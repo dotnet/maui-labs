@@ -7,10 +7,4 @@ public partial class DocumentPage : ContentPage
         InitializeComponent();
         BindingContext = viewModel;
     }
-
-    protected override async void OnAppearing()
-    {
-        base.OnAppearing();
-        await ((DocumentPlaygroundViewModel)BindingContext).ApplyLaunchOptionsAsync();
-    }
 }

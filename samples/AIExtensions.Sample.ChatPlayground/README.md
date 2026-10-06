@@ -1,15 +1,12 @@
-# AI Playground
+# AI Chat Playground
 
 A .NET MAUI sample for comparing `Microsoft.Extensions.AI` providers. It has
-Chat, Embeddings, Images, and Documents tabs. `Microsoft.Maui.Essentials.AI`
-provides `AppleIntelligenceChatClient` for on-device chat and
-`NLEmbeddingGenerator` for on-device embeddings. The Documents tab exercises
-the experimental `Microsoft.Extensions.DocumentExtraction` contract with Apple
-Vision/PDFKit, a compatible Mistral document deployment, and the configured
-vision-capable chat deployment. Azure OpenAI is optional. The app targets
-Android, iOS, Mac Catalyst, and Windows. It does **not** target native macOS.
-Available providers vary by platform; saved Chat recordings can be replayed
-offline.
+Chat, Embeddings, Images, and Documents tabs. `Microsoft.Maui.Essentials.AI` provides
+`AppleIntelligenceChatClient` for on-device chat and `NLEmbeddingGenerator`
+for on-device embeddings; Azure OpenAI is optional. The app targets Android,
+iOS, and Mac Catalyst, plus a Windows target with Azure and offline Replay
+only. It does **not** target native macOS. Available providers vary by
+platform; saved Chat recordings can be replayed offline.
 
 ## Build and run
 
@@ -17,10 +14,8 @@ Install the repo's pinned .NET 10 SDK and MAUI workload. Apple Intelligence
 Chat requires iOS or Mac Catalyst 26+ on a supported device with a compatible
 Xcode; Apple NaturalLanguage embeddings have broader Apple OS support but appear
 only when the English sentence-embedding asset is installed (it may be absent
-on simulators). Apple Vision document extraction requires iOS or Mac Catalyst
-26+. A compatible Mistral image-to-text model provides the specialized cloud
-Documents client from the same Microsoft Foundry resource used by the other
-Azure features. Azure-backed features also run on Android and Windows.
+on simulators).
+Azure-backed features also run on Android and Windows.
 
 From the repository root on macOS, build before running the Mac Catalyst target:
 
@@ -32,6 +27,8 @@ dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.Chat
 For Xcode 27 preview builds, pass `-p:UseXcode27Preview=true` and select
 `-f net10.0-ios27.0` or `-f net10.0-maccatalyst27.0`. Normal builds retain
 the stable Apple targets. Both Apple apps register MAUI scene delegates.
+Document mapping tests live in the existing Essentials.AI unit test project:
+`dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/ --filter FullyQualifiedName~DocumentMappingTests`.
 
 ## Optional Azure configuration
 
@@ -47,49 +44,74 @@ dotnet user-secrets set "AI:ApiKey" "<key>" --project samples\AIExtensions.Sampl
 dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:DocumentDeploymentName" "mistral-ocr-4-0" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
 ```
 
 Only set the deployment names you intend to use: `AI:DeploymentName` enables
 Chat, `AI:ImageDeploymentName` enables Images and Chat's image-generation tool,
-`AI:EmbeddingDeploymentName` enables Embeddings, and
-`AI:DocumentDeploymentName` identifies a compatible Mistral image-to-text
-deployment in the same Foundry resource, such as `mistral-ocr-4-0` or
-`mistral-document-ai-2512`.
-Documents also exposes the existing `AI:DeploymentName` as a separate general
-vision/chat provider when that deployment supports image input; only
-vision-capable Responses models can accept PDF files. All Azure clients reuse
-`AI:Endpoint` and `AI:ApiKey`; the app derives the matching
-`*.services.ai.azure.com` resource endpoint for the Mistral document route.
-
-Both cloud Documents clients are registered independently when configured so
-they can be selected and compared through descriptor-backed radio choices.
-Providers never silently retry through one another or resend a failed document
-to another model.
+and `AI:EmbeddingDeploymentName` enables Embeddings. The endpoint and key are
+required only when at least one Azure deployment name is configured.
 User secrets are **embedded in Debug builds** for device testing: never
 distribute those builds or commit keys. Azure prompts, images, and indexed
-text may leave the device and incur charges. Documents leave the device when
-either Foundry provider is selected.
+text may leave the device and incur charges.
 
-The playground adds the standard .NET command-line configuration provider over
-`Environment.GetCommandLineArgs()`. `--page` selects the initial tab, and each
-feature consumes its own configuration keys. For example:
+### Optional cloud document comparison
 
-```bash
-dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-maccatalyst -- \
-  --page Documents \
-  --document "/path/to/checklist.pdf" \
-  --document-client apple-vision \
-  --document-extract true
+The Documents tab registers selectable `IngestionDocumentReader` providers:
+Apple Vision RecognizeDocuments on-device on iOS/Mac Catalyst 26+, optional Azure Document Intelligence,
+and optional Foundry Mistral Document AI. The Apple reader is `AppleVisionRecognizeDocumentsReader`,
+backed by Vision's `RecognizeDocumentsRequest`.
+Both cloud readers work on all platforms. On Android and Windows, only configured cloud readers are available.
+Use the input area's **+** menu to select a PDF, PNG, JPEG, HEIC, or TIFF file (20 MB maximum),
+or load the bundled two-page sample PDF or sample document image. Choose a reader in settings and select **Read**.
+The attachment preview and remove/read/stop buttons use the same composer styles as Chat and Images. To compare, switch
+readers and re-run the same selected file. Pressing **Read** with a cloud reader selected uploads the document immediately,
+without a confirmation popup. There is **no automatic cloud fallback** if local
+recognition fails. The result displays standard `IngestionDocument` pages,
+element types/text, and Markdown. Azure paragraphs and tables follow reading
+order from the SDK spans; merged cells and actual header kinds use HTML table
+markup in the Markdown result.
+
+Azure AI Document Intelligence uses a **separate API** from Azure OpenAI:
+set its HTTPS resource root endpoint and subscription key explicitly. A compatible multi-service Foundry resource can host
+both services, but an Azure OpenAI-only resource does not imply Document Intelligence support. The
+sample uses the official `Azure.AI.DocumentIntelligence` 1.0.0 SDK and the
+`prebuilt-layout` model (2024-11-30 service API).
+
+**WIP dependency:** `Azure.AI.DocumentIntelligence` 1.0.0 is currently fetched
+from NuGet.org using a temporary restore source, for example:
+
+```sh
+dotnet restore samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json
 ```
 
-The normal `Microsoft.Extensions.Configuration.CommandLine` formats are
-supported, including `--name value` and `--name=value`. Command-line values can
-also override other configuration such as `--AI:DeploymentName value`.
-Sandboxed Apple apps still require file paths inside the app container;
-otherwise use the normal picker. Release builds ignore document automation
-values, though `--page` still selects the initial tab.
+The package must be mirrored to the approved dnceng proxy before CI can
+restore this sample. Do not add NuGet.org to `NuGet.config` or embed credentials
+in source files; the endpoint and key below belong in local user secrets.
+
+```powershell
+dotnet user-secrets set "AI:DocumentIntelligenceEndpoint" "https://<document-resource>.cognitiveservices.azure.com/" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+dotnet user-secrets set "AI:DocumentIntelligenceKey" "<document-resource-key>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+```
+
+Foundry Mistral Document AI reuses `AI:Endpoint` and `AI:ApiKey`; set `AI:DocumentDeploymentName` to an existing document-model
+deployment (for example, a deployment of `mistral-ocr-4-0` or `mistral-document-ai-2512`). It does not use the Chat deployment.
+The reader converts an Azure OpenAI resource hostname to its corresponding `.services.ai.azure.com` hostname and calls
+`/providers/mistral/azure/ocr` on the resource root, not the OpenAI chat-completions API.
+
+```powershell
+dotnet user-secrets set "AI:DocumentDeploymentName" "<document-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+```
+
+Rebuild and relaunch after changing secrets because the Debug app embeds the settings at build time.
+The Foundry reader projects pages, headings, text, and tables into standard ingestion elements without provider metadata.
+It does not request image crops or expose geometry, confidence, or raw-provider results. It uses a five-minute deadline and bounded
+retries for HTTP 503; it never switches to another reader. The Document Intelligence reader retains its 100-second deadline.
+
+Cloud comparison uploads the **entire document** to Azure and may incur
+charges. The sample embeds developer secrets in Debug app binaries; never
+publish or distribute such binaries. Cancelling an in-flight operation cannot
+undo a document already submitted to Azure. Neither credentials nor document
+contents are logged.
 
 ## What to try
 
@@ -116,24 +138,10 @@ values, though `--page` still selects the initial tab.
 - **Images:** Generate from text or edit a single source image and inspect the
   result. Configured Azure providers are offered; there is no on-device image
   provider in this branch. The Images tab does not save generated results.
-- **Documents:** Compare Apple Vision locally with two deployments in Microsoft
-  Foundry: specialized `mistral-ocr-4-0` and a general vision-capable model.
-  Mistral returns page Markdown, classified blocks, pixel boxes, tables,
-  figures, and confidence. The general vision model provides a probabilistic
-  semantic extraction path with text/tables but no provider-grade geometry.
-  Choose an image or PDF or load the packaged conformance sample.
-  Both providers return structured pages, text, tables, barcodes, metadata, and
-  geometry; Apple additionally exposes its provider-specific list model. Image inputs show
-  a polygon overlay, while PDF inputs show every rendered page. Switch the
-  synchronized two-pane inspector between page previews and the structured
-  result. It stays side-by-side on wider windows and stacks automatically on
-  narrow layouts. Selecting an overlay region selects and scrolls to its
-  normalized JSON path; selecting a result row highlights and scrolls to its
-  page region. Use the header **Inspect** popup to switch between client details,
-  normalized JSON, provider raw JSON, and the selected node's raw JSON without
-  leaving the page. Cancel a multi-page PDF while PDFKit renders and recognizes
-  pages sequentially. The selected client description clearly states whether
-  document bytes remain local or are sent to Azure.
+- **Documents:** Use **+** to pick an image/PDF or load a bundled sample. Choose **Document extraction** to exercise the proposed
+  `IDocumentExtractionClient` with whole-result or page-streaming calls, **Document reader** for the native ingestion projection,
+  or **Upstream OCR reader** for the unchanged proposal adapter. Inspect normalized and provider-raw results separately.
+  Only actual fields shared by the provider and contract are normalized. Selecting Azure uploads the document immediately.
 
 The app saves one Chat recording locally for replay. Use the Chat **More**
 menu to load a bundled example without credentials, or import/export a
@@ -149,20 +157,25 @@ services, views, and view models. Each feature registers its page and selected
 real abstractions with dependency injection. `MainWindow` composes the four
 registered pages as tabs. Reusable controls are in `Views/`, and shared
 configuration, image input, and atomic storage are in `Services/`. Chat
-recording, embedding document indexing, and document extraction remain
-separate.
+recording and document indexing remain separate.
 
-The Documents feature currently references a vendored snapshot of the proposed
-`Microsoft.Extensions.DocumentExtraction` API from dotnet/extensions#7588.
-Those non-shipping projects are experimental scaffolding and must be replaced
-with official package references before this sample or provider ships.
+Documents follows the same page/area/composer/settings split as Images and Embeddings. Its view model owns selection and
+request state; `DocumentReadingService` runs the reader and `DocumentExtractionService` runs the actual proposed client contract.
+Both services are independent of MAUI controls. Extraction clients use the original builder, logging, and OpenTelemetry decorators,
+and expose simple UI descriptors through standard `GetService`, matching the Chat/Embeddings conventions.
+All three attachment composers share `AttachmentPreview`, and image/document loading shares the bounded `InputStreamReader`.
+Provider-specific SDK/protocol adapters remain separate, behind actual `IngestionDocumentReader` and `IDocumentExtractionClient` abstractions.
 
-### Why these document providers
+The complete upstream abstraction and middleware projects are preserved verbatim under
+[`../../src/Libraries/DocumentExtraction/Upstream/`](../../src/Libraries/DocumentExtraction/Upstream/), including original project files
+and namespaces. Local non-shipping projects file-link them; no reduced internal replacement is compiled.
+The original `OcrDocumentReader` is file-linked too, without silently improving its currently lossy projection.
+See [the feature gaps](../../docs/ai/apple-document-extraction-gaps.md) for missing features on either side.
 
-| Provider | Demo role |
-|---|---|
-| Apple Vision | Local/private document-native baseline |
-| Mistral document model | Specialized image-to-text model using the Mistral document/OCR API; tested with `mistral-ocr-4-0` |
-| Vision-capable Foundry model | General multimodal/semantic extraction baseline using the configured Chat deployment |
-| Azure Document Intelligence | Valuable deterministic service comparison, but excluded from the active demo to avoid requiring a separate service resource |
-| Content Understanding | Valuable analyzer and typed-field comparison, but excluded for now because it demonstrates an analyzer workflow rather than a deployed model |
+This checkout is not intended to produce distributable packages. The copied projects and prototype Essentials.AI library are non-packable.
+Developer Debug builds embed local secrets and must never be distributed.
+
+### Standard launch arguments
+
+The existing .NET command-line configuration provider accepts `--name value` and `--name=value`.
+For example, launch directly into Documents with `--page Documents`; arbitrary configuration keys remain available without a custom parser.

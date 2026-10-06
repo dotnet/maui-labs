@@ -11,12 +11,13 @@
     <IsBindingProject>true</IsBindingProject>
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
-    <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
+    <NoWarn>$(NoWarn);CA1416;MEDE0001;XCODE_27_0_PREVIEW</NoWarn>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
-    <IsShipping>true</IsShipping>
-    <IsPackable>true</IsPackable>
+    <!-- Prototype only: the proposed public extraction contract is not approved for publication. -->
+    <IsShipping>false</IsShipping>
+    <IsPackable>false</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
     <!-- Keep this package always preview on its independent NuGet version line for all package builds.
          Bump the EssentialsAI version properties in eng/Versions.props for new previews. -->
@@ -29,51 +30,29 @@
     <PackageTags>$(DefaultPackageTags);essentials;ai</PackageTags>
     <Description>.NET Multi-platform App UI (.NET MAUI) is a cross-platform framework for creating native mobile and desktop apps with C# and XAML. This package contains a collection of cross-platform APIs for working with device AI and local models.</Description>
     <PackRepoRootReadme>false</PackRepoRootReadme>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DataIngestion.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <ProjectReference Include="..\..\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- Vendored Microsoft.Extensions.DocumentExtraction(.Abstractions) from dotnet/extensions PR #7588
-         (src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions and
-         src/Libraries/Microsoft.Extensions.DocumentExtraction). Both are non-shipping/non-packable
-         internal dependencies (not published from this repo). PrivateAssets="all" stops `dotnet pack`
-         from adding a NuGet dependency on their (unpublished) package IDs; the
-         CopyProjectReferencesToPackage target below merges their build output directly into this
-         package's lib folder instead, so consumers still get working assemblies at run time. -->
-    <ProjectReference Include="..\..\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" PrivateAssets="all" />
-    <ProjectReference Include="..\..\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" PrivateAssets="all" />
-  </ItemGroup>
-  <!-- Merge the (PrivateAssets="all") DocumentExtraction project references' build output into this
-       package instead of just discarding them, per the documented NuGet pattern for bundling
-       non-packable project-to-project references: https://learn.microsoft.com/nuget/reference/msbuild-targets#targetsfortfmspecificbuildoutput -->
-  <PropertyGroup>
-    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
-  </PropertyGroup>
-  <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">
-    <ItemGroup>
-      <BuildOutputInPackage
-        Include="@(ReferenceCopyLocalPaths)"
-        Condition="'%(ReferenceCopyLocalPaths.ReferenceSourceTarget)' == 'ProjectReference' And '%(ReferenceCopyLocalPaths.Extension)' == '.dll'" />
-    </ItemGroup>
-  </Target>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
+    <Compile Remove="Internal\DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs" />
   </ItemGroup>
   <ItemGroup Condition=" $(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst')) or $(TargetFramework.Contains('-macos')) ">
     <XcodeProject Include="..\AppleNative\EssentialsAI\EssentialsAI.xcodeproj">
       <SchemeName>EssentialsAI</SchemeName>
     </XcodeProject>
     <ObjcBindingApiDefinition Include="..\AppleNative\ApiDefinitions.cs" />
-    <ObjcBindingApiDefinition Include="..\AppleNative\DocumentRecognitionApiDefinitions.cs" />
+    <ObjcBindingApiDefinition Include="..\AppleNative\RecognizeDocumentsRequestApiDefinitions.cs" />
     <ObjcBindingCoreSource Include="..\AppleNative\StructsAndEnums.cs" />
   </ItemGroup>
   <Import Project="..\AppleBindings.targets" />

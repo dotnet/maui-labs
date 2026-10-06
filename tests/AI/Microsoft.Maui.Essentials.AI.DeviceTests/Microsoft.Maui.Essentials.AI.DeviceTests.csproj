@@ -48,13 +48,11 @@
     <MauiIcon Include="Resources\appicon.svg" ForegroundFile="Resources\appiconfg.svg" Color="#512BD4" />
     <MauiSplashScreen Include="Resources\appiconfg.svg" Color="#512BD4" BaseSize="128,128" />
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
-    <MauiAsset Include="TestAssets\DocumentExtraction\manifest.json" LogicalName="DocumentExtraction/manifest.json" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
-    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
-    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
+    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DataIngestion.DocumentExtraction\Microsoft.Extensions.DataIngestion.DocumentExtraction.csproj" />
   </ItemGroup>
 
   <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' And '$(Configuration)' == 'Debug' ">

@@ -1,143 +1,92 @@
-using System.Runtime.CompilerServices;
 using AIExtensions.Sample.ChatPlayground;
+using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DocumentExtraction;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
-public sealed class DocumentSettingsViewModelTests
+public class DocumentSettingsViewModelTests
 {
     [Fact]
-    public void Constructor_DescribedClients_SelectsFirstClient()
+    public void Constructor_RegistersActualClientsAndReadersWithoutProviderFactories()
     {
-        using var first = CreateClient("first", "First");
-        using var second = CreateClient("second", "Second");
-
-        var settings = new DocumentSettingsViewModel([first, second]);
-
-        Assert.Equal(2, settings.Clients.Count);
-        Assert.Same(first, settings.SelectedClient);
-        Assert.Equal("First", settings.SelectedDescriptor?.Name);
-        Assert.Equal("DocumentClient0Radio", settings.Clients[0].AutomationId);
+        var reader = Reader("apple-reader");
+        using var client = Client("apple-client");
+        var settings = new DocumentSettingsViewModel([reader], [client]);
+        Assert.Equal(DocumentOperationMode.Extraction, settings.Mode);
+        Assert.Same(client, settings.SelectedClientOption!.Client);
+        Assert.Same(reader, settings.SelectedReader);
+        Assert.True(settings.HasSelection);
+        Assert.False(settings.CanSelectModel);
+        settings.Mode = DocumentOperationMode.Reader;
+        Assert.True(settings.IsReaderMode);
+        Assert.False(settings.IsClientMode);
+        Assert.Equal("Reader", settings.CurrentName);
+        settings.Mode = DocumentOperationMode.OcrReader;
+        Assert.True(settings.IsClientMode);
+        Assert.False(settings.IsExtractionMode);
+        Assert.Equal("Read", settings.OperationLabel);
     }
 
     [Fact]
-    public void Constructor_DuplicateDescriptorIds_Throws()
+    public void ModelOverridesAreOnlyForwardedWhereTheSelectedProviderSupportsThem()
     {
-        using var first = CreateClient("duplicate", "First");
-        using var second = CreateClient("duplicate", "Second");
-
-        var exception = Assert.Throws<ArgumentException>(
-            () => new DocumentSettingsViewModel([first, second]));
-
-        Assert.Contains("distinct IDs", exception.Message);
+        using var local = Client("apple-client");
+        using var cloud = Client("cloud-client", isCloud: true);
+        var settings = new DocumentSettingsViewModel([], [local, cloud]) { ModelId = "deployment" };
+        Assert.Null(settings.CreateOptions());
+        settings.SelectedClientOption = settings.Clients[1];
+        Assert.True(settings.CanSelectModel);
+        Assert.Equal("deployment", settings.CreateOptions()!.ModelId);
+        settings.Mode = DocumentOperationMode.Reader;
+        Assert.Null(settings.CreateOptions());
     }
 
     [Fact]
-    public void CreateOptions_AppleVision_MapsAppleSettings()
+    public void SelectionRejectsUnregisteredOrDuplicateProviders()
     {
-        using var client = CreateClient("apple-vision", "Apple Vision");
-        var settings = new DocumentSettingsViewModel([client])
-        {
-            DetectBarcodes = false,
-            AutomaticallyDetectLanguage = true,
-        };
-
-        var options = settings.CreateOptions();
-
-        Assert.Equal(
-            ["apple.vision.barcodeDetectionEnabled", "apple.vision.automaticallyDetectLanguage"],
-            settings.RequestOptions.Select(static option => option.Key));
-        Assert.False(Assert.IsType<bool>(options.AdditionalProperties!["apple.vision.barcodeDetectionEnabled"]));
-        Assert.True(Assert.IsType<bool>(options.AdditionalProperties["apple.vision.automaticallyDetectLanguage"]));
-        Assert.False(options.AdditionalProperties.ContainsKey("mistral.includeImages"));
+        using var client = Client("same");
+        using var duplicate = Client("same");
+        Assert.Throws<ArgumentException>(() => new DocumentSettingsViewModel([], [client, duplicate]));
+        var settings = new DocumentSettingsViewModel([], [client]);
+        using var other = Client("other");
+        Assert.Throws<ArgumentException>(() => settings.SelectedClientOption = new DocumentExtractionClientOption(other, 2));
     }
 
     [Fact]
-    public void CreateOptions_MistralDocument_MapsImageSetting()
+    public void ReaderSelectionRemainsAvailableWhenNoExtractionClientIsConfigured()
     {
-        using var client = CreateClient("foundry-mistral-document", "Mistral document");
-        var settings = new DocumentSettingsViewModel([client])
-        {
-            IncludeImages = true,
-        };
-
-        var options = settings.CreateOptions();
-
-        Assert.Equal(["mistral.includeImages"], settings.RequestOptions.Select(static option => option.Key));
-        Assert.True(Assert.IsType<bool>(options.AdditionalProperties!["mistral.includeImages"]));
-        Assert.False(options.AdditionalProperties.ContainsKey("apple.vision.barcodeDetectionEnabled"));
+        var settings = new DocumentSettingsViewModel([Reader("reader")]);
+        Assert.Equal(DocumentOperationMode.Reader, settings.Mode);
+        Assert.True(settings.HasSelection);
+        settings.Mode = DocumentOperationMode.Extraction;
+        Assert.False(settings.HasSelection);
+        settings.Mode = DocumentOperationMode.Reader;
+        Assert.True(settings.HasSelection);
     }
 
-    [Fact]
-    public void CreateOptions_ClientWithoutSettings_LeavesAdditionalPropertiesUnset()
-    {
-        using var client = CreateClient("foundry-vision-chat", "Vision chat");
-        var settings = new DocumentSettingsViewModel([client]);
+    private static IngestionDocumentReader Reader(string id) =>
+        new DescribedDocumentReader(new TestReader(), new DocumentReaderDescriptor(id, "Reader", "Description"));
 
-        var options = settings.CreateOptions();
-
-        Assert.False(settings.HasRequestOptions);
-        Assert.Null(options.AdditionalProperties);
-    }
-
-    [Fact]
-    public void SelectedOption_ChangesVisibleOptionsAndPreservesValues()
-    {
-        using var apple = CreateClient("apple-vision", "Apple Vision");
-        using var mistral = CreateClient("foundry-mistral-document", "Mistral document");
-        using var vision = CreateClient("foundry-vision-chat", "Vision chat");
-        var settings = new DocumentSettingsViewModel([apple, mistral, vision])
-        {
-            DetectBarcodes = false,
-            IncludeImages = true,
-        };
-
-        settings.SelectedOption = settings.Clients[1];
-        Assert.Equal(["mistral.includeImages"], settings.RequestOptions.Select(static option => option.Key));
-        Assert.True(settings.IncludeImages);
-
-        settings.SelectedOption = settings.Clients[2];
-        Assert.Empty(settings.RequestOptions);
-
-        settings.SelectedOption = settings.Clients[0];
-        Assert.Equal(
-            ["apple.vision.barcodeDetectionEnabled", "apple.vision.automaticallyDetectLanguage"],
-            settings.RequestOptions.Select(static option => option.Key));
-        Assert.False(settings.DetectBarcodes);
-    }
-
-    private static IDocumentExtractionClient CreateClient(string id, string displayName) =>
+    private static IDocumentExtractionClient Client(string id, bool isCloud = false) =>
         new DescribedDocumentExtractionClient(
-            new EmptyDocumentClient(),
-            new DocumentExtractionClientDescriptor(
-                id,
-                displayName,
-                $"{displayName} description"));
+            new TestClient(), new DocumentExtractionClientDescriptor(id, "Client", "Description", isCloud));
 
-    private sealed class EmptyDocumentClient : IDocumentExtractionClient
+    private sealed class TestReader : IngestionDocumentReader
+    {
+        public override Task<IngestionDocument> ReadAsync(
+            Stream source, string identifier, string mediaType, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new IngestionDocument(identifier));
+    }
+
+    private sealed class TestClient : IDocumentExtractionClient
     {
         public Task<DocumentExtractionResult> ExtractAsync(
-            Stream document,
-            string mediaType,
-            DocumentExtractionOptions? options = null,
-            CancellationToken cancellationToken = default) =>
+            Stream document, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(new DocumentExtractionResult([]));
-
-        public async IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
-            Stream document,
-            string mediaType,
-            DocumentExtractionOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public object? GetService(Type serviceType, object? serviceKey = null) =>
-            serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-
-        public void Dispose()
-        {
-        }
+        public IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
+            Stream document, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+        public void Dispose() { }
     }
 }

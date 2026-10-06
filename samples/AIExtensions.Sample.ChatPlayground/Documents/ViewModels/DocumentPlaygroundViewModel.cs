@@ -1,411 +1,245 @@
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DocumentExtraction;
-using Microsoft.Maui.ApplicationModel.DataTransfer;
+using Microsoft.Extensions.DataIngestion;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Coordinates file input, selected-client extraction, and document result inspection.</summary>
+/// <summary>Runs the selected real document reader against the imported file.</summary>
 public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 {
-    private const int MaximumDisplayedNodes = 2000;
-
-    private readonly DocumentInputService _inputService;
-#if DEBUG
-    private readonly IConfiguration _configuration;
-    private bool _launchOptionsApplied;
-#endif
-    private DocumentInput? _selectedInput;
-    private DocumentExtractionResult? _result;
+    private readonly DocumentInputService _input;
+    private readonly DocumentReadingService _reading;
+    private readonly DocumentExtractionService _extraction;
+    private SelectedDocument? _selected;
+    private string _normalizedOutput = string.Empty;
+    private string _rawOutput = string.Empty;
 
     public DocumentPlaygroundViewModel(
-        DocumentInputService inputService,
-        DocumentSettingsViewModel settings,
-        IConfiguration configuration)
+        DocumentReadingService reading, DocumentExtractionService extraction,
+        DocumentInputService input, DocumentSettingsViewModel settings)
     {
-        _inputService = inputService;
-#if DEBUG
-        _configuration = configuration;
-#endif
+        _reading = reading;
+        _extraction = extraction;
+        _input = input;
         Settings = settings;
         Settings.PropertyChanged += SettingsPropertyChanged;
-        StatusMessage = settings.HasClient
-            ? "Choose an image or PDF, or load the sample document."
-            : settings.AvailabilityMessage;
+        StatusMessage = Settings.HasSelection
+            ? $"Selected {Settings.CurrentName}. Choose a document."
+            : "No document reader available. On Apple, use iOS or Mac Catalyst 26+; for cloud, configure Document Intelligence or Foundry.";
     }
 
     public DocumentSettingsViewModel Settings { get; }
 
-    public ObservableCollection<DocumentResultNode> Nodes { get; } = [];
-    public ObservableCollection<DocumentPagePreviewViewModel> PreviewPages { get; } = [];
-
+    [ObservableProperty] private string selectedName = "No document selected.";
     [ObservableProperty] private string statusMessage = string.Empty;
-    [ObservableProperty] private string selectedFileName = "No document selected";
-    [ObservableProperty] private string selectedDocumentDetails = "No document selected.";
-    [ObservableProperty] private string resultDetails = "No extraction result.";
-    [ObservableProperty] private DocumentResultNode? selectedNode;
-    [ObservableProperty] private DocumentInspectionMode selectedInspectionMode;
+    [ObservableProperty] private string resultHeading = "DOCUMENT RESULT";
+    [ObservableProperty] private string resultOutput = string.Empty;
     [ObservableProperty] private bool isBusy;
-    [ObservableProperty] private double progress;
-    [ObservableProperty] private bool isProgressVisible;
+    [ObservableProperty] private ImageSource? selectedPreview;
 
+    public bool HasDocument => _selected is not null;
+    public bool HasResult => ResultOutput.Length > 0;
+    public bool HasRawResult => _rawOutput.Length > 0;
+    public bool CanInspect => !IsBusy && HasResult;
     public bool IsIdle => !IsBusy;
-    public bool HasClient => Settings.HasClient;
-    public bool HasSelection => _selectedInput is not null;
-    public bool HasPreviewPages => PreviewPages.Count > 0;
-    public bool HasResult => _result is not null;
-    public bool CanInspectSelectedNode => SelectedNode?.HasRawJson == true;
-    public string ComposerHint => HasSelection
-        ? $"Extract with {Settings.ClientName}"
-        : "Add an image or PDF to extract";
-
-    public string InspectionTitle => SelectedInspectionMode switch
-    {
-        DocumentInspectionMode.NormalizedJson => "Normalized document JSON",
-        DocumentInspectionMode.RawJson => $"Raw {Settings.ClientName} JSON",
-        DocumentInspectionMode.SelectedNodeJson => SelectedNode is { } node ? $"Raw JSON - {node.Title}" : "Selected node JSON",
-        _ => "Document inspection",
-    };
-
-    public string InspectionContent => GetInspectionContent();
-
+    public bool IsCloudSelected => Settings.CurrentIsCloud;
+    public bool CanRead => !IsBusy && HasDocument && Settings.HasSelection;
+    public string OperationLabel => Settings.OperationLabel;
     public IAsyncRelayCommand ChooseDocument => ChooseDocumentCommand;
-    public IAsyncRelayCommand UseSampleDocument => UseSampleDocumentCommand;
-    public IAsyncRelayCommand ExtractDocument => ExtractDocumentCommand;
-    public System.Windows.Input.ICommand CancelExtraction => ExtractDocumentCancelCommand;
-    public IRelayCommand RemoveDocument => RemoveSelectedDocumentCommand;
-    public IAsyncRelayCommand CopyInspectionText => CopyInspectionTextCommand;
+    public IAsyncRelayCommand UseSamplePdf => UseSamplePdfCommand;
+    public IAsyncRelayCommand UseSampleImage => UseSampleImageCommand;
+    public IAsyncRelayCommand ReadDocument => ReadDocumentCommand;
+    public IRelayCommand RemoveDocumentAction => RemoveDocumentCommand;
+    public System.Windows.Input.ICommand CancelReading => ReadDocumentCancelCommand;
+    public IRelayCommand InspectNormalized => InspectNormalizedResultCommand;
+    public IRelayCommand InspectRaw => InspectRawResultCommand;
 
-    internal async Task ApplyLaunchOptionsAsync()
-    {
-#if DEBUG
-        if (_launchOptionsApplied)
-            return;
+    [RelayCommand(CanExecute = nameof(CanInspect))]
+    private void InspectNormalizedResult() => ResultOutput = _normalizedOutput;
 
-        _launchOptionsApplied = true;
+    private bool CanInspectRaw() => CanInspect && HasRawResult;
 
-        try
-        {
-            if (_configuration["document-client"] is { } clientId)
-            {
-                Settings.SelectedOption = Settings.Clients.FirstOrDefault(option =>
-                    string.Equals(option.Descriptor.Id, clientId, StringComparison.OrdinalIgnoreCase))
-                    ?? throw new InvalidOperationException($"Document client '{clientId}' is not registered.");
-            }
+    [RelayCommand(CanExecute = nameof(CanInspectRaw))]
+    private void InspectRawResult() => ResultOutput = _rawOutput;
 
-            Settings.DetectBarcodes =
-                _configuration.GetValue<bool?>("document-detect-barcodes") ?? Settings.DetectBarcodes;
-            Settings.AutomaticallyDetectLanguage =
-                _configuration.GetValue<bool?>("document-detect-language") ?? Settings.AutomaticallyDetectLanguage;
-            Settings.IncludeImages =
-                _configuration.GetValue<bool?>("document-include-images") ?? Settings.IncludeImages;
-
-            var path = _configuration["document"];
-            if (string.IsNullOrWhiteSpace(path))
-                return;
-
-            SelectInput(await _inputService.LoadFileAsync(path));
-
-            if ((_configuration.GetValue<bool?>("document-extract") ?? true) && CanExtractDocument())
-                await ExtractDocumentAsync(CancellationToken.None);
-        }
-        catch (Exception exception)
-        {
-            StatusMessage = $"Could not load configured document: {exception.Message}";
-        }
-#else
-        await Task.CompletedTask;
-#endif
-    }
-
-    private bool CanChooseDocument() => Settings.HasClient && !IsBusy;
+    private bool CanChooseDocument() => !IsBusy;
+    private bool CanReadDocument() => CanRead;
 
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
-    private async Task ChooseDocumentAsync()
-    {
-        try
-        {
-            if (await _inputService.PickAsync() is { } input)
-                SelectInput(input);
-        }
-        catch (Exception exception)
-        {
-            StatusMessage = $"Could not select a document: {exception.Message}";
-        }
-    }
+    private Task ChooseDocumentAsync() => SelectDocumentAsync(() => _input.PickAsync());
 
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
-    private async Task UseSampleDocumentAsync()
+    private Task UseSamplePdfAsync() => SelectDocumentAsync(async () => await _input.LoadSamplePdfAsync());
+
+    [RelayCommand(CanExecute = nameof(CanChooseDocument))]
+    private Task UseSampleImageAsync() => SelectDocumentAsync(async () => await _input.LoadSampleImageAsync());
+
+    private bool CanRemoveDocument() => !IsBusy && HasDocument;
+
+    [RelayCommand(CanExecute = nameof(CanRemoveDocument))]
+    private void RemoveDocument()
     {
-        try
-        {
-            SelectInput(await _inputService.LoadSampleAsync());
-        }
-        catch (Exception exception)
-        {
-            StatusMessage = $"Could not load the sample document: {exception.Message}";
-        }
+        _selected = null;
+        SelectedName = "No document selected.";
+        SelectedPreview = null;
+        ClearResult();
+        ResultHeading = "DOCUMENT RESULT";
+        StatusMessage = "Choose a PDF or image using the + menu.";
+        OnPropertyChanged(nameof(HasDocument));
+        OnPropertyChanged(nameof(CanRead));
+        ReadDocumentCommand.NotifyCanExecuteChanged();
+        RemoveDocumentCommand.NotifyCanExecuteChanged();
     }
 
-    private bool CanExtractDocument() => Settings.HasClient && _selectedInput is not null && !IsBusy;
-
-    [RelayCommand(CanExecute = nameof(CanExtractDocument), IncludeCancelCommand = true)]
-    private async Task ExtractDocumentAsync(CancellationToken cancellationToken)
+    private async Task SelectDocumentAsync(Func<Task<SelectedDocument?>> load)
     {
-        var input = _selectedInput ?? throw new InvalidOperationException("Choose an image or PDF first.");
-
         IsBusy = true;
         Settings.IsBusy = true;
-        IsProgressVisible = true;
-        Progress = 0;
-        Nodes.Clear();
-        _result = null;
-        SelectedNode = null;
-
-        foreach (var preview in PreviewPages)
-            preview.SetExtraction(null, []);
-
-        ResultDetails = "Extraction in progress.";
-        OnPropertyChanged(nameof(HasResult));
-        NotifyInspectionChanged();
-        RefreshCommands();
-        StatusMessage = $"Recognizing {input.FileName}...";
-
-        var pageProgress = new Progress<DocumentExtractionPageResult>(OnProgress);
-
         try
         {
-            var client = Settings.SelectedClient ?? throw new InvalidOperationException("Choose a document client.");
-            var result = await ExtractAsync(input, client, Settings.CreateOptions(), pageProgress, cancellationToken);
-            _result = result;
-
-            var projected = DocumentResultProjector.Project(result);
-
-            foreach (var node in projected.Take(MaximumDisplayedNodes))
-                Nodes.Add(node);
-
-            foreach (var preview in PreviewPages)
+            var file = await load();
+            if (file is null)
             {
-                preview.SetExtraction(
-                    result.Pages.FirstOrDefault(page => page.PageNumber == preview.PageNumber),
-                    projected.Where(node => node.PageNumber == preview.PageNumber));
+                StatusMessage = "File selection cancelled.";
+                return;
             }
-
-            SelectedNode = projected.FirstOrDefault(static node => node.BoundingRegion is not null);
-            ResultDetails =
-                $"{result.Pages.Count} pages - {projected.Count:N0} structured nodes" +
-                (projected.Count > MaximumDisplayedNodes ? $" - showing the first {MaximumDisplayedNodes:N0}" : string.Empty);
-            StatusMessage = BuildCompletionStatus(result, projected.Count);
-
-            OnPropertyChanged(nameof(HasResult));
-            NotifyInspectionChanged();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            StatusMessage = "Document extraction cancelled.";
-            ResultDetails = "No extraction result.";
-            NotifyInspectionChanged();
+            _selected = file;
+            SelectedName = file.FileName;
+            SelectedPreview = file.MediaType.StartsWith("image/", StringComparison.Ordinal)
+                ? ImageSource.FromStream(() => new MemoryStream(file.Bytes, writable: false))
+                : ImageSource.FromFile("folder.png");
+            ClearResult();
+            ResultHeading = "DOCUMENT RESULT";
+            StatusMessage = $"Selected {file.FileName}. Choose an API and provider in settings.";
+            OnPropertyChanged(nameof(HasDocument));
+            OnPropertyChanged(nameof(CanRead));
+            ReadDocumentCommand.NotifyCanExecuteChanged();
+            RemoveDocumentCommand.NotifyCanExecuteChanged();
         }
         catch (Exception exception)
         {
-            StatusMessage = $"Document extraction failed: {exception.Message}";
-            ResultDetails = "No extraction result.";
-            NotifyInspectionChanged();
+            StatusMessage = $"Could not select document: {exception.Message}";
         }
         finally
         {
             Settings.IsBusy = false;
             IsBusy = false;
-            IsProgressVisible = false;
-            RefreshCommands();
         }
     }
 
-    private bool CanRemoveDocument() => _selectedInput is not null && !IsBusy;
-
-    [RelayCommand(CanExecute = nameof(CanRemoveDocument))]
-    private void RemoveSelectedDocument()
+    [RelayCommand(CanExecute = nameof(CanReadDocument), IncludeCancelCommand = true)]
+    private async Task ReadDocumentAsync(CancellationToken cancellationToken)
     {
-        _selectedInput = null;
-        _result = null;
-        SelectedFileName = "No document selected";
-        SelectedDocumentDetails = "No document selected.";
-        ResultDetails = "No extraction result.";
-        Nodes.Clear();
-        SelectedNode = null;
-        PreviewPages.Clear();
-        Progress = 0;
-        StatusMessage = Settings.HasClient
-            ? "Choose an image or PDF, or load the sample document."
-            : Settings.AvailabilityMessage;
-        OnPropertyChanged(nameof(HasSelection));
-        OnPropertyChanged(nameof(HasPreviewPages));
-        OnPropertyChanged(nameof(HasResult));
-        OnPropertyChanged(nameof(ComposerHint));
-        NotifyInspectionChanged();
-        RefreshCommands();
-    }
-
-    [RelayCommand]
-    private async Task CopyInspectionTextAsync()
-    {
-        await Clipboard.Default.SetTextAsync(InspectionContent);
-        StatusMessage = $"Copied {InspectionTitle.ToLowerInvariant()}.";
-    }
-
-    private string GetInspectionContent()
-    {
+        var file = _selected ?? throw new InvalidOperationException("Choose a document first.");
+        var name = Settings.CurrentName;
+        IsBusy = true;
+        Settings.IsBusy = true;
+        ClearResult();
+        StatusMessage = $"Processing {file.FileName} with {name}...";
         try
         {
-            return SelectedInspectionMode switch
+            int pages;
+            if (Settings.IsExtractionMode)
             {
-                DocumentInspectionMode.NormalizedJson => _result is { } normalizedResult
-                    ? DocumentRawJson.SerializeNormalized(normalizedResult)
-                    : "Extract a document to inspect normalized JSON.",
-                DocumentInspectionMode.RawJson => _result is { } rawResult
-                    ? DocumentRawJson.SerializePages(rawResult)
-                    : "Extract a document to inspect provider raw JSON.",
-                DocumentInspectionMode.SelectedNodeJson => SelectedNode?.HasRawJson == true
-                    ? SelectedNode.GetRawJson()
-                    : "Select a structured result that exposes provider raw JSON.",
-                _ => string.Empty,
-            };
+                var client = Settings.SelectedClientOption?.Client
+                    ?? throw new InvalidOperationException("Choose a document extraction client.");
+                var progress = new Progress<DocumentExtractionProgress>(update =>
+                {
+                    if (IsBusy)
+                        StatusMessage = $"Extracted {update.PagesProcessed?.ToString() ?? "?"}/{update.TotalPages?.ToString() ?? "?"} pages.";
+                });
+                var result = await _extraction.ExtractAsync(
+                    client, file, Settings.StreamPages, Settings.CreateOptions(), progress, cancellationToken);
+                ResultOutput = result.Output;
+                _rawOutput = result.RawOutput;
+                pages = result.Result.Pages.Count;
+            }
+            else
+            {
+                var reader = Settings.IsReaderMode
+                    ? Settings.SelectedReader ?? throw new InvalidOperationException("Choose a document reader.")
+                    : new OcrDocumentReader(
+                        Settings.SelectedClientOption?.Client ?? throw new InvalidOperationException("Choose a document extraction client."),
+                        Settings.CreateOptions());
+                var result = await _reading.ReadAsync(reader, file, cancellationToken);
+                ResultOutput = result.Output;
+                pages = result.PageCount;
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            _normalizedOutput = ResultOutput;
+            OnPropertyChanged(nameof(HasRawResult));
+            ResultHeading = name.ToUpperInvariant() + " RESULT";
+            StatusMessage = $"Processed {pages} page(s) with {name} using {Settings.Mode}.";
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            StatusMessage = Settings.CurrentIsCloud
+                ? "Document reading timed out; a submitted Azure operation may continue server-side."
+                : "Document reading timed out.";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = Settings.CurrentIsCloud
+                ? "Document reading cancelled; a submitted Azure operation may continue server-side."
+                : "Document reading cancelled.";
         }
         catch (Exception exception)
         {
-            return $"Could not inspect the document: {exception.Message}";
+            StatusMessage = $"Document processing failed with {name}: {exception.Message}";
         }
-    }
-
-    private static async Task<DocumentExtractionResult> ExtractAsync(
-        DocumentInput input,
-        IDocumentExtractionClient client,
-        DocumentExtractionOptions options,
-        IProgress<DocumentExtractionPageResult> progress,
-        CancellationToken cancellationToken)
-    {
-        using var stream = input.OpenRead();
-        var pages = new List<DocumentExtractionPageResult>();
-
-        // Clients are registered singletons like chat clients and embedding generators, so a request must not dispose them.
-        await foreach (var update in client
-            .ExtractPagesAsync(stream, input.MediaType, options, cancellationToken)
-            .WithCancellation(cancellationToken)
-            .ConfigureAwait(false))
+        finally
         {
-            pages.Add(update);
-            progress.Report(update);
+            Settings.IsBusy = false;
+            IsBusy = false;
         }
-
-        return pages.ToDocumentExtractionResult();
-    }
-
-    private void SelectInput(DocumentInput input)
-    {
-        _selectedInput = input;
-        _result = null;
-        SelectedFileName = input.FileName;
-        SelectedDocumentDetails = input.Details;
-        ResultDetails = "Not extracted yet.";
-        Nodes.Clear();
-        SelectedNode = null;
-        PreviewPages.Clear();
-
-        foreach (var preview in input.PreviewPages)
-            PreviewPages.Add(new(preview, node => SelectedNode = node));
-
-        Progress = 0;
-        StatusMessage = $"Ready to extract {input.FileName}.";
-        OnPropertyChanged(nameof(HasSelection));
-        OnPropertyChanged(nameof(HasPreviewPages));
-        OnPropertyChanged(nameof(HasResult));
-        OnPropertyChanged(nameof(ComposerHint));
-        NotifyInspectionChanged();
-        RefreshCommands();
-    }
-
-    private void OnProgress(DocumentExtractionPageResult update)
-    {
-        StatusMessage = update.TotalPages is { } total
-            ? $"Processed page {update.PagesProcessed}/{total}..."
-            : $"Processed page {update.PagesProcessed}...";
-        if (update.PagesProcessed is { } processed && update.TotalPages is { } totalPages and > 0)
-            Progress = (double)processed / totalPages;
-    }
-
-    private static string BuildCompletionStatus(DocumentExtractionResult result, int nodeCount)
-    {
-        var pruned = result.Pages.Sum(static page =>
-            page.AdditionalProperties?.TryGetValue("apple.vision.repeatedContainersPruned", out var value) == true &&
-            value is long count ? count : 0);
-
-        return $"Extracted {result.Pages.Count} page(s) and {nodeCount:N0} structured nodes." +
-            (pruned > 0 ? $" Pruned {pruned:N0} repeated provider traversal(s)." : string.Empty);
     }
 
     private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(DocumentSettingsViewModel.SelectedOption))
-            return;
+        if (e.PropertyName == nameof(DocumentSettingsViewModel.SelectedOption) ||
+            e.PropertyName == nameof(DocumentSettingsViewModel.SelectedClientOption) ||
+            e.PropertyName == nameof(DocumentSettingsViewModel.Mode))
+        {
+            ClearResult();
+            ResultHeading = "DOCUMENT RESULT";
+            StatusMessage = Settings.HasSelection
+                ? $"Selected {Settings.CurrentName}. Choose a file, then {Settings.OperationLabel.ToLowerInvariant()}."
+                : "No document provider selected for this API.";
+            OnPropertyChanged(nameof(IsCloudSelected));
+            OnPropertyChanged(nameof(CanRead));
+            OnPropertyChanged(nameof(OperationLabel));
+            ReadDocumentCommand.NotifyCanExecuteChanged();
+        }
+    }
 
-        _result = null;
-        Nodes.Clear();
-        SelectedNode = null;
+    private void ClearResult()
+    {
+        ResultOutput = string.Empty;
+        _normalizedOutput = string.Empty;
+        _rawOutput = string.Empty;
+        OnPropertyChanged(nameof(HasRawResult));
+    }
 
-        foreach (var preview in PreviewPages)
-            preview.SetExtraction(null, []);
-
-        ResultDetails = HasSelection
-            ? "Not extracted with this provider."
-            : "No extraction result.";
-        StatusMessage = Settings.HasClient
-            ? $"Selected {Settings.ClientName}. Choose or extract a document."
-            : Settings.AvailabilityMessage;
-        OnPropertyChanged(nameof(HasClient));
+    partial void OnResultOutputChanged(string value)
+    {
         OnPropertyChanged(nameof(HasResult));
-        OnPropertyChanged(nameof(ComposerHint));
-        NotifyInspectionChanged();
-        RefreshCommands();
+        OnPropertyChanged(nameof(CanInspect));
+        InspectNormalizedResultCommand.NotifyCanExecuteChanged();
+        InspectRawResultCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(IsIdle));
-        OnPropertyChanged(nameof(ComposerHint));
-    }
-
-    partial void OnSelectedInspectionModeChanged(DocumentInspectionMode value) =>
-        NotifyInspectionChanged();
-
-    partial void OnSelectedNodeChanged(DocumentResultNode? value)
-    {
-        foreach (var preview in PreviewPages)
-            preview.SelectedNode = value?.PageNumber == preview.PageNumber ? value : null;
-        OnPropertyChanged(nameof(CanInspectSelectedNode));
-        NotifyInspectionChanged();
-    }
-
-    private void RefreshCommands()
-    {
+        OnPropertyChanged(nameof(CanRead));
         ChooseDocumentCommand.NotifyCanExecuteChanged();
-        UseSampleDocumentCommand.NotifyCanExecuteChanged();
-        ExtractDocumentCommand.NotifyCanExecuteChanged();
-        RemoveSelectedDocumentCommand.NotifyCanExecuteChanged();
+        UseSamplePdfCommand.NotifyCanExecuteChanged();
+        UseSampleImageCommand.NotifyCanExecuteChanged();
+        RemoveDocumentCommand.NotifyCanExecuteChanged();
+        ReadDocumentCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanInspect));
+        InspectNormalizedResultCommand.NotifyCanExecuteChanged();
+        InspectRawResultCommand.NotifyCanExecuteChanged();
     }
-
-    private void NotifyInspectionChanged()
-    {
-        OnPropertyChanged(nameof(InspectionTitle));
-        OnPropertyChanged(nameof(InspectionContent));
-    }
-}
-
-public enum DocumentInspectionMode
-{
-    NormalizedJson,
-    RawJson,
-    SelectedNodeJson,
 }

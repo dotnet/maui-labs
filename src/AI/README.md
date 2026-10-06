@@ -10,8 +10,10 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
-- **Document extraction** — structured on-device recognition through Apple Vision, including paragraphs, tables, nested cells, lists, and barcodes
-- **PDF extraction** — explicit PDFKit page rendering composed with the Apple Vision document client
+- **Document extraction prototype** — `AppleVisionRecognizeDocumentsClient` implements the actual proposed interface for text, tables,
+  spans, nested cells, geometry, and page streaming, without forcing unsupported Apple features into normalized models
+- **Document reader** — `AppleVisionRecognizeDocumentsReader` projects supported extraction elements into standard ingestion elements
+- **PDF extraction** — internal PDFKit page rendering through the same Vision request
 
 ### Platform Support
 
@@ -20,8 +22,8 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 | iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
 | Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
 | macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings | ✅ Apple Vision + PDFKit |
-| Android | 🔜 Coming soon | 🔜 Coming soon | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | 🔜 Coming soon | 🔜 Coming soon |
+| Android | 🔜 Coming soon | 🔜 Coming soon | Not implemented |
+| Windows | 🔜 Coming soon | 🔜 Coming soon | Not implemented |
 
 ## Quick Start
 
@@ -41,7 +43,7 @@ var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Maui.Essentials.AI;
 
-using IDocumentExtractionClient client = new AppleVisionDocumentExtractionClient();
+using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
 await using var image = File.OpenRead("receipt.png");
 var document = await client.ExtractAsync(image, "image/png");
 
@@ -88,12 +90,20 @@ version check.
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
+- **Document proposal** — the complete original abstraction/middleware source is file-linked from
+  [`../Libraries/DocumentExtraction/Upstream/`](../Libraries/DocumentExtraction/Upstream/), preserving namespaces and accessibility
+- **Intersection-only mapping** — one native `RecognizeDocumentsRequest` path shared by the client and reader; no provider-specific
+  result metadata or invented normalized kinds. Native details remain only in the proposal's explicit raw slot.
+
+This prototype library and copied projects are non-shipping and non-packable. Visibility/release design is deferred until the APIs have
+been exercised; this is not a reduced private stand-in for the upstream proposal.
 
 ## Documentation
 
 - [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
 - [Apple Document Recognizer Implementation](../../docs/ai/apple-document-recognizer-implementation.md)
 - [Apple Document Extraction Feedback](../../docs/ai/apple-document-extraction-feedback.md)
+- [Current Apple/Proposal Capability Gaps](../../docs/ai/apple-document-extraction-gaps.md)
 
 ## Requirements
 

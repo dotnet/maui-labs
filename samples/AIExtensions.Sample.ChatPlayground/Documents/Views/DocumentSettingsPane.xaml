@@ -6,56 +6,64 @@
              x:DataType="local:DocumentSettingsViewModel">
     <ScrollView>
         <VerticalStackLayout Padding="16" Spacing="12">
-            <HorizontalStackLayout Spacing="4">
-                <Label Text="CLIENT"
-                       Style="{StaticResource SectionHeading}"
-                       VerticalOptions="Center" />
-                <local:InfoTip Text="Each option is an independently registered IDocumentExtractionClient. Apple Vision stays on-device; Foundry clients send the selected document to Azure." />
-            </HorizontalStackLayout>
-            <VerticalStackLayout Spacing="4"
-                                 IsEnabled="{Binding CanSelectClient}"
-                                 RadioButtonGroup.GroupName="DocumentClient"
-                                 RadioButtonGroup.SelectedValue="{Binding SelectedOption, Mode=TwoWay}"
+            <Label Text="API" Style="{StaticResource SectionHeading}" />
+            <VerticalStackLayout IsEnabled="{Binding IsIdle}" RadioButtonGroup.GroupName="DocumentOperation"
+                                 RadioButtonGroup.SelectedValue="{Binding Mode, Mode=TwoWay}">
+                <RadioButton Content="Document extraction" Value="{x:Static local:DocumentOperationMode.Extraction}"
+                             AutomationId="DocumentExtractionModeRadio" />
+                <RadioButton Content="Document reader" Value="{x:Static local:DocumentOperationMode.Reader}"
+                             AutomationId="DocumentReaderModeRadio" />
+                <RadioButton Content="Upstream OCR reader" Value="{x:Static local:DocumentOperationMode.OcrReader}"
+                             AutomationId="DocumentOcrReaderModeRadio" />
+            </VerticalStackLayout>
+            <Label Text="CLIENT" Style="{StaticResource SectionHeading}" IsVisible="{Binding IsClientMode}" />
+            <VerticalStackLayout Spacing="4" IsVisible="{Binding IsClientMode}" IsEnabled="{Binding IsIdle}"
+                                 RadioButtonGroup.GroupName="DocumentExtractionClient"
+                                 RadioButtonGroup.SelectedValue="{Binding SelectedClientOption, Mode=TwoWay}"
                                  BindableLayout.ItemsSource="{Binding Clients}">
                 <BindableLayout.ItemTemplate>
-                    <DataTemplate x:DataType="local:DocumentClientOption">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                            <RadioButton HorizontalOptions="Fill"
-                                         Content="{Binding Descriptor.Name}"
-                                         Value="{Binding .}"
+                    <DataTemplate x:DataType="local:DocumentExtractionClientOption">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <RadioButton Content="{Binding Descriptor.DisplayName}" Value="{Binding .}"
                                          AutomationId="{Binding AutomationId}" />
-                            <local:InfoTip Grid.Column="1"
-                                           Text="{Binding Descriptor.Description}" />
+                            <local:InfoTip Grid.Column="1" Text="{Binding Descriptor.Description}" />
                         </Grid>
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
-
-            <VerticalStackLayout Spacing="12"
-                                 IsVisible="{Binding HasRequestOptions}"
-                                 IsEnabled="{Binding CanEditOptions}">
-                <BoxView HeightRequest="1"
-                         Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
-                <Label Text="REQUEST OPTIONS" Style="{StaticResource SectionHeading}" />
-
-                <VerticalStackLayout Spacing="8"
-                                     BindableLayout.ItemsSource="{Binding RequestOptions}">
-                    <BindableLayout.ItemTemplate>
-                        <DataTemplate x:DataType="local:DocumentBooleanOption">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
-                                <CheckBox IsChecked="{Binding Value}"
-                                          WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
-                                          AutomationId="{Binding AutomationId}" />
-                                <Label Grid.Column="1"
-                                       Text="{Binding Name}"
-                                       VerticalOptions="Center" />
-                                <local:InfoTip Grid.Column="2"
-                                               Text="{Binding Description}" />
-                            </Grid>
-                        </DataTemplate>
-                    </BindableLayout.ItemTemplate>
-                </VerticalStackLayout>
+            <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsExtractionMode}" IsEnabled="{Binding IsIdle}">
+                <CheckBox IsChecked="{Binding StreamPages}" AutomationId="DocumentStreamPagesCheckBox" />
+                <Label Text="Stream completed pages" VerticalOptions="Center" />
+            </HorizontalStackLayout>
+            <VerticalStackLayout IsVisible="{Binding CanSelectModel}" IsEnabled="{Binding IsIdle}">
+                <Label Text="Model / deployment override (optional)" Style="{StaticResource MutedLabel}" />
+                <Entry Text="{Binding ModelId}" AutomationId="DocumentModelIdEntry" />
             </VerticalStackLayout>
+            <HorizontalStackLayout Spacing="4" IsVisible="{Binding IsReaderMode}">
+                <Label Text="READER" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                <local:InfoTip Text="Choose a real IngestionDocumentReader. Apple reads on-device; Azure uploads the selected document when you press Read. Switch readers and re-run the same file to compare." />
+            </HorizontalStackLayout>
+            <VerticalStackLayout Spacing="4" IsEnabled="{Binding IsIdle}" IsVisible="{Binding IsReaderMode}"
+                                 RadioButtonGroup.GroupName="DocumentReader"
+                                 RadioButtonGroup.SelectedValue="{Binding SelectedOption, Mode=TwoWay}"
+                                 BindableLayout.ItemsSource="{Binding Readers}">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="local:DocumentReaderOption">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                            <RadioButton HorizontalOptions="Fill"
+                                         Value="{Binding .}"
+                                         Content="{Binding Descriptor.DisplayName}"
+                                         AutomationId="{Binding AutomationId}" />
+                            <local:InfoTip Grid.Column="1" Text="{Binding Descriptor.Description}" />
+                        </Grid>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <BoxView HeightRequest="1"
+                     Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+            <Label Text="Document Intelligence uses its explicit endpoint/key settings. Foundry Mistral uses the shared Azure endpoint/key plus DocumentDeploymentName. Only configured readers are listed. Debug builds embed local secrets; do not distribute them."
+                   Style="{StaticResource MutedLabel}" FontSize="12"
+                   AutomationId="DocumentReaderSettingsInfo" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentView>

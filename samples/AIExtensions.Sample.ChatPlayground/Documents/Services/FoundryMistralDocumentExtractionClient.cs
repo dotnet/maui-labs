@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
@@ -8,92 +6,48 @@ using ExtractedDocumentPage = Microsoft.Extensions.DocumentExtraction.DocumentPa
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Calls a Mistral document extraction model deployed to a Microsoft Foundry resource.</summary>
 internal sealed class FoundryMistralDocumentExtractionClient : IDocumentExtractionClient
 {
-    private const int MaximumDocumentBytes = 30 * 1024 * 1024;
-    private static readonly Uri s_ocrPath = new("providers/mistral/azure/ocr", UriKind.Relative);
-
-    private readonly HttpClient _httpClient;
-    private readonly string _defaultModel;
-    private readonly bool _disposeHttpClient;
+    private readonly HttpClient _client;
+    private readonly FoundryMistralDocumentReader _reader;
+    private readonly bool _ownsHttpClient;
+    private readonly DocumentExtractionClientMetadata _metadata;
+    private bool _disposed;
 
     public FoundryMistralDocumentExtractionClient(
-        HttpClient httpClient,
-        string defaultModel = "mistral-ocr-4-0",
-        bool disposeHttpClient = false)
+        HttpClient httpClient, string deploymentName, bool ownsHttpClient = false)
     {
-        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        if (_httpClient.BaseAddress is null)
-            throw new ArgumentException("The Foundry HttpClient must have a BaseAddress.", nameof(httpClient));
-
-        _defaultModel = string.IsNullOrWhiteSpace(defaultModel)
-            ? throw new ArgumentException("A Mistral document model ID is required.", nameof(defaultModel))
-            : defaultModel;
-        _disposeHttpClient = disposeHttpClient;
+        _reader = new(httpClient, deploymentName);
+        _client = httpClient;
+        _ownsHttpClient = ownsHttpClient;
+        _metadata = new("Azure.AI.Foundry.Mistral", httpClient.BaseAddress, deploymentName);
     }
 
-    public async Task<DocumentExtractionResult> ExtractAsync(
-        Stream document,
-        string mediaType,
-        DocumentExtractionOptions? options = null,
-        CancellationToken cancellationToken = default) =>
-        await ExtractPagesAsync(document, mediaType, options, cancellationToken)
-            .ToDocumentExtractionResultAsync(cancellationToken)
-            .ConfigureAwait(false);
+    public Task<DocumentExtractionResult> ExtractAsync(
+        Stream document, string mediaType, DocumentExtractionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (options?.ModelId is { } modelId)
+            ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
+        return _reader.ReadResultAsync(document, mediaType, options?.ModelId, MapResult, cancellationToken);
+    }
 
     public async IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
-        Stream document,
-        string mediaType,
-        DocumentExtractionOptions? options = null,
+        Stream document, string mediaType, DocumentExtractionOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(document);
-        ArgumentException.ThrowIfNullOrWhiteSpace(mediaType);
-        if (!document.CanRead)
-            throw new ArgumentException("The document stream must be readable.", nameof(document));
-
-        var bytes = await ReadAllBytesAsync(document, cancellationToken).ConfigureAwait(false);
-        if (bytes.Length > MaximumDocumentBytes)
-            throw new InvalidOperationException("Mistral document extraction accepts documents up to 30 MB.");
-
-        var model = string.IsNullOrWhiteSpace(options?.ModelId) ? _defaultModel : options.ModelId;
-        var includeImages = GetOption(options, "mistral.includeImages");
-
-        // The Foundry Mistral route accepts the complete document as an inline data URL.
-        using var request = new HttpRequestMessage(HttpMethod.Post, s_ocrPath);
-        request.Content = CreateRequestContent(model, mediaType, bytes, includeImages);
-
-        using var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
-
-        await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var responseDocument = await JsonDocument.ParseAsync(responseStream, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var root = responseDocument.RootElement;
-        var rawResponse = root.Clone();
-        var pages = root.GetProperty("pages").EnumerateArray().ToArray();
-
-        if (pages.Length == 0)
-            throw new InvalidDataException("The Mistral document model did not return any pages.");
-
-        var usage = GetUsage(root, pages.Length);
-
-        for (var index = 0; index < pages.Length; index++)
+        // OCR returns a complete JSON document, not incremental server events.
+        var result = await ExtractAsync(document, mediaType, options, cancellationToken);
+        for (var index = 0; index < result.Pages.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var page = MapPage(pages[index], index, rawResponse);
-            var pagesProcessed = index + 1;
-
-            yield return new DocumentExtractionPageResult(page)
+            yield return new(result.Pages[index])
             {
-                PagesProcessed = pagesProcessed,
-                TotalPages = pages.Length,
-                Usage = index == pages.Length - 1 ? usage : null,
-                AdditionalProperties = new AdditionalPropertiesDictionary
-                {
-                    ["foundry.mistral.modelId"] = GetString(root, "model") ?? model,
-                    ["foundry.mistral.totalPages"] = pages.Length,
-                },
+                PagesProcessed = index + 1,
+                TotalPages = result.Pages.Count,
+                Usage = index == result.Pages.Count - 1 ? result.Usage : null,
+                RawRepresentation = result.Pages[index].RawRepresentation,
             };
         }
     }
@@ -101,400 +55,197 @@ internal sealed class FoundryMistralDocumentExtractionClient : IDocumentExtracti
     public object? GetService(Type serviceType, object? serviceKey = null)
     {
         ArgumentNullException.ThrowIfNull(serviceType);
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (serviceKey is not null)
             return null;
+        if (serviceType == typeof(DocumentExtractionClientMetadata))
+            return _metadata;
         if (serviceType.IsInstanceOfType(this))
             return this;
-        if (serviceType == typeof(HttpClient))
-            return _httpClient;
-        if (serviceType == typeof(DocumentExtractionClientMetadata))
-        {
-            return new DocumentExtractionClientMetadata(
-                "foundry.mistral-document",
-                _httpClient.BaseAddress,
-                _defaultModel);
-        }
-        return null;
+        return serviceType.IsInstanceOfType(_client) ? _client : null;
     }
 
     public void Dispose()
     {
-        if (_disposeHttpClient)
-            _httpClient.Dispose();
+        if (_disposed)
+            return;
+        _disposed = true;
+        if (_ownsHttpClient)
+            _client.Dispose();
     }
 
-    private async Task<HttpResponseMessage> SendWithRetryAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken)
+    internal static DocumentExtractionResult MapResult(JsonElement root, CancellationToken token = default)
     {
-        var requestBytes = await request.Content!.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-        MediaTypeHeaderValue? contentType = request.Content.Headers.ContentType;
-        request.Dispose();
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("pages", out var sourcePages) || sourcePages.ValueKind != JsonValueKind.Array ||
+            sourcePages.GetArrayLength() == 0)
+            throw new InvalidDataException("Mistral OCR returned no pages.");
 
-        // Serverless deployments can return a transient 503 while capacity starts.
-        for (var attempt = 1; attempt <= 5; attempt++)
+        var pages = new List<ExtractedDocumentPage>();
+        var numbers = new HashSet<int>();
+        foreach (var source in sourcePages.EnumerateArray())
         {
-            using var retry = new HttpRequestMessage(HttpMethod.Post, s_ocrPath);
-            retry.Content = new ByteArrayContent(requestBytes);
-            retry.Content.Headers.ContentType = contentType;
-
-            var response = await _httpClient
-                .SendAsync(retry, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                .ConfigureAwait(false);
-            if (response.StatusCode != HttpStatusCode.ServiceUnavailable || attempt == 5)
-                return response;
-
-            response.Dispose();
-            await Task.Delay(TimeSpan.FromSeconds(attempt * 3), cancellationToken).ConfigureAwait(false);
-        }
-
-        throw new InvalidOperationException("The Mistral document retry loop exited unexpectedly.");
-    }
-
-    private static HttpContent CreateRequestContent(
-        string model,
-        string mediaType,
-        byte[] document,
-        bool includeImages)
-    {
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream))
-        {
-            writer.WriteStartObject();
-            writer.WriteString("model", model);
-            writer.WritePropertyName("document");
-            writer.WriteStartObject();
-            writer.WriteString("type", "document_url");
-            writer.WriteString("document_url", $"data:{mediaType};base64,{Convert.ToBase64String(document)}");
-            writer.WriteEndObject();
-            writer.WriteBoolean("include_image_base64", includeImages);
-            writer.WriteBoolean("include_blocks", true);
-            writer.WriteString("table_format", "html");
-            writer.WriteBoolean("extract_header", true);
-            writer.WriteBoolean("extract_footer", true);
-            writer.WriteString("confidence_scores_granularity", "page");
-            writer.WriteEndObject();
-        }
-        var content = new ByteArrayContent(stream.ToArray());
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-        return content;
-    }
-
-    private static ExtractedDocumentPage MapPage(JsonElement source, int pageIndex, JsonElement rawResponse)
-    {
-        var sourceIndex = GetInt32(source, "index") ?? pageIndex;
-        var pageNumber = sourceIndex + 1;
-        var markdown = GetString(source, "markdown") ?? string.Empty;
-        var dimensions = GetDimensions(source);
-        var imageLookup = GetImageLookup(source);
-        var tableLookup = GetContentLookup(source, "tables");
-        var elements = new List<DocumentElement>();
-
-        // OCR 4 blocks reference separately returned table and image payloads by ID.
-        if (source.TryGetProperty("blocks", out var blocks) &&
-            blocks.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var block in blocks.EnumerateArray())
-                elements.Add(MapBlock(block, pageNumber, imageLookup, tableLookup));
-        }
-        else
-        {
-            elements.Add(new DocumentBlock(markdown)
+            token.ThrowIfCancellationRequested();
+            var index = Integer(source, "index");
+            if (index is null or < 0 or int.MaxValue || !numbers.Add(index.Value + 1))
+                throw new InvalidDataException("Mistral OCR returned an invalid or duplicate page index.");
+            var number = index.Value + 1;
+            var elements = new List<DocumentElement>();
+            var tables = Indexed(source, "tables", "table_id");
+            var images = Indexed(source, "images", "image_id");
+            var usedTables = new HashSet<string>(StringComparer.Ordinal);
+            var usedImages = new HashSet<string>(StringComparer.Ordinal);
+            AddMargin("header");
+            if (source.TryGetProperty("blocks", out var blocks))
             {
-                Kind = DocumentBlockKind.Paragraph,
+                if (blocks.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException("Mistral OCR returned invalid blocks.");
+                foreach (var block in blocks.EnumerateArray())
+                {
+                    token.ThrowIfCancellationRequested();
+                    switch (String(block, "type"))
+                    {
+                        case "title":
+                        case "text":
+                            if (String(block, "content") is { } text)
+                                elements.Add(new DocumentBlock(text)
+                                {
+                                    Kind = String(block, "type") == "title" ? DocumentBlockKind.Title : DocumentBlockKind.Paragraph,
+                                    RawRepresentation = block.Clone(),
+                                });
+                            break;
+                        case "table":
+                            var tableId = String(block, "table_id");
+                            if (tableId is null || !tables.TryGetValue(tableId, out var table) || !usedTables.Add(tableId))
+                                throw new InvalidDataException("Mistral OCR returned an invalid table reference.");
+                            elements.Add(Table(table));
+                            break;
+                        case "image":
+                            var imageId = String(block, "image_id");
+                            if (imageId is not null)
+                            {
+                                if (!images.TryGetValue(imageId, out var image) || !usedImages.Add(imageId))
+                                    throw new InvalidDataException("Mistral OCR returned an invalid image reference.");
+                                elements.Add(Image(image, number));
+                            }
+                            else
+                                elements.Add(Image(block, number));
+                            break;
+                        // Unknown native block kinds are preserved in the raw page only.
+                    }
+                }
+            }
+            foreach (var (id, table) in tables)
+            {
+                token.ThrowIfCancellationRequested();
+                if (usedTables.Add(id))
+                    elements.Add(Table(table));
+            }
+            foreach (var (id, image) in images)
+            {
+                token.ThrowIfCancellationRequested();
+                if (usedImages.Add(id))
+                    elements.Add(Image(image, number));
+            }
+            AddMargin("footer");
+            DocumentPageDimensions? dimensions = null;
+            if (source.TryGetProperty("dimensions", out var size) &&
+                Number(size, "width") is { } width && Number(size, "height") is { } height)
+                dimensions = new(width, height);
+            pages.Add(new(number, String(source, "markdown") ?? "")
+            {
+                Elements = elements,
+                Dimensions = dimensions,
+                CoordinateUnit = dimensions is not null ? DocumentCoordinateUnit.Pixel : null,
+                CoordinateOrigin = dimensions is not null ? DocumentCoordinateOrigin.TopLeft : null,
                 RawRepresentation = source.Clone(),
             });
-            AppendUnreferencedTables(elements, source);
-            AppendUnreferencedImages(elements, source, pageNumber);
-        }
 
-        return new ExtractedDocumentPage(pageNumber, markdown)
-        {
-            Elements = elements,
-            Dimensions = dimensions,
-            CoordinateUnit = DocumentCoordinateUnit.Pixel,
-            CoordinateOrigin = DocumentCoordinateOrigin.TopLeft,
-            RawRepresentation = rawResponse,
-            AdditionalProperties = new AdditionalPropertiesDictionary
+            void AddMargin(string name)
             {
-                ["foundry.mistral.header"] = GetString(source, "header"),
-                ["foundry.mistral.footer"] = GetString(source, "footer"),
-                ["foundry.mistral.hyperlinkCount"] =
-                    source.TryGetProperty("hyperlinks", out var hyperlinks) &&
-                    hyperlinks.ValueKind == JsonValueKind.Array
-                        ? hyperlinks.GetArrayLength()
-                        : 0,
-                ["foundry.mistral.geometryAvailable"] = dimensions is not null,
-            },
-        };
+                if (String(source, name) is { Length: > 0 } content)
+                    elements.Add(new DocumentBlock(content) { RawRepresentation = source.GetProperty(name).Clone() });
+            }
+        }
+        DocumentExtractionUsage? usage = null;
+        if (root.TryGetProperty("usage_info", out var info))
+        {
+            var pagesProcessed = Integer(info, "pages_processed");
+            if (pagesProcessed is >= 0)
+                usage = new() { PagesProcessed = pagesProcessed };
+        }
+        return new(pages) { Usage = usage, RawRepresentation = root.Clone() };
     }
 
-    private static DocumentElement MapBlock(
-        JsonElement block,
-        int pageNumber,
-        IReadOnlyDictionary<string, JsonElement> images,
-        IReadOnlyDictionary<string, JsonElement> tables)
+    private static DocumentTable Table(JsonElement source)
     {
-        var type = GetString(block, "type") ?? "text";
-        var content = GetString(block, "content") ?? string.Empty;
-        var region = GetRegion(block, pageNumber);
-        var raw = block.Clone();
-
-        if (type == "image")
-        {
-            var imageId = GetString(block, "image_id");
-            var image = imageId is not null && images.TryGetValue(imageId, out var sourceImage)
-                ? sourceImage
-                : default;
-            return new DocumentImage
-            {
-                Caption = content,
-                Content = image.ValueKind == JsonValueKind.Object
-                    ? GetImageContent(image)
-                    : null,
-                BoundingRegion = region,
-                RawRepresentation = raw,
-                AdditionalProperties = new AdditionalPropertiesDictionary
-                {
-                    ["foundry.mistral.imageId"] = imageId,
-                },
-            };
-        }
-
-        if (type == "table")
-        {
-            var tableId = GetString(block, "table_id");
-            var tableContent = tableId is not null && tables.TryGetValue(tableId, out var sourceTable)
-                ? GetString(sourceTable, "content") ?? content
-                : content;
-            return new DocumentTable(0, 0, markdownRepresentation: tableContent)
-            {
-                BoundingRegion = region,
-                RawRepresentation = raw,
-                AdditionalProperties = new AdditionalPropertiesDictionary
-                {
-                    ["foundry.mistral.tableId"] = tableId,
-                    ["foundry.mistral.tableFormat"] = "html",
-                },
-            };
-        }
-
-        return new DocumentBlock(content)
-        {
-            Kind = MapBlockKind(type),
-            Confidence = GetConfidence(block),
-            BoundingRegion = region,
-            RawRepresentation = raw,
-        };
+        if (String(source, "content") is not { Length: > 0 } html)
+            throw new InvalidDataException("Mistral OCR returned an empty table.");
+        // HTML is the provider's representation; it does not report a native cell grid.
+        return new(0, 0, markdownRepresentation: html) { RawRepresentation = source.Clone() };
     }
 
-    private static DocumentBlockKind MapBlockKind(string type) =>
-        type switch
-        {
-            "title" => DocumentBlockKind.Title,
-            "text" => DocumentBlockKind.Paragraph,
-            _ => new DocumentBlockKind(type),
-        };
-
-    private static void AppendUnreferencedTables(
-        List<DocumentElement> elements,
-        JsonElement page)
+    private static DocumentImage Image(JsonElement source, int number)
     {
-        if (!page.TryGetProperty("tables", out var tables) ||
-            tables.ValueKind != JsonValueKind.Array)
-            return;
-
-        foreach (var table in tables.EnumerateArray())
+        DataContent? content = null;
+        if (String(source, "image_base64") is { Length: > 0 } encoded)
         {
-            elements.Add(new DocumentTable(
-                0,
-                0,
-                markdownRepresentation: GetString(table, "content") ?? string.Empty)
+            var mediaType = "application/octet-stream";
+            if (encoded.StartsWith("data:", StringComparison.Ordinal))
             {
-                RawRepresentation = table.Clone(),
-            });
+                var separator = encoded.IndexOf(";base64,", StringComparison.Ordinal);
+                if (separator <= 5)
+                    throw new InvalidDataException("Mistral OCR returned invalid image data.");
+                mediaType = encoded[5..separator];
+                encoded = encoded[(separator + 8)..];
+            }
+            try
+            {
+                content = new DataContent(Convert.FromBase64String(encoded), mediaType);
+            }
+            catch (FormatException)
+            {
+                throw new InvalidDataException("Mistral OCR returned invalid image data.");
+            }
         }
+        var image = new DocumentImage
+        {
+            Content = content,
+            Caption = String(source, "caption"),
+            RawRepresentation = source.Clone(),
+        };
+        if (Number(source, "top_left_x") is { } left && Number(source, "top_left_y") is { } top &&
+            Number(source, "bottom_right_x") is { } right && Number(source, "bottom_right_y") is { } bottom)
+            image.BoundingRegion = DocumentBoundingRegion.FromRectangle(number, left, top, right, bottom);
+        return image;
     }
 
-    private static void AppendUnreferencedImages(
-        List<DocumentElement> elements,
-        JsonElement page,
-        int pageNumber)
-    {
-        if (!page.TryGetProperty("images", out var images) ||
-            images.ValueKind != JsonValueKind.Array)
-            return;
-
-        foreach (var image in images.EnumerateArray())
-        {
-            elements.Add(new DocumentImage
-            {
-                Content = GetImageContent(image),
-                BoundingRegion = GetRegion(image, pageNumber),
-                RawRepresentation = image.Clone(),
-            });
-        }
-    }
-
-    private static IReadOnlyDictionary<string, JsonElement> GetImageLookup(JsonElement page) =>
-        GetLookup(page, "images", "id", "image_id");
-
-    private static IReadOnlyDictionary<string, JsonElement> GetContentLookup(
-        JsonElement page,
-        string propertyName) =>
-        GetLookup(page, propertyName, "id", "table_id");
-
-    private static IReadOnlyDictionary<string, JsonElement> GetLookup(
-        JsonElement page,
-        string propertyName,
-        params string[] idNames)
+    private static Dictionary<string, JsonElement> Indexed(JsonElement page, string name, string alternativeId)
     {
         var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        if (!page.TryGetProperty(propertyName, out var values) ||
-            values.ValueKind != JsonValueKind.Array)
+        if (!page.TryGetProperty(name, out var items))
             return result;
-
-        foreach (var value in values.EnumerateArray())
+        if (items.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException($"Mistral OCR returned invalid {name}.");
+        foreach (var item in items.EnumerateArray())
         {
-            var id = idNames.Select(name => GetString(value, name))
-                .FirstOrDefault(static candidate => !string.IsNullOrWhiteSpace(candidate));
-            if (id is not null)
-                result[id] = value.Clone();
+            var id = String(item, "id") ?? String(item, alternativeId);
+            if (string.IsNullOrWhiteSpace(id) || !result.TryAdd(id, item))
+                throw new InvalidDataException($"Mistral OCR returned invalid {name} IDs.");
         }
         return result;
     }
 
-    private static DataContent? GetImageContent(JsonElement image)
-    {
-        var raw = GetString(image, "image_base64");
-        if (string.IsNullOrWhiteSpace(raw))
-            return null;
-        return raw.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
-            ? new DataContent(raw)
-            : new DataContent(Convert.FromBase64String(raw), "image/png");
-    }
+    private static string? String(JsonElement value, string name) =>
+        value.ValueKind == JsonValueKind.Object && value.TryGetProperty(name, out var property) &&
+        property.ValueKind == JsonValueKind.String ? property.GetString() : null;
 
-    private static DocumentBoundingRegion? GetRegion(
-        JsonElement element,
-        int pageNumber)
-    {
-        var left = GetSingle(element, "top_left_x");
-        var top = GetSingle(element, "top_left_y");
-        var right = GetSingle(element, "bottom_right_x");
-        var bottom = GetSingle(element, "bottom_right_y");
-        return left is not null && top is not null && right is not null && bottom is not null
-            ? DocumentBoundingRegion.FromRectangle(
-                pageNumber,
-                left.Value,
-                top.Value,
-                right.Value,
-                bottom.Value)
-            : null;
-    }
+    private static int? Integer(JsonElement value, string name) =>
+        value.ValueKind == JsonValueKind.Object && value.TryGetProperty(name, out var property) &&
+        property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var number) ? number : null;
 
-    private static DocumentPageDimensions? GetDimensions(JsonElement page)
-    {
-        if (!page.TryGetProperty("dimensions", out var dimensions) ||
-            dimensions.ValueKind != JsonValueKind.Object)
-            return null;
-        var width = GetSingle(dimensions, "width");
-        var height = GetSingle(dimensions, "height");
-        return width is not null && height is not null
-            ? new(width.Value, height.Value)
-            : null;
-    }
-
-    private static double? GetConfidence(JsonElement block)
-    {
-        if (!block.TryGetProperty("confidence_scores", out var scores) ||
-            scores.ValueKind != JsonValueKind.Object)
-            return null;
-
-        foreach (var name in new[] { "confidence", "page_confidence", "block_confidence" })
-        {
-            if (scores.TryGetProperty(name, out var value) &&
-                value.ValueKind == JsonValueKind.Number)
-                return value.GetDouble();
-        }
-        return null;
-    }
-
-    private static DocumentExtractionUsage GetUsage(
-        JsonElement root,
-        int pageCount)
-    {
-        var usage = new DocumentExtractionUsage
-        {
-            PagesProcessed = pageCount,
-        };
-        if (root.TryGetProperty("usage_info", out var usageInfo) &&
-            usageInfo.ValueKind == JsonValueKind.Object)
-        {
-            usage.AdditionalProperties = new AdditionalPropertiesDictionary();
-            foreach (var property in usageInfo.EnumerateObject())
-            {
-                usage.AdditionalProperties[property.Name] =
-                    property.Value.ValueKind == JsonValueKind.Number
-                        ? property.Value.GetDouble()
-                        : property.Value.ToString();
-            }
-        }
-        return usage;
-    }
-
-    private static async Task EnsureSuccessAsync(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
-    {
-        if (response.IsSuccessStatusCode)
-            return;
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        string? message = null;
-        try
-        {
-            using var document = JsonDocument.Parse(body);
-            if (document.RootElement.TryGetProperty("error", out var error))
-                message = GetString(error, "message");
-        }
-        catch (JsonException)
-        {
-        }
-        throw new HttpRequestException(
-            $"Mistral document extraction returned {(int)response.StatusCode} ({response.ReasonPhrase}): " +
-            (message ?? body));
-    }
-
-    private static async Task<byte[]> ReadAllBytesAsync(
-        Stream document,
-        CancellationToken cancellationToken)
-    {
-        using var memory = new MemoryStream();
-        await document.CopyToAsync(memory, cancellationToken).ConfigureAwait(false);
-        return memory.ToArray();
-    }
-
-    private static bool GetOption(
-        DocumentExtractionOptions? options,
-        string key) =>
-        options?.AdditionalProperties?.TryGetValue(key, out var value) == true &&
-        value is true;
-
-    private static string? GetString(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var value) &&
-        value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
-
-    private static int? GetInt32(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var value) &&
-        value.ValueKind == JsonValueKind.Number
-            ? value.GetInt32()
-            : null;
-
-    private static float? GetSingle(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var value) &&
-        value.ValueKind == JsonValueKind.Number
-            ? value.GetSingle()
-            : null;
+    private static float? Number(JsonElement value, string name) =>
+        value.ValueKind == JsonValueKind.Object && value.TryGetProperty(name, out var property) &&
+        property.ValueKind == JsonValueKind.Number && property.TryGetSingle(out var number) && float.IsFinite(number)
+            ? number : null;
 }
