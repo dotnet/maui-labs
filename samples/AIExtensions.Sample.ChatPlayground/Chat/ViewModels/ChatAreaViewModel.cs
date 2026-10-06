@@ -173,6 +173,7 @@ public sealed partial class ChatAreaViewModel : ObservableObject
                     Text = added.Text,
                     DetailText = added.Details,
                     IsStreaming = added.IsStreaming,
+                    ModelId = added.ModelId,
                     ImageSource = added.ImageBytes is { } bytes
                         ? ImageSource.FromStream(() => new MemoryStream(bytes, writable: false))
                         : null,
@@ -186,6 +187,10 @@ public sealed partial class ChatAreaViewModel : ObservableObject
 
             case TranscriptChange.EntryTextChanged text:
                 GetEntry(text.EntryId).Text = text.Text;
+                break;
+
+            case TranscriptChange.EntryModelIdChanged model:
+                GetEntry(model.EntryId).ModelId = model.ModelId;
                 break;
 
             case TranscriptChange.ToolCallResolved result:

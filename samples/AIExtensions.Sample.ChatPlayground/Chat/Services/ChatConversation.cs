@@ -119,12 +119,9 @@ public sealed class ChatConversation
         try
         {
             await _turns.ExecuteTurnAsync(client, options, streaming,
-                response =>
-                {
-                    foreach (var message in response.Messages)
-                        projector.ProjectMessage(message);
-                },
+                projector.ProjectResponse,
                 projector.ProjectContent,
+                projector.ProjectUpdateMetadata,
                 cancellationToken);
             projector.Complete();
         }

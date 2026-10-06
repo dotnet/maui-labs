@@ -43,6 +43,10 @@
                                     <VerticalStackLayout Spacing="6">
                                         <Label Text="{Binding Label}" FontAttributes="Bold" FontSize="11"
                                                Style="{StaticResource MutedLabel}" />
+                                        <Label Text="{Binding ModelId, StringFormat='Model: {0}'}"
+                                               IsVisible="{Binding HasModelId}"
+                                               Style="{StaticResource MutedLabel}"
+                                               AutomationId="MessageModelId" />
                                         <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
                                         <Image Source="{Binding ImageSource}"
                                                IsVisible="{Binding HasImage}"
