@@ -33,6 +33,24 @@ public sealed class DocumentInputService
             _ => throw new NotSupportedException("Select a PDF, PNG, JPEG, HEIC, or TIFF file."),
         };
         await using var input = await file.OpenReadAsync();
+        return new SelectedDocument(file.FileName, mediaType, await ReadBytesAsync(input, cancellationToken));
+    }
+
+    public Task<SelectedDocument> LoadSamplePdfAsync(CancellationToken cancellationToken = default) =>
+        LoadSampleAsync("document_sample.pdf", "application/pdf", cancellationToken);
+
+    public Task<SelectedDocument> LoadSampleImageAsync(CancellationToken cancellationToken = default) =>
+        LoadSampleAsync("document_sample.png", "image/png", cancellationToken);
+
+    private static async Task<SelectedDocument> LoadSampleAsync(
+        string fileName, string mediaType, CancellationToken cancellationToken)
+    {
+        await using var input = await FileSystem.OpenAppPackageFileAsync(fileName);
+        return new SelectedDocument(fileName, mediaType, await ReadBytesAsync(input, cancellationToken));
+    }
+
+    private static async Task<byte[]> ReadBytesAsync(Stream input, CancellationToken cancellationToken)
+    {
         await using var output = new MemoryStream();
         var buffer = new byte[81920];
         int count;
@@ -42,6 +60,6 @@ public sealed class DocumentInputService
                 throw new InvalidOperationException("Documents must be 20 MB or smaller.");
             await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
         }
-        return new SelectedDocument(file.FileName, mediaType, output.ToArray());
+        return output.ToArray();
     }
 }

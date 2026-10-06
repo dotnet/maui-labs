@@ -42,26 +42,7 @@
                 </Border>
             </local:PlaygroundPageLayout.MainContent>
             <local:PlaygroundPageLayout.InputContent>
-                <Border Style="{StaticResource ComposerPanel}">
-                    <VerticalStackLayout Spacing="8">
-                        <Label Text="{Binding SelectedName}" AutomationId="DocumentSelectedName" />
-                        <FlexLayout Wrap="Wrap" AlignItems="Center">
-                            <Button Text="Choose PDF or image" Command="{Binding ChooseDocument}"
-                                    Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,8"
-                                    AutomationId="DocumentChooseButton" />
-                            <Button Text="Read document" Clicked="ReadClicked"
-                                    IsEnabled="{Binding CanRead}" Margin="0,0,8,8"
-                                    AutomationId="DocumentReadButton" />
-                            <Button Text="Cancel" Command="{Binding CancelReading}"
-                                    IsVisible="{Binding IsBusy}"
-                                    Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,8"
-                                    AutomationId="DocumentCancelButton" />
-                        </FlexLayout>
-                        <Label Text="Selecting Azure uploads the entire document to Azure AI Document Intelligence only after you confirm each Read. It may incur charges. No automatic cloud fallback."
-                               Style="{StaticResource MutedLabel}" FontSize="12"
-                               AutomationId="DocumentCloudDisclosure" />
-                    </VerticalStackLayout>
-                </Border>
+                <local:DocumentComposer ReadRequested="ReadClicked" />
             </local:PlaygroundPageLayout.InputContent>
         </local:PlaygroundPageLayout>
     </Grid>

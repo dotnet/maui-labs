@@ -59,8 +59,9 @@ text may leave the device and incur charges.
 The Documents tab registers selectable `IngestionDocumentReader` providers:
 Apple Vision on-device on iOS/Mac Catalyst 26+, and optional Azure Document
 Intelligence on all platforms. On Android and Windows, only the cloud reader
-is available. Select a PDF, PNG, JPEG, HEIC, or TIFF file once (20 MB maximum),
-choose a reader in settings, and select **Read document**. To compare, switch
+is available. Use the input area's **+** menu to select a PDF, PNG, JPEG, HEIC, or TIFF file (20 MB maximum),
+or load the bundled two-page sample PDF or sample document image. Choose a reader in settings and select **Read**.
+The attachment preview and remove/read/stop buttons use the same composer styles as Chat and Images. To compare, switch
 readers and re-run the same selected file. Each Azure read asks for explicit
 upload confirmation. There is **no automatic cloud fallback** if local
 recognition fails. The result displays standard `IngestionDocument` pages,
@@ -120,7 +121,7 @@ contents are logged.
 - **Images:** Generate from text or edit a single source image and inspect the
   result. Configured Azure providers are offered; there is no on-device image
   provider in this branch. The Images tab does not save generated results.
-- **Documents:** Pick one image/PDF, choose a reader in settings, and re-run
+- **Documents:** Use **+** to pick an image/PDF or load a bundled sample, choose a reader in settings, and re-run
   with another reader for comparison. Azure runs only after upload confirmation.
 
 The app saves one Chat recording locally for replay. Use the Chat **More**

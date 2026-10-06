@@ -30,6 +30,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     [ObservableProperty] private string resultHeading = "DOCUMENT RESULT";
     [ObservableProperty] private string resultOutput = string.Empty;
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty] private ImageSource? selectedPreview;
 
     public int SelectionVersion => _selectionVersion;
     public bool HasDocument => _selected is not null;
@@ -38,20 +39,46 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     public bool IsCloudSelected => Settings.SelectedDescriptor?.IsCloud == true;
     public bool CanRead => !IsBusy && HasDocument && Settings.HasReader;
     public IAsyncRelayCommand ChooseDocument => ChooseDocumentCommand;
+    public IAsyncRelayCommand UseSamplePdf => UseSamplePdfCommand;
+    public IAsyncRelayCommand UseSampleImage => UseSampleImageCommand;
     public IAsyncRelayCommand ReadDocument => ReadDocumentCommand;
+    public System.Windows.Input.ICommand RemoveDocumentAction => RemoveDocumentCommand;
     public System.Windows.Input.ICommand CancelReading => ReadDocumentCancelCommand;
 
     private bool CanChooseDocument() => !IsBusy;
     private bool CanReadDocument() => CanRead;
 
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
-    private async Task ChooseDocumentAsync()
+    private Task ChooseDocumentAsync() => SelectDocumentAsync(() => _input.PickAsync());
+
+    [RelayCommand(CanExecute = nameof(CanChooseDocument))]
+    private Task UseSamplePdfAsync() => SelectDocumentAsync(async () => await _input.LoadSamplePdfAsync());
+
+    [RelayCommand(CanExecute = nameof(CanChooseDocument))]
+    private Task UseSampleImageAsync() => SelectDocumentAsync(async () => await _input.LoadSampleImageAsync());
+
+    [RelayCommand(CanExecute = nameof(CanChooseDocument))]
+    private void RemoveDocument()
+    {
+        _selected = null;
+        _selectionVersion++;
+        SelectedName = "No document selected.";
+        SelectedPreview = null;
+        ResultOutput = string.Empty;
+        ResultHeading = "DOCUMENT RESULT";
+        StatusMessage = "Choose a PDF or image using the + menu.";
+        OnPropertyChanged(nameof(HasDocument));
+        OnPropertyChanged(nameof(CanRead));
+        ReadDocumentCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task SelectDocumentAsync(Func<Task<SelectedDocument?>> load)
     {
         IsBusy = true;
         Settings.IsBusy = true;
         try
         {
-            var file = await _input.PickAsync();
+            var file = await load();
             if (file is null)
             {
                 StatusMessage = "File selection cancelled.";
@@ -60,8 +87,12 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
             _selected = file;
             _selectionVersion++;
             SelectedName = file.FileName;
+            SelectedPreview = file.MediaType.StartsWith("image/", StringComparison.Ordinal)
+                ? ImageSource.FromStream(() => new MemoryStream(file.Bytes, writable: false))
+                : ImageSource.FromFile("folder.png");
             ResultOutput = string.Empty;
-            StatusMessage = $"Selected {file.FileName}. Choose a reader in settings, then select Read document.";
+            ResultHeading = "DOCUMENT RESULT";
+            StatusMessage = $"Selected {file.FileName}. Choose a reader in settings, then select Read.";
             OnPropertyChanged(nameof(HasDocument));
             OnPropertyChanged(nameof(CanRead));
             ReadDocumentCommand.NotifyCanExecuteChanged();
@@ -141,6 +172,9 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         OnPropertyChanged(nameof(IsIdle));
         OnPropertyChanged(nameof(CanRead));
         ChooseDocumentCommand.NotifyCanExecuteChanged();
+        UseSamplePdfCommand.NotifyCanExecuteChanged();
+        UseSampleImageCommand.NotifyCanExecuteChanged();
+        RemoveDocumentCommand.NotifyCanExecuteChanged();
         ReadDocumentCommand.NotifyCanExecuteChanged();
     }
 
