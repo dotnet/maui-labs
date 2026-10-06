@@ -454,7 +454,7 @@ public sealed class RecordedChatReplayTests
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
         using var client = new DescribedChatClient(
-            new RecordingChatClient(new EchoChatClient(), recording),
+            new RecordingChatClient(new EchoChatClient("echo-model"), recording),
             new ChatClientDescriptor("echo", "Echo", "Ready"));
 
         var messages = new[] { new ChatMessage(ChatRole.User, "Hello") };
@@ -516,7 +516,7 @@ public sealed class RecordedChatReplayTests
 
         var entries = changes.OfType<TranscriptChange.EntryAdded>().ToArray();
         Assert.All(entries.Where(entry => entry.EntryKind is TranscriptEntryKind.User or TranscriptEntryKind.System ||
-            entry.Text == "Earlier response"), entry => Assert.Equal(string.Empty, entry.ModelId));
+            entry.Text == "Earlier response"), entry => Assert.Null(entry.ModelId));
         var output = Assert.Single(entries, entry =>
             entry.EntryKind == TranscriptEntryKind.Assistant && entry.Text != "Earlier response");
         Assert.Equal(modelId, output.ModelId);
@@ -637,7 +637,7 @@ public sealed class RecordedChatReplayTests
     private static string FixturePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "TestData", fileName);
 
-    private sealed class EchoChatClient(string modelId = "echo-model") : IChatClient
+    private sealed class EchoChatClient(string modelId) : IChatClient
     {
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>

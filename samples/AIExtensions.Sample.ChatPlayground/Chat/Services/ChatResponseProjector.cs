@@ -19,11 +19,11 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
     private readonly HashSet<string> _seenResultIds = new(StringComparer.Ordinal);
     private bool _hasToolActivity;
     private bool _hasImage;
-    private string _modelId = string.Empty;
+    private string? _modelId;
 
     public void ProjectResponse(ChatResponse response)
     {
-        _modelId = response.ModelId ?? string.Empty;
+        _modelId = response.ModelId;
         foreach (var message in response.Messages)
             ProjectMessage(message);
     }
@@ -35,7 +35,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
         FlushText();
     }
 
-    public void ProjectContent(AIContent content, string modelId)
+    public void ProjectContent(AIContent content, string? modelId)
     {
         _modelId = modelId;
         // Tool results can resolve call bubbles; text, reasoning, and images update visible entries.

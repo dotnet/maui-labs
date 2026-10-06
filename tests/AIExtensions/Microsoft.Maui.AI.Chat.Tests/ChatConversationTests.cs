@@ -280,7 +280,7 @@ public sealed class ChatConversationTests
 
         var entries = changes.OfType<TranscriptChange.EntryAdded>().ToArray();
         Assert.All(entries.Where(entry => entry.EntryKind is TranscriptEntryKind.User or TranscriptEntryKind.System),
-            entry => Assert.Equal(string.Empty, entry.ModelId));
+            entry => Assert.Null(entry.ModelId));
         var outputs = entries.Where(entry => entry.EntryKind is not (TranscriptEntryKind.User or TranscriptEntryKind.System)).ToArray();
         Assert.Equal(6, outputs.Length);
         Assert.All(outputs, entry => Assert.Equal("actual-model", entry.ModelId));
