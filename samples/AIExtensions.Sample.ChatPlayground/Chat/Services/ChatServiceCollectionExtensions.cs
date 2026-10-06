@@ -55,7 +55,7 @@ internal static class ChatServiceCollectionExtensions
                 SupportsToolCalling: true))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
-            .UseFunctionInvocation()
+            .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif
 
@@ -88,7 +88,7 @@ internal static class ChatServiceCollectionExtensions
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>());
         if (imageGenerator is not null)
             builder.UseImageGenerationPreservingInputs(imageGenerator);
-        return builder.UseFunctionInvocation().Build();
+        return builder.UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>()).Build();
     }
 
     private static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>

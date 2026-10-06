@@ -113,6 +113,33 @@ public sealed class ChatDiagnosticsTests
     }
 
     [Fact]
+    public void Receiver_CapturesAppleToolLogsWithProviderFilterWithoutPayloads()
+    {
+        using var receiver = new ChatDiagnostics();
+        using var factory = LoggerFactory.Create(builder => builder
+            .SetMinimumLevel(LogLevel.Warning)
+            .AddProvider(receiver)
+            .AddFilter<ChatDiagnostics>(ChatDiagnostics.AppleToolLogCategory, LogLevel.Debug));
+        var logger = factory.CreateLogger(ChatDiagnostics.AppleToolLogCategory);
+        using var source = new ActivitySource(ChatDiagnostics.SourceName);
+        using var activity = source.StartActivity("chat")!;
+
+        logger.LogDebug("Invoking {MethodName}.", "calculate");
+        logger.LogDebug("{MethodName} invocation completed. Duration: {Duration}", "calculate", TimeSpan.FromMilliseconds(5));
+        logger.LogTrace("private tool arguments and result");
+        factory.CreateLogger("Microsoft.Maui.Essentials.AI.Other").LogError("unrelated");
+
+        var entries = receiver.Snapshot().Entries;
+        Assert.Equal(2, entries.Length);
+        Assert.Contains("Invoking calculate.", entries[0].Message);
+        Assert.Contains("calculate invocation completed.", entries[1].Message);
+        Assert.All(entries, entry => Assert.Equal(activity.TraceId.ToString(), entry.TraceId));
+        Assert.DoesNotContain(entries, entry => (entry.Message + entry.Details).Contains("private tool"));
+        receiver.Dispose();
+        Assert.False(logger.IsEnabled(LogLevel.Debug));
+    }
+
+    [Fact]
     public void Receiver_IgnoresOtherSourcesAndTraceAndSnapshotsTags()
     {
         using var receiver = new ChatDiagnostics();

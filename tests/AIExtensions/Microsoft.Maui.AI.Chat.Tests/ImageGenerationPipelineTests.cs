@@ -21,7 +21,7 @@ public sealed class ImageGenerationPipelineTests
         var imageProvider = new TestImageGenerator(image);
         using var generator = imageProvider.AsBuilder().UseLogging(factory).Build();
         using var client = new ImageGeneratingChatClient(
-            provider.AsBuilder().UseFunctionInvocation().Build(),
+            provider.AsBuilder().UseFunctionInvocation(factory).Build(),
             generator, ImageGeneratingChatClient.DataContentHandling.GeneratedImages)
             .AsBuilder().UsePlaygroundTelemetry().UseLogging(factory).Build();
 
@@ -56,6 +56,11 @@ public sealed class ImageGenerationPipelineTests
             && entry.Message.Contains("invoked"));
         Assert.Contains(entries, entry => entry.Heading.Contains("LoggingImageGenerator")
             && entry.Message.Contains("completed"));
+        Assert.Contains(entries, entry => entry.Heading.Contains("FunctionInvokingChatClient")
+            && entry.Message.Contains("Invoking GenerateImage."));
+        Assert.Contains(entries, entry => entry.Heading.Contains("FunctionInvokingChatClient")
+            && entry.Message.Contains("GenerateImage invocation completed. Duration:"));
+        Assert.DoesNotContain(entries, entry => (entry.Message + entry.Details).Contains("a robot"));
         Assert.All(entries, entry => Assert.Equal(span.TraceId, entry.TraceId));
 
         await client.GetResponseAsync(
