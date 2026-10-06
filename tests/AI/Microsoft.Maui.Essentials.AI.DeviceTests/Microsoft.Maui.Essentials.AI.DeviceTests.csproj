@@ -20,6 +20,10 @@
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(EnableOpenAIClient)' == 'true'">
+    <DefineConstants>$(DefineConstants);ENABLE_OPENAI_CLIENT</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <ApplicationTitle>AI Tests</ApplicationTitle>
     <ApplicationId>com.microsoft.maui.ai.devicetests</ApplicationId>
@@ -50,6 +54,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableOpenAIClient)' == 'true'">
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="OpenAI" />
   </ItemGroup>
 
   <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' And '$(Configuration)' == 'Debug' ">

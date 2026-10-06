@@ -54,6 +54,35 @@ dotnet build src/AI/EssentialsAI.slnf
 
 The CI pipeline handles the macOS → Windows artifact flow automatically. See `.github/workflows/ci-essentialsai.yml` for details.
 
+## Device tests
+
+The shared chat response tests require a nonempty `ChatResponse.ModelId`. The
+streaming tests check every `ChatResponseUpdate`, including metadata-only updates,
+for a nonempty, consistent model ID and verify the aggregated response retains it.
+Apple Intelligence and OpenAI inherit the same assertions.
+
+```bash
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests \
+  -f net10.0-maccatalyst --filter "FullyQualifiedName~ModelId"
+```
+
+For live OpenAI testing, add `-p:EnableOpenAIClient=true`. Configure the device
+test project's user secrets (`808cc184-141a-409e-addd-565c973dbce6`) with
+`AI:ApiKey`, `AI:Endpoint`, `AI:DeploymentName`, and `AI:EmbeddingDeploymentName`.
+Use an OpenAI-compatible endpoint, such as Azure OpenAI's `/openai/v1/` endpoint.
+The opt-in also enables a native SDK streaming test that distinguishes completion
+updates from prompt annotations, which can have an empty model field.
+
+The opt-in currently exposes an upstream Chat Completions adapter defect:
+an empty model field on the initial annotation is retained for the entire
+adapted stream, despite later native completion chunks carrying model IDs.
+This was reproduced with adapter versions 10.4.1 and 10.10.1. The Responses
+adapter used by the chat playground is a separate path.
+
+These tests contact real models and require Apple Intelligence to be available
+for the Apple cases. Debug builds embed the configured user secrets; do not
+distribute the resulting test app.
+
 ## Architecture
 
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
