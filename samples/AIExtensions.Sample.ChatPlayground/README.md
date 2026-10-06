@@ -34,10 +34,11 @@ disabled; exceptions may still contain sensitive data. Nothing is exported.
 
 On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses the enabled Apple
 Intelligence model to choose a local or Azure answer for each text-only turn.
-It is an ordinary `IChatClient` registered in `MauiProgram.cs`, using built-in
-`RoutingChatClient` and `FailoverChatClient`. Without a configured Azure chat
-deployment it answers locally without classification. Routing is model-decided,
-not deterministic; tools and images are unsupported.
+It is an ordinary `IChatClient` registered by `AddChatFeature(aiSettings)` in
+`ChatServiceCollectionExtensions`, using built-in `RoutingChatClient` and
+`FailoverChatClient`. Without a configured Azure chat deployment it answers
+locally without classification. Routing is model-decided, not deterministic;
+tools and images are unsupported.
 
 Cloud routes automatically send a locally prepared summary by default;
 original conversation mode is opt-in. Redaction is best-effort, not a privacy
