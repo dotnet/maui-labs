@@ -51,6 +51,7 @@ public class AppleVisionDocumentRecognizerNative: NSObject {
                 try Task.checkCancellation()
 
                 let result = try AppleVisionDocumentRecognitionResultNative(observations)
+                try Task.checkCancellation()
                 onComplete(result, nil)
             } catch is CancellationError {
                 let error = makeError(

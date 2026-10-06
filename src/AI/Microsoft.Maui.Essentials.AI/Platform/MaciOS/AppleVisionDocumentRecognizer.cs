@@ -190,6 +190,7 @@ internal sealed class AppleVisionDocumentRecognizer
 			{
 				throw new InvalidDataException("Apple Vision returned an invalid document snapshot.");
 			}
+			cancellationToken.ThrowIfCancellationRequested();
 
 			return new AppleVisionRecognizedPage(
 				pageNumber,
@@ -213,7 +214,7 @@ internal sealed class AppleVisionDocumentRecognizer
 
 	private static RenderedPdfPage RenderPdfPage(PdfPage page, CGRect bounds)
 	{
-		if (bounds.Width <= 0 || bounds.Height <= 0)
+		if (!double.IsFinite(bounds.Width) || !double.IsFinite(bounds.Height) || bounds.Width <= 0 || bounds.Height <= 0)
 		{
 			throw new InvalidDataException("The PDF page has invalid render bounds.");
 		}
@@ -222,16 +223,9 @@ internal sealed class AppleVisionDocumentRecognizer
 		var swapsDimensions = rotation is 90 or 270;
 		var widthPoints = swapsDimensions ? bounds.Height : bounds.Width;
 		var heightPoints = swapsDimensions ? bounds.Width : bounds.Height;
-		var scale = PdfRenderDpi / 72d;
+		var scale = Math.Min(PdfRenderDpi / 72d, PdfMaximumPixelDimension / Math.Max(widthPoints, heightPoints));
 		var width = Math.Max(1, (int)Math.Ceiling(widthPoints * scale));
 		var height = Math.Max(1, (int)Math.Ceiling(heightPoints * scale));
-		var largest = Math.Max(width, height);
-		if (largest > PdfMaximumPixelDimension)
-		{
-			var clampScale = (double)PdfMaximumPixelDimension / largest;
-			width = Math.Max(1, (int)Math.Floor(width * clampScale));
-			height = Math.Max(1, (int)Math.Floor(height * clampScale));
-		}
 
 		using var colorSpace = CGColorSpace.CreateDeviceRGB();
 		using var context = new CGBitmapContext(
