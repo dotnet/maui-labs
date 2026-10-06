@@ -35,6 +35,12 @@ public sealed class ChatDiagnosticsTests
         Assert.Contains(" ms |", span.Message);
         var trace = span.Details.Split('\n')[0].Split(" | ")[0];
         Assert.All(entries, entry => Assert.Contains(trace, entry.Details));
+        Assert.NotNull(span.TraceId);
+        Assert.All(entries, entry => Assert.Equal(span.TraceId, entry.TraceId));
+        var groups = new ChatDiagnosticGroups();
+        groups.ApplySnapshot(entries);
+        Assert.Equal(span.TraceId, Assert.Single(groups).TraceId);
+        Assert.Equal(entries, groups[0].ToArray());
         Assert.DoesNotContain(entries, entry => (entry.Message + entry.Details).Contains("private-prompt"));
         Assert.DoesNotContain(entries, entry => (entry.Message + entry.Details).Contains("private-answer"));
         Assert.DoesNotContain(entries, entry => entry.Heading.Contains("| Trace |"));
@@ -135,6 +141,33 @@ public sealed class ChatDiagnosticsTests
         }
         else
             await client.GetResponseAsync(messages, options);
+    }
+
+    [Fact]
+    public async Task ConcurrentRequests_GroupOwnLogsAndSpansWithoutMixingTraces()
+    {
+        using var receiver = new ChatDiagnostics();
+        using var factory = LoggerFactory.Create(builder =>
+            builder.AddProvider(receiver).SetMinimumLevel(LogLevel.Debug));
+        using var client = new FakeClient().AsBuilder()
+            .UsePlaygroundTelemetry().UseLogging(factory).Build();
+
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Invoke(client, streaming: true)));
+        factory.CreateLogger("Microsoft.Extensions.AI.Test").LogDebug("Outside a request");
+
+        var groups = new ChatDiagnosticGroups();
+        groups.ApplySnapshot(receiver.Snapshot().Entries);
+        Assert.Equal(5, groups.Count);
+        foreach (var group in groups.Where(group => group.TraceId is not null))
+        {
+            Assert.Equal(3, group.Count);
+            Assert.Single(group, entry => entry.Heading.Contains("| Telemetry |"));
+            Assert.All(group, entry => Assert.Equal(group.TraceId, entry.TraceId));
+            Assert.Equal(group.OrderBy(entry => entry.Sequence), group);
+        }
+        var uncorrelated = Assert.Single(groups, group => group.TraceId is null);
+        Assert.Equal("Uncorrelated", uncorrelated.Title);
+        Assert.Equal("Outside a request", Assert.Single(uncorrelated).Message);
     }
 
     [Fact]

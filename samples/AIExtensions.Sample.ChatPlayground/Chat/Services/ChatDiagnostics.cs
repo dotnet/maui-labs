@@ -5,7 +5,8 @@ using Microsoft.Extensions.Logging;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-public sealed record ChatDiagnosticEntry(long Sequence, string Heading, string Message, string Details);
+public sealed record ChatDiagnosticEntry(
+    long Sequence, string Heading, string Message, string Details, string? TraceId = null);
 
 /// <summary>A bounded local receiver for existing AI logs and completed chat activities.</summary>
 public sealed class ChatDiagnostics : ILoggerProvider
@@ -63,7 +64,7 @@ public sealed class ChatDiagnostics : ILoggerProvider
         _listener.Dispose();
     }
 
-    private void Append(string heading, string message, string details)
+    private void Append(string heading, string message, string details, string? traceId)
     {
         lock (_gate)
         {
@@ -71,7 +72,7 @@ public sealed class ChatDiagnostics : ILoggerProvider
                 return;
             if (_entries.Count == Capacity)
                 _entries.Dequeue();
-            _entries.Enqueue(new(++_version, Limit(heading), Limit(message), Limit(details)));
+            _entries.Enqueue(new(++_version, Limit(heading), Limit(message), Limit(details), traceId));
         }
     }
 
@@ -86,8 +87,11 @@ public sealed class ChatDiagnostics : ILoggerProvider
             $"{activity.StartTimeUtc.ToLocalTime():HH:mm:ss.fff} | Telemetry | {activity.Source.Name}",
             $"{activity.DisplayName} | {activity.Duration.TotalMilliseconds:F1} ms | {activity.Status}" +
                 (summary.Length == 0 ? "" : "\n" + summary),
-            $"{Correlation(activity)}\n{activity.StatusDescription}\n{tags}");
+            $"{Correlation(activity)}\n{activity.StatusDescription}\n{tags}", GetTraceId(activity));
     }
+
+    private static string? GetTraceId(Activity? activity) =>
+        activity is not null && activity.TraceId != default ? activity.TraceId.ToString() : null;
 
     private static string Correlation(Activity? activity) => activity is null
         ? string.Empty
@@ -112,10 +116,11 @@ public sealed class ChatDiagnostics : ILoggerProvider
         {
             if (!IsEnabled(logLevel))
                 return;
+            var activity = Activity.Current;
             owner.Append(
                 $"{DateTimeOffset.Now:HH:mm:ss.fff} | {logLevel} | {category} | {eventId}",
                 formatter(state, exception),
-                $"{Correlation(Activity.Current)}{(exception is null ? "" : "\n" + exception)}");
+                $"{Correlation(activity)}{(exception is null ? "" : "\n" + exception)}", GetTraceId(activity));
         }
     }
 }

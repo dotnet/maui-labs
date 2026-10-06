@@ -14,10 +14,16 @@
                          Clicked="CloseClicked" AutomationId="CloseChatLogsButton"
                          SemanticProperties.Description="Close chat diagnostics" />
         </Grid>
-        <Label Grid.Row="1" Text="Local logs and completed spans. No prompt capture."
+        <Label Grid.Row="1" Text="Local logs and completed spans, grouped by trace. No prompt capture."
                Style="{StaticResource MutedLabel}" FontSize="12" />
-        <CollectionView Grid.Row="2" ItemsSource="{Binding Entries, Source={x:Reference LogsView}}"
-                        SelectionMode="None" AutomationId="ChatLogEntries">
+        <CollectionView Grid.Row="2" ItemsSource="{Binding Groups, Source={x:Reference LogsView}}"
+                        IsGrouped="True" SelectionMode="None" AutomationId="ChatLogEntries">
+            <CollectionView.GroupHeaderTemplate>
+                <DataTemplate x:DataType="local:ChatDiagnosticGroup">
+                    <Label Text="{Binding Title}" AutomationId="{Binding AutomationId}"
+                           Style="{StaticResource SectionHeading}" Margin="0,8,0,8" />
+                </DataTemplate>
+            </CollectionView.GroupHeaderTemplate>
             <CollectionView.EmptyView>
                 <Label Text="Send a live chat request to see built-in diagnostics."
                        AutomationId="ChatLogsEmpty" Margin="12"
