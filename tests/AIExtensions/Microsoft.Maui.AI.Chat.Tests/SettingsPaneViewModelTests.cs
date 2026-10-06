@@ -12,6 +12,34 @@ public sealed class SettingsPaneViewModelTests
     }
 
     [Fact]
+    public void HybridCloudPayload_DefaultsToSummaryAndDoesNotAffectDirectClients()
+    {
+        using var hybrid = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("hybrid", "Hybrid", "Ready", IsHybrid: true));
+        using var live = CreateClient("Live", isReplay: false);
+        var settings = new SettingsPaneViewModel([hybrid, live]);
+
+        Assert.True(settings.UseCloudSummary);
+        Assert.False(settings.SendOriginalToCloud);
+        var summary = settings.CreateChatOptions([]);
+        Assert.Equal(false, summary.AdditionalProperties![HybridChatClient.OriginalCloudPayloadOption]);
+        Assert.Null(summary.Tools);
+        Assert.Null(summary.Reasoning);
+
+        settings.SendOriginalToCloud = true;
+        Assert.False(settings.UseCloudSummary);
+        Assert.Equal(true, settings.CreateChatOptions([]).AdditionalProperties![HybridChatClient.OriginalCloudPayloadOption]);
+
+        settings.SelectedClient = live;
+        Assert.Null(settings.CreateChatOptions([]).AdditionalProperties);
+
+        settings.SelectedClient = hybrid;
+        settings.UseCloudSummary = true;
+        Assert.False(settings.SendOriginalToCloud);
+        Assert.Equal(false, settings.CreateChatOptions([]).AdditionalProperties![HybridChatClient.OriginalCloudPayloadOption]);
+    }
+
+    [Fact]
     public void SelectedClient_ExposesActualClientAndItsDescriptor()
     {
         using var live = CreateClient("Live", isReplay: false);
