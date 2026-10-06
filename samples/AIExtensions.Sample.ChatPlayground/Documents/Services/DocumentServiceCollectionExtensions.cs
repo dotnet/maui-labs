@@ -12,6 +12,7 @@ internal static class DocumentServiceCollectionExtensions
     public static IServiceCollection AddDocumentFeature(this IServiceCollection services, AISettings settings)
     {
         services.AddSingleton<DocumentInputService>();
+        services.AddSingleton<DocumentReadingService>();
         services.AddSingleton<DocumentSettingsViewModel>();
         services.AddSingleton<DocumentPlaygroundViewModel>();
         services.AddTransient<Page, DocumentPage>();
@@ -37,14 +38,8 @@ internal static class DocumentServiceCollectionExtensions
                 client.DefaultRequestHeaders.Add("api-key", settings.ApiKey);
                 return client;
             });
-            services.AddSingleton<IngestionDocumentReader>(provider => new DescribedDocumentReader(
-                new FoundryMistralDocumentReader(
-                    provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings.DocumentDeploymentName),
-                new DocumentReaderDescriptor(
-                    "foundry-mistral-document",
-                    "Foundry Mistral Document AI",
-                    "Uploads the entire document to the configured Foundry document model; may incur charges.",
-                    IsCloud: true)));
+            services.AddSingleton<IngestionDocumentReader>(provider => CreateFoundryDocumentReader(
+                provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings));
         }
 
         return services;
@@ -69,5 +64,14 @@ internal static class DocumentServiceCollectionExtensions
                 "azure-document-intelligence",
                 "Azure Document Intelligence",
                 "Uploads the entire document to Azure for prebuilt-layout analysis; may incur charges.",
+                IsCloud: true));
+
+    private static IngestionDocumentReader CreateFoundryDocumentReader(HttpClient client, AISettings settings) =>
+        new DescribedDocumentReader(
+            new FoundryMistralDocumentReader(client, settings.DocumentDeploymentName!),
+            new DocumentReaderDescriptor(
+                "foundry-mistral-document",
+                "Foundry Mistral Document AI",
+                "Uploads the entire document to the configured Foundry document model; may incur charges.",
                 IsCloud: true));
 }

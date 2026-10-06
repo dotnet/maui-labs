@@ -16,33 +16,10 @@
                 <local:DocumentSettingsPane BindingContext="{Binding Settings}" />
             </local:PlaygroundPageLayout.SettingsContent>
             <local:PlaygroundPageLayout.MainContent>
-                <Border Style="{StaticResource ComposerPanel}">
-                    <Grid RowDefinitions="Auto,*" RowSpacing="8">
-                        <Label Text="{Binding ResultHeading}" Style="{StaticResource SectionHeading}"
-                               AutomationId="DocumentResultHeading" />
-                        <ScrollView Grid.Row="1" AutomationId="DocumentResultsScroll">
-                            <Grid>
-                                <Label Text="Choose a PDF or image and run the selected reader to see pages, elements, and Markdown."
-                                       Style="{StaticResource MutedLabel}" AutomationId="DocumentEmptyLabel">
-                                    <Label.Triggers>
-                                        <DataTrigger TargetType="Label" Binding="{Binding HasResult}" Value="True">
-                                            <Setter Property="IsVisible" Value="False" />
-                                        </DataTrigger>
-                                    </Label.Triggers>
-                                </Label>
-                                <Label Text="{Binding ResultOutput}" IsVisible="{Binding HasResult}"
-                                       LineBreakMode="WordWrap" AutomationId="DocumentResultOutput" />
-                            </Grid>
-                        </ScrollView>
-                        <ActivityIndicator Grid.Row="1" IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
-                                           Color="{StaticResource Primary}"
-                                           HorizontalOptions="Center" VerticalOptions="Center"
-                                           AutomationId="DocumentLoading" />
-                    </Grid>
-                </Border>
+                <local:DocumentArea />
             </local:PlaygroundPageLayout.MainContent>
             <local:PlaygroundPageLayout.InputContent>
-                <local:DocumentComposer ReadRequested="ReadClicked" />
+                <local:DocumentComposer />
             </local:PlaygroundPageLayout.InputContent>
         </local:PlaygroundPageLayout>
     </Grid>

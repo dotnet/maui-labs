@@ -6,15 +6,10 @@
              x:DataType="local:DocumentPlaygroundViewModel">
     <Border Style="{StaticResource ComposerPanel}">
         <VerticalStackLayout Spacing="8">
-            <Grid IsVisible="{Binding HasDocument}" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                <Image Source="{Binding SelectedPreview}" WidthRequest="56" HeightRequest="56" Aspect="AspectFit" />
-                <Label Grid.Column="1" Text="{Binding SelectedName}" VerticalOptions="Center"
-                       LineBreakMode="TailTruncation" AutomationId="DocumentSelectedName" />
-                <ImageButton Grid.Column="2" Source="close.png" Command="{Binding RemoveDocumentAction}"
-                             Style="{StaticResource AttachmentButton}"
-                             SemanticProperties.Description="Remove selected document"
-                             AutomationId="DocumentRemoveButton" />
-            </Grid>
+            <local:AttachmentPreview IsVisible="{Binding HasDocument}" PreviewSource="{Binding SelectedPreview}"
+                                     PreviewAspect="AspectFit" FileName="{Binding SelectedName}"
+                                     RemoveCommand="{Binding RemoveDocumentAction}" RemoveDescription="Remove selected document"
+                                     NameAutomationId="DocumentSelectedName" RemoveAutomationId="DocumentRemoveButton" />
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <ImageButton Source="add.png" Style="{StaticResource AttachmentButton}" IsEnabled="{Binding IsIdle}"
                              SemanticProperties.Description="Add a document"
@@ -34,7 +29,7 @@
                 <Label Grid.Column="1" Text="Add a PDF or image to read" Style="{StaticResource MutedLabel}"
                        MinimumHeightRequest="44" VerticalTextAlignment="Center" />
                 <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44" VerticalOptions="End">
-                    <ImageButton Source="send.png" Clicked="ReadClicked" IsEnabled="{Binding CanRead}"
+                    <ImageButton Source="send.png" Command="{Binding ReadDocument}"
                                  IsVisible="{Binding IsIdle}" Style="{StaticResource AttachmentButton}"
                                  SemanticProperties.Description="Read document" AutomationId="DocumentReadButton" />
                     <ImageButton Source="stop.png" Command="{Binding CancelReading}" IsVisible="{Binding IsBusy}"

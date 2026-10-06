@@ -154,3 +154,8 @@ real abstractions with dependency injection. `MainWindow` composes the four
 registered pages as tabs. Reusable controls are in `Views/`, and shared
 configuration, image input, and atomic storage are in `Services/`. Chat
 recording and document indexing remain separate.
+
+Documents follows the same page/area/composer/settings split as Images and Embeddings. Its view model owns selection and
+request state; `DocumentReadingService` runs the reader and formats standard ingestion results without MAUI dependencies.
+All three attachment composers share `AttachmentPreview`, and image/document loading shares the bounded `InputStreamReader`.
+Provider-specific SDK/protocol adapters remain separate, behind the real `IngestionDocumentReader` abstraction.

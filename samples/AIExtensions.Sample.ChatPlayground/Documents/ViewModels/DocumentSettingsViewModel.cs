@@ -9,12 +9,7 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     public DocumentSettingsViewModel(IEnumerable<IngestionDocumentReader> readers)
     {
         ArgumentNullException.ThrowIfNull(readers);
-        Readers = readers.Select((reader, index) => new DocumentReaderOption(
-            reader,
-            reader is DescribedDocumentReader described
-                ? described.Descriptor
-                : throw new InvalidOperationException($"Document reader {index} did not expose its descriptor."),
-            index)).ToArray();
+        Readers = readers.Select((reader, index) => new DocumentReaderOption(reader, index)).ToArray();
         if (Readers.Select(option => option.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != Readers.Count)
             throw new ArgumentException("Document readers need distinct IDs.", nameof(readers));
         SelectedOption = Readers.FirstOrDefault();
@@ -46,8 +41,12 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(IsIdle));
 }
 
-public sealed record DocumentReaderOption(
-    IngestionDocumentReader Reader, DocumentReaderDescriptor Descriptor, int Index)
+public sealed record DocumentReaderOption(IngestionDocumentReader Reader, int Index)
 {
+    public DocumentReaderDescriptor Descriptor { get; } =
+        Reader is DescribedDocumentReader described
+            ? described.Descriptor
+            : throw new InvalidOperationException($"Document reader {Index} did not expose its descriptor.");
+
     public string AutomationId => $"DocumentReader{Index}Radio";
 }

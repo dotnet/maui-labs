@@ -1,7 +1,5 @@
 namespace AIExtensions.Sample.ChatPlayground;
 
-public sealed record SelectedDocument(string FileName, string MediaType, byte[] Bytes);
-
 public sealed class DocumentInputService
 {
     private const int MaximumBytes = 20 * 1024 * 1024;
@@ -49,17 +47,6 @@ public sealed class DocumentInputService
         return new SelectedDocument(fileName, mediaType, await ReadBytesAsync(input, cancellationToken));
     }
 
-    private static async Task<byte[]> ReadBytesAsync(Stream input, CancellationToken cancellationToken)
-    {
-        await using var output = new MemoryStream();
-        var buffer = new byte[81920];
-        int count;
-        while ((count = await input.ReadAsync(buffer, cancellationToken)) != 0)
-        {
-            if (output.Length + count > MaximumBytes)
-                throw new InvalidOperationException("Documents must be 20 MB or smaller.");
-            await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
-        }
-        return output.ToArray();
-    }
+    private static Task<byte[]> ReadBytesAsync(Stream input, CancellationToken cancellationToken) =>
+        InputStreamReader.ReadBytesAsync(input, MaximumBytes, "Documents must be 20 MB or smaller.", cancellationToken);
 }

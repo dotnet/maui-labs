@@ -26,6 +26,9 @@
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\AzureDocumentIntelligenceReader.cs" Link="Documents\AzureDocumentIntelligenceReader.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralDocumentReader.cs" Link="Documents\FoundryMistralDocumentReader.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\AISettings.cs" Link="Documents\AISettings.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputStreamReader.cs" Link="Services\InputStreamReader.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\SelectedDocument.cs" Link="Documents\SelectedDocument.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentReadingService.cs" Link="Documents\DocumentReadingService.cs" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Models\**" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\StreamingJsonDeserializer.cs" Link="Services\StreamingJsonDeserializer.cs" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\BufferedChatClient.cs" Link="Services\BufferedChatClient.cs" />

@@ -1,8 +1,6 @@
 using System.ComponentModel;
-using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.DataIngestion;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
@@ -10,10 +8,13 @@ namespace AIExtensions.Sample.ChatPlayground;
 public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 {
     private readonly DocumentInputService _input;
+    private readonly DocumentReadingService _reading;
     private SelectedDocument? _selected;
 
-    public DocumentPlaygroundViewModel(DocumentInputService input, DocumentSettingsViewModel settings)
+    public DocumentPlaygroundViewModel(
+        DocumentReadingService reading, DocumentInputService input, DocumentSettingsViewModel settings)
     {
+        _reading = reading;
         _input = input;
         Settings = settings;
         Settings.PropertyChanged += SettingsPropertyChanged;
@@ -40,7 +41,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     public IAsyncRelayCommand UseSamplePdf => UseSamplePdfCommand;
     public IAsyncRelayCommand UseSampleImage => UseSampleImageCommand;
     public IAsyncRelayCommand ReadDocument => ReadDocumentCommand;
-    public System.Windows.Input.ICommand RemoveDocumentAction => RemoveDocumentCommand;
+    public IRelayCommand RemoveDocumentAction => RemoveDocumentCommand;
     public System.Windows.Input.ICommand CancelReading => ReadDocumentCancelCommand;
 
     private bool CanChooseDocument() => !IsBusy;
@@ -55,7 +56,9 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanChooseDocument))]
     private Task UseSampleImageAsync() => SelectDocumentAsync(async () => await _input.LoadSampleImageAsync());
 
-    [RelayCommand(CanExecute = nameof(CanChooseDocument))]
+    private bool CanRemoveDocument() => !IsBusy && HasDocument;
+
+    [RelayCommand(CanExecute = nameof(CanRemoveDocument))]
     private void RemoveDocument()
     {
         _selected = null;
@@ -67,6 +70,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         OnPropertyChanged(nameof(HasDocument));
         OnPropertyChanged(nameof(CanRead));
         ReadDocumentCommand.NotifyCanExecuteChanged();
+        RemoveDocumentCommand.NotifyCanExecuteChanged();
     }
 
     private async Task SelectDocumentAsync(Func<Task<SelectedDocument?>> load)
@@ -92,6 +96,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
             OnPropertyChanged(nameof(HasDocument));
             OnPropertyChanged(nameof(CanRead));
             ReadDocumentCommand.NotifyCanExecuteChanged();
+            RemoveDocumentCommand.NotifyCanExecuteChanged();
         }
         catch (Exception exception)
         {
@@ -115,12 +120,11 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         StatusMessage = $"Reading {file.FileName} with {option.Descriptor.DisplayName}...";
         try
         {
-            using var stream = new MemoryStream(file.Bytes, writable: false);
-            var result = await option.Reader.ReadAsync(stream, file.FileName, file.MediaType, cancellationToken);
+            var result = await _reading.ReadAsync(option.Reader, file, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            ResultOutput = Format(result);
+            ResultOutput = result.Output;
             ResultHeading = option.Descriptor.DisplayName.ToUpperInvariant() + " RESULT";
-            StatusMessage = $"Read {result.Sections.Count} page(s) with {option.Descriptor.DisplayName}.";
+            StatusMessage = $"Read {result.PageCount} page(s) with {option.Descriptor.DisplayName}.";
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -172,27 +176,5 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         UseSampleImageCommand.NotifyCanExecuteChanged();
         RemoveDocumentCommand.NotifyCanExecuteChanged();
         ReadDocumentCommand.NotifyCanExecuteChanged();
-    }
-
-    private static string Format(IngestionDocument document)
-    {
-        var output = new StringBuilder().AppendLine($"Document: {document.Identifier}");
-        foreach (var section in document.Sections)
-        {
-            output.AppendLine().AppendLine($"Page {section.PageNumber}");
-            foreach (var element in section.Elements)
-            {
-                var type = element switch
-                {
-                    IngestionDocumentHeader => "Header",
-                    IngestionDocumentTable => "Table",
-                    IngestionDocumentParagraph => "Paragraph",
-                    _ => "Element",
-                };
-                output.Append(type).Append(": ").AppendLine(element.Text ?? element.GetMarkdown());
-                output.AppendLine("Markdown:").AppendLine(element.GetMarkdown()).AppendLine();
-            }
-        }
-        return output.ToString();
     }
 }
