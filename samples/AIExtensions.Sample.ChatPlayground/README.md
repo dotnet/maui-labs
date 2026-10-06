@@ -32,25 +32,25 @@ disabled; exceptions may still contain sensitive data. Nothing is exported.
 
 #### Hybrid chat
 
-On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses the enabled Apple
-Intelligence model to choose a local or Azure answer for each text-only turn.
-It is an ordinary `IChatClient` registered by `AddChatFeature(aiSettings)` in
-`ChatServiceCollectionExtensions`, using built-in `RoutingChatClient` and
-`FailoverChatClient`. Without a configured Azure chat deployment it answers
-locally without classification. Routing is model-decided, not deterministic;
-tools and images are unsupported.
+On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses an enabled Apple
+Intelligence model to classify **only the last user message** in one local call
+per request. Routing is model-decided, not cached or deterministic; terse
+follow-ups have no earlier context for classification. Without an Azure chat
+deployment it answers locally without classification. Tools and images are
+unsupported. `AddChatFeature(aiSettings)` registers it as an ordinary
+`IChatClient`, using built-in `RoutingChatClient` and `FailoverChatClient`.
 
-Cloud routes automatically send the **full original text conversation and
-instructions**, preserving supported generation settings, stop sequences and
-response schemas. There is no summarization, redaction or per-turn approval;
-do not send secrets or data that must stay on-device. Only transient cloud
-failures before any streaming update allow local recovery, with at most two
-answer attempts. Authentication, validation, local failures and caller
-cancellation propagate.
+Either answer leaf receives the full original cleaned text conversation and
+instructions, supported generation settings, stop sequences and response schema.
+Cloud routes send this automatically without summarization, redaction or
+per-turn approval; do not send secrets or data that must stay on-device.
+Only transient cloud failures before any streaming update allow local recovery,
+with at most two answer attempts. Authentication, validation, local failures
+and caller cancellation propagate.
 
-Built-in diagnostics on the local/cloud leaves expose classification, answer
-attempts and recovery under the outer trace. Only this sample and its host tests
-use the newer AI routing packages; other products retain their pins.
+Built-in local/cloud leaf diagnostics expose classification, answer attempts
+and recovery under the outer trace. Only this sample and its host tests use the
+newer AI routing packages; other products retain their pins.
 
 ### Embeddings
 
