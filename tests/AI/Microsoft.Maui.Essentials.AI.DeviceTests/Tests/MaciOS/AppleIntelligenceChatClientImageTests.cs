@@ -62,7 +62,7 @@ public class AppleIntelligenceChatClientImageTests
 
 		var native = AppleIntelligenceChatClient.ToNative(new DataContent(jpeg.ToArray(), "image/jpeg"));
 
-		Assert.Equal(6, native.OrientationRaw);
+		Assert.Equal(CGImagePropertyOrientation.Right, native.Orientation);
 		Assert.NotNull(native.Data);
 
 		var portable = Assert.IsType<DataContent>(AppleIntelligenceChatClient.FromNative(native));
@@ -70,7 +70,7 @@ public class AppleIntelligenceChatClientImageTests
 		var oriented = Assert.IsType<CGImage>(portable.RawRepresentation);
 		Assert.Equal((nint)3, oriented.Width);
 		Assert.Equal((nint)2, oriented.Height);
-		Assert.Equal(0, AppleIntelligenceChatClient.ToNative(portable).OrientationRaw);
+		Assert.Equal(default(CGImagePropertyOrientation), AppleIntelligenceChatClient.ToNative(portable).Orientation);
 	}
 
 	[Fact]
@@ -97,7 +97,7 @@ public class AppleIntelligenceChatClientImageTests
 
 		Assert.NotNull(native.CgImage);
 		Assert.Null(native.Data);
-		Assert.Equal(6, native.OrientationRaw);
+		Assert.Equal(CGImagePropertyOrientation.Right, native.Orientation);
 	}
 
 	[Fact]
@@ -111,7 +111,7 @@ public class AppleIntelligenceChatClientImageTests
 
 		Assert.NotNull(native.CgImage);
 		Assert.Null(native.ImageUrl);
-		Assert.Equal(5, native.OrientationRaw);
+		Assert.Equal(CGImagePropertyOrientation.LeftMirrored, native.Orientation);
 	}
 
 	[Fact]
@@ -137,7 +137,7 @@ public class AppleIntelligenceChatClientImageTests
 	public void FromNative_CGImage_ProducesDecodablePng()
 	{
 		using var image = CreateTestImage();
-		var native = new ImageContentNative(image, 0, null);
+		var native = new ImageContentNative(image, default, null);
 
 		var content = AppleIntelligenceChatClient.FromNative(native);
 
@@ -169,10 +169,10 @@ public class AppleIntelligenceChatClientImageTests
 	}
 
 	[Theory]
-	[InlineData(2, 2, 3)]
-	[InlineData(6, 3, 2)]
-	[InlineData(8, 3, 2)]
-	public void FromNative_OrientedImage_NormalizesPortableAndNativePixels(int orientation, int width, int height)
+	[InlineData(CGImagePropertyOrientation.UpMirrored, 2, 3)]
+	[InlineData(CGImagePropertyOrientation.Right, 3, 2)]
+	[InlineData(CGImagePropertyOrientation.Left, 3, 2)]
+	public void FromNative_OrientedImage_NormalizesPortableAndNativePixels(CGImagePropertyOrientation orientation, int width, int height)
 	{
 		using var image = CreateTestImage(2, 3);
 		var native = new ImageContentNative(image, orientation, null);
@@ -181,7 +181,7 @@ public class AppleIntelligenceChatClientImageTests
 		var oriented = Assert.IsType<CGImage>(portable.RawRepresentation);
 		Assert.Equal((nint)width, oriented.Width);
 		Assert.Equal((nint)height, oriented.Height);
-		Assert.Equal(0, AppleIntelligenceChatClient.ToNative(portable).OrientationRaw);
+		Assert.Equal(default(CGImagePropertyOrientation), AppleIntelligenceChatClient.ToNative(portable).Orientation);
 
 		using var png = NSData.FromArray(portable.Data.ToArray());
 		using var source = CGImageSource.FromData(png);
@@ -203,7 +203,7 @@ public class AppleIntelligenceChatClientImageTests
 		try
 		{
 			File.WriteAllBytes(path, png.ToArray());
-			var native = new ImageContentNative(NSUrl.FromFilename(path), 6, null);
+			var native = new ImageContentNative(NSUrl.FromFilename(path), CGImagePropertyOrientation.Right, null);
 
 			var portable = Assert.IsType<DataContent>(AppleIntelligenceChatClient.FromNative(native));
 			var oriented = Assert.IsType<CGImage>(portable.RawRepresentation);
@@ -220,7 +220,7 @@ public class AppleIntelligenceChatClientImageTests
 	[Fact]
 	public void FromNative_EmptyImage_Throws()
 	{
-		var native = new ImageContentNative(NSData.FromArray([]), "image/png", 0, null)
+		var native = new ImageContentNative(NSData.FromArray([]), "image/png", default, null)
 		{
 			Data = null,
 		};

@@ -4,6 +4,7 @@ using System;
 using System.Threading.Tasks;
 using CoreGraphics;
 using Foundation;
+using ImageIO;
 using ObjCRuntime;
 
 namespace Microsoft.Maui.Essentials.AI;
@@ -280,7 +281,7 @@ interface ImageContentNative
 
 	// @property (nonatomic) int orientationRaw;
 	[Export("orientationRaw")]
-	int OrientationRaw { get; set; }
+	CGImagePropertyOrientation Orientation { get; set; }
 
 	// @property (nonatomic, copy) NSString * _Nullable label;
 	[NullAllowed, Export("label")]
@@ -289,15 +290,15 @@ interface ImageContentNative
 	// - (nonnull instancetype)initWithCgImage:(CGImageRef _Nonnull)cgImage orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label OBJC_DESIGNATED_INITIALIZER;
 	[Export("initWithCgImage:orientationRaw:label:")]
 	[DesignatedInitializer]
-	NativeHandle Constructor(CGImage cgImage, int orientationRaw, [NullAllowed] string label);
+	NativeHandle Constructor(CGImage cgImage, CGImagePropertyOrientation orientation, [NullAllowed] string label);
 
 	// - (nonnull instancetype)initWithData:(NSData * _Nonnull)data mimeType:(NSString * _Nonnull)mimeType orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label;
 	[Export("initWithData:mimeType:orientationRaw:label:")]
-	NativeHandle Constructor(NSData data, string mimeType, int orientationRaw, [NullAllowed] string label);
+	NativeHandle Constructor(NSData data, string mimeType, CGImagePropertyOrientation orientation, [NullAllowed] string label);
 
 	// - (nonnull instancetype)initWithImageURL:(NSURL * _Nonnull)imageURL orientationRaw:(int)orientationRaw label:(NSString * _Nullable)label;
 	[Export("initWithImageURL:orientationRaw:label:")]
-	NativeHandle Constructor(NSUrl imageURL, int orientationRaw, [NullAllowed] string label);
+	NativeHandle Constructor(NSUrl imageURL, CGImagePropertyOrientation orientation, [NullAllowed] string label);
 }
 
 // @interface ResponseUpdateNative : NSObject

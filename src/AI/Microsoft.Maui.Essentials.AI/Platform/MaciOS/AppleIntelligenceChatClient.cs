@@ -504,7 +504,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 		// Byte fallback: the Swift shim decodes the bytes to a CGImage.
 		var bytes = data.Data.ToArray();
-		return new ImageContentNative(NSData.FromArray(bytes), data.MediaType ?? "image/png", 0, null);
+		return new ImageContentNative(NSData.FromArray(bytes), data.MediaType ?? "image/png", default, null);
 	}
 
 	internal static ImageContentNative ToNative(UriContent uri)
@@ -513,7 +513,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			return native;
 
 		if (uri.Uri.IsFile)
-			return new ImageContentNative(NSUrl.FromFilename(uri.Uri.LocalPath), 0, null);
+			return new ImageContentNative(NSUrl.FromFilename(uri.Uri.LocalPath), default, null);
 
 		throw new NotSupportedException(
 			"Apple Intelligence image prompts require in-memory DataContent or a file:// UriContent. " +
@@ -525,24 +525,24 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		switch (representation)
 		{
 			case CGImage cg:
-				return new ImageContentNative(cg, 0, null);
+				return new ImageContentNative(cg, default, null);
 #if IOS || MACCATALYST
 			case UIKit.UIImage ui when ui.CGImage is { } cg:
 				return new ImageContentNative(cg, ui.Orientation switch
 				{
-					UIKit.UIImageOrientation.Up => 1,
-					UIKit.UIImageOrientation.UpMirrored => 2,
-					UIKit.UIImageOrientation.Down => 3,
-					UIKit.UIImageOrientation.DownMirrored => 4,
-					UIKit.UIImageOrientation.LeftMirrored => 5,
-					UIKit.UIImageOrientation.Right => 6,
-					UIKit.UIImageOrientation.RightMirrored => 7,
-					UIKit.UIImageOrientation.Left => 8,
+					UIKit.UIImageOrientation.Up => CGImagePropertyOrientation.Up,
+					UIKit.UIImageOrientation.UpMirrored => CGImagePropertyOrientation.UpMirrored,
+					UIKit.UIImageOrientation.Down => CGImagePropertyOrientation.Down,
+					UIKit.UIImageOrientation.DownMirrored => CGImagePropertyOrientation.DownMirrored,
+					UIKit.UIImageOrientation.LeftMirrored => CGImagePropertyOrientation.LeftMirrored,
+					UIKit.UIImageOrientation.Right => CGImagePropertyOrientation.Right,
+					UIKit.UIImageOrientation.RightMirrored => CGImagePropertyOrientation.RightMirrored,
+					UIKit.UIImageOrientation.Left => CGImagePropertyOrientation.Left,
 					_ => throw new ArgumentOutOfRangeException(nameof(representation), "Unsupported UIImage orientation.")
 				}, null);
 #elif MACOS
 			case AppKit.NSImage ns when ToCGImage(ns) is { } cg:
-				return new ImageContentNative(cg, 0, null);
+				return new ImageContentNative(cg, default, null);
 #endif
 			default:
 				return null;
@@ -551,14 +551,14 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	internal static AIContent FromNative(ImageContentNative image)
 	{
-		if (image.OrientationRaw is < 0 or > 8)
-			throw new InvalidDataException($"Unsupported EXIF orientation: {image.OrientationRaw}.");
+		if ((int)image.Orientation is < 0 or > 8)
+			throw new InvalidDataException($"Unsupported EXIF orientation: {(int)image.Orientation}.");
 
-		if (image.OrientationRaw > 1)
+		if (image.Orientation > CGImagePropertyOrientation.Up)
 		{
 			using var decoded = image.CgImage is null ? DecodeImage(image) : null;
 			using var source = CIImage.FromCGImage(image.CgImage ?? decoded!);
-			using var oriented = source.CreateByApplyingOrientation((CGImagePropertyOrientation)image.OrientationRaw);
+			using var oriented = source.CreateByApplyingOrientation(image.Orientation);
 			using var context = new CIContext();
 			var rendered = context.CreateCGImage(oriented, oriented.Extent)
 				?? throw new InvalidDataException("Failed to render the oriented native image.");
