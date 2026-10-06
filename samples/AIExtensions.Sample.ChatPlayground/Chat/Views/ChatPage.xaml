@@ -11,7 +11,8 @@
                                        HeaderInfo="Send messages with the selected real client. Replay plays only the current chat offline; More imports or exports that recording and toggles chat diagnostics."
                                        HeaderStatus="{Binding Chat.StatusMessage}"
                                        StatusAutomationId="RequestStatusLabel"
-                                       SidebarTitle="Chat settings">
+                                       SidebarTitle="Chat settings"
+                                       IsDiagnosticsOpen="{Binding Diagnostics.IsOpen}">
             <local:PlaygroundPageLayout.HeaderActions>
                 <HorizontalStackLayout Spacing="4">
                     <VerticalStackLayout Spacing="2">
@@ -42,8 +43,8 @@
                                             Command="{Binding ExportChatAction}"
                                             CommandParameter="{x:Reference MoreButton}"
                                             AutomationId="ExportChatButton" />
-                                    <Button Text="Show / hide logs" Clicked="ToggleLogsClicked"
-                                            SemanticProperties.Description="Show or hide chat diagnostics"
+                                    <Button Text="Show / hide logs" Command="{Binding Diagnostics.ToggleCommand}"
+                                            SemanticProperties.Description="Show or hide AI diagnostics"
                                             AutomationId="ToggleChatLogsButton" />
                                 </VerticalStackLayout>
                             </local:PopupMenu.Content>
@@ -52,6 +53,9 @@
                     </VerticalStackLayout>
                 </HorizontalStackLayout>
             </local:PlaygroundPageLayout.HeaderActions>
+            <local:PlaygroundPageLayout.DiagnosticsContent>
+                <local:ChatLogsView BindingContext="{Binding Diagnostics}" />
+            </local:PlaygroundPageLayout.DiagnosticsContent>
             <local:PlaygroundPageLayout.SettingsContent>
                 <local:SettingsPane BindingContext="{Binding Settings}" />
             </local:PlaygroundPageLayout.SettingsContent>

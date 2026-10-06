@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
+/// <summary>Groups original diagnostics by captured trace ID, including uncorrelated entries.</summary>
 public sealed class ChatDiagnosticGroup(string? traceId) : ObservableCollection<ChatDiagnosticEntry>
 {
     public string? TraceId { get; } = traceId;
@@ -9,6 +10,7 @@ public sealed class ChatDiagnosticGroup(string? traceId) : ObservableCollection<
     public string AutomationId => $"ChatLogTrace-{TraceId ?? "uncorrelated"}";
 }
 
+/// <summary>Reconciles trace groups with the receiver's bounded, append-ordered snapshots.</summary>
 public sealed class ChatDiagnosticGroups : ObservableCollection<ChatDiagnosticGroup>
 {
     public void ApplySnapshot(ChatDiagnosticEntry[] entries)

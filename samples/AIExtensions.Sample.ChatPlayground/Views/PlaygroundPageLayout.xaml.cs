@@ -24,9 +24,14 @@ public partial class PlaygroundPageLayout : ContentView
     public static readonly BindableProperty DiagnosticsContentProperty = BindableProperty.Create(
         nameof(DiagnosticsContent), typeof(View), typeof(PlaygroundPageLayout),
         propertyChanged: (bindable, _, _) => ((PlaygroundPageLayout)bindable).ResizeDiagnostics());
+    public static readonly BindableProperty IsDiagnosticsOpenProperty = BindableProperty.Create(
+        nameof(IsDiagnosticsOpen), typeof(bool), typeof(PlaygroundPageLayout), false,
+        defaultBindingMode: BindingMode.TwoWay,
+        propertyChanged: (bindable, _, _) => ((PlaygroundPageLayout)bindable).DiagnosticsOpenChanged());
+    public static readonly BindableProperty DiagnosticsAutomationPrefixProperty = BindableProperty.Create(
+        nameof(DiagnosticsAutomationPrefix), typeof(string), typeof(PlaygroundPageLayout), "Chat");
     private const double SidebarWidth = 330;
     private bool _isCompact;
-    private bool _diagnosticsOpen;
 
     public PlaygroundPageLayout()
     {
@@ -94,24 +99,30 @@ public partial class PlaygroundPageLayout : ContentView
         set => SetValue(DiagnosticsContentProperty, value);
     }
 
-    public void ToggleDiagnostics()
+    public bool IsDiagnosticsOpen
     {
-        _diagnosticsOpen = !_diagnosticsOpen;
-        CloseSettingsClicked(this, EventArgs.Empty);
+        get => (bool)GetValue(IsDiagnosticsOpenProperty);
+        set => SetValue(IsDiagnosticsOpenProperty, value);
+    }
+
+    public string DiagnosticsAutomationPrefix
+    {
+        get => (string)GetValue(DiagnosticsAutomationPrefixProperty);
+        set => SetValue(DiagnosticsAutomationPrefixProperty, value);
+    }
+
+    private void DiagnosticsOpenChanged()
+    {
+        if (IsDiagnosticsOpen)
+            CloseSettingsClicked(this, EventArgs.Empty);
         ResizeDiagnostics();
     }
 
-    public void CloseDiagnostics()
-    {
-        _diagnosticsOpen = false;
-        ResizeDiagnostics();
-    }
-
-    private void CloseDiagnosticsClicked(object? sender, EventArgs e) => CloseDiagnostics();
+    private void CloseDiagnosticsClicked(object? sender, EventArgs e) => IsDiagnosticsOpen = false;
 
     private void ResizeDiagnostics()
     {
-        var visible = _diagnosticsOpen && DiagnosticsContent is not null;
+        var visible = IsDiagnosticsOpen && DiagnosticsContent is not null;
         var overlay = Width < 1200;
         RootGrid.ColumnDefinitions[2].Width = visible && !overlay ? 390 : 0;
         Grid.SetColumnSpan(MainPanel, _isCompact ? 3 : visible && !overlay ? 1 : 2);
@@ -160,7 +171,7 @@ public partial class PlaygroundPageLayout : ContentView
             SettingsPanel.HorizontalOptions = LayoutOptions.Fill;
             Grid.SetColumnSpan(SettingsPanel, 1);
             Grid.SetColumn(MainPanel, 1);
-            Grid.SetColumnSpan(MainPanel, _diagnosticsOpen && DiagnosticsContent is not null && width >= 1200 ? 1 : 2);
+            Grid.SetColumnSpan(MainPanel, IsDiagnosticsOpen && DiagnosticsContent is not null && width >= 1200 ? 1 : 2);
         }
     }
 
@@ -168,7 +179,7 @@ public partial class PlaygroundPageLayout : ContentView
     {
         if (_isCompact)
         {
-            CloseDiagnostics();
+            IsDiagnosticsOpen = false;
             SettingsBackdrop.IsVisible = true;
             SettingsPanel.IsVisible = true;
         }

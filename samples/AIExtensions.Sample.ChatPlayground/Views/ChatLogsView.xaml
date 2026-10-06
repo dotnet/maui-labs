@@ -3,21 +3,25 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
              x:Class="AIExtensions.Sample.ChatPlayground.ChatLogsView"
-             x:Name="LogsView" x:DataType="local:ChatLogsView">
+             x:Name="LogsView"
+             x:DataType="local:DiagnosticsViewModel">
     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8" Padding="12">
         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-            <Label Text="Chat diagnostics" FontSize="20" FontAttributes="Bold" VerticalOptions="Center" />
+            <Label Text="AI diagnostics" FontSize="20" FontAttributes="Bold" VerticalOptions="Center" />
             <Button Grid.Column="1" Text="Clear" Style="{StaticResource SecondaryButtonStyle}"
-                    Clicked="ClearClicked" AutomationId="ClearChatLogsButton"
-                    SemanticProperties.Description="Clear local chat diagnostics" />
+                    Command="{Binding ClearCommand}"
+                    AutomationId="{Binding AutomationPrefix, Source={x:Reference LogsView}, x:DataType=local:ChatLogsView, StringFormat='Clear{0}LogsButton'}"
+                    SemanticProperties.Description="Clear local AI diagnostics" />
             <ImageButton Grid.Column="2" Source="close.png" Style="{StaticResource AttachmentButton}"
-                         Clicked="CloseClicked" AutomationId="CloseChatLogsButton"
-                         SemanticProperties.Description="Close chat diagnostics" />
+                         Command="{Binding CloseCommand}"
+                         AutomationId="{Binding AutomationPrefix, Source={x:Reference LogsView}, x:DataType=local:ChatLogsView, StringFormat='Close{0}LogsButton'}"
+                         SemanticProperties.Description="Close AI diagnostics" />
         </Grid>
         <Label Grid.Row="1" Text="Local logs and completed spans, grouped by trace. No prompt capture."
                Style="{StaticResource MutedLabel}" FontSize="12" />
-        <CollectionView Grid.Row="2" ItemsSource="{Binding Groups, Source={x:Reference LogsView}}"
-                        IsGrouped="True" SelectionMode="None" AutomationId="ChatLogEntries">
+        <CollectionView Grid.Row="2" ItemsSource="{Binding Groups}"
+                        IsGrouped="True" SelectionMode="None"
+                        AutomationId="{Binding AutomationPrefix, Source={x:Reference LogsView}, x:DataType=local:ChatLogsView, StringFormat='{0}LogEntries'}">
             <CollectionView.GroupHeaderTemplate>
                 <DataTemplate x:DataType="local:ChatDiagnosticGroup">
                     <Label Text="{Binding Title}" AutomationId="{Binding AutomationId}"
@@ -25,8 +29,9 @@
                 </DataTemplate>
             </CollectionView.GroupHeaderTemplate>
             <CollectionView.EmptyView>
-                <Label Text="Send a live chat request to see built-in diagnostics."
-                       AutomationId="ChatLogsEmpty" Margin="12"
+                <Label Text="Run a live AI operation to see built-in diagnostics."
+                       AutomationId="{Binding AutomationPrefix, Source={x:Reference LogsView}, x:DataType=local:ChatLogsView, StringFormat='{0}LogsEmpty'}"
+                       Margin="12"
                        Style="{StaticResource MutedLabel}" />
             </CollectionView.EmptyView>
             <CollectionView.ItemTemplate>

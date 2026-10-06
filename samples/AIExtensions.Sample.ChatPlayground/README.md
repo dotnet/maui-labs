@@ -20,6 +20,13 @@ offline. The **More** menu includes a bundled example; **New** replaces the
 current recording. Uncheck tools you do not need, or choose **None** to disable
 tool calls.
 
+**More > Show / hide logs** toggles the local, bounded diagnostics sidebar
+(also available on Embeddings and Images). It groups built-in logs and spans
+by trace; chat and embeddings emit spans, while the pinned MEAI version
+provides image logging only. Model and usage data appear only when emitted
+by the provider. Trace payload logging and sensitive telemetry capture are
+disabled; exceptions may still contain sensitive data. Nothing is exported.
+
 ### Embeddings
 
 Import documents, build an index, and search it using Apple's on-device

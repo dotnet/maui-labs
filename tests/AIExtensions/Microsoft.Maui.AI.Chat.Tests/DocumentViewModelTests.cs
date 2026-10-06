@@ -11,12 +11,13 @@ public sealed class DocumentViewModelTests
     public async Task ImportIndexSearchAndClear_UseOneSelectedGeneratorAndRemainIndependentOfChat()
     {
         using var directory = new DocumentDirectory();
+        using var diagnostics = new ChatDiagnostics();
         using var store = directory.CreateStore();
         using var search = directory.CreateSearch(store);
         var generator = new TestEmbeddings(_ => [1f, 0f]);
         var described = Describe("apple/english", generator);
         var settings = new EmbeddingSettingsViewModel(search, [described]) { Dimensions = "3" };
-        var playground = new EmbeddingPlaygroundViewModel(store, search, settings) { Query = "blue bird" };
+        var playground = new EmbeddingPlaygroundViewModel(store, search, settings, new(diagnostics)) { Query = "blue bird" };
         using var input = new MemoryStream(Encoding.UTF8.GetBytes("# Field notes\nBlue birds sing."));
         await playground.ImportDocumentAsync("notes.md", input);
 
@@ -53,6 +54,7 @@ public sealed class DocumentViewModelTests
     public async Task SavedIndex_RemainsSearchableAfterRestartWithSameGeneratorId()
     {
         const string generatorId = "apple-natural-language";
+        using var diagnostics = new ChatDiagnostics();
         using var directory = new DocumentDirectory();
         using var store = directory.CreateStore();
         using var input = new MemoryStream(Encoding.UTF8.GetBytes("A blue bird."));
@@ -65,7 +67,7 @@ public sealed class DocumentViewModelTests
         using var restoredSearch = directory.CreateSearch(store);
         var generator = new TestEmbeddings(_ => [1f, 0f]);
         var settings = new EmbeddingSettingsViewModel(restoredSearch, [Describe(generatorId, generator)]);
-        var playground = new EmbeddingPlaygroundViewModel(store, restoredSearch, settings) { Query = "bird" };
+        var playground = new EmbeddingPlaygroundViewModel(store, restoredSearch, settings, new(diagnostics)) { Query = "bird" };
 
         await playground.Search.ExecuteAsync(null);
 
@@ -78,11 +80,12 @@ public sealed class DocumentViewModelTests
     [Fact]
     public async Task NoGenerator_AllowsImportAndClearButDoesNotPretendSearchWorks()
     {
+        using var diagnostics = new ChatDiagnostics();
         using var directory = new DocumentDirectory();
         using var store = directory.CreateStore();
         using var search = directory.CreateSearch(store);
         var settings = new EmbeddingSettingsViewModel(search, []);
-        var playground = new EmbeddingPlaygroundViewModel(store, search, settings) { Query = "sunrise" };
+        var playground = new EmbeddingPlaygroundViewModel(store, search, settings, new(diagnostics)) { Query = "sunrise" };
         using var input = new MemoryStream(Encoding.UTF8.GetBytes("Sunrise over the meadow."));
 
         await playground.ImportDocumentAsync("notes.txt", input);
@@ -98,6 +101,7 @@ public sealed class DocumentViewModelTests
     [Fact]
     public async Task InvalidDimensionsAndDocuments_ReportErrorsWithoutContactingModel()
     {
+        using var diagnostics = new ChatDiagnostics();
         using var directory = new DocumentDirectory();
         using var store = directory.CreateStore();
         using var search = directory.CreateSearch(store);
@@ -106,7 +110,7 @@ public sealed class DocumentViewModelTests
         {
             Dimensions = "invalid",
         };
-        var playground = new EmbeddingPlaygroundViewModel(store, search, settings) { Query = "blue" };
+        var playground = new EmbeddingPlaygroundViewModel(store, search, settings, new(diagnostics)) { Query = "blue" };
         using var invalid = new MemoryStream(Encoding.UTF8.GetBytes("Not a document format"));
         await playground.ImportDocumentAsync("image.png", invalid);
         Assert.Contains("Import a Markdown", playground.StatusMessage);

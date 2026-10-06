@@ -30,11 +30,11 @@ internal static class EmbeddingServiceCollectionExtensions
         {
             using var embedding = NLEmbedding.GetSentenceEmbedding(NLLanguage.English);
             if (embedding is not null)
-                services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ => CreateAppleEmbeddingGenerator());
+                services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(CreateAppleEmbeddingGenerator);
         }
 #endif
         if (!string.IsNullOrWhiteSpace(settings.EmbeddingDeploymentName))
-            services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ => CreateAzureEmbeddingGenerator(settings));
+            services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(provider => CreateAzureEmbeddingGenerator(provider, settings));
 
         return services;
     }
@@ -42,22 +42,28 @@ internal static class EmbeddingServiceCollectionExtensions
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios13.0")]
     [SupportedOSPlatform("maccatalyst13.1")]
-    private static IEmbeddingGenerator<string, Embedding<float>> CreateAppleEmbeddingGenerator() =>
+    private static IEmbeddingGenerator<string, Embedding<float>> CreateAppleEmbeddingGenerator(IServiceProvider provider) =>
         new DescribedEmbeddingGenerator(
-            new NLEmbeddingGenerator(),
+            new NLEmbeddingGenerator().AsBuilder()
+                .UsePlaygroundTelemetry()
+                .UseLogging(provider.GetRequiredService<ILoggerFactory>())
+                .Build(),
             new EmbeddingGeneratorDescriptor(
                 "apple-natural-language",
                 "Apple NaturalLanguage",
                 "On-device English sentence embeddings from Apple's NaturalLanguage framework."));
 #endif
 
-    private static IEmbeddingGenerator<string, Embedding<float>> CreateAzureEmbeddingGenerator(AISettings settings) =>
+    private static IEmbeddingGenerator<string, Embedding<float>> CreateAzureEmbeddingGenerator(IServiceProvider provider, AISettings settings) =>
         new DescribedEmbeddingGenerator(
             new OpenAIClient(
                 new ApiKeyCredential(settings.ApiKey!),
                 new OpenAIClientOptions { Endpoint = settings.Endpoint! })
                 .GetEmbeddingClient(settings.EmbeddingDeploymentName!)
-                .AsIEmbeddingGenerator(),
+                .AsIEmbeddingGenerator().AsBuilder()
+                .UsePlaygroundTelemetry()
+                .UseLogging(provider.GetRequiredService<ILoggerFactory>())
+                .Build(),
             new EmbeddingGeneratorDescriptor(
                 "azure-openai-embeddings",
                 "Azure OpenAI",

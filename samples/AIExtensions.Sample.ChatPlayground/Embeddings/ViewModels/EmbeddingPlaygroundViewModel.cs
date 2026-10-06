@@ -11,11 +11,13 @@ public sealed partial class EmbeddingPlaygroundViewModel : ObservableObject
     private readonly DocumentStore _documents;
     private readonly DocumentSearchService _search;
 
-    public EmbeddingPlaygroundViewModel(DocumentStore documents, DocumentSearchService search, EmbeddingSettingsViewModel settings)
+    public EmbeddingPlaygroundViewModel(DocumentStore documents, DocumentSearchService search,
+        EmbeddingSettingsViewModel settings, DiagnosticsViewModel diagnostics)
     {
         _documents = documents;
         _search = search;
         Settings = settings;
+        Diagnostics = diagnostics;
         Settings.PropertyChanged += SettingsPropertyChanged;
         Settings.IndexCleared += (_, _) =>
         {
@@ -34,6 +36,7 @@ public sealed partial class EmbeddingPlaygroundViewModel : ObservableObject
     }
 
     public EmbeddingSettingsViewModel Settings { get; }
+    public DiagnosticsViewModel Diagnostics { get; }
     public ObservableCollection<ImportedDocument> Documents { get; } = [];
     public ObservableCollection<DocumentSearchHit> Results { get; } = [];
 

@@ -68,7 +68,7 @@ internal static class ChatServiceCollectionExtensions
         var imageDeployment = settings.ImageDeploymentName;
         var imageGenerator = string.IsNullOrWhiteSpace(imageDeployment)
             ? null
-            : openAIClient.GetImageClient(imageDeployment).AsIImageGenerator();
+            : serviceProvider.GetRequiredService<IImageGenerator>();
 
         // Recording wraps the tool and image middleware so the saved response is the one shown in chat.
         var builder = openAIClient.GetResponsesClient()

@@ -22,6 +22,7 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<ImageInputService>();
         builder.Services.AddSingleton<ChatDiagnostics>();
+        builder.Services.AddTransient<DiagnosticsViewModel>();
         builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<ChatDiagnostics>());
         builder.Logging.AddFilter<ChatDiagnostics>("Microsoft.Extensions.AI", LogLevel.Debug);
         builder.Services.AddChatFeature(aiSettings);

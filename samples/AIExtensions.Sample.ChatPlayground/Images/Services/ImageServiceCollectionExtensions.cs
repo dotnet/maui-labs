@@ -1,6 +1,7 @@
 using System.ClientModel;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OpenAI;
 
 namespace AIExtensions.Sample.ChatPlayground;
@@ -15,18 +16,20 @@ internal static class ImageServiceCollectionExtensions
         services.AddTransient<Page, ImagePage>();
 
         if (!string.IsNullOrWhiteSpace(settings.ImageDeploymentName))
-            services.AddSingleton<IImageGenerator>(_ => CreateAzureImageGenerator(settings));
+            services.AddSingleton<IImageGenerator>(provider => CreateAzureImageGenerator(provider, settings));
 
         return services;
     }
 
-    private static IImageGenerator CreateAzureImageGenerator(AISettings settings) =>
+    private static IImageGenerator CreateAzureImageGenerator(IServiceProvider provider, AISettings settings) =>
         new DescribedImageGenerator(
             new OpenAIClient(
                 new ApiKeyCredential(settings.ApiKey!),
                 new OpenAIClientOptions { Endpoint = settings.Endpoint! })
                 .GetImageClient(settings.ImageDeploymentName!)
-                .AsIImageGenerator(),
+                .AsIImageGenerator().AsBuilder()
+                .UseLogging(provider.GetRequiredService<ILoggerFactory>())
+                .Build(),
             new ImageGeneratorDescriptor(
                 "azure-openai-image-generation",
                 "Azure OpenAI",

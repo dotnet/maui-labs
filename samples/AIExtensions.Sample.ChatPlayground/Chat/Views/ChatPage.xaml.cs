@@ -7,16 +7,12 @@ public partial class ChatPage : ContentPage
     private bool _restored;
 
     /// <summary>Initializes the page with its view model.</summary>
-    public ChatPage(ChatViewModel viewModel, ChatDiagnostics diagnostics)
+    public ChatPage(ChatViewModel viewModel)
     {
         InitializeComponent();
         BindingContext = viewModel;
-        ChatLayout.DiagnosticsContent = new ChatLogsView(diagnostics, ChatLayout.CloseDiagnostics);
-        ChatLayout.ToggleDiagnostics();
         Loaded += PageLoaded;
     }
-
-    private void ToggleLogsClicked(object? sender, EventArgs e) => ChatLayout.ToggleDiagnostics();
 
     private async void PageLoaded(object? sender, EventArgs e)
     {

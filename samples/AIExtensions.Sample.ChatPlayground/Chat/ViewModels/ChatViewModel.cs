@@ -20,12 +20,14 @@ public partial class ChatViewModel : ObservableObject
     private bool _replayIncomplete;
 
     /// <summary>Initializes the child view models and request orchestration.</summary>
-    public ChatViewModel(PlaygroundTools tools, ChatSessionService recording, SettingsPaneViewModel settings, ChatAreaViewModel chat)
+    public ChatViewModel(PlaygroundTools tools, ChatSessionService recording, SettingsPaneViewModel settings,
+        ChatAreaViewModel chat, DiagnosticsViewModel diagnostics)
     {
         _tools = tools;
         _recording = recording;
         Settings = settings;
         Chat = chat;
+        Diagnostics = diagnostics;
         _replayClient = settings.Clients.Single(option => option.Descriptor.IsReplay).Client;
         Chat.SendCommand = new AsyncRelayCommand(SendAsync, () => Chat.CanSend);
         Chat.CancelCommand = new RelayCommand(Cancel, () => Chat.IsBusy);
@@ -40,6 +42,8 @@ public partial class ChatViewModel : ObservableObject
 
     /// <summary>Gets the chat-area state.</summary>
     public ChatAreaViewModel Chat { get; }
+
+    public DiagnosticsViewModel Diagnostics { get; }
 
     public IAsyncRelayCommand NewChatAction => NewChatCommand;
     public IAsyncRelayCommand ImportFileAction => ImportChatFileCommand;

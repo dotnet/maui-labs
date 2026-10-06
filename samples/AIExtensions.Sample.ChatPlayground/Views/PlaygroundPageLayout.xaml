@@ -66,14 +66,15 @@
             </Grid>
             <BoxView x:Name="DiagnosticsBackdrop" Grid.ColumnSpan="3" ZIndex="19"
                      Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
-                     IsVisible="False" AutomationId="ChatLogsDismissOverlay">
+                     IsVisible="False"
+                     AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='{0}LogsDismissOverlay'}">
                 <BoxView.GestureRecognizers>
                     <TapGestureRecognizer Tapped="CloseDiagnosticsClicked" />
                 </BoxView.GestureRecognizers>
             </BoxView>
             <Border x:Name="DiagnosticsPanel" Grid.Column="1" ZIndex="20"
                     IsVisible="False" Style="{StaticResource PlaygroundPanel}"
-                    AutomationId="ChatLogsSidebar">
+                    AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='{0}LogsSidebar'}">
                 <ContentView Content="{Binding DiagnosticsContent, Source={x:Reference PlaygroundLayout}}" />
             </Border>
         </Grid>

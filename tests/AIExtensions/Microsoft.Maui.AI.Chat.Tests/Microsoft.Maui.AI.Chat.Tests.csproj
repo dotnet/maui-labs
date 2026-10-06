@@ -20,12 +20,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatDiagnostics.cs"
-             Link="Chat\Services\ChatDiagnostics.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatDiagnosticsExtensions.cs"
-             Link="Chat\Services\ChatDiagnosticsExtensions.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\ViewModels\ChatDiagnosticGroups.cs"
-             Link="Chat\ViewModels\ChatDiagnosticGroups.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnostics.cs"
+             Link="Services\ChatDiagnostics.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnosticsExtensions.cs"
+             Link="Services\ChatDiagnosticsExtensions.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\ChatDiagnosticGroups.cs"
+             Link="ViewModels\ChatDiagnosticGroups.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\DiagnosticsViewModel.cs"
+             Link="ViewModels\DiagnosticsViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatClientDescriptor.cs"
              Link="Chat\Services\ChatClientDescriptor.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatConversation.cs"

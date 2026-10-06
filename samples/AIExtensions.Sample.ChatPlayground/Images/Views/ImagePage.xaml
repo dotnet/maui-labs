@@ -11,7 +11,26 @@
                                        HeaderInfo="IImageGenerator creates an image from a prompt or edits an attached original. The output is not saved as a chat."
                                        HeaderStatus="{Binding StatusMessage}"
                                        StatusAutomationId="ImageStatusLabel"
-                                       SidebarTitle="Image settings">
+                                       SidebarTitle="Image settings"
+                                       DiagnosticsAutomationPrefix="Image"
+                                       IsDiagnosticsOpen="{Binding Diagnostics.IsOpen}">
+            <local:PlaygroundPageLayout.HeaderActions>
+                <VerticalStackLayout Spacing="2">
+                    <ImageButton Source="more.png" Style="{StaticResource ChatActionButton}"
+                                 SemanticProperties.Description="Image diagnostics options"
+                                 AutomationId="ImageMoreButton">
+                        <local:PopupMenu.Content>
+                            <Button Text="Show / hide logs" Command="{Binding Diagnostics.ToggleCommand}"
+                                    SemanticProperties.Description="Show or hide AI diagnostics"
+                                    AutomationId="ToggleImageLogsButton" />
+                        </local:PopupMenu.Content>
+                    </ImageButton>
+                    <Label Text="More" Style="{StaticResource ChatActionLabel}" />
+                </VerticalStackLayout>
+            </local:PlaygroundPageLayout.HeaderActions>
+            <local:PlaygroundPageLayout.DiagnosticsContent>
+                <local:ChatLogsView BindingContext="{Binding Diagnostics}" AutomationPrefix="Image" />
+            </local:PlaygroundPageLayout.DiagnosticsContent>
             <local:PlaygroundPageLayout.SettingsContent>
                 <local:ImageSettingsPane BindingContext="{Binding Settings}" />
             </local:PlaygroundPageLayout.SettingsContent>

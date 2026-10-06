@@ -5,13 +5,18 @@ using Microsoft.Extensions.Logging;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
+/// <summary>An immutable snapshot of an existing AI log or completed span, with captured trace correlation.</summary>
 public sealed record ChatDiagnosticEntry(
-    long Sequence, string Heading, string Message, string Details, string? TraceId = null);
+    long Sequence,
+    string Heading,
+    string Message,
+    string Details,
+    string? TraceId = null);
 
-/// <summary>A bounded local receiver for existing AI logs and completed chat activities.</summary>
+/// <summary>A bounded local receiver for existing AI logs and completed playground activities.</summary>
 public sealed class ChatDiagnostics : ILoggerProvider
 {
-    public const string SourceName = "AIExtensions.Sample.ChatPlayground.Chat";
+    public const string SourceName = "AIExtensions.Sample.ChatPlayground";
     public const int Capacity = 500;
     private const int TextLimit = 8192;
     private readonly object _gate = new();
