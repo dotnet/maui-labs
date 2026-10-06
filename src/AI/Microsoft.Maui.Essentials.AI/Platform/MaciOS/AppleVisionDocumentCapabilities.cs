@@ -2,11 +2,11 @@ namespace Microsoft.Maui.Essentials.AI;
 
 internal sealed class AppleVisionDocumentCapabilities
 {
-	internal AppleVisionDocumentCapabilities(VisionDocumentCapabilitiesNative native)
+	internal AppleVisionDocumentCapabilities(AppleVisionRecognitionCapabilities capabilities)
 	{
-		RecognitionLanguages = native.RecognitionLanguages;
-		BarcodeSymbologies = native.BarcodeSymbologies;
-		Revisions = [.. native.Revisions.Select(static revision => revision.Int32Value)];
+		RecognitionLanguages = capabilities.RecognitionLanguages;
+		BarcodeSymbologies = capabilities.BarcodeSymbologies;
+		Revisions = capabilities.Revisions;
 	}
 
 	internal IReadOnlyList<string> RecognitionLanguages { get; }
