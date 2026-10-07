@@ -193,6 +193,31 @@ The explicit hook still requires builder registration. Calling it before initial
 without registering the agent reports an error instead of silently doing nothing.
 Use `maui devflow list` to discover the assigned port rather than assuming port 9223.
 
+GTK screenshots use one-shot `Gtk.WidgetPaintable` instances. Each capture keeps its
+paintable alive, detaches it with `SetWidget(null)` on the GTK thread before disposing
+it, and releases the owned snapshot, render node, texture, and PNG bytes. If its
+initial snapshot is empty, the same paintable stays attached across an asynchronous,
+bounded frame warmup (at most four frame waits, each capped at 100 ms); GTK's main
+loop is never blocked. This allows the first capture and captures after page swaps
+to receive GTK's deferred image update without depending on leaked paintables. Detaching
+cancels GTK's deferred paintable updates before the managed wrapper can be collected.
+PNG encoding stays in memory, without screenshot scratch files. Borrowed widgets and
+renderers are not disposed. No native-core reference-count or GC workaround is needed;
+this fix is in `Microsoft.Maui.DevFlow.Agent.Gtk`.
+
+The opt-in native regression exercises the real screenshot HTTP endpoint and native
+window capture during label/layout invalidation, Shell page swaps, and active worker
+GC, including strict first-capture PNG decoding without caller retries. Run it alone
+in a process with GTK 4.12+ and a display (the DevFlow CI job uses
+Ubuntu 24.04, D-Bus, and Xvfb):
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum dotnet test \
+  src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj \
+  --configuration Release --filter FullyQualifiedName~GtkScreenshotRuntimeTests
+```
+
 For Blazor Hybrid, register `builder.AddMauiBlazorDevFlowTools()` from
 `Microsoft.Maui.DevFlow.Blazor.Gtk` as well. CDP wiring and WebView discovery start on the
 same initialized window lifecycle, even if application startup takes more than two seconds.

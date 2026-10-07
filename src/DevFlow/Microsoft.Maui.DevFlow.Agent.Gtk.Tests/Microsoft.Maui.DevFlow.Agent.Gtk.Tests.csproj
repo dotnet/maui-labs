@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <!-- These tests exercise managed lifecycle/metadata only, without initializing GTK. -->
+    <!-- Lifecycle/metadata tests need no GTK; opt-in screenshot runtime tests use a real display. -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 

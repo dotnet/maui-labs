@@ -53,6 +53,41 @@ jobs:
       pack: true
       os: '["windows-latest"]'
 
+  gtk-screenshot-runtime:
+    name: Native GTK screenshot ownership regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install GTK and isolated display
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb dbus-daemon
+      - name: Run screenshot regression in its own GTK process
+        env:
+          RUN_GTK_RUNTIME_TESTS: '1'
+          GDK_BACKEND: x11
+          GSK_RENDERER: cairo
+          GTK_A11Y: none
+        run: >-
+          dbus-run-session -- xvfb-run --auto-servernum
+          dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
+          --configuration Release
+          --filter FullyQualifiedName~GtkScreenshotRuntimeTests
+          --logger "console;verbosity=detailed"
+          --logger "trx;LogFileName=gtk-screenshot.trx"
+          --results-directory artifacts/TestResults/gtk-screenshot
+          --blame-hang-timeout 3m
+          -m:1 -nr:false
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gtk-screenshot-runtime-results
+          path: artifacts/TestResults/gtk-screenshot
+
   native-aot-smoke:
     name: Reflection-disabled Native AOT smoke
     runs-on: ubuntu-24.04

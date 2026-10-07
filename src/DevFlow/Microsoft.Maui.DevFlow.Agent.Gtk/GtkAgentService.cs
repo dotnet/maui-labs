@@ -147,37 +147,31 @@ public class GtkAgentService : MauiDevFlowAgentService
         return false;
     }
 
-    protected override Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)
+    protected override async Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)
     {
         // Try the standard MAUI API first
         try
         {
-            var result = VisualDiagnostics.CaptureAsPngAsync(element).GetAwaiter().GetResult();
-            if (result != null) return Task.FromResult<byte[]?>(result);
+            var result = await VisualDiagnostics.CaptureAsPngAsync(element);
+            if (result != null) return result;
         }
         catch { }
 
         // GTK4-specific fallback: capture the specific widget via WidgetPaintable
-        try
+        if (element.Handler?.PlatformView is global::Gtk.Widget widget)
         {
-            if (element.Handler?.PlatformView is global::Gtk.Widget widget)
-            {
-                var pngBytes = CaptureGtkWidget(widget);
-                if (pngBytes != null)
-                    return Task.FromResult<byte[]?>(pngBytes);
-            }
+            return await CaptureGtkWidgetAsync(widget);
         }
-        catch { }
 
-        return Task.FromResult<byte[]?>(null);
+        return null;
     }
 
     protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
         object nativeElement,
         ElementInfo? elementInfo)
-        => Task.FromResult(nativeElement is global::Gtk.Widget widget
-            ? CaptureGtkWidget(widget)
-            : null);
+        => DispatchAsync<byte[]>(() => nativeElement is global::Gtk.Widget widget
+            ? CaptureGtkWidgetAsync(widget)
+            : Task.FromResult<byte[]?>(null));
 
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
@@ -190,71 +184,101 @@ public class GtkAgentService : MauiDevFlowAgentService
         catch { }
 
         // GTK4-specific fallback: capture the rootElement's native widget directly
-        try
+        if (rootElement.Handler?.PlatformView is global::Gtk.Widget widget)
         {
-            if (rootElement.Handler?.PlatformView is global::Gtk.Widget widget)
-            {
-                var pngBytes = CaptureGtkWidget(widget);
-                if (pngBytes != null) return pngBytes;
-            }
+            var pngBytes = await CaptureGtkWidgetAsync(widget);
+            if (pngBytes != null) return pngBytes;
         }
-        catch { }
 
         // Final fallback: capture the main GTK window
-        try
+        var window = Application.Current?.Windows.FirstOrDefault();
+        if (window?.Handler?.PlatformView is global::Gtk.Window gtkWindow)
         {
-            var window = Application.Current?.Windows.FirstOrDefault();
-            if (window?.Handler?.PlatformView is global::Gtk.Window gtkWindow)
-            {
-                return CaptureGtkWindow(gtkWindow);
-            }
+            return await CaptureGtkWidgetAsync(gtkWindow);
         }
-        catch { }
 
         return null;
     }
 
-    private static byte[]? CaptureGtkWidget(global::Gtk.Widget widget)
+    private static async Task<byte[]?> CaptureGtkWidgetAsync(global::Gtk.Widget widget)
     {
+        using var paintable = global::Gtk.WidgetPaintable.New(widget);
         try
         {
-            var paintable = global::Gtk.WidgetPaintable.New(widget);
             var width = paintable.GetIntrinsicWidth();
             var height = paintable.GetIntrinsicHeight();
 
             if (width <= 0 || height <= 0) return null;
 
-            var snapshot = global::Gtk.Snapshot.New();
-            paintable.Snapshot(snapshot, width, height);
-            var node = snapshot.ToNode();
+            Gsk.RenderNode? node = null;
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                using (var snapshot = global::Gtk.Snapshot.New())
+                {
+                    paintable.Snapshot(snapshot, width, height);
+                    node = snapshot.ToNode();
+                }
+                if (node != null)
+                    break;
+
+                // A newly observed widget may have no render node until GTK draws a frame
+                // and delivers its deferred image update. Keep this same paintable attached.
+                if (attempt == 4 || !await WaitForGtkFrameAsync(widget))
+                    return null;
+                width = paintable.GetIntrinsicWidth();
+                height = paintable.GetIntrinsicHeight();
+                if (width <= 0 || height <= 0)
+                    return null;
+            }
             if (node == null) return null;
 
-            var renderer = widget.GetNative()?.GetRenderer();
-            if (renderer == null) return null;
-
-            var texture = renderer.RenderTexture(node, null);
-            if (texture == null) return null;
-
-            var tmpPath = System.IO.Path.GetTempFileName() + ".png";
             try
             {
-                texture.SaveToPng(tmpPath);
-                return System.IO.File.ReadAllBytes(tmpPath);
+                var renderer = widget.GetNative()?.GetRenderer();
+                if (renderer == null) return null;
+
+                using var texture = renderer.RenderTexture(node, null);
+                if (texture == null) return null;
+
+                using var png = texture.SaveToPngBytes();
+                return png.GetRegionSpan<byte>(0, png.GetSize()).ToArray();
             }
             finally
             {
-                try { System.IO.File.Delete(tmpPath); } catch { }
+                node.Unref();
             }
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            Console.WriteLine($"[Microsoft.Maui.DevFlow] GTK screenshot failed: {ex}");
+            throw;
+        }
+        finally
+        {
+            // GTK queues paintable image updates with an unowned pointer. Detach while the
+            // wrapper is still live to cancel that idle before releasing the toggle reference.
+            paintable.SetWidget(null);
         }
     }
 
-    private static byte[]? CaptureGtkWindow(global::Gtk.Window window)
+    private static async Task<bool> WaitForGtkFrameAsync(global::Gtk.Widget widget)
     {
-        return CaptureGtkWidget(window);
+        var frame = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tickId = widget.AddTickCallback((_, _) =>
+        {
+            frame.TrySetResult();
+            return true;
+        });
+        try
+        {
+            widget.QueueDraw();
+            await Task.WhenAny(frame.Task, Task.Delay(100));
+            return frame.Task.IsCompletedSuccessfully;
+        }
+        finally
+        {
+            widget.RemoveTickCallback(tickId);
+        }
     }
 
     protected override void TryNativeResize(IWindow window, int width, int height)
