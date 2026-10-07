@@ -4,7 +4,7 @@
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
     <RootNamespace>Microsoft.Maui.AI.Chat.Tests</RootNamespace>
-    <NoWarn>$(NoWarn);MEAI001;OPENAI001</NoWarn>
+    <NoWarn>$(NoWarn);MEAI001;MEDE0001;OPENAI001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,11 +14,17 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DataIngestion.Abstractions" />
     <PackageReference Include="xunit" />
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentReaderDescriptor.cs" Link="Documents\DocumentReaderDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DescribedDocumentReader.cs" Link="Documents\DescribedDocumentReader.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\DocumentExtractionClientDescriptor.cs" Link="Documents\DocumentExtractionClientDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\ViewModels\DocumentSettingsViewModel.cs" Link="Documents\DocumentSettingsViewModel.cs" />
+    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatClientDescriptor.cs"
              Link="Chat\Services\ChatClientDescriptor.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatConversation.cs"

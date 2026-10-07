@@ -1,1 +1,3 @@
 .github/workflows/*.lock.yml linguist-generated=true merge=ours
+tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Resources/Raw/DocumentReader/*.pdf binary
+samples/AIExtensions.Sample.ChatPlayground/Resources/Raw/document_sample.pdf binary

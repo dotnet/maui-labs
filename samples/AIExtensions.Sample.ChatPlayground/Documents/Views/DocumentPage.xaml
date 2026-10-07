@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.DocumentPage"
+             x:DataType="local:DocumentPlaygroundViewModel"
+             Title="Documents"
+             BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
+    <Grid>
+        <local:PlaygroundPageLayout HeaderTitle="Documents"
+                                    HeaderInfo="Compare the proposed IDocumentExtractionClient, a native IngestionDocumentReader, and the unchanged upstream OcrDocumentReader. Unsupported provider features are left absent."
+                                    HeaderStatus="{Binding StatusMessage}"
+                                    StatusAutomationId="DocumentStatusLabel"
+                                    SidebarTitle="Document settings">
+            <local:PlaygroundPageLayout.HeaderActions>
+                <ImageButton Source="more.png" Style="{StaticResource ChatActionButton}"
+                             IsEnabled="{Binding CanInspect}" AutomationId="DocumentInspectButton">
+                    <local:PopupMenu.Content>
+                        <VerticalStackLayout Spacing="8" x:DataType="local:DocumentPlaygroundViewModel">
+                            <Label Text="INSPECT" Style="{StaticResource SectionHeading}" />
+                            <Button Text="Normalized result" Command="{Binding InspectNormalized}"
+                                    AutomationId="DocumentInspectNormalizedButton" />
+                            <Button Text="Provider raw result" Command="{Binding InspectRaw}"
+                                    AutomationId="DocumentInspectRawButton" />
+                        </VerticalStackLayout>
+                    </local:PopupMenu.Content>
+                </ImageButton>
+            </local:PlaygroundPageLayout.HeaderActions>
+            <local:PlaygroundPageLayout.SettingsContent>
+                <local:DocumentSettingsPane BindingContext="{Binding Settings}" />
+            </local:PlaygroundPageLayout.SettingsContent>
+            <local:PlaygroundPageLayout.MainContent>
+                <local:DocumentArea />
+            </local:PlaygroundPageLayout.MainContent>
+            <local:PlaygroundPageLayout.InputContent>
+                <local:DocumentComposer />
+            </local:PlaygroundPageLayout.InputContent>
+        </local:PlaygroundPageLayout>
+    </Grid>
+</ContentPage>

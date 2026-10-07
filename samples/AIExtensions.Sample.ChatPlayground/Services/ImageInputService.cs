@@ -46,21 +46,8 @@ public sealed class ImageInputService
             await ReadBytesAsync(input, cancellationToken));
     }
 
-    private static async Task<byte[]> ReadBytesAsync(Stream input, CancellationToken cancellationToken)
-    {
-        await using var output = new MemoryStream();
-        var buffer = new byte[81920];
-        int bytesRead;
-        while ((bytesRead = await input.ReadAsync(buffer, cancellationToken)) > 0)
-        {
-            if (output.Length + bytesRead > MaximumImageBytes)
-                throw new InvalidOperationException("Images must be 20 MB or smaller.");
-
-            await output.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
-        }
-
-        return output.ToArray();
-    }
+    private static Task<byte[]> ReadBytesAsync(Stream input, CancellationToken cancellationToken) =>
+        InputStreamReader.ReadBytesAsync(input, MaximumImageBytes, "Images must be 20 MB or smaller.", cancellationToken);
 
     private static string? GetImageMediaType(FileResult result)
     {

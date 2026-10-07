@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <rect width="1600" height="1200" fill="white"/>
+  <g fill="#111111" font-family="Helvetica, Arial, sans-serif">
+    <text x="120" y="120" font-size="64" font-weight="700">REQUIRED DOCUMENT</text>
+    <text x="120" y="240" font-size="44">Submit this document with the application.</text>
+    <text x="170" y="420" font-size="48">&#x2022; Signed application form</text>
+    <text x="120" y="610" font-size="44">Do not submit an unsigned copy.</text>
+  </g>
+</svg>

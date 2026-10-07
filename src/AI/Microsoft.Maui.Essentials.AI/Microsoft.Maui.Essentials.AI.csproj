@@ -11,12 +11,13 @@
     <IsBindingProject>true</IsBindingProject>
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
-    <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
+    <NoWarn>$(NoWarn);CA1416;MEDE0001;XCODE_27_0_PREVIEW</NoWarn>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
-    <IsShipping>true</IsShipping>
-    <IsPackable>true</IsPackable>
+    <!-- Prototype only: the proposed public extraction contract is not approved for publication. -->
+    <IsShipping>false</IsShipping>
+    <IsPackable>false</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
     <!-- Keep this package always preview on its independent NuGet version line for all package builds.
          Bump the EssentialsAI version properties in eng/Versions.props for new previews. -->
@@ -35,19 +36,23 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DataIngestion.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <ProjectReference Include="..\..\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
   </ItemGroup>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
+    <Compile Remove="Internal\DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs" />
   </ItemGroup>
   <ItemGroup Condition=" $(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst')) or $(TargetFramework.Contains('-macos')) ">
     <XcodeProject Include="..\AppleNative\EssentialsAI\EssentialsAI.xcodeproj">
       <SchemeName>EssentialsAI</SchemeName>
     </XcodeProject>
     <ObjcBindingApiDefinition Include="..\AppleNative\ApiDefinitions.cs" />
+    <ObjcBindingApiDefinition Include="..\AppleNative\RecognizeDocumentsRequestApiDefinitions.cs" />
     <ObjcBindingCoreSource Include="..\AppleNative\StructsAndEnums.cs" />
   </ItemGroup>
   <Import Project="..\AppleBindings.targets" />

@@ -26,6 +26,11 @@
   <Folder Name="/src/AI/">
     <Project Path="src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj" />
   </Folder>
+  <Folder Name="/src/Libraries/">
+    <Project Path="src/Libraries/Microsoft.Extensions.DataIngestion.DocumentExtraction/Microsoft.Extensions.DataIngestion.DocumentExtraction.csproj" />
+    <Project Path="src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
+    <Project Path="src/Libraries/Microsoft.Extensions.DocumentExtraction/Microsoft.Extensions.DocumentExtraction.csproj" />
+  </Folder>
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes.Generators/Microsoft.Maui.AI.Attributes.Generators.csproj" />
