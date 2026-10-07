@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Platform;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using Xunit.Abstractions;
@@ -59,6 +60,8 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 		public Entry CompactSearch { get; } = new() { IsVisible = false };
 		string _search = "";
 		bool _animationOnly;
+		event EventHandler? FiltersChanged;
+		public List<string> SearchUpdates { get; } = [];
 
 		public GalleryPage()
 		{
@@ -88,6 +91,14 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			};
 			Search.TextChanged += (_, args) => SetSearch(args.NewTextValue);
 			CompactSearch.TextChanged += (_, args) => SetSearch(args.NewTextValue);
+			FiltersChanged += (_, _) =>
+			{
+				if (Search.Text != _search)
+					Search.Text = _search;
+				if (CompactSearch.Text != _search)
+					CompactSearch.Text = _search;
+			};
+			FiltersChanged += (_, _) => RefreshResults();
 			var scroll = new ScrollView { Content = new Grid { Children = { Collection } } };
 			Root.Add(scroll, 0, 1);
 			Grid.SetColumnSpan(scroll, 2);
@@ -104,14 +115,14 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			if (_search == text)
 				return;
 			_search = text;
-			Search.Text = CompactSearch.Text = text;
-			RefreshResults();
+			SearchUpdates.Add(text);
+			FiltersChanged?.Invoke(this, EventArgs.Empty);
 		}
 
 		public void ToggleAnimationFacet()
 		{
 			_animationOnly = !_animationOnly;
-			RefreshResults();
+			FiltersChanged?.Invoke(this, EventArgs.Empty);
 		}
 
 		void RefreshResults() => Collection.ItemsSource = AllItems().Where((item, index) =>
@@ -206,11 +217,9 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 				var initialPanelCount = GtkLayoutPanel.TrackedInstanceCount;
 				for (var iteration = 0; iteration < 8; iteration++)
 				{
+					app.Gallery.SearchUpdates.Clear();
 					var retiredCards = app.Gallery.Cards.Where(c => c.Handler != null).ToArray();
-					if (iteration % 2 == 0)
-						entry.SetText("Lottie Player");
-					else
-						app.Gallery.CompactSearch.Text = "Lottie Player";
+					app.Gallery.CompactSearch.Text = "Lottie Player";
 					Assert.Equal("Lottie Player", app.Gallery.Search.Text);
 					Assert.Equal("Lottie Player", app.Gallery.CompactSearch.Text);
 					Assert.Single(app.Gallery.Collection.ItemsSource.Cast<string>());
@@ -221,7 +230,8 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 					app.Gallery.Collection.ScrollTo(0);
 					app.Gallery.ToggleAnimationFacet();
 					Assert.Single(app.Gallery.Collection.ItemsSource.Cast<string>());
-					entry.SetText("__no_such_gallery_sample__");
+					app.Gallery.CompactSearch.Text = "__no_such_gallery_sample__";
+					Assert.Equal(new[] { "Lottie Player", "__no_such_gallery_sample__" }, app.Gallery.SearchUpdates);
 					Assert.Empty(app.Gallery.Collection.ItemsSource);
 					var scrolled = (Gtk.ScrolledWindow)app.Gallery.Collection.Handler!.PlatformView!;
 					var emptyChild = scrolled.GetChild();
@@ -248,6 +258,7 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 				Assert.Equal("__no_such_gallery_sample__", app.Gallery.Search.Text);
 				entry.SetText("");
 				Assert.Equal("", app.Gallery.Search.Text);
+				CheckEntryFeedback(app.Gallery.Handler!.MauiContext!);
 				await Until(() => app.Gallery.Root.Width > 0, "input remains responsive");
 
 				await app.Shell.GoToAsync("//drawing", false);
@@ -297,6 +308,35 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			var scrolled = (Gtk.ScrolledWindow)collection.Handler!.PlatformView!;
 			var list = Assert.IsType<Gtk.ListView>(scrolled.GetChild());
 			Assert.Equal(count, ((Gio.ListModel)list.GetModel()!).GetNItems());
+		}
+
+		static void CheckEntryFeedback(IMauiContext context)
+		{
+			var entry = new Entry { Text = "old" };
+			using var native = (Gtk.Entry)entry.ToPlatform(context);
+			var changes = new List<string>();
+			entry.TextChanged += (_, args) => changes.Add(args.NewTextValue);
+			try
+			{
+				entry.Text = "new";
+				Assert.Equal(new[] { "new" }, changes);
+				native.SetMaxLength(4);
+				entry.Text = "longer";
+				Assert.Equal("long", entry.Text);
+				Assert.Equal("long", native.GetText());
+				Assert.DoesNotContain("", changes);
+				native.SetText("user");
+				Assert.Equal("user", entry.Text);
+				entry.Text = null;
+				Assert.Null(entry.Text);
+				Assert.Equal("", native.GetText());
+				entry.Text = "";
+				Assert.Equal("", entry.Text);
+			}
+			finally
+			{
+				entry.Handler?.DisconnectHandler();
+			}
 		}
 
 		static async Task SaveScreenshot(Gtk.Window window, string filename)
