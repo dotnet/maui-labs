@@ -127,9 +127,10 @@ jobs:
     permissions:
       contents: read
     strategy:
+      fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [PickerSelectionTests, GtkSynchronizationContextTests, WindowSizingTests]
+        test-class: [PickerSelectionTests, GtkSynchronizationContextTests, WindowSizingTests, GtkTransformTests]
         maui: ['']
         include:
           - test-class: WindowSizingTests
