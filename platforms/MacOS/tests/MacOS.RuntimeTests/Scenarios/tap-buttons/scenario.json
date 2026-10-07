@@ -1,7 +1,7 @@
 {
   "name": "tap-buttons",
-  "expectedCases": 2,
-  "expectedAssertions": 4,
+  "expectedCases": 3,
+  "expectedAssertions": 8,
   "evidence": ["clicks.jsonl", "assertions.txt"],
   "baseline": {
     "source": "platforms/MacOS/src/MacOS/Handlers/GestureManager.cs",

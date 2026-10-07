@@ -88,6 +88,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
             ((System.Collections.Specialized.INotifyCollectionChanged)mauiView.GestureRecognizers)
                 .CollectionChanged -= OnGestureRecognizersChanged;
         }
+        GestureManager.DisconnectGestures(platformView);
         base.DisconnectHandler(platformView);
     }
 

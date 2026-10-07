@@ -10,13 +10,14 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("tap-buttons", 2, context => new TapButtonsScenario().CreateDelegate(context),
-            ExpectedAssertions: 4));
+        ScenarioRegistry.Register(new("tap-buttons", 3, context => new TapButtonsScenario().CreateDelegate(context),
+            ExpectedAssertions: 8));
 }
 
 sealed class TapButtonsScenario : MauiRuntimeScenario
 {
     Border _target = null!;
+    TapGestureRecognizer _secondary = null!;
     int _primaryTaps;
     int _secondaryTaps;
 
@@ -62,6 +63,32 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
             "Both native recognizers remain attached after dispatching mouse events.",
             "tap-buttons.recognizers-attached");
         evidence.Pass("secondary-click");
+
+        _secondary.Buttons = ButtonsMask.Primary;
+        evidence.Assert(recognizers.Count(r => r.ButtonMask == 1) == 2,
+            "Changing Buttons to Primary updates the attached native recognizer.",
+            "tap-buttons.dynamic-primary-mask");
+        SendClick(native, nativeWindow, secondary: true);
+        await RuntimeTestContext.FlushMainQueueAsync();
+        evidence.Assert(_primaryTaps == 1 && _secondaryTaps == 1,
+            "Right click is ignored after changing the secondary recognizer to Primary.",
+            "tap-buttons.dynamic-secondary-ignored");
+
+        _secondary.Buttons = ButtonsMask.Secondary;
+        evidence.Assert(recognizers.Count(r => r.ButtonMask == 1) == 1 &&
+            recognizers.Count(r => r.ButtonMask == 2) == 1,
+            "Changing Buttons back to Secondary restores the native button masks.",
+            "tap-buttons.dynamic-secondary-mask");
+        SendClick(native, nativeWindow, secondary: true);
+        await RuntimeTestContext.FlushMainQueueAsync();
+        evidence.Assert(_primaryTaps == 1 && _secondaryTaps == 2,
+            "Right click fires after changing the attached recognizer back to Secondary.",
+            "tap-buttons.dynamic-secondary-click");
+        evidence.AppendJson("clicks.jsonl", new
+        {
+            button = "secondary-after-property-change", _primaryTaps, _secondaryTaps
+        });
+        evidence.Pass("dynamic-buttons");
     }
 
     static void SendClick(NSView view, NSWindow window, bool secondary)
@@ -88,8 +115,8 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
     {
         var primary = new TapGestureRecognizer();
         primary.Tapped += (_, _) => _primaryTaps++;
-        var secondary = new TapGestureRecognizer { Buttons = ButtonsMask.Secondary };
-        secondary.Tapped += (_, _) => _secondaryTaps++;
+        _secondary = new TapGestureRecognizer { Buttons = ButtonsMask.Secondary };
+        _secondary.Tapped += (_, _) => _secondaryTaps++;
 
         _target = new Border
         {
@@ -104,7 +131,7 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
             }
         };
         _target.GestureRecognizers.Add(primary);
-        _target.GestureRecognizers.Add(secondary);
+        _target.GestureRecognizers.Add(_secondary);
 
         return new(new ContentPage
         {
