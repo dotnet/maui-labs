@@ -84,4 +84,5 @@
     </ItemGroup>
   </Target>
 
+  <Import Project="../../../src/AI/CoreAIModelResources.targets" />
 </Project>

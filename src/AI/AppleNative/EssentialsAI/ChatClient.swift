@@ -68,7 +68,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "streamResponse"
-        let cq = callbackQueue()
+        let cq: DispatchQueue? = callbackQueue()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -181,7 +181,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "getResponse"
-        let cq = callbackQueue()
+        let cq: DispatchQueue? = callbackQueue()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -447,12 +447,10 @@ public class ChatClientNative: NSObject {
         return result
     }
 
-    private func callbackQueue() -> DispatchQueue? {
-        OperationQueue.current?.underlyingQueue.map {
-            // Updates and completion share one serial queue even if the caller's
-            // operation queue is concurrent, so completion cannot release a live callback.
-            DispatchQueue(label: "EssentialsAI.response", target: $0)
-        }
+    private func callbackQueue() -> DispatchQueue {
+        // Tool callbacks and snapshot iteration can arrive on different native tasks.
+        // One serial queue also keeps completion behind every pending update.
+        DispatchQueue(label: "EssentialsAI.response", target: OperationQueue.current?.underlyingQueue)
     }
 
     // MARK: - Conversion to Foundation Models Helpers

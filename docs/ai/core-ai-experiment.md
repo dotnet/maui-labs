@@ -201,3 +201,25 @@ linking is not a model-response proof, a macOS recipe is not iOS proof, and an
 OS26 deployment-target build is not an OS26 runtime regression test.
 For offline runtime proof, use a complete app-local fixture and an app/process-
 scoped network restriction; do not disrupt shared-machine networking.
+
+### Implementation build/host checks
+
+On the implementation host (macOS27.0.1 arm64, .NET10.0.401, Xcode27.0 /
+Swift6.4), the phase-1 source wiring passed:
+
+| Check | Result |
+|---|---|
+| Normal System Mac Catalyst27 binding | Build passed; Mach-O minimum remains **26.0**, SDK27, both arm64/x86_64 |
+| Opt-in Core AI Mac Catalyst27 and macOS27 bindings | Builds passed |
+| Opt-in Mac Catalyst playground and device-test apps | Builds and strict/deep code-signature verification passed |
+| App resource boundary | Exactly one EssentialsAI framework variant; Hub/Crypto bundles present; model has seven files / 979,929,057 bytes under app resources |
+| Essentials.AI host suite | **361 passed**, including supplied/absent usage tests; timing-dependent tests unchanged |
+| Chat Playground host suite | **154 passed**, including phase-1 reasoning/image descriptor checks |
+| Missing fixture / official-build gates | Fail explicitly as intended |
+| Experimental package properties | `IsPackable=false`, `IsShipping=false`; normal package properties remain true |
+
+The SDK reports legacy Foundation Models `GenerationError` deprecation
+warnings in experimental native builds. Actual .NET model responses, the
+device assertion results, controlled offline execution and OS26/iOS runtime
+regression results are **separate runtime gates**, not claims made by this
+build/host-test table.

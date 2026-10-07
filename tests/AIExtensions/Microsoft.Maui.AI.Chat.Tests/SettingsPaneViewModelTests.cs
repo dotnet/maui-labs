@@ -6,6 +6,23 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class SettingsPaneViewModelTests
 {
     [Fact]
+    public void CoreAIPhase1Descriptor_DoesNotEnableReasoningOrImageOptions()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("core-ai-chat", "Core AI", "Not loaded.", SupportsToolCalling: true));
+        var settings = new SettingsPaneViewModel([client]) { UseReasoningSummary = true };
+
+        var options = settings.CreateChatOptions([]);
+
+        Assert.Null(options.Reasoning);
+        Assert.False(settings.SelectedDescriptor!.SupportsImageInput);
+        Assert.False(settings.SelectedDescriptor.SupportsReasoningSummary);
+        Assert.Null(options.TopK);
+        Assert.Null(options.Seed);
+        Assert.Same(ChatToolMode.Auto, options.ToolMode);
+    }
+
+    [Fact]
     public void ChatDescriptor_ToolCallingIsOptIn()
     {
         Assert.False(new ChatClientDescriptor("test", "Test", "Ready").SupportsToolCalling);
