@@ -31,7 +31,7 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
             .OfType<NSClickGestureRecognizer>()
             .ToArray() ?? [];
 
-        SendClick(native, nativeWindow, secondary: false);
+        await SendClickAsync(native, nativeWindow, secondary: false);
         await RuntimeTestContext.FlushMainQueueAsync();
         evidence.AppendJson("clicks.jsonl", new { button = "primary", _primaryTaps, _secondaryTaps });
 
@@ -53,7 +53,7 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
             "tap-buttons.primary-click");
         evidence.Pass("primary-click");
 
-        SendClick(native, nativeWindow, secondary: true);
+        await SendClickAsync(native, nativeWindow, secondary: true);
         await RuntimeTestContext.FlushMainQueueAsync();
         evidence.AppendJson("clicks.jsonl", new { button = "secondary", _primaryTaps, _secondaryTaps });
         evidence.Assert(_primaryTaps == 1 && _secondaryTaps == 1,
@@ -68,7 +68,7 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         evidence.Assert(recognizers.Count(r => r.ButtonMask == 1) == 2,
             "Changing Buttons to Primary updates the attached native recognizer.",
             "tap-buttons.dynamic-primary-mask");
-        SendClick(native, nativeWindow, secondary: true);
+        await SendClickAsync(native, nativeWindow, secondary: true);
         await RuntimeTestContext.FlushMainQueueAsync();
         evidence.Assert(_primaryTaps == 1 && _secondaryTaps == 1,
             "Right click is ignored after changing the secondary recognizer to Primary.",
@@ -79,7 +79,7 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
             recognizers.Count(r => r.ButtonMask == 2) == 1,
             "Changing Buttons back to Secondary restores the native button masks.",
             "tap-buttons.dynamic-secondary-mask");
-        SendClick(native, nativeWindow, secondary: true);
+        await SendClickAsync(native, nativeWindow, secondary: true);
         await RuntimeTestContext.FlushMainQueueAsync();
         evidence.Assert(_primaryTaps == 1 && _secondaryTaps == 2,
             "Right click fires after changing the attached recognizer back to Secondary.",
@@ -91,7 +91,7 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         evidence.Pass("dynamic-buttons");
     }
 
-    static void SendClick(NSView view, NSWindow window, bool secondary)
+    static async Task SendClickAsync(NSView view, NSWindow window, bool secondary)
     {
         window.MakeKeyAndOrderFront(null);
         NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
@@ -100,15 +100,30 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
             new CGPoint(view.Bounds.X + view.Bounds.Width / 2, view.Bounds.Y + view.Bounds.Height / 2), null);
         var down = secondary ? NSEventType.RightMouseDown : NSEventType.LeftMouseDown;
         var up = secondary ? NSEventType.RightMouseUp : NSEventType.LeftMouseUp;
+        var upMask = secondary ? NSEventMask.RightMouseUp : NSEventMask.LeftMouseUp;
+        var dispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var monitor = NSEvent.AddLocalMonitorForEventsMatchingMask(upMask, mouseEvent =>
+        {
+            dispatched.TrySetResult();
+            return mouseEvent;
+        });
 
-        using var downEvent = NSEvent.MouseEvent(
-            down, point, 0, 0, window.WindowNumber, window.GraphicsContext,
-            1, 1, 1);
-        using var upEvent = NSEvent.MouseEvent(
-            up, point, 0, 0, window.WindowNumber, window.GraphicsContext,
-            2, 1, 0);
-        NSApplication.SharedApplication.PostEvent(downEvent, false);
-        NSApplication.SharedApplication.PostEvent(upEvent, false);
+        try
+        {
+            using var downEvent = NSEvent.MouseEvent(
+                down, point, 0, 0, window.WindowNumber, window.GraphicsContext,
+                1, 1, 1);
+            using var upEvent = NSEvent.MouseEvent(
+                up, point, 0, 0, window.WindowNumber, window.GraphicsContext,
+                2, 1, 0);
+            NSApplication.SharedApplication.PostEvent(downEvent, false);
+            NSApplication.SharedApplication.PostEvent(upEvent, false);
+            await dispatched.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            NSEvent.RemoveMonitor(monitor);
+        }
     }
 
     public override Window CreateWindow(IActivationState? activationState)
