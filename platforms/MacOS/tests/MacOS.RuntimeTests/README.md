@@ -20,6 +20,7 @@ A timeout is a failure, not accepted baseline evidence.
 | `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
+| `tap-buttons` | 2 | Left click routed to secondary recognizer / primary and secondary clicks respect `Buttons` |
 | `bundle-resources` | 4 | Linked image missing / assets included and loaded from the built app bundle |
 
 The `picker` scenario covers the native state transitions of the AppKit Picker

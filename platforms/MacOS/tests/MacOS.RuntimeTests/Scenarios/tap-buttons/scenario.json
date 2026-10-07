@@ -1,0 +1,17 @@
+{
+  "name": "tap-buttons",
+  "expectedCases": 2,
+  "expectedAssertions": 4,
+  "evidence": ["clicks.jsonl", "assertions.txt"],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/GestureManager.cs",
+    "replace": {
+      "old": "            ButtonMask = (nuint)tap.Buttons,\n",
+      "new": ""
+    },
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "tap-buttons.primary-routed-to-secondary",
+    "message": "BASELINE_603: left click fired the secondary-only TapGestureRecognizer."
+  }
+}

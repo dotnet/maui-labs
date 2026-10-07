@@ -73,6 +73,7 @@ public static class GestureManager
         var recognizer = new MacOSTapGestureRecognizer(tap)
         {
             NumberOfClicksRequired = (nint)tap.NumberOfTapsRequired,
+            ButtonMask = (nuint)tap.Buttons,
         };
         view.AddGestureRecognizer(recognizer);
 
