@@ -75,6 +75,10 @@ version check.
 
 ## Documentation
 
+- [Chat usage, provider comparison, and Apple guidance](https://github.com/dotnet/docs-maui/blob/main/docs/ai/chat.md)
+- [Embedding usage, provider comparison, and Apple guidance](https://github.com/dotnet/docs-maui/blob/main/docs/ai/embeddings.md)
+- [Repeatable Apple embedding evaluation](../../tests/AI/AppleEmbeddingEvaluation/README.md)
+- [Apple AI evaluation findings and reproduction](../../docs/ai/apple-ai-evaluation.md)
 - [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
 
 ## Requirements
