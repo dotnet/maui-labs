@@ -41,8 +41,6 @@ public static class MauiProgram
 		// Register AI agents and workflow
 #if IOS || MACCATALYST
 		builder.AddAppleIntelligenceServices();
-#elif ANDROID
-		builder.AddGeminiNanoServices();
 #else
 		builder.AddOpenAIServices();
 #endif
@@ -155,44 +153,6 @@ public static class MauiProgram
 		return builder;
 	}
 #pragma warning restore CA1416
-#endif
-
-#if ANDROID
-	private static MauiAppBuilder AddGeminiNanoServices(this MauiAppBuilder builder)
-	{
-		builder.Services.AddSingleton<GeminiNanoChatClient>();
-
-		builder.Services.AddSingleton<IChatClient>(sp =>
-		{
-			var client = sp.GetRequiredService<GeminiNanoChatClient>();
-			return client
-				.AsBuilder()
-				.UseLogging(sp.GetRequiredService<ILoggerFactory>())
-				.Build();
-		});
-
-		builder.Services.AddKeyedSingleton<IChatClient>("local-model", (sp, _) =>
-		{
-			var client = sp.GetRequiredService<GeminiNanoChatClient>();
-			return client
-				.AsBuilder()
-				.UseLogging(sp.GetRequiredService<ILoggerFactory>())
-				.Use(cc => new BufferedChatClient(cc))
-				.Build();
-		});
-
-		builder.Services.AddKeyedSingleton<IChatClient>("cloud-model", (sp, _) =>
-		{
-			var client = sp.GetRequiredService<GeminiNanoChatClient>();
-			return client
-				.AsBuilder()
-				.UseLogging(sp.GetRequiredService<ILoggerFactory>())
-				.Use(cc => new BufferedChatClient(cc))
-				.Build();
-		});
-
-		return builder;
-	}
 #endif
 
 	private static MauiAppBuilder AddOpenAIServices(this MauiAppBuilder builder)
