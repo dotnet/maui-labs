@@ -18,6 +18,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasImage))]
     private ImageSource? imageSource;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModelId))]
+    private string? modelId;
+
+    /// <summary>Gets whether this provider output has a model identifier to display.</summary>
+    public bool HasModelId => ModelId is not null;
 
     /// <summary>Gets whether this bubble has supplemental details.</summary>
     public bool HasDetails => !string.IsNullOrWhiteSpace(DetailText);

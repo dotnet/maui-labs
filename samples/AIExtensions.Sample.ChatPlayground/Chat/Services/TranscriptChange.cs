@@ -21,6 +21,7 @@ public abstract record TranscriptChange
         TranscriptEntryKind EntryKind,
         string Label,
         string Text,
+        string? ModelId,
         string? Details = null,
         byte[]? ImageBytes = null,
         bool IsStreaming = false) : TranscriptChange;

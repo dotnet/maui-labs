@@ -173,6 +173,7 @@ public sealed partial class ChatAreaViewModel : ObservableObject
                     Text = added.Text,
                     DetailText = added.Details,
                     IsStreaming = added.IsStreaming,
+                    ModelId = added.ModelId,
                     ImageSource = added.ImageBytes is { } bytes
                         ? ImageSource.FromStream(() => new MemoryStream(bytes, writable: false))
                         : null,

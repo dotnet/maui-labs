@@ -308,7 +308,6 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 			var pt = Graphene.Point.Alloc();
 			pt.Init(tx, ty);
 			transform = transform.Translate(pt);
-			pt.Free();
 		}
 
 		// Move to anchor, apply rotation/scale, move back

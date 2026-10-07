@@ -130,6 +130,13 @@ declarations of equal specificity, the most recently updated fragment wins.
 The original `ApplyCss` / `ApplyCssWithSelector` signatures remain available for
 compiled custom handlers and share a legacy fragment per widget and selector.
 
+### Transform point ownership
+
+`Graphene.Point.Alloc()` returns a point owned by a GirCore `SafeHandle`.
+Do not call its native `Free()` method after passing it to `Gsk.Transform.Translate`:
+the handle still owns the allocation and will free it again during finalization.
+This applies to layout-position points as well as anchor points.
+
 ### Essentials (21 of 36 services)
 
 | Status | Services |
@@ -440,6 +447,7 @@ From the repository root on Linux, use the shared class runner (PowerShell 7,
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransformTests
 ```
 
 The runner creates a private DBus session and display, requires nonzero executed
@@ -447,6 +455,14 @@ tests with no failures or skips in the TRX, and rejects missing/empty filtered
 classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
 evidence. CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
+
+The transform regression creates a real GTK window and repeatedly scales and
+rotates a button at origin, off-origin, translated, and translation-cancelled
+positions. Forced finalization detects native point double frees; coordinate
+assertions check that transforms still work.
+
+The native CI job runs each test class in a separate process to keep GTK
+initialization on one thread and uploads its TRX results.
 
 ### Run the sample app
 

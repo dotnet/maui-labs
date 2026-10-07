@@ -7,7 +7,7 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public class OpenAIChatClient : DelegatingChatClient
 {
 	public OpenAIChatClient()
-		: base(IPlatformApplication.Current!.Services.GetRequiredService<OpenAI.Chat.ChatClient>().AsIChatClient())
+		: base(IPlatformApplication.Current!.Services.GetRequiredService<IChatClient>())
 	{
 	}
 }
