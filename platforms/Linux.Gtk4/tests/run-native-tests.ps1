@@ -24,7 +24,15 @@ if (Test-Path -LiteralPath $trxPath) {
 $env:RUN_GTK_RUNTIME_TESTS = '1'
 $env:GSK_RENDERER = 'cairo'
 $filter = "FullyQualifiedName~Microsoft.Maui.Platforms.Linux.Gtk4.Tests.$TestClass."
-$mauiArgs = if ($MauiVersion) { @("-p:MauiVersion=$MauiVersion") } else { @() }
+# Build as a direct statement, not an if/else expression: assigning the result of an
+# if-expression unrolls a single-element array to its bare scalar element, which then
+# makes the later `@mauiArgs` splat iterate the string's *characters* instead of
+# passing it as one argument (observed in CI as "-p:MauiVersion=..." exploded into a
+# per-character argument list that MSBuild then rejected as an unknown switch).
+[string[]] $mauiArgs = @()
+if ($MauiVersion) {
+    $mauiArgs = @("-p:MauiVersion=$MauiVersion")
+}
 
 & dbus-run-session -- xvfb-run --auto-servernum dotnet test $project `
     --configuration Release --filter $filter @mauiArgs `

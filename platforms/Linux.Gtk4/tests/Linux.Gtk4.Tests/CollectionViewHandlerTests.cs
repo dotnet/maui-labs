@@ -225,9 +225,14 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 			paned.SetStartChild(panel);
 			window.SetChild(paned);
 			paned.SetPosition(160);
-			PumpThroughSentinel();
+			// Swapping the window's child queues GTK's allocate pass on its frame
+			// clock rather than the next idle round; a single PumpThroughSentinel()
+			// can race ahead of that under CI's virtual display (observed as a real
+			// CI failure: MeasureCount/ArrangeCount still 0 immediately after pump).
+			// Wait for the actual condition instead, matching the pattern already
+			// used below for the dirty-tick assertion.
+			PumpUntil(() => current.MeasureCount > 0 && current.ArrangeCount > 0);
 			Assert.Equal((0, 0), superseded.Counts);
-			Assert.True(current.MeasureCount > 0 && current.ArrangeCount > 0);
 
 			var sameBindingCounts = current.Counts;
 			handler.SetVirtualView(current);
