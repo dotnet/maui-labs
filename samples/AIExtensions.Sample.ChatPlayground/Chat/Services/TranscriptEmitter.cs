@@ -32,7 +32,8 @@ internal sealed class TranscriptEmitter
                 entryId,
                 TranscriptEntryKind.System,
                 "System instructions",
-                instructions));
+                instructions,
+                null));
             _systemEntryId = entryId;
         }
     }
@@ -45,6 +46,7 @@ internal sealed class TranscriptEmitter
             TranscriptEntryKind.User,
             "You",
             displayText,
+            null,
             ImageBytes: image?.Data.ToArray()));
     }
 
@@ -61,8 +63,8 @@ internal sealed class TranscriptEmitter
         void Flush()
         {
             var projector = new ChatResponseProjector(this, emit, streaming: false, structuredJson: false);
-            foreach (var item in pending)
-                projector.ProjectMessage(item);
+            foreach (var update in new ChatResponse(pending).ToChatResponseUpdates())
+                projector.ProjectUpdate(update);
             pending.Clear();
         }
 

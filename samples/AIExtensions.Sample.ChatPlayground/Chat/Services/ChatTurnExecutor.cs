@@ -41,8 +41,7 @@ internal sealed class ChatTurnExecutor
         IChatClient client,
         ChatOptions? options,
         bool streaming,
-        Action<ChatResponse> onResponse,
-        Action<AIContent> onContent,
+        Action<ChatResponseUpdate> onUpdate,
         CancellationToken cancellationToken)
     {
         if (!streaming)
@@ -52,19 +51,27 @@ internal sealed class ChatTurnExecutor
             foreach (var message in response.Messages)
                 ClearProviderMetadata(message);
             _history.AddRange(response.Messages);
-            onResponse(response);
+            foreach (var update in response.ToChatResponseUpdates())
+                onUpdate(update);
             return;
         }
 
-        // Rebuild protocol history from stream fragments, grouping text until a tool boundary.
+        // Rebuild protocol history from stream fragments, grouping text until a message or tool boundary.
         var historyStart = _history.Count;
         ChatMessage? activeText = null;
+        string? messageId = null;
         var callIds = new HashSet<string>(StringComparer.Ordinal);
         var resultIds = new HashSet<string>(StringComparer.Ordinal);
         await foreach (var update in client.GetStreamingResponseAsync(_history, options, cancellationToken)
             .WithCancellation(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (update.MessageId is { } nextMessageId && messageId != nextMessageId)
+            {
+                activeText = null;
+                messageId = nextMessageId;
+            }
+            List<AIContent> acceptedContents = [];
             foreach (var content in update.Contents)
             {
                 switch (content)
@@ -105,8 +112,11 @@ internal sealed class ChatTurnExecutor
                         continue;
                 }
 
-                onContent(content);
+                acceptedContents.Add(content);
             }
+            var acceptedUpdate = update.Clone();
+            acceptedUpdate.Contents = acceptedContents;
+            onUpdate(acceptedUpdate);
         }
 
         // Function invocation marks completed calls after the stream; recorded updates retain the earlier value.
