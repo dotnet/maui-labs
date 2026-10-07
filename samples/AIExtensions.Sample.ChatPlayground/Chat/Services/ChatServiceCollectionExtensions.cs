@@ -56,6 +56,7 @@ internal static class ChatServiceCollectionExtensions
                 "windows-ai-chat",
                 "Windows AI",
                 "Windows AI checks model readiness on first use. Tool calling and image input are unavailable."))
+            .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif

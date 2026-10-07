@@ -92,7 +92,7 @@ public sealed class WindowsAIChatClient : IChatClient
 
 		// Use StreamingResponseHandler without a chunker — the Windows AI API
 		// already provides incremental deltas via the Progress callback.
-		var handler = new StreamingResponseHandler();
+		var handler = new StreamingResponseHandler(DefaultModelId);
 
 		// Structured generation has no LanguageModelContext overload, so the system prompt
 		// is folded into the prompt text.
