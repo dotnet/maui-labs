@@ -3,12 +3,65 @@ using System.Runtime.CompilerServices;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
+using static Microsoft.Maui.AI.Chat.Tests.HybridChatClientTests;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
 #pragma warning disable MEAI001 // Image generation tool content is experimental in the installed SDK.
 public sealed class RecordedChatReplayTests
 {
+    [Theory]
+    [InlineData(false, "local")]
+    [InlineData(true, "local")]
+    [InlineData(false, "cloud")]
+    [InlineData(true, "cloud")]
+    [InlineData(false, "fallback")]
+    [InlineData(true, "fallback")]
+    [InlineData(false, "tools")]
+    [InlineData(true, "tools")]
+    public async Task Hybrid_RecordsOneAnswerWithoutClassifierOrDuplicateProviderInteractions(bool streaming, string route)
+    {
+        using var directory = new RecordingDirectory();
+        var recording = directory.CreateService();
+        var local = new FakeClient("apple-model") { Decision = route == "local" ? LocalDecision : CloudDecision };
+        var cloud = new FakeClient("azure-model")
+        {
+            Failure = route == "fallback" ? new IOException("Offline") : null,
+            ToolName = route == "tools" ? "test_tool" : null,
+        };
+        using var localPipeline = local.AsBuilder().UseFunctionInvocation(NullLoggerFactory.Instance).Build();
+        using var cloudPipeline = cloud.AsBuilder().UseFunctionInvocation(NullLoggerFactory.Instance).Build();
+        using var client = new RecordingChatClient(
+            new HybridChatClient(localPipeline, cloudPipeline, NullLoggerFactory.Instance), recording);
+        var invocations = 0;
+        var options = route == "tools"
+            ? new ChatOptions { Tools = [AIFunctionFactory.Create(() => ++invocations, "test_tool")] }
+            : null;
+        ChatMessage[] messages = [new(ChatRole.User, "Original question")];
+        var response = streaming
+            ? await client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync()
+            : await client.GetResponseAsync(messages, options);
+
+        var expectedModel = route is "local" or "fallback" ? "apple-model" : "azure-model";
+        Assert.Equal(expectedModel, response.ModelId);
+        Assert.Equal(1, recording.InteractionCount);
+        var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(recording.AutosavePath));
+        var interaction = Assert.Single(saved.Interactions);
+        Assert.Equal(streaming, interaction.IsStreaming);
+        Assert.Equal("Original question", Assert.Single(ChatRecordingSerializer.ReadRequestMessages(interaction.Request)).Text);
+        Assert.Equal(1, local.ClassifierCalls);
+        Assert.Equal(route == "tools" ? 1 : 0, invocations);
+        var recordedResponse = streaming
+            ? await new ReplayChatClient(recording).GetStreamingResponseAsync(messages, options).ToChatResponseAsync()
+            : ChatRecordingSerializer.ReadResponse(interaction.Response!);
+        Assert.Equal("answer", recordedResponse.Text);
+        Assert.Equal(expectedModel, recordedResponse.ModelId);
+        var json = File.ReadAllText(recording.AutosavePath);
+        Assert.DoesNotContain("routing classifier", json);
+        Assert.DoesNotContain("Simple greeting", json);
+        Assert.DoesNotContain("Complex task", json);
+    }
+
     [Theory]
     [InlineData("no-tools.json", 0, false)]
     [InlineData("one-tool.json", 1, true)]
