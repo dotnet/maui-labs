@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding</RootNamespace>
+    <AssemblyName>Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding</AssemblyName>
+    <PackageId>Microsoft.Maui.Essentials.AI.ImageClassification.AzureContentUnderstanding</PackageId>
+    <Description>Image classification for .NET MAUI using Azure Content Understanding.</Description>
+    <PackageTags>$(DefaultPackageTags);ai;image-classification;azure;content-understanding</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+    <IsShipping>true</IsShipping>
+    <IsPackable>true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <MajorVersion>$(EssentialsAIMajorVersion)</MajorVersion>
+    <MinorVersion>$(EssentialsAIMinorVersion)</MinorVersion>
+    <PatchVersion>$(EssentialsAIPatchVersion)</PatchVersion>
+    <SuppressFinalPackageVersion>true</SuppressFinalPackageVersion>
+    <PreReleaseVersionLabel>$(EssentialsAIPreReleaseVersionLabel)</PreReleaseVersionLabel>
+    <PreReleaseVersionIteration>$(EssentialsAIPreviewVersionIteration)</PreReleaseVersionIteration>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.AI.ContentUnderstanding" />
+    <ProjectReference Include="..\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
