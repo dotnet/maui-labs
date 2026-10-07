@@ -8,6 +8,9 @@ using OpenAI;
 using System.Runtime.Versioning;
 using Microsoft.Maui.Essentials.AI;
 #endif
+#if ANDROID
+using Microsoft.Maui.Essentials.AI;
+#endif
 
 namespace AIExtensions.Sample.ChatPlayground;
 
@@ -31,6 +34,9 @@ internal static class ChatServiceCollectionExtensions
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
             services.AddSingleton<IChatClient>(CreateAppleChatClient);
+#endif
+#if ANDROID
+        services.AddSingleton<IChatClient>(CreateGeminiChatClient);
 #endif
 
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
@@ -57,6 +63,23 @@ internal static class ChatServiceCollectionExtensions
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+#endif
+
+#if ANDROID
+    private static IChatClient CreateGeminiChatClient(IServiceProvider serviceProvider) =>
+        new GeminiNanoChatClient()
+            .AsBuilder()
+            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
+            .UseDescriptor(new ChatClientDescriptor(
+                "gemini-nano-chat",
+                "Gemini Nano",
+                "Gemini Nano runs on supported Android devices. The first request confirms that the local model is available.",
+                SupportsImageInput: true,
+                SupportsReasoningSummary: false,
+                SupportsImageGeneration: false,
+                SupportsToolCalling: false))
+            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif
 

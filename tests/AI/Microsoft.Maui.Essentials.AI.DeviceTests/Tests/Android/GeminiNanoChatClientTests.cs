@@ -20,6 +20,23 @@ public class GeminiNanoChatClientMessagesTests : ChatClientMessagesTestsBase<Gem
 
 public class GeminiNanoChatClientOptionsTests : ChatClientOptionsTestsBase<GeminiNanoChatClient>
 {
+	[Fact]
+	public override async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
+	{
+		using IChatClient client = new GeminiNanoChatClient();
+		await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+			client.GetResponseAsync([new(ChatRole.User, "Hello")], new() { Temperature = 2.0f }));
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public override Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat() =>
+		base.GetResponseAsync_WithResponseFormat_AcceptsJsonFormat();
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public override Task GetStreamingResponseAsync_WithResponseFormat_AcceptsJsonFormat() =>
+		base.GetStreamingResponseAsync_WithResponseFormat_AcceptsJsonFormat();
 }
 
 public class GeminiNanoChatClientResponseTests : ChatClientResponseTestsBase<GeminiNanoChatClient>
