@@ -43,8 +43,14 @@ public static class GestureManager
         }
     }
 
-    public static void DisconnectGestures(NSView platformView) =>
-        ClearManagedGestures(platformView);
+    public static void DisconnectGestures(NSView platformView)
+    {
+        if (platformView.GestureRecognizers == null)
+            return;
+
+        foreach (var tap in platformView.GestureRecognizers.OfType<MacOSTapGestureRecognizer>())
+            tap.Disconnect();
+    }
 
     static void ClearManagedGestures(NSView view)
     {
