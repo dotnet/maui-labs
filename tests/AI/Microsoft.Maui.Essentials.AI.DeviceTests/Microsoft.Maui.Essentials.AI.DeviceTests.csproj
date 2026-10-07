@@ -35,10 +35,6 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.Maui.Controls.Compatibility" />
-    <PackageReference Include="Xamarin.AndroidX.Collection.Ktx" VersionOverride="1.6.0.1" Condition="$(TargetFramework.Contains('-android'))" />
-    <PackageReference Include="Xamarin.AndroidX.Fragment.Ktx" VersionOverride="1.9.0" Condition="$(TargetFramework.Contains('-android'))" />
-    <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData" VersionOverride="2.11.0.1" Condition="$(TargetFramework.Contains('-android'))" />
-    <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData.Core" VersionOverride="2.11.0.1" Condition="$(TargetFramework.Contains('-android'))" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.utility" />
     <!-- OSS device test runner -->

@@ -29,7 +29,7 @@ builder.UseMauiApp<App>();
 // Register the platform-native chat client
 #if ANDROID
 builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
-#else
+#elif IOS || MACCATALYST || MACOS
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 #endif
 ```
@@ -66,8 +66,8 @@ await foreach (var update in _chat.GetStreamingResponseAsync("Plan a day trip to
 ### Android capabilities
 
 `GeminiNanoChatClient` supports text and image prompts, incremental text streaming,
-system instructions on compatible Nano versions, schema-based JSON responses for
-the same DTO-oriented subset supported by the Apple client, and Nano V4 thinking
+system instructions on compatible Nano versions, prompt-guided JSON responses for
+a DTO-oriented schema subset, and Nano V4 thinking
 through `ChatOptions.Reasoning`. AICore does not support native multi-turn
 sessions, so supplied chat history is flattened into each request.
 
@@ -76,11 +76,23 @@ uses its own ML Kit model session. JSON schemas are included in the request and
 the completed response is parsed and validated against the requested schema.
 
 The public surface remains `Microsoft.Extensions.AI` plus
-`GeminiNanoChatClient`; ML Kit, coroutine, model-management, and schema-provider
-types are contained inside the package's Kotlin native bridge.
+`GeminiNanoChatClient`; ML Kit and coroutine types are internal. The Kotlin
+bridge and its pinned ML Kit runtime assets are built and packaged through
+`AndroidGradleProject`. Consumers do not need Gradle or a separate GenAI binding
+package.
+
+Schemas support objects, arrays, primitives, nullable types, enums, numeric
+bounds, and collection size limits. Unsupported schema constructs fail before
+inference; invalid generated JSON fails after generation. This does not use
+ML Kit's compile-time Kotlin typed-output API or guarantee constrained decoding.
 
 The current ML Kit beta does not expose dynamic .NET tool calling. Unsupported
-`ChatOptions` values fail explicitly rather than being ignored.
+`ChatOptions` values fail explicitly rather than being ignored. `ChatToolMode.None`
+disables supplied tool definitions.
+
+AICore and the model must already be ready for inference. If Gemini Nano is
+downloadable but not ready, prepare it through AICore and retry. Model errors are
+returned to the caller; the client never switches to a cloud model.
 
 ### Embeddings for semantic search
 
@@ -98,6 +110,8 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
   bootloader, and a device listed in
   [Prompt API device support](https://developers.google.com/ml-kit/genai#prompt-device)
 - Android emulators do not include AICore and cannot run Gemini Nano inference
+- The Android package minimum is API 26; apps referencing it must also target
+  API 26 or later
 
 ## Status
 

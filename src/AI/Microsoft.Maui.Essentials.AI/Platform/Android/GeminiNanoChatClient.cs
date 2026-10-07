@@ -11,6 +11,12 @@ namespace Microsoft.Maui.Essentials.AI;
 /// Provides an <see cref="IChatClient"/> backed by Gemini Nano through the
 /// Google ML Kit GenAI Prompt API.
 /// </summary>
+/// <remarks>
+/// Requests are stateless and use independent native models. Images must contain
+/// in-memory data. JSON output is prompt-guided and validated against a bounded
+/// schema subset; it is not native typed generation. Model availability errors
+/// are surfaced to the caller without a cloud fallback.
+/// </remarks>
 public sealed class GeminiNanoChatClient : IChatClient
 {
 	private const string ProviderName = "google";
@@ -38,8 +44,8 @@ public sealed class GeminiNanoChatClient : IChatClient
 		ThrowIfDisposed();
 
 		var messageList = messages.ToList();
-		ValidateMessages(messageList);
-		ValidateOptions(options);
+		GeminiNanoPromptFormatter.ValidateMessages(messageList);
+		GeminiNanoPromptFormatter.ValidateOptions(options);
 
 		ThrowIfDisposed();
 		using var request = CreateRequest(messageList, options);
@@ -64,8 +70,8 @@ public sealed class GeminiNanoChatClient : IChatClient
 		ThrowIfDisposed();
 
 		var messageList = messages.ToList();
-		ValidateMessages(messageList);
-		ValidateOptions(options);
+		GeminiNanoPromptFormatter.ValidateMessages(messageList);
+		GeminiNanoPromptFormatter.ValidateOptions(options);
 
 		AndroidNative.NativeCancellation? nativeCancellation = null;
 		NativeCallback? callback = null;
@@ -165,7 +171,8 @@ public sealed class GeminiNanoChatClient : IChatClient
 			return;
 
 		_native.Close();
-		_native.Dispose();
+		// Keep the Java peer alive for requests racing with Dispose; the bridge
+		// rejects them after Close and its peer is released by normal GC.
 	}
 
 	private static AndroidNative.NativeChatRequest CreateRequest(
@@ -179,7 +186,7 @@ public sealed class GeminiNanoChatClient : IChatClient
 			responseInstruction);
 		var nativeMessages = new List<AndroidNative.NativeChatMessage>();
 
-		foreach (var message in messages.Where(message => message.Role != ChatRole.System))
+		foreach (var message in GeminiNanoPromptFormatter.GetConversationMessages(messages))
 		{
 			var role = message.Role == ChatRole.User ? 0 : 1;
 			var parts = new List<AndroidNative.NativeContentPart>
@@ -195,8 +202,10 @@ public sealed class GeminiNanoChatClient : IChatClient
 			{
 				switch (content)
 				{
-					case TextContent text:
-						parts.Add(new(0, text.Text ?? string.Empty, null));
+					case TextContent { Text.Length: > 0 } text:
+						parts.Add(new(0, text.Text, null));
+						break;
+					case TextContent:
 						break;
 					case TextReasoningContent:
 						break;
@@ -294,67 +303,10 @@ public sealed class GeminiNanoChatClient : IChatClient
 				$"Response format '{responseFormat.GetType().Name}' is not supported by Gemini Nano."),
 		};
 
-	private static void ValidateMessages(IReadOnlyList<ChatMessage> messages)
-	{
-		if (messages.Count == 0)
-			throw new ArgumentException("At least one chat message is required.", nameof(messages));
-
-		if (!messages.Any(message =>
-			message.Role != ChatRole.System &&
-			message.Contents.Any(content => content is TextContent or DataContent)))
-		{
-			throw new ArgumentException(
-				"At least one user or assistant message with text or image content is required.",
-				nameof(messages));
-		}
-	}
-
-	private static void ValidateOptions(ChatOptions? options)
-	{
-		if (options is null)
-			return;
-
-		if (options.Temperature is < 0 or > 1)
-			throw new ArgumentOutOfRangeException(nameof(options), options.Temperature, "Temperature must be between 0 and 1.");
-		if (options.TopK is <= 0)
-			throw new ArgumentOutOfRangeException(nameof(options), options.TopK, "TopK must be greater than zero.");
-		if (options.Seed is < 0 or > int.MaxValue)
-			throw new ArgumentOutOfRangeException(nameof(options), options.Seed, $"Seed must be between 0 and {int.MaxValue}.");
-		if (options.MaxOutputTokens is < 1 or > 4096)
-			throw new ArgumentOutOfRangeException(nameof(options), options.MaxOutputTokens, "MaxOutputTokens must be between 1 and 4096.");
-
-		ThrowIfSpecified(options.TopP, nameof(options.TopP));
-		ThrowIfSpecified(options.FrequencyPenalty, nameof(options.FrequencyPenalty));
-		ThrowIfSpecified(options.PresencePenalty, nameof(options.PresencePenalty));
-		ThrowIfSpecified(options.ConversationId, nameof(options.ConversationId));
-		ThrowIfSpecified(options.ContinuationToken, nameof(options.ContinuationToken));
-		ThrowIfSpecified(options.ModelId, nameof(options.ModelId));
-		ThrowIfSpecified(options.ToolMode, nameof(options.ToolMode));
-		ThrowIfSpecified(options.AllowMultipleToolCalls, nameof(options.AllowMultipleToolCalls));
-		ThrowIfSpecified(options.RawRepresentationFactory, nameof(options.RawRepresentationFactory));
-
-		if (options.AllowBackgroundResponses == true)
-			throw new NotSupportedException("Gemini Nano does not support background responses.");
-		if (options.StopSequences is { Count: > 0 })
-			throw new NotSupportedException("Gemini Nano does not support stop sequences.");
-		if (options.Tools is { Count: > 0 })
-			throw new NotSupportedException("The ML Kit GenAI Prompt beta4 API does not expose tool calling.");
-		if (options.AdditionalProperties is { Count: > 0 })
-			throw new NotSupportedException("Gemini Nano does not support unrecognized additional chat options.");
-		if (options.Reasoning?.Output == ReasoningOutput.Summary)
-			throw new NotSupportedException("Gemini Nano exposes full thinking output but not reasoning summaries.");
-	}
-
 	private static bool ShouldEnableThinking(ReasoningOptions? reasoning) =>
 		reasoning is not null &&
 		(reasoning.Effort is not null and not ReasoningEffort.None ||
 		 reasoning.Output == ReasoningOutput.Full);
-
-	private static void ThrowIfSpecified<T>(T? value, string optionName)
-	{
-		if (value is not null)
-			throw new NotSupportedException($"Gemini Nano does not support ChatOptions.{optionName}.");
-	}
 
 	private static void ValidateJsonResponse(string text, ChatResponseFormat? responseFormat)
 	{

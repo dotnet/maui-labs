@@ -16,10 +16,6 @@
   <PropertyGroup Condition="$(TargetFramework.Contains('-android'))">
     <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
     <NoWarn>$(NoWarn);BG8605;BG8606</NoWarn>
-    <_GeminiNanoNativeProject>$(MSBuildProjectDirectory)/../AndroidNative/EssentialsAI</_GeminiNanoNativeProject>
-    <_GeminiNanoNativeAar>$(_GeminiNanoNativeProject)/build/outputs/aar/EssentialsAI-release.aar</_GeminiNanoNativeAar>
-    <_GeminiNanoGradleCommand Condition="$([MSBuild]::IsOSPlatform('windows'))">gradlew.bat</_GeminiNanoGradleCommand>
-    <_GeminiNanoGradleCommand Condition="!$([MSBuild]::IsOSPlatform('windows'))">./gradlew</_GeminiNanoGradleCommand>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
@@ -49,22 +45,31 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
-    <PackageReference Include="Xamarin.Google.MLKit.GenAI.Prompt" />
-    <AndroidLibrary Include="$(_GeminiNanoNativeAar)" />
-    <_GeminiNanoNativeSources Include="$(_GeminiNanoNativeProject)/build.gradle.kts" />
-    <_GeminiNanoNativeSources Include="$(_GeminiNanoNativeProject)/settings.gradle.kts" />
-    <_GeminiNanoNativeSources Include="$(_GeminiNanoNativeProject)/gradle.properties" />
-    <_GeminiNanoNativeSources Include="$(_GeminiNanoNativeProject)/src/**/*" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" />
+    <PackageReference Include="Xamarin.Firebase.Encoders" />
+    <PackageReference Include="Xamarin.Firebase.Encoders.JSON" />
+    <PackageReference Include="Xamarin.Google.Android.DataTransport.TransportApi" />
+    <PackageReference Include="Xamarin.Google.Android.DataTransport.TransportBackendCct" />
+    <PackageReference Include="Xamarin.Google.Android.DataTransport.TransportRuntime" />
+    <PackageReference Include="Xamarin.Google.Guava" />
+    <PackageReference Include="Xamarin.Google.MLKit.Common" />
+    <PackageReference Include="Xamarin.GooglePlayServices.Basement" />
+    <PackageReference Include="Xamarin.GooglePlayServices.Tasks" />
+    <PackageReference Include="Xamarin.Kotlin.StdLib" />
+    <PackageReference Include="Xamarin.KotlinX.Coroutines.Core" />
+    <PackageReference Include="Xamarin.KotlinX.Coroutines.Guava" />
+    <PackageReference Include="Xamarin.KotlinX.Coroutines.Reactive" />
+    <AndroidGradleProject Include="../AndroidNative/EssentialsAI/build.gradle.kts" CreateAndroidLibrary="false" />
     <TransformFile Include="Platform\Android\Transforms\Metadata.xml" />
   </ItemGroup>
-  <Target Name="BuildGeminiNanoAndroidNative"
-          BeforeTargets="_ResolveLibraryProjectImports"
-          Condition="$(TargetFramework.Contains('-android'))"
-          Inputs="@(_GeminiNanoNativeSources)"
-          Outputs="$(_GeminiNanoNativeAar)">
-    <Exec Command="$(_GeminiNanoGradleCommand) --no-daemon testReleaseUnitTest assembleRelease"
-          WorkingDirectory="$(_GeminiNanoNativeProject)"
-          EnvironmentVariables="ANDROID_HOME=$(AndroidSdkDirectory)" />
+  <Target Name="CollectGeminiNanoAndroidLibraries"
+          AfterTargets="_BuildAndroidGradleProjects"
+          Condition="$(TargetFramework.Contains('-android'))">
+    <ItemGroup>
+      <AndroidLibrary Include="%(AndroidGradleProject.OutputPath)outputs/aar/EssentialsAI-release.aar" />
+      <AndroidLibrary Include="%(AndroidGradleProject.OutputPath)outputs/mlkit-runtime/*.aar" Bind="false" />
+      <AndroidLibrary Include="%(AndroidGradleProject.OutputPath)outputs/mlkit-runtime/*.jar" Bind="false" />
+    </ItemGroup>
   </Target>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">

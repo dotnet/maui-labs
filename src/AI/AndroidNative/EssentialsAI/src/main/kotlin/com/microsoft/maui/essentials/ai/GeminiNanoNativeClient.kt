@@ -11,113 +11,66 @@ import com.google.mlkit.genai.prompt.ImagePart
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import java.util.concurrent.atomic.AtomicBoolean
 
 class GeminiNanoNativeClient {
-    private val rootJob = SupervisorJob()
-    private val scope = CoroutineScope(rootJob + Dispatchers.Default)
-    private val closed = AtomicBoolean()
+    private val operations = NativeChatOperations(
+        createModel = { Generation.getClient() },
+        closeModel = { it.close() },
+        infer = { model, request, streaming, callback ->
+            val status = model.checkStatus()
+            if (status != FeatureStatus.AVAILABLE) {
+                val preparation = when (status) {
+                    FeatureStatus.DOWNLOADABLE, FeatureStatus.DOWNLOADING ->
+                        " Download Gemini Nano through AICore before retrying."
+                    else -> " This device must support Gemini Nano and have the latest AICore configuration."
+                }
+                error("Gemini Nano is not ready for inference. Current status: $status.$preparation")
+            }
+
+            val nativeRequest = buildRequest(model, request)
+            val modelName = model.getBaseModelName()
+            val tokenCount = model.countTokens(nativeRequest).totalTokens
+            val generated = if (streaming) {
+                model.generateContent(nativeRequest, object : StreamingCallback {
+                    override fun onNewText(additionalText: String) = callback.onText(additionalText)
+                    override fun onNewThought(additionalThought: String) = callback.onThought(additionalThought)
+                })
+            } else {
+                model.generateContent(nativeRequest)
+            }
+
+            generated.toNativeResponse(modelName, tokenCount)
+        },
+        mapError = ::toNativeError,
+    )
 
     fun generate(
         request: NativeChatRequest,
         streaming: Boolean,
         callback: NativeChatCallback,
-    ): NativeCancellation {
-        val terminated = AtomicBoolean()
-
-        fun complete(response: NativeChatResponse) {
-            if (terminated.compareAndSet(false, true)) {
-                callback.onComplete(response)
-            }
-        }
-
-        fun fail(error: NativeChatError) {
-            if (terminated.compareAndSet(false, true)) {
-                callback.onError(error)
-            }
-        }
-
-        if (closed.get()) {
-            fail(NativeChatError("Gemini Nano client is closed.", 7, null))
-            return NativeCancellation(null)
-        }
-
-        val job = scope.launch {
-            try {
-                val model = Generation.getClient()
-                val response = try {
-                    val status = model.checkStatus()
-                    if (status != FeatureStatus.AVAILABLE) {
-                        error("Gemini Nano is not ready for inference. Current status: $status")
-                    }
-
-                    val nativeRequest = buildRequest(model, request)
-                    val modelName = model.getBaseModelName()
-                    val tokenCount = model.countTokens(nativeRequest).totalTokens
-                    val generated = if (streaming) {
-                        model.generateContent(nativeRequest, object : StreamingCallback {
-                            override fun onNewText(additionalText: String) {
-                                if (!terminated.get()) callback.onText(additionalText)
-                            }
-
-                            override fun onNewThought(additionalThought: String) {
-                                if (!terminated.get()) callback.onThought(additionalThought)
-                            }
-                        })
-                    } else {
-                        model.generateContent(nativeRequest)
-                    }
-
-                    generated.toNativeResponse(modelName, tokenCount)
-                } finally {
-                    model.close()
-                }
-
-                complete(response)
-            } catch (exception: GenAiException) {
-                fail(
-                    NativeChatError(
-                        exception.message ?: "Gemini Nano inference failed.",
-                        exception.errorCode,
-                        runCatching { exception.retryDelay.toMillis() }.getOrNull(),
-                    )
-                )
-            } catch (exception: CancellationException) {
-                fail(NativeChatError("Gemini Nano operation cancelled.", 7, null))
-            } catch (exception: Throwable) {
-                fail(
-                    NativeChatError(
-                        exception.message ?: "Gemini Nano inference failed.",
-                        0,
-                        null,
-                    )
-                )
-            }
-        }
-
-        job.invokeOnCompletion { cause ->
-            if (cause is CancellationException) {
-                fail(NativeChatError("Gemini Nano operation cancelled.", 7, null))
-            }
-        }
-        if (closed.get()) job.cancel()
-
-        return NativeCancellation(job)
-    }
+    ): NativeCancellation = operations.generate(request, streaming, callback)
 
     fun close() {
-        if (closed.compareAndSet(false, true)) {
-            runBlocking {
-                rootJob.cancelAndJoin()
-            }
-        }
+        runBlocking { operations.close() }
+    }
+
+    private fun toNativeError(exception: Throwable): NativeChatError = when (exception) {
+        is GenAiException -> NativeChatError(
+            exception.message ?: "Gemini Nano inference failed.",
+            exception.errorCode,
+            exception.retryDelay.let { delay ->
+                try {
+                    delay.toMillis()
+                } catch (_: ArithmeticException) {
+                    Long.MAX_VALUE
+                }
+            },
+        )
+        is CancellationException -> NativeChatError(
+            exception.message ?: "Gemini Nano operation cancelled.", 7, null,
+        )
+        else -> NativeChatError(exception.message ?: "Gemini Nano inference failed.", 0, null)
     }
 
     private suspend fun buildRequest(
@@ -180,11 +133,13 @@ class GeminiNanoNativeClient {
         modelName: String,
         inputTokens: Int,
     ): NativeChatResponse {
-        val candidate = candidates.firstOrNull()
+        val candidate = checkNotNull(candidates.firstOrNull()) {
+            "Gemini Nano returned no response candidate."
+        }
         return NativeChatResponse(
-            candidate?.text.orEmpty(),
+            candidate.text,
             thoughtProcess.map { it.text }.toTypedArray(),
-            candidate?.finishReason ?: FINISH_OTHER,
+            candidate.finishReason ?: FINISH_OTHER,
             modelName,
             inputTokens,
         )

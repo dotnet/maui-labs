@@ -2,8 +2,9 @@
 
 A .NET MAUI sample for comparing `Microsoft.Extensions.AI` providers. It has
 Chat, Embeddings, and Images tabs. `Microsoft.Maui.Essentials.AI` provides
-`AppleIntelligenceChatClient` for on-device chat and `NLEmbeddingGenerator`
-for on-device embeddings; Azure OpenAI is optional. The app targets Android,
+`AppleIntelligenceChatClient` for Apple on-device chat, `GeminiNanoChatClient`
+for Android on-device chat, and `NLEmbeddingGenerator` for Apple on-device
+embeddings; Azure OpenAI is optional. The app targets Android,
 iOS, and Mac Catalyst, plus a Windows target with Azure and offline Replay
 only. It does **not** target native macOS. Available providers vary by
 platform; saved Chat recordings can be replayed offline.
@@ -16,6 +17,14 @@ Xcode; Apple NaturalLanguage embeddings have broader Apple OS support but appear
 only when the English sentence-embedding asset is installed (it may be absent
 on simulators).
 Azure-backed features also run on Android and Windows.
+
+Android requires API 26+. Gemini Nano additionally requires a supported
+physical device with a locked bootloader and an updated, provisioned AICore
+model. The Gemini slot is available on Android, but its first request checks
+actual model readiness and shows errors if the device or model is unavailable.
+Android emulators can exercise the playground and Replay, not AICore inference.
+The native bridge is built through .NET 10's `AndroidGradleProject`; a source
+build requires the Android SDK and Java 17+.
 
 From the repository root on macOS, build before running the Mac Catalyst target:
 
@@ -59,14 +68,17 @@ text may leave the device and incur charges.
   select **Send** to submit it. Structured JSON requests a summary, key points,
   a free-form category, and a constrained sentiment. The common .NET schema
   leaves fields optional for other providers, while Apple and Azure OpenAI
-  require all four in their native structured-output schemas; key points may
+  require all four in their native structured-output schemas. Gemini uses the
+  same normalization, prompt-guided JSON and managed validation; key points may
   be empty. The transcript displays the provider's actual JSON, including extra
   fields, without rewriting it through the request schema. Restoring an
   auto-saved chat keeps the selected live client; without one configured,
   Replay remains the offline default. Apple and Azure support optional tools.
   Date/time, calculator, and connection status start checked; connection
   status returns JSON with network access and connection types, not SSIDs or
-  IP addresses. **None** disables tool calls even when tools remain checked;
+  IP addresses. Gemini supports text and in-memory image input but not tools,
+  image generation, or reasoning summaries; its tool controls are disabled.
+  **None** disables tool calls even when tools remain checked;
   **Auto** makes checked tools available, and a model may call them for
   unrelated prompts. Uncheck unneeded tools to prevent those calls. Azure
   can accept images and create them through a separately configured

@@ -252,7 +252,7 @@ extends:
               displayName: Install MAUI workloads
             - script: .dotnet/dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
               displayName: Install Android SDK dependencies
-            - script: ./gradlew --no-daemon testReleaseUnitTest assembleRelease
+            - script: ./gradlew --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
               displayName: Build and Test EssentialsAI Kotlin Bridge
               workingDirectory: $(Build.SourcesDirectory)/src/AI/AndroidNative/EssentialsAI
               env:
@@ -313,7 +313,7 @@ extends:
                 )
                 & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
-            - script: gradlew.bat --no-daemon testReleaseUnitTest assembleRelease
+            - script: gradlew.bat --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
               displayName: Build and Test EssentialsAI Kotlin Bridge
               workingDirectory: $(Build.SourcesDirectory)\src\AI\AndroidNative\EssentialsAI
             - script: eng\common\cibuild.cmd

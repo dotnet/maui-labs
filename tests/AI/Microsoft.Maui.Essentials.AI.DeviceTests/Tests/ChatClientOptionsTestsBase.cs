@@ -62,7 +62,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
+	public virtual async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
