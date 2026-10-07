@@ -24,6 +24,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	readonly HashSet<int> _groupHeaderIndices = [];
 	bool _updatingSelection;
 	INotifyCollectionChanged? _observedCollection;
+	readonly Dictionary<Gtk.Widget, GtkAllocationObserver> _templateAllocations = [];
 
 	public static IPropertyMapper<IView, CollectionViewHandler> Mapper =
 		new PropertyMapper<IView, CollectionViewHandler>(ViewMapper)
@@ -80,6 +81,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 	void RebuildListView()
 	{
+		ClearTemplateAllocations();
 		var hasTemplate = VirtualView is CollectionView cv && cv.ItemTemplate != null;
 		Gtk.ListItemFactory factory;
 
@@ -191,6 +193,8 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		factory.OnUnbind += (_, args) =>
 		{
 			var listItem = (Gtk.ListItem)args.Object;
+			if (listItem.GetChild() is { } child && _templateAllocations.Remove(child, out var observer))
+				observer.Dispose();
 			listItem.SetChild(null);
 		};
 		factory.OnTeardown += (_, args) =>
@@ -279,14 +283,36 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		var height = Math.Max((int)desiredSize.Height, 20);
 
 		DisableVexpandRecursive(nativeWidget);
-		nativeWidget.SetSizeRequest((int)widthConstraint, height);
+		nativeWidget.SetSizeRequest(-1, height);
 		nativeWidget.SetHexpand(true);
 
-		// Trigger layout so children are positioned correctly
-		if (mauiView.Handler is IViewHandler viewHandler)
-			viewHandler.PlatformArrange(new Rect(0, 0, widthConstraint, height));
+		// GTK owns row width. A fixed width request would pin the initial allocation
+		// and keep cards clipped after narrowing the viewport.
+		_templateAllocations[nativeWidget] = new GtkAllocationObserver(nativeWidget, (width, _) =>
+		{
+			var generation = LayoutGeneration;
+			mauiView.InvalidateMeasure();
+			if (generation != LayoutGeneration || !_templateAllocations.ContainsKey(nativeWidget))
+				return;
+			var view = (IView)mauiView;
+			var measured = view.Measure(width, double.PositiveInfinity);
+			if (generation != LayoutGeneration || !_templateAllocations.ContainsKey(nativeWidget))
+				return;
+			var rowHeight = Math.Max((int)Math.Ceiling(measured.Height), 20);
+			view.Arrange(new Rect(0, 0, width, rowHeight));
+			if (generation == LayoutGeneration && _templateAllocations.ContainsKey(nativeWidget))
+				nativeWidget.SetSizeRequest(-1, rowHeight);
+		}, MauiContext.Services.GetService(typeof(Microsoft.Extensions.Logging.ILoggerFactory)) is
+			Microsoft.Extensions.Logging.ILoggerFactory factory ? factory.CreateLogger(GetType().FullName!) : null);
 
 		return (nativeWidget, height);
+	}
+
+	void ClearTemplateAllocations()
+	{
+		foreach (var observer in _templateAllocations.Values)
+			observer.Dispose();
+		_templateAllocations.Clear();
 	}
 
 	static void MarkExternallyManaged(Gtk.Widget widget)
@@ -335,6 +361,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 		UnhookCollectionChanged();
 		UnhookSelectionChanged();
+		ClearTemplateAllocations();
 
 		base.DisconnectHandler(platformView);
 	}

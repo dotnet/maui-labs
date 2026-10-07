@@ -33,9 +33,9 @@ jobs:
   shell-navigation:
     name: Shell navigation runtime regression
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
     permissions:
       contents: read
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -121,7 +121,7 @@ jobs:
       pack: true
 
   runtime:
-    name: Native GTK runtime (${{ matrix.test-class }})
+    name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -131,6 +131,12 @@ jobs:
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
         test-class: [PickerSelectionTests, GtkSynchronizationContextTests, WindowSizingTests, GtkTransformTests]
+        maui: ['']
+        include:
+          - test-class: WindowSizingTests
+            maui: '10.0.70'
+          - test-class: WindowSizingTests
+            maui: '10.0.110'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -148,6 +154,7 @@ jobs:
           dbus-run-session -- xvfb-run --auto-servernum
           dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
           --configuration Release
+          ${{ matrix.maui && format('-p:MauiVersion={0}', matrix.maui) || '' }}
           --filter FullyQualifiedName~${{ matrix.test-class }}
           --logger "console;verbosity=detailed"
           --logger "trx;LogFileName=${{ matrix.test-class }}.trx"
@@ -157,7 +164,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: gtk-runtime-${{ matrix.test-class }}
+          name: gtk-runtime-${{ matrix.test-class }}${{ matrix.maui && format('-maui-{0}', matrix.maui) || '' }}
           path: artifacts/TestResults/gtk-runtime
 
   templates:

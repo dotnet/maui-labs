@@ -12,6 +12,7 @@
     <PackageReference Include="xunit" />
     <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
     <Compile Include="..\..\..\Shared\Essentials.Tests\StaticFacadeTests.cs" Link="StaticFacadeTests.cs" />
+    <Compile Include="..\..\..\Shared\Essentials.Tests\FileSystemDirectoryTests.cs" Link="FileSystemDirectoryTests.cs" />
     <Using Include="Xunit" />
     <Using Include="System.IO" />
   </ItemGroup>
