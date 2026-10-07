@@ -619,7 +619,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
 
         if (request.RouteParams.TryGetValue("id", out value) && !string.IsNullOrEmpty(value))
         {
-            id = Uri.UnescapeDataString(value);
+            id = value;
             return true;
         }
 
@@ -664,7 +664,6 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     {
         if (request.RouteParams.TryGetValue(key, out value) && !string.IsNullOrEmpty(value))
         {
-            value = Uri.UnescapeDataString(value);
             return true;
         }
 
