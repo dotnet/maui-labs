@@ -4,6 +4,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class EntryHandler : GtkViewHandler<IEntry, Gtk.Entry>
 {
+	bool _updatingText;
+
 	public static IPropertyMapper<IEntry, EntryHandler> Mapper =
 		new PropertyMapper<IEntry, EntryHandler>(ViewMapper)
 		{
@@ -49,14 +51,32 @@ public class EntryHandler : GtkViewHandler<IEntry, Gtk.Entry>
 
 	void OnTextChanged(Gtk.Editable sender, EventArgs args)
 	{
-		if (VirtualView != null)
+		if (!_updatingText && VirtualView != null)
 			VirtualView.Text = sender.GetText();
 	}
 
 	public static void MapText(EntryHandler handler, IEntry entry)
 	{
-		if (handler.PlatformView?.GetText() != entry.Text)
-			handler.PlatformView?.SetText(entry.Text ?? string.Empty);
+		var platformView = handler.PlatformView;
+		var text = entry.Text ?? string.Empty;
+		if (platformView.GetText() == text)
+			return;
+
+		var wasUpdatingText = handler._updatingText;
+		handler._updatingText = true;
+		try
+		{
+			// GTK replacement emits a transient empty change before inserting the new text.
+			platformView.SetText(text);
+		}
+		finally
+		{
+			handler._updatingText = wasUpdatingText;
+		}
+
+		var actualText = platformView.GetText();
+		if (actualText != text)
+			entry.Text = actualText;
 	}
 
 	public static void MapPlaceholder(EntryHandler handler, IEntry entry)
@@ -104,7 +124,7 @@ public class EntryHandler : GtkViewHandler<IEntry, Gtk.Entry>
 
 	public static void MapCharacterSpacing(EntryHandler handler, IEntry entry)
 	{
-		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {entry.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, BuildCharacterSpacingCss(entry.CharacterSpacing));
 	}
 
 	public static void MapClearButtonVisibility(EntryHandler handler, IEntry entry)

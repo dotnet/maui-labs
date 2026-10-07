@@ -252,18 +252,7 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 	/// </summary>
 	void MarkLayoutDirty()
 	{
-		PlatformView.LayoutDirty = true;
-
-		// Propagate to ancestor layout panels (root tick callback drives layout)
-		Gtk.Widget? current = PlatformView.GetParent();
-		while (current != null)
-		{
-			if (current is GtkLayoutPanel panel)
-			{
-				panel.LayoutDirty = true;
-			}
-			current = current.GetParent();
-		}
+		GtkLayoutPanel.InvalidateLayout(PlatformView);
 	}
 
 	public void UpdateZIndex(IView child)

@@ -42,12 +42,11 @@ public class ButtonHandler : GtkViewHandler<IButton, Gtk.Button>
 
 	void OnClicked(Gtk.Button sender, EventArgs args)
 	{
-		try
-		{
-			VirtualView?.Clicked();
-			VirtualView?.Released();
-		}
-		catch (InvalidOperationException) { }
+		if (((IElementHandler)this).VirtualView is not IButton button)
+			return;
+
+		button.Clicked();
+		button.Released();
 	}
 
 	public static void MapText(ButtonHandler handler, IButton button)
@@ -77,19 +76,19 @@ public class ButtonHandler : GtkViewHandler<IButton, Gtk.Button>
 	{
 		var p = button.Padding;
 		handler.UpdateCss(handler.PlatformView,
-			$"padding: {(int)p.Top}px {(int)p.Right}px {(int)p.Bottom}px {(int)p.Left}px;");
+			FormattableString.Invariant($"padding: {(int)p.Top}px {(int)p.Right}px {(int)p.Bottom}px {(int)p.Left}px;"));
 	}
 
 	public static void MapCharacterSpacing(ButtonHandler handler, IButton button)
 	{
 		if (button is ITextStyle textStyle)
-			handler.UpdateCss(handler.PlatformView, $"letter-spacing: {textStyle.CharacterSpacing}px;");
+			handler.UpdateCss(handler.PlatformView, BuildCharacterSpacingCss(textStyle.CharacterSpacing));
 	}
 
 	public static void MapCornerRadius(ButtonHandler handler, IButton button)
 	{
 		handler.UpdateCss(handler.PlatformView,
-			button is IButtonStroke stroke && stroke.CornerRadius >= 0 ? $"border-radius: {stroke.CornerRadius}px;" : null);
+			button is IButtonStroke stroke && stroke.CornerRadius >= 0 ? FormattableString.Invariant($"border-radius: {stroke.CornerRadius}px;") : null);
 	}
 
 	public static void MapStrokeColor(ButtonHandler handler, IButton button)
@@ -102,7 +101,7 @@ public class ButtonHandler : GtkViewHandler<IButton, Gtk.Button>
 	{
 		handler.UpdateCss(handler.PlatformView,
 			button is IButtonStroke stroke && stroke.StrokeThickness >= 0
-				? $"border-width: {stroke.StrokeThickness}px; border-style: solid;" : null);
+				? BuildStrokeThicknessCss(stroke.StrokeThickness) : null);
 	}
 
 	public static void MapImageSource(ButtonHandler handler, IButton button)

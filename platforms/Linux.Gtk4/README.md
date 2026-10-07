@@ -129,6 +129,64 @@ must supply distinct keys for independently updated properties. For overlapping
 declarations of equal specificity, the most recently updated fragment wins.
 The original `ApplyCss` / `ApplyCssWithSelector` signatures remain available for
 compiled custom handlers and share a legacy fragment per widget and selector.
+Numeric CSS values, including color alpha, character spacing, and border widths,
+use invariant culture; application text and bindings retain the user's culture.
+
+CollectionView template rows are measured and arranged by MAUI against their actual
+GTK allocation, including after viewport resizes. Page and root layout frames are
+updated through `IView.Arrange`, so `Width`, `Height`, and `SizeChanged` agree with
+the native content area rather than remaining unset. Native widget measurement
+includes theme padding and borders before allocation.
+Measure invalidations (such as changing Grid columns) propagate to the native root
+without requiring a window resize. Children explicitly arranged to zero extent
+are suppressed by the GTK container until they are arranged positively again.
+Unbinding a CollectionView template disconnects its complete MAUI handler tree,
+including native event subscriptions and layout callback registrations, before
+releasing the native row. Repeated filtering does not retain retired layout panels.
+Realized item and group-header templates are registered as MAUI logical children,
+so the standard visual tree and DevFlow can inspect them, including derived
+CollectionViews. Unbinding or disconnecting the collection removes those children
+and their handlers before replacement rows are registered.
+Programmatic Entry text replacement suppresses GTK's intermediate clear/insert
+notifications, preventing transient empty strings from reentering synchronized
+MAUI inputs and collection filters. Native edits and final native length coercion
+still update the MAUI text.
+Native Button and ImageButton click callbacks retain their original MAUI target
+for the complete event sequence, even when navigation disconnects the handler
+inside an event. Retired native buttons no longer dispatch clicks after teardown.
+
+### Native GTK hosting and regression checks
+
+The backend's direct GTK/Cairo/font imports resolve the platform's DLL, dylib, or
+soname. GirCore's native runtime libraries must still be available on the process
+library search path. Startup selects Pango's FreeType/fontconfig map **before GTK
+creates text contexts**, so embedded fonts are registered against the correct
+map on Windows as well as Linux. Applications should no longer install a separate
+`DllImportResolver` on the GTK backend assembly or force `PANGOCAIRO_BACKEND`.
+This does not add Windows Essentials implementations or a WebKit Windows port.
+
+The opt-in `GalleryLayoutRuntimeTests` runs a real GTK main loop, nested
+Grid/Border/ScrollView/CollectionView templates, native Entry edits, paired Entry
+model synchronization and programmatic replacement, derived CollectionView
+replacement and balanced template visual registration, repeated
+single-item/facet/empty/repopulate filtering, template teardown under GC, and Shell
+page timer stop/restart. It also registers the sample font and runs with en-ZA
+decimal-comma culture using a clone with an explicitly configured separator,
+independent of platform globalization data. Each native test class must run in its own process because
+GTK initialization is thread-affine.
+
+```powershell
+$env:RUN_GTK_RUNTIME_TESTS = '1'
+# On Windows, add the installed GTK bin directory to PATH and set FONTCONFIG_PATH.
+dotnet test platforms\Linux.Gtk4\tests\Linux.Gtk4.Tests\Linux.Gtk4.Tests.csproj `
+  -p:MauiVersion=10.0.51 --filter FullyQualifiedName~GalleryLayoutRuntimeTests
+```
+
+Set `GTK_RUNTIME_ARTIFACTS` to an output directory to capture only the test app's
+window. On Windows the test sends native window-manager resize events; the tested
+GTK Win32 runtime does not honor `SetDefaultSize` for an already mapped window.
+The original `WindowSizingTests` therefore remains Linux-only and separately
+checks MAUI/default-size mappings on GTK/X11.
 
 ### Transform point ownership
 

@@ -50,9 +50,13 @@ public class ImageButtonHandler : GtkViewHandler<IImageButton, Gtk.Button>
 
 	void OnClicked(Gtk.Button sender, EventArgs args)
 	{
-		VirtualView?.Pressed();
-		VirtualView?.Clicked();
-		VirtualView?.Released();
+		if (((IElementHandler)this).VirtualView is not IImageButton button)
+			return;
+
+		// Navigation during event delivery can disconnect or rebind this handler.
+		button.Pressed();
+		button.Clicked();
+		button.Released();
 	}
 
 	public static void MapPadding(ImageButtonHandler handler, IImageButton imageButton)
@@ -149,10 +153,10 @@ public class ImageButtonHandler : GtkViewHandler<IImageButton, Gtk.Button>
 	{
 		var css = string.Empty;
 		if (imageButton.CornerRadius > 0)
-			css += $"border-radius: {(int)imageButton.CornerRadius}px; ";
+			css += FormattableString.Invariant($"border-radius: {(int)imageButton.CornerRadius}px; ");
 
 		if (imageButton.StrokeColor != null && imageButton.StrokeThickness > 0)
-			css += $"border: {imageButton.StrokeThickness}px solid {ToGtkColor(imageButton.StrokeColor)}; ";
+			css += BuildStrokeCss(imageButton.StrokeThickness, imageButton.StrokeColor);
 		else if (imageButton.StrokeThickness <= 0)
 			css += "border: none; ";
 

@@ -53,6 +53,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		{
 			["Focus"] = MapFocus,
 			["Unfocus"] = MapUnfocus,
+			[nameof(IView.InvalidateMeasure)] = MapInvalidateMeasure,
 		};
 
 	protected GtkViewHandler(IPropertyMapper mapper, CommandMapper? commandMapper = null)
@@ -120,6 +121,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		}
 		_cssProviders.Clear();
 		_cssStyles.Clear();
+		if (platformView is GtkLayoutPanel panel)
+			panel.ReleaseLayout();
 		base.DisconnectHandler(platformView);
 	}
 
@@ -143,9 +146,30 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 	void CleanupVisualStateTracking(Gtk.Widget widget)
 	{
-		if (_vsmMotion != null) { widget.RemoveController(_vsmMotion); _vsmMotion = null; }
-		if (_vsmClick != null) { widget.RemoveController(_vsmClick); _vsmClick = null; }
-		if (_vsmFocus != null) { widget.RemoveController(_vsmFocus); _vsmFocus = null; }
+		if (_vsmMotion != null)
+		{
+			_vsmMotion.OnEnter -= OnPointerEnter;
+			_vsmMotion.OnLeave -= OnPointerLeave;
+			widget.RemoveController(_vsmMotion);
+			_vsmMotion.Dispose();
+			_vsmMotion = null;
+		}
+		if (_vsmClick != null)
+		{
+			_vsmClick.OnPressed -= OnPressed;
+			_vsmClick.OnReleased -= OnReleased;
+			widget.RemoveController(_vsmClick);
+			_vsmClick.Dispose();
+			_vsmClick = null;
+		}
+		if (_vsmFocus != null)
+		{
+			_vsmFocus.OnEnter -= OnFocusIn;
+			_vsmFocus.OnLeave -= OnFocusOut;
+			widget.RemoveController(_vsmFocus);
+			_vsmFocus.Dispose();
+			_vsmFocus = null;
+		}
 	}
 
 	void OnPointerEnter(Gtk.EventControllerMotion sender, Gtk.EventControllerMotion.EnterSignalArgs args)
@@ -224,6 +248,12 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		catch { }
 	}
 
+	static void MapInvalidateMeasure(GtkViewHandler<TVirtualView, TPlatformView> handler, TVirtualView view, object? args)
+	{
+		if (handler.PlatformView != null)
+			GtkLayoutPanel.InvalidateLayout(handler.PlatformView);
+	}
+
 	/// <summary>
 	/// Applies CSS transitions for smooth property changes (background-color, opacity, box-shadow).
 	/// This enables VSM state transitions and property animations to animate smoothly.
@@ -272,11 +302,6 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 				layoutPanel.SetChildTransform(platformView, null);
 				layoutPanel.SetChildBounds(platformView, rect.X, rect.Y, (int)rect.Width, (int)rect.Height);
 			}
-		}
-		else if (VirtualView is not Microsoft.Maui.Controls.Page &&
-			VirtualView?.Parent is not Microsoft.Maui.Controls.ContentPage)
-		{
-			platformView.SetSizeRequest((int)rect.Width, (int)rect.Height);
 		}
 	}
 
@@ -344,7 +369,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		platformView.SetSizeRequest(-1, -1);
 
 		// Measure horizontal natural size
-		platformView.MeasureNative(Gtk.Orientation.Horizontal, -1, out var minWidth, out var natWidth, out _, out _);
+		platformView.Measure(Gtk.Orientation.Horizontal, -1, out var minWidth, out var natWidth, out _, out _);
 
 		var width = Math.Min(natWidth, widthConstraint);
 
@@ -359,8 +384,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 		// Measure vertical size with the actual width constraint so wrapping
 		// widgets (e.g. labels with SetWrap) report the correct wrapped height.
-		int forWidth = (int)width;
-		platformView.MeasureNative(Gtk.Orientation.Vertical, forWidth, out var minHeight, out var natHeight, out _, out _);
+		int forWidth = (int)Math.Clamp(width, minWidth, int.MaxValue);
+		platformView.Measure(Gtk.Orientation.Vertical, forWidth, out var minHeight, out var natHeight, out _, out _);
 
 		var height = Math.Min(natHeight, heightConstraint);
 
@@ -408,8 +433,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var stops = string.Join(", ",
 			paint.GradientStops
 				.OrderBy(s => s.Offset)
-				.Select(s => $"{ToGtkColor(s.Color)} {s.Offset * 100:F0}%"));
-		return $"background-image: linear-gradient({angle:F0}deg, {stops}); background-color: transparent;";
+				.Select(s => FormattableString.Invariant($"{ToGtkColor(s.Color)} {s.Offset * 100:F0}%")));
+		return FormattableString.Invariant($"background-image: linear-gradient({angle:F0}deg, {stops}); background-color: transparent;");
 	}
 
 	static double CalculateGradientAngle(Point start, Point end)
@@ -431,8 +456,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var stops = string.Join(", ",
 			paint.GradientStops
 				.OrderBy(s => s.Offset)
-				.Select(s => $"{ToGtkColor(s.Color)} {s.Offset * 100:F0}%"));
-		return $"background-image: radial-gradient(circle {r:F0}% at {cx:F0}% {cy:F0}%, {stops}); background-color: transparent;";
+				.Select(s => FormattableString.Invariant($"{ToGtkColor(s.Color)} {s.Offset * 100:F0}%")));
+		return FormattableString.Invariant($"background-image: radial-gradient(circle {r:F0}% at {cx:F0}% {cy:F0}%, {stops}); background-color: transparent;");
 	}
 
 	static void MapOpacity(GtkViewHandler<TVirtualView, TPlatformView> handler, IView view)
@@ -539,8 +564,17 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 	protected static string ToGtkColor(Color color)
 	{
-		return $"rgba({(int)(color.Red * 255)},{(int)(color.Green * 255)},{(int)(color.Blue * 255)},{color.Alpha})";
+		return FormattableString.Invariant($"rgba({(int)(color.Red * 255)},{(int)(color.Green * 255)},{(int)(color.Blue * 255)},{color.Alpha})");
 	}
+
+	internal static string BuildCharacterSpacingCss(double spacing)
+		=> FormattableString.Invariant($"letter-spacing: {spacing}px;");
+
+	internal static string BuildStrokeThicknessCss(double thickness)
+		=> FormattableString.Invariant($"border-width: {thickness}px; border-style: solid;");
+
+	internal static string BuildStrokeCss(double thickness, Color color)
+		=> FormattableString.Invariant($"border: {thickness}px solid {ToGtkColor(color)}; ");
 
 	static void MapShadow(GtkViewHandler<TVirtualView, TPlatformView> handler, IView view)
 	{
@@ -558,7 +592,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var ox = shadow.Offset.X;
 		var oy = shadow.Offset.Y;
 		var radius = shadow.Radius;
-		handler.UpdateCss(widget, $"box-shadow: {ox:F0}px {oy:F0}px {radius:F0}px {color};");
+		handler.UpdateCss(widget, FormattableString.Invariant($"box-shadow: {ox:F0}px {oy:F0}px {radius:F0}px {color};"));
 	}
 
 	static void MapInputTransparent(GtkViewHandler<TVirtualView, TPlatformView> handler, IView view)
@@ -587,7 +621,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		{
 			var cr = rrg.CornerRadius;
 			handler.UpdateCss(widget,
-				$"border-radius: {(int)cr.TopLeft}px {(int)cr.TopRight}px {(int)cr.BottomRight}px {(int)cr.BottomLeft}px;");
+				FormattableString.Invariant($"border-radius: {(int)cr.TopLeft}px {(int)cr.TopRight}px {(int)cr.BottomRight}px {(int)cr.BottomLeft}px;"));
 		}
 		else if (view is Microsoft.Maui.Controls.VisualElement ve2 && ve2.Clip is Microsoft.Maui.Controls.Shapes.EllipseGeometry)
 		{

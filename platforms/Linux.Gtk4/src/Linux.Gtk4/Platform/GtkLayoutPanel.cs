@@ -28,9 +28,28 @@ public class GtkLayoutPanel : Gtk.Fixed
 	/// </summary>
 	public bool IsExternallyManaged { get; set; }
 
+	internal static void InvalidateLayout(Gtk.Widget widget)
+	{
+		for (Gtk.Widget? current = widget; current != null; current = current.GetParent())
+		{
+			if (current is GtkLayoutPanel panel)
+				panel.LayoutDirty = true;
+		}
+		widget.QueueResize();
+	}
+
 	// Instance tracking: native widget pointer → managed panel.
 	// Used by static P/Invoke callbacks to find the managed instance.
 	static readonly System.Collections.Concurrent.ConcurrentDictionary<IntPtr, GtkLayoutPanel> s_instances = new();
+	internal static int TrackedInstanceCount => s_instances.Count;
+
+	internal void ReleaseLayout()
+	{
+		s_instances.TryRemove(Handle.DangerousGetHandle(), out _);
+		_crossPlatformLayout = null;
+		_childBounds.Clear();
+		_childTransforms.Clear();
+	}
 
 	// Native callback delegates — pinned as static fields to prevent GC.
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -71,7 +90,10 @@ public class GtkLayoutPanel : Gtk.Fixed
 		gtk_widget_set_layout_manager(nativeHandle, layoutPtr);
 	}
 
-	static int NativeRequestMode(IntPtr widget) => 2; // GTK_SIZE_REQUEST_CONSTANT_SIZE
+	static int NativeRequestMode(IntPtr widget) =>
+		s_instances.TryGetValue(widget, out var panel) && panel.IsExternallyManaged && panel.CrossPlatformLayout != null
+			? 0 // GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH
+			: 2; // GTK_SIZE_REQUEST_CONSTANT_SIZE
 
 	/// <summary>
 	/// Reports 0 minimum height so the panel never pushes the window to grow.
@@ -86,6 +108,25 @@ public class GtkLayoutPanel : Gtk.Fixed
 		naturalBaseline = -1;
 
 		if (!s_instances.TryGetValue(widget, out var panel)) return;
+
+		if (panel.IsExternallyManaged && panel.CrossPlatformLayout != null)
+		{
+			try
+			{
+				var measured = panel.CrossPlatformMeasure(orientation == 1 && forSize >= 0 ? forSize : double.PositiveInfinity,
+					double.PositiveInfinity);
+				var extent = orientation == 0 ? measured.Width : measured.Height;
+				if (!double.IsFinite(extent) || extent < 0)
+					throw new InvalidOperationException($"GTK template returned an invalid measured extent: {extent}.");
+				natural = (int)Math.Min(int.MaxValue, Math.Ceiling(extent));
+				minimum = orientation == 0 ? 0 : natural;
+			}
+			catch (Exception ex)
+			{
+				Console.Error.WriteLine($"[Microsoft.Maui.Platforms.Linux.Gtk4] Native template measure failed: {ex}");
+			}
+			return;
+		}
 
 		foreach (var kvp in panel._childBounds)
 		{
@@ -108,15 +149,36 @@ public class GtkLayoutPanel : Gtk.Fixed
 	static void NativeAllocate(IntPtr widget, int width, int height, int baseline)
 	{
 		if (!s_instances.TryGetValue(widget, out var panel)) return;
+		try
+		{
+			panel.AllocateChildren(width, height);
+		}
+		catch (Exception ex)
+		{
+			Console.Error.WriteLine($"[Microsoft.Maui.Platforms.Linux.Gtk4] Native layout allocation failed at {width}x{height}: {ex}");
+		}
+	}
 
-		for (var child = panel.GetFirstChild(); child != null; child = child.GetNextSibling())
+	void AllocateChildren(int width, int height)
+	{
+		if (CrossPlatformLayout != null)
+		{
+			CrossPlatformMeasure(width, height);
+			CrossPlatformArrange(new Rect(0, 0, width, height));
+		}
+
+		for (var child = GetFirstChild(); child != null; child = child.GetNextSibling())
 		{
 			if (!child.GetVisible()) continue;
 
-			if (panel._childBounds.TryGetValue(child, out var bounds))
+			if (_childBounds.TryGetValue(child, out var bounds))
 			{
+				child.SetChildVisible(bounds.Width > 0 && bounds.Height > 0);
+				if (bounds.Width <= 0 || bounds.Height <= 0)
+					continue;
+
 				Gsk.Transform? transform;
-				if (panel._childTransforms.TryGetValue(child, out var customTransform) && customTransform != null)
+				if (_childTransforms.TryGetValue(child, out var customTransform) && customTransform != null)
 				{
 					transform = customTransform;
 				}
@@ -131,7 +193,9 @@ public class GtkLayoutPanel : Gtk.Fixed
 					transform = null;
 				}
 
-				child.Allocate(Math.Max(1, (int)bounds.Width), Math.Max(1, (int)bounds.Height), -1, transform);
+				child.Measure(Gtk.Orientation.Horizontal, -1, out _, out _, out _, out _);
+				child.Measure(Gtk.Orientation.Vertical, (int)bounds.Width, out _, out _, out _, out _);
+				child.Allocate((int)bounds.Width, (int)bounds.Height, -1, transform);
 			}
 			else
 			{
@@ -170,7 +234,10 @@ public class GtkLayoutPanel : Gtk.Fixed
 	/// </summary>
 	public void SetChildBounds(Gtk.Widget child, double x, double y, int width, int height)
 	{
-		_childBounds[child] = new Rect(x, y, width, height);
+		var bounds = new Rect(x, y, width, height);
+		if (_childBounds.TryGetValue(child, out var previous) && previous == bounds)
+			return;
+		_childBounds[child] = bounds;
 		// QueueResize (not QueueAllocate) so parent widgets like ScrolledWindow/Viewport
 		// re-measure and discover the full content extent for scrolling.
 		QueueResize();
@@ -183,6 +250,8 @@ public class GtkLayoutPanel : Gtk.Fixed
 	/// </summary>
 	public new void SetChildTransform(Gtk.Widget child, Gsk.Transform? transform)
 	{
+		if (_childTransforms.TryGetValue(child, out var previous) && previous == transform)
+			return;
 		_childTransforms[child] = transform;
 		QueueAllocate();
 	}
@@ -238,11 +307,9 @@ public class GtkLayoutPanel : Gtk.Fixed
 	/// </summary>
 	public override void Dispose()
 	{
-		s_instances.TryRemove(Handle.DangerousGetHandle(), out _);
+		ReleaseLayout();
 		while (GetFirstChild() is Gtk.Widget child)
 		{
-			_childBounds.Remove(child);
-			_childTransforms.Remove(child);
 			child.Unparent();
 		}
 		base.Dispose();

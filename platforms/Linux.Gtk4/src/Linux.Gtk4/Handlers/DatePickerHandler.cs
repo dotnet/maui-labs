@@ -159,7 +159,7 @@ public class DatePickerHandler : GtkViewHandler<IDatePicker, Gtk.Box>
 	public static void MapCharacterSpacing(DatePickerHandler handler, IDatePicker datePicker)
 	{
 		var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
-		handler.UpdateCss(button, $"letter-spacing: {datePicker.CharacterSpacing}px;");
+		handler.UpdateCss(button, BuildCharacterSpacingCss(datePicker.CharacterSpacing));
 	}
 
 	public static void MapTextColor(DatePickerHandler handler, IDatePicker datePicker)

@@ -4,7 +4,7 @@
     <AssemblyName>Microsoft.Maui.Platforms.Linux.Gtk4.Tests</AssemblyName>
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
-    <!-- Managed tests are portable; native GTK tests explicitly opt in on Linux. -->
+    <!-- Managed tests are portable; native GTK tests explicitly opt in with a display. -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
@@ -12,5 +12,8 @@
     <PackageReference Include="xunit" />
     <ProjectReference Include="..\..\src\Linux.Gtk4\Linux.Gtk4.csproj" />
     <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\samples\Linux.Gtk4.Sample\Resources\Fonts\OpenSans-Regular.ttf" Link="OpenSans-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

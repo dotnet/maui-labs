@@ -86,7 +86,7 @@ public class BorderHandler : GtkViewHandler<IBorderView, Platform.GtkLayoutPanel
 		if (border.Stroke is SolidPaint strokePaint && strokePaint.Color != null)
 		{
 			var thickness = Math.Max(1, (int)border.StrokeThickness);
-			css += $"border: {thickness}px solid {ToGtkColor(strokePaint.Color)}; ";
+			css += BuildStrokeCss(thickness, strokePaint.Color);
 		}
 		else if (border.StrokeThickness <= 0)
 		{
@@ -97,7 +97,7 @@ public class BorderHandler : GtkViewHandler<IBorderView, Platform.GtkLayoutPanel
 		if (border.Shape is Microsoft.Maui.Controls.Shapes.RoundRectangle rr)
 		{
 			var cr = rr.CornerRadius;
-			css += $"border-radius: {(int)cr.TopLeft}px {(int)cr.TopRight}px {(int)cr.BottomRight}px {(int)cr.BottomLeft}px; ";
+			css += FormattableString.Invariant($"border-radius: {(int)cr.TopLeft}px {(int)cr.TopRight}px {(int)cr.BottomRight}px {(int)cr.BottomLeft}px; ");
 		}
 
 		handler.PlatformView.SetOverflow(!string.IsNullOrEmpty(css) || border.Clip != null

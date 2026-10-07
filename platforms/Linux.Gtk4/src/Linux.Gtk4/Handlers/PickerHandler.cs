@@ -102,7 +102,7 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 
 	public static void MapCharacterSpacing(PickerHandler handler, IPicker picker)
 	{
-		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {picker.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, BuildCharacterSpacingCss(picker.CharacterSpacing));
 	}
 
 	public static void MapHorizontalTextAlignment(PickerHandler handler, IPicker picker)

@@ -10,7 +10,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 [Collection("GTK runtime")]
 public partial class WindowSizingTests(ITestOutputHelper output)
 {
-	[GtkRuntimeFact]
+	[GtkRuntimeFact(linuxOnly: true)]
 	public void StartupWindow_ResizesBelowOldFloor_AndReflowsContent()
 	{
 		var host = new SizingHost(output);

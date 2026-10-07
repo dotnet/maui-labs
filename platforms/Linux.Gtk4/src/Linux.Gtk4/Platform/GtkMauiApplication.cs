@@ -36,6 +36,8 @@ public abstract class GtkMauiApplication : IPlatformApplication
 	{
 		// Fail fast with a friendly message before any GirCore GTK initialization.
 		GtkRuntime.EnsureSupported();
+		GtkFontManager.FontConfigNative.InitializeFontMap();
+		Graphene.Module.Initialize();
 
 		var applicationId = string.IsNullOrWhiteSpace(ApplicationId) ? null : ApplicationId;
 		_gtkApp = Gtk.Application.New(applicationId, Gio.ApplicationFlags.DefaultFlags);
