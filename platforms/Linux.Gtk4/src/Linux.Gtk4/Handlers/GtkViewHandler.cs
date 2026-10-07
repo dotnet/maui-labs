@@ -89,6 +89,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		}
 		_cssProviders.Clear();
 		_cssStyles.Clear();
+		if (platformView is GtkLayoutPanel panel)
+			panel.ReleaseLayout();
 		base.DisconnectHandler(platformView);
 	}
 

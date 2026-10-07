@@ -120,6 +120,9 @@ includes theme padding and borders before allocation.
 Measure invalidations (such as changing Grid columns) propagate to the native root
 without requiring a window resize. Children explicitly arranged to zero extent
 are suppressed by the GTK container until they are arranged positively again.
+Unbinding a CollectionView template disconnects its complete MAUI handler tree,
+including native event subscriptions and layout callback registrations, before
+releasing the native row. Repeated filtering does not retain retired layout panels.
 
 ### Native GTK hosting and regression checks
 
@@ -132,7 +135,8 @@ map on Windows as well as Linux. Applications should no longer install a separat
 This does not add Windows Essentials implementations or a WebKit Windows port.
 
 The opt-in `GalleryLayoutRuntimeTests` runs a real GTK main loop, nested
-Grid/Border/ScrollView/CollectionView templates, native Entry edits, and Shell
+Grid/Border/ScrollView/CollectionView templates, native Entry edits, repeated
+single-item/facet/empty/repopulate filtering, template teardown under GC, and Shell
 page timer stop/restart. It also registers the sample font and runs with en-ZA
 decimal-comma culture. Each native test class must run in its own process because
 GTK initialization is thread-affine.

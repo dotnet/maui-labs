@@ -195,7 +195,9 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			listItem.SetChild(null);
 			if (row != null)
 			{
+				var templateLayout = row.CrossPlatformLayout as TemplateLayout;
 				row.CrossPlatformLayout = null;
+				templateLayout?.Disconnect();
 				row.Dispose();
 			}
 		};
@@ -288,6 +290,8 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 	sealed class TemplateLayout(View view) : ICrossPlatformLayout
 	{
+		public void Disconnect() => view.DisconnectHandlers();
+
 		public Size CrossPlatformMeasure(double widthConstraint, double heightConstraint) =>
 			((IView)view).Measure(widthConstraint, heightConstraint);
 

@@ -41,6 +41,15 @@ public class GtkLayoutPanel : Gtk.Fixed
 	// Instance tracking: native widget pointer → managed panel.
 	// Used by static P/Invoke callbacks to find the managed instance.
 	static readonly System.Collections.Concurrent.ConcurrentDictionary<IntPtr, GtkLayoutPanel> s_instances = new();
+	internal static int TrackedInstanceCount => s_instances.Count;
+
+	internal void ReleaseLayout()
+	{
+		s_instances.TryRemove(Handle.DangerousGetHandle(), out _);
+		_crossPlatformLayout = null;
+		_childBounds.Clear();
+		_childTransforms.Clear();
+	}
 
 	// Native callback delegates — pinned as static fields to prevent GC.
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -298,11 +307,9 @@ public class GtkLayoutPanel : Gtk.Fixed
 	/// </summary>
 	public override void Dispose()
 	{
-		s_instances.TryRemove(Handle.DangerousGetHandle(), out _);
+		ReleaseLayout();
 		while (GetFirstChild() is Gtk.Widget child)
 		{
-			_childBounds.Remove(child);
-			_childTransforms.Remove(child);
 			child.Unparent();
 		}
 		base.Dispose();

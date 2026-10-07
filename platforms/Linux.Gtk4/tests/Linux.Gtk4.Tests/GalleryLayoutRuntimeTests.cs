@@ -12,7 +12,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 {
 	[GtkRuntimeFact]
-	public void Gallery_AllocatesNestedCards_AcceptsNativeInput_AndRestartsPageLifecycle()
+	public void Gallery_AllocatesNestedCards_FiltersTemplates_AndRestartsPageLifecycle()
 	{
 		var previousCulture = CultureInfo.CurrentCulture;
 		try
@@ -55,14 +55,20 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			Padding = 12, RowSpacing = 8
 		};
 		public List<Border> Cards { get; } = [];
+		public CollectionView Collection { get; }
+		public Entry CompactSearch { get; } = new() { IsVisible = false };
+		string _search = "";
+		bool _animationOnly;
 
 		public GalleryPage()
 		{
 			Root.Add(Search);
 			Root.Add(Sort, 1);
-			var collection = new CollectionView
+			Root.Add(CompactSearch);
+			Collection = new CollectionView
 			{
-				ItemsSource = Enumerable.Range(0, 12).Select(i => $"Card {i}").ToArray(),
+				ItemsSource = AllItems(),
+				EmptyView = "No matching samples",
 				ItemTemplate = new DataTemplate(() =>
 				{
 					var title = new Label { FontFamily = "RegressionFont", FontSize = 18.5, TextColor = new Color(1f, 0.5f, 0f, 0.75f) };
@@ -77,10 +83,12 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 					grid.Add(new Label { Text = "Nested card detail which wraps when the viewport shrinks.", LineBreakMode = LineBreakMode.WordWrap }, 0, 1);
 					var border = new Border { Content = grid, StrokeThickness = 1, BackgroundColor = new Color(0.2f, 0.3f, 0.4f, 0.5f), Margin = 4 };
 					Cards.Add(border);
-					return border;
+					return new ContentView { Content = border };
 				})
 			};
-			var scroll = new ScrollView { Content = new Grid { Children = { collection } } };
+			Search.TextChanged += (_, args) => SetSearch(args.NewTextValue);
+			CompactSearch.TextChanged += (_, args) => SetSearch(args.NewTextValue);
+			var scroll = new ScrollView { Content = new Grid { Children = { Collection } } };
 			Root.Add(scroll, 0, 1);
 			Grid.SetColumnSpan(scroll, 2);
 			var footer = new Label { Text = "Gallery footer", BackgroundColor = Colors.LightGray };
@@ -88,6 +96,26 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			Grid.SetColumnSpan(footer, 2);
 			Content = Root;
 		}
+
+		static string[] AllItems() => Enumerable.Range(0, 12).Select(i => i == 0 ? "Lottie Player" : $"Card {i}").ToArray();
+
+		void SetSearch(string text)
+		{
+			if (_search == text)
+				return;
+			_search = text;
+			Search.Text = CompactSearch.Text = text;
+			RefreshResults();
+		}
+
+		public void ToggleAnimationFacet()
+		{
+			_animationOnly = !_animationOnly;
+			RefreshResults();
+		}
+
+		void RefreshResults() => Collection.ItemsSource = AllItems().Where((item, index) =>
+			item.Contains(_search, StringComparison.OrdinalIgnoreCase) && (!_animationOnly || index % 2 == 0)).ToArray();
 	}
 
 	public sealed class LifecyclePage : ContentPage
@@ -175,6 +203,47 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 				await Until(() => app.Gallery.Sort.Width > 0 && sort.GetMapped(), "zero-to-positive allocation");
 
 				var entry = Assert.IsType<Gtk.Entry>(app.Gallery.Search.Handler!.PlatformView);
+				var initialPanelCount = GtkLayoutPanel.TrackedInstanceCount;
+				for (var iteration = 0; iteration < 8; iteration++)
+				{
+					var retiredCards = app.Gallery.Cards.Where(c => c.Handler != null).ToArray();
+					if (iteration % 2 == 0)
+						entry.SetText("Lottie Player");
+					else
+						app.Gallery.CompactSearch.Text = "Lottie Player";
+					Assert.Equal("Lottie Player", app.Gallery.Search.Text);
+					Assert.Equal("Lottie Player", app.Gallery.CompactSearch.Text);
+					Assert.Single(app.Gallery.Collection.ItemsSource.Cast<string>());
+					AssertNativeItems(app.Gallery.Collection, 1);
+					await Until(() => app.Gallery.Cards.Any(c => c.BindingContext as string == "Lottie Player" &&
+						c.Handler?.PlatformView is Gtk.Widget widget && widget.GetMapped() && c.Height > 0), "filtered card allocation");
+					Assert.All(retiredCards, card => Assert.Null(card.Handler));
+					app.Gallery.Collection.ScrollTo(0);
+					app.Gallery.ToggleAnimationFacet();
+					Assert.Single(app.Gallery.Collection.ItemsSource.Cast<string>());
+					entry.SetText("__no_such_gallery_sample__");
+					Assert.Empty(app.Gallery.Collection.ItemsSource);
+					var scrolled = (Gtk.ScrolledWindow)app.Gallery.Collection.Handler!.PlatformView!;
+					var emptyChild = scrolled.GetChild();
+					if (emptyChild is Gtk.Viewport viewport)
+						emptyChild = viewport.GetChild();
+					Assert.Equal("No matching samples", Assert.IsType<Gtk.Label>(emptyChild).GetText());
+					await Task.Delay(16);
+					entry.SetText("");
+					Assert.Equal(6, app.Gallery.Collection.ItemsSource.Cast<string>().Count());
+					app.Gallery.ToggleAnimationFacet();
+					Assert.Equal(12, app.Gallery.Collection.ItemsSource.Cast<string>().Count());
+					AssertNativeItems(app.Gallery.Collection, 12);
+					await Until(() => app.Gallery.Cards.Any(c => c.Handler?.PlatformView is Gtk.Widget widget &&
+						widget.GetMapped() && c.Width > 0 && c.Height > 0), "repopulated card allocation");
+					await Task.Run(() =>
+					{
+						GC.Collect();
+						GC.WaitForPendingFinalizers();
+					});
+					Assert.Equal(initialPanelCount, GtkLayoutPanel.TrackedInstanceCount);
+					output.WriteLine($"GTK-FILTER iteration={iteration} cards={app.Gallery.Cards.Count} panels={GtkLayoutPanel.TrackedInstanceCount}");
+				}
 				entry.SetText("__no_such_gallery_sample__");
 				Assert.Equal("__no_such_gallery_sample__", app.Gallery.Search.Text);
 				entry.SetText("");
@@ -221,6 +290,13 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 				Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"Timed out at {phase}.");
 				await Task.Delay(16);
 			}
+		}
+
+		static void AssertNativeItems(CollectionView collection, uint count)
+		{
+			var scrolled = (Gtk.ScrolledWindow)collection.Handler!.PlatformView!;
+			var list = Assert.IsType<Gtk.ListView>(scrolled.GetChild());
+			Assert.Equal(count, ((Gio.ListModel)list.GetModel()!).GetNItems());
 		}
 
 		static async Task SaveScreenshot(Gtk.Window window, string filename)
