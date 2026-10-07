@@ -14,6 +14,8 @@ namespace Microsoft.Maui.Handlers.WPF
 			[nameof(IButtonStroke.StrokeThickness)] = MapStrokeThickness,
 			[nameof(IButtonStroke.CornerRadius)] = MapCornerRadius,
 			[nameof(IImageSourcePart.Source)] = MapImageSource,
+			[nameof(Microsoft.Maui.Controls.Button.ImageSource)] = MapImageSource,
+			[nameof(Microsoft.Maui.Controls.Button.ContentLayout)] = MapImageSource,
 		};
 
 		public static CommandMapper<IButton, ButtonHandler> CommandMapper = new(ViewCommandMapper)

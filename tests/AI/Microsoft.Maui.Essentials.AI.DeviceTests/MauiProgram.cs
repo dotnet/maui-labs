@@ -8,7 +8,6 @@ using Microsoft.Extensions.AI;
 #if ENABLE_OPENAI_CLIENT
 using System.ClientModel;
 using OpenAI;
-using OpenAI.Chat;
 using OpenAI.Embeddings;
 #endif
 
@@ -49,14 +48,15 @@ public static class MauiProgram
 		var chatModel = aiSection["DeploymentName"] ?? throw new InvalidOperationException("Deployment Name not found in user secrets.");
 		var embeddingModel = aiSection["EmbeddingDeploymentName"] ?? throw new InvalidOperationException("Embedding Deployment Name not found in user secrets.");
 
-		var client = new ChatClient(
+		var client = new OpenAIClient(
 			credential: new ApiKeyCredential(apikey),
-			model: chatModel,
 			options: new OpenAIClientOptions()
 			{
 				Endpoint = endpoint,
 			});
-		builder.Services.AddSingleton(client);
+#pragma warning disable OPENAI001 // Responses API is experimental in the pinned SDK.
+		builder.Services.AddSingleton<IChatClient>(client.GetResponsesClient().AsIChatClient(chatModel));
+#pragma warning restore OPENAI001
 
 		var embeddings = new EmbeddingClient(
 			credential: new ApiKeyCredential(apikey),

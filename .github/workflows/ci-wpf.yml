@@ -31,6 +31,123 @@ on:
       - 'NuGet.config'
 
 jobs:
+  layout-regression:
+    name: Native WPF layout - MAUI ${{ matrix.maui }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        maui: ['10.0.41', '10.0.70']
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: fixed
+      - uses: actions/checkout@v6
+        with:
+          ref: f6bd8cc2dff423c3ca7aabade4fa1f8fb8cbd687
+          path: baseline
+      - uses: actions/checkout@v6
+        with:
+          ref: 63f8baa65f74ee6c605c9ebb5969949f990ccdf8
+          path: dispatch-only
+      - uses: actions/checkout@v6
+        with:
+          ref: 6fbd7df10b08c9d01c61ec6bcea23d5449f8763b
+          path: cached-measure
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: fixed/global.json
+      - name: Verify native layout regression before and after
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $relative = 'platforms\Windows.WPF\tests\HandlerTests'
+          Copy-Item "fixed\$relative\LayoutHandlerTests.cs" "baseline\$relative"
+          Copy-Item "fixed\$relative\LayoutHandlerTests.cs" "dispatch-only\$relative"
+          Copy-Item "fixed\$relative\LayoutHandlerTests.cs" "cached-measure\$relative"
+          foreach ($variant in @('baseline', 'dispatch-only', 'cached-measure', 'fixed')) {
+            Push-Location $variant
+            try {
+              $output = Join-Path $env:GITHUB_WORKSPACE "layout-runtime-evidence\$variant"
+              New-Item -ItemType Directory -Force $output | Out-Null
+              $filter = 'FullyQualifiedName~LayoutHandlerTests'
+              if ($variant -eq 'baseline') {
+                $filter = 'FullyQualifiedName~FlexLayout_FirstNativeMeasure|FullyQualifiedName~CreatePlatformView_UsesInterface|FullyQualifiedName~SetVirtualView_Replacement_UsesNewInterface'
+              } elseif ($variant -eq 'dispatch-only') {
+                $filter = 'FullyQualifiedName~FlexLayout_FirstNativeMeasure'
+              } elseif ($variant -eq 'cached-measure') {
+                $filter = 'FullyQualifiedName~NestedFlexLayout_WidthChanges'
+              }
+              dotnet test "$relative\HandlerTests.csproj" -c Release -p:UseMaui=false -p:MauiVersion=${{ matrix.maui }} -p:MicrosoftMauiControlsVersion=${{ matrix.maui }} -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=layouts.trx' --results-directory $output *> "$output\process.log"
+              $exitCode = $LASTEXITCODE
+              if (!(Test-Path "$output\layouts.trx")) {
+                Get-Content "$output\process.log"
+                throw "$variant produced no test results"
+              }
+              [xml]$results = Get-Content "$output\layouts.trx"
+              $counters = $results.TestRun.ResultSummary.Counters
+              if ($variant -eq 'baseline') {
+                $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
+                if ($exitCode -ne 1 -or $counters.failed -ne 4 -or $counters.total -ne 4 -or
+                    @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Flex height must be positive|Assert.Equal\(\) Failure' }).Count -ne 0) {
+                  Get-Content "$output\process.log"
+                  throw 'Baseline did not reproduce the four expected layout dispatch failures'
+                }
+              } elseif ($variant -eq 'dispatch-only') {
+                $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
+                if ($exitCode -ne 1 -or $counters.failed -ne 2 -or $counters.total -ne 2 -or
+                    @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert.InRange\(\) Failure' }).Count -ne 0) {
+                  Get-Content "$output\process.log"
+                  throw 'Dispatch-only fix did not reproduce the two native frame inflation failures'
+                }
+              } elseif ($variant -eq 'cached-measure') {
+                $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
+                if ($exitCode -ne 1 -or $counters.failed -ne 1 -or $counters.total -ne 1 -or
+                    @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert.InRange\(\) Failure' }).Count -ne 0) {
+                  Get-Content "$output\process.log"
+                  throw 'Cached-measure revision did not reproduce the nested flex stale-height failure'
+                }
+              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -ne 16) {
+                Get-Content "$output\process.log"
+                throw 'Fixed native WPF layout regression failed'
+              }
+            } finally { Pop-Location }
+          }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: layout-wpf-runtime-${{ matrix.maui }}
+          path: layout-runtime-evidence
+
+  essentials-runtime:
+    name: Essentials WPF regression
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Exercise WPF Essentials
+        shell: pwsh
+        run: >-
+          dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj
+          --configuration Release -p:UseMaui=false -m:1 -nr:false
+          --logger "trx;LogFileName=essentials-wpf.trx"
+          --results-directory artifacts\TestResults\essentials
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: essentials-wpf-results
+          path: artifacts/TestResults/essentials/*.trx
+          if-no-files-found: error
+
   shell-section-regression:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -44,6 +161,10 @@ jobs:
         with:
           ref: 23ea45e98b84bfbf9dd00f4859fd4cf30d44120d
           path: baseline
+      - uses: actions/checkout@v6
+        with:
+          ref: 2fd4e24a553bcfb6e3ab39dc7ee3eb3500b0438d
+          path: followup-baseline
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
@@ -54,14 +175,19 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
           $relative = 'platforms\Windows.WPF\tests\HandlerTests'
           Copy-Item "fixed\$relative\ShellSectionSwitchingTests.cs" "baseline\$relative"
-          foreach ($variant in @('baseline', 'fixed')) {
+          Copy-Item "fixed\$relative\ShellTabNavigationTests.cs" "baseline\$relative"
+          Copy-Item "fixed\$relative\ShellTabNavigationTests.cs" "followup-baseline\$relative"
+          foreach ($variant in @('baseline', 'followup-baseline', 'fixed')) {
             Push-Location $variant
             try {
               $env:SHELL_SECTION_RESULTS = Join-Path $env:GITHUB_WORKSPACE "section-runtime-evidence\$variant"
+              $env:SHELL_TAB_RESULTS = Join-Path $env:SHELL_SECTION_RESULTS 'tabs'
               New-Item -ItemType Directory -Force $env:SHELL_SECTION_RESULTS | Out-Null
-              $filter = 'FullyQualifiedName~ShellSectionSwitchingTests'
+              $filter = '(FullyQualifiedName~ShellSectionSwitchingTests|FullyQualifiedName~ShellTabNavigationTests)&FullyQualifiedName!~NativeTabEnabled_'
               if ($variant -eq 'baseline') {
-                $filter = 'FullyQualifiedName~SwitchSection_ShowsLazyPageAndCompletesNavigation|FullyQualifiedName~SwitchContentWithinSection_ShowsLazyPage'
+                $filter = 'FullyQualifiedName~SwitchSection_ShowsLazyPageAndCompletesNavigation|FullyQualifiedName~SwitchContentWithinSection_ShowsLazyPage|FullyQualifiedName~NativeTabSelection_WithOrWithoutItemTemplate'
+              } elseif ($variant -eq 'followup-baseline') {
+                $filter = 'FullyQualifiedName~TabPopulation_WhenVisibleSectionsChange|FullyQualifiedName~NativeTabSelection_WhenKeyboardFocused'
               }
               dotnet test "$relative\HandlerTests.csproj" -c Release -p:UseMaui=false -m:1 -nr:false --filter $filter --logger 'trx;LogFileName=sections.trx' --results-directory $env:SHELL_SECTION_RESULTS *> "$env:SHELL_SECTION_RESULTS\process.log"
               $exitCode = $LASTEXITCODE
@@ -70,12 +196,21 @@ jobs:
               $counters = $results.TestRun.ResultSummary.Counters
               if ($variant -eq 'baseline') {
                 $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
-                if ($exitCode -ne 1 -or $counters.failed -ne 3 -or $counters.total -ne 3 -or
+                if ($exitCode -ne 1 -or $counters.failed -ne 5 -or $counters.total -ne 5 -or $counters.executed -ne 5 -or
                     @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert\.(Equal|Same)\(\) Failure' }).Count -ne 0) {
                   Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
-                  throw 'Baseline did not reproduce all three lazy section/content selection failures'
+                  throw 'Baseline did not reproduce the three section/content and two native tab failures'
                 }
-              } elseif ($exitCode -ne 0 -or $counters.failed -ne 0 -or $counters.executed -lt 7) {
+              } elseif ($variant -eq 'followup-baseline') {
+                $failures = @($results.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed')
+                if ($exitCode -ne 1 -or $counters.failed -ne 8 -or $counters.total -ne 8 -or
+                    $counters.executed -ne 8 -or $counters.notExecuted -ne 0 -or
+                    @($failures | Where-Object { $_.Output.ErrorInfo.Message -notmatch 'Assert\.(Equal|Same)\(\) Failure' }).Count -ne 0) {
+                  Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
+                  throw 'Follow-up baseline did not reproduce six population and two native keyboard-focus failures'
+                }
+              } elseif ($exitCode -ne 0 -or $counters.total -ne 30 -or $counters.executed -ne 30 -or
+                        $counters.passed -ne 30 -or $counters.failed -ne 0 -or $counters.notExecuted -ne 0) {
                 Get-Content "$env:SHELL_SECTION_RESULTS\process.log"
                 throw 'Fixed WPF section regression failed'
               }
@@ -86,6 +221,35 @@ jobs:
         with:
           name: shell-section-wpf-runtime
           path: section-runtime-evidence
+          if-no-files-found: error
+
+  shell-enabled-regression:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: fixed
+      - uses: actions/checkout@v6
+        with:
+          path: baseline
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: fixed/global.json
+      - name: Verify native enabled-state baseline and fix with identical tests
+        shell: pwsh
+        run: >
+          fixed\platforms\Windows.WPF\tests\Scripts\Verify-ShellEnabledRegression.ps1
+          -BaselineRef 76ba9861590190dcea8dc076df719c151e44ac9d
+          -FixedDirectory fixed -BaselineDirectory baseline
+          -ResultsDirectory shell-enabled-evidence
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: shell-enabled-wpf-runtime
+          path: shell-enabled-evidence
           if-no-files-found: error
 
   compatibility:
@@ -126,12 +290,30 @@ jobs:
           -c Release -p:UseMaui=false -m:1 -nr:false
           --logger "trx;LogFileName=wpf-handler-tests.trx"
           --results-directory artifacts\TestResults\WpfHandlers
+      - name: Verify native fonts from isolated working directories
+        shell: pwsh
+        run: >
+          eng\smoke-tests\wpf-font-smoke-test.ps1
+          -TestAssembly artifacts\bin\HandlerTests\Release\net10.0-windows\HandlerTests.dll
+      - name: Verify published fonts without rebuilding
+        shell: pwsh
+        run: |
+          dotnet publish platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj `
+            -c Release --no-build --no-restore -p:UseMaui=false -m:1 -nr:false `
+            -o artifacts\publish\WpfFonts
+          if ($LASTEXITCODE -ne 0) { throw 'Publishing font tests failed.' }
+          eng\smoke-tests\wpf-font-smoke-test.ps1 `
+            -TestAssembly artifacts\publish\WpfFonts\HandlerTests.dll `
+            -ResultsDirectory artifacts\TestResults\WpfFontsPublish
       - name: Upload handler test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: wpf-handler-tests
-          path: artifacts/TestResults/WpfHandlers/*.trx
+          path: |
+            artifacts/TestResults/WpfHandlers/*.trx
+            artifacts/TestResults/WpfFonts/**
+            artifacts/TestResults/WpfFontsPublish/**
           if-no-files-found: error
 
   build:
@@ -146,6 +328,7 @@ jobs:
 
   template-smoke:
     runs-on: windows-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -153,7 +336,7 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
-      - name: Install workloads and verify the packed WPF template
+      - name: Install existing WPF template workloads
         shell: pwsh
         run: |
           $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
@@ -161,7 +344,127 @@ jobs:
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
           & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --version 10.0.203
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
-          eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory
+      - name: Restore and build the normal source consumer
+        id: source-font-build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
+          $project = 'platforms\Windows.WPF\samples\Windows.WPF.Sample\Windows.WPF.Sample.csproj'
+          $proof = (New-Item -ItemType Directory -Force 'artifacts\TestResults\WpfSourceFontsBaseline').FullName
+          $properties = @('-p:Configuration=Release', '-p:WpfTestScenarios=true',
+            '-p:RuntimeIdentifier=win-x64', '-p:SelfContained=false', '-m:1', '-nr:false')
+          & $dotnet restore $project @properties --disable-parallel 2>&1 | Tee-Object "$proof\restore.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Normal consumer restore failed; not native regression evidence.' }
+          & $dotnet msbuild $project @properties "-preprocess:$proof\postrestore.xml"
+          if ($LASTEXITCODE -ne 0) { throw 'Normal consumer preprocessing failed.' }
+          $json = & $dotnet msbuild $project @properties `
+            '-getProperty:UseMaui,TargetPath,ProjectAssetsFile,RuntimeIdentifier,SelfContained' `
+            '-getItem:MauiFont,EmbeddedResource,ContentWithTargetPath,MissingWorkloadPack' '-verbosity:quiet'
+          if ($LASTEXITCODE -ne 0) { throw 'Normal consumer evaluation failed.' }
+          $json | Set-Content "$proof\evaluation.json"
+          $evaluation = ($json -join "`n") | ConvertFrom-Json
+          if ($evaluation.Properties.UseMaui -ne 'true' -or @($evaluation.Items.MissingWorkloadPack).Count -ne 0) {
+            throw 'The baseline requires normal UseMaui=true with available workloads.'
+          }
+          $normalProperties = @($properties | Where-Object { $_ -notlike '-p:WpfTestScenarios=*' })
+          & $dotnet msbuild $project @normalProperties "-preprocess:$proof\postrestore-no-scenarios.xml"
+          if ($LASTEXITCODE -ne 0) { throw 'Normal gallery preprocessing failed.' }
+          $normalJson = & $dotnet msbuild $project @normalProperties `
+            '-getProperty:UseMaui' '-getItem:MauiFont,EmbeddedResource,ContentWithTargetPath' '-verbosity:quiet'
+          if ($LASTEXITCODE -ne 0) { throw 'Normal gallery font-item evaluation failed.' }
+          $normalJson | Set-Content "$proof\evaluation-no-scenarios.json"
+          $normal = ($normalJson -join "`n") | ConvertFrom-Json
+          if ($normal.Properties.UseMaui -ne 'true') { throw 'The non-instrumented sample must also retain UseMaui=true.' }
+          foreach ($item in @('MauiFont', 'EmbeddedResource', 'ContentWithTargetPath')) {
+            if ((ConvertTo-Json -InputObject $normal.Items.$item -Depth 10 -Compress) -ne
+                (ConvertTo-Json -InputObject $evaluation.Items.$item -Depth 10 -Compress)) {
+              throw "Fixture changes $item items compared with the normal sample; not baseline evidence."
+            }
+          }
+          [xml] $instrumentedImports = Get-Content "$proof\postrestore.xml" -Raw
+          [xml] $normalImports = Get-Content "$proof\postrestore-no-scenarios.xml" -Raw
+          $instrumentedFontTargets = @($instrumentedImports.SelectNodes('//*[local-name()="Target"]') |
+            Where-Object { $_.OuterXml -match 'MauiFont' } | ForEach-Object OuterXml | Sort-Object)
+          $normalFontTargets = @($normalImports.SelectNodes('//*[local-name()="Target"]') |
+            Where-Object { $_.OuterXml -match 'MauiFont' } | ForEach-Object OuterXml | Sort-Object)
+          if (($instrumentedFontTargets -join "`n") -ne ($normalFontTargets -join "`n")) {
+            throw 'Fixture changes font-processing targets (including shared asset-harness imports); not baseline evidence.'
+          }
+          git rev-parse HEAD | Set-Content "$proof\checkout-sha.txt"
+          & $dotnet --info | Set-Content "$proof\dotnet-info.txt"
+          & $dotnet build $project --no-restore @properties "-bl:$proof\build.binlog" 2>&1 | Tee-Object "$proof\build.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Normal consumer build failed; not native regression evidence.' }
+          if (!(Test-Path -LiteralPath $evaluation.Properties.TargetPath)) { throw 'The evaluated sample assembly was not built.' }
+          "assembly=$($evaluation.Properties.TargetPath)" >> $env:GITHUB_OUTPUT
+      - name: Capture native fonts from normal build output
+        id: source-font-native-build
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          eng\smoke-tests\wpf-font-smoke-test.ps1 `
+            -SampleAssembly '${{ steps.source-font-build.outputs.assembly }}' `
+            -ControlFont platforms\Windows.WPF\samples\Windows.WPF.Sample\Resources\Fonts\OpenSans-Regular.ttf `
+            -DotNet (Join-Path $env:DOTNET_ROOT 'dotnet.exe') `
+            -ResultsDirectory artifacts\TestResults\WpfSourceFontsBaseline\Build
+      - name: Publish the same normal source consumer without rebuilding
+        id: source-font-publish
+        shell: pwsh
+        run: |
+          & (Join-Path $env:DOTNET_ROOT 'dotnet.exe') publish `
+            platforms\Windows.WPF\samples\Windows.WPF.Sample\Windows.WPF.Sample.csproj `
+            -c Release --no-build --no-restore -p:WpfTestScenarios=true `
+            -p:RuntimeIdentifier=win-x64 -p:SelfContained=false -m:1 -nr:false `
+            -o artifacts\publish\WpfSourceFontsBaseline
+          if ($LASTEXITCODE -ne 0) { throw 'Normal consumer publish failed; not native regression evidence.' }
+      - name: Capture native fonts from normal publish output
+        id: source-font-native-publish
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          eng\smoke-tests\wpf-font-smoke-test.ps1 `
+            -SampleAssembly artifacts\publish\WpfSourceFontsBaseline\Windows.WPF.Sample.dll `
+            -ControlFont platforms\Windows.WPF\samples\Windows.WPF.Sample\Resources\Fonts\OpenSans-Regular.ttf `
+            -DotNet (Join-Path $env:DOTNET_ROOT 'dotnet.exe') `
+            -ResultsDirectory artifacts\TestResults\WpfSourceFontsBaseline\Publish
+      - name: Upload normal consumer font baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpf-normal-source-font-baseline
+          path: artifacts/TestResults/WpfSourceFontsBaseline/**
+          if-no-files-found: error
+      - name: Verify the packed WPF template and native fonts
+        shell: pwsh
+        run: |
+          $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+          $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
+          eng\smoke-tests\wpf-template-smoke-test.ps1 -SdkDirectory $sdkDirectory -FontScenarios `
+            -ArtifactsDirectory (Join-Path $env:RUNNER_TEMP 'wpf-font-package')
+      - name: Upload packed consumer font evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpf-package-font-proof
+          path: |
+            ${{ runner.temp }}/wpf-font-package/FontBuild/**
+            ${{ runner.temp }}/wpf-font-package/FontPublish/**
+            ${{ runner.temp }}/wpf-font-package/font-*.json
+            ${{ runner.temp }}/wpf-font-package/font-consumer.xml
+            ${{ runner.temp }}/wpf-font-package/packages/*.nupkg
+          if-no-files-found: error
+      - name: Require successful native consumer evidence
+        if: always()
+        shell: pwsh
+        run: |
+          if ('${{ steps.source-font-build.outcome }}' -ne 'success' -or
+              '${{ steps.source-font-publish.outcome }}' -ne 'success') {
+            throw 'Consumer restore/build/publish did not complete: no native regression conclusion.'
+          }
+          if ('${{ steps.source-font-native-build.outcome }}' -ne 'success' -or
+              '${{ steps.source-font-native-publish.outcome }}' -ne 'success') {
+            throw 'Inspect classified native results: fixture, rendering and unproven portability are distinct outcomes.'
+          }
       - name: Verify sample packaged asset build and publish runtime paths
         shell: pwsh
         run: eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64

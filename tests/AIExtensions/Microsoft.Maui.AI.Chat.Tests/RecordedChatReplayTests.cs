@@ -454,7 +454,7 @@ public sealed class RecordedChatReplayTests
         using var directory = new RecordingDirectory();
         var recording = directory.CreateService();
         using var client = new DescribedChatClient(
-            new RecordingChatClient(new EchoChatClient(), recording),
+            new RecordingChatClient(new EchoChatClient("echo-model"), recording),
             new ChatClientDescriptor("echo", "Echo", "Ready"));
 
         var messages = new[] { new ChatMessage(ChatRole.User, "Hello") };
@@ -470,6 +470,83 @@ public sealed class RecordedChatReplayTests
         var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(recording.AutosavePath));
         Assert.True(JsonNode.DeepEquals(saved.Interactions[0].Response, ChatRecordingSerializer.Response(response)));
         Assert.True(JsonNode.DeepEquals(saved.Interactions[1].Updates[0], ChatRecordingSerializer.Update(Assert.Single(updates))));
+    }
+
+    [Theory]
+    [InlineData(false, false, "recorded-model")]
+    [InlineData(true, true, "recorded-model")]
+    [InlineData(false, true, "recorded-model")]
+    [InlineData(true, false, "recorded-model")]
+    public async Task RecordedModelId_ReplaysThroughBothTransportsWithoutLabellingRequestHistory(
+        bool recordedStreaming, bool replayStreaming, string modelId)
+    {
+        using var directory = new RecordingDirectory();
+        var recording = directory.CreateService();
+        using var client = new RecordingChatClient(new EchoChatClient(modelId), recording);
+        var messages = new[]
+        {
+            new ChatMessage(ChatRole.System, "Be helpful"),
+            new ChatMessage(ChatRole.User, "Earlier question"),
+            new ChatMessage(ChatRole.Assistant, "Earlier response"),
+            new ChatMessage(ChatRole.User, "Hello"),
+        };
+        var options = new ChatOptions { ModelId = "requested-model" };
+        if (recordedStreaming)
+        {
+            await foreach (var _ in client.GetStreamingResponseAsync(messages, options)) { }
+        }
+        else
+        {
+            await client.GetResponseAsync(messages, options);
+        }
+
+        var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(recording.AutosavePath));
+        var interaction = Assert.Single(saved.Interactions);
+        Assert.Equal(modelId, recordedStreaming
+            ? ChatRecordingSerializer.ReadUpdate(Assert.Single(interaction.Updates)).ModelId
+            : ChatRecordingSerializer.ReadResponse(interaction.Response!).ModelId);
+
+        var restored = directory.CreateService();
+        using var replay = new ReplayChatClient(restored);
+        var changes = new List<TranscriptChange>();
+        await foreach (var change in new ChatConversation().ReplayTurnAsync(
+            replay, interaction.Request, ChatRecordingSerializer.ReadOptions(interaction.Request),
+            replayStreaming, structuredJson: false))
+            changes.Add(change);
+
+        var entries = changes.OfType<TranscriptChange.EntryAdded>().ToArray();
+        Assert.All(entries.Where(entry => entry.EntryKind is TranscriptEntryKind.User or TranscriptEntryKind.System ||
+            entry.Text == "Earlier response"), entry => Assert.Null(entry.ModelId));
+        var output = Assert.Single(entries, entry =>
+            entry.EntryKind == TranscriptEntryKind.Assistant && entry.Text != "Earlier response");
+        Assert.Equal(modelId, output.ModelId);
+        Assert.Equal(1, restored.ReplayPosition);
+    }
+
+    [Fact]
+    public void RestoredRequestHistory_UsesUpdateProjectionWithoutLosingMessageBoundaries()
+    {
+        var changes = new List<TranscriptChange>();
+        new TranscriptEmitter().EmitRecordedRequest(
+            [
+                new ChatMessage(ChatRole.Assistant, "First") { MessageId = "first" },
+                new ChatMessage(ChatRole.Assistant,
+                    [new TextReasoningContent("Checking"), new FunctionCallContent("call", "calculate")]),
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call", 4)]),
+                new ChatMessage(ChatRole.Assistant, "Second") { MessageId = "second" },
+                new ChatMessage(ChatRole.User, "Continue"),
+            ],
+            "Be concise", changes.Add);
+
+        var entries = changes.OfType<TranscriptChange.EntryAdded>().ToArray();
+        Assert.All(entries, entry => Assert.Null(entry.ModelId));
+        Assert.Equal(new[] { "First", "Second" }, entries
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Assistant).Select(entry => entry.Text));
+        Assert.Single(entries, entry => entry.EntryKind == TranscriptEntryKind.Reasoning);
+        Assert.Single(entries, entry => entry.EntryKind == TranscriptEntryKind.Tool);
+        Assert.Single(entries, entry => entry.EntryKind == TranscriptEntryKind.System);
+        Assert.Equal("Continue", Assert.Single(entries, entry => entry.EntryKind == TranscriptEntryKind.User).Text);
+        Assert.Single(changes.OfType<TranscriptChange.ToolCallResolved>());
     }
 
     [Fact]
@@ -586,17 +663,17 @@ public sealed class RecordedChatReplayTests
     private static string FixturePath(string fileName) =>
         Path.Combine(AppContext.BaseDirectory, "TestData", fileName);
 
-    private sealed class EchoChatClient : IChatClient
+    private sealed class EchoChatClient(string modelId) : IChatClient
     {
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "Hello back")]));
+            Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "Hello back")]) { ModelId = modelId });
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages, ChatOptions? options = null,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            yield return new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Hello back")]);
+            yield return new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Hello back")]) { ModelId = modelId };
             await Task.Yield();
         }
 

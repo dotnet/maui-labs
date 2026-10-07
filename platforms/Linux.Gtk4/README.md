@@ -80,6 +80,26 @@ content minimums still apply; there is no backend-imposed 800 x 600 minimum.
 Root MAUI layouts reflow using their actual GTK allocation, including space reserved
 by native containers and window chrome.
 
+`Window.Width`/`Height` report the allocated client area (excluding a native titlebar),
+and `Window.SizeChanged` follows actual allocation changes, not just size requests.
+Pages, including `NavigationPage` and `Shell`, report their own native allocation;
+the current content page excludes navigation chrome. Their `SizeChanged` and
+`OnSizeAllocated` callbacks and top-level layout frames can be used for responsive UI.
+Vertical `CollectionView` templates reflow at their allocated row width.
+
+The existing native sizing host covers initial sizing, minimum sizes, nested
+layouts, scrolling, NavigationPage/Shell frames and events, independent windows,
+unchanged allocations, decorated client areas, handler reconnect, and collection
+cards. It runs in the normal GTK CI runtime matrix. To run the same checks on Linux:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --configuration Release --filter FullyQualifiedName~WindowSizingTests \
+  --logger "console;verbosity=detailed"
+```
+
 ### Shell navigation regression checks
 
 Shell section navigation displays the top pushed page and restores the previous
@@ -164,6 +184,13 @@ window. On Windows the test sends native window-manager resize events; the teste
 GTK Win32 runtime does not honor `SetDefaultSize` for an already mapped window.
 The original `WindowSizingTests` therefore remains Linux-only and separately
 checks MAUI/default-size mappings on GTK/X11.
+
+### Transform point ownership
+
+`Graphene.Point.Alloc()` returns a point owned by a GirCore `SafeHandle`.
+Do not call its native `Free()` method after passing it to `Gsk.Transform.Translate`:
+the handle still owns the allocation and will free it again during finalization.
+This applies to layout-position points as well as anchor points.
 
 ### Essentials (21 of 36 services)
 
@@ -304,8 +331,17 @@ configuring the builder. Unsupported desktop capabilities retain their existing
 stub behavior. Facades are process-wide: the most recently built app sets their
 instances, and callers must not use them after disposing that app.
 
-Run the behavioral registration regressions on Linux:
+`FileSystem.AppDataDirectory` and `CacheDirectory` use `XDG_DATA_HOME` and
+`XDG_CACHE_HOME`, falling back to `~/.local/share` and `~/.cache`, respectively,
+with the application name appended. Both getters create the directory before
+returning it, preserve existing contents, and propagate filesystem errors.
+Paths are resolved on every access, including changes to the XDG variables.
+
+Run the registration and filesystem regressions on Linux:
 `dotnet test platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj`.
+The filesystem tests cover XDG overrides and fallback paths with unique
+application identities and real file writes; only their owned directories are
+removed. These tests do not require a display.
 Set `ESSENTIALS_NATIVE_GTK=1` under a real display (or `xvfb-run`) to also run the
 GTK application activation/display regression; otherwise that test is explicitly skipped.
 
@@ -450,7 +486,8 @@ RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
 ```
 
 ```bash
-RUN_GTK_RUNTIME_TESTS=1 GSK_RENDERER=cairo dbus-run-session -- xvfb-run --auto-servernum \
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
   dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
   --filter FullyQualifiedName~GtkSynchronizationContextTests \
   --logger "console;verbosity=detailed" --blame-hang-timeout 3m
@@ -465,8 +502,14 @@ invokes an async MAUI button handler from the GTK main loop, and checks thread
 identity, context preservation across repeated awaits, native label updates,
 and restoration of the original context after shutdown.
 
-The native CI job runs each GTK test class in its own process and uploads its
-TRX results.
+The transform regression creates a real GTK window and repeatedly scales and
+rotates a button at origin, off-origin, translated, and translation-cancelled
+positions. Forced finalization detects native point double frees; coordinate
+assertions check that transforms still work. Run it with the same command,
+replacing the filter with `FullyQualifiedName~GtkTransformTests`.
+
+The native CI job runs each test class in a separate process to keep GTK
+initialization on one thread and uploads its TRX results.
 
 ### Run the sample app
 

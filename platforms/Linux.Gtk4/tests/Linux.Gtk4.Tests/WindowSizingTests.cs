@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
 [Collection("GTK runtime")]
-public class WindowSizingTests(ITestOutputHelper output)
+public partial class WindowSizingTests(ITestOutputHelper output)
 {
 	[GtkRuntimeFact(linuxOnly: true)]
 	public void StartupWindow_ResizesBelowOldFloor_AndReflowsContent()
@@ -69,6 +69,9 @@ public class WindowSizingTests(ITestOutputHelper output)
 						Orientation = ScrollOrientation.Horizontal,
 						Content = new HorizontalStackLayout { Children = { Child } }
 					};
+					break;
+				case 6:
+					Page.Content = Child;
 					break;
 				default:
 					Page.Content = Inner;
@@ -133,10 +136,10 @@ public class WindowSizingTests(ITestOutputHelper output)
 				mauiWindow.Height = 720;
 			}, 550, 720);
 
-			foreach (var kind in new[] { 0, 1, 2, 3, 4, 5 })
+			foreach (var kind in new[] { 0, 1, 2, 3, 4, 5, 6 })
 			{
 				var contentKind = kind;
-				int? childHeight = kind == 5 ? 1200 : kind >= 2 ? 40 : null;
+				int? childHeight = kind == 5 ? 1200 : kind is >= 2 and <= 4 ? 40 : null;
 				int? childWidth = kind == 4 ? 1200 : null;
 				Add($"content {kind} initial allocation", () =>
 				{
@@ -148,6 +151,7 @@ public class WindowSizingTests(ITestOutputHelper output)
 						width, height, childHeight, childWidth);
 			}
 
+			Add("direct child replacement without resize", () => app.SetContent(6), 300, 400);
 			Add("nested mutation setup", () =>
 			{
 				app.SetContent(1);
@@ -236,7 +240,13 @@ public class WindowSizingTests(ITestOutputHelper output)
 						clock.Restart();
 						return true;
 					}
-					Completed = true;
+					new FrameChecks(app, output, error =>
+					{
+						Failure = error;
+						Completed = error == null;
+						window.Close();
+					}).Start();
+					return false;
 				}
 				catch (Exception ex)
 				{

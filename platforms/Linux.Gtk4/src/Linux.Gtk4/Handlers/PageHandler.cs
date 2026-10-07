@@ -6,9 +6,6 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class PageHandler : GtkViewHandler<IContentView, Gtk.Box>
 {
-	uint _allocationTick;
-	Size _allocatedSize = new(-1, -1);
-
 	public static IPropertyMapper<IContentView, PageHandler> Mapper =
 		new PropertyMapper<IContentView, PageHandler>(ViewMapper)
 		{
@@ -26,39 +23,6 @@ public class PageHandler : GtkViewHandler<IContentView, Gtk.Box>
 		box.SetVexpand(true);
 		box.SetHexpand(true);
 		return box;
-	}
-
-	protected override void ConnectHandler(Gtk.Box platformView)
-	{
-		base.ConnectHandler(platformView);
-		_allocationTick = platformView.AddTickCallback((widget, clock) =>
-		{
-			if (VirtualView == null)
-				return false;
-			var size = new Size(widget.GetAllocatedWidth(), widget.GetAllocatedHeight());
-			if (size.Width <= 0 || size.Height <= 0 || size == _allocatedSize)
-				return true;
-			_allocatedSize = size;
-			try
-			{
-				VirtualView.Measure(size.Width, size.Height);
-				VirtualView.Arrange(new Rect(0, 0, size.Width, size.Height));
-			}
-			catch (Exception ex)
-			{
-				Console.Error.WriteLine($"[Microsoft.Maui.Platforms.Linux.Gtk4] Page layout failed at {size}: {ex}");
-			}
-			return true;
-		});
-	}
-
-	protected override void DisconnectHandler(Gtk.Box platformView)
-	{
-		if (_allocationTick != 0)
-			platformView.RemoveTickCallback(_allocationTick);
-		_allocationTick = 0;
-		_allocatedSize = new Size(-1, -1);
-		base.DisconnectHandler(platformView);
 	}
 
 	public static void MapContent(PageHandler handler, IContentView page)
@@ -89,6 +53,7 @@ public class PageHandler : GtkViewHandler<IContentView, Gtk.Box>
 			}
 			current = current.GetParent();
 		}
+		handler.InvalidateNativeAllocation();
 	}
 
 	public override void SetVirtualView(IView view)

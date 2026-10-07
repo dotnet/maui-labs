@@ -68,16 +68,48 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 	Rect _lastArrangeRect;
 
 	Gtk.CssProvider? _transitionCssProvider;
+	Platform.GtkAllocationObserver? _pageAllocationObserver;
+	protected int LayoutGeneration { get; private set; }
+
+	protected void InvalidateNativeAllocation() => _pageAllocationObserver?.Invalidate();
+
+	public override void SetVirtualView(IView view)
+	{
+		var changed = ((IElementHandler)this).VirtualView != view;
+		if (changed)
+			LayoutGeneration++;
+		base.SetVirtualView(view);
+		if (changed)
+			_pageAllocationObserver?.Invalidate();
+	}
 
 	protected override void ConnectHandler(TPlatformView platformView)
 	{
 		base.ConnectHandler(platformView);
+		LayoutGeneration++;
 		SetupVisualStateTracking(platformView);
 		ApplyTransitionCss(platformView);
+		if (VirtualView is Microsoft.Maui.Controls.Page)
+		{
+			_pageAllocationObserver = new Platform.GtkAllocationObserver(platformView, (width, height) =>
+			{
+				var view = VirtualView;
+				var generation = LayoutGeneration;
+				if (view == null || platformView.GetParent() is Platform.GtkLayoutPanel)
+					return;
+				view.Measure(width, height);
+				if (LayoutGeneration == generation && VirtualView == view && PlatformView == platformView)
+					view.Arrange(new Rect(0, 0, width, height));
+			}, MauiContext?.Services.GetService(typeof(Microsoft.Extensions.Logging.ILoggerFactory)) is
+				Microsoft.Extensions.Logging.ILoggerFactory factory ? factory.CreateLogger(GetType().FullName!) : null);
+		}
 	}
 
 	protected override void DisconnectHandler(TPlatformView platformView)
 	{
+		LayoutGeneration++;
+		_pageAllocationObserver?.Dispose();
+		_pageAllocationObserver = null;
 		_zIndexMap.TryRemove(platformView.Handle.DangerousGetHandle(), out _);
 		CleanupContextFlyout(platformView);
 		CleanupVisualStateTracking(platformView);
@@ -301,7 +333,6 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 			var pt = Graphene.Point.Alloc();
 			pt.Init(tx, ty);
 			transform = transform.Translate(pt);
-			pt.Free();
 		}
 
 		// Move to anchor, apply rotation/scale, move back

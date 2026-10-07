@@ -29,10 +29,8 @@
   </Target>
 
   <!-- Process MauiFont → copy fonts to output -->
-  <Target Name="_WpfProcessMauiFont" BeforeTargets="Build" Condition="@(MauiFont) != ''">
-    <Message Importance="Normal" Text="Platform.Maui.WPF: Processing MauiFont: @(MauiFont)" />
-    <Copy SourceFiles="@(MauiFont)" DestinationFolder="$(OutputPath)Resources\Fonts" SkipUnchangedFiles="true" Condition="Exists('%(MauiFont.Identity)')" />
-  </Target>
+  <Import Project="$(MSBuildThisFileDirectory)Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
+          Condition="'$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
 
   <!-- Match WPFFileSystem's app-root paths and participate in build and no-build publish. -->
   <Target Name="_WpfProcessMauiAsset" BeforeTargets="AssignTargetPaths" Condition="@(MauiAsset) != ''">
