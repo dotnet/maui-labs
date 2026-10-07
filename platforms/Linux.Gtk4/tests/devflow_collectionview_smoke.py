@@ -44,7 +44,12 @@ class DevFlowHttpError(RuntimeError):
         return self.body.get("reason") if isinstance(self.body, dict) else None
 
 
-RETRYABLE_REASONS = {"stale-capture-epoch", "ui-mutation-busy"}
+ACTION_RETRYABLE_REASONS = {"stale-capture-epoch", "ui-mutation-busy"}
+# Read endpoints (ui/elements, ui/tree, hit-test, ...) report a disjoint pair of transient
+# reasons for the same underlying race — see AgentClient.GetStringWithRetryableUiReadAsync in
+# Microsoft.Maui.DevFlow.Client/AgentClient.cs, which retries exactly these for up to 2s before
+# surfacing an error to the caller.
+READ_RETRYABLE_REASONS = {"capture-changed-during-read", "native-probe-busy"}
 
 
 def request(route, body=None, method=None, raw=False):
@@ -62,30 +67,37 @@ def request(route, body=None, method=None, raw=False):
         raise DevFlowHttpError(error.code, error.read().decode()) from error
 
 
-def with_capture_retry(perform, description):
-    """Run ``perform()`` (which re-queries a fresh captureEpoch and acts on
-    it), retrying the whole query+act cycle on the protocol's documented
-    transient "stale-capture-epoch"/"ui-mutation-busy" responses.
+def with_retry(perform, retryable_reasons, description):
+    """Run ``perform()``, retrying on the protocol's documented transient
+    responses named in ``retryable_reasons``.
 
     A background layout/measure pass (frame-clock driven — the same class of
     race already fixed in the native xUnit tests) can legitimately invalidate
-    a capture between the query that produced it and the action request that
-    consumes it. The real AgentClient marks exactly these two reasons
-    Retryable=true (see Microsoft.Maui.DevFlow.Client/AgentClient.cs) and
-    documents that callers should re-capture and retry rather than fail.
+    a capture between a query/read and a dependent request that consumes it.
+    The real AgentClient marks exactly these reasons Retryable=true (see
+    Microsoft.Maui.DevFlow.Client/AgentClient.cs) and documents that callers
+    should re-capture/re-read and retry rather than fail outright.
     """
     deadline = time.monotonic() + 20
     while True:
         try:
             return perform()
         except DevFlowHttpError as error:
-            if error.reason not in RETRYABLE_REASONS or time.monotonic() >= deadline:
+            if error.reason not in retryable_reasons or time.monotonic() >= deadline:
                 raise
             time.sleep(0.1)
 
 
+def with_capture_retry(perform, description):
+    """Run ``perform()`` (which re-queries a fresh captureEpoch and acts on
+    it), retrying on the action endpoints' documented transient reasons."""
+    return with_retry(perform, ACTION_RETRYABLE_REASONS, description)
+
+
 def query(**filters):
-    return request("ui/elements?" + urllib.parse.urlencode(filters, quote_via=urllib.parse.quote))
+    def read():
+        return request("ui/elements?" + urllib.parse.urlencode(filters, quote_via=urllib.parse.quote))
+    return with_retry(read, READ_RETRYABLE_REASONS, "query " + repr(filters))
 
 
 def save(name, value):
@@ -158,7 +170,8 @@ with (output / "app.log").open("w", encoding="utf-8") as log:
             assert any(item["text"] == "Tapped: " + name for item in result), result
             save(name + "-tap.json", result)
 
-        save("tree.json", request("ui/tree?depth=20"))
+        save("tree.json", with_retry(
+            lambda: request("ui/tree?depth=20"), READ_RETRYABLE_REASONS, "final tree capture"))
         deadline = time.monotonic() + 10
         while True:
             try:
