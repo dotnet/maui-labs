@@ -1,7 +1,11 @@
 import Foundation
+import Dispatch
 import CoreGraphics
 import ImageIO
 import FoundationModels
+#if ENABLE_CORE_AI
+import CoreAILanguageModels
+#endif
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
 /// Type alias for the logging action block.
@@ -26,6 +30,33 @@ public enum ChatClientError: Int {
 
 @objc(ChatClientNative)
 public class ChatClientNative: NSObject {
+    private let modelDirectory: String?
+    private let owner = UUID()
+    @objc public private(set) var modelIdentifier: String?
+#if ENABLE_CORE_AI
+    private var coreAIEntry: CoreAIModel.Entry?
+#endif
+
+    @objc public override init() {
+        modelDirectory = nil
+        modelIdentifier = "apple-intelligence"
+        super.init()
+    }
+
+    @objc public init(modelDirectory: String) {
+        self.modelDirectory = URL(fileURLWithPath: modelDirectory, isDirectory: true)
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        super.init()
+    }
+
+    deinit {
+#if ENABLE_CORE_AI
+        if let path = modelDirectory {
+            let owner = owner
+            Task { await CoreAIModel.shared.removeOwner(owner, path: path) }
+        }
+#endif
+    }
 
     // MARK: - Stream Response
 
@@ -37,7 +68,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "streamResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let cq = callbackQueue()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -75,7 +106,7 @@ public class ChatClientNative: NSObject {
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, cq, onComplete) { session, prompt, schema, genOptions in
 
             if let jsonSchema = schema {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -105,7 +136,7 @@ public class ChatClientNative: NSObject {
                     log("[\(methodName)] Stream collected, content length: \(response.content.jsonString.count)")
                 }
 #endif
-                return (response.content.jsonString, response.transcriptEntries)
+                return try self.fromResponse(response)
             } else {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
@@ -134,7 +165,7 @@ public class ChatClientNative: NSObject {
                     log("[\(methodName)] Stream collected, content length: \(response.content.count)")
                 }
 #endif
-                return (response.content, response.transcriptEntries)
+                return try self.fromResponse(response)
             }
         }
 
@@ -150,7 +181,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "getResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let cq = callbackQueue()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -188,7 +219,7 @@ public class ChatClientNative: NSObject {
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, cq, onComplete) { session, prompt, schema, genOptions in
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
             if let log = AppleIntelligenceLogger.log {
@@ -204,7 +235,7 @@ public class ChatClientNative: NSObject {
                         log("[\(methodName)] Response received, content length: \(inner.content.jsonString.count)")
                     }
 #endif
-                    return (inner.content.jsonString, inner.transcriptEntries)
+                    return try self.fromResponse(inner)
                 } else {
                     let inner = try await session.respond(to: prompt, options: genOptions)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -212,7 +243,7 @@ public class ChatClientNative: NSObject {
                         log("[\(methodName)] Response received, content length: \(inner.content.count)")
                     }
 #endif
-                    return (inner.content, inner.transcriptEntries)
+                    return try self.fromResponse(inner)
                 }
             }()
 
@@ -246,10 +277,9 @@ public class ChatClientNative: NSObject {
         }
         let otherMessages = Array(messages.dropLast())
 
-        let model = SystemLanguageModel.default
-        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *), modelDirectory == nil,
            messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) }),
-           !model.capabilities.contains(.vision) {
+           !SystemLanguageModel.default.capabilities.contains(.vision) {
             throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later and a vision-capable Apple Intelligence model. The current model does not report vision support.")
         }
 
@@ -291,11 +321,37 @@ public class ChatClientNative: NSObject {
                 }
                 return .greedy
             }(),
-            temperature: options?.temperature?.doubleValue,
+            temperature: options?.temperature?.doubleValue ?? (modelDirectory == nil ? nil : 0.6),
             maximumResponseTokens: options?.maxOutputTokens?.intValue
         )
 
-        let session = LanguageModelSession(model: model, tools: tools, transcript: transcript)
+        let session: LanguageModelSession
+        if modelDirectory != nil {
+#if ENABLE_CORE_AI
+            guard #available(iOS 27.0, macOS 27.0, *), let entry = coreAIEntry else {
+                throw NSError(domain: "CoreAI", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "Core AI requires OS27 and a loaded local model."
+                ])
+            }
+            if !tools.isEmpty && !entry.model.capabilities.contains(.toolCalling) {
+                throw NSError(domain: "CoreAI", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "The selected local model does not support tool calling."
+                ])
+            }
+            if schema != nil && !entry.model.capabilities.contains(.guidedGeneration) {
+                throw NSError(domain: "CoreAI", code: 4, userInfo: [
+                    NSLocalizedDescriptionKey: "The selected local model does not support guided generation."
+                ])
+            }
+            session = LanguageModelSession(model: entry, tools: tools, transcript: transcript)
+#else
+            throw NSError(domain: "CoreAI", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "Core AI is not enabled in this build."
+            ])
+#endif
+        } else {
+            session = LanguageModelSession(model: SystemLanguageModel.default, tools: tools, transcript: transcript)
+        }
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -311,13 +367,12 @@ public class ChatClientNative: NSObject {
         _ messages: [ChatMessageNative],
         _ options: ChatOptionsNative?,
         _ toolWatcher: ToolCallWatcher?,
+        _ cq: DispatchQueue?,
         _ onComplete: @escaping (ChatResponseNative?, NSError?) -> Void,
         operation:
             @escaping (LanguageModelSession, Prompt, GenerationSchema?, GenerationOptions) async throws
-            -> (String, ArraySlice<Transcript.Entry>)
+            -> ChatResponseNative
     ) -> CancellationTokenNative? {
-
-        let cq = OperationQueue.current?.underlyingQueue
 
         guard !messages.isEmpty else {
             let error = NSError.chatError(.emptyMessages, description: "No messages provided.")
@@ -332,30 +387,43 @@ public class ChatClientNative: NSObject {
         }
 
         let task = Task {
+            var acquired = false
             do {
                 try Task.checkCancellation()
 
+#if ENABLE_CORE_AI
+                if let path = modelDirectory {
+                    coreAIEntry = try await CoreAIModel.shared.acquire(path: path, owner: owner)
+                    acquired = true
+                    modelIdentifier = coreAIEntry?.name
+                }
+#endif
                 let (session, prompt, schema, genOptions) = try await self.prepareSession(methodName, messages, options, toolWatcher)
 
-                let result = try await operation(session, prompt, schema, genOptions)
+                let response = try await operation(session, prompt, schema, genOptions)
 
                 try Task.checkCancellation()
-
-                // Convert transcript entries to messages
-                let transcriptMessages = try result.1.compactMap(self.fromTranscriptEntry)
-
-                // Create response with all transcript messages
-                let response = ChatResponseNative(messages: transcriptMessages)
+#if ENABLE_CORE_AI
+                if acquired, let path = modelDirectory {
+                    await CoreAIModel.shared.release(path: path)
+                    acquired = false
+                }
+#endif
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
-                    log("[\(methodName)] Completed with \(transcriptMessages.count) messages")
+                    log("[\(methodName)] Completed with \(response.messages.count) messages")
                     log("[\(methodName)] Response: \(self.formatResponseDetailed(response))")
                 }
 #endif
 
                 cq?.async { onComplete(response, nil) } ?? onComplete(response, nil)
             } catch {
+#if ENABLE_CORE_AI
+                if acquired, let path = modelDirectory {
+                    await CoreAIModel.shared.release(path: path)
+                }
+#endif
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Failed: \(error.localizedDescription)")
@@ -367,6 +435,24 @@ public class ChatClientNative: NSObject {
         }
 
         return CancellationTokenNative(task: task)
+    }
+
+    private func fromResponse<Content: Generable>(_ response: LanguageModelSession.Response<Content>) throws -> ChatResponseNative {
+        let result = ChatResponseNative(messages: try response.transcriptEntries.compactMap(self.fromTranscriptEntry))
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            result.inputTokenCount = NSNumber(value: response.usage.input.totalTokenCount)
+            result.outputTokenCount = NSNumber(value: response.usage.output.totalTokenCount)
+            result.totalTokenCount = NSNumber(value: response.usage.totalTokenCount)
+        }
+        return result
+    }
+
+    private func callbackQueue() -> DispatchQueue? {
+        OperationQueue.current?.underlyingQueue.map {
+            // Updates and completion share one serial queue even if the caller's
+            // operation queue is concurrent, so completion cannot release a live callback.
+            DispatchQueue(label: "EssentialsAI.response", target: $0)
+        }
     }
 
     // MARK: - Conversion to Foundation Models Helpers

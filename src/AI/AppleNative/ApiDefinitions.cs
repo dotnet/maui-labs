@@ -110,6 +110,12 @@ interface CancellationTokenNative
 [Internal]
 interface ChatClientNative
 {
+	[Export("initWithModelDirectory:")]
+	NativeHandle Constructor(string modelDirectory);
+
+	[NullAllowed, Export("modelIdentifier")]
+	string ModelIdentifier { get; }
+
 	// - (CancellationTokenNative * _Nullable)streamResponseWithMessages:(NSArray<ChatMessageNative *> * _Nonnull)messages options:(ChatOptionsNative * _Nullable)options onUpdate:(void (^ _Nonnull)(ResponseUpdateNative * _Nonnull))onUpdate onComplete:(void (^ _Nonnull)(ChatResponseNative * _Nullable, NSError * _Nullable))onComplete SWIFT_WARN_UNUSED_RESULT;
 	[Export("streamResponseWithMessages:options:onUpdate:onComplete:")]
 	[return: NullAllowed]
@@ -183,6 +189,15 @@ interface ChatOptionsNative
 [Internal]
 interface ChatResponseNative
 {
+	[NullAllowed, Export("inputTokenCount", ArgumentSemantic.Strong)]
+	NSNumber InputTokenCount { get; }
+
+	[NullAllowed, Export("outputTokenCount", ArgumentSemantic.Strong)]
+	NSNumber OutputTokenCount { get; }
+
+	[NullAllowed, Export("totalTokenCount", ArgumentSemantic.Strong)]
+	NSNumber TotalTokenCount { get; }
+
 	// @property (nonatomic, copy) NSArray<ChatMessageNative *> * _Nonnull messages;
 	[Export("messages", ArgumentSemantic.Copy)]
 	ChatMessageNative[] Messages { get; set; }

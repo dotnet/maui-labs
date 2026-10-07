@@ -57,4 +57,5 @@
       <EmbeddedResource Include="$(UserSecretsFilePath)" Condition="Exists($(UserSecretsFilePath))" />
     </ItemGroup>
   </Target>
+  <Import Project="../../src/AI/CoreAIModelResources.targets" />
 </Project>

@@ -284,7 +284,10 @@ public partial class ChatViewModel : ObservableObject
         _requestCancellation = requestCancellation;
         Chat.IsBusy = true;
         Settings.IsBusy = true;
-        Chat.StatusMessage = "Sending request…";
+        var isCoreAI = descriptor.Id == "core-ai-chat";
+        Chat.StatusMessage = isCoreAI ? "Loading local Core AI model / generating response…" : "Sending request…";
+        if (isCoreAI)
+            Settings.ClientStatus = Chat.StatusMessage;
 
         try
         {
@@ -302,6 +305,8 @@ public partial class ChatViewModel : ObservableObject
                 var count = _recording.InteractionCount;
                 Chat.StatusMessage = $"Response complete and auto-saved " +
                     $"({count} {(count == 1 ? "interaction" : "interactions")}).";
+                if (isCoreAI)
+                    Settings.ClientStatus = $"Core AI ready — {client.GetService<ChatClientMetadata>()?.DefaultModelId}";
             }
         }
         catch (OperationCanceledException)
@@ -309,6 +314,8 @@ public partial class ChatViewModel : ObservableObject
             if (IsCurrentRequest(requestGeneration))
             {
                 Chat.StatusMessage = "Request cancelled.";
+                if (isCoreAI)
+                    Settings.ClientStatus = "Core AI request cancelled. The next request can load/reuse the local model.";
                 AddError("Request cancelled.");
             }
         }
@@ -317,6 +324,8 @@ public partial class ChatViewModel : ObservableObject
             if (IsCurrentRequest(requestGeneration))
             {
                 Chat.StatusMessage = $"Request failed: {exception.Message}";
+                if (isCoreAI)
+                    Settings.ClientStatus = $"Core AI error — {exception.Message}";
                 AddError($"Request failed: {exception.Message}");
             }
         }

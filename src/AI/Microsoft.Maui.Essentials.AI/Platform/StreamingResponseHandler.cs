@@ -18,7 +18,7 @@ internal sealed class StreamingResponseHandler
 {
 	private readonly Channel<ChatResponseUpdate> _channel;
 	private readonly StreamChunkerBase? _chunker;
-	private readonly string? _modelId;
+	private string? _modelId;
 
 	/// <summary>
 	/// Creates a handler that passes content through directly (no chunking).
@@ -114,7 +114,9 @@ internal sealed class StreamingResponseHandler
 	/// <summary>
 	/// Flushes remaining chunker content and completes the channel successfully.
 	/// </summary>
-	public void Complete()
+	public void SetModelId(string? modelId) => _modelId = modelId;
+
+	public void Complete(UsageDetails? usage = null)
 	{
 		if (_chunker is not null)
 		{
@@ -130,6 +132,15 @@ internal sealed class StreamingResponseHandler
 			}
 		}
 
+		if (usage is not null)
+		{
+			_channel.Writer.TryWrite(new ChatResponseUpdate
+			{
+				Role = ChatRole.Assistant,
+				ModelId = _modelId,
+				Contents = { new UsageContent(usage) },
+			});
+		}
 		_channel.Writer.TryComplete();
 	}
 

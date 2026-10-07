@@ -15,14 +15,16 @@
     <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="'$(EnableCoreAI)' == 'true'">
+    <OutputPath>$(OutputPath)coreai/</OutputPath>
+    <IntermediateOutputPath>$(IntermediateOutputPath)coreai/</IntermediateOutputPath>
     <IsPackable>false</IsPackable>
     <IsShipping>false</IsShipping>
     <DefineConstants>$(DefineConstants);ENABLE_CORE_AI</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
-    <IsShipping>true</IsShipping>
-    <IsPackable>true</IsPackable>
+    <IsShipping Condition="'$(EnableCoreAI)' != 'true'">true</IsShipping>
+    <IsPackable Condition="'$(EnableCoreAI)' != 'true'">true</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
     <!-- Keep this package always preview on its independent NuGet version line for all package builds.
          Bump the EssentialsAI version properties in eng/Versions.props for new previews. -->

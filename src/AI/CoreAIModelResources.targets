@@ -1,0 +1,21 @@
+<Project>
+  <!-- Imported only by local validation apps, never by the shipping library. -->
+  <PropertyGroup Condition="'$(EnableCoreAI)' == 'true'">
+    <OutputPath>$(OutputPath)coreai/</OutputPath>
+    <IntermediateOutputPath>$(IntermediateOutputPath)coreai/</IntermediateOutputPath>
+    <DefineConstants>$(DefineConstants);ENABLE_CORE_AI</DefineConstants>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst'))">27.0</SupportedOSPlatformVersion>
+    <CoreAIModelDirectory Condition="'$(CoreAIModelDirectory)' != ''">$([System.IO.Path]::GetFullPath('$(CoreAIModelDirectory)', '$(RepoRoot)'))</CoreAIModelDirectory>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableCoreAI)' == 'true' and '$(CoreAIModelDirectory)' != ''">
+    <BundleResource Include="$(CoreAIModelDirectory)/**/*" Exclude="$(CoreAIModelDirectory)/**/.DS_Store">
+      <LogicalName>CoreAIModel/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </BundleResource>
+  </ItemGroup>
+  <Target Name="ValidateCoreAIModelResources" BeforeTargets="PrepareForBuild" Condition="'$(EnableCoreAI)' == 'true'">
+    <Error Condition="'$(UseXcode27Preview)' != 'true'" Text="Core AI validation apps require UseXcode27Preview=true." />
+    <Error Condition="'$(CoreAIModelDirectory)' == ''" Text="Set CoreAIModelDirectory to a complete app-owned exported model bundle. No model is downloaded automatically." />
+    <Error Condition="!Exists('$(CoreAIModelDirectory)/metadata.json') or !Exists('$(CoreAIModelDirectory)/tokenizer/tokenizer.json') or !Exists('$(CoreAIModelDirectory)/tokenizer/tokenizer_config.json')" Text="CoreAIModelDirectory must contain metadata.json and a complete tokenizer folder. An explicitly enabled missing fixture is an error." />
+    <Error Condition="'$(CI)' == 'true' or '$(TF_BUILD)' == 'true'" Text="Core AI model validation is local-only; model assets must not enter official builds." />
+  </Target>
+</Project>
