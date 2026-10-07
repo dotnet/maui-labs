@@ -161,14 +161,27 @@ with (output / "app.log").open("w", encoding="utf-8") as log:
                 card = next(card for card in cards if card["text"] == name)
                 tapped = request("ui/actions/tap",
                                  {"elementId": card["id"], "captureEpoch": card["captureEpoch"]})
-                return cards, tapped
+                return card, cards, tapped
 
-            cards, tapped = with_capture_retry(tap_named_card, name + " tap")
+            card, cards, tapped = with_capture_retry(tap_named_card, name + " tap")
             save(name + "-query.json", cards)
             assert tapped["success"], tapped
             result = wait_for(lambda: query(text="Tapped: " + name), name + " command outcome")
             assert any(item["text"] == "Tapped: " + name for item in result), result
             save(name + "-tap.json", result)
+
+            # Directly exercise the exact route #619 fixed: GET ui/elements/{id}/properties/{name}
+            # with the element id (which legitimately contains a space, e.g. "Alice Johnson")
+            # percent-encoded in the URL path. Reads the dot-path "BindingContext.Name", which is
+            # literally the property lookup that failed before #619 ("BindingContext.Name not
+            # found") because the un-decoded, still-percent-encoded id couldn't match any element.
+            encoded_id = urllib.parse.quote(card["id"], safe="")
+            property_read = with_retry(
+                lambda: request("ui/elements/" + encoded_id + "/properties/BindingContext.Name"),
+                READ_RETRYABLE_REASONS,
+                name + " BindingContext.Name property read")
+            assert property_read["value"] == name, property_read
+            save(name + "-property-read.json", property_read)
 
         save("tree.json", with_retry(
             lambda: request("ui/tree?depth=20"), READ_RETRYABLE_REASONS, "final tree capture"))
@@ -181,7 +194,8 @@ with (output / "app.log").open("w", encoding="utf-8") as log:
                 if "Failed to capture screenshot" not in str(error) or time.monotonic() >= deadline:
                     raise
                 time.sleep(0.1)
-        print("PASS: owned GTK sample; Alice text and Bob AutomationId taps changed status.")
+        print("PASS: owned GTK sample; Alice text and Bob AutomationId taps changed status; "
+              "BindingContext.Name property reads succeeded for both space-containing element ids.")
     finally:
         if app.poll() is None:
             app.terminate()
