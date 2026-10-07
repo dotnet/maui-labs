@@ -170,6 +170,67 @@ For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on W
 It packs, generates, restores, builds, and launches the template using an isolated
 template hive. See [validation details](docs/getting-started.md#validating-template-changes).
 
+## Registered fonts
+
+Include fonts as `MauiFont` items and register them using `ConfigureFonts`:
+
+```csharp
+builder.ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"));
+```
+
+The NuGet package imports font processing through its existing
+`Microsoft.Maui.Platforms.Windows.WPF.targets` entry point; package consumers do
+not need an additional import. A `ProjectReference` to the backend does not import
+its packaged build targets into the consuming app. Source consumers must explicitly
+import the font-only target, as the repository sample does:
+
+```xml
+<Import Project="..\..\src\Windows.WPF\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
+        Condition="'$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
+```
+
+Adjust this path relative to your app project. Keep `UseMaui` enabled. This import
+handles only `MauiFont`; it does not enable or fix source-consumer processing of
+images, icons, splash screens, or raw assets.
+The import guard prevents loading the font target twice when another import
+already included the umbrella; it does not depend on test-scenario opt-in.
+
+WPF copies `MauiFont` files into `Resources\Fonts` in both build and publish output.
+This output layout uses leaf filenames, so font filenames must be unique even
+when their source directories differ.
+An explicitly included `MauiFont` must exist: build/publish now fails on a missing
+file instead of silently skipping it. Use a conditional item include for optional fonts.
+Aliases resolve relative to the application directory, not the process working
+directory, using the family name declared inside the font file. Embedded fonts
+registered with an assembly are extracted to a content-addressed temporary directory;
+no system font installation is required.
+
+Text controls and formatted label spans resolve aliases through the WPF font manager.
+Native WPF composite families, such as `Global User Interface`, remain supported
+for text. Font images require a physical typeface containing the requested glyphs;
+composite families produce a warning and no image rather than an unverified fallback.
+Clearing a control's MAUI font family restores its native style or inherited default.
+Entry also applies its font when creating a native password control. GraphicsView
+text drawing and measurement share the same registered-family and style resolution.
+The default public `IFontManager` and native `WPFFontManager` share one singleton.
+Replacing the portable `IFontManager` preserves its `DefaultFontSize` contract;
+native family resolution still uses the app's registered fonts. A supplied
+`WPFFontManager` override takes precedence for native resolution as well.
+`FontImageSource` uses the same resolution for Image, ImageButton, Button, Shell
+flyout icons, and NavigationPage toolbar icons. A missing or invalid font logs a warning and text uses the default UI
+font. An unresolved icon font or a character absent from that font logs a warning
+and produces no image rather than a fallback box.
+Glyph bitmaps retain the font's advance width and line box, including its internal
+padding, rather than cropping to the visible ink. This keeps icon scaling and
+alignment consistent with the font's metrics.
+Glyph sizes must be finite, positive, and no greater than 4096 device-independent
+units. At 96 DPI, the rendered bitmap, including its one-pixel padding on each side,
+is limited to 4096 pixels per side and 4,194,304 pixels total (16 MiB of pixel data).
+Out-of-range sizes, unsupported bounds, and expected native rendering failures log
+a warning and produce no image; invalid sizes are not replaced with a default size.
+Register fonts before first use. Missing-font results are cached as failures, not as
+successful fallback fonts; transient extraction I/O failures can be retried.
+
 ## Packaged raw assets
 
 Declare raw files as `MauiAsset` items with their package-relative names:
