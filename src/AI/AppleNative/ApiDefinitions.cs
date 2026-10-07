@@ -2,7 +2,9 @@
 
 using System;
 using System.Threading.Tasks;
+using CoreGraphics;
 using Foundation;
+using ImageIO;
 using ObjCRuntime;
 
 namespace Microsoft.Maui.Essentials.AI;
@@ -253,6 +255,50 @@ interface TextContentNative
 	// @property (nonatomic, copy) NSString * _Nonnull text;
 	[Export("text")]
 	string Text { get; set; }
+}
+
+// @interface ImageContentNative : AIContentNative
+[BaseType(typeof(AIContentNative))]
+[DisableDefaultCtor]
+[Internal]
+interface ImageContentNative
+{
+	// @property (nonatomic, strong) CGImageRef _Nullable cgImage;
+	[NullAllowed, Export("cgImage")]
+	CGImage CgImage { get; set; }
+
+	// @property (nonatomic, copy) NSData * _Nullable data;
+	[NullAllowed, Export("data", ArgumentSemantic.Copy)]
+	NSData Data { get; set; }
+
+	// @property (nonatomic, copy) NSURL * _Nullable imageURL;
+	[NullAllowed, Export("imageURL", ArgumentSemantic.Copy)]
+	NSUrl ImageUrl { get; set; }
+
+	// @property (nonatomic, copy) NSString * _Nullable mimeType;
+	[NullAllowed, Export("mimeType")]
+	string MimeType { get; set; }
+
+	// @property (nonatomic, strong) NSNumber * _Nullable orientationValue;
+	[NullAllowed, BindAs(typeof(CGImagePropertyOrientation?)), Export("orientationValue")]
+	NSNumber Orientation { get; set; }
+
+	// @property (nonatomic, copy) NSString * _Nullable label;
+	[NullAllowed, Export("label")]
+	string Label { get; set; }
+
+	// - (nonnull instancetype)initWithCgImage:(CGImageRef _Nonnull)cgImage orientationValue:(NSNumber * _Nullable)orientationValue label:(NSString * _Nullable)label OBJC_DESIGNATED_INITIALIZER;
+	[Export("initWithCgImage:orientationValue:label:")]
+	[DesignatedInitializer]
+	NativeHandle Constructor(CGImage cgImage, [NullAllowed, BindAs(typeof(CGImagePropertyOrientation?))] NSNumber orientation, [NullAllowed] string label);
+
+	// - (nonnull instancetype)initWithData:(NSData * _Nonnull)data mimeType:(NSString * _Nonnull)mimeType orientationValue:(NSNumber * _Nullable)orientationValue label:(NSString * _Nullable)label;
+	[Export("initWithData:mimeType:orientationValue:label:")]
+	NativeHandle Constructor(NSData data, string mimeType, [NullAllowed, BindAs(typeof(CGImagePropertyOrientation?))] NSNumber orientation, [NullAllowed] string label);
+
+	// - (nonnull instancetype)initWithImageURL:(NSURL * _Nonnull)imageURL orientationValue:(NSNumber * _Nullable)orientationValue label:(NSString * _Nullable)label;
+	[Export("initWithImageURL:orientationValue:label:")]
+	NativeHandle Constructor(NSUrl imageURL, [NullAllowed, BindAs(typeof(CGImagePropertyOrientation?))] NSNumber orientation, [NullAllowed] string label);
 }
 
 // @interface ResponseUpdateNative : NSObject
