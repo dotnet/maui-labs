@@ -97,6 +97,31 @@ WPF content hosting, including selection cleanup:
 dotnet test platforms\Windows.WPF\tests\HandlerTests --filter FullyQualifiedName~ShellSectionSwitchingTests
 ```
 
+## Layout measurement
+
+The WPF layout handler dispatches measurement and arrangement through
+`ICrossPlatformLayout`, including during native panel creation and virtual-view
+replacement. This preserves specialized implementations such as `FlexLayout`'s
+measure-mode handling. Fixed-width entries in a wrapping flex layout do not need
+an explicit height or a preliminary manual measure.
+
+Run the native layout regressions on Windows (the existing shared STA application
+host is reused; these tests do not show or activate windows):
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false --filter FullyQualifiedName~LayoutHandlerTests
+```
+
+These tests cover first measurement, wrapping as constraints change, native child
+frames, delegate dispatch during creation and replacement, and ordinary Grid/Stack
+layout. The native panel preserves measurements already performed by MAUI, instead
+of remeasuring each child against the whole parent's size (which can inflate flex
+lines beyond their allocated frames). Children whose native measurement is still
+invalid, including explicitly sized views MAUI did not measure, are measured by
+the panel. Nested flex panels retain fallback measurement on constraint changes,
+because the shared flex engine bypasses their native measure.
+The existing minimum-height floor is retained.
+
 ## Screenshots
 
 | Home | Controls | Layouts |
