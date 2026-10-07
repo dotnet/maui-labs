@@ -69,27 +69,19 @@ sealed class TapButtonsScenario : MauiRuntimeScenario
         window.MakeKeyAndOrderFront(null);
         NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
 
-        var windowPoint = view.ConvertPointToView(
+        var point = view.ConvertPointToView(
             new CGPoint(view.Bounds.X + view.Bounds.Width / 2, view.Bounds.Y + view.Bounds.Height / 2), null);
-        var screenPoint = window.ConvertPointToScreen(windowPoint);
-        var screen = window.Screen ?? NSScreen.MainScreen
-            ?? throw new InvalidOperationException("Tap target window has no screen.");
-        var quartzPoint = new CGPoint(
-            screenPoint.X, screen.Frame.Y + screen.Frame.Height - screenPoint.Y);
-        var button = secondary ? CGMouseButton.Right : CGMouseButton.Left;
-        var down = secondary ? CGEventType.RightMouseDown : CGEventType.LeftMouseDown;
-        var up = secondary ? CGEventType.RightMouseUp : CGEventType.LeftMouseUp;
+        var down = secondary ? NSEventType.RightMouseDown : NSEventType.LeftMouseDown;
+        var up = secondary ? NSEventType.RightMouseUp : NSEventType.LeftMouseUp;
 
-        using var downEvent = new CGEvent(null, down, quartzPoint, button)
-        {
-            MouseEventClickState = 1
-        };
-        using var upEvent = new CGEvent(null, up, quartzPoint, button)
-        {
-            MouseEventClickState = 1
-        };
-        downEvent.PostToPid(Environment.ProcessId);
-        upEvent.PostToPid(Environment.ProcessId);
+        using var downEvent = NSEvent.MouseEvent(
+            down, point, 0, 0, window.WindowNumber, window.GraphicsContext,
+            1, 1, 1);
+        using var upEvent = NSEvent.MouseEvent(
+            up, point, 0, 0, window.WindowNumber, window.GraphicsContext,
+            2, 1, 0);
+        NSApplication.SharedApplication.PostEvent(downEvent, false);
+        NSApplication.SharedApplication.PostEvent(upEvent, false);
     }
 
     public override Window CreateWindow(IActivationState? activationState)
