@@ -137,6 +137,36 @@ public class CollectionViewObservableSourceTests
 		});
 	}
 
+	[Fact]
+	public void IsGroupedToggle_PreservesSelectionAcrossWrapperShapeChange()
+	{
+		Run(view =>
+		{
+			var group = new ObservableCollection<string> { "Hello" };
+			view.ItemsSource = new[] { group };
+			view.SelectionMode = SelectionMode.Single;
+			return (handler, list, empty) =>
+			{
+				// Flat (ungrouped): the single list item IS the raw group collection itself
+				// (matches IsGroupedChange_UpdatesSubscriptionsAndRepresentation's shape).
+				list.SelectedItem = list.Items[0];
+				Assert.Same(group, list.SelectedItem);
+
+				// Toggling IsGrouped rebuilds ItemsSource with GroupedItem wrappers around the
+				// same underlying group; selection should resolve to the header entry that
+				// wraps that same group instance, not be silently dropped.
+				view.IsGrouped = true;
+				Assert.NotNull(list.SelectedItem);
+				Assert.Same(group, GroupData(list.SelectedItem));
+
+				// Toggling back to ungrouped rebuilds with raw data objects again; selection
+				// should resolve to the same group object, not be dropped.
+				view.IsGrouped = false;
+				Assert.Same(group, list.SelectedItem);
+			};
+		});
+	}
+
 	static object? GroupData(object item) => item.GetType().GetProperty("Data")!.GetValue(item);
 
 	[Fact]

@@ -266,6 +266,8 @@ namespace Microsoft.Maui.Handlers.WPF
 			UpdateEmptyView();
 		}
 
+		static object UnwrapGroupedItem(object item) => item is GroupedItem gi ? gi.Data : item;
+
 		static void MapTemplates(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view)
 		{
 			if (handler._listBox is not { } list) return;
@@ -283,7 +285,14 @@ namespace Microsoft.Maui.Handlers.WPF
 					return;
 				}
 
+				// When only the footer shape changes, UpdateGroupFooters() reuses the exact same
+				// GroupedItem instances for retained entries, so matching by reference preserves
+				// the precise selected occurrence (important when duplicate-valued items exist).
+				// When IsGrouped itself flips, the wrapper shape changes (raw items <-> GroupedItem)
+				// so no pre-rebuild reference can ever match post-rebuild items; fall back to
+				// matching on the unwrapped underlying data instead.
 				var selectedItems = list.SelectedItems.Cast<object>().ToArray();
+				var selectedData = groupingChanged ? selectedItems.Select(UnwrapGroupedItem).ToArray() : null;
 				var groupedItems = !groupingChanged
 					? UpdateGroupFooters(list.Items.Cast<GroupedItem>(), view.GroupFooterTemplate != null)
 					: null;
@@ -299,13 +308,33 @@ namespace Microsoft.Maui.Handlers.WPF
 				}
 				if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Single)
 				{
-					if (selectedItems.Length > 0 && list.Items.Contains(selectedItems[0]))
+					if (groupingChanged)
+					{
+						if (selectedData!.Length > 0)
+						{
+							var match = list.Items.Cast<object>().FirstOrDefault(i => Equals(UnwrapGroupedItem(i), selectedData[0]));
+							if (match != null)
+								list.SelectedItem = match;
+						}
+					}
+					else if (selectedItems.Length > 0 && list.Items.Contains(selectedItems[0]))
 						list.SelectedItem = selectedItems[0];
 				}
 				else if (view.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Multiple)
-					foreach (var item in selectedItems)
-						if (list.Items.Contains(item))
-							list.SelectedItems.Add(item);
+				{
+					if (groupingChanged)
+					{
+						foreach (var item in list.Items.Cast<object>())
+							if (selectedData!.Contains(UnwrapGroupedItem(item)))
+								list.SelectedItems.Add(item);
+					}
+					else
+					{
+						foreach (var item in selectedItems)
+							if (list.Items.Contains(item))
+								list.SelectedItems.Add(item);
+					}
+				}
 			}
 			finally
 			{
