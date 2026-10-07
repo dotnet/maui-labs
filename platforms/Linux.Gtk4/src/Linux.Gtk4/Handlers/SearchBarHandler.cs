@@ -89,7 +89,7 @@ public class SearchBarHandler : GtkViewHandler<ISearchBar, Gtk.SearchEntry>
 
 	public static void MapCharacterSpacing(SearchBarHandler handler, ISearchBar searchBar)
 	{
-		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {searchBar.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, BuildCharacterSpacingCss(searchBar.CharacterSpacing));
 	}
 
 	public static void MapHorizontalTextAlignment(SearchBarHandler handler, ISearchBar searchBar)

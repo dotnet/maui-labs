@@ -92,7 +92,7 @@ public class LabelHandler : GtkViewHandler<ILabel, Gtk.Label>
 
 	public static void MapCharacterSpacing(LabelHandler handler, ILabel label)
 	{
-		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {label.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, BuildCharacterSpacingCss(label.CharacterSpacing));
 	}
 
 	public static void MapLineHeight(LabelHandler handler, ILabel label)

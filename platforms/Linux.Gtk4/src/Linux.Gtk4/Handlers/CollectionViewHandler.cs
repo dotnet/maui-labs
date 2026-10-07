@@ -191,7 +191,13 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		factory.OnUnbind += (_, args) =>
 		{
 			var listItem = (Gtk.ListItem)args.Object;
+			var row = listItem.GetChild() as GtkLayoutPanel;
 			listItem.SetChild(null);
+			if (row != null)
+			{
+				row.CrossPlatformLayout = null;
+				row.Dispose();
+			}
 		};
 		factory.OnTeardown += (_, args) =>
 		{
@@ -264,29 +270,28 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		if (MauiContext == null)
 			throw new InvalidOperationException("MauiContext not set.");
 
-		var widthConstraint = _listView?.GetAllocatedWidth() ?? 400;
-		if (widthConstraint <= 0) widthConstraint = 400;
-
-		// Use the standard MAUI handler pipeline to create native widget
 		var nativeWidget = (Gtk.Widget)mauiView.ToPlatform(MauiContext);
-
-		// Mark all GtkLayoutPanels in this tree as externally managed
-		// so LayoutHandler's idle/tick callbacks don't override our sizing
 		MarkExternallyManaged(nativeWidget);
-
-		// Measure through MAUI's cross-platform layout to get desired size
-		var desiredSize = mauiView.Measure(widthConstraint, double.PositiveInfinity);
-		var height = Math.Max((int)desiredSize.Height, 20);
-
 		DisableVexpandRecursive(nativeWidget);
-		nativeWidget.SetSizeRequest((int)widthConstraint, height);
-		nativeWidget.SetHexpand(true);
 
-		// Trigger layout so children are positioned correctly
-		if (mauiView.Handler is IViewHandler viewHandler)
-			viewHandler.PlatformArrange(new Rect(0, 0, widthConstraint, height));
+		// GTK owns row allocation and virtualization; MAUI measures and arranges
+		// the template at that actual width, including after viewport resizes.
+		var row = new GtkLayoutPanel
+		{
+			IsExternallyManaged = true,
+			CrossPlatformLayout = new TemplateLayout(mauiView)
+		};
+		row.SetVexpand(false);
+		row.AddChild(nativeWidget);
+		return (row, 0);
+	}
 
-		return (nativeWidget, height);
+	sealed class TemplateLayout(View view) : ICrossPlatformLayout
+	{
+		public Size CrossPlatformMeasure(double widthConstraint, double heightConstraint) =>
+			((IView)view).Measure(widthConstraint, heightConstraint);
+
+		public Size CrossPlatformArrange(Rect bounds) => ((IView)view).Arrange(bounds);
 	}
 
 	static void MarkExternallyManaged(Gtk.Widget widget)
@@ -294,28 +299,18 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		if (widget is Platform.GtkLayoutPanel panel)
 			panel.IsExternallyManaged = true;
 
-		if (widget is Gtk.Fixed fixedContainer)
+		for (var child = widget.GetFirstChild(); child != null; child = child.GetNextSibling())
 		{
-			var child = fixedContainer.GetFirstChild();
-			while (child != null)
-			{
-				MarkExternallyManaged(child);
-				child = child.GetNextSibling();
-			}
+			MarkExternallyManaged(child);
 		}
 	}
 
 	static void DisableVexpandRecursive(Gtk.Widget widget)
 	{
 		widget.SetVexpand(false);
-		if (widget is Gtk.Fixed fixedContainer)
+		for (var child = widget.GetFirstChild(); child != null; child = child.GetNextSibling())
 		{
-			var child = fixedContainer.GetFirstChild();
-			while (child != null)
-			{
-				DisableVexpandRecursive(child);
-				child = child.GetNextSibling();
-			}
+			DisableVexpandRecursive(child);
 		}
 	}
 

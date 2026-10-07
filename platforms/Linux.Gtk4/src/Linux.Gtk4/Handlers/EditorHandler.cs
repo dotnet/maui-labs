@@ -118,7 +118,7 @@ public class EditorHandler : GtkViewHandler<IEditor, Gtk.TextView>
 
 	public static void MapCharacterSpacing(EditorHandler handler, IEditor editor)
 	{
-		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {editor.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, BuildCharacterSpacingCss(editor.CharacterSpacing));
 	}
 
 	public static void MapCursorPosition(EditorHandler handler, IEditor editor)

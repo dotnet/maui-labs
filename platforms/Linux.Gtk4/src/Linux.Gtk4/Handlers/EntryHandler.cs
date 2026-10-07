@@ -104,7 +104,7 @@ public class EntryHandler : GtkViewHandler<IEntry, Gtk.Entry>
 
 	public static void MapCharacterSpacing(EntryHandler handler, IEntry entry)
 	{
-		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {entry.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, BuildCharacterSpacingCss(entry.CharacterSpacing));
 	}
 
 	public static void MapClearButtonVisibility(EntryHandler handler, IEntry entry)

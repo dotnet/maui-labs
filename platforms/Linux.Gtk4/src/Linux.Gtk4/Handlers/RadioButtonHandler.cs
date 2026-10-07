@@ -92,7 +92,7 @@ public class RadioButtonHandler : GtkViewHandler<IRadioButton, Gtk.CheckButton>
 	public static void MapCharacterSpacing(RadioButtonHandler handler, IRadioButton radioButton)
 	{
 		if (radioButton is ITextStyle textStyle)
-			handler.UpdateCss(handler.PlatformView, $"letter-spacing: {textStyle.CharacterSpacing}px;");
+			handler.UpdateCss(handler.PlatformView, BuildCharacterSpacingCss(textStyle.CharacterSpacing));
 	}
 
 	public static void MapTextColor(RadioButtonHandler handler, IRadioButton radioButton)
@@ -104,7 +104,7 @@ public class RadioButtonHandler : GtkViewHandler<IRadioButton, Gtk.CheckButton>
 	public static void MapCornerRadius(RadioButtonHandler handler, IRadioButton radioButton)
 	{
 		handler.UpdateCss(handler.PlatformView,
-			radioButton is IButtonStroke stroke && stroke.CornerRadius >= 0 ? $"border-radius: {stroke.CornerRadius}px;" : null);
+			radioButton is IButtonStroke stroke && stroke.CornerRadius >= 0 ? FormattableString.Invariant($"border-radius: {stroke.CornerRadius}px;") : null);
 	}
 
 	public static void MapStrokeColor(RadioButtonHandler handler, IRadioButton radioButton)
@@ -117,6 +117,6 @@ public class RadioButtonHandler : GtkViewHandler<IRadioButton, Gtk.CheckButton>
 	{
 		handler.UpdateCss(handler.PlatformView,
 			radioButton is IButtonStroke stroke && stroke.StrokeThickness >= 0
-				? $"border-width: {stroke.StrokeThickness}px; border-style: solid;" : null);
+				? BuildStrokeThicknessCss(stroke.StrokeThickness) : null);
 	}
 }

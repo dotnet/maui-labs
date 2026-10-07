@@ -245,7 +245,7 @@ public class TableViewHandler : GtkViewHandler<TableView, Gtk.ScrolledWindow>
 			if (label.FontSize > 0 && label.FontSize != 14)
 			{
 				var css = Gtk.CssProvider.New();
-				css.LoadFromString($"label {{ font-size: {(int)label.FontSize}px; }}");
+				css.LoadFromString(FormattableString.Invariant($"label {{ font-size: {(int)label.FontSize}px; }}"));
 				gtkLabel.GetStyleContext().AddProvider(css, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
 			}
 			if (label.TextColor != null)

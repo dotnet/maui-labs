@@ -17,15 +17,6 @@ public class ShellNavigationRuntimeTests
 		Assert.True(app.Completed);
 	}
 
-	sealed class GtkRuntimeFactAttribute : FactAttribute
-	{
-		public GtkRuntimeFactAttribute()
-		{
-			if (!OperatingSystem.IsLinux() || Environment.GetEnvironmentVariable("MAUI_GTK_RUNTIME_TESTS") != "1")
-				Skip = "Requires Linux with a GTK display and MAUI_GTK_RUNTIME_TESTS=1.";
-		}
-	}
-
 	sealed class NavigationTestHost : GtkMauiApplication
 	{
 		public Exception? Failure { get; private set; }

@@ -472,7 +472,7 @@ internal sealed class GtkFontManager : IFontManager, IGtkFontManager
 		return bytes.Length == 4 ? Encoding.ASCII.GetString(bytes) : string.Empty;
 	}
 
-	static class FontConfigNative
+	internal static class FontConfigNative
 	{
 		[DllImport("libfontconfig.so.1", EntryPoint = "FcConfigGetCurrent")]
 		static extern IntPtr FcConfigGetCurrent();
@@ -484,8 +484,36 @@ internal sealed class GtkFontManager : IFontManager, IGtkFontManager
 		[DllImport("libpangocairo-1.0.so.0", EntryPoint = "pango_cairo_font_map_get_default")]
 		static extern IntPtr PangoCairoFontMapGetDefault();
 
+		[DllImport("libpangocairo-1.0.so.0", EntryPoint = "pango_cairo_font_map_get_font_type")]
+		static extern int PangoCairoFontMapGetFontType(IntPtr fontMap);
+
+		[DllImport("libpangocairo-1.0.so.0", EntryPoint = "pango_cairo_font_map_new_for_font_type")]
+		static extern IntPtr PangoCairoFontMapNewForFontType(int fontType);
+
+		[DllImport("libpangocairo-1.0.so.0", EntryPoint = "pango_cairo_font_map_set_default")]
+		static extern void PangoCairoFontMapSetDefault(IntPtr fontMap);
+
 		[DllImport("libpangoft2-1.0.so.0", EntryPoint = "pango_fc_font_map_config_changed")]
 		static extern void PangoFcFontMapConfigChanged(IntPtr fontMap);
+
+		const int CairoFontTypeFreeType = 1;
+
+		internal static void InitializeFontMap()
+		{
+			// GTK must create its Pango contexts from the same fontconfig map
+			// that receives MAUI's embedded fonts, even on Windows.
+			PangoCairo.Module.Initialize();
+			var current = PangoCairoFontMapGetDefault();
+			if (current != IntPtr.Zero && PangoCairoFontMapGetFontType(current) == CairoFontTypeFreeType)
+				return;
+
+			var fontMap = PangoCairoFontMapNewForFontType(CairoFontTypeFreeType);
+			if (fontMap == IntPtr.Zero)
+				throw new PlatformNotSupportedException("MAUI GTK requires Pango's FreeType/fontconfig backend for embedded fonts.");
+
+			PangoCairoFontMapSetDefault(fontMap);
+			GObject.Internal.Object.Unref(fontMap);
+		}
 
 		public static bool TryAddAppFont(string fontFilePath)
 		{
@@ -502,16 +530,11 @@ internal sealed class GtkFontManager : IFontManager, IGtkFontManager
 		/// </summary>
 		public static void NotifyFontMapChanged()
 		{
-			try
-			{
-				var fontMap = PangoCairoFontMapGetDefault();
-				if (fontMap != IntPtr.Zero)
-					PangoFcFontMapConfigChanged(fontMap);
-			}
-			catch
-			{
-				// Best-effort; ignore if Pango libs are unavailable
-			}
+			var fontMap = PangoCairoFontMapGetDefault();
+			if (fontMap == IntPtr.Zero || PangoCairoFontMapGetFontType(fontMap) != CairoFontTypeFreeType)
+				throw new InvalidOperationException("Initialize the MAUI GTK fontconfig font map before registering embedded fonts.");
+
+			PangoFcFontMapConfigChanged(fontMap);
 		}
 	}
 }

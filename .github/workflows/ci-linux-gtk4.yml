@@ -129,7 +129,7 @@ jobs:
     strategy:
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [PickerSelectionTests, GtkSynchronizationContextTests, WindowSizingTests]
+        test-class: [PickerSelectionTests, GtkSynchronizationContextTests, WindowSizingTests, GalleryLayoutRuntimeTests]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5

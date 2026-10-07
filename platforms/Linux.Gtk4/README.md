@@ -109,6 +109,46 @@ must supply distinct keys for independently updated properties. For overlapping
 declarations of equal specificity, the most recently updated fragment wins.
 The original `ApplyCss` / `ApplyCssWithSelector` signatures remain available for
 compiled custom handlers and share a legacy fragment per widget and selector.
+Numeric CSS values, including color alpha, character spacing, and border widths,
+use invariant culture; application text and bindings retain the user's culture.
+
+CollectionView template rows are measured and arranged by MAUI against their actual
+GTK allocation, including after viewport resizes. Page and root layout frames are
+updated through `IView.Arrange`, so `Width`, `Height`, and `SizeChanged` agree with
+the native content area rather than remaining unset. Native widget measurement
+includes theme padding and borders before allocation.
+Measure invalidations (such as changing Grid columns) propagate to the native root
+without requiring a window resize. Children explicitly arranged to zero extent
+are suppressed by the GTK container until they are arranged positively again.
+
+### Native GTK hosting and regression checks
+
+The backend's direct GTK/Cairo/font imports resolve the platform's DLL, dylib, or
+soname. GirCore's native runtime libraries must still be available on the process
+library search path. Startup selects Pango's FreeType/fontconfig map **before GTK
+creates text contexts**, so embedded fonts are registered against the correct
+map on Windows as well as Linux. Applications should no longer install a separate
+`DllImportResolver` on the GTK backend assembly or force `PANGOCAIRO_BACKEND`.
+This does not add Windows Essentials implementations or a WebKit Windows port.
+
+The opt-in `GalleryLayoutRuntimeTests` runs a real GTK main loop, nested
+Grid/Border/ScrollView/CollectionView templates, native Entry edits, and Shell
+page timer stop/restart. It also registers the sample font and runs with en-ZA
+decimal-comma culture. Each native test class must run in its own process because
+GTK initialization is thread-affine.
+
+```powershell
+$env:RUN_GTK_RUNTIME_TESTS = '1'
+# On Windows, add the installed GTK bin directory to PATH and set FONTCONFIG_PATH.
+dotnet test platforms\Linux.Gtk4\tests\Linux.Gtk4.Tests\Linux.Gtk4.Tests.csproj `
+  -p:MauiVersion=10.0.51 --filter FullyQualifiedName~GalleryLayoutRuntimeTests
+```
+
+Set `GTK_RUNTIME_ARTIFACTS` to an output directory to capture only the test app's
+window. On Windows the test sends native window-manager resize events; the tested
+GTK Win32 runtime does not honor `SetDefaultSize` for an already mapped window.
+The original `WindowSizingTests` therefore remains Linux-only and separately
+checks MAUI/default-size mappings on GTK/X11.
 
 ### Essentials (21 of 36 services)
 

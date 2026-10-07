@@ -158,7 +158,7 @@ public class TimePickerHandler : GtkViewHandler<ITimePicker, Gtk.Box>
 	public static void MapCharacterSpacing(TimePickerHandler handler, ITimePicker timePicker)
 	{
 		var button = handler.PlatformView?.GetFirstChild() as Gtk.Button;
-		handler.UpdateCss(button, $"letter-spacing: {timePicker.CharacterSpacing}px;");
+		handler.UpdateCss(button, BuildCharacterSpacingCss(timePicker.CharacterSpacing));
 	}
 
 	public static void MapTextColor(TimePickerHandler handler, ITimePicker timePicker)
