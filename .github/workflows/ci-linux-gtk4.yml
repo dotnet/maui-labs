@@ -144,7 +144,7 @@ jobs:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [CollectionViewHandlerTests, PickerSelectionTests, GtkSynchronizationContextTests, WindowSizingTests, GtkTransformTests]
+        test-class: [CollectionViewHandlerTests, PickerSelectionTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests]
         maui: ['']
         include:
           - test-class: WindowSizingTests
@@ -165,6 +165,7 @@ jobs:
           GDK_BACKEND: x11
           GSK_RENDERER: cairo
           GTK_A11Y: none
+          GTK_TEST_ARTIFACTS: ${{ github.workspace }}/artifacts/TestResults/gtk-runtime/paint
         run: >-
           ./platforms/Linux.Gtk4/tests/run-native-tests.ps1
           -TestClass '${{ matrix.test-class }}'
