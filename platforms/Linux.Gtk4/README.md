@@ -71,6 +71,35 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
 - **Desktop integration** — App icons via hicolor icon theme, `.desktop` file generation, `MauiImage`/`MauiFont`/`MauiAsset` resource processing.
 
+### Window sizing
+
+Windows default to 1024 x 768 when the app does not specify a size. Set `Window.Width`
+and `Window.Height` to request another initial or runtime size, and `Window.MinimumWidth`
+and `Window.MinimumHeight` to impose application-specific lower bounds. GTK's native
+content minimums still apply; there is no backend-imposed 800 x 600 minimum.
+Root MAUI layouts reflow using their actual GTK allocation, including space reserved
+by native containers and window chrome.
+
+`Window.Width`/`Height` report the allocated client area (excluding a native titlebar),
+and `Window.SizeChanged` follows actual allocation changes, not just size requests.
+Pages, including `NavigationPage` and `Shell`, report their own native allocation;
+the current content page excludes navigation chrome. Their `SizeChanged` and
+`OnSizeAllocated` callbacks and top-level layout frames can be used for responsive UI.
+Vertical `CollectionView` templates reflow at their allocated row width.
+
+The existing native sizing host covers initial sizing, minimum sizes, nested
+layouts, scrolling, NavigationPage/Shell frames and events, independent windows,
+unchanged allocations, decorated client areas, handler reconnect, and collection
+cards. It runs in the normal GTK CI runtime matrix. To run the same checks on Linux:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --configuration Release --filter FullyQualifiedName~WindowSizingTests \
+  --logger "console;verbosity=detailed"
+```
+
 ### Shell navigation regression checks
 
 Shell section navigation displays the top pushed page and restores the previous
@@ -240,8 +269,17 @@ configuring the builder. Unsupported desktop capabilities retain their existing
 stub behavior. Facades are process-wide: the most recently built app sets their
 instances, and callers must not use them after disposing that app.
 
-Run the behavioral registration regressions on Linux:
+`FileSystem.AppDataDirectory` and `CacheDirectory` use `XDG_DATA_HOME` and
+`XDG_CACHE_HOME`, falling back to `~/.local/share` and `~/.cache`, respectively,
+with the application name appended. Both getters create the directory before
+returning it, preserve existing contents, and propagate filesystem errors.
+Paths are resolved on every access, including changes to the XDG variables.
+
+Run the registration and filesystem regressions on Linux:
 `dotnet test platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj`.
+The filesystem tests cover XDG overrides and fallback paths with unique
+application identities and real file writes; only their owned directories are
+removed. These tests do not require a display.
 Set `ESSENTIALS_NATIVE_GTK=1` under a real display (or `xvfb-run`) to also run the
 GTK application activation/display regression; otherwise that test is explicitly skipped.
 

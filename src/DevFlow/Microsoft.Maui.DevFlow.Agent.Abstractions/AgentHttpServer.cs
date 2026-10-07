@@ -388,7 +388,8 @@ public class AgentHttpServer : IDisposable
                 if (routeParts[i].StartsWith('{') && routeParts[i].EndsWith('}'))
                 {
                     var paramName = routeParts[i][1..^1];
-                    request.RouteParams[paramName] = requestParts[i];
+                    // Decode captures only after splitting: an encoded slash is data, not a route separator.
+                    request.RouteParams[paramName] = Uri.UnescapeDataString(requestParts[i]);
                     continue;
                 }
                 if (!routeParts[i].Equals(requestParts[i], StringComparison.OrdinalIgnoreCase))

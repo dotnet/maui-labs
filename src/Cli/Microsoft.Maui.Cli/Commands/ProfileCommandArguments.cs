@@ -9,6 +9,9 @@ internal static class ProfileCommandArguments
 {
 	internal static string[] BuildCompileArguments(
 		string projectPath,
+		string artifactsPath,
+		string directoryBuildPropsPath,
+		string directoryBuildTargetsPath,
 		string framework,
 		string configuration,
 		ProfileTransportConfiguration transport,
@@ -20,6 +23,10 @@ internal static class ProfileCommandArguments
 		{
 			"build",
 			projectPath,
+			$"-p:ArtifactsPath={artifactsPath}",
+			$"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}",
+			$"-p:CustomAfterDirectoryBuildTargets={directoryBuildTargetsPath}",
+			$"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={directoryBuildTargetsPath}",
 			"-c", configuration,
 			"-f", framework,
 			"--nologo"
@@ -36,6 +43,9 @@ internal static class ProfileCommandArguments
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
+		string artifactsPath,
+		string directoryBuildPropsPath,
+		string directoryBuildTargetsPath,
 		string framework,
 		string configuration,
 		Device device,
@@ -48,6 +58,10 @@ internal static class ProfileCommandArguments
 		{
 			"build",
 			projectPath,
+			$"-p:ArtifactsPath={artifactsPath}",
+			$"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}",
+			$"-p:CustomAfterDirectoryBuildTargets={directoryBuildTargetsPath}",
+			$"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={directoryBuildTargetsPath}",
 			"-t:Run",
 			"-c", configuration,
 			"-f", framework,
@@ -85,7 +99,6 @@ internal static class ProfileCommandArguments
 		if (buildInjection is null)
 			return;
 
-		args.Add($"-p:CustomAfterMicrosoftCommonTargets={buildInjection.TargetsPath}");
 		args.Add("-p:MauiProfilingHelperInject=true");
 		args.Add($"-p:MauiProfilingHelperProjectFullPath={Path.GetFullPath(projectPath)}");
 		if (!string.IsNullOrWhiteSpace(buildInjection.ExitControlHost))

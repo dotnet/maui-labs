@@ -59,6 +59,29 @@ test process environment to save PNGs of those transitions.
 
 ### Shell section selection
 
+Selecting a native tab navigates through Shell's cancellable section-selection
+pipeline, with or without `Shell.ItemTemplate`. Cancelled or deferred navigation
+keeps the native selection on the current section until Shell accepts the change.
+Rebuilding the strip does not initiate navigation or create inactive pages.
+The strip uses controller-visible sections, excluding hidden sections and sections
+without visible content. Visibility changes refresh it automatically. Plain section
+changes retain the native tab elements and synchronize selection without rebuilding,
+preserving keyboard focus.
+
+`ShellSection.IsEnabled` is projected onto native tabs and their UI Automation
+enabled state, both initially and when it changes. Enabled-state changes update
+only the matching current tab in place: they do not rebuild the strip, replay
+property mappers, replace custom headers, or navigate away from a selected section.
+Disabled sections remain visible; native UI Automation selection rejects them.
+Section observers follow collection changes and handler rebind/disconnect.
+
+The `ShellTabNavigationTests` handler regressions drive native UI Automation
+selection in an offscreen WPF window and assert the route,
+`Navigated` events, and rendered page. Set `SHELL_TAB_RESULTS` to a directory to
+capture the templated and non-templated repro states as PNG and JSON.
+Only the keyboard-focus cases activate their window; all other cases are
+nonactivating. On a shared desktop, run the focus cases only with exclusive
+foreground access. They assert actual keyboard focus, not just logical focus.
 For section switching within one Shell item, select **Launch Section Switching
 Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
 pages in one `TabBar`, without calling a handler refresh workaround. The
@@ -296,8 +319,15 @@ tracking property is used, not merely when building the app.
 The facades are process-wide: the most recently built app sets their instances.
 Do not use them after disposing that app.
 
-Run the behavioral registration regressions on Windows:
-`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj`.
+`FileSystem.AppDataDirectory` uses local application data and `CacheDirectory`
+uses the temporary directory, each with the application name appended. Both
+getters create the directory before returning it, without changing existing
+contents; filesystem errors propagate to the caller.
+
+Run the registration and filesystem regressions on Windows:
+`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj -p:UseMaui=false`.
+The filesystem tests use unique application identities and real file writes;
+they remove only their own directories, never the user storage roots.
 
 | API | Status | Notes |
 |---|---|---|

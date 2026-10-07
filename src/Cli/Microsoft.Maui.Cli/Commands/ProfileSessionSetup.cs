@@ -10,6 +10,8 @@ internal static class ProfileSessionSetup
 {
 	internal static async Task<ProfileSessionContext> PrepareAsync(ProfileSessionRequest request, CancellationToken cancellationToken)
 	{
+		ValidateBuildIsolationOptions(request.NoBuild);
+
 		var primaryOutputPath = ProfileOutputResolver.GetPrimaryOutputPath(request.OutputPath, request.OutputFormat);
 		var outputDirectory = Path.GetDirectoryName(request.OutputPath);
 		if (string.IsNullOrWhiteSpace(outputDirectory))
@@ -23,38 +25,46 @@ internal static class ProfileSessionSetup
 
 		var profilePlatform = ProfileTargetResolver.InferPlatformFromTargetFramework(request.Framework) ?? request.Device.Platform;
 		var transport = ProfileCommand.ResolveProfileTransport(profilePlatform, request.Device);
-		var context = new ProfileSessionContext(request, primaryOutputPath, profilePlatform, transport);
-		context.UseRuntimeOwnedTraceCollection = ShouldUseRuntimeOwnedTraceCollection(context);
-		if (context.UseRuntimeOwnedTraceCollection)
-		{
-			context.RuntimeOwnedTraceDevicePath = ResolveRuntimeOwnedTraceDevicePath(context);
-			if (string.IsNullOrWhiteSpace(context.RuntimeOwnedTraceDevicePath))
-				context.UseRuntimeOwnedTraceCollection = false;
-		}
-
-		WriteSessionHeader(context);
-		WriteVerboseSettings(context);
-
-		context.ReservedPorts = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
-			context.Device,
-			context.Transport with { RequiresExplicitDsrouter = context.RequiresExplicitDsrouter },
-			context.DiagnosticPort,
-			context.Formatter,
-			context.UseJson,
-			context.Verbose,
-			cancellationToken);
+		var buildWorkspace = ProfileBuildWorkspace.Create(request.Project.ProjectDirectory, request.Formatter, request.UseJson, request.Verbose);
+		var context = new ProfileSessionContext(request, primaryOutputPath, profilePlatform, transport, buildWorkspace);
 
 		try
 		{
+			context.UseRuntimeOwnedTraceCollection = ShouldUseRuntimeOwnedTraceCollection(context);
+			if (context.UseRuntimeOwnedTraceCollection)
+			{
+				context.RuntimeOwnedTraceDevicePath = ResolveRuntimeOwnedTraceDevicePath(context);
+				if (string.IsNullOrWhiteSpace(context.RuntimeOwnedTraceDevicePath))
+					context.UseRuntimeOwnedTraceCollection = false;
+			}
+
+			WriteSessionHeader(context);
+			WriteVerboseSettings(context);
+
+			context.ReservedPorts = await ProfileCommandPortRouter.ReserveProfilePortsAndConfigureRoutingAsync(
+				context.Device,
+				context.Transport with { RequiresExplicitDsrouter = context.RequiresExplicitDsrouter },
+				context.DiagnosticPort,
+				context.Formatter,
+				context.UseJson,
+				context.Verbose,
+				cancellationToken);
+
 			context.DiagnosticPort = context.ReservedPorts.DiagnosticPort;
 
 			var hasProfilingHelper = MauiProjectResolver.HasPackageReference(context.Project.ProjectPath, ProfileCommand.ProfilingHelperPackageId);
+			var existingBuildHooks = await ProfileBuildWorkspace.ResolveExistingBuildHooksAsync(
+				context.Project.ProjectPath,
+				context.Framework,
+				context.Configuration,
+				cancellationToken);
 			context.BuildInjection = ProfileCommandBuildInjectionResolver.TryCreateBuildInjection(
 				context.DiagnosticAddress,
 				context.ReservedPorts.ExitControlPort,
 				injectBootstrap: !hasProfilingHelper,
 				enableRuntimePgo: context.UseRuntimeOwnedTraceCollection || context.OutputFormat == TraceOutputFormat.Mibc,
 				eventPipeOutputPath: context.RuntimeOwnedTraceDevicePath);
+			context.BuildWorkspace.ConfigureBuildTargets(context.BuildInjection?.TargetsPath, existingBuildHooks);
 
 			WriteDiagnosticPortInfo(context);
 			return context;
@@ -64,6 +74,20 @@ internal static class ProfileSessionSetup
 			await ProfileSessionRunner.CleanupAsync(context);
 			throw;
 		}
+	}
+
+	internal static void ValidateBuildIsolationOptions(bool noBuild)
+	{
+		if (!noBuild)
+			return;
+
+		throw MauiToolException.UserActionRequired(
+			ErrorCodes.InvalidArgument,
+			"--no-build cannot be used for profiling because each profiling session builds into a new isolated workspace.",
+			[
+				"Remove --no-build. The profiling build is stored under the app project's ignored obj directory and is deleted after the session.",
+				"Your normal bin and obj outputs will not be overwritten."
+			]);
 	}
 
 	static void WriteSessionHeader(ProfileSessionContext context)
@@ -94,6 +118,11 @@ internal static class ProfileSessionSetup
 
 	static void WriteVerboseSettings(ProfileSessionContext context)
 	{
+		ProfileCommandProcessHelpers.WriteVerbose(
+			context.Formatter,
+			context.UseJson,
+			context.Verbose,
+			$"Profile build workspace: {context.BuildWorkspace.Path}");
 		ProfileCommandProcessHelpers.WriteVerbose(
 			context.Formatter,
 			context.UseJson,

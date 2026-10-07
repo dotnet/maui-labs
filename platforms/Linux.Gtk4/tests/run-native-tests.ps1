@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory)]
     [ValidatePattern('^[A-Za-z_][A-Za-z0-9_]*$')]
     [string] $TestClass,
+    [string] $MauiVersion,
     [string] $ResultsDirectory = 'artifacts/TestResults/gtk-runtime'
 )
 
@@ -12,8 +13,9 @@ if (-not $IsLinux) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $project = Join-Path $PSScriptRoot 'Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj'
+$resultsName = if ($MauiVersion) { "$TestClass-maui-$MauiVersion" } else { $TestClass }
 $results = [IO.Path]::GetFullPath($ResultsDirectory, $repoRoot)
-$trxPath = Join-Path $results "$TestClass.trx"
+$trxPath = Join-Path $results "$resultsName.trx"
 New-Item -ItemType Directory -Force -Path $results | Out-Null
 if (Test-Path -LiteralPath $trxPath) {
     throw "Results already exist at $trxPath; choose a new ResultsDirectory to preserve evidence."
@@ -22,11 +24,12 @@ if (Test-Path -LiteralPath $trxPath) {
 $env:RUN_GTK_RUNTIME_TESTS = '1'
 $env:GSK_RENDERER = 'cairo'
 $filter = "FullyQualifiedName~Microsoft.Maui.Platforms.Linux.Gtk4.Tests.$TestClass."
+$mauiArgs = if ($MauiVersion) { @("-p:MauiVersion=$MauiVersion") } else { @() }
 
 & dbus-run-session -- xvfb-run --auto-servernum dotnet test $project `
-    --configuration Release --filter $filter `
+    --configuration Release --filter $filter @mauiArgs `
     --logger 'console;verbosity=detailed' `
-    --logger "trx;LogFileName=$TestClass.trx" `
+    --logger "trx;LogFileName=$resultsName.trx" `
     --results-directory $results --blame-hang-timeout 3m '-m:1' '-nr:false'
 if ($LASTEXITCODE -ne 0) {
     throw "Native GTK class $TestClass failed (exit code $LASTEXITCODE)."

@@ -35,6 +35,8 @@ jobs:
   shell-navigation:
     name: Shell navigation runtime regression
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
@@ -133,7 +135,7 @@ jobs:
         run: ./eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps
 
   runtime:
-    name: Native GTK runtime (${{ matrix.test-class }})
+    name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -142,7 +144,13 @@ jobs:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [CollectionViewHandlerTests, PickerSelectionTests, GtkSynchronizationContextTests]
+        test-class: [CollectionViewHandlerTests, PickerSelectionTests, GtkSynchronizationContextTests, WindowSizingTests]
+        maui: ['']
+        include:
+          - test-class: WindowSizingTests
+            maui: '10.0.70'
+          - test-class: WindowSizingTests
+            maui: '10.0.110'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
@@ -157,7 +165,10 @@ jobs:
           GDK_BACKEND: x11
           GSK_RENDERER: cairo
           GTK_A11Y: none
-        run: ./platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass '${{ matrix.test-class }}'
+        run: >-
+          ./platforms/Linux.Gtk4/tests/run-native-tests.ps1
+          -TestClass '${{ matrix.test-class }}'
+          ${{ matrix.maui && format('-MauiVersion {0}', matrix.maui) || '' }}
       - name: Build DevFlow sample
         if: matrix.test-class == 'CollectionViewHandlerTests'
         run: >-
@@ -174,7 +185,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: gtk-runtime-${{ matrix.test-class }}
+          name: gtk-runtime-${{ matrix.test-class }}${{ matrix.maui && format('-maui-{0}', matrix.maui) || '' }}
           path: artifacts/TestResults/gtk-runtime/
           if-no-files-found: error
       - name: Upload DevFlow runtime evidence
