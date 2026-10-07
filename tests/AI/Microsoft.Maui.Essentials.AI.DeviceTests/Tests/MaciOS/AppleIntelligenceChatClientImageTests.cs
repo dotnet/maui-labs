@@ -259,7 +259,7 @@ public class AppleIntelligenceChatClientImageTests
 		};
 
 		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
-		Assert.Contains("27.0", error.Message);
+		Assert.Contains("Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.", error.Message);
 	}
 
 	[Fact]
@@ -285,7 +285,7 @@ public class AppleIntelligenceChatClientImageTests
 			{
 			}
 		});
-		Assert.Contains("27.0", error.Message);
+		Assert.Contains("Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.", error.Message);
 	}
 
 	[Fact]
@@ -308,7 +308,7 @@ public class AppleIntelligenceChatClientImageTests
 		};
 
 		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
-		Assert.Contains("27.0", error.Message);
+		Assert.Contains("Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.", error.Message);
 	}
 
 	[Fact]
@@ -328,7 +328,7 @@ public class AppleIntelligenceChatClientImageTests
 		};
 
 		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
-		Assert.Contains("27.0", error.Message);
+		Assert.Contains("Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.", error.Message);
 	}
 
 	[Fact]

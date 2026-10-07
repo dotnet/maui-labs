@@ -250,7 +250,7 @@ public class ChatClientNative: NSObject {
         if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
            messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) }),
            !model.capabilities.contains(.vision) {
-            throw NSError.chatError(.invalidContent, description: "The Apple Intelligence model does not support image input.")
+            throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later and a vision-capable Apple Intelligence model. The current model does not report vision support.")
         }
 
         let tools = options?.tools?.map { ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
@@ -388,7 +388,7 @@ public class ChatClientNative: NSObject {
                     let attachment = try imageContent.toAttachment()
                     return Prompt { attachment }
                 } else {
-                    throw NSError.chatError(.invalidContent, description: "Image prompts require iOS/macCatalyst/macOS 27.0 or later.")
+                    throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.")
                 }
 
             default:
@@ -428,7 +428,7 @@ public class ChatClientNative: NSObject {
                 let attachment = try imageContent.toTranscriptAttachment()
                 return .attachment(Transcript.AttachmentSegment(content: attachment, label: imageContent.label))
             } else {
-                throw NSError.chatError(.invalidContent, description: "Image content requires iOS/macCatalyst/macOS 27.0 or later.")
+                throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.")
             }
 
         default:
