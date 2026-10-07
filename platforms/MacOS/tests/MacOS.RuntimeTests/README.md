@@ -16,6 +16,7 @@ A timeout is a failure, not accepted baseline evidence.
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
+| `contentview-clipping` | 2 | Missing bounds clip and transform redraw / clipped content and visible moved text |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |

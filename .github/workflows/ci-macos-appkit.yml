@@ -50,6 +50,8 @@ jobs:
         include:
           - scenario: layout
             maui-version: ''
+          - scenario: contentview-clipping
+            maui-version: ''
           - scenario: shell-sections
             maui-version: ''
           - scenario: shell-tabs

@@ -1,0 +1,29 @@
+{
+  "name": "contentview-clipping",
+  "expectedCases": 2,
+  "expectedAssertions": 7,
+  "evidence": ["native-state.json", "initial.png", "assertions.txt"],
+  "fixedEvidence": ["translated.png"],
+  "baseline": {
+    "overlays": [
+      {
+        "source": "platforms/MacOS/src/MacOS/Handlers/ContentViewHandler.cs",
+        "replace": {
+          "old": "            [nameof(IContentView.Content)] = MapContent,\n            [nameof(ILayout.ClipsToBounds)] = MapClipsToBounds,\n            [nameof(IView.Background)] = MapBackground,",
+          "new": "            [nameof(IContentView.Content)] = MapContent,\n            [nameof(IView.Background)] = MapBackground,"
+        }
+      },
+      {
+        "source": "platforms/MacOS/src/MacOS/Handlers/MacOSViewHandler.cs",
+        "replace": {
+          "old": "        platformView.Layer.Transform = transform;\n        InvalidateDisplay(platformView);",
+          "new": "        platformView.Layer.Transform = transform;"
+        }
+      }
+    ],
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "contentview.clip-and-redraw",
+    "message": "ContentView did not clip, and transformed text was not invalidated for display."
+  }
+}

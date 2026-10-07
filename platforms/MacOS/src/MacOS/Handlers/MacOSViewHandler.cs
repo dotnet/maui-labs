@@ -382,6 +382,14 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
             transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
 
         platformView.Layer.Transform = transform;
+        InvalidateDisplay(platformView);
+    }
+
+    static void InvalidateDisplay(NSView view)
+    {
+        view.NeedsDisplay = true;
+        foreach (var subview in view.Subviews)
+            InvalidateDisplay(subview);
     }
 
     public static void MapInputTransparent(IViewHandler handler, IView view)
