@@ -16,6 +16,7 @@
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <UserSecretsId>2727d4aa-a3a5-484b-9447-91604761972b</UserSecretsId>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-android'))">26.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -45,6 +46,10 @@
     <PackageReference Include="Microsoft.Maui.Controls.Compatibility" />
     <PackageReference Include="Microsoft.Maui.Essentials" />
     <PackageReference Include="Microsoft.Maui.Controls.Maps" />
+    <PackageReference Include="Xamarin.AndroidX.Collection.Ktx" VersionOverride="1.6.0.1" Condition="$(TargetFramework.Contains('-android'))" />
+    <PackageReference Include="Xamarin.AndroidX.Fragment.Ktx" VersionOverride="1.9.0" Condition="$(TargetFramework.Contains('-android'))" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData" VersionOverride="2.11.0.1" Condition="$(TargetFramework.Contains('-android'))" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData.Core" VersionOverride="2.11.0.1" Condition="$(TargetFramework.Contains('-android'))" />
   </ItemGroup>
 
   <ItemGroup>

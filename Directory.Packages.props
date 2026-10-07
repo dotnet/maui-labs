@@ -78,6 +78,7 @@
     <!-- Windows AI WinRT APIs (the umbrella SDK version is pinned for MAUI's WinUI runtime) -->
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="$(MicrosoftWindowsAppSDKVersion)" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="$(MicrosoftWindowsAppSDKFoundationVersion)" />
+    <PackageVersion Include="Xamarin.Google.MLKit.GenAI.Prompt" Version="$(XamarinGoogleMLKitGenAIPromptVersion)" />
     <!-- Sample app: Microsoft Agents AI -->
     <PackageVersion Include="Microsoft.Agents.AI" Version="$(MicrosoftAgentsAIVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Hosting" Version="$(MicrosoftAgentsAIHostingVersion)" />
