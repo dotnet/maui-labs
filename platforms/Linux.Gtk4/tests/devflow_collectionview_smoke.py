@@ -21,6 +21,32 @@ lease = "gtk-collectionview-" + uuid.uuid4().hex
 base = "http://127.0.0.1:9223/api/v1/"
 
 
+class DevFlowHttpError(RuntimeError):
+    """An HTTP error response from the DevFlow agent.
+
+    Exposes the parsed ``reason`` field so callers can distinguish genuine
+    failures from the protocol's documented transient conditions
+    ("stale-capture-epoch", "ui-mutation-busy"), which the real AgentClient
+    (see Microsoft.Maui.DevFlow.Client/AgentClient.cs) marks Retryable=true
+    and expects callers to re-capture and retry rather than treat as fatal.
+    """
+
+    def __init__(self, status, payload):
+        super().__init__(payload)
+        self.status = status
+        try:
+            self.body = json.loads(payload)
+        except json.JSONDecodeError:
+            self.body = None
+
+    @property
+    def reason(self):
+        return self.body.get("reason") if isinstance(self.body, dict) else None
+
+
+RETRYABLE_REASONS = {"stale-capture-epoch", "ui-mutation-busy"}
+
+
 def request(route, body=None, method=None, raw=False):
     req = urllib.request.Request(
         base + route,
@@ -33,7 +59,29 @@ def request(route, body=None, method=None, raw=False):
             data = response.read()
             return data if raw else json.loads(data)
     except urllib.error.HTTPError as error:
-        raise RuntimeError(error.read().decode()) from error
+        raise DevFlowHttpError(error.code, error.read().decode()) from error
+
+
+def with_capture_retry(perform, description):
+    """Run ``perform()`` (which re-queries a fresh captureEpoch and acts on
+    it), retrying the whole query+act cycle on the protocol's documented
+    transient "stale-capture-epoch"/"ui-mutation-busy" responses.
+
+    A background layout/measure pass (frame-clock driven — the same class of
+    race already fixed in the native xUnit tests) can legitimately invalidate
+    a capture between the query that produced it and the action request that
+    consumes it. The real AgentClient marks exactly these two reasons
+    Retryable=true (see Microsoft.Maui.DevFlow.Client/AgentClient.cs) and
+    documents that callers should re-capture and retry rather than fail.
+    """
+    deadline = time.monotonic() + 20
+    while True:
+        try:
+            return perform()
+        except DevFlowHttpError as error:
+            if error.reason not in RETRYABLE_REASONS or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.1)
 
 
 def query(**filters):
@@ -84,20 +132,27 @@ with (output / "app.log").open("w", encoding="utf-8") as log:
         })
         assert granted["allowed"], granted
 
-        picker = wait_for(lambda: query(type="Picker"), "example picker")[0]
-        selected = request("ui/elements/" + picker["id"] + "/properties/SelectedIndex",
+        def set_selected_index():
+            picker = wait_for(lambda: query(type="Picker"), "example picker")[0]
+            return request("ui/elements/" + picker["id"] + "/properties/SelectedIndex",
                            {"value": "3", "captureEpoch": picker["captureEpoch"]}, "PUT")
+
+        selected = with_capture_retry(set_selected_index, "set SelectedIndex")
         assert selected["property"] == "SelectedIndex" and selected["value"] == "3", selected
 
         for name, filters in [
             ("Alice Johnson", {"text": "Alice Johnson"}),
             ("Bob Smith", {"automationId": "Bob Smith"}),
         ]:
-            cards = wait_for(lambda: query(**filters), name + " realization")
-            card = next(card for card in cards if card["text"] == name)
+            def tap_named_card(name=name, filters=filters):
+                cards = wait_for(lambda: query(**filters), name + " realization")
+                card = next(card for card in cards if card["text"] == name)
+                tapped = request("ui/actions/tap",
+                                 {"elementId": card["id"], "captureEpoch": card["captureEpoch"]})
+                return cards, tapped
+
+            cards, tapped = with_capture_retry(tap_named_card, name + " tap")
             save(name + "-query.json", cards)
-            tapped = request("ui/actions/tap",
-                             {"elementId": card["id"], "captureEpoch": card["captureEpoch"]})
             assert tapped["success"], tapped
             result = wait_for(lambda: query(text="Tapped: " + name), name + " command outcome")
             assert any(item["text"] == "Tapped: " + name for item in result), result
