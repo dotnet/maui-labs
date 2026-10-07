@@ -255,9 +255,11 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 			handler.SetVirtualView(replacement);
 			Assert.Same(panel, handler.PlatformView);
 			Assert.Same(replacement, panel.CrossPlatformLayout);
-			PumpThroughSentinel();
+			// SetVirtualView(replacement) queues a fresh layout pass on the frame
+			// clock, same race as above: wait for it instead of a single blind
+			// idle pump.
+			PumpUntil(() => replacement.MeasureCount > 0 && replacement.ArrangeCount > 0);
 			Assert.Equal(retiredCounts, current.Counts);
-			Assert.True(replacement.MeasureCount > 0 && replacement.ArrangeCount > 0);
 			var beforeResize = replacement.Counts;
 			window.SetDefaultSize(460, 340);
 			paned.SetPosition(200);
