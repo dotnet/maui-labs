@@ -1,6 +1,7 @@
 #if ENABLE_OPENAI_CLIENT
 
 using Microsoft.Extensions.AI;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
@@ -43,7 +44,7 @@ public class OpenAIChatClientResponseTests : ChatClientResponseTestsBase<OpenAIC
 public class OpenAIChatClientStreamingTests : ChatClientStreamingTestsBase<OpenAIChatClient>
 {
 }
-public class OpenAIChatClientUsageTests : ChatClientUsageTestsBase<OpenAIChatClient>
+public class OpenAIChatClientUsageTests(ITestOutputHelper output) : ChatClientUsageTestsBase<OpenAIChatClient>(output)
 {
 }
 public class OpenAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<OpenAIChatClient>

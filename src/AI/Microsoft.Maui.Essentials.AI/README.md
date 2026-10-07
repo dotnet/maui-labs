@@ -110,6 +110,34 @@ application total, accumulate responses with `UsageDetails.Add`. Usage is
 introduced in OS 27. Counts come directly from Foundation Models; the client
 does not reconstruct or estimate missing usage.
 
+### OpenTelemetry
+
+Reference `Microsoft.Extensions.AI` to use its built-in telemetry middleware,
+just as with an Azure OpenAI client:
+
+```csharp
+using var client = new AppleIntelligenceChatClient().AsBuilder()
+    .UseOpenTelemetry(
+        sourceName: "MyApp.AI",
+        configure: telemetry => telemetry.EnableSensitiveData = false)
+    .Build();
+```
+
+Configure your application's OpenTelemetry listeners or exporters for the
+`MyApp.AI` activity source and meter. The middleware emits provider/model
+metadata, request duration, and native usage through standard `gen_ai` spans
+and metrics. Fully enumerate streaming responses to capture final usage.
+Streaming also produces time-to-first-chunk and time-per-output-chunk metrics.
+Prompts and responses are excluded by the explicit sensitive-data setting.
+
+With the repository's pinned M.E.AI 10.4.1, input/output tokens are span tags
+and `gen_ai.client.token.usage` measurements; cached input is also a span tag
+(`gen_ai.usage.cache_read.input_tokens`). Total and reasoning counts remain
+available on `UsageDetails`, but do not have separate built-in span tags or
+metrics. On OS 26, request timing and model metadata remain available without
+token usage. Provider-specific response IDs and finish reasons are emitted
+only when the provider supplies them.
+
 ### Embeddings for semantic search
 
 ```csharp

@@ -1,6 +1,7 @@
 #if IOS || MACCATALYST
 using Microsoft.Extensions.AI;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
@@ -127,7 +128,8 @@ public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTest
 	}
 }
 
-public class AppleIntelligenceChatClientUsageTests : ChatClientUsageTestsBase<AppleIntelligenceChatClient>
+public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
+	: ChatClientUsageTestsBase<AppleIntelligenceChatClient>(output)
 {
 	protected override bool IsUsageAvailable
 	{
