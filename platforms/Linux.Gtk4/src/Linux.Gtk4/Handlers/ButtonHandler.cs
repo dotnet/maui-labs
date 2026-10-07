@@ -42,12 +42,11 @@ public class ButtonHandler : GtkViewHandler<IButton, Gtk.Button>
 
 	void OnClicked(Gtk.Button sender, EventArgs args)
 	{
-		try
-		{
-			VirtualView?.Clicked();
-			VirtualView?.Released();
-		}
-		catch (InvalidOperationException) { }
+		if (((IElementHandler)this).VirtualView is not IButton button)
+			return;
+
+		button.Clicked();
+		button.Released();
 	}
 
 	public static void MapText(ButtonHandler handler, IButton button)

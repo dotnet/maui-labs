@@ -1,5 +1,6 @@
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Platform;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 
@@ -65,6 +66,30 @@ public class ShellNavigationRuntimeTests
 				await shell.GoToAsync("detail", false);
 				await shell.GoToAsync("..", false);
 				await AssertDisplayed(shell, root, "relative-back");
+
+				var back = new ImageButton();
+				var nativeBackPage = new ContentPage { Content = back };
+				await section.Navigation.PushAsync(nativeBackPage, false);
+				await AssertDisplayed(shell, nativeBackPage, "native-back-detail");
+				var signals = new List<string>();
+				Task? nativeBack = null;
+				back.Pressed += (_, _) => signals.Add("pressed");
+				back.Clicked += (_, _) =>
+				{
+					signals.Add("clicked");
+					nativeBack = section.Navigation.PopAsync(false);
+					nativeBackPage.DisconnectHandlers();
+				};
+				back.Released += (_, _) => signals.Add("released");
+				using var nativeButton = Assert.IsType<Gtk.Button>(back.Handler!.PlatformView);
+				GtkTestButton.Click(nativeButton);
+				Assert.Equal(new[] { "pressed", "clicked", "released" }, signals);
+				Assert.Null(back.Handler);
+				GtkTestButton.Click(nativeButton);
+				Assert.Equal(3, signals.Count);
+				Assert.NotNull(nativeBack);
+				await nativeBack;
+				await AssertDisplayed(shell, root, "native-back-disconnected-during-click");
 
 				var first = new ContentPage { Content = new Label { Text = "First detail" } };
 				var second = new ContentPage { Content = new Label { Text = "Reentrant detail" } };

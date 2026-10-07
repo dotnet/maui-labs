@@ -151,6 +151,9 @@ Programmatic Entry text replacement suppresses GTK's intermediate clear/insert
 notifications, preventing transient empty strings from reentering synchronized
 MAUI inputs and collection filters. Native edits and final native length coercion
 still update the MAUI text.
+Native Button and ImageButton click callbacks retain their original MAUI target
+for the complete event sequence, even when navigation disconnects the handler
+inside an event. Retired native buttons no longer dispatch clicks after teardown.
 
 ### Native GTK hosting and regression checks
 

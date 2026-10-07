@@ -297,6 +297,7 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 				entry.SetText("");
 				Assert.Equal("", app.Gallery.Search.Text);
 				CheckEntryFeedback(app.Gallery.Handler!.MauiContext!);
+				CheckNativeButtonFeedback(app.Gallery.Handler.MauiContext!);
 				await Until(() => app.Gallery.Root.Width > 0, "input remains responsive");
 
 				await app.Shell.GoToAsync("//drawing", false);
@@ -375,6 +376,38 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			{
 				entry.Handler?.DisconnectHandler();
 			}
+		}
+
+		static void CheckNativeButtonFeedback(IMauiContext context)
+		{
+			var button = new Button();
+			using var nativeButton = (Gtk.Button)button.ToPlatform(context);
+			var buttonSignals = new List<string>();
+			button.Clicked += (_, _) =>
+			{
+				buttonSignals.Add("clicked");
+				button.DisconnectHandlers();
+			};
+			button.Released += (_, _) => buttonSignals.Add("released");
+			GtkTestButton.Click(nativeButton);
+			Assert.Equal(new[] { "clicked", "released" }, buttonSignals);
+			GtkTestButton.Click(nativeButton);
+			Assert.Equal(2, buttonSignals.Count);
+
+			var imageButton = new ImageButton();
+			using var nativeImageButton = (Gtk.Button)imageButton.ToPlatform(context);
+			var imageSignals = new List<string>();
+			imageButton.Pressed += (_, _) =>
+			{
+				imageSignals.Add("pressed");
+				imageButton.DisconnectHandlers();
+			};
+			imageButton.Clicked += (_, _) => imageSignals.Add("clicked");
+			imageButton.Released += (_, _) => imageSignals.Add("released");
+			GtkTestButton.Click(nativeImageButton);
+			Assert.Equal(new[] { "pressed", "clicked", "released" }, imageSignals);
+			GtkTestButton.Click(nativeImageButton);
+			Assert.Equal(3, imageSignals.Count);
 		}
 
 		static async Task SaveScreenshot(Gtk.Window window, string filename)

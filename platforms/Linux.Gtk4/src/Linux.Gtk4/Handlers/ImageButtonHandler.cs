@@ -50,9 +50,13 @@ public class ImageButtonHandler : GtkViewHandler<IImageButton, Gtk.Button>
 
 	void OnClicked(Gtk.Button sender, EventArgs args)
 	{
-		VirtualView?.Pressed();
-		VirtualView?.Clicked();
-		VirtualView?.Released();
+		if (((IElementHandler)this).VirtualView is not IImageButton button)
+			return;
+
+		// Navigation during event delivery can disconnect or rebind this handler.
+		button.Pressed();
+		button.Clicked();
+		button.Released();
 	}
 
 	public static void MapPadding(ImageButtonHandler handler, IImageButton imageButton)
