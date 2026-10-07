@@ -56,8 +56,9 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			Padding = 12, RowSpacing = 8
 		};
 		public List<Border> Cards { get; } = [];
-		public CollectionView Collection { get; }
+		public GalleryCardsView Collection { get; private set; }
 		public Entry CompactSearch { get; } = new() { IsVisible = false };
+		readonly Grid _collectionRoot = new();
 		string _search = "";
 		bool _animationOnly;
 		event EventHandler? FiltersChanged;
@@ -68,7 +69,7 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			Root.Add(Search);
 			Root.Add(Sort, 1);
 			Root.Add(CompactSearch);
-			Collection = new CollectionView
+			Collection = new GalleryCardsView
 			{
 				ItemsSource = AllItems(),
 				EmptyView = "No matching samples",
@@ -99,7 +100,8 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 					CompactSearch.Text = _search;
 			};
 			FiltersChanged += (_, _) => RefreshResults();
-			var scroll = new ScrollView { Content = new Grid { Children = { Collection } } };
+			_collectionRoot.Add(Collection);
+			var scroll = new ScrollView { Content = _collectionRoot };
 			Root.Add(scroll, 0, 1);
 			Grid.SetColumnSpan(scroll, 2);
 			var footer = new Label { Text = "Gallery footer", BackgroundColor = Colors.LightGray };
@@ -125,9 +127,26 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 			FiltersChanged?.Invoke(this, EventArgs.Empty);
 		}
 
+		public GalleryCardsView ReplaceCollection()
+		{
+			var retired = Collection;
+			Collection = new GalleryCardsView
+			{
+				ItemsSource = retired.ItemsSource,
+				ItemTemplate = retired.ItemTemplate,
+				EmptyView = retired.EmptyView
+			};
+			_collectionRoot.Remove(retired);
+			retired.DisconnectHandlers();
+			_collectionRoot.Add(Collection);
+			return retired;
+		}
+
 		void RefreshResults() => Collection.ItemsSource = AllItems().Where((item, index) =>
 			item.Contains(_search, StringComparison.OrdinalIgnoreCase) && (!_animationOnly || index % 2 == 0)).ToArray();
 	}
+
+	public sealed class GalleryCardsView : CollectionView { }
 
 	public sealed class LifecyclePage : ContentPage
 	{
@@ -214,6 +233,20 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 				await Until(() => app.Gallery.Sort.Width > 0 && sort.GetMapped(), "zero-to-positive allocation");
 
 				var entry = Assert.IsType<Gtk.Entry>(app.Gallery.Search.Handler!.PlatformView);
+				Assert.Equal(12, ((IVisualTreeElement)app.Gallery.Collection).GetVisualChildren().Count);
+				var retiredRoots = ((IVisualTreeElement)app.Gallery.Collection).GetVisualChildren().Cast<View>().ToArray();
+				var retiredCollection = app.Gallery.ReplaceCollection();
+				Assert.Empty(((IVisualTreeElement)retiredCollection).GetVisualChildren());
+				Assert.All(retiredRoots, root =>
+				{
+					Assert.Null(root.Parent);
+					Assert.Null(root.Handler);
+				});
+				await Until(() => ((IVisualTreeElement)app.Gallery.Collection).GetVisualChildren().Count == 12 &&
+					app.Gallery.Cards.Any(c => c.Handler?.PlatformView is Gtk.Widget widget && widget.GetMapped() && c.Height > 0),
+					"replacement visual children and allocation");
+				Assert.All(((IVisualTreeElement)app.Gallery.Collection).GetVisualChildren(),
+					root => Assert.Same(app.Gallery.Collection, Assert.IsAssignableFrom<Element>(root).Parent));
 				var initialPanelCount = GtkLayoutPanel.TrackedInstanceCount;
 				for (var iteration = 0; iteration < 8; iteration++)
 				{
@@ -226,6 +259,7 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 					AssertNativeItems(app.Gallery.Collection, 1);
 					await Until(() => app.Gallery.Cards.Any(c => c.BindingContext as string == "Lottie Player" &&
 						c.Handler?.PlatformView is Gtk.Widget widget && widget.GetMapped() && c.Height > 0), "filtered card allocation");
+					Assert.Single(((IVisualTreeElement)app.Gallery.Collection).GetVisualChildren());
 					Assert.All(retiredCards, card => Assert.Null(card.Handler));
 					app.Gallery.Collection.ScrollTo(0);
 					app.Gallery.ToggleAnimationFacet();
@@ -233,6 +267,7 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 					app.Gallery.CompactSearch.Text = "__no_such_gallery_sample__";
 					Assert.Equal(new[] { "Lottie Player", "__no_such_gallery_sample__" }, app.Gallery.SearchUpdates);
 					Assert.Empty(app.Gallery.Collection.ItemsSource);
+					Assert.Empty(((IVisualTreeElement)app.Gallery.Collection).GetVisualChildren());
 					var scrolled = (Gtk.ScrolledWindow)app.Gallery.Collection.Handler!.PlatformView!;
 					var emptyChild = scrolled.GetChild();
 					if (emptyChild is Gtk.Viewport viewport)

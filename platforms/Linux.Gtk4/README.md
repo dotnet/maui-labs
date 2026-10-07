@@ -123,6 +123,10 @@ are suppressed by the GTK container until they are arranged positively again.
 Unbinding a CollectionView template disconnects its complete MAUI handler tree,
 including native event subscriptions and layout callback registrations, before
 releasing the native row. Repeated filtering does not retain retired layout panels.
+Realized item and group-header templates are registered as MAUI logical children,
+so the standard visual tree and DevFlow can inspect them, including derived
+CollectionViews. Unbinding or disconnecting the collection removes those children
+and their handlers before replacement rows are registered.
 Programmatic Entry text replacement suppresses GTK's intermediate clear/insert
 notifications, preventing transient empty strings from reentering synchronized
 MAUI inputs and collection filters. Native edits and final native length coercion
@@ -140,7 +144,8 @@ This does not add Windows Essentials implementations or a WebKit Windows port.
 
 The opt-in `GalleryLayoutRuntimeTests` runs a real GTK main loop, nested
 Grid/Border/ScrollView/CollectionView templates, native Entry edits, paired Entry
-model synchronization and programmatic replacement, repeated
+model synchronization and programmatic replacement, derived CollectionView
+replacement and balanced template visual registration, repeated
 single-item/facet/empty/repopulate filtering, template teardown under GC, and Shell
 page timer stop/restart. It also registers the sample font and runs with en-ZA
 decimal-comma culture. Each native test class must run in its own process because

@@ -218,7 +218,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 				if (content is View mauiView)
 				{
 					mauiView.BindingContext = groupData;
-					return InflateView(mauiView).widget;
+					return InflateView(collectionView, mauiView).widget;
 				}
 			}
 			catch { }
@@ -260,37 +260,51 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			return (null, 0);
 
 		mauiView.BindingContext = dataItem;
-		return InflateView(mauiView);
+		return InflateView(collectionView, mauiView);
 	}
 
 	/// <summary>
 	/// Converts a MAUI View to a native GTK widget using ToPlatform, then measures
 	/// and sizes it so GTK's layout engine gives the row correct height.
 	/// </summary>
-	(Gtk.Widget widget, int height) InflateView(View mauiView)
+	(Gtk.Widget widget, int height) InflateView(CollectionView collectionView, View mauiView)
 	{
 		if (MauiContext == null)
 			throw new InvalidOperationException("MauiContext not set.");
 
-		var nativeWidget = (Gtk.Widget)mauiView.ToPlatform(MauiContext);
-		MarkExternallyManaged(nativeWidget);
-		DisableVexpandRecursive(nativeWidget);
-
-		// GTK owns row allocation and virtualization; MAUI measures and arranges
-		// the template at that actual width, including after viewport resizes.
-		var row = new GtkLayoutPanel
+		collectionView.AddLogicalChild(mauiView);
+		try
 		{
-			IsExternallyManaged = true,
-			CrossPlatformLayout = new TemplateLayout(mauiView)
-		};
-		row.SetVexpand(false);
-		row.AddChild(nativeWidget);
-		return (row, 0);
+			var nativeWidget = (Gtk.Widget)mauiView.ToPlatform(MauiContext);
+			MarkExternallyManaged(nativeWidget);
+			DisableVexpandRecursive(nativeWidget);
+
+			// GTK owns row allocation and virtualization; MAUI measures and arranges
+			// the template at that actual width, including after viewport resizes.
+			var row = new GtkLayoutPanel
+			{
+				IsExternallyManaged = true,
+				CrossPlatformLayout = new TemplateLayout(collectionView, mauiView)
+			};
+			row.SetVexpand(false);
+			row.AddChild(nativeWidget);
+			return (row, 0);
+		}
+		catch
+		{
+			collectionView.RemoveLogicalChild(mauiView);
+			mauiView.DisconnectHandlers();
+			throw;
+		}
 	}
 
-	sealed class TemplateLayout(View view) : ICrossPlatformLayout
+	sealed class TemplateLayout(CollectionView parent, View view) : ICrossPlatformLayout
 	{
-		public void Disconnect() => view.DisconnectHandlers();
+		public void Disconnect()
+		{
+			parent.RemoveLogicalChild(view);
+			view.DisconnectHandlers();
+		}
 
 		public Size CrossPlatformMeasure(double widthConstraint, double heightConstraint) =>
 			((IView)view).Measure(widthConstraint, heightConstraint);
@@ -334,6 +348,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 		UnhookCollectionChanged();
 		UnhookSelectionChanged();
+		_listView?.SetModel(null);
 
 		base.DisconnectHandler(platformView);
 	}
