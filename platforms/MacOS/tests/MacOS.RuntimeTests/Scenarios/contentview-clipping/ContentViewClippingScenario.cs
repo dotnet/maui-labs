@@ -86,12 +86,14 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
 
         var windowContent = Native(_clip).Window?.ContentView
             ?? throw new InvalidOperationException("ContentView is not attached to the real AppKit window.");
+        var nativeWindow = windowContent.Window
+            ?? throw new InvalidOperationException("The native content has no AppKit window.");
         var clipNative = Native(_clip);
         var worldNative = Native(_world);
         var labelNative = Native(_movedLabel);
         windowContent.LayoutSubtreeIfNeeded();
         windowContent.DisplayIfNeeded();
-        var initial = context.CaptureBitmap(windowContent, "initial.png");
+        var initial = context.CaptureWindowBitmap(nativeWindow, "initial.png");
 
         var clips = clipNative.Layer?.MasksToBounds == true;
         _clip.IsClippedToBounds = false;
@@ -101,7 +103,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
 
         _world.TranslationX = -300;
         await RuntimeTestContext.FlushMainQueueAsync();
-        var translated = context.CaptureBitmap(windowContent, "translated.png");
+        var translated = context.CaptureWindowBitmap(nativeWindow, "translated.png");
         var outsideClipIsLavender = IsLavender(initial, windowContent, 300, 180);
         var magentaTextPixels = CountMagentaPixels(translated);
 

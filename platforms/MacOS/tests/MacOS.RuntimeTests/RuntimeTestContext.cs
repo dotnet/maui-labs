@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Runtime.InteropServices;
 using AppKit;
 using CoreGraphics;
+using ObjCRuntime;
 
 namespace MacOS.RuntimeTests;
 
@@ -154,6 +155,30 @@ public sealed class RuntimeTestContext
         {
             NSGraphicsContext.GlobalRestoreGraphicsState();
         }
+        return SaveBitmap(bitmap, name);
+    }
+
+    public RuntimeBitmap CaptureWindowBitmap(NSWindow window, string name)
+    {
+        var imageHandle = CGWindowListCreateImage(
+            CGRect.Null,
+            CGWindowListOption.IncludingWindow,
+            (uint)window.WindowNumber,
+            CGWindowImageOption.BoundsIgnoreFraming);
+        if (imageHandle == IntPtr.Zero)
+            throw new InvalidOperationException("Could not capture the native window.");
+
+        using var image = Runtime.GetINativeObject<CGImage>(imageHandle, owns: true)
+            ?? throw new InvalidOperationException("Could not create the window image.");
+        using var nativeImage = new NSImage(image, new CGSize(image.Width, image.Height));
+        using var tiff = nativeImage.AsTiff()
+            ?? throw new InvalidOperationException("Could not encode the window image.");
+        using var bitmap = new NSBitmapImageRep(tiff);
+        return SaveBitmap(bitmap, name);
+    }
+
+    RuntimeBitmap SaveBitmap(NSBitmapImageRep bitmap, string name)
+    {
         using var png = bitmap.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png)
             ?? throw new InvalidOperationException("Could not encode screenshot.");
         File.WriteAllBytes(EvidencePath(name), png.ToArray());
@@ -163,6 +188,13 @@ public sealed class RuntimeTestContext
         return new RuntimeBitmap(pixels, (int)bitmap.PixelsWide, (int)bitmap.PixelsHigh,
             (int)bitmap.BytesPerRow, (int)bitmap.SamplesPerPixel);
     }
+
+    [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+    static extern IntPtr CGWindowListCreateImage(
+        CGRect screenBounds,
+        CGWindowListOption listOption,
+        uint windowId,
+        CGWindowImageOption imageOption);
 
     public static Task FlushMainQueueAsync()
     {
