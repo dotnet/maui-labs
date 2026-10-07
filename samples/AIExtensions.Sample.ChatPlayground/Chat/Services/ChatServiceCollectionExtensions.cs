@@ -13,6 +13,10 @@ namespace AIExtensions.Sample.ChatPlayground;
 
 internal static class ChatServiceCollectionExtensions
 {
+    private const string LocalClientKey = "local-chat";
+    private const string AzureClientKey = "azure-openai-chat";
+    private const string HybridClientKey = "hybrid-chat";
+
     public static IServiceCollection AddChatFeature(this IServiceCollection services, AISettings settings)
     {
         services.AddSingleton<ConnectionStatusService>();
@@ -30,10 +34,27 @@ internal static class ChatServiceCollectionExtensions
 
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
-            AddAppleChatClients(services, settings);
+        {
+            services.AddKeyedSingleton<IChatClient>(LocalClientKey, CreateAppleChatClient);
+            services.AddSingleton<IChatClient>(provider => CreateRecordedClient(provider, LocalClientKey));
+        }
 #endif
+
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
-            services.AddSingleton<IChatClient>(provider => CreateAzureChatClient(provider, settings));
+        {
+            services.AddKeyedSingleton<IChatClient>(AzureClientKey, (provider, _) => CreateAzureChatClient(provider, settings));
+            services.AddSingleton<IChatClient>(provider => CreateRecordedClient(provider, AzureClientKey));
+        }
+
+#if IOS || MACCATALYST
+        if ((OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26)) &&
+            !string.IsNullOrWhiteSpace(settings.DeploymentName))
+        {
+            services.AddKeyedSingleton<IChatClient>(HybridClientKey, CreateHybridChatClient);
+            services.AddSingleton<IChatClient>(provider => CreateRecordedClient(provider, HybridClientKey));
+        }
+#endif
+
         services.AddSingleton<IChatClient>(CreateReplayChatClient);
 
         return services;
@@ -42,18 +63,9 @@ internal static class ChatServiceCollectionExtensions
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
-    private static void AddAppleChatClients(IServiceCollection services, AISettings settings)
-    {
-        services.AddSingleton<IChatClient>(CreateAppleChatClient);
-        services.AddSingleton<IChatClient>(provider => CreateHybridChatClient(provider, settings));
-    }
-
-    [SupportedOSPlatform("ios26.0")]
-    [SupportedOSPlatform("maccatalyst26.0")]
-    private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>
+    private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider, object? key) =>
         new AppleIntelligenceChatClient(serviceProvider.GetRequiredService<ILoggerFactory>())
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "apple-intelligence-chat",
                 "Apple Intelligence",
@@ -64,52 +76,22 @@ internal static class ChatServiceCollectionExtensions
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
-
-    [SupportedOSPlatform("ios26.0")]
-    [SupportedOSPlatform("maccatalyst26.0")]
-    private static IChatClient CreateHybridChatClient(IServiceProvider serviceProvider, AISettings settings)
-    {
-        var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
-        var local = new AppleIntelligenceChatClient(loggerFactory)
-            .AsBuilder().UsePlaygroundDiagnostics(loggerFactory).Build();
-        var cloud = string.IsNullOrWhiteSpace(settings.DeploymentName)
-            ? null
-            : CreateOpenAIClient(settings).GetResponsesClient().AsIChatClient(settings.DeploymentName)
-                .AsBuilder().UsePlaygroundDiagnostics(loggerFactory).Build();
-        return new HybridChatClient(local, cloud)
-            .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
-            .UseDescriptor(new ChatClientDescriptor(
-                "hybrid-chat",
-                "Hybrid (local + cloud)",
-                "Apple Intelligence chooses local or cloud for each text-only turn. " +
-                    "Complex turns attempt cloud, with local recovery for transient failures before output. " +
-                    (cloud is null ? "Azure is not configured, so all turns stay local." :
-                        "Cloud receives the original text conversation and instructions automatically.")))
-            .UsePlaygroundDiagnostics(loggerFactory)
-            .Build();
-    }
 #endif
-
-    private static OpenAIClient CreateOpenAIClient(AISettings settings) =>
-        new(
-            new ApiKeyCredential(settings.ApiKey!),
-            new OpenAIClientOptions { Endpoint = settings.Endpoint! });
 
     private static IChatClient CreateAzureChatClient(IServiceProvider serviceProvider, AISettings settings)
     {
         var deploymentName = settings.DeploymentName!;
-        var openAIClient = CreateOpenAIClient(settings);
+        var openAIClient = new OpenAIClient(
+            new ApiKeyCredential(settings.ApiKey!),
+            new OpenAIClientOptions { Endpoint = settings.Endpoint! });
         var imageDeployment = settings.ImageDeploymentName;
         var imageGenerator = string.IsNullOrWhiteSpace(imageDeployment)
             ? null
             : serviceProvider.GetRequiredService<IImageGenerator>();
 
-        // Recording wraps the tool and image middleware so the saved response is the one shown in chat.
         var builder = openAIClient.GetResponsesClient()
             .AsIChatClient(deploymentName)
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "azure-openai-chat",
                 "Azure OpenAI",
@@ -136,8 +118,26 @@ internal static class ChatServiceCollectionExtensions
                 IsReplay: true))
             .Build();
 
-    private static ChatClientBuilder UseRecording(this ChatClientBuilder builder, IChatRecordingSession recording) =>
-        builder.Use(inner => new RecordingChatClient(inner, recording));
+    private static IChatClient CreateHybridChatClient(IServiceProvider serviceProvider, object? key)
+    {
+        var local = serviceProvider.GetRequiredKeyedService<IChatClient>(LocalClientKey);
+        var cloud = serviceProvider.GetRequiredKeyedService<IChatClient>(AzureClientKey);
+        return new HybridChatClient(local, cloud, serviceProvider.GetRequiredService<ILoggerFactory>())
+            .AsBuilder()
+            .UseDescriptor(new ChatClientDescriptor(
+                "hybrid-chat",
+                "Hybrid (local + cloud)",
+                "Local model chooses local or cloud for each turn. Cloud requests fall back to local if they fail before output.",
+                SupportsToolCalling: true))
+            .UsePlaygroundDiagnostics(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+    }
+
+    private static IChatClient CreateRecordedClient(IServiceProvider serviceProvider, string key) =>
+        new RecordingChatClient(
+            serviceProvider.GetRequiredKeyedService<IChatClient>(key),
+            serviceProvider.GetRequiredService<IChatRecordingSession>(),
+            leaveOpen: true);
 
     private static ChatClientBuilder UseDescriptor(this ChatClientBuilder builder, ChatClientDescriptor descriptor) =>
         builder.Use(inner => new DescribedChatClient(inner, descriptor));

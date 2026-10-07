@@ -18,6 +18,7 @@ public sealed class ChatDiagnostics : ILoggerProvider
 {
     public const string SourceName = "AIExtensions.Sample.ChatPlayground";
     public const string AppleToolLogCategory = "Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient";
+    public const string HybridLogCategory = "AIExtensions.Sample.ChatPlayground.HybridChatClient";
     public const int Capacity = 500;
     private const int TextLimit = 8192;
     private readonly object _gate = new();
@@ -115,7 +116,7 @@ public sealed class ChatDiagnostics : ILoggerProvider
             lock (owner._gate)
                 return !owner._disposed && level >= LogLevel.Debug && level < LogLevel.None
                     && (category.StartsWith("Microsoft.Extensions.AI.", StringComparison.Ordinal)
-                        || category == AppleToolLogCategory);
+                        || category == AppleToolLogCategory || category == HybridLogCategory);
         }
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state,
