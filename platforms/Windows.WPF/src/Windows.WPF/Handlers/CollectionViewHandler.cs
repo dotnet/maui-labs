@@ -93,15 +93,57 @@ namespace Microsoft.Maui.Handlers.WPF
 
 			if (VirtualView.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Single)
 			{
-				VirtualView.SelectedItem = _listBox.SelectedItem;
+				var selectedItem = GetMauiItem(_listBox.SelectedItem);
+				if (_listBox.SelectedItem is GroupedItem && selectedItem == null)
+				{
+					_processingSelection = true;
+					_listBox.SelectedItem = GetPlatformItem(_listBox, VirtualView.SelectedItem);
+					_processingSelection = false;
+					return;
+				}
+
+				VirtualView.SelectedItem = selectedItem;
 			}
 			else if (VirtualView.SelectionMode == Microsoft.Maui.Controls.SelectionMode.Multiple)
 			{
+				var nonItems = _listBox.SelectedItems
+					.OfType<GroupedItem>()
+					.Where(item => item.Kind != GroupedItemKind.Item)
+					.ToArray();
+				if (nonItems.Length > 0)
+				{
+					_processingSelection = true;
+					foreach (var item in nonItems)
+						_listBox.SelectedItems.Remove(item);
+					_processingSelection = false;
+				}
+
 				var selected = new List<object>();
 				foreach (var item in _listBox.SelectedItems)
-					selected.Add(item);
+				{
+					if (GetMauiItem(item) is object selectedItem)
+						selected.Add(selectedItem);
+				}
 				VirtualView.SelectedItems = selected;
 			}
+		}
+
+		static object? GetMauiItem(object? platformItem)
+			=> platformItem is GroupedItem groupedItem
+				? groupedItem.Kind == GroupedItemKind.Item ? groupedItem.Data : null
+				: platformItem;
+
+		static object? GetPlatformItem(MauiCollectionListBox listBox, object? mauiItem)
+		{
+			if (!listBox.IsGrouped || mauiItem == null)
+				return mauiItem;
+
+			return listBox.Items
+				.OfType<GroupedItem>()
+				.FirstOrDefault(item => item.Kind == GroupedItemKind.Item && ReferenceEquals(item.Data, mauiItem))
+				?? listBox.Items
+					.OfType<GroupedItem>()
+					.FirstOrDefault(item => item.Kind == GroupedItemKind.Item && Equals(item.Data, mauiItem));
 		}
 
 		static void FireTapGestures(View mauiView)
@@ -287,8 +329,9 @@ namespace Microsoft.Maui.Handlers.WPF
 		static void MapSelectedItem(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view)
 		{
 			if (handler._listBox == null) return;
-			if (handler._listBox.SelectedItem != view.SelectedItem)
-				handler._listBox.SelectedItem = view.SelectedItem;
+			var selectedItem = GetPlatformItem(handler._listBox, view.SelectedItem);
+			if (handler._listBox.SelectedItem != selectedItem)
+				handler._listBox.SelectedItem = selectedItem;
 		}
 
 		static void MapSelectionMode(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view)
