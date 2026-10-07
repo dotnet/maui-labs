@@ -118,7 +118,19 @@ The `RequiresModel=true` test sends a real image to the model and is excluded
 from CI; it passed on a macOS 27.0.1 host with a ready model. The playground
 also returned image-specific descriptions and answered a streamed follow-up
 from image-bearing history on that host. Model readiness varies by device;
-the OS 26 rejection branches have not been exercised on an OS 26 runtime.
+the missing-vision error still requires a device whose model lacks `.vision`.
+Compiling against the Xcode 27 SDK does not force the OS 26 availability
+branch: `#available` checks the OS at runtime. The four older-OS image
+rejection tests passed on an iOS 26.5 simulator using binaries built against
+the 27 SDK:
+
+```bash
+# Boot an iOS 26 simulator first; use its UDID in place of <simulator-udid>.
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
+  -f net10.0-ios27.0 -p:UseXcode27Preview=true \
+  -p:DeviceRunnersDevice=<simulator-udid> \
+  --filter 'FullyQualifiedName~OnOlderOS_ReportsUnsupported' --logger trx
+```
 
 ## API references
 
