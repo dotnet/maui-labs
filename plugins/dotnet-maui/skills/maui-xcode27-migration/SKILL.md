@@ -76,6 +76,9 @@ Apple heads (including conditional TargetFrameworks), imported
 Directory.Build.props/targets, Directory.Packages.props, global.json, NuGet.config,
 package references/lockfiles, platform source inclusions, Info.plist files,
 AppDelegate and SceneDelegate classes, and ConfigureLifecycleEvents calls.
+Include configuration- or flavor-specific Info.plist files selected by MSBuild;
+updating only the default plist can leave one shipping configuration on the
+legacy lifecycle.
 Include CI SDK/workload/Xcode pins: changing a project SDK pin while leaving
 CI installing only the old SDK makes the migration fail on the build server.
 Do not assume an empty project-level MauiVersion means there is no version pin:
@@ -217,6 +220,9 @@ integration with MauiUISceneDelegate, not deletion. Check dynamic scene
 configuration overrides as well as the plist. If the custom implementation
 cannot be safely reconciled, explain the exact unresolved behavior and stop
 short of claiming completion. Never append a duplicate manifest or registration.
+Do not remove or replace the app's existing `MauiSplashScreen` or
+`UILaunchStoryboardName` configuration while editing the manifest, and do not
+add `UISceneStoryboardFile`; MAUI creates the scene window programmatically.
 
 ### 4. Preserve lifecycle, links, authentication and quick actions
 
@@ -310,6 +316,13 @@ URL does not handle it. Only real app handling may add a true result.
   `?.ToArray<T>() ?? []` or equivalent guards for both collections.
   An ordinary no-link launch must not throw before `base.WillConnect`.
   WebAuthenticator forwarding is not a general deep-link router.
+- If the app handles notification taps or previously reads notification data
+  from launch options, audit cold scene delivery through
+  `connectionOptions.NotificationResponse` as a separate path. Preserve that
+  app-specific behavior and defer UI/navigation work until the owning scene's
+  window is ready. Push registration and ordinary
+  `DidReceiveRemoteNotification` handling remain application-level unless the
+  app's exact API contract says otherwise.
 - AppDelegate.PerformActionForShortcutItem is no longer the callback path.
   Move custom handling to the iOSLifecycle.PerformActionForShortcutItem
   registration. The default builder already forwards Essentials: do not add
@@ -411,9 +424,10 @@ validation. A build alone does not exercise lifecycle behavior.
 
 With user-approved simulator/device access, launch on an ordinary iOS 27
 iPhone/iPad; verify startup past splash, foreground/background, warm/cold links,
-auth return, quick actions (handled and unhandled), and any custom multiwindow
-behavior. Validate Catalyst separately. Coordinate shared devices, do not
-reset/uninstall apps or modify global Xcode selection without permission.
+auth return, notification taps when applicable, quick actions (handled and
+unhandled), and any custom multiwindow behavior. Validate Catalyst separately.
+Coordinate shared devices, do not reset/uninstall apps or modify global Xcode
+selection without permission.
 If DevFlow is already integrated, use its debugging skill for observation;
 installing DevFlow is not a prerequisite for this migration.
 

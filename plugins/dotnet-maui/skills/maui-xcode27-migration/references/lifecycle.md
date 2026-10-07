@@ -71,6 +71,13 @@ can still lose cold universal links. Do not navigate immediately from
 SceneWillConnect or FinishedLaunching.
 Do not assume a later SceneOpenUrl event repeats a cold link.
 
+If the app previously handles notification-tap launch data, inspect
+`connectionOptions.NotificationResponse` as an additional cold scene input.
+Preserve its existing side effects and defer UI/navigation work with the other
+per-scene pending work. Do not mechanically move push registration or ordinary
+`DidReceiveRemoteNotification` handling; those remain application callbacks
+unless the app's exact platform contract requires another path.
+
 Check native collection types before applying LINQ. The cold connection-option
 properties can be non-generic Foundation `NSSet`, unlike the typed
 `NSSet<UIOpenUrlContext>` passed to `SceneOpenUrl`. With those bindings, use
