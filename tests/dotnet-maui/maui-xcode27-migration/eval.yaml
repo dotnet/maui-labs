@@ -335,6 +335,14 @@ scenarios:
       initialization remains cold-only. The activity observer must
       log ActivityType for both warm activity callbacks and cold connection-option
       activities, even though FinishedLaunching only inspected LaunchOptionsUrlKey.
+      After editing, run exactly
+      `node _acceptance/audit-lifecycle.mjs MyApp --json` and report its actual
+      result. Do not substitute the copy under the installed skill directory.
+    allow_shell_commands:
+      - node _acceptance/audit-lifecycle.mjs MyApp --json
+    trusted_shell_files:
+      - path: _acceptance/audit-lifecycle.mjs
+        sha256: a08ed6509d365725d5926ddd73cbd2d833afc0cfcc9dec40111ebc7e37c23308
     assertions:
       - type: file_contains
         path: "MyApp/Platforms/iOS/ExistingSceneDelegate.cs"
@@ -389,7 +397,7 @@ scenarios:
       - type: run_command_and_assert
         command_to_run: node
         command_arguments: &migration-audit-command >-
-          --eval "const fs=require('node:fs'),crypto=require('node:crypto'),cp=require('node:child_process'),p='_acceptance/audit-lifecycle.mjs'; if(!fs.lstatSync(p).isFile()||crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')!=='06e53354257dccf307cb12f14cf16dab4f9980f88d6448a5f481a05c56955223')throw Error('Acceptance instrument changed'); const r=cp.spawnSync(process.execPath,[p,'MyApp','--json'],{encoding:'utf8',timeout:10000}); if(r.error)throw r.error; process.stdout.write(r.stdout??''); process.stderr.write(r.stderr??''); if(r.status===0){let report;try{report=JSON.parse(r.stdout);}catch{throw Error('Acceptance instrument did not produce a valid audit report');}if(!report||report.status!=='no-patterns-found'||!Number.isSafeInteger(report.filesScanned)||report.filesScanned<=0||!Array.isArray(report.errors)||report.errors.length!==0||!Array.isArray(report.findings)||report.findings.length!==0)throw Error('Acceptance instrument did not produce a complete no-patterns report');}process.exit(r.status??2);"
+          --eval "const fs=require('node:fs'),crypto=require('node:crypto'),cp=require('node:child_process'),p='_acceptance/audit-lifecycle.mjs'; if(!fs.lstatSync(p).isFile()||crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')!=='a08ed6509d365725d5926ddd73cbd2d833afc0cfcc9dec40111ebc7e37c23308')throw Error('Acceptance instrument changed'); const r=cp.spawnSync(process.execPath,[p,'MyApp','--json'],{encoding:'utf8',timeout:10000}); if(r.error)throw r.error; process.stdout.write(r.stdout??''); process.stderr.write(r.stderr??''); if(r.status===0){let report;try{report=JSON.parse(r.stdout);}catch{throw Error('Acceptance instrument did not produce a valid audit report');}if(!report||report.status!=='no-patterns-found'||!Number.isSafeInteger(report.filesScanned)||report.filesScanned<=0||!Array.isArray(report.errors)||report.errors.length!==0||!Array.isArray(report.findings)||report.findings.length!==0)throw Error('Acceptance instrument did not produce a complete no-patterns report');}process.exit(r.status??2);"
         command_timeout: 20
         expected_exit_code: 0
     rubric:

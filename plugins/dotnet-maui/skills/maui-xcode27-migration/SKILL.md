@@ -32,7 +32,9 @@ does not preserve it. Move its original body to cold connection-option work
 that runs once the owning scene's window exists. Likewise, application-level
 `ContinueUserActivity` registration is not reached by scene forwarding: use
 `SceneContinueUserActivity` (or the verified scene override) for warm delivery
-and process cold `UserActivities` separately. Each custom shortcut registration,
+and process cold `UserActivities` separately. Once its behavior is moved, remove
+the obsolete application-level registration; do not leave both paths wired.
+Each custom shortcut registration,
 including a logging-only observer, must complete its own acknowledgement.
 These are migration requirements, not optional cleanup of old code.
 

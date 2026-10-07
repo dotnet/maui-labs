@@ -73,7 +73,10 @@ test('does not flag scene-owned deferred work processing every cold URL', () => 
     public override void WillConnect(UIScene scene, UISceneSession session, UISceneConnectionOptions options) {
       foreach (var context in options.UrlContexts.ToArray<UIOpenUrlContext>()) {
         var url = context.Url;
-        pending.Enqueue(window => window.RootViewController.Title = url.AbsoluteString);
+        pending.Enqueue(window => {
+          if (window.RootViewController is UIViewController rootViewController)
+            rootViewController.Title = url.AbsoluteString;
+        });
       }
       base.WillConnect(scene, session, options);
     }
@@ -83,6 +86,41 @@ test('does not flag scene-owned deferred work processing every cold URL', () => 
       while (pending.Count > 0) pending.Dequeue()(window);
     }
   }`), []);
+});
+
+test('reports expression-bodied cold work that dereferences a missing root controller', () => {
+  const findings = auditSource(`foreach (var context in connectionOptions.UrlContexts?.ToArray<UIOpenUrlContext>() ?? [])
+    pending.Enqueue(window => window.RootViewController.Title = context.Url.AbsoluteString);`);
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].rule, 'X27_UNGUARDED_ROOT');
+});
+
+test('reports an unguarded cold-launch helper dereference', () => {
+  const findings = auditSource(`static void SetColdLaunchTitle(UIWindow window, NSUrl url)
+  {
+    window.RootViewController.Title = url.AbsoluteString;
+  }`);
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].rule, 'X27_UNGUARDED_ROOT');
+});
+
+test('does not report guarded root-controller cold work', () => {
+  const findings = auditSource(`pending.Enqueue(window =>
+  {
+    if (window.RootViewController is UIViewController rootViewController)
+      rootViewController.Title = url.AbsoluteString;
+  });`);
+
+  assert.deepEqual(findings, []);
+});
+
+test('does not report a direct assignment protected by an explicit root null guard', () => {
+  const findings = auditSource(`if (window.RootViewController is not null)
+    window.RootViewController.Title = url.AbsoluteString;`);
+
+  assert.deepEqual(findings, []);
 });
 
 test('keeps window ownership local to a nested scene class', () => {
@@ -102,6 +140,54 @@ test('does not mistake another object window or unrelated single-item selection 
       var copy = options.UrlContexts.ToArray<UIOpenUrlContext>()[..];
     }
   }`), []);
+});
+
+test('reports an obsolete app activity registration retained beside a scene override', t => {
+  const app = fixture(t);
+  app.write('MauiProgram.cs', `builder.ConfigureLifecycleEvents(events => events.AddiOS(ios => ios
+    .ContinueUserActivity((application, activity, restorationHandler) => false)));`);
+  app.write('Platforms/iOS/SceneDelegate.cs', `class SceneDelegate : MauiUISceneDelegate {
+    public override bool ContinueUserActivity(UIScene scene, NSUserActivity activity) {
+      return base.ContinueUserActivity(scene, activity);
+    }
+  }`);
+
+  const report = auditDirectory(app.root);
+
+  assert.equal(report.findings.length, 1);
+  const [finding] = report.findings;
+  assert.equal(finding.rule, 'X27_DUPLICATE_ACTIVITY');
+  assert.equal(finding.file, 'MauiProgram.cs');
+  assert.equal(finding.line, 2);
+});
+
+test('does not report one scene activity path without the obsolete app registration', t => {
+  const app = fixture(t);
+  app.write('MauiProgram.cs', `builder.ConfigureLifecycleEvents(events => events.AddiOS(ios => ios
+    .SceneContinueUserActivity((scene, activity) => false)));`);
+
+  assert.deepEqual(auditDirectory(app.root).findings, []);
+});
+
+test('reports an obsolete app activity registration beside a scene lifecycle registration', t => {
+  const app = fixture(t);
+  app.write('MauiProgram.cs', `builder.ConfigureLifecycleEvents(events => events.AddiOS(ios => ios
+    .ContinueUserActivity((application, activity, restorationHandler) => false)
+    .SceneContinueUserActivity((scene, activity) => false)));`);
+
+  const report = auditDirectory(app.root);
+
+  assert.equal(report.findings.length, 1);
+  assert.equal(report.findings[0].rule, 'X27_DUPLICATE_ACTIVITY');
+});
+
+test('ignores duplicate activity patterns that occur only in comments and strings', t => {
+  const app = fixture(t);
+  app.write('MauiProgram.cs', `// .ContinueUserActivity((application, activity, restorationHandler) => false)
+var text = ".SceneContinueUserActivity((scene, activity) => false)";
+var raw = """public override bool ContinueUserActivity(UIScene scene, NSUserActivity activity)""";`);
+
+  assert.deepEqual(auditDirectory(app.root).findings, []);
 });
 
 test('ignores comments and regular, verbatim, raw and interpolated literal text', () => {

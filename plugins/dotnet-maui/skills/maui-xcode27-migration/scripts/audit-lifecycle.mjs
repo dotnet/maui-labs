@@ -92,12 +92,28 @@ export function auditSource(source, file) {
       cursor = end + 1;
     }
   }
+  for (const match of code.matchAll(/\b([A-Za-z_]\w*)\s*\.\s*RootViewController\s*!?\s*\.\s*Title\s*=/g)) {
+    const variable = match[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const prefix = code.slice(Math.max(0, match.index - 500), match.index);
+    const guarded = new RegExp(
+      `if\\s*\\(\\s*${variable}\\s*\\.\\s*RootViewController\\s*(?:is\\s+not\\s+null|!=\\s*null)\\s*\\)\\s*\\{?\\s*$`)
+      .test(prefix)
+      || new RegExp(
+        `if\\s*\\(\\s*${variable}\\s*\\.\\s*RootViewController\\s*(?:is\\s+null|==\\s*null)\\s*\\)\\s*(?:return|throw\\b[^;]*;)\\s*$`)
+        .test(prefix);
+    if (!guarded) {
+      add('X27_UNGUARDED_ROOT', match.index,
+        'Cold-launch work directly dereferences RootViewController without a recognized null guard. '
+        + 'Guard the scene window root before applying the side effect.');
+    }
+  }
   return findings;
 }
 
 export function auditDirectory(directory) {
   const root = resolve(directory);
   const report = { root, status: '', filesScanned: 0, excludedDirectories: [], findings: [], errors: [], limitations };
+  const sources = [];
   function walk(path) {
     const name = relative(root, path).replaceAll('\\', '/') || '.';
     try {
@@ -114,6 +130,7 @@ export function auditDirectory(directory) {
         const encoding = bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le'
           : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : 'utf-8';
         const source = new TextDecoder(encoding, { fatal: true }).decode(bytes);
+        sources.push({ file: name, source, code: codeOnly(source) });
         report.findings.push(...auditSource(source, name));
         report.filesScanned++;
       }
@@ -126,6 +143,23 @@ export function auditDirectory(directory) {
     walk(root);
   } catch (error) {
     report.errors.push({ file: '.', message: error.message });
+  }
+  const sceneActivityHandler = sources.some(({ code }) =>
+    /\boverride\s+bool\s+ContinueUserActivity\s*\(\s*UIScene\b/.test(code)
+    || /\.\s*SceneContinueUserActivity\s*\(/.test(code));
+  if (sceneActivityHandler) {
+    for (const { file, source, code } of sources) {
+      for (const match of code.matchAll(/\.\s*ContinueUserActivity\s*\(\s*\(/g)) {
+        report.findings.push({
+          rule: 'X27_DUPLICATE_ACTIVITY',
+          file,
+          line: source.slice(0, match.index).split('\n').length,
+          severity: 'warning',
+          message: 'Application-level ContinueUserActivity remains registered alongside scene activity handling. '
+            + 'Move the original behavior to one scene path and remove the obsolete registration to avoid dead or duplicate delivery.',
+        });
+      }
+    }
   }
   if (report.filesScanned === 0) report.errors.push({ file: '.', message: 'No C# source files scanned.' });
   report.status = report.errors.length ? 'incomplete' : report.findings.length ? 'review-required' : 'no-patterns-found';
