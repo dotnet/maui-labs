@@ -140,7 +140,6 @@ public class CollectionViewObservableSourceTests
 	static object? GroupData(object item) => item.GetType().GetProperty("Data")!.GetValue(item);
 
 	[Fact]
-	[Fact]
 	public void GroupedRebuilds_ReleaseDiscardedMaterializedViews()
 	{
 		Run(view =>
