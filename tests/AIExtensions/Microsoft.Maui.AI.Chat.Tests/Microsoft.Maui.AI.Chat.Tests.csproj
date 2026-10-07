@@ -14,11 +14,20 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="xunit" />
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnostics.cs"
+             Link="Services\ChatDiagnostics.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnosticsExtensions.cs"
+             Link="Services\ChatDiagnosticsExtensions.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\ChatDiagnosticGroups.cs"
+             Link="ViewModels\ChatDiagnosticGroups.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\DiagnosticsViewModel.cs"
+             Link="ViewModels\DiagnosticsViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatClientDescriptor.cs"
              Link="Chat\Services\ChatClientDescriptor.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatConversation.cs"

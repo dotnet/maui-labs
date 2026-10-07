@@ -12,11 +12,13 @@ public sealed partial class ImagePlaygroundViewModel : ObservableObject
     private ImageAttachment? _original;
 
     public ImagePlaygroundViewModel(
-        ImageGenerationService generation, ImageInputService imageInput, ImageSettingsViewModel settings)
+        ImageGenerationService generation, ImageInputService imageInput, ImageSettingsViewModel settings,
+        DiagnosticsViewModel diagnostics)
     {
         _generation = generation;
         _imageInput = imageInput;
         Settings = settings;
+        Diagnostics = diagnostics;
         Settings.PropertyChanged += SettingsPropertyChanged;
         StatusMessage = Settings.HasGenerator
             ? "Ready to generate or edit an image."
@@ -24,6 +26,7 @@ public sealed partial class ImagePlaygroundViewModel : ObservableObject
     }
 
     public ImageSettingsViewModel Settings { get; }
+    public DiagnosticsViewModel Diagnostics { get; }
 
     [ObservableProperty] private string prompt = string.Empty;
     [ObservableProperty] private string statusMessage = string.Empty;

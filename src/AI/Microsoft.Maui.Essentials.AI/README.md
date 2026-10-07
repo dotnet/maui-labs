@@ -66,6 +66,14 @@ var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
 
+### Tool diagnostics
+
+Pass an `ILoggerFactory` to `AppleIntelligenceChatClient` to receive existing
+tool lifecycle logs at Debug (arguments/results require Trace). Native tool
+callbacks preserve the originating .NET execution context, so their logs and
+async tool code inherit any active chat trace/span, including one created by
+`UseOpenTelemetry`. The client does not invent correlation when no span exists.
+
 ## Requirements
 
 - .NET 10

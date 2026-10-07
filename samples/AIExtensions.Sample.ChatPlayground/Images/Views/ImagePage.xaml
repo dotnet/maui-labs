@@ -11,7 +11,9 @@
                                        HeaderInfo="IImageGenerator creates an image from a prompt or edits an attached original. The output is not saved as a chat."
                                        HeaderStatus="{Binding StatusMessage}"
                                        StatusAutomationId="ImageStatusLabel"
-                                       SidebarTitle="Image settings">
+                                       SidebarTitle="Image settings"
+                                       DiagnosticsAutomationPrefix="Image"
+                                       Diagnostics="{Binding Diagnostics}">
             <local:PlaygroundPageLayout.SettingsContent>
                 <local:ImageSettingsPane BindingContext="{Binding Settings}" />
             </local:PlaygroundPageLayout.SettingsContent>

@@ -1,9 +1,11 @@
 using System.Runtime.CompilerServices;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
+[Collection("Chat diagnostics")]
 public sealed class ImageGenerationPipelineTests
 {
     [Theory]
@@ -12,11 +14,16 @@ public sealed class ImageGenerationPipelineTests
     public async Task ImageTool_GeneratesInlineImageWithoutHidingUserImages(bool streaming)
     {
         var image = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "TestData", "playground_sample.png"));
+        using var diagnostics = new ChatDiagnostics();
+        using var factory = LoggerFactory.Create(builder =>
+            builder.AddProvider(diagnostics).AddFilter<ChatDiagnostics>("Microsoft.Extensions.AI", LogLevel.Debug));
         var provider = new TestChatClient();
-        var generator = new TestImageGenerator(image);
+        var imageProvider = new TestImageGenerator(image);
+        using var generator = imageProvider.AsBuilder().UseLogging(factory).Build();
         using var client = new ImageGeneratingChatClient(
-            provider.AsBuilder().UseFunctionInvocation().Build(),
-            generator, ImageGeneratingChatClient.DataContentHandling.GeneratedImages);
+            provider.AsBuilder().UseFunctionInvocation(factory).Build(),
+            generator, ImageGeneratingChatClient.DataContentHandling.GeneratedImages)
+            .AsBuilder().UsePlaygroundTelemetry().UseLogging(factory).Build();
 
         var input = new DataContent(image, "image/png");
         var messages = new[] { new ChatMessage(ChatRole.User, [new TextContent("Generate a robot"), input]) };
@@ -40,9 +47,21 @@ public sealed class ImageGenerationPipelineTests
             Assert.DoesNotContain(tools, tool => tool is HostedImageGenerationTool);
             Assert.Contains(tools, tool => tool.Name == "GenerateImage");
         });
-        Assert.Equal(1, generator.CallCount);
+        Assert.Equal(1, imageProvider.CallCount);
         var output = Assert.Single(contents.OfType<ImageGenerationToolResultContent>());
         Assert.Equal(image, Assert.Single(output.Outputs!.OfType<DataContent>()).Data.ToArray());
+        var entries = diagnostics.Snapshot().Entries;
+        var span = Assert.Single(entries, entry => entry.Heading.Contains("| Telemetry |"));
+        Assert.Contains(entries, entry => entry.Heading.Contains("LoggingImageGenerator")
+            && entry.Message.Contains("invoked"));
+        Assert.Contains(entries, entry => entry.Heading.Contains("LoggingImageGenerator")
+            && entry.Message.Contains("completed"));
+        Assert.Contains(entries, entry => entry.Heading.Contains("FunctionInvokingChatClient")
+            && entry.Message.Contains("Invoking GenerateImage."));
+        Assert.Contains(entries, entry => entry.Heading.Contains("FunctionInvokingChatClient")
+            && entry.Message.Contains("GenerateImage invocation completed. Duration:"));
+        Assert.DoesNotContain(entries, entry => (entry.Message + entry.Details).Contains("a robot"));
+        Assert.All(entries, entry => Assert.Equal(span.TraceId, entry.TraceId));
 
         await client.GetResponseAsync(
             [messages[0], new ChatMessage(ChatRole.Tool, [output]), new ChatMessage(ChatRole.User, "Describe my original image")]);

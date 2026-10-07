@@ -53,8 +53,9 @@ internal static class ChatServiceCollectionExtensions
                 "Apple Intelligence",
                 "Apple Intelligence is supported on this OS. The first request confirms that the local model is enabled and available.",
                 SupportsToolCalling: true))
+            .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
-            .UseFunctionInvocation()
+            .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif
 
@@ -67,7 +68,7 @@ internal static class ChatServiceCollectionExtensions
         var imageDeployment = settings.ImageDeploymentName;
         var imageGenerator = string.IsNullOrWhiteSpace(imageDeployment)
             ? null
-            : openAIClient.GetImageClient(imageDeployment).AsIImageGenerator();
+            : serviceProvider.GetRequiredService<IImageGenerator>();
 
         // Recording wraps the tool and image middleware so the saved response is the one shown in chat.
         var builder = openAIClient.GetResponsesClient()
@@ -83,10 +84,11 @@ internal static class ChatServiceCollectionExtensions
                 SupportsReasoningSummary: true,
                 SupportsImageGeneration: imageGenerator is not null,
                 SupportsToolCalling: true))
+            .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>());
         if (imageGenerator is not null)
             builder.UseImageGenerationPreservingInputs(imageGenerator);
-        return builder.UseFunctionInvocation().Build();
+        return builder.UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>()).Build();
     }
 
     private static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>

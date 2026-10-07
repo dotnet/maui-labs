@@ -7,11 +7,12 @@
              Title="Chat"
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid>
-        <local:PlaygroundPageLayout HeaderTitle="Chat"
-                                       HeaderInfo="Send messages with the selected real client. Replay plays only the current chat offline; More imports or exports that recording."
+        <local:PlaygroundPageLayout x:Name="ChatLayout" HeaderTitle="Chat"
+                                       HeaderInfo="Send messages with the selected real client. Replay plays only the current chat offline; More imports or exports that recording. Logs toggles local AI diagnostics."
                                        HeaderStatus="{Binding Chat.StatusMessage}"
                                        StatusAutomationId="RequestStatusLabel"
-                                       SidebarTitle="Chat settings">
+                                       SidebarTitle="Chat settings"
+                                       Diagnostics="{Binding Diagnostics}">
             <local:PlaygroundPageLayout.HeaderActions>
                 <HorizontalStackLayout Spacing="4">
                     <VerticalStackLayout Spacing="2">
@@ -25,7 +26,7 @@
                     <VerticalStackLayout Spacing="2">
                         <ImageButton x:Name="MoreButton" Source="more.png"
                                      Style="{StaticResource ChatActionButton}"
-                                     SemanticProperties.Description="Import or export the current chat"
+                                     SemanticProperties.Description="Chat recording options"
                                      AutomationId="ChatMoreButton">
                             <local:PopupMenu.Content>
                                 <VerticalStackLayout Spacing="8" x:DataType="local:ChatViewModel">
