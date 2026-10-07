@@ -239,10 +239,13 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 			Assert.Same(panel, handler.PlatformView);
 			Assert.Equal(sameBindingCounts, current.Counts);
 			window.SetDefaultSize(440, 320);
-			Assert.True(current.MeasureCount > sameBindingCounts.Measure && current.ArrangeCount > sameBindingCounts.Arrange);
+			// Same frame-clock-vs-idle race as above: a resize queues the allocate
+			// pass asynchronously, so wait for the actual condition rather than
+			// asserting immediately.
+			PumpUntil(() => current.MeasureCount > sameBindingCounts.Measure && current.ArrangeCount > sameBindingCounts.Arrange);
 			var beforePaned = current.Counts;
 			paned.SetPosition(180);
-			Assert.True(current.MeasureCount > beforePaned.Measure && current.ArrangeCount > beforePaned.Arrange);
+			PumpUntil(() => current.MeasureCount > beforePaned.Measure && current.ArrangeCount > beforePaned.Arrange);
 			var beforeTick = current.Counts;
 			panel.LayoutDirty = true;
 			PumpUntil(() => current.MeasureCount > beforeTick.Measure && current.ArrangeCount > beforeTick.Arrange);
@@ -258,7 +261,7 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 			var beforeResize = replacement.Counts;
 			window.SetDefaultSize(460, 340);
 			paned.SetPosition(200);
-			Assert.True(replacement.MeasureCount > beforeResize.Measure && replacement.ArrangeCount > beforeResize.Arrange);
+			PumpUntil(() => replacement.MeasureCount > beforeResize.Measure && replacement.ArrangeCount > beforeResize.Arrange);
 			Assert.Equal(retiredCounts, current.Counts);
 
 			var disconnectedCounts = replacement.Counts;
