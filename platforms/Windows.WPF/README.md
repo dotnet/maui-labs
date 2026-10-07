@@ -59,6 +59,29 @@ test process environment to save PNGs of those transitions.
 
 ### Shell section selection
 
+Selecting a native tab navigates through Shell's cancellable section-selection
+pipeline, with or without `Shell.ItemTemplate`. Cancelled or deferred navigation
+keeps the native selection on the current section until Shell accepts the change.
+Rebuilding the strip does not initiate navigation or create inactive pages.
+The strip uses controller-visible sections, excluding hidden sections and sections
+without visible content. Visibility changes refresh it automatically. Plain section
+changes retain the native tab elements and synchronize selection without rebuilding,
+preserving keyboard focus.
+
+`ShellSection.IsEnabled` is projected onto native tabs and their UI Automation
+enabled state, both initially and when it changes. Enabled-state changes update
+only the matching current tab in place: they do not rebuild the strip, replay
+property mappers, replace custom headers, or navigate away from a selected section.
+Disabled sections remain visible; native UI Automation selection rejects them.
+Section observers follow collection changes and handler rebind/disconnect.
+
+The `ShellTabNavigationTests` handler regressions drive native UI Automation
+selection in an offscreen WPF window and assert the route,
+`Navigated` events, and rendered page. Set `SHELL_TAB_RESULTS` to a directory to
+capture the templated and non-templated repro states as PNG and JSON.
+Only the keyboard-focus cases activate their window; all other cases are
+nonactivating. On a shared desktop, run the focus cases only with exclusive
+foreground access. They assert actual keyboard focus, not just logical focus.
 For section switching within one Shell item, select **Launch Section Switching
 Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
 pages in one `TabBar`, without calling a handler refresh workaround. The
@@ -73,6 +96,31 @@ WPF content hosting, including selection cleanup:
 ```powershell
 dotnet test platforms\Windows.WPF\tests\HandlerTests --filter FullyQualifiedName~ShellSectionSwitchingTests
 ```
+
+## Layout measurement
+
+The WPF layout handler dispatches measurement and arrangement through
+`ICrossPlatformLayout`, including during native panel creation and virtual-view
+replacement. This preserves specialized implementations such as `FlexLayout`'s
+measure-mode handling. Fixed-width entries in a wrapping flex layout do not need
+an explicit height or a preliminary manual measure.
+
+Run the native layout regressions on Windows (the existing shared STA application
+host is reused; these tests do not show or activate windows):
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false --filter FullyQualifiedName~LayoutHandlerTests
+```
+
+These tests cover first measurement, wrapping as constraints change, native child
+frames, delegate dispatch during creation and replacement, and ordinary Grid/Stack
+layout. The native panel preserves measurements already performed by MAUI, instead
+of remeasuring each child against the whole parent's size (which can inflate flex
+lines beyond their allocated frames). Children whose native measurement is still
+invalid, including explicitly sized views MAUI did not measure, are measured by
+the panel. Nested flex panels retain fallback measurement on constraint changes,
+because the shared flex engine bypasses their native measure.
+The existing minimum-height floor is retained.
 
 ## Screenshots
 
@@ -121,6 +169,67 @@ matching preview, not the latest.
 For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on Windows.
 It packs, generates, restores, builds, and launches the template using an isolated
 template hive. See [validation details](docs/getting-started.md#validating-template-changes).
+
+## Registered fonts
+
+Include fonts as `MauiFont` items and register them using `ConfigureFonts`:
+
+```csharp
+builder.ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"));
+```
+
+The NuGet package imports font processing through its existing
+`Microsoft.Maui.Platforms.Windows.WPF.targets` entry point; package consumers do
+not need an additional import. A `ProjectReference` to the backend does not import
+its packaged build targets into the consuming app. Source consumers must explicitly
+import the font-only target, as the repository sample does:
+
+```xml
+<Import Project="..\..\src\Windows.WPF\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
+        Condition="'$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
+```
+
+Adjust this path relative to your app project. Keep `UseMaui` enabled. This import
+handles only `MauiFont`; it does not enable or fix source-consumer processing of
+images, icons, splash screens, or raw assets.
+The import guard prevents loading the font target twice when another import
+already included the umbrella; it does not depend on test-scenario opt-in.
+
+WPF copies `MauiFont` files into `Resources\Fonts` in both build and publish output.
+This output layout uses leaf filenames, so font filenames must be unique even
+when their source directories differ.
+An explicitly included `MauiFont` must exist: build/publish now fails on a missing
+file instead of silently skipping it. Use a conditional item include for optional fonts.
+Aliases resolve relative to the application directory, not the process working
+directory, using the family name declared inside the font file. Embedded fonts
+registered with an assembly are extracted to a content-addressed temporary directory;
+no system font installation is required.
+
+Text controls and formatted label spans resolve aliases through the WPF font manager.
+Native WPF composite families, such as `Global User Interface`, remain supported
+for text. Font images require a physical typeface containing the requested glyphs;
+composite families produce a warning and no image rather than an unverified fallback.
+Clearing a control's MAUI font family restores its native style or inherited default.
+Entry also applies its font when creating a native password control. GraphicsView
+text drawing and measurement share the same registered-family and style resolution.
+The default public `IFontManager` and native `WPFFontManager` share one singleton.
+Replacing the portable `IFontManager` preserves its `DefaultFontSize` contract;
+native family resolution still uses the app's registered fonts. A supplied
+`WPFFontManager` override takes precedence for native resolution as well.
+`FontImageSource` uses the same resolution for Image, ImageButton, Button, Shell
+flyout icons, and NavigationPage toolbar icons. A missing or invalid font logs a warning and text uses the default UI
+font. An unresolved icon font or a character absent from that font logs a warning
+and produces no image rather than a fallback box.
+Glyph bitmaps retain the font's advance width and line box, including its internal
+padding, rather than cropping to the visible ink. This keeps icon scaling and
+alignment consistent with the font's metrics.
+Glyph sizes must be finite, positive, and no greater than 4096 device-independent
+units. At 96 DPI, the rendered bitmap, including its one-pixel padding on each side,
+is limited to 4096 pixels per side and 4,194,304 pixels total (16 MiB of pixel data).
+Out-of-range sizes, unsupported bounds, and expected native rendering failures log
+a warning and produce no image; invalid sizes are not replaced with a default size.
+Register fonts before first use. Missing-font results are cached as failures, not as
+successful fallback fonts; transient extraction I/O failures can be retried.
 
 ## Packaged raw assets
 
@@ -296,8 +405,15 @@ tracking property is used, not merely when building the app.
 The facades are process-wide: the most recently built app sets their instances.
 Do not use them after disposing that app.
 
-Run the behavioral registration regressions on Windows:
-`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj`.
+`FileSystem.AppDataDirectory` uses local application data and `CacheDirectory`
+uses the temporary directory, each with the application name appended. Both
+getters create the directory before returning it, without changing existing
+contents; filesystem errors propagate to the caller.
+
+Run the registration and filesystem regressions on Windows:
+`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj -p:UseMaui=false`.
+The filesystem tests use unique application identities and real file writes;
+they remove only their own directories, never the user storage roots.
 
 | API | Status | Notes |
 |---|---|---|

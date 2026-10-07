@@ -126,12 +126,10 @@ public abstract class GtkMauiApplication : IPlatformApplication
 	private void CreatePlatformWindow(GtkMauiContext applicationContext)
 	{
 		var virtualWindow = _mauiApp.CreateWindow(null);
-		var gtkWindow = CreateAndShowWindow(virtualWindow);
+		CreateAndShowWindow(virtualWindow);
 
 		var windowTitle = virtualWindow.Title ?? "Microsoft.Maui.Platforms.Linux.Gtk4";
 		_desktopEntryName = windowTitle;
-		gtkWindow.SetDefaultSize(1024, 768);
-		gtkWindow.SetSizeRequest(800, 600);
 	}
 
 	/// <summary>
@@ -142,6 +140,7 @@ public abstract class GtkMauiApplication : IPlatformApplication
 	{
 		var gtkWindow = new Gtk.Window();
 		gtkWindow.SetTitle(virtualWindow.Title ?? "Microsoft.Maui.Platforms.Linux.Gtk4");
+		gtkWindow.SetDefaultSize(1024, 768);
 
 		var windowContext = _applicationContext.MakeWindowScope(gtkWindow);
 		windowContext.AddSpecific(gtkWindow);

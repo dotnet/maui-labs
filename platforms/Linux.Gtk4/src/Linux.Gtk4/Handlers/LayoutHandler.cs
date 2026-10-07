@@ -10,7 +10,10 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHandler
 {
-	GtkRootLayoutDriver? _rootLayout;
+	uint _rootLayoutTickId;
+	int _rootWidth = -1;
+	int _rootHeight = -1;
+	ScrollOrientation? _rootScrollOrientation;
 
 	object ILayoutHandler.PlatformView => base.PlatformView!;
 
@@ -47,7 +50,14 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	public override void SetVirtualView(IView view)
 	{
+		if (((IElementHandler)this).VirtualView == view)
+			return;
+		if (((IElementHandler)this).PlatformView != null)
+			Clear();
 		base.SetVirtualView(view);
+		var platformView = PlatformView ?? throw new InvalidOperationException("PlatformView not set.");
+		platformView.CrossPlatformLayout = view as ICrossPlatformLayout;
+		_rootWidth = _rootHeight = -1;
 
 		// MAUI doesn't automatically call Add for pre-existing children.
 		// We must add them manually when the handler is first connected.
@@ -65,18 +75,117 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 		if (VirtualView is ICrossPlatformLayout layout)
 			platformView.CrossPlatformLayout = layout;
 
-		_rootLayout?.Dispose();
-		_rootLayout = new GtkRootLayoutDriver(platformView,
-			() => ((IElementHandler)this).VirtualView as IView,
-			() => MauiContext?.Services.GetService(typeof(ILogger<LayoutHandler>)) as ILogger);
+		platformView.OnNotify += OnPlatformNotify;
+		platformView.OnMap += OnPlatformMap;
+		StartRootLayoutTick(platformView);
+	}
+
+	void OnPlatformNotify(GObject.Object sender, GObject.Object.NotifySignalArgs args)
+	{
+		if (args.Pspec.GetName() == "parent")
+			StartRootLayoutTick(PlatformView);
+	}
+
+	void OnPlatformMap(Gtk.Widget sender, EventArgs args) => StartRootLayoutTick(PlatformView);
+
+	void StartRootLayoutTick(GtkLayoutPanel platformView)
+	{
+		if (_rootLayoutTickId != 0)
+			return;
+
+		_rootWidth = _rootHeight = -1;
+		_rootLayoutTickId = platformView.AddTickCallback((widget, clock) =>
+		{
+			if (VirtualView == null)
+			{
+				_rootLayoutTickId = 0;
+				return false;
+			}
+			if (platformView.IsExternallyManaged || HasAncestorLayoutPanel(platformView))
+			{
+				_rootLayoutTickId = 0;
+				return false;
+			}
+
+			// A default-size notification precedes allocation and misses compositor
+			// and container resizes. Use this panel's actual space, excluding native chrome.
+			var width = platformView.GetAllocatedWidth();
+			var height = platformView.GetAllocatedHeight();
+			ScrollOrientation? scrollOrientation = null;
+			if (VirtualView.Parent is IScrollView scrollView && platformView.GetParent() is Gtk.Viewport viewport)
+			{
+				// The viewport can keep its child at the previous natural extent.
+				// Reflow the non-scrolling axis against the viewport, not that stale extent.
+				width = viewport.GetAllocatedWidth();
+				height = viewport.GetAllocatedHeight();
+				scrollOrientation = scrollView.Orientation;
+			}
+			if (width <= 0 || height <= 0 ||
+				(width == _rootWidth && height == _rootHeight &&
+					scrollOrientation == _rootScrollOrientation && !platformView.LayoutDirty))
+				return true;
+
+			try
+			{
+				var view = VirtualView;
+				var generation = LayoutGeneration;
+				_rootWidth = width;
+				_rootHeight = height;
+				_rootScrollOrientation = scrollOrientation;
+				platformView.LayoutDirty = false;
+				(view as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
+				if (LayoutGeneration != generation || VirtualView != view || PlatformView != platformView)
+					return true;
+				var scrollsHorizontally = scrollOrientation is ScrollOrientation.Horizontal or ScrollOrientation.Both;
+				var scrollsVertically = scrollOrientation is ScrollOrientation.Vertical or ScrollOrientation.Both;
+				var measured = view.Measure(
+					scrollsHorizontally ? double.PositiveInfinity : width,
+					scrollsVertically ? double.PositiveInfinity : height);
+				if (LayoutGeneration != generation || VirtualView != view || PlatformView != platformView)
+					return true;
+				view.Arrange(new Rect(0, 0,
+					scrollsHorizontally ? Math.Max(width, measured.Width) : width,
+					scrollsVertically ? Math.Max(height, measured.Height) : height));
+			}
+			catch (Exception ex)
+			{
+				var logger = MauiContext?.Services.GetService(typeof(ILogger<LayoutHandler>)) as ILogger<LayoutHandler>;
+				if (logger != null)
+					logger.LogError(ex, "GTK root layout failed at {Width}x{Height}", width, height);
+				else
+					Console.Error.WriteLine($"[Microsoft.Maui.Platforms.Linux.Gtk4] Root layout failed: {ex}");
+			}
+			return true;
+		});
 	}
 
 	protected override void DisconnectHandler(GtkLayoutPanel platformView)
 	{
-		_rootLayout?.Dispose();
-		_rootLayout = null;
+		platformView.OnNotify -= OnPlatformNotify;
+		platformView.OnMap -= OnPlatformMap;
+		if (_rootLayoutTickId != 0)
+			platformView.RemoveTickCallback(_rootLayoutTickId);
+		_rootLayoutTickId = 0;
+		_rootWidth = _rootHeight = -1;
+		_rootScrollOrientation = null;
 		platformView.CrossPlatformLayout = null;
 		base.DisconnectHandler(platformView);
+	}
+
+	/// <summary>
+	/// Walks up the GTK widget tree to check if any ancestor is a GtkLayoutPanel.
+	/// If so, this panel is nested and should be driven by the parent layout pass.
+	/// </summary>
+	private static bool HasAncestorLayoutPanel(Gtk.Widget widget)
+	{
+		var current = widget.GetParent();
+		while (current != null && current is not Gtk.Window)
+		{
+			if (current is GtkLayoutPanel)
+				return true;
+			current = current.GetParent();
+		}
+		return false;
 	}
 
 	public override Size GetDesiredSize(double widthConstraint, double heightConstraint)

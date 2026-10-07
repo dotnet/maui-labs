@@ -5,6 +5,13 @@ info:
   description: >
     Protocol for runtime app inspection, interaction, and debugging in
     DevFlow-enabled applications.
+    Percent-encode path parameter values as individual URI segments. The server
+    splits the route before decoding each captured parameter exactly once:
+    %20 is a space, %2B is a literal plus, %2F is a slash within the parameter,
+    and %2520 is the literal text %20. A raw plus remains a plus. Static route
+    segments are not decoded. Malformed percent escapes are preserved by
+    System.Uri.UnescapeDataString, consistent with query parameter decoding;
+    endpoint-specific validation still applies to decoded values.
   license:
     name: MIT
     identifier: MIT
@@ -819,6 +826,16 @@ paths:
       summary: Get element property value
       description: >
         Returns the current value of a named property on an element.
+        The MAUI backend accepts case-insensitive public-property dot paths and
+        formats the resulting value as a string. A null value or missing path returns 404.
+        Handler and handler PlatformView segments use public MAUI interfaces to
+        avoid ambiguity from hidden properties.
+        Reading a password Entry's direct Text property returns [REDACTED].
+        When traversing IElementHandler.PlatformView belonging to a password Entry,
+        a non-null native view and its entire requested subtree return [REDACTED]
+        before native getters or formatting run, including nonsensitive properties.
+        A null native view still returns 404. Nonpassword handler paths are unaffected.
+        This boundary is not a general redaction policy for other reflective paths.
       parameters:
         - $ref: "#/components/parameters/ElementIdPath"
         - name: name

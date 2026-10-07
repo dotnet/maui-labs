@@ -2548,7 +2548,6 @@ public partial class DevFlowAgentService
                 return HttpResponse.Error("file path is required");
 
             var root = ResolveFileStorageRoot(request, FileStorageOperationDownload);
-            relativePath = Uri.UnescapeDataString(relativePath);
             var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
             FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
 
@@ -2586,7 +2585,6 @@ public partial class DevFlowAgentService
                 return HttpResponse.Error("file path is required");
 
             var root = ResolveFileStorageRoot(request, FileStorageOperationUpload);
-            relativePath = Uri.UnescapeDataString(relativePath);
             var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
             FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
 
@@ -2640,7 +2638,6 @@ public partial class DevFlowAgentService
                 return Task.FromResult(HttpResponse.Error("file path is required"));
 
             var root = ResolveFileStorageRoot(request, FileStorageOperationDelete);
-            relativePath = Uri.UnescapeDataString(relativePath);
             var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
             FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
 

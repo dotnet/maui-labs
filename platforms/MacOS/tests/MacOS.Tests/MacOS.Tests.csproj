@@ -17,6 +17,8 @@
   <!-- Link the production lifecycle code without referencing the AppKit-only assembly.
        These tests use real MAUI windows and handlers and require no native workloads. -->
   <ItemGroup>
+    <Compile Include="../../src/MacOS/Platform/ShellTabBarCoordinator.cs"
+             Link="Platform/ShellTabBarCoordinator.cs" />
     <Compile Include="../../src/MacOS/Platform/WindowCloseCoordinator.cs"
              Link="Platform/WindowCloseCoordinator.cs" />
   </ItemGroup>
