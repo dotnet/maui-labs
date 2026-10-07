@@ -59,7 +59,7 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 CI builds the native Swift library on an Xcode 27 runner while keeping the
 package's normal Apple target frameworks unchanged. To opt into Apple 27
 reference packs locally, install the .NET 10.0.401 SDK and matching workloads,
-select Xcode 27 with `DEVELOPER_DIR`, and build with
+use Xcode 27 (no `DEVELOPER_DIR` override when it is the default), and build with
 `-p:UseXcode27Preview=true -f net10.0-maccatalyst27.0` (or the corresponding
 `ios27.0` / `macos27.0` framework). `UseXcode27Preview` only changes this
 repo's target-framework list; it does not install or select Xcode. When
@@ -76,7 +76,7 @@ version check.
 ## Documentation
 
 - [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
-- [Multimodal Image Input Design](../../docs/ai/multimodal-design.md)
+- [Apple Foundation Models Image Input](../../docs/ai/apple-foundation-models-image-input.md)
 
 ## Requirements
 
