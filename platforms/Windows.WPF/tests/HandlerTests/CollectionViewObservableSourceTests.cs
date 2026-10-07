@@ -159,17 +159,21 @@ public class CollectionViewObservableSourceTests
 	[Fact]
 	public void GroupedMultipleSelection_IgnoresGroupHeaders()
 	{
+		var selectedItem = new SelectionItem("Selected");
 		Run(view =>
 		{
 			view.IsGrouped = true;
-			view.ItemsSource = new[] { new[] { new SelectionItem("Item") } };
+			view.ItemsSource = new[] { new[] { selectedItem } };
 			view.SelectionMode = SelectionMode.Multiple;
 			return (handler, list, empty) =>
 			{
 				var header = list.Items[0];
-				list.SelectedItems.Add(header);
+				var item = list.Items[1];
+				list.SelectedItem = item;
+				list.SelectedItem = header;
 
-				Assert.Empty(view.SelectedItems);
+				Assert.Same(selectedItem, Assert.Single(view.SelectedItems));
+				Assert.Contains(item, list.SelectedItems.Cast<object>());
 				Assert.DoesNotContain(header, list.SelectedItems.Cast<object>());
 			};
 		});

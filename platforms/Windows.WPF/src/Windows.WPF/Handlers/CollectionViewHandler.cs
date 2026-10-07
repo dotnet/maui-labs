@@ -112,9 +112,18 @@ namespace Microsoft.Maui.Handlers.WPF
 					.ToArray();
 				if (nonItems.Length > 0)
 				{
+					var previousItems = VirtualView.SelectedItems
+						.Select(item => GetPlatformItem(_listBox, item))
+						.OfType<object>()
+						.ToArray();
 					_processingSelection = true;
 					foreach (var item in nonItems)
 						_listBox.SelectedItems.Remove(item);
+					if (_listBox.SelectedItems.Count == 0)
+					{
+						foreach (var item in previousItems)
+							_listBox.SelectedItems.Add(item);
+					}
 					_processingSelection = false;
 				}
 
