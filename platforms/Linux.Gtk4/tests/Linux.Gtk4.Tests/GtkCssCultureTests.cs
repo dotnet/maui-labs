@@ -19,8 +19,10 @@ public class GtkCssCultureTests
 		var previousUiCulture = CultureInfo.CurrentUICulture;
 		try
 		{
-			CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
-			CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
+			var commaCulture = (CultureInfo)CultureInfo.GetCultureInfo(culture).Clone();
+			commaCulture.NumberFormat.NumberDecimalSeparator = ",";
+			CultureInfo.CurrentCulture = commaCulture;
+			CultureInfo.CurrentUICulture = commaCulture;
 			Assert.Equal(",", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
 
 			var color = new Color(1f, 0.5f, 0f, 0.25f);

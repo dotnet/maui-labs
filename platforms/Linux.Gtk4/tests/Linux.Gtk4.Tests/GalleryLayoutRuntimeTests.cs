@@ -18,7 +18,10 @@ public class GalleryLayoutRuntimeTests(ITestOutputHelper output)
 		var previousCulture = CultureInfo.CurrentCulture;
 		try
 		{
-			CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-ZA");
+			var commaCulture = (CultureInfo)CultureInfo.GetCultureInfo("en-ZA").Clone();
+			commaCulture.NumberFormat.NumberDecimalSeparator = ",";
+			CultureInfo.CurrentCulture = commaCulture;
+			Assert.Equal(",", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
 			var host = new GalleryHost(output);
 			host.Run([]);
 			Assert.Null(host.Failure);

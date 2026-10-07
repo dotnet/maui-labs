@@ -148,7 +148,8 @@ model synchronization and programmatic replacement, derived CollectionView
 replacement and balanced template visual registration, repeated
 single-item/facet/empty/repopulate filtering, template teardown under GC, and Shell
 page timer stop/restart. It also registers the sample font and runs with en-ZA
-decimal-comma culture. Each native test class must run in its own process because
+decimal-comma culture using a clone with an explicitly configured separator,
+independent of platform globalization data. Each native test class must run in its own process because
 GTK initialization is thread-affine.
 
 ```powershell
