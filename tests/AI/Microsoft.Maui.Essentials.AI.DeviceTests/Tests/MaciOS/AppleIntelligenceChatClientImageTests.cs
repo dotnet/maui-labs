@@ -312,6 +312,26 @@ public class AppleIntelligenceChatClientImageTests
 	}
 
 	[Fact]
+	public async Task GetResponseAsync_WithImageFileOnOlderOS_ReportsUnsupported()
+	{
+		if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
+			return;
+
+		var client = new AppleIntelligenceChatClient();
+		var messages = new List<ChatMessage>
+		{
+			new(ChatRole.User,
+			[
+				new TextContent("Describe this image."),
+				new UriContent("file:///tmp/image.png", "image/png"),
+			]),
+		};
+
+		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
+		Assert.Contains("27.0", error.Message);
+	}
+
+	[Fact]
 	public async Task GetResponseAsync_WithHttpImageUri_ThrowsBeforeModel()
 	{
 		var client = new AppleIntelligenceChatClient();

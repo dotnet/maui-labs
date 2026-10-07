@@ -44,33 +44,20 @@ works without credentials or a model.
 
 ## Build and run
 
-Install the repo's pinned .NET 10 SDK, the matching MAUI workload, and a
-compatible Xcode for Apple builds. From the repository root on macOS, build
-and run the Mac Catalyst sample with:
+Install the repo's pinned .NET 10 SDK, the matching MAUI workload, and Xcode 27
+for Apple builds. From the repository root on macOS, build and run the Mac
+Catalyst sample with:
 
 ```sh
 dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-maccatalyst -c Debug -t:Build,Run
+  -f net10.0-maccatalyst27.0 -c Debug -t:Build,Run -p:UseXcode27Preview=true
 ```
 
-For iOS, use `-f net10.0-ios` instead. Apple Intelligence text chat requires
+For iOS, use `-f net10.0-ios27.0` instead. Apple Intelligence text chat requires
 iOS or Mac Catalyst 26+ on a supported device with the model enabled. Apple
 image input requires 27+ and a ready vision-capable model. Apple embeddings
 require the English sentence-embedding asset, which may be absent on
 simulators. Azure-backed features also run on Android and Windows.
-
-### Xcode 27 builds
-
-To opt into Apple 27 reference packs, select Xcode 27 and enable
-`UseXcode27Preview`:
-
-```sh
-DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer \
-  dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -t:Build,Run -p:UseXcode27Preview=true
-```
-
-For iOS, use `-f net10.0-ios27.0` instead.
 
 ## Optional Azure configuration
 
