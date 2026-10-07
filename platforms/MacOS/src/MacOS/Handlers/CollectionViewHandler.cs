@@ -196,7 +196,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
         // Resize document/container
         var totalSize = _flatItems.Count > 0
-            ? _flatItems[^1].Position + _flatItems[^1].Size
+            ? _flatItems.Max(info => info.Position + info.Size)
             : 0;
 
         if (isHorizontal)
@@ -253,14 +253,20 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             var colWidth = ((nfloat)rect.Width - totalHSpacing) / span;
             if (colWidth < 20) colWidth = 20;
 
-            var colTops = new nfloat[span];
-            for (int i = 0; i < _flatItems.Count; i++)
+            nfloat y = 0;
+            for (int rowStart = 0; rowStart < _flatItems.Count; rowStart += span)
             {
-                int col = i % span;
-                _flatItems[i].Position = colTops[col];
-                if (!_flatItems[i].Measured)
-                    _flatItems[i].Size = _estimatedItemHeight;
-                colTops[col] += _flatItems[i].Size + vSpacing;
+                nfloat rowHeight = 0;
+                var rowEnd = Math.Min(rowStart + span, _flatItems.Count);
+                for (int i = rowStart; i < rowEnd; i++)
+                {
+                    _flatItems[i].Position = y;
+                    if (!_flatItems[i].Measured)
+                        _flatItems[i].Size = _estimatedItemHeight;
+                    if (_flatItems[i].Size > rowHeight)
+                        rowHeight = _flatItems[i].Size;
+                }
+                y += rowHeight + vSpacing;
             }
         }
     }
@@ -351,9 +357,19 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             // Measure and position
             if (!info.Measured)
             {
+                var availableWidth = span > 1 && !isHorizontal
+                    ? (containerWidth - itemSpacing * (span - 1)) / span
+                    : containerWidth;
+                if (availableWidth < 20)
+                    availableWidth = 20;
+                var availableHeight = span > 1 && isHorizontal
+                    ? (containerHeight - lineSpacing * (span - 1)) / span
+                    : containerHeight;
+                if (availableHeight < 20)
+                    availableHeight = 20;
                 var measuredSize = isHorizontal
-                    ? MeasureItemWidth(platformView, containerHeight)
-                    : MeasureItemHeight(platformView, containerWidth);
+                    ? MeasureItemWidth(platformView, availableHeight)
+                    : MeasureItemHeight(platformView, availableWidth);
 
                 if (Math.Abs(measuredSize - info.Size) > 1)
                 {
