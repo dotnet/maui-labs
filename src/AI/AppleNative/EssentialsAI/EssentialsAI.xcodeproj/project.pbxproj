@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C0A100000000000000000001 /* CoreAILM in Frameworks */ = {isa = PBXBuildFile; productRef = C0A100000000000000000002 /* CoreAILM */; };
+		C0A100000000000000000003 /* CoreAIModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100000000000000000004 /* CoreAIModel.swift */; };
 		340019332EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */; };
 		340019342EDF4D6800DAB0A3 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019292EDF4D6800DAB0A3 /* ChatMessage.swift */; };
 		340019352EDF4D6800DAB0A3 /* ToolNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019322EDF4D6800DAB0A3 /* ToolNative.swift */; };
@@ -22,6 +24,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		C0A100000000000000000004 /* CoreAIModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAIModel.swift; sourceTree = "<group>"; };
+		C0A100000000000000000005 /* EssentialsAICoreAI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = EssentialsAICoreAI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		340019272EDF4D6800DAB0A3 /* Cancellation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cancellation.swift; sourceTree = "<group>"; };
 		340019282EDF4D6800DAB0A3 /* ChatClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatClient.swift; sourceTree = "<group>"; };
 		340019292EDF4D6800DAB0A3 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
@@ -38,6 +42,15 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		C0A100000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				34279CA12EC421CC00583050 /* FoundationModels.framework in Frameworks */,
+				C0A100000000000000000001 /* CoreAILM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		34279C8D2EC421CC00583050 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -52,6 +65,7 @@
 		34279C862EC421CC00583050 = {
 			isa = PBXGroup;
 			children = (
+				C0A100000000000000000004 /* CoreAIModel.swift */,
 				34279CA02EC421CC00583050 /* FoundationModels.framework */,
 				340019272EDF4D6800DAB0A3 /* Cancellation.swift */,
 				340019282EDF4D6800DAB0A3 /* ChatClient.swift */,
@@ -72,6 +86,7 @@
 			isa = PBXGroup;
 			children = (
 				34279C902EC421CC00583050 /* EssentialsAI.framework */,
+				C0A100000000000000000005 /* EssentialsAICoreAI.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -89,6 +104,25 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
+		C0A100000000000000000007 /* EssentialsAICoreAI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0A100000000000000000008;
+			buildPhases = (
+				34279C8B2EC421CC00583050 /* Headers */,
+				34279C8C2EC421CC00583050 /* Sources */,
+				C0A100000000000000000006 /* Frameworks */,
+				34279C8E2EC421CC00583050 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = EssentialsAICoreAI;
+			packageProductDependencies = (
+				C0A100000000000000000002 /* CoreAILM */,
+			);
+			productName = EssentialsAICoreAI;
+			productReference = C0A100000000000000000005;
+			productType = "com.apple.product-type.framework";
+		};
 		34279C8F2EC421CC00583050 /* EssentialsAI */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 34279C992EC421CC00583050 /* Build configuration list for PBXNativeTarget "EssentialsAI" */;
@@ -134,12 +168,17 @@
 			);
 			mainGroup = 34279C862EC421CC00583050;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C0A100000000000000000009 /* coreai-models */,
+				C0A10000000000000000000C /* swift-collections */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 34279C912EC421CC00583050 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				34279C8F2EC421CC00583050 /* EssentialsAI */,
+				C0A100000000000000000007 /* EssentialsAICoreAI */,
 			);
 		};
 /* End PBXProject section */
@@ -159,6 +198,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0A100000000000000000003 /* CoreAIModel.swift in Sources */,
 				340019332EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift in Sources */,
 				340019342EDF4D6800DAB0A3 /* ChatMessage.swift in Sources */,
 				340019352EDF4D6800DAB0A3 /* ToolNative.swift in Sources */,
@@ -176,6 +216,65 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		C0A10000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALLOW_TARGET_PLATFORM_SPECIALIZATION = YES;
+				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEFINES_MODULE = YES;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @loader_path/Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.microsoft.maui.EssentialsAICoreAI;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ENABLE_CORE_AI";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_INSTALL_MODULE = YES;
+				SWIFT_INSTALL_OBJC_HEADER = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C0A10000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALLOW_TARGET_PLATFORM_SPECIALIZATION = YES;
+				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEFINES_MODULE = YES;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @loader_path/Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.microsoft.maui.EssentialsAICoreAI;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ENABLE_CORE_AI";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_INSTALL_MODULE = YES;
+				SWIFT_INSTALL_OBJC_HEADER = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		34279C972EC421CC00583050 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -402,6 +501,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		C0A100000000000000000008 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0A10000000000000000000A /* Debug */,
+				C0A10000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		34279C8A2EC421CC00583050 /* Build configuration list for PBXProject "EssentialsAI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -421,6 +529,33 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C0A10000000000000000000C /* swift-collections */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-collections.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.2.1;
+			};
+		};
+		C0A100000000000000000009 /* coreai-models */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/coreai-models";
+			requirement = {
+				kind = revision;
+				revision = 1953c4f90ba0214c1abc7bebcb9be5107e329a46;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C0A100000000000000000002 /* CoreAILM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0A100000000000000000009 /* coreai-models */;
+			productName = CoreAILM;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 34279C872EC421CC00583050 /* Project object */;
 }

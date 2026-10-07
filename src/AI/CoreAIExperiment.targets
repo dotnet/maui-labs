@@ -1,0 +1,33 @@
+<Project>
+  <PropertyGroup>
+    <_BuildXcodeProjectsStamp>$(_MaciOSStampDirectory)_BuildCoreAIProjects.stamp</_BuildXcodeProjectsStamp>
+  </PropertyGroup>
+
+  <!-- The SDK archive task replaces OTHER_SWIFT_FLAGS, losing the package's required
+       Lifetimes flag. Keep the workaround confined to the unpublished experiment. -->
+  <Target Name="_BuildXcodeProjects"
+          Condition="'@(XcodeProject)' != '' and $([MSBuild]::IsOSPlatform('osx'))"
+          DependsOnTargets="ValidateCoreAIExperiment;_GetBuildXcodeProjectsInputs;_CalculateXcodeProjectOutputPaths;_DetectSdkLocations"
+          Inputs="@(_XcbInputs);$(MSBuildThisFileFullPath);%(XcodeProject.FullPath)/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+          Outputs="$(_BuildXcodeProjectsStamp)">
+    <PropertyGroup>
+      <_CoreAIArchivePlatform Condition="'$(TargetPlatformIdentifier)' == 'maccatalyst'">generic/platform=macOS,variant=Mac Catalyst</_CoreAIArchivePlatform>
+      <_CoreAIArchivePlatform Condition="'$(TargetPlatformIdentifier)' == 'macos'">generic/platform=macOS</_CoreAIArchivePlatform>
+      <_CoreAIArchivePlatform Condition="'$(TargetPlatformIdentifier)' == 'ios'">generic/platform=iOS</_CoreAIArchivePlatform>
+    </PropertyGroup>
+    <RemoveDir Directories="@(XcodeProject->'%(OutputPath)archives');@(XcodeProject->'%(OutputPath)xcframeworks')" />
+    <Exec Command="&quot;$(_SdkDevPath)/usr/bin/xcodebuild&quot; archive -project &quot;%(XcodeProject.FullPath)&quot; -scheme &quot;%(XcodeProject.SchemeName)&quot; -configuration &quot;%(XcodeProject.Configuration)&quot; -destination &quot;$(_CoreAIArchivePlatform)&quot; -archivePath &quot;%(XcodeProject.OutputPath)archives/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcarchive&quot; -derivedDataPath &quot;$(_XcodeProjectDefaultOutputPathRoot)CoreAIDerivedData&quot; -disableAutomaticPackageResolution &quot;OTHER_SWIFT_FLAGS=$(inherited) -no-verify-emitted-module-interface -enable-experimental-feature Lifetimes&quot; BUILD_LIBRARY_FOR_DISTRIBUTION=YES SKIP_INSTALL=NO CODE_SIGNING_ALLOWED=NO" />
+    <Exec Condition="'$(TargetPlatformIdentifier)' == 'ios'"
+          Command="&quot;$(_SdkDevPath)/usr/bin/xcodebuild&quot; archive -project &quot;%(XcodeProject.FullPath)&quot; -scheme &quot;%(XcodeProject.SchemeName)&quot; -configuration &quot;%(XcodeProject.Configuration)&quot; -destination &quot;generic/platform=iOS Simulator&quot; -archivePath &quot;%(XcodeProject.OutputPath)archives/%(XcodeProject.SchemeName)iosSimulator.xcarchive&quot; -derivedDataPath &quot;$(_XcodeProjectDefaultOutputPathRoot)CoreAIDerivedData&quot; -disableAutomaticPackageResolution &quot;OTHER_SWIFT_FLAGS=$(inherited) -no-verify-emitted-module-interface -enable-experimental-feature Lifetimes&quot; BUILD_LIBRARY_FOR_DISTRIBUTION=YES SKIP_INSTALL=NO CODE_SIGNING_ALLOWED=NO" />
+    <CreateXcFramework XcArchivePath="%(XcodeProject.OutputPath)archives"
+                       FrameworkName="%(XcodeProject.SchemeName).framework"
+                       OutputPath="%(XcodeProject.OutputPath)xcframeworks/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcframework"
+                       SdkDevPath="$(_SdkDevPath)"
+                       WorkingDirectory="%(XcodeProject.RootDir)%(XcodeProject.Directory)" />
+    <ItemGroup>
+      <NativeReference Include="%(XcodeProject.OutputPath)xcframeworks/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcframework" Kind="Framework" />
+      <FileWrites Include="$(_BuildXcodeProjectsStamp);%(XcodeProject.OutputPath)**/*" />
+    </ItemGroup>
+    <Touch Files="$(_BuildXcodeProjectsStamp)" AlwaysCreate="true" />
+  </Target>
+</Project>
