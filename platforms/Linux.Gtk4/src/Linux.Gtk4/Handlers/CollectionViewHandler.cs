@@ -675,7 +675,6 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	{
 		// Rebuild the ListView with the appropriate factory (string vs template)
 		handler.RebuildListView();
-		handler.HookSelectionChanged();
 		MapItemsSource(handler, view);
 	}
 
