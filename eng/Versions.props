@@ -87,6 +87,8 @@
     <EssentialsAIPreviewVersionIteration>6</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
     <MicrosoftExtensionsAIAbstractionsVersion>10.4.1</MicrosoftExtensionsAIAbstractionsVersion>
+    <!-- Google ML Kit GenAI -->
+    <XamarinGoogleMLKitGenAIPromptVersion>1.0.0.3-beta4</XamarinGoogleMLKitGenAIPromptVersion>
     <!-- Microsoft Agents AI (sample only) -->
     <MicrosoftAgentsAIVersion>1.0.0-rc2</MicrosoftAgentsAIVersion>
     <MicrosoftAgentsAIWorkflowsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsVersion>

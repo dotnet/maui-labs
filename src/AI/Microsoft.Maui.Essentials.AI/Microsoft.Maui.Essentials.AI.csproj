@@ -13,6 +13,14 @@
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
     <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
   </PropertyGroup>
+  <PropertyGroup Condition="$(TargetFramework.Contains('-android'))">
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <NoWarn>$(NoWarn);BG8605;BG8606</NoWarn>
+    <_GeminiNanoNativeProject>$(MSBuildProjectDirectory)/../AndroidNative/EssentialsAI</_GeminiNanoNativeProject>
+    <_GeminiNanoNativeAar>$(_GeminiNanoNativeProject)/build/outputs/aar/EssentialsAI-release.aar</_GeminiNanoNativeAar>
+    <_GeminiNanoGradleCommand Condition="$([MSBuild]::IsOSPlatform('windows'))">gradlew.bat</_GeminiNanoGradleCommand>
+    <_GeminiNanoGradleCommand Condition="!$([MSBuild]::IsOSPlatform('windows'))">./gradlew</_GeminiNanoGradleCommand>
+  </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
     <IsShipping>true</IsShipping>
@@ -29,6 +37,7 @@
     <PackageTags>$(DefaultPackageTags);essentials;ai</PackageTags>
     <Description>.NET Multi-platform App UI (.NET MAUI) is a cross-platform framework for creating native mobile and desktop apps with C# and XAML. This package contains a collection of cross-platform APIs for working with device AI and local models.</Description>
     <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
@@ -39,9 +48,30 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
+    <PackageReference Include="Xamarin.Google.MLKit.GenAI.Prompt" />
+    <AndroidLibrary Include="$(_GeminiNanoNativeAar)" />
+    <_GeminiNanoNativeSources Include="$(_GeminiNanoNativeProject)/build.gradle.kts" />
+    <_GeminiNanoNativeSources Include="$(_GeminiNanoNativeProject)/settings.gradle.kts" />
+    <_GeminiNanoNativeSources Include="$(_GeminiNanoNativeProject)/gradle.properties" />
+    <_GeminiNanoNativeSources Include="$(_GeminiNanoNativeProject)/src/**/*" />
+    <TransformFile Include="Platform\Android\Transforms\Metadata.xml" />
+  </ItemGroup>
+  <Target Name="BuildGeminiNanoAndroidNative"
+          BeforeTargets="_ResolveLibraryProjectImports"
+          Condition="$(TargetFramework.Contains('-android'))"
+          Inputs="@(_GeminiNanoNativeSources)"
+          Outputs="$(_GeminiNanoNativeAar)">
+    <Exec Command="$(_GeminiNanoGradleCommand) --no-daemon testReleaseUnitTest assembleRelease"
+          WorkingDirectory="$(_GeminiNanoNativeProject)"
+          EnvironmentVariables="ANDROID_HOME=$(AndroidSdkDirectory)" />
+  </Target>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="!$(TargetFramework.Contains('-android'))">
+    <Compile Remove="Platform\Android\**\*.cs" />
   </ItemGroup>
   <ItemGroup Condition=" $(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst')) or $(TargetFramework.Contains('-macos')) ">
     <XcodeProject Include="..\AppleNative\EssentialsAI\EssentialsAI.xcodeproj">

@@ -1,0 +1,9 @@
+-keep class com.microsoft.maui.essentials.ai.GeminiNanoNativeClient { *; }
+-keep class com.microsoft.maui.essentials.ai.NativeChatRequest { *; }
+-keep class com.microsoft.maui.essentials.ai.NativeChatMessage { *; }
+-keep class com.microsoft.maui.essentials.ai.NativeChatOptions { *; }
+-keep class com.microsoft.maui.essentials.ai.NativeContentPart { *; }
+-keep class com.microsoft.maui.essentials.ai.NativeChatResponse { *; }
+-keep class com.microsoft.maui.essentials.ai.NativeChatError { *; }
+-keep class com.microsoft.maui.essentials.ai.NativeCancellation { *; }
+-keep interface com.microsoft.maui.essentials.ai.NativeChatCallback { *; }

@@ -6,7 +6,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 
 ## Features
 
-- **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
+- **`IChatClient`** — backed by Apple Intelligence on Apple platforms and Gemini Nano through ML Kit GenAI Prompt on Android
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
@@ -18,7 +18,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 | iOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
 | Mac Catalyst 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
 | macOS 26+ | ✅ Apple Intelligence | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | 🔜 Coming soon |
+| Android 8.0+ on supported AICore devices | ✅ Gemini Nano | 🔜 Coming soon |
 | Windows | 🔜 Coming soon | 🔜 Coming soon |
 
 ## Quick Start
@@ -28,7 +28,11 @@ using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
 
 // Register in MauiProgram.cs
+#if ANDROID
+builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+#else
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
+#endif
 
 // Use via DI
 var client = serviceProvider.GetRequiredService<IChatClient>();
@@ -70,6 +74,8 @@ version check.
 ## Architecture
 
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
+- **Kotlin Android bridge** (`AndroidNative/EssentialsAI/`) — wraps stateless per-request ML Kit GenAI Prompt inference, streaming, cancellation, and Nano V4 thinking behind a Java-friendly AAR
+- **`GeminiNanoChatClient`** — the only Android public API; maps `Microsoft.Extensions.AI` messages/options to the internal Kotlin bridge
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
 
@@ -81,6 +87,9 @@ version check.
 
 - .NET 10
 - MAUI workload (`dotnet workload install maui`)
+- Building Android from source also requires Java 17+; the checked-in Gradle wrapper builds the Kotlin AAR automatically
 - Apple Intelligence features require iOS 26+, Mac Catalyst 26+, or macOS 26+
+- Gemini Nano requires a device listed in [ML Kit GenAI device support](https://developers.google.com/ml-kit/genai#prompt-device), current AICore system services, and a locked bootloader
+- Android emulators do not provide AICore/Gemini Nano inference
 
 > ⚠️ **This package is experimental** (always ships as `-preview`). APIs may change between releases.

@@ -75,6 +75,7 @@
   <!-- EssentialsAI dependencies -->
   <ItemGroup Label="EssentialsAI">
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIAbstractionsVersion)" />
+    <PackageVersion Include="Xamarin.Google.MLKit.GenAI.Prompt" Version="$(XamarinGoogleMLKitGenAIPromptVersion)" />
     <!-- Sample app: Microsoft Agents AI -->
     <PackageVersion Include="Microsoft.Agents.AI" Version="$(MicrosoftAgentsAIVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Hosting" Version="$(MicrosoftAgentsAIHostingVersion)" />
