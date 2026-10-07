@@ -41,7 +41,9 @@ requesting that model.
 updates, and non-streaming responses assembled from those updates. It maps
 temperature, TopK, and TopP to native `LanguageModelOptions`. It flattens
 conversation history into a text prompt and passes the leading system
-instruction as model context for ordinary text generation.
+instruction as model context for ordinary text generation. Streaming updates
+and completed responses use the stable provider ID `windows-ai-language-model`;
+it identifies the Windows AI API, not the model weights selected by the OS.
 
 For `ChatResponseFormatJson` **with a schema**, it calls the native
 `GenerateStructuredJsonResponseAsync` API. That API lacks a context overload,
