@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -55,29 +54,6 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	/// Lazily-initialized metadata describing the implementation.
 	/// </summary>
 	private ChatClientMetadata? _metadata;
-
-	internal static AIJsonSchemaTransformCache StrictSchemaTransformCache { get; } =
-		new(new()
-		{
-			DisallowAdditionalProperties = true,
-			ConvertBooleanSchemas = true,
-			MoveDefaultKeywordToDescription = true,
-			RequireAllProperties = true,
-			TransformSchemaNode = (ctx, node) =>
-			{
-				// Handle objects
-				if (node is JsonObject obj && obj.TryGetPropertyValue("type", out var typeNode) && typeNode?.GetValue<string>() == "object")
-				{
-					// All objects need a title
-					if (!obj.ContainsKey("title"))
-					{
-						obj["title"] = Guid.NewGuid().ToString("N");
-					}
-				}
-
-				return node;
-			},
-		});
 
 	/// <inheritdoc />
 	public Task<ChatResponse> GetResponseAsync(
@@ -430,7 +406,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	private static NSString? ToNative(ChatResponseFormat? format) =>
 		format switch
 		{
-			ChatResponseFormatJson jsonFormat when StrictSchemaTransformCache.GetOrCreateTransformedSchema(jsonFormat) is { } jsonSchema =>
+			ChatResponseFormatJson jsonFormat when StructuredOutputSchema.StrictSchemaTransformCache.GetOrCreateTransformedSchema(jsonFormat) is { } jsonSchema =>
 				(NSString?)jsonSchema.GetRawText(),
 			ChatResponseFormatJson jsonFormat when jsonFormat.Schema is not null =>
 				throw new InvalidOperationException("Failed to transform JSON schema for Apple Intelligence chat API."),

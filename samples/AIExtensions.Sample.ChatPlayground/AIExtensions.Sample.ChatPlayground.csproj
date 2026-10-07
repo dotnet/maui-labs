@@ -20,6 +20,7 @@
     <ApplicationVersion>1</ApplicationVersion>
     <WindowsPackageType>None</WindowsPackageType>
     <UserSecretsId>2727d4aa-a3a5-484b-9447-91604761972b</UserSecretsId>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-android'))">26.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,6 +39,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="OpenAI" />
+    <PackageReference Include="Xamarin.AndroidX.Fragment.Ktx" Condition="$(TargetFramework.Contains('-android'))" />
   </ItemGroup>
 
   <ItemGroup>

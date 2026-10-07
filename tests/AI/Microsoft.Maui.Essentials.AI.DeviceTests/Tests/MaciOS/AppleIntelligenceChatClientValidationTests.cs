@@ -20,7 +20,7 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.NotNull(format.Schema);
 		Assert.False(format.Schema.Value.TryGetProperty("required", out _));
 
-		var schema = AppleIntelligenceChatClient.StrictSchemaTransformCache.GetOrCreateTransformedSchema(format);
+		var schema = StructuredOutputSchema.StrictSchemaTransformCache.GetOrCreateTransformedSchema(format);
 
 		Assert.NotNull(schema);
 		var properties = schema.Value.GetProperty("properties");

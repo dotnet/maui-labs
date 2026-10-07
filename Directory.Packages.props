@@ -73,6 +73,24 @@
   </ItemGroup>
 
   <!-- EssentialsAI dependencies -->
+  <ItemGroup Label="EssentialsAI Android"
+             Condition="$(MSBuildProjectName.StartsWith('Microsoft.Maui.Essentials.AI')) or '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground'">
+    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.8.9" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.9.2.1" />
+    <PackageVersion Include="Xamarin.Firebase.Encoders" Version="117.0.0.21" />
+    <PackageVersion Include="Xamarin.Firebase.Encoders.JSON" Version="118.0.1.13" />
+    <PackageVersion Include="Xamarin.Google.Android.DataTransport.TransportApi" Version="4.0.0.3" />
+    <PackageVersion Include="Xamarin.Google.Android.DataTransport.TransportBackendCct" Version="4.0.0.3" />
+    <PackageVersion Include="Xamarin.Google.Android.DataTransport.TransportRuntime" Version="4.0.0.3" />
+    <PackageVersion Include="Xamarin.Google.Guava" Version="33.6.0.1" />
+    <PackageVersion Include="Xamarin.Google.MLKit.Common" Version="118.11.0.3" />
+    <PackageVersion Include="Xamarin.GooglePlayServices.Basement" Version="118.9.0" />
+    <PackageVersion Include="Xamarin.GooglePlayServices.Tasks" Version="118.3.0.1" />
+    <PackageVersion Include="Xamarin.Kotlin.StdLib" Version="2.4.0.1" />
+    <PackageVersion Include="Xamarin.KotlinX.Coroutines.Core" Version="1.11.0.1" />
+    <PackageVersion Include="Xamarin.KotlinX.Coroutines.Guava" Version="1.11.0.1" />
+    <PackageVersion Include="Xamarin.KotlinX.Coroutines.Reactive" Version="1.11.0.1" />
+  </ItemGroup>
   <ItemGroup Label="EssentialsAI">
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIAbstractionsVersion)" />
     <!-- Sample app: Microsoft Agents AI -->

@@ -250,6 +250,13 @@ extends:
               displayName: Verify Xcode 27
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
+            - script: .dotnet/dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
+              displayName: Install Android SDK dependencies
+            - script: ./gradlew --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
+              displayName: Build and Test EssentialsAI Kotlin Bridge
+              workingDirectory: $(Build.SourcesDirectory)/src/AI/AndroidNative/EssentialsAI
+              env:
+                ANDROID_HOME: $(ANDROID_HOME)
             - script: |
                 ./eng/common/build.sh \
                   --configuration $(_BuildConfig) \
@@ -306,6 +313,9 @@ extends:
                 )
                 & eng/common/dotnet.ps1 @arguments
               displayName: Install Android SDK dependencies
+            - script: gradlew.bat --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
+              displayName: Build and Test EssentialsAI Kotlin Bridge
+              workingDirectory: $(Build.SourcesDirectory)\src\AI\AndroidNative\EssentialsAI
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
