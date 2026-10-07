@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using AppKit;
 using CoreGraphics;
 
@@ -124,7 +125,9 @@ public sealed class RuntimeTestContext
     public void AppendJson(string name, object value) =>
         File.AppendAllText(EvidencePath(name), JsonSerializer.Serialize(value) + Environment.NewLine);
 
-    public void Capture(NSView view, string name)
+    public void Capture(NSView view, string name) => _ = CaptureBitmap(view, name);
+
+    public RuntimeBitmap CaptureBitmap(NSView view, string name)
     {
         view.LayoutSubtreeIfNeeded();
         view.DisplayIfNeeded();
@@ -154,6 +157,11 @@ public sealed class RuntimeTestContext
         using var png = bitmap.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png)
             ?? throw new InvalidOperationException("Could not encode screenshot.");
         File.WriteAllBytes(EvidencePath(name), png.ToArray());
+        var byteCount = checked((int)bitmap.BytesPerRow * (int)bitmap.PixelsHigh);
+        var pixels = new byte[byteCount];
+        Marshal.Copy(bitmap.BitmapData, pixels, 0, byteCount);
+        return new RuntimeBitmap(pixels, (int)bitmap.PixelsWide, (int)bitmap.PixelsHigh,
+            (int)bitmap.BytesPerRow, (int)bitmap.SamplesPerPixel);
     }
 
     public static Task FlushMainQueueAsync()
@@ -165,6 +173,9 @@ public sealed class RuntimeTestContext
         return completion.Task;
     }
 }
+
+public readonly record struct RuntimeBitmap(
+    byte[] Pixels, int Width, int Height, int BytesPerRow, int SamplesPerPixel);
 
 sealed class RuntimeAssertionException(string failureId, string message) : Exception(message)
 {

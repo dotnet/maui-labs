@@ -2,8 +2,7 @@
   "name": "contentview-clipping",
   "expectedCases": 2,
   "expectedAssertions": 7,
-  "evidence": ["native-state.json", "initial.png", "assertions.txt"],
-  "fixedEvidence": ["translated.png"],
+  "evidence": ["native-state.json", "initial.png", "translated.png", "assertions.txt"],
   "baseline": {
     "overlays": [
       {
@@ -24,6 +23,6 @@
     "exitCode": 42,
     "outcome": "regression",
     "failureId": "contentview.clip-and-redraw",
-    "message": "ContentView did not clip, and transformed text was not invalidated for display."
+    "message": "ContentView did not clip, and text moved into view did not render."
   }
 }

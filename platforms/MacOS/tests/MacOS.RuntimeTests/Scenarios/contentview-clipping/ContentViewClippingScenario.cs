@@ -26,7 +26,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         _movedLabel = new Label
         {
             Text = "Moved into view",
-            TextColor = Colors.Black,
+            TextColor = Colors.Magenta,
             BackgroundColor = Colors.White,
             Padding = 12,
         };
@@ -91,7 +91,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         var labelNative = Native(_movedLabel);
         windowContent.LayoutSubtreeIfNeeded();
         windowContent.DisplayIfNeeded();
-        context.Capture(windowContent, "initial.png");
+        var initial = context.CaptureBitmap(windowContent, "initial.png");
 
         var clips = clipNative.Layer?.MasksToBounds == true;
         _clip.IsClippedToBounds = false;
@@ -99,31 +99,31 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         _clip.IsClippedToBounds = true;
         var clipsAgain = clipNative.Layer?.MasksToBounds == true;
 
-        worldNative.DisplayIfNeeded();
-        labelNative.DisplayIfNeeded();
         _world.TranslationX = -300;
-        var worldInvalidated = worldNative.NeedsDisplay;
-        var labelInvalidated = labelNative.NeedsDisplay;
+        await RuntimeTestContext.FlushMainQueueAsync();
+        var translated = context.CaptureBitmap(windowContent, "translated.png");
+        var outsideClipIsLavender = IsLavender(initial, windowContent, 300, 180);
+        var magentaTextPixels = CountMagentaPixels(translated);
 
         context.WriteJson("native-state.json", new
         {
             clips,
             unclipped,
             clipsAgain,
-            worldInvalidated,
-            labelInvalidated,
+            outsideClipIsLavender,
+            magentaTextPixels,
             clipFrame = clipNative.Frame.ToString(),
             worldFrame = worldNative.Frame.ToString(),
             labelFrame = labelNative.Frame.ToString(),
             labelText = (labelNative as NSTextField)?.StringValue,
         });
 
-        if (!clips && !clipsAgain && !worldInvalidated && !labelInvalidated)
+        if (!clips && !clipsAgain && outsideClipIsLavender && magentaTextPixels == 0)
         {
             context.Assert(true,
-                "Observed missing bounds clipping and missing transformed-subtree display invalidation.");
+                "Observed paint outside the ContentView and missing text after moving it into view.");
             context.BaselineFailure("contentview.clip-and-redraw",
-                "ContentView did not clip, and transformed text was not invalidated for display.");
+                "ContentView did not clip, and text moved into view did not render.");
             return;
         }
 
@@ -133,21 +133,51 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "contentview.disable-clip");
         context.Assert(clipsAgain, "ContentView did not restore native bounds clipping.",
             "contentview.restore-clip");
+        context.Assert(!outsideClipIsLavender,
+            "Oversized content painted outside the ContentView bounds.",
+            "contentview.rendered-clip");
         context.Pass("IsClippedToBounds updates the native layer");
 
-        context.Assert(worldInvalidated, "Transformed content was not invalidated for display.",
-            "contentview.world-redraw");
-        context.Assert(labelInvalidated, "Text moved into view was not invalidated for display.",
-            "contentview.label-redraw");
         context.Assert((labelNative as NSTextField)?.StringValue == "Moved into view",
             "The moved native label lost its text.", "contentview.label-text");
         context.Assert(worldNative.Layer?.Transform.M41 == -300,
             $"Expected translated native layer, got {worldNative.Layer?.Transform.M41}.",
             "contentview.translation");
+        context.Assert(magentaTextPixels > 5,
+            $"Text moved into view did not render; found {magentaTextPixels} magenta text pixels.",
+            "contentview.rendered-text");
         context.Pass("Transformed content and text redraw after moving into view");
+    }
 
-        await RuntimeTestContext.FlushMainQueueAsync();
-        context.Capture(windowContent, "translated.png");
+    static bool IsLavender(RuntimeBitmap image, NSView view, double x, double y)
+    {
+        var pixelX = Math.Clamp((int)(x * image.Width / view.Bounds.Width), 0, image.Width - 1);
+        var pixelY = Math.Clamp((int)(y * image.Height / view.Bounds.Height), 0, image.Height - 1);
+        var offset = pixelY * image.BytesPerRow + pixelX * image.SamplesPerPixel;
+        var first = image.Pixels[offset];
+        var green = image.Pixels[offset + 1];
+        var third = image.Pixels[offset + 2];
+        return first >= 225 && green is >= 220 and <= 240 && third >= 225
+            && Math.Max(first, third) - Math.Min(first, third) >= 10;
+    }
+
+    static int CountMagentaPixels(RuntimeBitmap image)
+    {
+        var count = 0;
+        for (var y = 0; y < image.Height; y++)
+        {
+            for (var x = 0; x < image.Width; x++)
+            {
+                var offset = y * image.BytesPerRow + x * image.SamplesPerPixel;
+                if (image.Pixels[offset] > 150 &&
+                    image.Pixels[offset + 1] < 140 &&
+                    image.Pixels[offset + 2] > 150)
+                {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     static NSView Native(IView view) =>
