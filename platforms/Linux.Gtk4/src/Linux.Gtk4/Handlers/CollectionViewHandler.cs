@@ -276,7 +276,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 		// Mark all GtkLayoutPanels in this tree as externally managed
 		// so LayoutHandler's idle/tick callbacks don't override our sizing
-		MarkExternallyManaged(nativeWidget);
+		Platform.GtkLayoutPanel.MarkExternallyManaged(nativeWidget);
 
 		// Measure through MAUI's cross-platform layout to get desired size
 		var desiredSize = mauiView.Measure(widthConstraint, double.PositiveInfinity);
@@ -313,22 +313,6 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		foreach (var observer in _templateAllocations.Values)
 			observer.Dispose();
 		_templateAllocations.Clear();
-	}
-
-	static void MarkExternallyManaged(Gtk.Widget widget)
-	{
-		if (widget is Platform.GtkLayoutPanel panel)
-			panel.IsExternallyManaged = true;
-
-		if (widget is Gtk.Fixed fixedContainer)
-		{
-			var child = fixedContainer.GetFirstChild();
-			while (child != null)
-			{
-				MarkExternallyManaged(child);
-				child = child.GetNextSibling();
-			}
-		}
 	}
 
 	static void DisableVexpandRecursive(Gtk.Widget widget)
