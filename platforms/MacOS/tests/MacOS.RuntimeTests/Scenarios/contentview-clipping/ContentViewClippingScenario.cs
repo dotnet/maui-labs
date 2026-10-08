@@ -113,16 +113,14 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             CountMagentaPixels(translated, windowContent, clipNative.Frame);
 
         _world.Scale = 1.1;
-        await RuntimeTestContext.FlushMainQueueAsync();
-        var firstZoom = context.CaptureWindowBitmap(nativeWindow, "zoomed-1.png");
-        var (firstZoomMagentaTextPixels, firstZoomMagentaPixelsOutsideClip) =
-            CountMagentaPixels(firstZoom, windowContent, clipNative.Frame);
+        var (firstZoom, firstZoomMagentaTextPixels, firstZoomMagentaPixelsOutsideClip,
+            firstZoomChangedPixels) = await CaptureChangedCompositorFrame(
+                context, nativeWindow, "zoomed-1.png", translated, windowContent, clipNative.Frame);
 
         _world.Scale = 1.25;
-        await RuntimeTestContext.FlushMainQueueAsync();
-        var zoomed = context.CaptureWindowBitmap(nativeWindow, "zoomed.png");
-        var (zoomedMagentaTextPixels, zoomedMagentaPixelsOutsideClip) =
-            CountMagentaPixels(zoomed, windowContent, clipNative.Frame);
+        var (_, zoomedMagentaTextPixels, zoomedMagentaPixelsOutsideClip,
+            zoomedChangedPixels) = await CaptureChangedCompositorFrame(
+                context, nativeWindow, "zoomed.png", firstZoom, windowContent, clipNative.Frame);
 
         context.WriteJson("native-state.json", new
         {
@@ -135,8 +133,10 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             magentaPixelsOutsideClip,
             firstZoomMagentaTextPixels,
             firstZoomMagentaPixelsOutsideClip,
+            firstZoomChangedPixels,
             zoomedMagentaTextPixels,
             zoomedMagentaPixelsOutsideClip,
+            zoomedChangedPixels,
             clipFrame = clipNative.Frame.ToString(),
             worldFrame = worldNative.Frame.ToString(),
             labelFrame = labelNative.Frame.ToString(),
@@ -178,16 +178,66 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "contentview.translated-clip");
         context.Pass("Transformed content and text redraw after moving into view");
 
-        context.Assert(firstZoomMagentaTextPixels != magentaTextPixels &&
-            zoomedMagentaTextPixels != firstZoomMagentaTextPixels,
-            $"Text did not visibly scale across repeated zoom updates; pixel counts were " +
-            $"{magentaTextPixels}, {firstZoomMagentaTextPixels}, and {zoomedMagentaTextPixels}.",
+        context.Assert(firstZoomChangedPixels > 5 && zoomedChangedPixels > 5 &&
+            firstZoomMagentaTextPixels > 5 && zoomedMagentaTextPixels > 5,
+            $"Text did not visibly scale across repeated zoom updates; changed glyph pixels were " +
+            $"{firstZoomChangedPixels} and {zoomedChangedPixels}.",
             "contentview.zoomed-text");
         context.Assert(firstZoomMagentaPixelsOutsideClip == 0 && zoomedMagentaPixelsOutsideClip == 0,
             $"Zoomed text escaped the clip by {firstZoomMagentaPixelsOutsideClip} and " +
             $"{zoomedMagentaPixelsOutsideClip} pixels.",
             "contentview.zoomed-clip");
         context.Pass("Moved content remains rendered and clipped after zoom");
+    }
+
+    static async Task<(RuntimeBitmap bitmap, int inside, int outside, int changed)>
+        CaptureChangedCompositorFrame(
+            RuntimeTestContext context,
+            NSWindow window,
+            string name,
+            RuntimeBitmap previous,
+            NSView windowContent,
+            CGRect clip)
+    {
+        var current = previous;
+        var inside = 0;
+        var outside = 0;
+        var changed = 0;
+        for (var attempt = 0; attempt < 20 && changed <= 5; attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(16);
+            await RuntimeTestContext.FlushMainQueueAsync();
+            current = context.CaptureWindowBitmap(window, name);
+            (inside, outside) = CountMagentaPixels(current, windowContent, clip);
+            changed = CountChangedMagentaPixels(previous, current);
+        }
+        return (current, inside, outside, changed);
+    }
+
+    static int CountChangedMagentaPixels(RuntimeBitmap first, RuntimeBitmap second)
+    {
+        if (first.Width != second.Width || first.Height != second.Height)
+            return int.MaxValue;
+
+        var changed = 0;
+        for (var y = 0; y < first.Height; y++)
+        {
+            for (var x = 0; x < first.Width; x++)
+            {
+                if (IsMagenta(first, x, y) != IsMagenta(second, x, y))
+                    changed++;
+            }
+        }
+        return changed;
+    }
+
+    static bool IsMagenta(RuntimeBitmap image, int x, int y)
+    {
+        var offset = y * image.BytesPerRow + x * image.SamplesPerPixel;
+        return image.Pixels[offset] > 150 &&
+            image.Pixels[offset + 1] < 140 &&
+            image.Pixels[offset + 2] > 150;
     }
 
     static bool IsLavender(RuntimeBitmap image, NSView view, double x, double y)
@@ -211,10 +261,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         {
             for (var x = 0; x < image.Width; x++)
             {
-                var offset = y * image.BytesPerRow + x * image.SamplesPerPixel;
-                if (image.Pixels[offset] > 150 &&
-                    image.Pixels[offset + 1] < 140 &&
-                    image.Pixels[offset + 2] > 150)
+                if (IsMagenta(image, x, y))
                 {
                     var logicalX = x * view.Bounds.Width / image.Width;
                     var logicalY = y * view.Bounds.Height / image.Height;
