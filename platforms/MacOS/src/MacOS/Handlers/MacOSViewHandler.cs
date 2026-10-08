@@ -515,7 +515,6 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
         // NSView uses Frame for positioning (with IsFlipped=true for top-left origin)
         platformView.Frame = new CGRect(x, y, width, height);
-        RememberTranslation(view);
     }
 
     void UpdateTranslationOrigin(NSView platformView, IView view)
