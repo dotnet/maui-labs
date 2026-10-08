@@ -515,11 +515,19 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             foreach (var width in new[] { 160, 240 })
             {
                 toolbarButton.Frame = new CGRect(320, 170, width, 28);
+                toolbarButton.NeedsLayout = true;
+                toolbarButton.LayoutSubtreeIfNeeded();
                 await CaptureAsync(context, nativeWindow, $"toolbar-resize-{width}.png");
                 var resolvedFrame = toolbarNative.Frame;
                 var resolvedBounds = toolbarNative.Bounds;
+                context.AppendJson("toolbar-state.jsonl", new
+                {
+                    width, button = toolbarButton.Frame.ToString(),
+                    label = resolvedFrame.ToString(), bounds = resolvedBounds.ToString(),
+                });
                 context.Assert(Math.Abs(resolvedFrame.Width - width) < 0.0001,
-                    "Toolbar Auto Layout did not resolve the requested width.", "contentview.toolbar-layout");
+                    $"Toolbar Auto Layout expected width {width}, got {resolvedFrame}; button {toolbarButton.Frame}.",
+                    "contentview.toolbar-layout");
                 toolbarLabel.Scale = width == 160 ? 0.9 : 0.8;
                 toolbarLabel.AnchorX = width == 160 ? 0.25 : 0.75;
                 toolbarLabel.TranslationX = width == 160 ? 8 : 12;
