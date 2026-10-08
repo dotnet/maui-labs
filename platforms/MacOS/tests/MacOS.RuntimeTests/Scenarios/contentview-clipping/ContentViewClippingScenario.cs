@@ -17,9 +17,9 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("contentview-clipping", 17,
+        ScenarioRegistry.Register(new("contentview-clipping", 19,
             context => new ContentViewClippingScenario().CreateDelegate(context),
-            ExpectedAssertions: 188));
+            ExpectedAssertions: 194));
 }
 
 sealed class ContentViewClippingScenario : MauiRuntimeScenario
