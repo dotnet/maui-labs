@@ -510,6 +510,10 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             toolbarButton.Title = string.Empty;
             toolbarButton.SetButtonType(NSButtonType.MomentaryPushIn);
             toolbarButton.ImagePosition = NSCellImagePosition.NoImage;
+            toolbarButton.TranslatesAutoresizingMaskIntoConstraints = false;
+            using var toolbarWidth = toolbarButton.WidthAnchor.ConstraintEqualTo(160);
+            using var toolbarHeight = toolbarButton.HeightAnchor.ConstraintEqualTo(28);
+            toolbarWidth.Active = toolbarHeight.Active = true;
             toolbarButton.AddSubview(toolbarNative);
             toolbarNative.TranslatesAutoresizingMaskIntoConstraints = false;
             toolbarNative.LeadingAnchor.ConstraintEqualTo(toolbarButton.LeadingAnchor).Active = true;
@@ -528,11 +532,9 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             toolbar.Visible = true;
             try
             {
-                nfloat firstButtonWidth = 0;
                 foreach (var width in new[] { 160, 240 })
                 {
-                    toolbarItem.MinSize = toolbarItem.MaxSize = new CGSize(width, 28);
-                    toolbarButton.Frame = new CGRect(0, 0, width, 28);
+                    toolbarWidth.Constant = width;
                     toolbarButton.NeedsLayout = true;
                     toolbarButton.LayoutSubtreeIfNeeded();
                     await CaptureAsync(context, nativeWindow, $"toolbar-resize-{width}.png");
@@ -540,8 +542,6 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                     var resolvedBounds = toolbarNative.Bounds;
                     var alignmentInsets = toolbarNative.AlignmentRectInsets;
                     var buttonInsets = toolbarButton.AlignmentRectInsets;
-                    if (width == 160)
-                        firstButtonWidth = toolbarButton.Bounds.Width;
                     context.AppendJson("toolbar-state.jsonl", new
                     {
                         width, button = toolbarButton.Frame.ToString(),
@@ -550,7 +550,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                         labelLeftInset = (double)alignmentInsets.Left, labelRightInset = (double)alignmentInsets.Right,
                         buttonLeftInset = (double)buttonInsets.Left, buttonRightInset = (double)buttonInsets.Right,
                     });
-                    context.Assert(Math.Abs(toolbarButton.Bounds.Width - firstButtonWidth - (width - 160)) < 0.0001 &&
+                    context.Assert(Math.Abs(toolbarButton.Bounds.Width - width) < 0.0001 &&
                         Math.Abs(resolvedFrame.Width - alignmentInsets.Left - alignmentInsets.Right - toolbarButton.Bounds.Width) < 0.0001 &&
                         Math.Abs(resolvedFrame.X + alignmentInsets.Left) < 0.0001,
                         $"Toolbar expected item alignment width {width}, button {toolbarButton.Frame}, label {resolvedFrame}.",
