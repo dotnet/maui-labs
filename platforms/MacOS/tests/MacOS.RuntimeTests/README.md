@@ -158,8 +158,7 @@ claim exhaustive 3D rotation coverage.
 The combined marker also requires exact single-scale pixel areas and placement
 in a 60x30-point region calculated independently from MAUI's untransformed
 arranged rectangle. Transform updates occur after attachment/layout settles;
-the earlier lime marker is hidden so zero-scale checks cannot count unrelated
-pixels.
+the unique yellow corner isolates zero-scale checks from the earlier lime marker.
 
 The scenario requires all 198 assertions and 19 cases. Native scroll notifications
 must not re-arrange unchanged composite item roots, while an ItemsLayout change

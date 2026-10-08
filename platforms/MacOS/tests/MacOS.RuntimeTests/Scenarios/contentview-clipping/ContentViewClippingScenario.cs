@@ -692,7 +692,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         context.Pass("Compositor-paced scaling preserves text without synchronous redraw");
 
         var combinedMarker = new BoxView { Color = Colors.Red };
-        var combinedCorner = new BoxView { Color = Colors.Lime };
+        var combinedCorner = new BoxView { Color = Colors.Yellow };
         AbsoluteLayout.SetLayoutBounds(combinedMarker, new Rect(10, 10, 40, 20));
         AbsoluteLayout.SetLayoutBounds(combinedCorner, new Rect(10, 10, 10, 10));
         var combined = new ContentView
@@ -702,7 +702,6 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         AbsoluteLayout.SetLayoutBounds(combined, new Rect(320, 260, 80, 40));
         var root = (AbsoluteLayout)_clip.Parent!;
         root.Children.Add(combined);
-        _clip.IsVisible = false;
         await CaptureAsync(context, nativeWindow, "combined-base.png");
         var logicalFrame = ((IView)combined).Frame;
         var expectedRegion = new CGRect(logicalFrame.X + 45, logicalFrame.Y + 15, 60, 30);
@@ -725,7 +724,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             WantsLayer = true,
         };
         nativeMarker.Layer!.BackgroundColor = NSColor.Red.CGColor;
-        nativeCorner.Layer!.BackgroundColor = NSColor.Green.CGColor;
+        nativeCorner.Layer!.BackgroundColor = NSColor.Yellow.CGColor;
         nativeReference.AddSubview(nativeMarker);
         nativeReference.AddSubview(nativeCorner);
         rootNative.AddSubview(nativeReference);
@@ -749,12 +748,15 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                 nativeReference.Hidden = true;
                 var image = await CaptureAsync(context, nativeWindow, $"combined-{name}.png");
                 var productionRed = GetPixelGeometry(image, nativeWindow, rootNative, IsRed, combinedRegion);
-                var productionLime = GetPixelGeometry(image, nativeWindow, rootNative, IsLime, combinedRegion);
+                var productionCorner = GetPixelGeometry(image, nativeWindow, rootNative, IsYellow, combinedRegion);
                 combined.IsVisible = false;
                 nativeReference.Hidden = false;
+                ConfigureNativeReference(nativeReference, combined.Scale * combined.ScaleX,
+                    combined.Scale * combined.ScaleY, combined.Rotation,
+                    combined.TranslationX, combined.TranslationY);
                 var reference = await CaptureAsync(context, nativeWindow, $"combined-{name}-reference.png");
                 var referenceRed = GetPixelGeometry(reference, nativeWindow, rootNative, IsRed, combinedRegion);
-                var referenceLime = GetPixelGeometry(reference, nativeWindow, rootNative, IsLime, combinedRegion);
+                var referenceCorner = GetPixelGeometry(reference, nativeWindow, rootNative, IsYellow, combinedRegion);
                 context.AppendJson("combined-transforms.jsonl", new
                 {
                     name, combined.Scale, combined.ScaleX, combined.Rotation,
@@ -762,25 +764,25 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                     logicalFrame = logicalFrame.ToString(), expectedRegion = expectedRegion.ToString(),
                     frame = Native(combined).Frame.ToString(), bounds = Native(combined).Bounds.ToString(),
                     transform = Native(combined).Layer?.Transform.ToString(),
-                    productionRed, productionLime, referenceRed, referenceLime,
+                    productionRed, productionCorner, referenceRed, referenceCorner,
                 });
-                context.Assert(GeometryMatches(productionRed, productionLime, referenceRed, referenceLime),
+                context.Assert(GeometryMatches(productionRed, productionCorner, referenceRed, referenceCorner),
                     $"Combined {name} transform differs from the native AppKit reference: " +
-                    $"production={productionRed}/{productionLime}, reference={referenceRed}/{referenceLime}.",
+                    $"production={productionRed}/{productionCorner}, reference={referenceRed}/{referenceCorner}.",
                     $"contentview.combined-{name}-reference");
-                context.Assert(productionRed.Pixels > 5 && productionLime.Pixels > 5 &&
+                context.Assert(productionRed.Pixels > 5 && productionCorner.Pixels > 5 &&
                     CountPixels(image, nativeWindow, windowContent, IsRed) == productionRed.Pixels &&
                     CountPixels(reference, nativeWindow, windowContent, IsRed) == referenceRed.Pixels,
                     $"Combined {name} transform painted outside its isolated production region.",
                     $"contentview.combined-{name}-region");
                 var scale = image.Width / nativeWindow.Frame.Width;
                 context.Assert(productionRed.Pixels == 1575 * scale * scale &&
-                    productionLime.Pixels == 225 * scale * scale,
+                    productionCorner.Pixels == 225 * scale * scale,
                     $"Combined {name} transform has the wrong single-scale marker areas.",
                     $"contentview.combined-{name}-extent");
                 context.Assert(
                     CountPixels(image, nativeWindow, rootNative, IsRed, expectedRegion) == productionRed.Pixels &&
-                    CountPixels(image, nativeWindow, rootNative, IsLime, expectedRegion) == productionLime.Pixels,
+                    CountPixels(image, nativeWindow, rootNative, IsYellow, expectedRegion) == productionCorner.Pixels,
                     $"Combined {name} transform has the wrong analytically expected anchor/translation.",
                     $"contentview.combined-{name}-placement");
                 context.Pass($"Combined {name}, scale and translation match native AppKit rendering");
@@ -789,7 +791,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                 if (mirrored == 0)
                 {
                     rotatedRed = productionRed;
-                    rotatedLime = productionLime;
+                    rotatedLime = productionCorner;
                 }
             }
 
@@ -798,7 +800,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             combined.Scale = 0;
             var zero = await CaptureAsync(context, nativeWindow, "combined-zero.png");
             context.Assert(CountPixels(zero, nativeWindow, rootNative, IsRed, combinedRegion) == 0 &&
-                CountPixels(zero, nativeWindow, rootNative, IsLime, combinedRegion) == 0,
+                CountPixels(zero, nativeWindow, rootNative, IsYellow, combinedRegion) == 0,
                 "Zero scale left combined-transform pixels visible.", "contentview.combined-zero");
             combined.Scale = 1.5;
             combined.Rotation = 180;
@@ -806,7 +808,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             var zeroRestoredRed = GetPixelGeometry(
                 zeroRestored, nativeWindow, rootNative, IsRed, combinedRegion);
             var zeroRestoredLime = GetPixelGeometry(
-                zeroRestored, nativeWindow, rootNative, IsLime, combinedRegion);
+                zeroRestored, nativeWindow, rootNative, IsYellow, combinedRegion);
             context.Assert(zeroRestoredRed == rotatedRed && zeroRestoredLime == rotatedLime,
                 "Restoring zero scale did not restore the prior rotated pixels.",
                 "contentview.combined-zero-restored");
@@ -818,14 +820,14 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             combined.IsVisible = false;
             var collapsed = await CaptureAsync(context, nativeWindow, "combined-collapsed.png");
             context.Assert(CountPixels(collapsed, nativeWindow, rootNative, IsRed, combinedRegion) == 0 &&
-                CountPixels(collapsed, nativeWindow, rootNative, IsLime, combinedRegion) == 0,
+                CountPixels(collapsed, nativeWindow, rootNative, IsYellow, combinedRegion) == 0,
                 "Collapsed combined transform remained visible.", "contentview.combined-collapsed");
             combined.IsVisible = true;
             var collapsedRestored = await CaptureAsync(context, nativeWindow, "combined-collapsed-restored.png");
             var collapsedRestoredRed = GetPixelGeometry(
                 collapsedRestored, nativeWindow, rootNative, IsRed, combinedRegion);
             var collapsedRestoredLime = GetPixelGeometry(
-                collapsedRestored, nativeWindow, rootNative, IsLime, combinedRegion);
+                collapsedRestored, nativeWindow, rootNative, IsYellow, combinedRegion);
             context.Assert(collapsedRestoredRed == rotatedRed && collapsedRestoredLime == rotatedLime,
                 "Restoring collapsed content did not restore the prior rotated pixels.",
                 "contentview.combined-collapsed-restored");
@@ -858,7 +860,10 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             .Translate((nfloat)translationX, (nfloat)translationY, 0)
             .Scale((nfloat)scaleX, (nfloat)scaleY, 1)
             .Rotate((nfloat)(rotation * Math.PI / 180), 0, 0, 1);
+        CATransaction.Begin();
+        CATransaction.DisableActions = true;
         layer.Transform = transform;
+        CATransaction.Commit();
     }
 
     static PixelGeometry GetPixelGeometry(RuntimeBitmap image, NSWindow window, NSView view,
@@ -989,6 +994,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
     static bool IsOrange(byte red, byte green, byte blue) => red > 180 && green is > 60 and < 200 && blue < 100;
     static bool IsBlue(byte red, byte green, byte blue) => red < 140 && green < 140 && blue > 150;
     static bool IsLime(byte red, byte green, byte blue) => red < 10 && green > 240 && blue < 10;
+    static bool IsYellow(byte red, byte green, byte blue) => red > 240 && green > 240 && blue < 10;
     static bool IsRed(byte red, byte green, byte blue) => red > 240 && green < 10 && blue < 10;
 
     static int CountPixels(RuntimeBitmap image, NSWindow window, NSView view,
