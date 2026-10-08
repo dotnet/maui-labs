@@ -352,3 +352,33 @@ production whitespace filtering or unrelated test change was made.
 
 OS26 runtime and actual iOS-device execution remain unverified. The normal
 framework's OS26 deployment minimum is a build result, not those runtime proofs.
+
+### Reasoning runtime proof
+
+The OS27 Mac Catalyst playground produced two **actual model-supplied**
+reasoning entries (1,396 and 374 characters) around one native calculator call.
+Its saved standard updates were ordered as reasoning, answer whitespace,
+function call/result, reasoning, and final answer. Call/result IDs matched;
+the calculator returned `391`, and the answer preserved that result. Every
+provider update retained the exported model ID, followed by exactly one supplied
+usage update: input **288**, output **143**, total **431**.
+
+A second live turn used `ReasoningOutput.None` and retained the earlier
+reasoning identities/text and tool history. It answered `391` without emitting
+reasoning or calling another tool. Both turns auto-saved and replayed in the
+actual playground without contacting the model. Full reasoning was displayed
+separately from the answer; hidden output did not remove prior conversation
+entries. The owned validation app was stopped afterward.
+
+The complete host suites passed **373 Essentials.AI** and **161 playground**
+assertions. Synthetic SDK-native tests also cover signed-entry revisions,
+protection-only completion after answer/tools, foreign payload rejection and
+lossless history replay. Qwen supplies **no signatures**; those synthetic tests
+are not a claim of signed-model runtime proof. The normal System binding
+continued to build without the opt-in Core AI graph.
+
+The small Qwen fixture can request a tool more than once or rewrite a decorative
+label on its returned value. Visibility tests use an unpredictable opaque code
+and verify every native call/result and actual invocation, rather than silently
+retrying or filtering model output. Positive same-request reasoning tests retain
+separate exactly-once tool and stream-versus-collected assertions.
