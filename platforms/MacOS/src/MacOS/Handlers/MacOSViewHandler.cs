@@ -1,5 +1,6 @@
 using CoreGraphics;
 using CoreAnimation;
+using System.Runtime.CompilerServices;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using AppKit;
@@ -370,10 +371,8 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
         var scaleX = view.ScaleX * view.Scale;
         var scaleY = view.ScaleY * view.Scale;
-        if (externallyManaged && (scaleX != 1 || scaleY != 1))
+        if (scaleX != 1 || scaleY != 1)
             transform = transform.Scale((nfloat)scaleX, (nfloat)scaleY, 1);
-        else if (!externallyManaged && (scaleX < 0 || scaleY < 0))
-            transform = transform.Scale(scaleX < 0 ? -1 : 1, scaleY < 0 ? -1 : 1, 1);
 
         if (view.Rotation != 0)
             transform = transform.Rotate((nfloat)(view.Rotation * Math.PI / 180.0), 0, 0, 1);
@@ -389,10 +388,50 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
         else
         {
-            SetFrame(platformView, view, view.Frame);
+            SetFrameOrigin(platformView, view, view.Frame);
         }
 
         platformView.Layer.Transform = transform;
+        if (scaleX != 1 || scaleY != 1 ||
+            view.Rotation != 0 || view.RotationX != 0 || view.RotationY != 0)
+        {
+            ScheduleLayerTransformDisplay(platformView);
+        }
+    }
+
+    static readonly ConditionalWeakTable<NSView, object> DisplayedForLayerTransform = new();
+    static readonly ConditionalWeakTable<NSView, LayerTransformDisplayState> LayerTransformDisplayStates = new();
+
+    static void ScheduleLayerTransformDisplay(NSView view)
+    {
+        var state = LayerTransformDisplayStates.GetOrCreateValue(view);
+        if (state.Scheduled)
+            return;
+
+        state.Scheduled = true;
+        view.BeginInvokeOnMainThread(() =>
+        {
+            state.Scheduled = false;
+            DisplayNewSubtreeViews(view);
+        });
+    }
+
+    static void DisplayNewSubtreeViews(NSView view)
+    {
+        foreach (var subview in view.Subviews)
+            DisplayNewSubtreeViews(subview);
+
+        if (DisplayedForLayerTransform.TryGetValue(view, out _))
+            return;
+
+        DisplayedForLayerTransform.Add(view, new object());
+        view.NeedsDisplay = true;
+        view.DisplayIfNeededIgnoringOpacity();
+    }
+
+    sealed class LayerTransformDisplayState
+    {
+        public bool Scheduled { get; set; }
     }
 
     public static void MapInputTransparent(IViewHandler handler, IView view)
@@ -501,18 +540,21 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
     static void SetFrame(NSView platformView, IView view, Rect rect)
     {
-        var scaleX = Math.Abs(view.ScaleX * view.Scale);
-        var scaleY = Math.Abs(view.ScaleY * view.Scale);
-
         // Guard against NaN values which crash CALayer
-        var width = Sanitize(rect.Width * scaleX);
-        var height = Sanitize(rect.Height * scaleY);
-        var x = Sanitize(rect.X + view.TranslationX + (rect.Width - width) * view.AnchorX);
-        var y = Sanitize(rect.Y + view.TranslationY + (rect.Height - height) * view.AnchorY);
+        var x = Sanitize(rect.X + view.TranslationX);
+        var y = Sanitize(rect.Y + view.TranslationY);
+        var width = Sanitize(rect.Width);
+        var height = Sanitize(rect.Height);
 
         // NSView uses Frame for positioning (with IsFlipped=true for top-left origin)
         platformView.Frame = new CGRect(x, y, width, height);
-        platformView.Bounds = new CGRect(0, 0, Sanitize(rect.Width), Sanitize(rect.Height));
+    }
+
+    static void SetFrameOrigin(NSView platformView, IView view, Rect rect)
+    {
+        var x = Sanitize(rect.X + view.TranslationX);
+        var y = Sanitize(rect.Y + view.TranslationY);
+        platformView.SetFrameOrigin(new CGPoint(x, y));
     }
 
     public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
