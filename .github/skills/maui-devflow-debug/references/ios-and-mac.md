@@ -184,19 +184,24 @@ apple xcode list                                # installed Xcode versions
 
 ## xcrun simctl Reference
 
-Key subcommands beyond the basics:
+Key subcommands beyond the basics. Several of these are now wrapped by the `maui` CLI
+(`maui apple simulator …`) — prefer the wrapper when available so you get `--json` output and
+the standard error envelope:
 
-| Command | Use |
-|---------|-----|
-| `simctl addmedia <UDID> file.jpg` | Add photos/videos to sim |
-| `simctl openurl <UDID> "url"` | Open URL / deep link |
-| `simctl push <UDID> bundle payload.json` | Simulate push notification |
-| `simctl privacy <UDID> grant location bundle` | Grant permissions |
-| `simctl location <UDID> set 37.33,-122.03` | Set GPS location |
-| `simctl pbcopy <UDID>` | Copy stdin to clipboard |
-| `simctl pbpaste <UDID>` | Read clipboard |
-| `simctl get_app_container <UDID> bundle` | App container path |
-| `simctl listapps <UDID>` | Installed apps |
+| Command | Use | `maui` equivalent |
+|---------|-----|-------------------|
+| `simctl addmedia <UDID> file.jpg` | Add photos/videos to sim | `maui apple simulator add-media <UDID> file.jpg` |
+| `simctl openurl <UDID> "url"` | Open URL / deep link | `maui apple simulator openurl <UDID> "url"` |
+| `simctl push <UDID> bundle payload.json` | Simulate push notification | `maui apple simulator push <UDID> bundle payload.json` |
+| `simctl privacy <UDID> grant location bundle` | Grant permissions | `maui apple simulator privacy grant <UDID> location --bundle-id bundle` |
+| `simctl location <UDID> set 37.33,-122.03` | Set GPS location | `maui apple simulator location set <UDID> 37.33 -122.03` |
+| `simctl status_bar <UDID> override --time 9:41` | Override status bar | `maui apple simulator status-bar override <UDID> --time 9:41` |
+| `simctl ui <UDID> appearance dark` | Set light/dark appearance | `maui apple simulator appearance dark <UDID>` |
+| `simctl io <UDID> screenshot out.png` | Capture screenshot | `maui apple simulator screenshot <UDID> out.png` |
+| `simctl pbcopy <UDID>` | Copy stdin to clipboard | — |
+| `simctl pbpaste <UDID>` | Read clipboard | — |
+| `simctl get_app_container <UDID> bundle` | App container path | `maui apple simulator get-app-container <UDID> bundle` |
+| `simctl listapps <UDID>` | Installed apps | — |
 
 ## Troubleshooting
 
@@ -222,10 +227,20 @@ Key subcommands beyond the basics:
 ## Permission & Dialog Handling
 
 ### Pre-grant permissions (prevents dialogs from appearing)
+
+**Prefer the `maui` CLI** — `maui apple simulator privacy` now wraps `simctl privacy`
+(the `bundle-id` is optional, so you can grant for all apps), and `maui devflow ui permission`
+drives it for the agent-detected simulator:
+```bash
+maui apple simulator privacy grant <UDID> location --bundle-id com.company.appid
+maui apple simulator privacy grant <UDID> photos          # all apps (no bundle id)
+maui devflow ui permission grant location --bundle-id com.company.appid
+```
+
+Raw `xcrun simctl` fallback (only if the `maui` CLI is unavailable):
 ```bash
 # Grant specific permission before the app requests it
 xcrun simctl privacy <UDID> grant location com.company.appid
-xcrun simctl privacy <UDID> grant camera com.company.appid
 xcrun simctl privacy <UDID> grant photos com.company.appid
 xcrun simctl privacy <UDID> grant contacts com.company.appid
 xcrun simctl privacy <UDID> grant microphone com.company.appid

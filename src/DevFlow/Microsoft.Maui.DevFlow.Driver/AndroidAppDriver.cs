@@ -73,6 +73,29 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         await RunAdbAsync("shell", "input", "keyevent", keycode).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Taps a physical screen-pixel coordinate through Android's input pipeline.
+    /// Use the current accessibility tree to locate native controls outside the MAUI tree.
+    /// </summary>
+    public async Task TapCoordinateAsync(int x, int y)
+    {
+        var arguments = BuildCoordinateTapArguments(x, y);
+        var serial = await ResolveSerialAsync().ConfigureAwait(false);
+        await RunAdbForSerialAsync(serial, arguments).ConfigureAwait(false);
+    }
+
+    internal static string[] BuildCoordinateTapArguments(int x, int y)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(x);
+        ArgumentOutOfRangeException.ThrowIfNegative(y);
+        return
+        [
+            "shell", "input", "tap",
+            x.ToString(CultureInfo.InvariantCulture),
+            y.ToString(CultureInfo.InvariantCulture),
+        ];
+    }
+
     public override async Task<ThemeResult> SetThemeAsync(DevFlowTheme theme, ThemeSetScope scope = ThemeSetScope.Auto)
     {
         if (scope == ThemeSetScope.App)
@@ -368,6 +391,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     {
         EnsureNotRecording();
 
+        var serial = await ResolveSerialAsync().ConfigureAwait(false);
         var effectiveTimeout = timeoutSeconds;
         if (effectiveTimeout > AdbMaxTimeLimit)
         {
@@ -377,7 +401,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         }
 
         var arguments = BuildAdbArguments(
-            Serial,
+            serial,
             "shell",
             "screenrecord",
             "--time-limit",
@@ -385,18 +409,21 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             DeviceRecordingPath);
         var processStartInfo = CreateAdbProcessStartInfo(AdbPath, arguments);
         int? recordingPid = null;
+        var error = new StringWriter(CultureInfo.InvariantCulture);
         var recordingTask = ProcessUtils.StartProcess(
             processStartInfo,
             TextWriter.Null,
-            TextWriter.Null,
+            error,
             CancellationToken.None,
             process => recordingPid = process.Id);
 
+        await EnsureRecordingProcessStartedAsync(
+            recordingTask,
+            error,
+            "adb screenrecord").ConfigureAwait(false);
+
         if (recordingPid is null)
-        {
-            await recordingTask.ConfigureAwait(false);
             throw new InvalidOperationException("Failed to start adb screenrecord");
-        }
 
         var watchdogPid = SpawnWatchdog(recordingPid.Value, effectiveTimeout);
 
@@ -407,10 +434,28 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             OutputFile = Path.GetFullPath(outputFile),
             Platform = "android",
             DeviceOutputFile = DeviceRecordingPath,
-            Serial = Serial,
+            Serial = serial,
             StartedAt = DateTimeOffset.UtcNow,
             TimeoutSeconds = effectiveTimeout
         });
+    }
+
+    internal static async Task EnsureRecordingProcessStartedAsync(
+        Task<int> recordingTask,
+        TextWriter error,
+        string command)
+    {
+        var completedTask = await Task.WhenAny(
+            recordingTask,
+            Task.Delay(TimeSpan.FromMilliseconds(500))).ConfigureAwait(false);
+        if (completedTask != recordingTask)
+            return;
+
+        var exitCode = await recordingTask.ConfigureAwait(false);
+        var detail = error.ToString().Trim();
+        var suffix = detail.Length == 0 ? string.Empty : $": {detail}";
+        throw new InvalidOperationException(
+            $"{command} exited during startup with code {exitCode}{suffix}");
     }
 
     public override async Task<string> StopRecordingAsync()
@@ -475,19 +520,17 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     }
 
     private Task TapAsync(AlertButton button)
-        => RunAdbAsync(
-            "shell",
-            "input",
-            "tap",
-            button.CenterX.ToString(CultureInfo.InvariantCulture),
-            button.CenterY.ToString(CultureInfo.InvariantCulture));
+        => RunAdbAsync(BuildCoordinateTapArguments(button.CenterX, button.CenterY));
 
     private async Task RunAdbAsync(params string[] arguments)
         => _ = await RunAdbWithOutputAsync(arguments).ConfigureAwait(false);
 
-    private async Task<string> RunAdbWithOutputAsync(params string[] arguments)
+    private Task<string> RunAdbWithOutputAsync(params string[] arguments)
+        => RunAdbForSerialAsync(Serial, arguments);
+
+    private async Task<string> RunAdbForSerialAsync(string? serial, string[] arguments)
     {
-        var adbArguments = BuildAdbArguments(Serial, arguments);
+        var adbArguments = BuildAdbArguments(serial, arguments);
         var processStartInfo = CreateAdbProcessStartInfo(AdbPath, adbArguments);
         using var output = new StringWriter(CultureInfo.InvariantCulture);
         using var error = new StringWriter(CultureInfo.InvariantCulture);
