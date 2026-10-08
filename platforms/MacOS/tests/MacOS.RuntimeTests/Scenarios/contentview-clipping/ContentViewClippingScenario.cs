@@ -505,44 +505,62 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         var toolbarNative = Native(toolbarLabel);
         using (var toolbarButton = new NSButton(new CGRect(320, 170, 160, 28)))
         {
-            Native((IView)_clip.Parent).AddSubview(toolbarButton);
             toolbarButton.AddSubview(toolbarNative);
             toolbarNative.TranslatesAutoresizingMaskIntoConstraints = false;
             toolbarNative.LeadingAnchor.ConstraintEqualTo(toolbarButton.LeadingAnchor).Active = true;
             toolbarNative.TrailingAnchor.ConstraintEqualTo(toolbarButton.TrailingAnchor).Active = true;
             toolbarNative.CenterYAnchor.ConstraintEqualTo(toolbarButton.CenterYAnchor).Active = true;
             toolbarNative.HeightAnchor.ConstraintEqualTo(28).Active = true;
-            foreach (var width in new[] { 160, 240 })
+            using var toolbarItem = new NSToolbarItem("regression-content") { View = toolbarButton };
+            using var toolbarDelegate = new ObservedToolbarDelegate(toolbarItem);
+            using var toolbar = new NSToolbar("regression-toolbar")
             {
-                toolbarButton.Frame = new CGRect(320, 170, width, 28);
-                toolbarButton.NeedsLayout = true;
-                toolbarButton.LayoutSubtreeIfNeeded();
-                await CaptureAsync(context, nativeWindow, $"toolbar-resize-{width}.png");
-                var resolvedFrame = toolbarNative.Frame;
-                var resolvedBounds = toolbarNative.Bounds;
-                var alignmentInsets = toolbarNative.AlignmentRectInsets;
-                context.AppendJson("toolbar-state.jsonl", new
+                Delegate = toolbarDelegate,
+                DisplayMode = NSToolbarDisplayMode.Icon,
+            };
+            var previousToolbar = nativeWindow.Toolbar;
+            nativeWindow.Toolbar = toolbar;
+            toolbar.Visible = true;
+            try
+            {
+                foreach (var width in new[] { 160, 240 })
                 {
-                    width, button = toolbarButton.Frame.ToString(),
-                    label = resolvedFrame.ToString(), bounds = resolvedBounds.ToString(),
-                    alignmentInsets = alignmentInsets.ToString(),
-                });
-                context.Assert(Math.Abs(resolvedFrame.Width - alignmentInsets.Left - alignmentInsets.Right - width) < 0.0001 &&
-                    Math.Abs(resolvedFrame.X + alignmentInsets.Left) < 0.0001,
-                    $"Toolbar Auto Layout expected alignment width {width}, got frame {resolvedFrame}, insets {alignmentInsets}.",
-                    "contentview.toolbar-layout");
-                toolbarLabel.Scale = width == 160 ? 0.9 : 0.8;
-                toolbarLabel.AnchorX = width == 160 ? 0.25 : 0.75;
-                toolbarLabel.TranslationX = width == 160 ? 8 : 12;
-                toolbarLabel.Handler!.PlatformArrange(new Rect(0, 0, 160, 28));
-                var toolbarImage = await CaptureAsync(context, nativeWindow, $"toolbar-transformed-{width}.png");
-                context.Assert(FramesMatch(toolbarNative.Frame, resolvedFrame) &&
-                    FramesMatch(toolbarNative.Bounds, resolvedBounds),
-                    "A transform overwrote the toolbar's Auto Layout geometry.", "contentview.toolbar-transform");
-                context.Assert(CountPixels(toolbarImage, nativeWindow, toolbarButton, IsBlue) > 5,
-                    "Transformed Auto Layout toolbar text is blank.", "contentview.toolbar-text");
+                    toolbarItem.MinSize = toolbarItem.MaxSize = new CGSize(width, 28);
+                    toolbarButton.Frame = new CGRect(0, 0, width, 28);
+                    toolbarButton.NeedsLayout = true;
+                    toolbarButton.LayoutSubtreeIfNeeded();
+                    await CaptureAsync(context, nativeWindow, $"toolbar-resize-{width}.png");
+                    var resolvedFrame = toolbarNative.Frame;
+                    var resolvedBounds = toolbarNative.Bounds;
+                    var alignmentInsets = toolbarNative.AlignmentRectInsets;
+                    context.AppendJson("toolbar-state.jsonl", new
+                    {
+                        width, button = toolbarButton.Frame.ToString(),
+                        label = resolvedFrame.ToString(), bounds = resolvedBounds.ToString(),
+                        alignmentInsets = alignmentInsets.ToString(),
+                    });
+                    context.Assert(Math.Abs(resolvedFrame.Width - alignmentInsets.Left - alignmentInsets.Right - width) < 0.0001 &&
+                        Math.Abs(resolvedFrame.X + alignmentInsets.Left) < 0.0001,
+                        $"Toolbar Auto Layout expected alignment width {width}, got frame {resolvedFrame}, insets {alignmentInsets}.",
+                        "contentview.toolbar-layout");
+                    toolbarLabel.Scale = width == 160 ? 0.9 : 0.8;
+                    toolbarLabel.AnchorX = width == 160 ? 0.25 : 0.75;
+                    toolbarLabel.TranslationX = width == 160 ? 8 : 12;
+                    toolbarLabel.Handler!.PlatformArrange(new Rect(0, 0, 160, 28));
+                    var toolbarImage = await CaptureAsync(context, nativeWindow, $"toolbar-transformed-{width}.png");
+                    context.Assert(FramesMatch(toolbarNative.Frame, resolvedFrame) &&
+                        FramesMatch(toolbarNative.Bounds, resolvedBounds),
+                        "A transform overwrote the toolbar's Auto Layout geometry.", "contentview.toolbar-transform");
+                    context.Assert(CountPixels(toolbarImage, nativeWindow, toolbarButton, IsBlue) > 5,
+                        "Transformed Auto Layout toolbar text is blank.", "contentview.toolbar-text");
+                }
             }
-            toolbarButton.RemoveFromSuperview();
+            finally
+            {
+                toolbar.Visible = false;
+                nativeWindow.Toolbar = previousToolbar;
+                toolbarNative.RemoveFromSuperview();
+            }
         }
         toolbarLabel.Handler!.DisconnectHandler();
         context.Pass("Auto Layout toolbar content retains native geometry across transforms");
@@ -601,7 +619,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                 "Repeated scale changed logical bounds or native frame.", "contentview.scale-geometry");
             context.Assert(worldNative.AutoresizesSubviews &&
                 FramesMatch(autoresizedChild.Frame, new CGRect(800, 100, 80, 20)),
-                "Transform geometry resized an autoresizing child or changed its owner's autoresizing flag.",
+                $"Transform geometry resized an autoresizing child ({autoresizedChild.Frame}) or changed its owner's flag ({worldNative.AutoresizesSubviews}).",
                 "contentview.autoresizing-child");
         }
         _world.AnchorX = _world.AnchorY = 0.5;
@@ -801,6 +819,18 @@ sealed class ObservedContentViewHandler : ContentViewHandler
         ArrangeCalls++;
         base.PlatformArrange(rect);
     }
+}
+
+sealed class ObservedToolbarDelegate(NSToolbarItem item) : NSObject, INSToolbarDelegate
+{
+    [Export("toolbar:itemForItemIdentifier:willBeInsertedIntoToolbar:")]
+    public NSToolbarItem ToolbarItemForIdentifier(NSToolbar toolbar, string identifier, bool inserted) => item;
+
+    [Export("toolbarAllowedItemIdentifiers:")]
+    public string[] ToolbarAllowedItemIdentifiers(NSToolbar toolbar) => [item.Identifier];
+
+    [Export("toolbarDefaultItemIdentifiers:")]
+    public string[] ToolbarDefaultItemIdentifiers(NSToolbar toolbar) => [item.Identifier];
 }
 
 sealed class ObservedTextField : MauiNSTextField
