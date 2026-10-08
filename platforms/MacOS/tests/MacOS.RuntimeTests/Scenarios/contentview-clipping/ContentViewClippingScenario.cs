@@ -11,9 +11,9 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("contentview-clipping", 2,
+        ScenarioRegistry.Register(new("contentview-clipping", 3,
             context => new ContentViewClippingScenario().CreateDelegate(context),
-            ExpectedAssertions: 8));
+            ExpectedAssertions: 11));
 }
 
 sealed class ContentViewClippingScenario : MauiRuntimeScenario
@@ -102,6 +102,15 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         _clip.IsClippedToBounds = true;
         var clipsAgain = clipNative.Layer?.MasksToBounds == true;
 
+        _world.AnchorX = 1;
+        _world.Scale = 2;
+        await RuntimeTestContext.FlushMainQueueAsync();
+        var scaled = context.CaptureWindowBitmap(nativeWindow, "scaled.png");
+        var (scaledMagentaTextPixels, scaledMagentaPixelsOutsideClip) =
+            CountMagentaPixels(scaled, windowContent, clipNative.Frame);
+
+        _world.Scale = 1;
+        _world.AnchorX = 0.5;
         _world.TranslationX = -500;
         _world.TranslationX = -600;
         await RuntimeTestContext.FlushMainQueueAsync();
@@ -119,6 +128,8 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             clipsAgain,
             outsideClipIsLavender,
             translatedOutsideClipIsLavender,
+            scaledMagentaTextPixels,
+            scaledMagentaPixelsOutsideClip,
             magentaTextPixels,
             magentaPixelsOutsideClip,
             clipFrame = clipNative.Frame.ToString(),
@@ -127,7 +138,8 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             labelText = (labelNative as NSTextField)?.StringValue,
         });
 
-        if (!clips && !clipsAgain && outsideClipIsLavender && magentaTextPixels == 0)
+        if (!clips && !clipsAgain && outsideClipIsLavender &&
+            scaledMagentaTextPixels == 0 && magentaTextPixels == 0)
         {
             context.Assert(true,
                 "Observed paint outside the ContentView and missing text after moving it into view.");
@@ -146,6 +158,17 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "Oversized content painted outside the ContentView bounds.",
             "contentview.rendered-clip");
         context.Pass("IsClippedToBounds updates the native layer");
+
+        context.Assert(worldNative.Layer?.Transform.M11 == 1,
+            "Scale reset did not restore the native layer transform.",
+            "contentview.scale-reset");
+        context.Assert(scaledMagentaTextPixels > 5,
+            $"Text scaled into view did not render; found {scaledMagentaTextPixels} magenta text pixels.",
+            "contentview.scaled-text");
+        context.Assert(scaledMagentaPixelsOutsideClip == 0,
+            $"Scaled text escaped the clip by {scaledMagentaPixelsOutsideClip} pixels.",
+            "contentview.scaled-clip");
+        context.Pass("Scaled content and text render inside the clip");
 
         context.Assert((labelNative as NSTextField)?.StringValue == "Moved into view",
             "The moved native label lost its text.", "contentview.label-text");
