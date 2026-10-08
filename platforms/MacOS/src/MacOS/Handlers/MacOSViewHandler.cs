@@ -19,6 +19,11 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
     where TVirtualView : class, IView
     where TPlatformView : NSView
 {
+    bool _hasAppliedTranslation;
+    bool _hasLayerTransform;
+    double _appliedTranslationX;
+    double _appliedTranslationY;
+
     static MacOSViewHandler()
     {
         try
@@ -385,10 +390,15 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
         else
         {
-            SetFrameOrigin(platformView, view, view.Frame);
+            if (handler is MacOSViewHandler<TVirtualView, TPlatformView> macOSHandler)
+                macOSHandler.UpdateTranslationOrigin(platformView, view);
         }
 
         platformView.Layer.Transform = transform;
+        if (handler is MacOSViewHandler<TVirtualView, TPlatformView> viewHandler)
+            viewHandler._hasLayerTransform =
+                scaleX != 1 || scaleY != 1 ||
+                view.Rotation != 0 || view.RotationX != 0 || view.RotationY != 0;
     }
 
     public static void MapInputTransparent(IViewHandler handler, IView view)
@@ -495,7 +505,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         SetFrame(platformView, VirtualView, rect);
     }
 
-    static void SetFrame(NSView platformView, IView view, Rect rect)
+    void SetFrame(NSView platformView, IView view, Rect rect)
     {
         // Guard against NaN values which crash CALayer
         var x = Sanitize(rect.X + view.TranslationX);
@@ -505,13 +515,41 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
         // NSView uses Frame for positioning (with IsFlipped=true for top-left origin)
         platformView.Frame = new CGRect(x, y, width, height);
+        RememberTranslation(view);
     }
 
-    static void SetFrameOrigin(NSView platformView, IView view, Rect rect)
+    void UpdateTranslationOrigin(NSView platformView, IView view)
     {
-        var x = Sanitize(rect.X + view.TranslationX);
-        var y = Sanitize(rect.Y + view.TranslationY);
-        platformView.SetFrameOrigin(new CGPoint(x, y));
+        if (_hasAppliedTranslation &&
+            _appliedTranslationX == view.TranslationX &&
+            _appliedTranslationY == view.TranslationY)
+        {
+            return;
+        }
+
+        CGPoint origin;
+        if (_hasAppliedTranslation && _hasLayerTransform)
+        {
+            origin = new CGPoint(
+                platformView.Frame.X + Sanitize(view.TranslationX - _appliedTranslationX),
+                platformView.Frame.Y + Sanitize(view.TranslationY - _appliedTranslationY));
+        }
+        else
+        {
+            origin = new CGPoint(
+                Sanitize(view.Frame.X + view.TranslationX),
+                Sanitize(view.Frame.Y + view.TranslationY));
+        }
+
+        platformView.SetFrameOrigin(origin);
+        RememberTranslation(view);
+    }
+
+    void RememberTranslation(IView view)
+    {
+        _hasAppliedTranslation = true;
+        _appliedTranslationX = view.TranslationX;
+        _appliedTranslationY = view.TranslationY;
     }
 
     public override Size GetDesiredSize(double widthConstraint, double heightConstraint)

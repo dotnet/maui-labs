@@ -112,6 +112,12 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         var (magentaTextPixels, magentaPixelsOutsideClip) =
             CountMagentaPixels(translated, windowContent, clipNative.Frame);
 
+        _world.Scale = 1.1;
+        await RuntimeTestContext.FlushMainQueueAsync();
+        var firstZoom = context.CaptureWindowBitmap(nativeWindow, "zoomed-1.png");
+        var (firstZoomMagentaTextPixels, firstZoomMagentaPixelsOutsideClip) =
+            CountMagentaPixels(firstZoom, windowContent, clipNative.Frame);
+
         _world.Scale = 1.25;
         await RuntimeTestContext.FlushMainQueueAsync();
         var zoomed = context.CaptureWindowBitmap(nativeWindow, "zoomed.png");
@@ -127,6 +133,8 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             translatedOutsideClipIsLavender,
             magentaTextPixels,
             magentaPixelsOutsideClip,
+            firstZoomMagentaTextPixels,
+            firstZoomMagentaPixelsOutsideClip,
             zoomedMagentaTextPixels,
             zoomedMagentaPixelsOutsideClip,
             clipFrame = clipNative.Frame.ToString(),
@@ -170,11 +178,14 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "contentview.translated-clip");
         context.Pass("Transformed content and text redraw after moving into view");
 
-        context.Assert(zoomedMagentaTextPixels > 5,
-            $"Text disappeared after zoom; found {zoomedMagentaTextPixels} magenta text pixels.",
+        context.Assert(firstZoomMagentaTextPixels > magentaTextPixels &&
+            zoomedMagentaTextPixels > firstZoomMagentaTextPixels,
+            $"Text did not visibly scale across repeated zoom updates; pixel counts were " +
+            $"{magentaTextPixels}, {firstZoomMagentaTextPixels}, and {zoomedMagentaTextPixels}.",
             "contentview.zoomed-text");
-        context.Assert(zoomedMagentaPixelsOutsideClip == 0,
-            $"Zoomed text escaped the clip by {zoomedMagentaPixelsOutsideClip} pixels.",
+        context.Assert(firstZoomMagentaPixelsOutsideClip == 0 && zoomedMagentaPixelsOutsideClip == 0,
+            $"Zoomed text escaped the clip by {firstZoomMagentaPixelsOutsideClip} and " +
+            $"{zoomedMagentaPixelsOutsideClip} pixels.",
             "contentview.zoomed-clip");
         context.Pass("Moved content remains rendered and clipped after zoom");
     }
