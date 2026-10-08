@@ -150,7 +150,7 @@ public class CoreAIReasoningTests
 	{
 		using var client = CoreAIModelFixture.Create().AsBuilder().UseFunctionInvocation().Build();
 		var calls = 0;
-		var code = $"LOCAL-{Guid.NewGuid():N}";
+		var code = Guid.NewGuid().ToString("N");
 		var options = CoreAIModelFixture.Options;
 		options.Reasoning = new()
 		{
@@ -177,7 +177,8 @@ public class CoreAIReasoningTests
 		{
 			Assert.False(string.IsNullOrWhiteSpace(call.CallId));
 			Assert.True(call.InformationalOnly);
-			Assert.Single(results, result => result.CallId == call.CallId);
+			var result = Assert.Single(results, result => result.CallId == call.CallId);
+			Assert.Contains(code, Assert.IsType<string>(result.Result), StringComparison.Ordinal);
 		});
 		Assert.NotNull(response.Usage);
 		Assert.True(response.Usage.InputTokenCount > 0);
