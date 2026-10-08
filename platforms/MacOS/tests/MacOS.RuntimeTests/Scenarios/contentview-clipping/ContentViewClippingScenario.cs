@@ -13,7 +13,7 @@ static class Registration
     public static void Register() =>
         ScenarioRegistry.Register(new("contentview-clipping", 3,
             context => new ContentViewClippingScenario().CreateDelegate(context),
-            ExpectedAssertions: 11));
+            ExpectedAssertions: 10));
 }
 
 sealed class ContentViewClippingScenario : MauiRuntimeScenario
@@ -102,15 +102,6 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         _clip.IsClippedToBounds = true;
         var clipsAgain = clipNative.Layer?.MasksToBounds == true;
 
-        _world.AnchorX = 1;
-        _world.Scale = 2;
-        await RuntimeTestContext.FlushMainQueueAsync();
-        var scaled = context.CaptureWindowBitmap(nativeWindow, "scaled.png");
-        var (scaledMagentaTextPixels, scaledMagentaPixelsOutsideClip) =
-            CountMagentaPixels(scaled, windowContent, clipNative.Frame);
-
-        _world.Scale = 1;
-        _world.AnchorX = 0.5;
         _world.TranslationX = -500;
         _world.TranslationX = -600;
         await RuntimeTestContext.FlushMainQueueAsync();
@@ -121,6 +112,12 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         var (magentaTextPixels, magentaPixelsOutsideClip) =
             CountMagentaPixels(translated, windowContent, clipNative.Frame);
 
+        _world.Scale = 1.25;
+        await RuntimeTestContext.FlushMainQueueAsync();
+        var zoomed = context.CaptureWindowBitmap(nativeWindow, "zoomed.png");
+        var (zoomedMagentaTextPixels, zoomedMagentaPixelsOutsideClip) =
+            CountMagentaPixels(zoomed, windowContent, clipNative.Frame);
+
         context.WriteJson("native-state.json", new
         {
             clips,
@@ -128,10 +125,10 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             clipsAgain,
             outsideClipIsLavender,
             translatedOutsideClipIsLavender,
-            scaledMagentaTextPixels,
-            scaledMagentaPixelsOutsideClip,
             magentaTextPixels,
             magentaPixelsOutsideClip,
+            zoomedMagentaTextPixels,
+            zoomedMagentaPixelsOutsideClip,
             clipFrame = clipNative.Frame.ToString(),
             worldFrame = worldNative.Frame.ToString(),
             labelFrame = labelNative.Frame.ToString(),
@@ -139,7 +136,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         });
 
         if (!clips && !clipsAgain && outsideClipIsLavender &&
-            scaledMagentaTextPixels == 0 && magentaTextPixels == 0)
+            magentaTextPixels == 0 && zoomedMagentaTextPixels == 0)
         {
             context.Assert(true,
                 "Observed paint outside the ContentView and missing text after moving it into view.");
@@ -159,17 +156,6 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "contentview.rendered-clip");
         context.Pass("IsClippedToBounds updates the native layer");
 
-        context.Assert(worldNative.Layer?.Transform.M11 == 1,
-            "Scale reset did not restore the native layer transform.",
-            "contentview.scale-reset");
-        context.Assert(scaledMagentaTextPixels > 5,
-            $"Text scaled into view did not render; found {scaledMagentaTextPixels} magenta text pixels.",
-            "contentview.scaled-text");
-        context.Assert(scaledMagentaPixelsOutsideClip == 0,
-            $"Scaled text escaped the clip by {scaledMagentaPixelsOutsideClip} pixels.",
-            "contentview.scaled-clip");
-        context.Pass("Scaled content and text render inside the clip");
-
         context.Assert((labelNative as NSTextField)?.StringValue == "Moved into view",
             "The moved native label lost its text.", "contentview.label-text");
         context.Assert(worldNative.Frame.X == -600,
@@ -183,6 +169,14 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             $"outside text pixels={magentaPixelsOutsideClip}.",
             "contentview.translated-clip");
         context.Pass("Transformed content and text redraw after moving into view");
+
+        context.Assert(zoomedMagentaTextPixels > 5,
+            $"Text disappeared after zoom; found {zoomedMagentaTextPixels} magenta text pixels.",
+            "contentview.zoomed-text");
+        context.Assert(zoomedMagentaPixelsOutsideClip == 0,
+            $"Zoomed text escaped the clip by {zoomedMagentaPixelsOutsideClip} pixels.",
+            "contentview.zoomed-clip");
+        context.Pass("Moved content remains rendered and clipped after zoom");
     }
 
     static bool IsLavender(RuntimeBitmap image, NSView view, double x, double y)

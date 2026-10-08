@@ -1,6 +1,5 @@
 using CoreGraphics;
 using CoreAnimation;
-using System.Runtime.CompilerServices;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using AppKit;
@@ -366,8 +365,6 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
 
         var transform = CATransform3D.Identity;
-        var externallyManaged =
-            platformView is MacOSContainerView { ExternalFrameManagement: true };
 
         var scaleX = view.ScaleX * view.Scale;
         var scaleY = view.ScaleY * view.Scale;
@@ -381,7 +378,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (view.RotationY != 0)
             transform = transform.Rotate((nfloat)(view.RotationY * Math.PI / 180.0), 0, 1, 0);
 
-        if (externallyManaged)
+        if (platformView is MacOSContainerView { ExternalFrameManagement: true })
         {
             if (view.TranslationX != 0 || view.TranslationY != 0)
                 transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
@@ -392,46 +389,6 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
 
         platformView.Layer.Transform = transform;
-        if (scaleX != 1 || scaleY != 1 ||
-            view.Rotation != 0 || view.RotationX != 0 || view.RotationY != 0)
-        {
-            ScheduleLayerTransformDisplay(platformView);
-        }
-    }
-
-    static readonly ConditionalWeakTable<NSView, object> DisplayedForLayerTransform = new();
-    static readonly ConditionalWeakTable<NSView, LayerTransformDisplayState> LayerTransformDisplayStates = new();
-
-    static void ScheduleLayerTransformDisplay(NSView view)
-    {
-        var state = LayerTransformDisplayStates.GetOrCreateValue(view);
-        if (state.Scheduled)
-            return;
-
-        state.Scheduled = true;
-        view.BeginInvokeOnMainThread(() =>
-        {
-            state.Scheduled = false;
-            DisplayNewSubtreeViews(view);
-        });
-    }
-
-    static void DisplayNewSubtreeViews(NSView view)
-    {
-        foreach (var subview in view.Subviews)
-            DisplayNewSubtreeViews(subview);
-
-        if (DisplayedForLayerTransform.TryGetValue(view, out _))
-            return;
-
-        DisplayedForLayerTransform.Add(view, new object());
-        view.NeedsDisplay = true;
-        view.DisplayIfNeededIgnoringOpacity();
-    }
-
-    sealed class LayerTransformDisplayState
-    {
-        public bool Scheduled { get; set; }
     }
 
     public static void MapInputTransparent(IViewHandler handler, IView view)

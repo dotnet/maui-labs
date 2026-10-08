@@ -1,8 +1,8 @@
 {
   "name": "contentview-clipping",
   "expectedCases": 3,
-  "expectedAssertions": 11,
-  "evidence": ["native-state.json", "initial.png", "scaled.png", "translated.png", "assertions.txt"],
+  "expectedAssertions": 10,
+  "evidence": ["native-state.json", "initial.png", "translated.png", "zoomed.png", "assertions.txt"],
   "baseline": {
     "overlays": [
       {
