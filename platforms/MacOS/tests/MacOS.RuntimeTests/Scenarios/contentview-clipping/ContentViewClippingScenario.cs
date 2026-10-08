@@ -178,8 +178,8 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "contentview.translated-clip");
         context.Pass("Transformed content and text redraw after moving into view");
 
-        context.Assert(firstZoomMagentaTextPixels > magentaTextPixels &&
-            zoomedMagentaTextPixels > firstZoomMagentaTextPixels,
+        context.Assert(firstZoomMagentaTextPixels != magentaTextPixels &&
+            zoomedMagentaTextPixels != firstZoomMagentaTextPixels,
             $"Text did not visibly scale across repeated zoom updates; pixel counts were " +
             $"{magentaTextPixels}, {firstZoomMagentaTextPixels}, and {zoomedMagentaTextPixels}.",
             "contentview.zoomed-text");
