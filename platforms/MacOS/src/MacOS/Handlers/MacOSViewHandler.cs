@@ -1,5 +1,6 @@
 using CoreGraphics;
 using CoreAnimation;
+using System.Runtime.CompilerServices;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using AppKit;
@@ -7,6 +8,21 @@ using AppKit;
 using Microsoft.Maui.Platforms.MacOS.Platform;
 
 namespace Microsoft.Maui.Platforms.MacOS.Handlers;
+
+static class MacOSViewTransformStates
+{
+    static readonly ConditionalWeakTable<NSView, MacOSViewTransformState> States = new();
+
+    public static MacOSViewTransformState Get(NSView view) => States.GetOrCreateValue(view);
+}
+
+sealed class MacOSViewTransformState
+{
+    public bool HasAppliedTranslation { get; set; }
+    public bool HasLayerTransform { get; set; }
+    public double AppliedTranslationX { get; set; }
+    public double AppliedTranslationY { get; set; }
+}
 
 /// <summary>
 /// Base view handler for macOS that provides PlatformArrange and GetDesiredSize implementations.
@@ -19,11 +35,6 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
     where TVirtualView : class, IView
     where TPlatformView : NSView
 {
-    bool _hasAppliedTranslation;
-    bool _hasLayerTransform;
-    double _appliedTranslationX;
-    double _appliedTranslationY;
-
     static MacOSViewHandler()
     {
         try
@@ -389,10 +400,9 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
                 transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
         }
         platformView.Layer.Transform = transform;
-        if (handler is MacOSViewHandler<TVirtualView, TPlatformView> viewHandler)
-            viewHandler._hasLayerTransform =
-                scaleX != 1 || scaleY != 1 ||
-                view.Rotation != 0 || view.RotationX != 0 || view.RotationY != 0;
+        MacOSViewTransformStates.Get(platformView).HasLayerTransform =
+            scaleX != 1 || scaleY != 1 ||
+            view.Rotation != 0 || view.RotationX != 0 || view.RotationY != 0;
     }
 
     public static void MapTranslation(IViewHandler handler, IView view)
@@ -400,11 +410,8 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (handler.PlatformView is not NSView platformView)
             return;
 
-        if (platformView is not MacOSContainerView { ExternalFrameManagement: true } &&
-            handler is MacOSViewHandler<TVirtualView, TPlatformView> macOSHandler)
-        {
-            macOSHandler.UpdateTranslationOrigin(platformView, view);
-        }
+        if (platformView is not MacOSContainerView { ExternalFrameManagement: true })
+            UpdateTranslationOrigin(platformView, view);
 
         MapTransform(handler, view);
     }
@@ -525,21 +532,22 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         platformView.Frame = new CGRect(x, y, width, height);
     }
 
-    void UpdateTranslationOrigin(NSView platformView, IView view)
+    static void UpdateTranslationOrigin(NSView platformView, IView view)
     {
-        if (_hasAppliedTranslation &&
-            _appliedTranslationX == view.TranslationX &&
-            _appliedTranslationY == view.TranslationY)
+        var state = MacOSViewTransformStates.Get(platformView);
+        if (state.HasAppliedTranslation &&
+            state.AppliedTranslationX == view.TranslationX &&
+            state.AppliedTranslationY == view.TranslationY)
         {
             return;
         }
 
         CGPoint origin;
-        if (_hasAppliedTranslation && _hasLayerTransform)
+        if (state.HasAppliedTranslation && state.HasLayerTransform)
         {
             origin = new CGPoint(
-                platformView.Frame.X + Sanitize(view.TranslationX - _appliedTranslationX),
-                platformView.Frame.Y + Sanitize(view.TranslationY - _appliedTranslationY));
+                platformView.Frame.X + Sanitize(view.TranslationX - state.AppliedTranslationX),
+                platformView.Frame.Y + Sanitize(view.TranslationY - state.AppliedTranslationY));
         }
         else
         {
@@ -549,14 +557,9 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
 
         platformView.SetFrameOrigin(origin);
-        RememberTranslation(view);
-    }
-
-    void RememberTranslation(IView view)
-    {
-        _hasAppliedTranslation = true;
-        _appliedTranslationX = view.TranslationX;
-        _appliedTranslationY = view.TranslationY;
+        state.HasAppliedTranslation = true;
+        state.AppliedTranslationX = view.TranslationX;
+        state.AppliedTranslationY = view.TranslationY;
     }
 
     public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
