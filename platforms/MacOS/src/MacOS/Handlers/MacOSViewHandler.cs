@@ -365,11 +365,15 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
 
         var transform = CATransform3D.Identity;
+        var externallyManaged =
+            platformView is MacOSContainerView { ExternalFrameManagement: true };
 
         var scaleX = view.ScaleX * view.Scale;
         var scaleY = view.ScaleY * view.Scale;
-        if (scaleX != 1 || scaleY != 1)
+        if (externallyManaged && (scaleX != 1 || scaleY != 1))
             transform = transform.Scale((nfloat)scaleX, (nfloat)scaleY, 1);
+        else if (!externallyManaged && (scaleX < 0 || scaleY < 0))
+            transform = transform.Scale(scaleX < 0 ? -1 : 1, scaleY < 0 ? -1 : 1, 1);
 
         if (view.Rotation != 0)
             transform = transform.Rotate((nfloat)(view.Rotation * Math.PI / 180.0), 0, 0, 1);
@@ -378,14 +382,14 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (view.RotationY != 0)
             transform = transform.Rotate((nfloat)(view.RotationY * Math.PI / 180.0), 0, 1, 0);
 
-        if (platformView is MacOSContainerView { ExternalFrameManagement: true })
+        if (externallyManaged)
         {
             if (view.TranslationX != 0 || view.TranslationY != 0)
                 transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
         }
         else
         {
-            SetFrameOrigin(platformView, view, view.Frame);
+            SetFrame(platformView, view, view.Frame);
         }
 
         platformView.Layer.Transform = transform;
@@ -497,21 +501,18 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
     static void SetFrame(NSView platformView, IView view, Rect rect)
     {
+        var scaleX = Math.Abs(view.ScaleX * view.Scale);
+        var scaleY = Math.Abs(view.ScaleY * view.Scale);
+
         // Guard against NaN values which crash CALayer
-        var x = Sanitize(rect.X + view.TranslationX);
-        var y = Sanitize(rect.Y + view.TranslationY);
-        var width = Sanitize(rect.Width);
-        var height = Sanitize(rect.Height);
+        var width = Sanitize(rect.Width * scaleX);
+        var height = Sanitize(rect.Height * scaleY);
+        var x = Sanitize(rect.X + view.TranslationX + (rect.Width - width) * view.AnchorX);
+        var y = Sanitize(rect.Y + view.TranslationY + (rect.Height - height) * view.AnchorY);
 
         // NSView uses Frame for positioning (with IsFlipped=true for top-left origin)
         platformView.Frame = new CGRect(x, y, width, height);
-    }
-
-    static void SetFrameOrigin(NSView platformView, IView view, Rect rect)
-    {
-        var x = Sanitize(rect.X + view.TranslationX);
-        var y = Sanitize(rect.Y + view.TranslationY);
-        platformView.SetFrameOrigin(new CGPoint(x, y));
+        platformView.Bounds = new CGRect(0, 0, Sanitize(rect.Width), Sanitize(rect.Height));
     }
 
     public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
