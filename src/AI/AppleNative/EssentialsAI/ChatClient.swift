@@ -333,7 +333,7 @@ public class ChatClientNative: NSObject {
         }
 #endif
 
-        let transcript = try Transcript(entries: otherMessages.flatMap(self.toTranscriptEntries))
+        let transcript = try Transcript(entries: normalizedReasoningHistory(otherMessages).flatMap(self.toTranscriptEntries))
         let prompt = try self.toPrompt(message: lastMessage)
 
         // Parse the JSON schema from the options
@@ -558,22 +558,30 @@ public class ChatClientNative: NSObject {
     }
 
     func replayReasoning(_ contents: [TextReasoningContentNative], messageId: String?) throws -> Transcript.Entry? {
-        let protectedValues = Set(contents.compactMap(\.protectedData))
+        let protectedValues = contents.compactMap(\.protectedData)
         guard !protectedValues.isEmpty else {
             // Unsigned traces are not answer text or fabricated tokens. CoreAILM ignores reasoning history.
             return nil
         }
-        guard #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
-              protectedValues.count == 1, let value = protectedValues.first,
-              value.hasPrefix(Self.protectionPrefix),
-              let bytes = Data(base64Encoded: String(value.dropFirst(Self.protectionPrefix.count))) else {
+        guard #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) else {
             throw NSError.chatError(.invalidContent, description: "Unsupported protected reasoning data.")
         }
-        let payload = try JSONDecoder().decode(ProtectedReasoning.self, from: bytes)
-        guard payload.producer == reasoningProducer, payload.transcript.count == 1,
-              case .reasoning(let reasoning)? = payload.transcript.first,
-              reasoning.signature != nil, reasoning.id == messageId else {
-            throw NSError.chatError(.invalidContent, description: "Protected reasoning must retain its native message identity and producer.")
+        var latest: Transcript.Reasoning?
+        for value in protectedValues {
+            guard value.hasPrefix(Self.protectionPrefix),
+                  let bytes = Data(base64Encoded: String(value.dropFirst(Self.protectionPrefix.count))) else {
+                throw NSError.chatError(.invalidContent, description: "Unsupported protected reasoning data.")
+            }
+            let payload = try JSONDecoder().decode(ProtectedReasoning.self, from: bytes)
+            guard payload.producer == reasoningProducer, payload.transcript.count == 1,
+                  case .reasoning(let reasoning)? = payload.transcript.first,
+                  reasoning.signature != nil, reasoning.id == messageId else {
+                throw NSError.chatError(.invalidContent, description: "Protected reasoning must retain its native message identity and producer.")
+            }
+            latest = reasoning
+        }
+        guard let reasoning = latest else {
+            throw NSError.chatError(.invalidContent, description: "Protected reasoning has no native entry.")
         }
         let text = contents.compactMap(\.text).joined()
         let signedText = reasoning.segments.compactMap { segment in
@@ -584,6 +592,44 @@ public class ChatClientNative: NSObject {
             throw NSError.chatError(.invalidContent, description: "Reasoning text does not match its protected native entry.")
         }
         return .reasoning(reasoning)
+    }
+
+    func normalizedReasoningHistory(_ messages: [ChatMessageNative]) throws -> [ChatMessageNative] {
+        var fragments: [String: [TextReasoningContentNative]] = [:]
+        var protectedIds: Set<String> = []
+        for message in messages where message.role == .assistant {
+            let reasoning = message.contents.compactMap { $0 as? TextReasoningContentNative }
+            if reasoning.contains(where: { $0.protectedData != nil }) {
+                guard let id = message.messageId, !id.isEmpty else {
+                    throw NSError.chatError(.invalidContent, description: "Protected reasoning requires its native message identity.")
+                }
+                protectedIds.insert(id)
+            }
+            if let id = message.messageId {
+                fragments[id, default: []].append(contentsOf: reasoning)
+            }
+        }
+        var emittedIds: Set<String> = []
+        return messages.compactMap { message in
+            guard message.role == .assistant, let id = message.messageId, protectedIds.contains(id) else {
+                return message
+            }
+            let normalized = ChatMessageNative()
+            normalized.role = message.role
+            normalized.messageId = id
+            for content in message.contents {
+                if content is TextReasoningContentNative {
+                    // Standard aggregation may place final protection after answer/tool messages.
+                    // Restore all revisions at the first position of this native reasoning entry.
+                    if emittedIds.insert(id).inserted {
+                        normalized.contents.append(contentsOf: fragments[id] ?? [])
+                    }
+                } else {
+                    normalized.contents.append(content)
+                }
+            }
+            return normalized.contents.isEmpty ? nil : normalized
+        }
     }
 
     private func callbackQueue() -> DispatchQueue {

@@ -56,6 +56,7 @@ public class CoreAIChatClientTests
 		var expectedName = metadata.RootElement.GetProperty("name").GetString();
 		var options = CoreAIModelFixture.Options;
 		options.ModelId = "not-a-resource-path";
+		options.Reasoning = new() { Effort = ReasoningEffort.None, Output = ReasoningOutput.Full };
 		var response = await Respond(client, [new(ChatRole.User, "Say hello in one short sentence.")], options, streaming);
 
 		Assert.Equal(expectedName, client.GetService<ChatClientMetadata>()?.DefaultModelId);
@@ -75,7 +76,12 @@ public class CoreAIChatClientTests
 		using var native = new ChatClientNative(CoreAIModelFixture.DirectoryPath);
 		var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
 		var completion = new TaskCompletionSource<ChatResponseNative>(TaskCreationOptions.RunContinuationsAsynchronously);
-		using var options = new ChatOptionsNative { Temperature = NSNumber.FromDouble(0.6), MaxOutputTokens = NSNumber.FromInt32(1536) };
+		using var options = new ChatOptionsNative
+		{
+			Temperature = NSNumber.FromDouble(0.6),
+			MaxOutputTokens = NSNumber.FromInt32(1536),
+			ReasoningLevel = "none",
+		};
 		using var token = native.StreamResponse(
 			[new ChatMessageNative { Role = ChatRoleNative.User, Contents = [new TextContentNative("Say hello in a single short sentence. /no_think")] }],
 			options,
@@ -542,7 +548,7 @@ public class CoreAIChatClientTests
 		return updates.ToChatResponse();
 	}
 
-	private sealed record SchemaAnswer(
+	internal sealed record SchemaAnswer(
 		[property: System.Text.Json.Serialization.JsonPropertyName("city")] string City,
 		[property: System.Text.Json.Serialization.JsonPropertyName("count")] int Count);
 

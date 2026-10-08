@@ -68,11 +68,11 @@ internal sealed class ChatTurnExecutor
             .WithCancellation(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (update.MessageId is { } nextMessageId && messageId != nextMessageId)
+            if (messageId != update.MessageId)
             {
                 activeText = null;
                 activeReasoning = null;
-                messageId = nextMessageId;
+                messageId = update.MessageId;
             }
             List<AIContent> acceptedContents = [];
             foreach (var content in update.Contents)
@@ -106,9 +106,11 @@ internal sealed class ChatTurnExecutor
                         // Final signature-only updates may refer to a reasoning item before the answer.
                         if (string.IsNullOrEmpty(reasoning.Text) && reasoning.ProtectedData is not null &&
                             update.MessageId is { } protectedMessageId &&
-                            reasoningByMessageId.TryGetValue(protectedMessageId, out var protectedMessage))
+                            reasoningByMessageId.TryGetValue(protectedMessageId, out var protectedMessage) &&
+                            ((TextReasoningContent)protectedMessage.Contents[0]).ProtectedData is null)
                         {
                             ((TextReasoningContent)protectedMessage.Contents[0]).ProtectedData = reasoning.ProtectedData;
+                            activeReasoning = null;
                             break;
                         }
                         if (activeReasoning is null)
@@ -127,8 +129,8 @@ internal sealed class ChatTurnExecutor
                             if (reasoning.ProtectedData is not null)
                                 accumulated.ProtectedData = reasoning.ProtectedData;
                         }
-                        // Providers without message identity use protected completion as an item boundary.
-                        if (reasoning.ProtectedData is not null && messageId is null)
+                        // Protection completes a reasoning item, even when a message contains multiple items.
+                        if (reasoning.ProtectedData is not null)
                             activeReasoning = null;
                         break;
                     case DataContent image when image.MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase):

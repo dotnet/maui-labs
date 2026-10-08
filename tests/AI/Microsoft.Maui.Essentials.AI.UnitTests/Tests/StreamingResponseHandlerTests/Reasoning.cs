@@ -54,6 +54,31 @@ public partial class StreamingResponseHandlerTests
 		Assert.Equal(new[] { null, "opaque-native-1", "opaque-native-2", "opaque-native-3" },
 			reasoning.Select(content => content.ProtectedData));
 		Assert.Equal("signature-only", updates[^1].MessageId);
+		var aggregated = updates.ToChatResponse().Messages.SelectMany(message => message.Contents)
+			.OfType<TextReasoningContent>().ToArray();
+		Assert.Equal("Original", string.Concat(aggregated.Select(content => content.Text)));
+		Assert.Equal(new[] { "opaque-native-1", "opaque-native-2", "opaque-native-3" },
+			aggregated.Where(content => content.ProtectedData is not null).Select(content => content.ProtectedData));
+	}
+
+	[Fact]
+	public async Task Reasoning_ProtectionRevisionAfterAnswer_StandardAggregationRetainsNativeIdentity()
+	{
+		var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+		handler.ProcessReasoning("native-entry", "segment", "Original", "opaque-native-1");
+		handler.ProcessContent("Answer", "answer");
+		handler.ProcessReasoning("native-entry", null, null, "opaque-native-2");
+		handler.Complete();
+		var response = (await ReadAll(handler)).ToChatResponse();
+
+		Assert.Equal(new[] { "native-entry", "answer", "native-entry" }, response.Messages.Select(message => message.MessageId));
+		var first = Assert.IsType<TextReasoningContent>(Assert.Single(response.Messages[0].Contents));
+		Assert.Equal("Original", first.Text);
+		Assert.Equal("opaque-native-1", first.ProtectedData);
+		Assert.Equal("Answer", Assert.IsType<TextContent>(Assert.Single(response.Messages[1].Contents)).Text);
+		var last = Assert.IsType<TextReasoningContent>(Assert.Single(response.Messages[2].Contents));
+		Assert.True(string.IsNullOrEmpty(last.Text));
+		Assert.Equal("opaque-native-2", last.ProtectedData);
 	}
 
 	[Fact]

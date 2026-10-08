@@ -207,12 +207,18 @@ supported; foreign/Azure blobs, altered text, missing identity, and a different
 producer are rejected explicitly. Core AI affinity uses the canonical local
 resource path; protected history is not transferable to another path/provider.
 This is lossless transport, not a new cryptographic signature or encryption scheme.
+Standard aggregation may retain multiple protection revisions, or put final
+protection after answer/tool messages. Internal replay gathers revisions with
+the same native entry ID at that entry's first history position, validates every
+payload, and restores the final supplied entry without reordering answer/tools.
 
 The playground displays **Full reasoning** for Core AI, while Azure retains
 **Reasoning summary** with Medium effort. Unchecking Core AI reasoning hides
 returned content without setting Effort.None. History coalesces native reasoning
 fragments by message identity/content type, preserves protection-only completion,
-and keeps tool/content transitions. Record/replay uses the existing standard
+and keeps tool/content transitions. Protected completion ends a generic reasoning
+item even when multiple items share one message ID; later revisions do not
+overwrite completed items. Record/replay uses the existing standard
 Microsoft.Extensions.AI serializer; no custom public metadata keys are added.
 
 On OS27 the bridge maps the native response's supplied input/output/total
@@ -252,7 +258,11 @@ For real pinned-model reasoning cases, use `FullyQualifiedName~CoreAIReasoningTe
 (also tagged `Reasoning=true`) in the device runner command below. These tests cover
 native/managed reasoning parity from the same request, tool-separated reasoning
 entries, native call IDs, full/hidden output, None effort, unsigned-history
-continuation, summary rejection, and final usage. Build/host checks are not proof
+continuation, summary rejection, final usage, and interruption after actual
+reasoning followed immediately by another facade's schema request.
+Tool assertions distinguish multiple genuine model requests from duplicate
+middleware execution: each native call ID has one result and one real invocation.
+Build/host checks are not proof
 that those device cases ran; capture actual runtime results separately.
 
 Compile the real device tests with the same app resource input:

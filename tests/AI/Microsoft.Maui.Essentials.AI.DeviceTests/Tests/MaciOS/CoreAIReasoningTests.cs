@@ -127,6 +127,10 @@ public class CoreAIReasoningTests
 			content => !string.IsNullOrWhiteSpace(content.Text));
 		Assert.False(string.IsNullOrWhiteSpace(CoreAIModelFixture.Answer(response)));
 		Assert.NotNull(response.Usage);
+		Assert.True(response.Usage.InputTokenCount > 0);
+		Assert.True(response.Usage.OutputTokenCount > 0);
+		Assert.Equal(response.Usage.InputTokenCount + response.Usage.OutputTokenCount, response.Usage.TotalTokenCount);
+		Assert.Equal(client.GetService<ChatClientMetadata>()?.DefaultModelId, response.ModelId);
 		// The pinned Qwen export is unsigned; a future signed fixture must use its actual blob.
 		Assert.All(messages.SelectMany(message => message.Contents).OfType<TextReasoningContent>(), content => Assert.Null(content.ProtectedData));
 		history.AddRange(response.Messages);
@@ -155,21 +159,65 @@ public class CoreAIReasoningTests
 		};
 		options.Tools = [AIFunctionFactory.Create((string key) =>
 		{
-			Assert.Equal("alpha", key);
+			Assert.False(string.IsNullOrWhiteSpace(key));
 			Interlocked.Increment(ref calls);
 			return code;
-		}, name: "lookup_code", description: "Read the validation code for a key. Call exactly once.")];
+		}, name: "LookupValidationCode", description: "Read the current local validation code for any key. Use the returned code directly.")];
 		var response = await Respond(client, [new(ChatRole.User,
-			"Use lookup_code once with key alpha, think about its result, then repeat the returned code.")], options, streaming);
+			"Call LookupValidationCode with key alpha to read the current validation code, then repeat the returned code unchanged.")], options, streaming);
 		Assert.Empty(response.Messages.SelectMany(message => message.Contents).OfType<TextReasoningContent>());
 		Assert.Contains(code, CoreAIModelFixture.Answer(response), StringComparison.Ordinal);
-		var call = Assert.Single(response.Messages.SelectMany(message => message.Contents).OfType<FunctionCallContent>());
-		var result = Assert.Single(response.Messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>());
-		Assert.Equal(call.CallId, result.CallId);
-		Assert.True(call.InformationalOnly);
-		Assert.Equal(1, calls);
+		var functionCalls = response.Messages.SelectMany(message => message.Contents).OfType<FunctionCallContent>().ToArray();
+		var results = response.Messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().ToArray();
+		Assert.NotEmpty(functionCalls);
+		Assert.Equal(functionCalls.Length, functionCalls.Select(call => call.CallId).Distinct().Count());
+		Assert.Equal(functionCalls.Length, calls);
+		Assert.Equal(functionCalls.Length, results.Length);
+		Assert.All(functionCalls, call =>
+		{
+			Assert.False(string.IsNullOrWhiteSpace(call.CallId));
+			Assert.True(call.InformationalOnly);
+			Assert.Single(results, result => result.CallId == call.CallId);
+		});
 		Assert.NotNull(response.Usage);
+		Assert.True(response.Usage.InputTokenCount > 0);
 		Assert.True(response.Usage.OutputTokenCount > 0);
+		Assert.Equal(response.Usage.InputTokenCount + response.Usage.OutputTokenCount, response.Usage.TotalTokenCount);
+		Assert.Equal(client.GetService<ChatClientMetadata>()?.DefaultModelId, response.ModelId);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task Reasoning_InterruptedStream_AllowsImmediateSchemaRequest(bool cancel)
+	{
+		using var first = CoreAIModelFixture.Create();
+		using var second = CoreAIModelFixture.Create();
+		using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+		var options = CoreAIModelFixture.Options;
+		options.Reasoning = new() { Effort = ReasoningEffort.Medium, Output = ReasoningOutput.Full };
+		var sawReasoning = false;
+		async Task Interrupt()
+		{
+			await foreach (var update in first.GetStreamingResponseAsync(
+				[new(ChatRole.User, "Think carefully through how to plan a long journey, then describe the plan in detail.")], options, cancellation.Token))
+			{
+				if (!update.Contents.OfType<TextReasoningContent>().Any(content => !string.IsNullOrWhiteSpace(content.Text)))
+					continue;
+				sawReasoning = true;
+				if (cancel) cancellation.Cancel();
+				else break;
+			}
+		}
+		if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(Interrupt);
+		else await Interrupt();
+		Assert.True(sawReasoning);
+		var nextOptions = CoreAIModelFixture.Options;
+		nextOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema<CoreAIChatClientTests.SchemaAnswer>();
+		var next = await Respond(second, [new(ChatRole.User, "Return an object with city Paris and count 3.")], nextOptions, streaming: false);
+		using var json = System.Text.Json.JsonDocument.Parse(CoreAIModelFixture.Answer(next));
+		Assert.Equal("Paris", json.RootElement.GetProperty("city").GetString());
+		Assert.Equal(3, json.RootElement.GetProperty("count").GetInt32());
 	}
 
 	[Theory]

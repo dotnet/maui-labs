@@ -602,19 +602,27 @@ public sealed class ChatConversationTests
         Assert.All(reasoning, content => Assert.Null(content.ProtectedData));
     }
 
-    [Fact]
-    public async Task ExecuteTurn_ProtectedReasoningCompletion_SeparatesItemsWithoutChangingTheirText()
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("message", "message")]
+    [InlineData("message", null)]
+    public async Task ExecuteTurn_ProtectedReasoningCompletion_SeparatesItemsWithoutChangingTheirText(
+        string? firstMessageId, string? secondMessageId)
     {
         const string first = "**First heading**\n\nFirst body";
         const string second = "**Second heading**\n\nSecond body";
         using var client = new ScriptedClient(new ChatResponse([]),
         [
-            new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent(first)]) { ModelId = "actual-model" },
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent(first)])
+                { ModelId = "actual-model", MessageId = firstMessageId },
             new ChatResponseUpdate(ChatRole.Assistant,
-                [new TextReasoningContent("") { ProtectedData = "completed-first-item" }]) { ModelId = "actual-model" },
-            new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent(second)]) { ModelId = "actual-model" },
+                [new TextReasoningContent("") { ProtectedData = "completed-first-item" }])
+                { ModelId = "actual-model", MessageId = firstMessageId },
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent(second)])
+                { ModelId = "actual-model", MessageId = secondMessageId },
             new ChatResponseUpdate(ChatRole.Assistant,
-                [new TextReasoningContent("") { ProtectedData = "completed-second-item" }]) { ModelId = "actual-model" },
+                [new TextReasoningContent("") { ProtectedData = "completed-second-item" }])
+                { ModelId = "actual-model", MessageId = secondMessageId },
         ]);
         var conversation = new ChatConversation();
 
@@ -627,9 +635,41 @@ public sealed class ChatConversationTests
 
         using var nextClient = new ScriptedClient(new ChatResponse([new ChatMessage(ChatRole.Assistant, "Next")]), []);
         await CollectChangesAsync(nextClient, streaming: false, conversation: conversation);
-        Assert.Equal(new[] { "completed-first-item", "completed-second-item" }, nextClient.ReceivedMessages!
-            .SelectMany(message => message.Contents).OfType<TextReasoningContent>()
-            .Where(content => content.ProtectedData is not null).Select(content => content.ProtectedData));
+        var history = nextClient.ReceivedMessages!;
+        Assert.Equal(new[] { firstMessageId, secondMessageId },
+            history.Where(message => message.Contents.OfType<TextReasoningContent>().Any()).Select(message => message.MessageId));
+        var restored = ChatRecordingSerializer.ReadRequestMessages(ChatRecordingSerializer.Request(history, null));
+        Assert.Equal(new[] { "completed-first-item", "completed-second-item" }, restored
+            .SelectMany(message => message.Contents).OfType<TextReasoningContent>().Select(content => content.ProtectedData));
+        Assert.Equal(new[] { first, second }, restored.SelectMany(message => message.Contents)
+            .OfType<TextReasoningContent>().Select(content => content.Text));
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_LateProtectionRevision_DoesNotOverwriteACompletedItem()
+    {
+        using var client = new ScriptedClient(new ChatResponse([]),
+        [
+            new(ChatRole.Assistant, [new TextReasoningContent("Original") { ProtectedData = "native-first" }])
+                { MessageId = "native-entry" },
+            new(ChatRole.Assistant, [new TextContent("Answer")]) { MessageId = "answer" },
+            new(ChatRole.Assistant, [new TextReasoningContent(null) { ProtectedData = "native-final" }])
+                { MessageId = "native-entry" },
+        ]);
+        var conversation = new ChatConversation();
+        await CollectChangesAsync(client, streaming: true, conversation: conversation);
+        using var next = new ScriptedClient(new ChatResponse([new(ChatRole.Assistant, "Next")]), []);
+        await CollectChangesAsync(next, streaming: false, conversation: conversation);
+        var history = next.ReceivedMessages!;
+        var reasoning = history.Where(message => message.MessageId == "native-entry")
+            .SelectMany(message => message.Contents).OfType<TextReasoningContent>().ToArray();
+        Assert.Equal(2, reasoning.Length);
+        Assert.Equal("Original", reasoning[0].Text);
+        Assert.True(string.IsNullOrEmpty(reasoning[1].Text));
+        Assert.Equal(new[] { "native-first", "native-final" }, reasoning.Select(content => content.ProtectedData));
+        var restored = ChatRecordingSerializer.ReadRequestMessages(ChatRecordingSerializer.Request(history, null));
+        Assert.Equal(new[] { "native-first", "native-final" }, restored.SelectMany(message => message.Contents)
+            .OfType<TextReasoningContent>().Select(content => content.ProtectedData));
     }
 
     [Fact]
