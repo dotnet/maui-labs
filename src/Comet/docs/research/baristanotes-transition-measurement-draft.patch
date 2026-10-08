@@ -1,0 +1,1228 @@
+diff --git a/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/BaristaFixtureHost.cs b/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/BaristaFixtureHost.cs
+index 701a05b661f537413bbce35e331b81babeecb130..aa81cd10c4fdc5bb1b2b539ad56f36452175afdb 100644
+--- a/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/BaristaFixtureHost.cs
++++ b/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/BaristaFixtureHost.cs
+@@ -82,6 +82,12 @@ internal static class BaristaFixtureHost
+     }
+ 
+     internal static Task WaitForIdleAsync() => _operation;
++#if BARISTA_MEASUREMENT
++    internal static (FixtureSelection Selection, ProvisioningReceipt Receipt)? MeasurementMetadata =>
++        _session is { Selection.Mode: "run" } session
++            ? (session.Selection, session.Store.Receipt)
++            : null;
++#endif
+ 
+     internal static byte[] LoadInput(Context context, int count)
+     {
+diff --git a/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/BaristaMeasurement.cs b/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/BaristaMeasurement.cs
+new file mode 100644
+index 00000000..65eee20d
+--- /dev/null
++++ b/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/BaristaMeasurement.cs
+@@ -0,0 +1,388 @@
++#if BARISTA_MEASUREMENT
++using System;
++using System.Collections.Generic;
++using System.Globalization;
++using System.Linq;
++using System.IO;
++using System.Text.Json;
++using Android.App;
++using Android.OS;
++using Barista.Measurement;
++using Barista.Measurement.AndroidSupport;
++using Comet.Platform.Compose;
++using CometSamples.BaristaNotes;
++using CometSamples.BaristaNotes.Comparison;
++
++namespace CometComposeProbe.BaristaNotes.Comparison;
++
++internal sealed record MeasurementArm(
++    int Pid, long Activity, long Root, long Sequence,
++    string Trial, string Journey, string Hop, string Token);
++
++internal sealed record MeasurementAdapterError(string Stage, string Code, string Detail);
++
++internal sealed record MeasurementStatus(
++    int Pid, long Activity, long Root, string ProcessInstance, bool Armed,
++    MeasurementArm? Pending, MeasurementAdapterError[] Errors, string SystemTtfd,
++    long? DataCompletedAtNs, bool? CachedAtDispatch);
++
++internal sealed class BaristaMeasurement : IDisposable
++{
++    static readonly string ProcessInstance = Guid.NewGuid().ToString("N");
++    static long _generation;
++    static readonly string[] EditorRoles =
++    {
++        "shot_tile_method", "shot_tile_bag", "shot_tile_drink_type", "shot_tile_rating",
++        "shot_tile_dose", "shot_tile_yield", "shot_tile_time", "shot_tile_grind",
++        "shot_tile_temperature", "shot_tile_people", "shot_tile_machine", "shot_tile_grinder", "shot_save",
++    };
++
++    readonly AndroidFrameObserver _observer;
++    readonly SessionIdentity _session;
++    readonly OwnerIdentity _owner;
++    readonly Activity _activity;
++    readonly Android.Views.View _nativeRoot;
++    readonly BaristaNotesApp _app;
++    readonly FixtureIdentity _fixture;
++    readonly int _expectedCount;
++    readonly Dictionary<int, string> _fixtureIds = new();
++    readonly List<MeasurementAdapterError> _errors = new();
++    readonly HashSet<string> _drawn = new();
++    readonly List<MeasurementTrialToken> _trialTokens = new();
++    MeasurementControlExport? _pendingExport;
++    MeasurementArm? _pending;
++    OperationToken? _operation;
++    ComparisonContent? _content;
++    FrameTicket? _candidate;
++    bool _readyObserved;
++    long _lastSequence;
++    bool _disposed;
++    bool? _cachedAtDispatch;
++    long? _dataCompletedAt;
++
++    internal static BaristaMeasurement? Current { get; private set; }
++    internal bool IsArmed => _observer.IsArmed;
++
++    internal BaristaMeasurement(
++        Activity activity, Android.Views.View nativeRoot, BaristaNotesApp app,
++        string runId)
++    {
++        CheckThread();
++        if (Current is not null)
++            throw new InvalidOperationException("The previous measurement owner must be disposed first.");
++        var metadata = BaristaFixtureHost.MeasurementMetadata ??
++            throw new InvalidOperationException("Measurement requires an existing completed run namespace.");
++        _fixture = new(metadata.Receipt.FixtureName, metadata.Selection.Namespace);
++        _expectedCount = metadata.Selection.DrinkCount;
++        foreach (var pair in metadata.Receipt.Ids.Drinks)
++            if (!_fixtureIds.TryAdd(int.Parse(pair.Value, CultureInfo.InvariantCulture), pair.Key))
++                throw new InvalidOperationException("The completed receipt contains duplicate native drink IDs.");
++        if (_fixtureIds.Count != _expectedCount)
++            throw new InvalidOperationException("The completed receipt does not contain the expected drink ID map.");
++        _activity = activity;
++        _nativeRoot = nativeRoot;
++        _app = app;
++        var generation = ++_generation;
++        _owner = new(ProcessInstance, Android.OS.Process.MyPid(), generation, generation);
++        _session = new(runId, ProcessInstance, _owner.ProcessId,
++            new(ClockKind.AndroidElapsedRealtimeNanos, "android-elapsed-realtime"),
++            EvidenceKind.AndroidAdapterObservation);
++        _observer = new(nativeRoot, _session, _owner);
++        Current = this;
++    }
++
++    internal void Startup(string trial, string hop, string token, long entryNs, string? setupError)
++    {
++        if (!Guid.TryParseExact(token, "N", out _))
++            throw new InvalidOperationException("A startup token must be a GUID in N format.");
++        _trialTokens.Add(new(1, token));
++        var identity = new OperationIdentity(1, trial, "startup-newdrink", hop, _fixture,
++            "Activity.OnCreate", "ProcessStart", "NewDrink", null);
++        Start(identity, _app.ComparisonNewDrink, entryNs);
++        _lastSequence = 1;
++        if (setupError is not null && _observer.IsArmed && _operation is { } operation)
++            Protocol("startup-setup", () => _observer.Fail(operation, setupError));
++    }
++
++    internal MeasurementStatus Arm(MeasurementArm request)
++    {
++        CheckLive();
++        if (_observer.IsArmed || _pending is not null)
++            throw new InvalidOperationException("A measurement is already armed.");
++        if (_errors.Count != 0 || _pendingExport is not null || _trialTokens.Count >= 64)
++            throw new InvalidOperationException("Export retained errors before arming another measurement.");
++        if (request.Pid != _owner.ProcessId || request.Activity != _owner.ActivityGeneration ||
++            request.Root != _owner.RootGeneration)
++            throw new InvalidOperationException("The arm request does not match the current native owner.");
++        if (request.Sequence <= _lastSequence || request.Journey != "newdrink-activity" ||
++            request.Hop != "footer-activity" || !Guid.TryParseExact(request.Token, "N", out _) ||
++            !ValidText(request.Trial))
++            throw new InvalidOperationException("Invalid or reused measurement identity.");
++        if (!_app.ComparisonActive("NewDrink") || !_activity.HasWindowFocus ||
++            !BaristaFixtureHost.WaitForIdleAsync().IsCompletedSuccessfully)
++            throw new InvalidOperationException("The NewDrink root is not available for the real footer action.");
++        _lastSequence = request.Sequence;
++        _trialTokens.Add(new(request.Sequence, request.Token));
++        _pending = request;
++        return Status();
++    }
++
++    internal void ActionEntered(BaristaNavigationCoordinator navigation, BaristaSection target, long entryNs)
++    {
++        if (_disposed || _pending is not { } request ||
++            !ReferenceEquals(navigation, _app.ComparisonNavigation))
++            return;
++        _pending = null;
++        if (target != BaristaSection.Activity || !_app.ComparisonActive("NewDrink"))
++        {
++            Record("action", RejectionCode.ContentMismatch, "The real action does not match the armed journey.");
++            return;
++        }
++        var operation = new OperationIdentity(request.Sequence, request.Trial, request.Journey,
++            request.Hop, _fixture, "RequestSectionSwitch(Activity)", "NewDrink", "Activity", null);
++        Protocol("dispatch", () => Start(operation, _app.ComparisonActivity, entryNs));
++    }
++
++    internal void SectionChanging(BaristaNavigationCoordinator navigation, BaristaSection target)
++    {
++        if (!_disposed && _observer.IsArmed && ReferenceEquals(navigation, _app.ComparisonNavigation) &&
++            _content is { } content && target.ToString() != content.Scene)
++            Cancel("The normal action selected another root.");
++    }
++
++    internal void ValidateActiveRoot(BaristaNotesApp app)
++    {
++        if (!_disposed && _observer.IsArmed && ReferenceEquals(app, _app) &&
++            _content is { } content && !_app.ComparisonActive(content.Scene))
++            Cancel("The active root or an app overlay changed.");
++    }
++
++    void Start(OperationIdentity identity, ComparisonContent content, long entryNs)
++    {
++        _operation = _observer.Dispatch(identity, content.Revision,
++            new(_session.Clock, entryNs));
++        _content = content;
++        _readyObserved = false;
++        _candidate = null;
++        _drawn.Clear();
++        _cachedAtDispatch = content.Ready;
++        _dataCompletedAt = content.Ready ? content.DataCompletedAtNs : null;
++        UpdateReadiness(content);
++    }
++
++    internal void ContentChanged(ComparisonContent content)
++    {
++        if (_disposed || !_observer.IsArmed || _content?.Page != content.Page ||
++            _content.Scene != content.Scene || _operation is not { } operation)
++            return;
++        Protocol("content-revision", () =>
++        {
++            if (content.Revision != _content.Revision)
++            {
++                _observer.AdvanceRevision(operation, content.Revision);
++                _candidate = null;
++                _drawn.Clear();
++                _readyObserved = false;
++            }
++            _content = content;
++            UpdateReadiness(content);
++        });
++    }
++
++    void UpdateReadiness(ComparisonContent content)
++    {
++        if (!_observer.IsArmed || _operation is not { } operation)
++            return;
++        if (content.Error is { } error)
++        {
++            _observer.ObserveDataFailure(operation, content.Revision, Limit(error));
++            return;
++        }
++        if (_readyObserved || !content.Ready)
++            return;
++        if (content.Scene == "Activity" &&
++            (_app.HasActiveActivityFilters || content.Total != _expectedCount ||
++             content.RowIds.Length != Math.Min(50, _expectedCount) ||
++             content.RowIds.Distinct().Count() != content.RowIds.Length ||
++             content.RowIds.Any(id => !_fixtureIds.ContainsKey(id))))
++        {
++            _observer.ObserveDataFailure(operation, content.Revision,
++                "Activity rows/count do not match the selected completed fixture metadata.");
++            return;
++        }
++        _observer.ObserveSuccessfulDataReadiness(operation, content.Revision);
++        _readyObserved = true;
++        _dataCompletedAt = content.DataCompletedAtNs;
++    }
++
++    internal void ContentDrawn(ComparisonContent composed, ComposeDrawnContent drawn)
++    {
++        if (_disposed || !_observer.IsArmed || _content is null ||
++            composed.Page != _content.Page || composed.Revision != _content.Revision ||
++            !_app.ComparisonActive(composed.Scene) || !_nativeRoot.IsShown ||
++            !_activity.HasWindowFocus || _observer.DrawingCandidate is not { } ticket)
++            return;
++        Protocol("native-draw", () =>
++        {
++            if (_candidate != ticket)
++            {
++                _candidate = ticket;
++                _drawn.Clear();
++            }
++            if (drawn.FullyVisible && ValidRole(composed, drawn))
++                _drawn.Add(drawn.AutomationId);
++            var rootId = composed.Scene == "NewDrink" ? "new_drink_page" : "activity_page";
++            if (drawn.AutomationId != rootId)
++                return;
++            if (!_readyObserved || !drawn.FullyVisible || !RequiredRoles(composed).All(_drawn.Contains))
++            {
++                _observer.ObserveIncompleteDraw(ticket,
++                    "The active root has not drawn every required visible field for this revision.");
++                return;
++            }
++            var entity = composed.Scene == "Activity"
++                ? $"{_fixtureIds[composed.RowIds[0]]}:{composed.RowIds[0]}"
++                : "editor";
++            _observer.QualifyDraw(ticket, new(composed.Scene, null, composed.Revision,
++                ticket.Sequence, $"compose:{composed.Page:N}:{entity}:{ticket.Operation.Sequence}:{ticket.Sequence}"));
++        });
++    }
++
++    bool ValidRole(ComparisonContent content, ComposeDrawnContent drawn)
++    {
++        if (content.Scene == "NewDrink")
++            return EditorRoles.Contains(drawn.AutomationId);
++        if (drawn.AutomationId == "activity_count")
++            return drawn.Text == _expectedCount.ToString(CultureInfo.InvariantCulture) + " shots";
++        return content.RowIds.Length != 0 &&
++            (drawn.AutomationId == $"activity_shot_{content.RowIds[0]}_edit" ||
++             (RequiredRoles(content).Contains(drawn.AutomationId) && !string.IsNullOrWhiteSpace(drawn.Text)));
++    }
++
++    static IEnumerable<string> RequiredRoles(ComparisonContent content)
++    {
++        if (content.Scene == "NewDrink")
++            return EditorRoles;
++        if (content.RowIds.Length == 0)
++            return new[] { "unavailable-activity-row" };
++        var prefix = $"activity_shot_{content.RowIds[0]}";
++        return new[] { "activity_count", prefix + "_edit", prefix + "_method",
++            prefix + "_ratio", prefix + "_details", prefix + "_result" };
++    }
++
++    internal MeasurementStatus Status()
++    {
++        CheckLive();
++        return new(_owner.ProcessId, _owner.ActivityGeneration, _owner.RootGeneration,
++            ProcessInstance, _observer.IsArmed, _pending, _errors.ToArray(),
++            "NotReported: observer01 completion API pending review", _dataCompletedAt, _cachedAtDispatch);
++    }
++
++    internal (MeasurementResult[] Results, FrameObserverRejection[] Rejections,
++        MeasurementAdapterError[] Errors) Drain()
++    {
++        CheckLive();
++        if (_observer.IsArmed || _pending is not null)
++            throw new InvalidOperationException("Result export is outside the measured interval only.");
++        var results = _observer.DrainResults();
++        var rejections = _observer.DrainRejections();
++        var errors = _errors.ToArray();
++        _errors.Clear();
++        return (results, rejections, errors);
++    }
++
++    internal string SaveExport(Android.Content.Context context)
++    {
++        CheckThread();
++        if (_pendingExport is null)
++        {
++            var batch = Drain();
++            _pendingExport = new(1,
++                batch.Results.Select(result => new MeasurementEnvelope(
++                    MeasurementExport.SchemaVersion, MeasurementExport.Definition, result)).ToArray(),
++                _trialTokens.ToArray(), batch.Rejections, batch.Errors,
++                "NotReported: observer01 completion API pending review");
++        }
++        var directory = Path.Combine(BaristaFixtureHost.ControlDirectory(context), "exports");
++        Directory.CreateDirectory(directory);
++        var token = Guid.NewGuid().ToString("N");
++        var path = Path.Combine(directory, _fixture.NamespaceId + "-" + token + ".json");
++        var bytes = JsonSerializer.SerializeToUtf8Bytes(_pendingExport,
++            MeasurementControlJson.Default.MeasurementControlExport);
++        using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
++        {
++            output.Write(bytes);
++            output.Flush(true);
++        }
++        _pendingExport = null;
++        _trialTokens.Clear();
++        if (_disposed && ReferenceEquals(Current, this))
++            Current = null;
++        return token;
++    }
++
++    internal void Cancel(string detail = "Explicit native-control cancellation.")
++    {
++        CheckLive();
++        _pending = null;
++        if (_observer.IsArmed && _operation is { } operation)
++            Protocol("cancel", () => _observer.Cancel(operation, detail));
++    }
++
++    void Protocol(string stage, Action action)
++    {
++        try { action(); }
++        catch (MeasurementProtocolException error) { Record(stage, error.Code, error.Message); }
++    }
++
++    void Record(string stage, RejectionCode code, string detail)
++    {
++        if (_errors.Count < 32)
++            _errors.Add(new(stage, code.ToString(), Limit(detail)));
++        if (_errors.Count == 32 && _observer.IsArmed && _operation is { } operation)
++            _observer.Fail(operation, "Adapter rejection capacity reached; drain errors before reuse.");
++    }
++
++    public void Dispose()
++    {
++        if (_disposed)
++            return;
++        CheckThread();
++        _pending = null;
++        _observer.Dispose();
++        try
++        {
++            var token = SaveExport(_activity);
++            Android.Util.Log.Info("BaristaMeasurement", "Lifecycle result export: " + token);
++        }
++        catch (IOException error)
++        {
++            // Keep Current and the drained batch until explicit export succeeds.
++            Android.Util.Log.Error("BaristaMeasurement", "Lifecycle result export failed: " + error);
++        }
++        finally
++        {
++            _disposed = true;
++            if (_pendingExport is null && ReferenceEquals(Current, this))
++                Current = null;
++        }
++    }
++
++    void CheckLive()
++    {
++        CheckThread();
++        if (_disposed)
++            throw new ObjectDisposedException(nameof(BaristaMeasurement));
++    }
++
++    static void CheckThread()
++    {
++        if (Looper.MyLooper() != Looper.MainLooper)
++            throw new MeasurementProtocolException(RejectionCode.WrongThread, "Measurement requires the main thread.");
++    }
++
++    static bool ValidText(string? text) =>
++        !string.IsNullOrWhiteSpace(text) && text.Length <= 128 && !text.Any(char.IsControl);
++    static string Limit(string detail) => detail.Length <= 512 ? detail : detail[..512];
++}
++#endif
+diff --git a/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/MeasurementControlReceiver.cs b/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/MeasurementControlReceiver.cs
+new file mode 100644
+index 00000000..43f876e8
+--- /dev/null
++++ b/src/Comet/sample/CometComposeProbe/BaristaNotes/Comparison/MeasurementControlReceiver.cs
+@@ -0,0 +1,98 @@
++using Android.App;
++using Android.Content;
++using Android.Runtime;
++#if BARISTA_MEASUREMENT
++using System;
++using System.IO;
++using System.Linq;
++using System.Text.Json;
++using System.Text.Json.Serialization;
++using Barista.Measurement;
++using Barista.Measurement.AndroidSupport;
++using CometBaristaNotes.Comparison;
++#endif
++
++namespace CometComposeProbe.BaristaNotes.Comparison;
++
++[Register("com/comet/baristacomparison/MeasurementControlReceiver")]
++#if BARISTA_MEASUREMENT
++[BroadcastReceiver(Name = "com.comet.baristacomparison.MeasurementControlReceiver",
++    Enabled = true, Exported = true, Permission = "android.permission.DUMP")]
++#endif
++public sealed class MeasurementControlReceiver : BroadcastReceiver
++{
++    public override void OnReceive(Context? context, Intent? intent)
++    {
++#if BARISTA_MEASUREMENT
++        try
++        {
++            if (context is null || intent is null)
++                throw new InvalidDataException("Measurement control requires a context and intent.");
++            var measurement = BaristaMeasurement.Current ??
++                throw new InvalidOperationException("There is no opted-in measurement owner.");
++            if (measurement.IsArmed && intent.Action != "com.comet.baristacomparison.MEASURE_CANCEL")
++                throw new InvalidOperationException("Control processing is outside measured intervals only.");
++            string response;
++            switch (intent.Action)
++            {
++                case "com.comet.baristacomparison.MEASURE_ARM":
++                    var request = JsonSerializer.Deserialize(
++                        intent.GetStringExtra("request") ?? throw new InvalidDataException("request is required."),
++                        MeasurementControlJson.Default.MeasurementArm) ??
++                        throw new InvalidDataException("request is null.");
++                    response = JsonSerializer.Serialize(measurement.Arm(request),
++                        MeasurementControlJson.Default.MeasurementStatus);
++                    break;
++                case "com.comet.baristacomparison.MEASURE_STATUS":
++                    response = JsonSerializer.Serialize(measurement.Status(),
++                        MeasurementControlJson.Default.MeasurementStatus);
++                    break;
++                case "com.comet.baristacomparison.MEASURE_CANCEL":
++                    measurement.Cancel();
++                    response = JsonSerializer.Serialize(measurement.Status(),
++                        MeasurementControlJson.Default.MeasurementStatus);
++                    break;
++                case "com.comet.baristacomparison.MEASURE_EXPORT":
++                    response = measurement.SaveExport(context);
++                    break;
++                case "com.comet.baristacomparison.MEASURE_READ_EXPORT":
++                    var selection = BaristaFixtureHost.MeasurementMetadata?.Selection ??
++                        throw new InvalidOperationException("The selected run namespace is missing.");
++                    var chunk = CometFixtureExports.Read(BaristaFixtureHost.AppData(context), selection,
++                        intent.GetStringExtra("token") ?? throw new InvalidDataException("token is required."),
++                        intent.GetIntExtra("offset", -1), intent.GetIntExtra("length", -1));
++                    response = JsonSerializer.Serialize(chunk, CometFixtureStatusJson.Default.CometFixtureChunk);
++                    break;
++                default:
++                    throw new InvalidDataException("Unknown measurement action. Ready/qualify controls do not exist.");
++            }
++            SetResult(Result.Ok, response, null);
++        }
++        catch (Exception error) when (error is InvalidOperationException or InvalidDataException or IOException or JsonException or FormatException)
++        {
++            Android.Util.Log.Error("BaristaMeasurement", error.ToString());
++            SetResult(Result.Canceled, "Rejected: " + error.Message, null);
++        }
++#else
++        SetResult(Result.Canceled, "Measurement controls are not enabled.", null);
++#endif
++    }
++}
++
++#if BARISTA_MEASUREMENT
++internal sealed record MeasurementTrialToken(long Sequence, string Token);
++internal sealed record MeasurementControlExport(
++    int SchemaVersion, MeasurementEnvelope[] Measurements, MeasurementTrialToken[] TrialTokens,
++    FrameObserverRejection[] Rejections, MeasurementAdapterError[] AdapterErrors, string SystemTtfd);
++
++[JsonSourceGenerationOptions(
++    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
++    UseStringEnumConverter = true,
++    GenerationMode = JsonSourceGenerationMode.Metadata,
++    UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
++    DefaultIgnoreCondition = JsonIgnoreCondition.Never)]
++[JsonSerializable(typeof(MeasurementArm))]
++[JsonSerializable(typeof(MeasurementStatus))]
++[JsonSerializable(typeof(MeasurementControlExport))]
++internal partial class MeasurementControlJson : JsonSerializerContext;
++#endif
+diff --git a/src/Comet/sample/CometComposeProbe/MainActivity.cs b/src/Comet/sample/CometComposeProbe/MainActivity.cs
+index 62bd3a176c1e8939fafaa4fb3d5a63bd9c116466..09322149e5fc9e771bdfe20d4a1d6500f1cc22e9 100644
+--- a/src/Comet/sample/CometComposeProbe/MainActivity.cs
++++ b/src/Comet/sample/CometComposeProbe/MainActivity.cs
+@@ -49,6 +49,9 @@ namespace CometComposeProbe
+ 
+ 		protected override async void OnCreate(Bundle? savedInstanceState)
+ 		{
++#if BARISTA_MEASUREMENT
++			var measurementEntryNs = Android.OS.SystemClock.ElapsedRealtimeNanos();
++#endif
+ 			base.OnCreate(savedInstanceState);
+ 			ActionBar?.Hide();
+ 
+@@ -169,6 +172,9 @@ namespace CometComposeProbe
+ 			catch (Exception ex)
+ 			{
+ 				Android.Util.Log.Warn("CometProbe", "Font load failed: " + ex);
++#if BARISTA_MEASUREMENT
++				_measurementSetupError = "Normal font setup failed: " + ex.Message;
++#endif
+ 			}
+ 
+ 			// Material 3 color. By DEFAULT we seed the scheme from the Comet brand color via the
+@@ -295,6 +301,9 @@ namespace CometComposeProbe
+ 			if (baristaScreen)
+ 				_baristaBackend = backend;
+ 			var composeView = backend.CreateView(this, root);
++#if BARISTA_MEASUREMENT
++			StartMeasurement(composeView, measurementEntryNs);
++#endif
+ 			SetContentView(composeView);
+ #if BARISTA_PERF
+ 			if (_baristaHost?.Root is { } baristaRoot)
+@@ -311,6 +320,9 @@ namespace CometComposeProbe
+ 
+ 		protected override void OnStop()
+ 		{
++#if BARISTA_MEASUREMENT
++			_measurement?.Cancel("The native activity stopped.");
++#endif
+ 			if (Screen == "baristanotes" && BaristaOwnership.IsOwner(this))
+ 				ObserveLifecycleTask(
+ 					BaristaVoiceIntegration.OnAppBackgroundedAsync(),
+@@ -320,6 +332,10 @@ namespace CometComposeProbe
+ 
+ 		protected override void OnDestroy()
+ 		{
++#if BARISTA_MEASUREMENT
++			_measurement?.Dispose();
++			_measurement = null;
++#endif
+ #if BARISTA_PERF && COMET_RUNTIME_DIAGNOSTICS
+ 			WithdrawLifecycleControl();
+ #endif
+@@ -333,6 +349,10 @@ namespace CometComposeProbe
+ 
+ 		void DetachBaristaNative()
+ 		{
++#if BARISTA_MEASUREMENT
++			_measurement?.Dispose();
++			_measurement = null;
++#endif
+ 			if (_baristaThemeSubscribed)
+ 			{
+ 				CometSamples.BaristaNotes.Styles.CoffeeTheme.Mode.PropertyChanged -= OnBaristaThemeChanged;
+diff --git a/src/Comet/sample/CometComposeProbe/MainActivity.Measurement.cs b/src/Comet/sample/CometComposeProbe/MainActivity.Measurement.cs
+new file mode 100644
+index 00000000..5b36b1b5
+--- /dev/null
++++ b/src/Comet/sample/CometComposeProbe/MainActivity.Measurement.cs
+@@ -0,0 +1,49 @@
++#if BARISTA_MEASUREMENT
++using System;
++using CometComposeProbe.BaristaNotes.Comparison;
++
++namespace CometComposeProbe;
++
++public partial class MainActivity
++{
++    BaristaMeasurement? _measurement;
++    string? _measurementSetupError;
++
++    public override bool DispatchTouchEvent(Android.Views.MotionEvent? e)
++    {
++        if (_measurement?.IsArmed == true &&
++            e?.ActionMasked is Android.Views.MotionEventActions.Down or Android.Views.MotionEventActions.Move)
++            _measurement.Cancel("Another touch or scroll input arrived before commit notification.");
++        return base.DispatchTouchEvent(e);
++    }
++
++    void StartMeasurement(Android.Views.View nativeRoot, long entryNs)
++    {
++        // No session, file read or observer in the normal comparison review path.
++        var run = Intent?.GetStringExtra("measurementRun");
++        if (run is null)
++            return;
++        try
++        {
++            var root = _baristaHost?.Root ??
++                throw new InvalidOperationException("A logical Barista root is required.");
++            if (root.ComparisonInitializationError is { } initializationError)
++                throw new InvalidOperationException("Normal app initialization failed: " + initializationError);
++            var trial = Intent?.GetStringExtra("measurementTrial") ??
++                throw new InvalidOperationException("measurementTrial is required.");
++            var hop = Intent?.GetStringExtra("measurementHop") ??
++                throw new InvalidOperationException("measurementHop is required.");
++            var token = Intent?.GetStringExtra("measurementToken") ??
++                throw new InvalidOperationException("measurementToken is required.");
++            _measurement = new(this, nativeRoot, root, run);
++            _measurement.Startup(trial, hop, token, entryNs, _measurementSetupError);
++        }
++        catch (Exception error) when (error is InvalidOperationException or FormatException or OverflowException)
++        {
++            Android.Util.Log.Error("BaristaMeasurement", "Startup measurement rejected: " + error);
++            _measurement?.Dispose();
++            _measurement = null;
++        }
++    }
++}
++#endif
+diff --git a/src/Comet/sample/Shared/BaristaNotes/BaristaNotesApp.cs b/src/Comet/sample/Shared/BaristaNotes/BaristaNotesApp.cs
+index 55951b211541f0598cfbf25bedb69457a3a28e9a..da86393f9267525fc54bcc824875cb51194dc6c9 100644
+--- a/src/Comet/sample/Shared/BaristaNotes/BaristaNotesApp.cs
++++ b/src/Comet/sample/Shared/BaristaNotes/BaristaNotesApp.cs
+@@ -83,6 +83,9 @@ public sealed class BaristaNavigationCoordinator
+ 
+     public void SwitchTo(BaristaSection section, bool activateVoice = false)
+     {
++#if BARISTA_MEASUREMENT
++        CometComposeProbe.BaristaNotes.Comparison.BaristaMeasurement.Current?.SectionChanging(this, section);
++#endif
+         using var hold = ReactiveScheduler.HoldFlushes();
+         var activationVersion = Interlocked.Increment(ref _sectionActivationVersion);
+         var previousSection = Section.Value;
+@@ -119,7 +122,14 @@ public sealed class BaristaNavigationCoordinator
+     }
+ 
+     public void RequestSectionSwitch(BaristaSection section, bool activateVoice = false)
+-        => RequestNavigation(() => SwitchTo(section, activateVoice));
++    {
++#if BARISTA_MEASUREMENT
++        var entry = Android.OS.SystemClock.ElapsedRealtimeNanos();
++        CometComposeProbe.BaristaNotes.Comparison.BaristaMeasurement.Current?
++            .ActionEntered(this, section, entry);
++#endif
++        RequestNavigation(() => SwitchTo(section, activateVoice));
++    }
+ 
+     public void RequestNavigation(Action confirmedNavigation)
+     {
+@@ -749,6 +759,19 @@ public sealed class BaristaNotesApp : View, IAsyncDisposable
+     public BaristaServices Services => _services ??
+         throw new InvalidOperationException("Barista services are not available.");
+     internal bool HasActiveActivityFilters => _activityPage.HasActiveFilters;
++#if BARISTA_MEASUREMENT
++    internal string? ComparisonInitializationError => _initializationError.Value;
++    internal BaristaNavigationCoordinator ComparisonNavigation => _navigation;
++    internal Comparison.ComparisonContent ComparisonNewDrink => _navigation.ActiveShotEditor!.ComparisonContent;
++    internal Comparison.ComparisonContent ComparisonActivity => _activityPage.ComparisonContent;
++    internal bool ComparisonActive(string scene) =>
++        _initializationError.Value is null && !_disposed &&
++        !_navigation.ModalOpen.Value && !_navigation.IsImmersive.Value &&
++        !_navigation.IsEditingShot.Value && !_navigation.VoiceVisible.Value &&
++        !_photoBusy.Value &&
++        ((scene == "NewDrink" && _navigation.Section.Value == BaristaSection.NewDrink) ||
++         (scene == "Activity" && _navigation.Section.Value == BaristaSection.Activity));
++#endif
+ 
+     public BaristaNotesApp()
+         => InitializeShell();
+@@ -939,6 +962,9 @@ public sealed class BaristaNotesApp : View, IAsyncDisposable
+     View body()
+     {
+         _ = CoffeeTheme.IsLight;
++#if BARISTA_MEASUREMENT
++        CometComposeProbe.BaristaNotes.Comparison.BaristaMeasurement.Current?.ValidateActiveRoot(this);
++#endif
+         if (_initializationError.Value is { } initializationError)
+         {
+             return new ContentStateView(
+diff --git a/src/Comet/sample/Shared/BaristaNotes/Comparison/ComparisonPage.cs b/src/Comet/sample/Shared/BaristaNotes/Comparison/ComparisonPage.cs
+new file mode 100644
+index 00000000..4c54779c
+--- /dev/null
++++ b/src/Comet/sample/Shared/BaristaNotes/Comparison/ComparisonPage.cs
+@@ -0,0 +1,78 @@
++#if BARISTA_MEASUREMENT
++using System;
++using System.Linq;
++using Comet;
++using Comet.Platform.Compose;
++using Microsoft.Maui;
++using Barista.Measurement;
++using CometComposeProbe.BaristaNotes.Comparison;
++
++namespace CometSamples.BaristaNotes.Comparison;
++
++internal sealed record ComparisonContent(
++    Guid Page, string Scene, ContentRevision Revision, bool Ready, string? Error,
++    int Total, int[] RowIds, long DataCompletedAtNs);
++
++internal sealed class ComparisonPage(string scene)
++{
++    readonly Guid _page = Guid.NewGuid();
++    long _load;
++    long _content;
++    bool _ready;
++    string? _error;
++    int _total;
++    int[] _rows = Array.Empty<int>();
++    long _completedAt;
++
++    internal ComparisonContent Current { get; private set; } =
++        new(Guid.Empty, scene, new(1, 1), false, null, 0, Array.Empty<int>(), 0);
++
++    internal long BeginLoad()
++    {
++        ++_load;
++        _ready = false;
++        _error = null;
++        Publish();
++        return _load;
++    }
++
++    internal void Complete(long load, string? error, int total = 0, int[]? rows = null)
++    {
++        if (load != _load)
++            return;
++        _error = error;
++        _ready = error is null;
++        _total = total;
++        _rows = rows ?? Array.Empty<int>();
++        _completedAt = Android.OS.SystemClock.ElapsedRealtimeNanos();
++        Publish();
++    }
++
++    internal ComparisonContent Compose()
++    {
++        Publish();
++        return Current;
++    }
++
++    void Publish()
++    {
++        Current = new(_page, scene, new(Math.Max(1, _load), ++_content),
++            _ready, _error, _total, _rows, _completedAt);
++        BaristaMeasurement.Current?.ContentChanged(Current);
++    }
++
++    internal static T Observe<T>(T declaration, ComparisonContent snapshot) where T : View
++    {
++        // Do not materialize components or enumerate app data to instrument a frame.
++        if (!string.IsNullOrEmpty(declaration.AutomationId))
++            ComposeDrawObservation.Observe(declaration,
++                () => BaristaMeasurement.Current?.IsArmed == true,
++                drawn => BaristaMeasurement.Current?.ContentDrawn(snapshot, drawn));
++        if (declaration is IContainerView container)
++            foreach (var child in container.GetChildren())
++                if (child is not null)
++                    Observe(child, snapshot);
++        return declaration;
++    }
++}
++#endif
+diff --git a/src/Comet/sample/Shared/BaristaNotes/Components/ActivityShotRow.cs b/src/Comet/sample/Shared/BaristaNotes/Components/ActivityShotRow.cs
+index 6830c9dc250dec2b095f226f6747c07e6cca2f4f..f69006f3b9af7a966586a17534297b19a0e344a4 100644
+--- a/src/Comet/sample/Shared/BaristaNotes/Components/ActivityShotRow.cs
++++ b/src/Comet/sample/Shared/BaristaNotes/Components/ActivityShotRow.cs
+@@ -12,11 +12,26 @@ public sealed class ActivityShotRow : View
+ {
+     readonly ShotRecordDto _shot;
+     readonly Action _edit;
++#if BARISTA_MEASUREMENT
++    readonly Comparison.ComparisonContent? _comparison;
++#endif
+ 
+-    public ActivityShotRow(ShotRecordDto shot, Action edit)
++#if BARISTA_MEASUREMENT
++    internal
++#else
++    public
++#endif
++    ActivityShotRow(ShotRecordDto shot, Action edit
++#if BARISTA_MEASUREMENT
++        , Comparison.ComparisonContent? comparison = null
++#endif
++    )
+     {
+         _shot = shot;
+         _edit = edit;
++#if BARISTA_MEASUREMENT
++        _comparison = comparison;
++#endif
+     }
+ 
+     [Body]
+@@ -63,7 +78,7 @@ public sealed class ActivityShotRow : View
+         .Padding(new Thickness(CoffeeSpacing.M, 14))
+         .Background(CoffeeTheme.SurfaceColor);
+ 
+-        return new VStack(spacing: 0)
++        var result = new VStack(spacing: 0)
+         {
+             row,
+             new HStack()
+@@ -77,6 +92,11 @@ public sealed class ActivityShotRow : View
+         {
+             _edit();
+         });
++#if BARISTA_MEASUREMENT
++        if (_comparison is { } snapshot)
++            Comparison.ComparisonPage.Observe(result, snapshot);
++#endif
++        return result;
+     }
+ 
+     static string RatingText(int? rating)
+diff --git a/src/Comet/sample/Shared/BaristaNotes/Pages/ActivityFeedPage.cs b/src/Comet/sample/Shared/BaristaNotes/Pages/ActivityFeedPage.cs
+index 853abf0d2ff54617ce79045fd16551cb5480ec94..a7c41316c965fad9202ea33d9dd74cd71f574b92 100644
+--- a/src/Comet/sample/Shared/BaristaNotes/Pages/ActivityFeedPage.cs
++++ b/src/Comet/sample/Shared/BaristaNotes/Pages/ActivityFeedPage.cs
+@@ -151,8 +151,11 @@ public sealed class ActivityFeedPage : View
+     {
+         _ = _filterVersion.Value;
+         _ = _rowsVersion.Value;
++#if BARISTA_MEASUREMENT
++        var comparisonContent = _comparison.Compose();
++#endif
+         var safeArea = BaristaSafeAreaLayout.GetInsets(this);
+-        return new Grid(
++        var result = new Grid(
+             columns: new object[] { "*" },
+             rows: new object[] { "Auto", "*" },
+             rowSpacing: CoffeeSpacing.Divider)
+@@ -162,6 +165,10 @@ public sealed class ActivityFeedPage : View
+         }
+         .Background(CoffeeTheme.OutlineColor)
+         .AutomationId("activity_page");
++#if BARISTA_MEASUREMENT
++        Comparison.ComparisonPage.Observe(result, comparisonContent);
++#endif
++        return result;
+     }
+ 
+     View Header(Thickness safeArea)
+@@ -247,9 +254,16 @@ public sealed class ActivityFeedPage : View
+         }
+ 
+         var items = BuildRows();
++#if BARISTA_MEASUREMENT
++        var composedRows = _comparison.Current;
++#endif
+         var list = new CollectionView<object>(() => items)
+         {
++#if BARISTA_MEASUREMENT
++            ViewFor = item => RenderRow(item, composedRows),
++#else
+             ViewFor = RenderRow,
++#endif
+             ItemsLayout = ItemsLayout.Vertical(),
+             RemainingItemsThreshold = 5,
+             RemainingItemsThresholdReached = () =>
+@@ -272,9 +286,22 @@ public sealed class ActivityFeedPage : View
+         return rows;
+     }
+ 
+-    View RenderRow(object item) => item switch
++#if BARISTA_MEASUREMENT
++    readonly Comparison.ComparisonPage _comparison = new("Activity");
++    internal Comparison.ComparisonContent ComparisonContent => _comparison.Current;
++#endif
++
++    View RenderRow(object item
++#if BARISTA_MEASUREMENT
++        , Comparison.ComparisonContent composedRows
++#endif
++    ) => item switch
+     {
+-        ShotRecordDto shot => new ActivityShotRow(shot, () => _openShot?.Invoke(shot)),
++        ShotRecordDto shot => new ActivityShotRow(shot, () => _openShot?.Invoke(shot)
++#if BARISTA_MEASUREMENT
++            , composedRows
++#endif
++        ),
+         _ => LoadMoreRow(),
+     };
+ 
+@@ -319,6 +346,9 @@ public sealed class ActivityFeedPage : View
+     async Task ReloadAsync(bool isRefresh = false)
+     {
+         var requestVersion = ++_requestVersion;
++#if BARISTA_MEASUREMENT
++        var comparisonLoad = _comparison.BeginLoad();
++#endif
+         try
+         {
+             if (isRefresh)
+@@ -357,6 +387,10 @@ public sealed class ActivityFeedPage : View
+         {
+             if (requestVersion == _requestVersion)
+             {
++#if BARISTA_MEASUREMENT
++                _comparison.Complete(comparisonLoad, _error.Value,
++                    _totalShotCount.Value, _shots.Select(shot => shot.Id).ToArray());
++#endif
+                 _isLoading.Value = false;
+                 _isRefreshing.Value = false;
+             }
+@@ -369,6 +403,9 @@ public sealed class ActivityFeedPage : View
+             return;
+ 
+         var requestVersion = _requestVersion;
++#if BARISTA_MEASUREMENT
++        var comparisonLoad = _comparison.BeginLoad();
++#endif
+         try
+         {
+             _isLoadingMore.Value = true;
+@@ -397,6 +434,10 @@ public sealed class ActivityFeedPage : View
+         {
+             if (requestVersion == _requestVersion)
+             {
++#if BARISTA_MEASUREMENT
++                _comparison.Complete(comparisonLoad, _loadMoreError.Value,
++                    _totalShotCount.Value, _shots.Select(shot => shot.Id).ToArray());
++#endif
+                 _isLoadingMore.Value = false;
+                 _shotList?.ReloadData();
+             }
+diff --git a/src/Comet/sample/Shared/BaristaNotes/Pages/ShotLoggingPage.cs b/src/Comet/sample/Shared/BaristaNotes/Pages/ShotLoggingPage.cs
+index 2f477936f70632aa38b5f8d53f55ec2aff7c5629..c1dacefa9d8dab22322007bd3177f013d6204f8a 100644
+--- a/src/Comet/sample/Shared/BaristaNotes/Pages/ShotLoggingPage.cs
++++ b/src/Comet/sample/Shared/BaristaNotes/Pages/ShotLoggingPage.cs
+@@ -111,6 +111,10 @@ public sealed class ShotLoggingPage : View
+     ListView<decimal>? _numericList;
+     bool _hydrating = true;
+     int _loadVersion;
++#if BARISTA_MEASUREMENT
++    readonly Comparison.ComparisonPage _comparison = new("NewDrink");
++    internal Comparison.ComparisonContent ComparisonContent => _comparison.Current;
++#endif
+ 
+     public ShotLoggingPage(
+         BaristaServices services,
+@@ -417,6 +421,10 @@ public sealed class ShotLoggingPage : View
+         }
+         .Background(CoffeeTheme.OutlineColor)
+         .AutomationId(_shotId.HasValue ? "edit_drink_page" : "new_drink_page");
++#if BARISTA_MEASUREMENT
++        if (!_shotId.HasValue)
++            Comparison.ComparisonPage.Observe(result, _comparison.Compose());
++#endif
+         return result;
+     }
+ 
+@@ -1978,6 +1986,9 @@ public sealed class ShotLoggingPage : View
+     async System.Threading.Tasks.Task LoadAsync(bool showLoading = true)
+     {
+         var loadVersion = Volatile.Read(ref _loadVersion);
++#if BARISTA_MEASUREMENT
++        var comparisonLoad = _comparison.BeginLoad();
++#endif
+         try
+         {
+             if (showLoading)
+@@ -2021,6 +2032,9 @@ public sealed class ShotLoggingPage : View
+             if (loadVersion == Volatile.Read(ref _loadVersion))
+             {
+                 _hydrating = false;
++#if BARISTA_MEASUREMENT
++                _comparison.Complete(comparisonLoad, _loadError.Value);
++#endif
+                 _loading.Value = false;
+             }
+         }
+diff --git a/src/Comet/src/Comet/Backend/View.Backend.cs b/src/Comet/src/Comet/Backend/View.Backend.cs
+index 11fe31677dde561bd64cf7a4cf09fd4a196f93f4..eacbcfd198b773688d887aaef898dc2e4558e452 100644
+--- a/src/Comet/src/Comet/Backend/View.Backend.cs
++++ b/src/Comet/src/Comet/Backend/View.Backend.cs
+@@ -325,6 +325,9 @@ namespace Comet
+ 	{
+ 		readonly View _view;
+ 		public ViewEventSink(View view) => _view = view;
++#if ANDROID && BARISTA_MEASUREMENT
++		internal View DrawObservationOwner => _view;
++#endif
+ 
+ 		public void OnEvent(Backend.EventId id) => _view.OnBackendEvent(id);
+ 		public void OnEvent<T>(Backend.EventId id, T payload) => _view.OnBackendEvent(id, payload);
+diff --git a/src/Comet/src/Comet/Platform/Compose/ComposeDrawObservation.cs b/src/Comet/src/Comet/Platform/Compose/ComposeDrawObservation.cs
+new file mode 100644
+index 00000000..8bbecb28
+--- /dev/null
++++ b/src/Comet/src/Comet/Platform/Compose/ComposeDrawObservation.cs
+@@ -0,0 +1,35 @@
++#if ANDROID && BARISTA_MEASUREMENT
++using System;
++using System.Runtime.CompilerServices;
++using AndroidX.Compose;
++
++namespace Comet.Platform.Compose;
++
++public sealed record ComposeDrawnContent(string AutomationId, string? Text, bool FullyVisible);
++
++public static class ComposeDrawObservation
++{
++    sealed record Observation(Func<bool> Enabled, Action<ComposeDrawnContent> Acknowledge);
++    static readonly ConditionalWeakTable<View, Observation> Observations = new();
++
++    public static void Observe(View declaration, Func<bool> enabled, Action<ComposeDrawnContent> acknowledge)
++    {
++        ArgumentNullException.ThrowIfNull(declaration);
++        ArgumentNullException.ThrowIfNull(acknowledge);
++        ArgumentNullException.ThrowIfNull(enabled);
++        Observations.Add(declaration, new(enabled, acknowledge));
++    }
++
++    internal static Modifier? Capture(
++        Modifier? modifier, View? declaration, string automationId, string? text, bool visible,
++        ref DrawAcknowledgmentState? position)
++    {
++        if (declaration is null || !Observations.TryGetValue(declaration, out var observation))
++            return modifier;
++        // Capture the declaration and native text in composition, not in the later draw callback.
++        position ??= new();
++        return (modifier ?? Modifier.Companion).AfterContent(position, observation.Enabled, fullyVisible =>
++            observation.Acknowledge(new(automationId, text, visible && fullyVisible)));
++    }
++}
++#endif
+diff --git a/src/Comet/src/Comet/Platform/Compose/ComposeLeafNodes.cs b/src/Comet/src/Comet/Platform/Compose/ComposeLeafNodes.cs
+index bbdfa07860dc3b168fd14f0dad064109390e9dde..a220d5fccd8983999ee4db66661c037c9aaf03af 100644
+--- a/src/Comet/src/Comet/Platform/Compose/ComposeLeafNodes.cs
++++ b/src/Comet/src/Comet/Platform/Compose/ComposeLeafNodes.cs
+@@ -15,6 +15,9 @@ namespace Comet.Platform.Compose
+ 		protected override bool PadsOwnContent => true;
+ 
+ 		readonly MutableState<string> _text = new(string.Empty);
++#if BARISTA_MEASUREMENT
++		protected override string? DrawObservationText => _text.Value;
++#endif
+ 		Microsoft.Maui.Graphics.Color? _color;
+ 		int _maxLines;
+ 		int _fontSize;
+diff --git a/src/Comet/src/Comet/Platform/Compose/ComposeNode.cs b/src/Comet/src/Comet/Platform/Compose/ComposeNode.cs
+index a8cd3653c27d394d22f7b67e0de14e222cfe40ac..c38378a33d4a512ebff2309c1298b877ac403803 100644
+--- a/src/Comet/src/Comet/Platform/Compose/ComposeNode.cs
++++ b/src/Comet/src/Comet/Platform/Compose/ComposeNode.cs
+@@ -29,6 +29,10 @@ namespace Comet.Platform.Compose
+ 		readonly MutableState<int> _childVersion = new(0);
+ 		readonly BackendMeasureCache _measureCache = new();
+ 		ICometEventSink? _sink;
++#if BARISTA_MEASUREMENT
++		protected virtual string? DrawObservationText => null;
++		DrawAcknowledgmentState? _drawObservationPosition;
++#endif
+ 		readonly MutableState<bool> _hasTap = new(false);
+ 
+ 		/// <summary>A widget-rendering branch (e.g. the clickable Card) that takes over the
+@@ -415,6 +419,10 @@ namespace Comet.Platform.Compose
+ 				m = m is null ? record : m.Then(record);
+ 			}
+ 
++#if BARISTA_MEASUREMENT
++			m = ComposeDrawObservation.Capture(m, (_sink as ViewEventSink)?.DrawObservationOwner,
++				_automationId, DrawObservationText, _isVisible && _opacity == 1f, ref _drawObservationPosition);
++#endif
+ 			return m;
+ 		}
+ 
+diff --git a/src/Comet/src/vendor/Microsoft.AndroidX.Compose/DrawAcknowledgment.cs b/src/Comet/src/vendor/Microsoft.AndroidX.Compose/DrawAcknowledgment.cs
+new file mode 100644
+index 00000000..5c97616d
+--- /dev/null
++++ b/src/Comet/src/vendor/Microsoft.AndroidX.Compose/DrawAcknowledgment.cs
+@@ -0,0 +1,95 @@
++using Android.Runtime;
++using AndroidX.Compose.UI.Graphics.Drawscope;
++using AndroidX.Compose.UI.Layout;
++using Kotlin.Jvm.Functions;
++
++namespace AndroidX.Compose;
++
++public static class DrawAcknowledgment
++{
++    public static Modifier AfterContent(
++        this Modifier modifier, DrawAcknowledgmentState state, Func<bool> enabled, Action<bool> acknowledge)
++    {
++        ArgumentNullException.ThrowIfNull(state);
++        ArgumentNullException.ThrowIfNull(enabled);
++        ArgumentNullException.ThrowIfNull(acknowledge);
++        var position = state.Position;
++        var draw = new DrawContentCallback(position, enabled, acknowledge);
++        return modifier
++            .Append(handle => ComposeBridges.ObserveDrawPosition(handle, position))
++            .Append(handle => ComposeBridges.ObserveDrawContent(handle, draw));
++    }
++}
++
++public sealed class DrawAcknowledgmentState
++{
++    internal DrawPositionCallback Position { get; } = new();
++}
++
++// These peers must exist in every JNI generation pass, not only Debug.
++[Register("net/compose/DrawPositionCallback")]
++internal sealed class DrawPositionCallback : Java.Lang.Object, IFunction1
++{
++    internal ILayoutCoordinates? Coordinates { get; private set; }
++
++    public Java.Lang.Object Invoke(Java.Lang.Object? value)
++    {
++        Coordinates = value?.JavaCast<ILayoutCoordinates>()
++            ?? throw new InvalidOperationException("Compose did not supply layout coordinates.");
++        return Kotlin.Unit.Instance!;
++    }
++}
++
++[Register("net/compose/DrawContentCallback")]
++internal sealed class DrawContentCallback(DrawPositionCallback position, Func<bool> enabled, Action<bool> acknowledge)
++    : Java.Lang.Object, IFunction1
++{
++    public Java.Lang.Object Invoke(Java.Lang.Object? value)
++    {
++        var scope = value?.JavaCast<IContentDrawScope>()
++            ?? throw new InvalidOperationException("Compose did not supply its content draw scope.");
++        scope.DrawContent();
++        if (!enabled())
++            return Kotlin.Unit.Instance!;
++        var coordinates = position.Coordinates;
++        acknowledge(coordinates is { IsAttached: true } &&
++            ComposeBridges.DrawContentFullyVisible(coordinates) == 1);
++        return Kotlin.Unit.Instance!;
++    }
++}
++
++internal static partial class ComposeBridges
++{
++    [ComposeBridge(Class = "androidx/compose/ui/layout/OnGloballyPositionedModifierKt",
++        JvmName = "onGloballyPositioned",
++        Signature = "(Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function1;)Landroidx/compose/ui/Modifier;")]
++    internal static partial IntPtr ObserveDrawPosition(IntPtr modifier, IFunction1 callback);
++
++    [ComposeBridge(Class = "androidx/compose/ui/draw/DrawModifierKt", JvmName = "drawWithContent",
++        Signature = "(Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function1;)Landroidx/compose/ui/Modifier;")]
++    internal static partial IntPtr ObserveDrawContent(IntPtr modifier, IFunction1 callback);
++
++    static IntPtr _drawGeometryClass;
++    static IntPtr _drawGeometryMethod;
++
++    // ComposeBridgeGenerator emits object returns only. This helper returns a JVM int.
++    internal static unsafe int DrawContentFullyVisible(ILayoutCoordinates coordinates)
++    {
++        if (_drawGeometryMethod == IntPtr.Zero)
++        {
++            _drawGeometryClass = JNIEnv.FindClass("net/compose/DrawGeometry");
++            _drawGeometryMethod = JNIEnv.GetStaticMethodID(_drawGeometryClass, "fullyVisible",
++                "(Landroidx/compose/ui/layout/LayoutCoordinates;)I");
++        }
++        try
++        {
++            JValue* arguments = stackalloc JValue[1];
++            arguments[0] = new JValue(((Java.Lang.Object)coordinates).Handle);
++            return JNIEnv.CallStaticIntMethod(_drawGeometryClass, _drawGeometryMethod, arguments);
++        }
++        finally
++        {
++            GC.KeepAlive(coordinates);
++        }
++    }
++}
+diff --git a/src/Comet/src/vendor/Microsoft.AndroidX.Compose/Java/DrawGeometry.java b/src/Comet/src/vendor/Microsoft.AndroidX.Compose/Java/DrawGeometry.java
+new file mode 100644
+index 00000000..0a5bba8e
+--- /dev/null
++++ b/src/Comet/src/vendor/Microsoft.AndroidX.Compose/Java/DrawGeometry.java
+@@ -0,0 +1,23 @@
++package net.compose;
++
++import androidx.compose.ui.geometry.Rect;
++import androidx.compose.ui.layout.LayoutCoordinates;
++import androidx.compose.ui.layout.LayoutCoordinatesKt;
++
++public final class DrawGeometry {
++    private DrawGeometry() {}
++
++    public static int fullyVisible(LayoutCoordinates coordinates) {
++        if (!coordinates.isAttached()) return 0;
++        Rect full = LayoutCoordinatesKt.boundsInWindow(coordinates, false);
++        Rect clipped = LayoutCoordinatesKt.boundsInWindow(coordinates, true);
++        boolean visible = full.getWidth() > 0 && full.getHeight() > 0
++            && Float.isFinite(full.getLeft()) && Float.isFinite(full.getTop())
++            && Float.isFinite(full.getRight()) && Float.isFinite(full.getBottom())
++            && Math.abs(full.getLeft() - clipped.getLeft()) <= 0.5f
++            && Math.abs(full.getTop() - clipped.getTop()) <= 0.5f
++            && Math.abs(full.getRight() - clipped.getRight()) <= 0.5f
++            && Math.abs(full.getBottom() - clipped.getBottom()) <= 0.5f;
++        return visible ? 1 : 0;
++    }
++}
+diff --git a/src/Comet/src/vendor/Microsoft.AndroidX.Compose/Microsoft.AndroidX.Compose.csproj b/src/Comet/src/vendor/Microsoft.AndroidX.Compose/Microsoft.AndroidX.Compose.csproj
+index 3757056e27665953fe9211559acbf696c165799d..b961142078d172bf60051024e0033025c7cf91ab 100644
+--- a/src/Comet/src/vendor/Microsoft.AndroidX.Compose/Microsoft.AndroidX.Compose.csproj
++++ b/src/Comet/src/vendor/Microsoft.AndroidX.Compose/Microsoft.AndroidX.Compose.csproj
+@@ -74,6 +74,7 @@
+     <PackageReference Include="Xamarin.AndroidX.Navigation.Compose.Android" Version="2.9.8" />
+   </ItemGroup>
+   <ItemGroup>
++    <AndroidJavaSource Include="Java\DrawGeometry.java" Bind="false" />
+     <AndroidJavaSource Include="Java\PointerInputEventHandlerImpl.java">
+       <Bind>false</Bind>
+     </AndroidJavaSource>
