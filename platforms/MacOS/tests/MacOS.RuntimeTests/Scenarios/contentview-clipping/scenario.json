@@ -15,7 +15,7 @@
       {
         "source": "platforms/MacOS/src/MacOS/Handlers/MacOSViewHandler.cs",
         "replace": {
-          "old": "        platformView.Layer.Transform = transform;\n        InvalidateDisplay(platformView);",
+          "old": "        platformView.Layer.Transform = transform;\n        RedrawTransformedSubtree(platformView);",
           "new": "        platformView.Layer.Transform = transform;"
         }
       }
