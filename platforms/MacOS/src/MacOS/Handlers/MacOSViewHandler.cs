@@ -385,8 +385,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
         else
         {
-            platformView.Layer.Transform = CATransform3D.Identity;
-            SetFrame(platformView, view, view.Frame);
+            SetFrameOrigin(platformView, view, view.Frame);
         }
 
         platformView.Layer.Transform = transform;
@@ -506,6 +505,13 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
         // NSView uses Frame for positioning (with IsFlipped=true for top-left origin)
         platformView.Frame = new CGRect(x, y, width, height);
+    }
+
+    static void SetFrameOrigin(NSView platformView, IView view, Rect rect)
+    {
+        var x = Sanitize(rect.X + view.TranslationX);
+        var y = Sanitize(rect.Y + view.TranslationY);
+        platformView.SetFrameOrigin(new CGPoint(x, y));
     }
 
     public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
