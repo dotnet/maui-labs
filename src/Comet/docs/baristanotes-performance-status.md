@@ -1,7 +1,8 @@
 # BaristaNotes performance status
 
-Status at 2026-09-23: **the applied ART-profile startup rerun is complete.
-Page-transition and rendering measurements remain pending**.
+Status at 2026-09-24: **the applied ART-profile startup rerun and the bounded
+page-transition study are complete. Rendering cost, jank, input delay and
+physical-presentation timing remain unmeasured**.
 
 This records bounded experiments, not a general framework ranking.
 The comparison uses Original BaristaNotes (MAUI, MauiReactor and EF Core/SQLite)
@@ -244,20 +245,23 @@ base Compose node, control-specific state, Java-peer callbacks and temporary
 text-measurement peers. Attribute the current candidate before changing the
 bridge. Old inset intervals cannot quantify its remaining cost.
 
-## Build and evidence limits
+## Startup build and evidence limits
 
-Measurements used one Pixel 5, Android 14/API 34, arm64, user 0, with existing
-animation scales at zero. Process-cold means the selected package's processes
-were absent; storage, shader/page caches and ART profiles were not reset.
-Do not infer animated-transition smoothness from this configuration.
+The startup, size and memory measurements used one Pixel 5, Android 14/API 34,
+arm64, user 0, with existing animation scales at zero. Process-cold means the
+selected package's processes were absent; storage, shader/page caches and ART
+profiles were not reset. Do not infer animated-transition smoothness from this
+configuration.
 
 The experimental Android Native AOT builds used SDK
 `11.0.100-rc.1.26425.128`, workload set `11.0.100-rc.1.26458.5`,
 Android pack `37.0.0-rc.1.2257`, runtime `11.0.0-rc.1.26428.117`,
 and explicit MAUI packages `11.0.0-preview.7.26406.9`.
 They are Release, non-debuggable, separate test identities, with no DevFlow
-or readiness instrumentation in the timing APKs. Existing AOT/trimming
-warnings, including XA1040, remain disclosed. The signer is a test identity.
+or readiness instrumentation in the startup timing APKs. Existing
+AOT/trimming warnings, including XA1040, remain disclosed. The signer is a
+test identity. The later page-transition study used separate instrumented APKs
+that are identified in its detailed report.
 
 Original uses a disclosed local `Microsoft.Data.Sqlite.Core`
 `11.0.0-preview.7.26381.103-local.barista.38971.1` backport of
@@ -275,7 +279,7 @@ not compared in the profile reruns. Preservation evidence is limited to
 the recorded operations, fixture/receipt checks, native observations and
 selector restoration; it is not a general loss-free claim.
 
-The measured APK identities are:
+The startup-study APK identities are:
 
 | Artifact | SHA-256 |
 |---|---|
@@ -288,32 +292,31 @@ The measured APK identities are:
 These identify measured artifacts, not a promise that rebuilding a later
 commit produces identical APK bytes.
 
-## Next: page transitions and rendering
+## Accepted page-transition measurements
 
-The first bounded slice is New Drink -> Activity with 100 drinks.
-The existing wider plan has all six root-switch directions, Equipment
-list/detail, existing-drink editing and the temperature picker, separately
-for 100/1,000 drinks and first-use/warm conditions.
+The bounded Pixel 5 study used the approved 1,000-record fixture, Release
+Android arm64 Native AOT builds, and 10 samples per route per app. The
+Activity destination queried the total count and loaded the first 50 rows.
 
-The primary proposed interval is entry to the app's existing action handler
-through its qualified native-ready frame-commit notification. Keep current
-data-readiness and native control/layout milestones separately.
-This includes UI-thread callback delivery delay, excludes input delivery
-before handler entry, and is not exact buffer submission or physical display.
-Pure CPU/GPU render duration, jank and input responsiveness need distinct
-evidence; none has an accepted result in this comparison.
+For Shot -> Activity, Comet's median was 19.6% lower and Comet was faster in
+9 of 10 numbered pairs. For Activity -> Settings, Comet's median was 61.3%
+higher and MAUI was faster in all 10 pairs.
 
-The schema-2 shared observer passed source/host checks. A Comet adapter exists
-only as a source candidate based on an older snapshot, with one Activity
-action per owner; Original needs its matching adapter. The earlier analyzer
-still expects schema 1. Complete and review matching adapters and explicit
-versioned ingestion before new artifact, accuracy and overhead gates.
-Do not relabel historical v1 events or timing samples as schema 2.
+These results describe the two instrumented app builds on one device. They
+are not a general framework ranking. The MAUI Settings observer requested an
+extra draw after readiness; the Comet observer did not. Observer overhead was
+not equalized or measured separately.
 
-Earlier ordinary Debug transition diagnostics used host tap-to-DevFlow-registry
-observation, not native rendering or presentation. Their gains motivated
-retained section roots and layout caches, but are not the Pixel Native AOT
-app-pair benchmark. Keep the data sets separate.
+The timer started at the existing app action-handler entry and ended at the
+qualified Android frame-commit callback. No screenshots, host waits, USB
+round trips, or post-action quiet time were inside the interval. The measure
+includes UI-thread callback-delivery delay, excludes input delivery before
+handler entry, and does not claim exact buffer production, swap submission,
+or physical pixel presentation.
+
+The [detailed page-timing report](baristanotes-page-timings-1000.md) is the
+canonical source for exact values, percentile rules, APK identities,
+readiness criteria, device conditions, repairs and limitations.
 
 ## Resume evidence
 

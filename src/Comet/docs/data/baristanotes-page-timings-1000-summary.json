@@ -1,0 +1,50 @@
+{
+  "NewDrinkToActivity": {
+    "original": {
+      "valid": 10,
+      "failed": 0,
+      "p50_ms": 1854.53969,
+      "p90_ms": 1873.254718,
+      "min_ms": 1823.712473,
+      "max_ms": 1878.046542
+    },
+    "comet": {
+      "valid": 10,
+      "failed": 0,
+      "p50_ms": 1490.5831435,
+      "p90_ms": 1624.874224,
+      "min_ms": 1115.052924,
+      "max_ms": 2165.320685
+    },
+    "paired": {
+      "count": 10,
+      "median_comet_minus_original_ms": -367.13930700000003,
+      "comet_faster_pairs": 9,
+      "difference_of_medians_percent": -19.625168901076474
+    }
+  },
+  "ActivityToSettings": {
+    "original": {
+      "valid": 10,
+      "failed": 0,
+      "p50_ms": 247.84984200000002,
+      "p90_ms": 253.177838,
+      "min_ms": 241.516014,
+      "max_ms": 260.294141
+    },
+    "comet": {
+      "valid": 10,
+      "failed": 0,
+      "p50_ms": 399.878712,
+      "p90_ms": 450.161243,
+      "min_ms": 386.04733,
+      "max_ms": 451.585097
+    },
+    "paired": {
+      "count": 10,
+      "median_comet_minus_original_ms": 156.85090100000002,
+      "comet_faster_pairs": 0,
+      "difference_of_medians_percent": 61.33910305256518
+    }
+  }
+}

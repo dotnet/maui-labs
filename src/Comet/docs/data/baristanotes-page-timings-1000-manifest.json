@@ -1,0 +1,40 @@
+{
+  "metric": "app_action_entry_to_frame_commit_notification",
+  "device": {
+    "model": "Pixel 5",
+    "os": "Android 14",
+    "serial": "13041FDD4007MT"
+  },
+  "dataset": {
+    "name": "barista-perf-v2-1000",
+    "records": 1000,
+    "activity_page_size": 50,
+    "input_sha256": "58643ebd288f83b11259226b711bd0062d7b249ef369d18c39c2950b238aa115",
+    "semantic_sha256": "eb97125e964e9504ce498e1f1bd85d297a1234d56eb2db00e7b5c14da68f092f"
+  },
+  "builds": {
+    "original": {
+      "apk_sha256": "12e6809b39f6a8042a5e7d177133c36fb906d2546b299ba18db78558957376b1",
+      "native_library": "lib/arm64-v8a/libBaristaNotes.so",
+      "art_profile_embedded": false
+    },
+    "comet": {
+      "apk_sha256": "9054675443a202c76298be19615bffe0dc8a4dd4ab137c45653362fd8d9c556c",
+      "native_library": "lib/arm64-v8a/libCometComposeProbe.so",
+      "art_profile_embedded": true
+    }
+  },
+  "verification": {
+    "samples": 40,
+    "successful": 40,
+    "distinct_processes": 40,
+    "all_export_timestamps_match": true,
+    "all_dataset_hashes_match": true,
+    "original_current_readbacks_checked": 20
+  },
+  "source_identity": {
+    "kind": "external_isolated_measurement_snapshots",
+    "repository_commit_reproducible": false,
+    "note": "The APK hashes are the durable identity of the measured binaries. The larger source snapshots and build logs remain in the originating session evidence set."
+  }
+}

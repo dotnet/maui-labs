@@ -1,11 +1,14 @@
 # BaristaNotes Android comparison tools
 
-These tools support the planned comparison of the original MAUI/MauiReactor
-BaristaNotes app with the Comet/Compose implementation. Both measurement
-artifacts must be real Android arm64 Release Native AOT builds.
+These repository tools prepare deterministic inputs and record read-only
+device conditions for comparisons of the original MAUI/MauiReactor
+BaristaNotes app with the Comet/Compose implementation.
 
-The full APK integration and timing runner are not yet complete. These
-preparation tools do not produce a performance result.
+The accepted bounded page-transition study used separate Android arm64
+Release Native AOT timing builds and an external collection runner. These
+preparation tools do not run that comparison by themselves. See the
+[1,000-record page-timing report](../../../docs/baristanotes-page-timings-1000.md)
+for the accepted result, exact samples, APK identities and measurement limits.
 
 ## Read-only phone conditions
 
