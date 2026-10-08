@@ -61,7 +61,7 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
         var resize = CreateCollection(resizeLayout, wrappingText: true);
         await ShowAsync(resize);
         var wideSnapshot = Snapshot(resize);
-        var nativeWindow = resize.Handler?.PlatformView is NSView view ? view.Window : null
+        var nativeWindow = (resize.Handler?.PlatformView is NSView view ? view.Window : null)
             ?? throw new InvalidOperationException("CollectionView is not attached to an AppKit window.");
         var frame = nativeWindow.Frame;
         nativeWindow.SetFrame(new CGRect(frame.X, frame.Y, 420, frame.Height), true);
