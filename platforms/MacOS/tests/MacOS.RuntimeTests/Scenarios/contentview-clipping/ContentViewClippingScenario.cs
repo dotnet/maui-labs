@@ -17,9 +17,9 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("contentview-clipping", 13,
+        ScenarioRegistry.Register(new("contentview-clipping", 15,
             context => new ContentViewClippingScenario().CreateDelegate(context),
-            ExpectedAssertions: 172));
+            ExpectedAssertions: 184));
 }
 
 sealed class ContentViewClippingScenario : MauiRuntimeScenario
@@ -30,7 +30,11 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
     Label _controlLabel = null!;
 
     public override void Configure(MauiAppBuilder builder) =>
-        builder.ConfigureMauiHandlers(handlers => handlers.AddHandler<Label, ObservedLabelHandler>());
+        builder.ConfigureMauiHandlers(handlers =>
+        {
+            handlers.AddHandler<Label, ObservedLabelHandler>();
+            handlers.AddHandler<ContentView, ObservedContentViewHandler>();
+        });
 
     public override Window CreateWindow(IActivationState? activationState)
     {
@@ -438,6 +442,100 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         collection.Scale = 1;
         context.Pass("Transform preserves a native-positioned CollectionView item frame");
 
+        var compositeItems = new List<ContentView>();
+        collection.ItemsSource = null;
+        collection.ItemTemplate = new DataTemplate(() =>
+        {
+            var item = new ContentView
+            {
+                HeightRequest = 48,
+                Content = new Grid
+                {
+                    Children = { new Label { Text = "Composite item", TextColor = Colors.Blue } },
+                },
+            };
+            compositeItems.Add(item);
+            return item;
+        });
+        collection.ItemsSource = new[] { "Composite first", "Composite second" };
+        await CaptureAsync(context, nativeWindow, "collection-composite-before.png");
+        context.Assert(compositeItems.Count == 2,
+            $"Expected two composite item roots, got {compositeItems.Count}.", "contentview.composite-items");
+        var compositeFrames = compositeItems.Select(item => Native(item).Frame).ToArray();
+        var compositeHandlers = compositeItems.Select(item => (ObservedContentViewHandler)item.Handler!).ToArray();
+        var arrangedBeforeScroll = compositeHandlers.Sum(handler => handler.ArrangeCalls);
+        var scrollView = (NSScrollView)Native(collection);
+        var notifications = 0;
+        using (var observer = NSNotificationCenter.DefaultCenter.AddObserver(
+            NSView.BoundsChangedNotification, _ => notifications++, scrollView.ContentView))
+        {
+            for (var step = 1; step <= 10; step++)
+                scrollView.ContentView.ScrollToPoint(new CGPoint(0, step * 0.5));
+        }
+        context.Assert(notifications > 0, "No native scroll notifications were exercised.",
+            "contentview.composite-scroll-notifications");
+        var arrangedAfterScroll = compositeHandlers.Sum(handler => handler.ArrangeCalls);
+        context.Assert(arrangedAfterScroll == arrangedBeforeScroll &&
+            compositeItems.Select((item, index) => FramesMatch(Native(item).Frame, compositeFrames[index])).All(match => match),
+            $"Unchanged composite items were arranged {arrangedAfterScroll - arrangedBeforeScroll} times while scrolling.",
+            "contentview.composite-scroll-layout");
+        var compositeScrolled = await CaptureAsync(context, nativeWindow, "collection-composite-scrolled.png");
+        context.Assert(CountPixels(compositeScrolled, nativeWindow, Native(collection), IsBlue) > 5,
+            "Scrolling lost composite item text.", "contentview.composite-scroll-text");
+        context.WriteJson("scroll-cost.json", new { notifications, arrangedBeforeScroll, arrangedAfterScroll });
+        collection.ItemsLayout = new GridItemsLayout(2, ItemsLayoutOrientation.Vertical)
+        {
+            HorizontalItemSpacing = 10,
+        };
+        var gridFrames = compositeItems.Select(item => Native(item).Frame).OrderBy(frame => frame.X).ToArray();
+        var columnWidth = (Native(collection).Bounds.Width - 10) / 2;
+        context.Assert(compositeHandlers.Sum(handler => handler.ArrangeCalls) > arrangedAfterScroll &&
+            Math.Abs(gridFrames[0].Width - columnWidth) < 0.0001 &&
+            Math.Abs(gridFrames[1].Width - columnWidth) < 0.0001 &&
+            Math.Abs(gridFrames[0].X) < 0.0001 && Math.Abs(gridFrames[1].X - columnWidth - 10) < 0.0001,
+            "Changing ItemsLayout did not reposition existing composite roots.", "contentview.composite-layout-change");
+        var compositeGrid = await CaptureAsync(context, nativeWindow, "collection-composite-grid.png");
+        context.Assert(CountPixels(compositeGrid, nativeWindow, Native(collection), IsBlue) > 5,
+            "Changing ItemsLayout lost composite text.", "contentview.composite-layout-text");
+        context.Pass("Scrolling does not rearrange unchanged composite item roots");
+
+        var toolbarLabel = new Label { Text = "Toolbar content", TextColor = Colors.Blue };
+        toolbarLabel.ToHandler(_clip.Handler!.MauiContext!);
+        toolbarLabel.Arrange(new Rect(0, 0, 160, 28));
+        var toolbarNative = Native(toolbarLabel);
+        using (var toolbarButton = new NSButton(new CGRect(320, 170, 160, 28)))
+        {
+            Native((IView)_clip.Parent).AddSubview(toolbarButton);
+            toolbarButton.AddSubview(toolbarNative);
+            toolbarNative.TranslatesAutoresizingMaskIntoConstraints = false;
+            toolbarNative.LeadingAnchor.ConstraintEqualTo(toolbarButton.LeadingAnchor).Active = true;
+            toolbarNative.TrailingAnchor.ConstraintEqualTo(toolbarButton.TrailingAnchor).Active = true;
+            toolbarNative.CenterYAnchor.ConstraintEqualTo(toolbarButton.CenterYAnchor).Active = true;
+            toolbarNative.HeightAnchor.ConstraintEqualTo(28).Active = true;
+            foreach (var width in new[] { 160, 240 })
+            {
+                toolbarButton.Frame = new CGRect(320, 170, width, 28);
+                await CaptureAsync(context, nativeWindow, $"toolbar-resize-{width}.png");
+                var resolvedFrame = toolbarNative.Frame;
+                var resolvedBounds = toolbarNative.Bounds;
+                context.Assert(Math.Abs(resolvedFrame.Width - width) < 0.0001,
+                    "Toolbar Auto Layout did not resolve the requested width.", "contentview.toolbar-layout");
+                toolbarLabel.Scale = width == 160 ? 0.9 : 0.8;
+                toolbarLabel.AnchorX = width == 160 ? 0.25 : 0.75;
+                toolbarLabel.TranslationX = width == 160 ? 8 : 12;
+                toolbarLabel.Handler!.PlatformArrange(new Rect(0, 0, 160, 28));
+                var toolbarImage = await CaptureAsync(context, nativeWindow, $"toolbar-transformed-{width}.png");
+                context.Assert(FramesMatch(toolbarNative.Frame, resolvedFrame) &&
+                    FramesMatch(toolbarNative.Bounds, resolvedBounds),
+                    "A transform overwrote the toolbar's Auto Layout geometry.", "contentview.toolbar-transform");
+                context.Assert(CountPixels(toolbarImage, nativeWindow, toolbarButton, IsBlue) > 5,
+                    "Transformed Auto Layout toolbar text is blank.", "contentview.toolbar-text");
+            }
+            toolbarButton.RemoveFromSuperview();
+        }
+        toolbarLabel.Handler!.DisconnectHandler();
+        context.Pass("Auto Layout toolbar content retains native geometry across transforms");
+
         _world.TranslationX = 0;
         _world.AnchorX = 0;
         _world.AnchorY = 0;
@@ -681,6 +779,17 @@ sealed class ObservedLabelHandler : LabelHandler
         Editable = false, Selectable = false, Bordered = false, DrawsBackground = false,
         TextColor = NSColor.ControlText, MaximumNumberOfLines = 0,
     };
+}
+
+sealed class ObservedContentViewHandler : ContentViewHandler
+{
+    public int ArrangeCalls { get; private set; }
+
+    public override void PlatformArrange(Rect rect)
+    {
+        ArrangeCalls++;
+        base.PlatformArrange(rect);
+    }
 }
 
 sealed class ObservedTextField : MauiNSTextField

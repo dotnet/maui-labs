@@ -16,7 +16,7 @@ A timeout is a failure, not accepted baseline evidence.
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
-| `contentview-clipping` | 13 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, autoresizing, scale/anchor resets and nonuniform scale (172 assertions) |
+| `contentview-clipping` | 15 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets and nonuniform scale (184 assertions) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
@@ -147,7 +147,11 @@ and ten compositor-paced scale updates record actual glyphs and draw counts in
 A cold coloured marker must occupy exactly its expected single-scale region
 and area; Entry password/plain replacement must retain native geometry and text.
 
-The scenario requires all 172 assertions and 13 cases.
+The scenario requires all 184 assertions and 15 cases. Native scroll notifications
+must not re-arrange unchanged composite item roots, while an ItemsLayout change
+must reposition those same roots. Auto Layout-owned toolbar
+content must retain its resolved Frame/Bounds while transformed and resized;
+these externally owned views use the existing layer-only transform path.
 The exact pre-fix overlay still exits 42
 only for the original observed clipping plus translated-text failures; it stops
 there and does not claim to reproduce the later scale/item cases.

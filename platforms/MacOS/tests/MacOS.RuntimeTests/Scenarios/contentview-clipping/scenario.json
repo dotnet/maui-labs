@@ -1,9 +1,9 @@
 {
   "name": "contentview-clipping",
-  "expectedCases": 13,
-  "expectedAssertions": 172,
+  "expectedCases": 15,
+  "expectedAssertions": 184,
   "evidence": ["native-state.json", "initial.png", "translated.png", "zoom-base.png", "zoomed-1.png", "zoomed.png", "unclipped.png", "restored.png", "assertions.txt", "capture-state.jsonl"],
-  "fixedEvidence": ["nested.png", "nested-scaled.png", "entry-plain.png", "transforms.jsonl", "redraw-cost.jsonl", "paced-cost.jsonl", "paced-9.png", "returned-9.png", "scaled.png", "scale-state.json", "scale-returned-2.png", "scale-axes.png", "collection-state.json", "collection-before.png", "collection-after.png", "collection-translated.png", "collection-relayout-reset.png", "collection-owner-relayout.png", "collection-scaled.png"],
+  "fixedEvidence": ["nested.png", "nested-scaled.png", "entry-plain.png", "transforms.jsonl", "redraw-cost.jsonl", "paced-cost.jsonl", "paced-9.png", "returned-9.png", "scaled.png", "scale-state.json", "scale-returned-2.png", "scale-axes.png", "collection-state.json", "collection-before.png", "collection-after.png", "collection-translated.png", "collection-relayout-reset.png", "collection-owner-relayout.png", "collection-scaled.png", "collection-composite-scrolled.png", "collection-composite-grid.png", "scroll-cost.json", "toolbar-transformed-240.png"],
   "baseline": {
     "overlays": [
       {

@@ -367,7 +367,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (platformView.Layer == null)
             return;
 
-        var externalFrame = platformView is MacOSContainerView { ExternalFrameManagement: true };
+        var externalFrame = HasExternalFrame(platformView);
         if (!externalFrame && handler is IMacOSViewTransformHandler macOSHandler)
             macOSHandler.UpdateGeometry(platformView, view);
 
@@ -509,8 +509,8 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (platformView == null)
             return;
 
-        // Modal pages have their frame managed externally — don't override
-        if (platformView is MacOSContainerView container && container.ExternalFrameManagement)
+        // Auto Layout and modal owners must retain their resolved native frames.
+        if (HasExternalFrame(platformView))
             return;
 
         SetFrame(platformView, VirtualView, rect);
@@ -523,6 +523,10 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
             Math.Max(0, Sanitize(rect.Width)), Math.Max(0, Sanitize(rect.Height))));
         MapTransform(this, view);
     }
+
+    static bool HasExternalFrame(NSView view) =>
+        !view.TranslatesAutoresizingMaskIntoConstraints ||
+        view is MacOSContainerView { ExternalFrameManagement: true };
 
     void UpdateGeometry(NSView platformView, IView view, CGRect? arrangedFrame = null)
     {

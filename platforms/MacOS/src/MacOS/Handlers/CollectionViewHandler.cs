@@ -340,8 +340,11 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             var info = _flatItems[idx];
             if (_visibleViews.TryGetValue(idx, out var existing))
             {
-                PositionItem(existing.platformView, info, idx, isHorizontal, span,
-                    containerWidth, containerHeight, itemSpacing, lineSpacing);
+                // Scrolling only changes visibility; explicit layout and the
+                // measurement recalculation below reposition existing items.
+                if (viewportOverride is not null)
+                    PositionItem(existing.platformView, info, idx, isHorizontal, span,
+                        containerWidth, containerHeight, itemSpacing, lineSpacing);
                 continue;
             }
 
@@ -546,7 +549,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         {
             var rect = new Rect(0, 0, handler.PlatformView.Bounds.Width, handler.PlatformView.Bounds.Height);
             handler.CalculatePositions(rect);
-            handler.UpdateVisibleItems();
+            handler.UpdateVisibleItems(rect);
         }
     }
 
