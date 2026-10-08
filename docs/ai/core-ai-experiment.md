@@ -355,6 +355,13 @@ framework's OS26 deployment minimum is a build result, not those runtime proofs.
 
 ### Reasoning runtime proof
 
+The final complete Mac Catalyst27 Core AI selection passed **47 of 47**
+assertions, zero failed/skipped, including **11 reasoning cases**. These cover
+actual stream/collected parity around tools, Full/hidden output, None effort,
+unsigned next-turn history, summary rejection, and cancellation/early disposal
+after genuine reasoning with immediate cross-facade schema recovery. Existing
+tool, context, model identity, usage, schema and lifetime regressions also passed.
+
 The OS27 Mac Catalyst playground produced two **actual model-supplied**
 reasoning entries (1,396 and 374 characters) around one native calculator call.
 Its saved standard updates were ordered as reasoning, answer whitespace,
