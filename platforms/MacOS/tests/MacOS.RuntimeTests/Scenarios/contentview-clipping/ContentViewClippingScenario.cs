@@ -17,9 +17,9 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("contentview-clipping", 15,
+        ScenarioRegistry.Register(new("contentview-clipping", 17,
             context => new ContentViewClippingScenario().CreateDelegate(context),
-            ExpectedAssertions: 184));
+            ExpectedAssertions: 188));
 }
 
 sealed class ContentViewClippingScenario : MauiRuntimeScenario
@@ -690,6 +690,48 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         }
         autoresizedChild.RemoveFromSuperview();
         context.Pass("Compositor-paced scaling preserves text without synchronous redraw");
+
+        var combinedMarker = new BoxView { Color = Colors.Red };
+        AbsoluteLayout.SetLayoutBounds(combinedMarker, new Rect(10, 10, 40, 20));
+        var combined = new ContentView
+        {
+            Content = new AbsoluteLayout { Children = { combinedMarker } },
+            Scale = 1.5,
+            Rotation = 180,
+            TranslationX = 20,
+            TranslationY = 10,
+        };
+        AbsoluteLayout.SetLayoutBounds(combined, new Rect(320, 260, 80, 40));
+        var root = (AbsoluteLayout)_clip.Parent!;
+        root.Children.Add(combined);
+        await RuntimeTestContext.FlushMainQueueAsync();
+        var combinedRegion = new CGRect(365, 275, 60, 30);
+        for (var mirrored = 0; mirrored < 2; mirrored++)
+        {
+            if (mirrored == 1)
+            {
+                combined.Rotation = 0;
+                combined.ScaleX = -1;
+            }
+            var name = mirrored == 0 ? "rotated" : "mirrored";
+            var image = await CaptureAsync(context, nativeWindow, $"combined-{name}.png");
+            var pixels = CountPixels(image, nativeWindow, Native(root), IsRed, combinedRegion);
+            var scale = image.Width / nativeWindow.Frame.Width;
+            context.AppendJson("combined-transforms.jsonl", new
+            {
+                name, combined.Scale, combined.ScaleX, combined.Rotation,
+                combined.TranslationX, combined.TranslationY,
+                frame = Native(combined).Frame.ToString(), bounds = Native(combined).Bounds.ToString(),
+                expectedRegion = combinedRegion.ToString(), pixels,
+            });
+            context.Assert(pixels == 1800 * scale * scale,
+                $"Combined {name} transform rendered {pixels} pixels instead of a single-scaled 60x30-point marker.",
+                $"contentview.combined-{name}-extent");
+            context.Assert(CountPixels(image, nativeWindow, windowContent, IsRed) == pixels,
+                $"Combined {name} transform painted outside its expected anchored, translated region.",
+                $"contentview.combined-{name}-region");
+            context.Pass($"Combined {name}, scale and translation preserve rendered geometry");
+        }
     }
 
     async Task<(RuntimeBitmap bitmap, int inside, int outside, int changed)>
@@ -780,6 +822,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
     static bool IsOrange(byte red, byte green, byte blue) => red > 180 && green is > 60 and < 200 && blue < 100;
     static bool IsBlue(byte red, byte green, byte blue) => red < 140 && green < 140 && blue > 150;
     static bool IsLime(byte red, byte green, byte blue) => red < 10 && green > 240 && blue < 10;
+    static bool IsRed(byte red, byte green, byte blue) => red > 240 && green < 10 && blue < 10;
 
     static int CountPixels(RuntimeBitmap image, NSWindow window, NSView view,
         Func<byte, byte, byte, bool> matches, CGRect? region = null)
