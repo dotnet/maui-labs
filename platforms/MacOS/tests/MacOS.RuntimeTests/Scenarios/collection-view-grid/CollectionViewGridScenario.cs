@@ -41,14 +41,14 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
         await FlushLayoutAsync(_collectionView);
         var tallSnapshot = Snapshot(_collectionView);
         evidence.WriteJson("tall-content.json", tallSnapshot);
-        evidence.Capture(CaptureView(_collectionView), "tall-content.png");
+        evidence.Capture(CaptureWindow(_collectionView), "tall-content.png");
         var tallMeasured = tallSnapshot.ItemFrames.All(frame => frame.Height > 150);
         var tallRowsOrdered = RowsAreOrdered(tallSnapshot.ItemFrames, 3);
         if (!tallMeasured) failures.Add("tall-content-measurement");
         if (!tallRowsOrdered) failures.Add("tall-content-overlap");
 
         evidence.WriteJson("span-change.json", new { initial = initialSnapshot, updated = tallSnapshot });
-        evidence.Capture(CaptureView(_collectionView), "span-change.png");
+        evidence.Capture(CaptureWindow(_collectionView), "span-change.png");
         var spanApplied = HasThreeColumns(tallSnapshot.ItemFrames);
         var spanRowsOrdered = RowsAreOrdered(tallSnapshot.ItemFrames, 3);
         if (!spanApplied) failures.Add("span-change-layout");
@@ -78,7 +78,7 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
         await FlushLayoutAsync(_collectionView);
         var headerSnapshot = Snapshot(_collectionView, hasHeader: true);
         evidence.WriteJson("header.json", headerSnapshot);
-        evidence.Capture(CaptureView(_collectionView), "header.png");
+        evidence.Capture(CaptureWindow(_collectionView), "header.png");
         var headerSpans = headerSnapshot.HeaderFrame is { } header &&
             header.Width >= headerSnapshot.ContainerWidth - 1;
         var headerKeepsGrid = HasThreeColumns(headerSnapshot.ItemFrames) &&
@@ -206,8 +206,9 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
         Native(collectionView).DocumentView
             ?? throw new InvalidOperationException("CollectionView has no native document view.");
 
-    static NSView CaptureView(CollectionView collectionView) =>
-        Native(collectionView);
+    static NSWindow CaptureWindow(CollectionView collectionView) =>
+        Native(collectionView).Window
+            ?? throw new InvalidOperationException("CollectionView is not attached to a real AppKit window.");
 
     public override Window CreateWindow(IActivationState? activationState)
     {
