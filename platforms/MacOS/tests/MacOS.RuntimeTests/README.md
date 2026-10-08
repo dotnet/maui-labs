@@ -16,7 +16,7 @@ A timeout is a failure, not accepted baseline evidence.
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
-| `contentview-clipping` | 17 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets, nonuniform scale and combined rotation/mirroring with translation (188 assertions) |
+| `contentview-clipping` | 19 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets, nonuniform scale, combined rotation/mirroring with translation, and zero/collapsed transitions (194 assertions) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
@@ -148,12 +148,14 @@ A cold coloured marker must occupy exactly its expected single-scale region
 and area; Entry password/plain replacement must retain native geometry and text.
 
 Combined positive scale, translation and a 180-degree rotation, followed by
-mirrored scale with translation, must each render an off-center marker entirely
-inside its analytically expected 60x30-point region with exactly that pixel area.
-These cases distinguish single scaling and correct anchor placement from double
-scaling or misplaced translation; they do not claim exhaustive 3D rotation coverage.
+mirrored scale with translation, must match an independently constructed,
+layer-only native AppKit reference using an asymmetric two-color marker. Zero
+scale and collapsed visibility must remove every marker pixel, then restore the
+exact prior raster. These cases distinguish single scaling, orientation and
+anchor placement from double scaling or misplaced translation; they do not
+claim exhaustive 3D rotation coverage.
 
-The scenario requires all 188 assertions and 17 cases. Native scroll notifications
+The scenario requires all 194 assertions and 19 cases. Native scroll notifications
 must not re-arrange unchanged composite item roots, while an ItemsLayout change
 must reposition those same roots. Auto Layout-owned toolbar
 content must retain its resolved Frame/Bounds while transformed and resized;

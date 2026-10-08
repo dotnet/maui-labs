@@ -692,10 +692,12 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         context.Pass("Compositor-paced scaling preserves text without synchronous redraw");
 
         var combinedMarker = new BoxView { Color = Colors.Red };
+        var combinedCorner = new BoxView { Color = Colors.Lime };
         AbsoluteLayout.SetLayoutBounds(combinedMarker, new Rect(10, 10, 40, 20));
+        AbsoluteLayout.SetLayoutBounds(combinedCorner, new Rect(10, 10, 10, 10));
         var combined = new ContentView
         {
-            Content = new AbsoluteLayout { Children = { combinedMarker } },
+            Content = new AbsoluteLayout { Children = { combinedMarker, combinedCorner } },
             Scale = 1.5,
             Rotation = 180,
             TranslationX = 20,
@@ -705,34 +707,183 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         var root = (AbsoluteLayout)_clip.Parent!;
         root.Children.Add(combined);
         await RuntimeTestContext.FlushMainQueueAsync();
-        var combinedRegion = new CGRect(365, 275, 60, 30);
-        for (var mirrored = 0; mirrored < 2; mirrored++)
+        var rootNative = Native(root);
+        using var nativeReference = new FlippedReferenceView(new CGRect(320, 260, 80, 40))
         {
-            if (mirrored == 1)
+            WantsLayer = true, Hidden = true,
+        };
+        using var nativeMarker = new FlippedReferenceView(new CGRect(10, 10, 40, 20))
+        {
+            WantsLayer = true,
+        };
+        using var nativeCorner = new FlippedReferenceView(new CGRect(10, 10, 10, 10))
+        {
+            WantsLayer = true,
+        };
+        nativeMarker.Layer!.BackgroundColor = NSColor.Red.CGColor;
+        nativeCorner.Layer!.BackgroundColor = NSColor.Green.CGColor;
+        nativeReference.AddSubview(nativeMarker);
+        nativeReference.AddSubview(nativeCorner);
+        rootNative.AddSubview(nativeReference);
+        var combinedRegion = new CGRect(200, 0, 300, rootNative.Bounds.Height);
+        PixelGeometry rotatedRed = default;
+        PixelGeometry rotatedLime = default;
+        try
+        {
+            for (var mirrored = 0; mirrored < 2; mirrored++)
             {
-                combined.Rotation = 0;
-                combined.ScaleX = -1;
+                if (mirrored == 1)
+                {
+                    combined.Rotation = 0;
+                    combined.ScaleX = -1;
+                }
+                ConfigureNativeReference(nativeReference, combined.Scale * combined.ScaleX,
+                    combined.Scale * combined.ScaleY, combined.Rotation,
+                    combined.TranslationX, combined.TranslationY);
+                var name = mirrored == 0 ? "rotated" : "mirrored";
+                combined.IsVisible = true;
+                nativeReference.Hidden = true;
+                var image = await CaptureAsync(context, nativeWindow, $"combined-{name}.png");
+                var productionRed = GetPixelGeometry(image, nativeWindow, rootNative, IsRed, combinedRegion);
+                var productionLime = GetPixelGeometry(image, nativeWindow, rootNative, IsLime, combinedRegion);
+                combined.IsVisible = false;
+                nativeReference.Hidden = false;
+                var reference = await CaptureAsync(context, nativeWindow, $"combined-{name}-reference.png");
+                var referenceRed = GetPixelGeometry(reference, nativeWindow, rootNative, IsRed, combinedRegion);
+                var referenceLime = GetPixelGeometry(reference, nativeWindow, rootNative, IsLime, combinedRegion);
+                context.AppendJson("combined-transforms.jsonl", new
+                {
+                    name, combined.Scale, combined.ScaleX, combined.Rotation,
+                    combined.TranslationX, combined.TranslationY,
+                    frame = Native(combined).Frame.ToString(), bounds = Native(combined).Bounds.ToString(),
+                    productionRed, productionLime, referenceRed, referenceLime,
+                });
+                context.Assert(GeometryMatches(productionRed, productionLime, referenceRed, referenceLime),
+                    $"Combined {name} transform differs from the native AppKit reference: " +
+                    $"production={productionRed}/{productionLime}, reference={referenceRed}/{referenceLime}.",
+                    $"contentview.combined-{name}-reference");
+                context.Assert(productionRed.Pixels > 5 && productionLime.Pixels > 5 &&
+                    CountPixels(image, nativeWindow, windowContent, IsRed) == productionRed.Pixels &&
+                    CountPixels(reference, nativeWindow, windowContent, IsRed) == referenceRed.Pixels,
+                    $"Combined {name} transform painted outside its isolated production region.",
+                    $"contentview.combined-{name}-region");
+                context.Pass($"Combined {name}, scale and translation match native AppKit rendering");
+                nativeReference.Hidden = true;
+                combined.IsVisible = true;
+                if (mirrored == 0)
+                {
+                    rotatedRed = productionRed;
+                    rotatedLime = productionLime;
+                }
             }
-            var name = mirrored == 0 ? "rotated" : "mirrored";
-            var image = await CaptureAsync(context, nativeWindow, $"combined-{name}.png");
-            var pixels = CountPixels(image, nativeWindow, Native(root), IsRed, combinedRegion);
-            var scale = image.Width / nativeWindow.Frame.Width;
-            context.AppendJson("combined-transforms.jsonl", new
-            {
-                name, combined.Scale, combined.ScaleX, combined.Rotation,
-                combined.TranslationX, combined.TranslationY,
-                frame = Native(combined).Frame.ToString(), bounds = Native(combined).Bounds.ToString(),
-                expectedRegion = combinedRegion.ToString(), pixels,
-            });
-            context.Assert(pixels == 1800 * scale * scale,
-                $"Combined {name} transform rendered {pixels} pixels instead of a single-scaled 60x30-point marker.",
-                $"contentview.combined-{name}-extent");
-            context.Assert(CountPixels(image, nativeWindow, windowContent, IsRed) == pixels,
-                $"Combined {name} transform painted outside its expected anchored, translated region.",
-                $"contentview.combined-{name}-region");
-            context.Pass($"Combined {name}, scale and translation preserve rendered geometry");
+
+            combined.ScaleX = 1;
+            combined.Rotation = 0;
+            combined.Scale = 0;
+            var zero = await CaptureAsync(context, nativeWindow, "combined-zero.png");
+            context.Assert(CountPixels(zero, nativeWindow, rootNative, IsRed, combinedRegion) == 0 &&
+                CountPixels(zero, nativeWindow, rootNative, IsLime, combinedRegion) == 0,
+                "Zero scale left combined-transform pixels visible.", "contentview.combined-zero");
+            combined.Scale = 1.5;
+            combined.Rotation = 180;
+            var zeroRestored = await CaptureAsync(context, nativeWindow, "combined-zero-restored.png");
+            var zeroRestoredRed = GetPixelGeometry(
+                zeroRestored, nativeWindow, rootNative, IsRed, combinedRegion);
+            var zeroRestoredLime = GetPixelGeometry(
+                zeroRestored, nativeWindow, rootNative, IsLime, combinedRegion);
+            context.Assert(zeroRestoredRed == rotatedRed && zeroRestoredLime == rotatedLime,
+                "Restoring zero scale did not restore the prior rotated pixels.",
+                "contentview.combined-zero-restored");
+            context.Assert(zeroRestoredRed.Pixels > 5 && zeroRestoredLime.Pixels > 5,
+                "Restoring zero scale did not restore visible asymmetric marker pixels.",
+                "contentview.combined-zero-reference");
+            context.Pass("Zero scale transition restores native-reference rendering");
+
+            combined.IsVisible = false;
+            var collapsed = await CaptureAsync(context, nativeWindow, "combined-collapsed.png");
+            context.Assert(CountPixels(collapsed, nativeWindow, rootNative, IsRed, combinedRegion) == 0 &&
+                CountPixels(collapsed, nativeWindow, rootNative, IsLime, combinedRegion) == 0,
+                "Collapsed combined transform remained visible.", "contentview.combined-collapsed");
+            combined.IsVisible = true;
+            var collapsedRestored = await CaptureAsync(context, nativeWindow, "combined-collapsed-restored.png");
+            var collapsedRestoredRed = GetPixelGeometry(
+                collapsedRestored, nativeWindow, rootNative, IsRed, combinedRegion);
+            var collapsedRestoredLime = GetPixelGeometry(
+                collapsedRestored, nativeWindow, rootNative, IsLime, combinedRegion);
+            context.Assert(collapsedRestoredRed == rotatedRed && collapsedRestoredLime == rotatedLime,
+                "Restoring collapsed content did not restore the prior rotated pixels.",
+                "contentview.combined-collapsed-restored");
+            context.Assert(collapsedRestoredRed.Pixels > 5 && collapsedRestoredLime.Pixels > 5,
+                "Restoring collapsed content did not restore visible asymmetric marker pixels.",
+                "contentview.combined-collapsed-reference");
+            context.Pass("Collapsed transition restores native-reference rendering");
+        }
+        finally
+        {
+            nativeReference.RemoveFromSuperview();
         }
     }
+
+    static void ConfigureNativeReference(NSView reference, double scaleX, double scaleY,
+        double rotation, double translationX, double translationY)
+    {
+        var layer = reference.Layer
+            ?? throw new InvalidOperationException("Native transform reference has no layer.");
+        var anchor = new CGPoint(0.5, 0.5);
+        if (layer.AnchorPoint != anchor)
+        {
+            layer.Position = new CGPoint(
+                layer.Position.X + (anchor.X - layer.AnchorPoint.X) * layer.Bounds.Width,
+                layer.Position.Y + (anchor.Y - layer.AnchorPoint.Y) * layer.Bounds.Height);
+            layer.AnchorPoint = anchor;
+        }
+        var transform = CATransform3D.Identity
+            .Scale((nfloat)scaleX, (nfloat)scaleY, 1)
+            .Rotate((nfloat)(rotation * Math.PI / 180), 0, 0, 1);
+        if (translationX != 0 || translationY != 0)
+            transform = transform.Translate((nfloat)translationX, (nfloat)translationY, 0);
+        layer.Transform = transform;
+    }
+
+    static PixelGeometry GetPixelGeometry(RuntimeBitmap image, NSWindow window, NSView view,
+        Func<byte, byte, byte, bool> matches, CGRect region)
+    {
+        var bounds = view.ConvertRectToView(region, null);
+        var scaleX = image.Width / window.Frame.Width;
+        var scaleY = image.Height / window.Frame.Height;
+        var left = Math.Clamp((int)(bounds.X * scaleX), 0, image.Width);
+        var right = Math.Clamp((int)(bounds.Right * scaleX), 0, image.Width);
+        var top = Math.Clamp((int)((window.Frame.Height - bounds.Bottom) * scaleY), 0, image.Height);
+        var bottom = Math.Clamp((int)((window.Frame.Height - bounds.Y) * scaleY), 0, image.Height);
+        var minX = image.Width;
+        var minY = image.Height;
+        var maxX = -1;
+        var maxY = -1;
+        var pixels = 0;
+        for (var y = top; y < bottom; y++)
+        {
+            for (var x = left; x < right; x++)
+            {
+                var offset = y * image.BytesPerRow + x * image.SamplesPerPixel;
+                if (!matches(image.Pixels[offset], image.Pixels[offset + 1], image.Pixels[offset + 2]))
+                    continue;
+                pixels++;
+                minX = Math.Min(minX, x);
+                minY = Math.Min(minY, y);
+                maxX = Math.Max(maxX, x);
+                maxY = Math.Max(maxY, y);
+            }
+        }
+        return pixels == 0
+            ? default
+            : new PixelGeometry(pixels, minX, minY, maxX - minX + 1, maxY - minY + 1);
+    }
+
+    static bool GeometryMatches(PixelGeometry productionRed, PixelGeometry productionLime,
+        PixelGeometry referenceRed, PixelGeometry referenceLime) =>
+        productionRed == referenceRed && productionLime == referenceLime;
+
+    readonly record struct PixelGeometry(int Pixels, int X, int Y, int Width, int Height);
 
     async Task<(RuntimeBitmap bitmap, int inside, int outside, int changed)>
         CaptureChangedCompositorFrame(RuntimeTestContext context, NSWindow window, string name,
@@ -863,6 +1014,11 @@ sealed class ObservedLabelHandler : LabelHandler
         Editable = false, Selectable = false, Bordered = false, DrawsBackground = false,
         TextColor = NSColor.ControlText, MaximumNumberOfLines = 0,
     };
+}
+
+sealed class FlippedReferenceView(CGRect frame) : NSView(frame)
+{
+    public override bool IsFlipped => true;
 }
 
 sealed class ObservedContentViewHandler : ContentViewHandler
