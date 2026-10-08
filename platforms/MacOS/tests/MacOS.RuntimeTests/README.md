@@ -114,23 +114,27 @@ backing resolution and an independent
 cyan text control in every capture; a locked display or invalid capture fails,
 never counts as an exit-42 reproduction. Glyph assertions scan the expected text
 regions. Ten out-and-back cycles alternate two strings with distinct glyph counts
-to detect blank or stale text. Nested ContentViews, Grid, Label and Entry are
+to detect blank or stale text. Repeated zoom uses a short, fully visible string:
+clipping a longer string can decrease its pixel count even when scaling works.
+Nested ContentViews, Grid, Label and Entry are
 followed by batches of 10, 100 and 500 three-property transform updates, with and
 without 64 extra labels. `redraw-cost.jsonl` records timings, synchronous/settled
 Label draws, draw depth and UI-thread ownership; timings are observations, not a
-performance pass threshold. The last cases scale a newly created, initially
-off-window label into view without first translating it through the window, and
-check that a CollectionView item's transform does not overwrite its natively
-assigned frame.
+performance pass threshold. The last cases check that a CollectionView item's
+transform does not overwrite its natively assigned frame, then scale a newly
+created, initially off-window label into view without first translating it
+through the window.
 
-**Known failures at PR #640 head `f6402c1c`:** the first six cases pass, but the
-scale-only label has zero rendered glyph pixels. Changing a native-positioned
-CollectionView item's scale also moves the second item's native origin from
-`(0, 16)` to `(0, 0)` because its managed frame is still unset; the item overlaps
-the first item. `collection-state.json` records this before the scale-only
-assertion terminates the run. The strengthened scenario is an
-intentional red regression test until that defect is corrected; do not treat its
-presence as passing runtime evidence. The exact pre-fix overlay still exits 42
+**Verification status:** PR #640 head `f6402c1c` moved a native-positioned
+CollectionView item's origin from `(0, 16)` to `(0, 0)` when changing its scale.
+Head `8756a807` preserves translation state, but its shared transform mapper casts
+to a closed generic handler type and skips other handlers' translation updates.
+The accompanying type-independent dispatch correction restores ordinary
+translation. With that correction, the first seven cases pass, including the
+CollectionView frame assertion; the final scale-only label still has zero
+rendered glyph pixels. The strengthened scenario is an intentional red regression
+test until that remaining defect is corrected; do not treat its presence as
+passing runtime evidence. The exact pre-fix overlay still exits 42
 only for the original observed clipping plus translated-text failures; it stops
 there and does not claim to reproduce the later scale/item cases.
 

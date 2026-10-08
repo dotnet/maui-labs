@@ -136,6 +136,11 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             CountPixels(translated, nativeWindow, windowContent, IsLavender, outsideRegion) > 5;
         var magentaPixelsOutsideClip = CountPixels(translated, nativeWindow, windowContent, IsMagenta)
             - CountPixels(translated, nativeWindow, clipNative, IsMagenta);
+        var translatedLabelText = (labelNative as NSTextField)?.StringValue;
+        // Keep the zoom proof fully inside the clip; clipped glyph area need not grow with scale.
+        _movedLabel.Text = "Zoom";
+        var zoomBaseline = await CaptureAsync(context, nativeWindow, "zoom-base.png");
+        var zoomBaselineMagentaTextPixels = CountPixels(zoomBaseline, nativeWindow, clipNative, IsMagenta);
         _world.Scale = 1.1;
         var firstZoom = await CaptureAsync(context, nativeWindow, "zoomed-1.png");
         var firstZoomMagentaTextPixels = CountPixels(firstZoom, nativeWindow, clipNative, IsMagenta);
@@ -156,6 +161,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             translatedOutsideClipIsLavender,
             magentaTextPixels,
             magentaPixelsOutsideClip,
+            zoomBaselineMagentaTextPixels,
             firstZoomMagentaTextPixels,
             firstZoomMagentaPixelsOutsideClip,
             zoomedMagentaTextPixels,
@@ -169,7 +175,8 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             clipFrame = clipNative.Frame.ToString(),
             worldFrame = worldNative.Frame.ToString(),
             labelFrame = labelNative.Frame.ToString(),
-            labelText = (labelNative as NSTextField)?.StringValue,
+            labelText = translatedLabelText,
+            zoomLabelText = (labelNative as NSTextField)?.StringValue,
         });
 
         if (!clips && !clipsAgain && outsideClipIsLavender &&
@@ -197,7 +204,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "contentview.rendered-restored");
         context.Pass("IsClippedToBounds updates the native layer");
 
-        context.Assert((labelNative as NSTextField)?.StringValue == "Moved into view",
+        context.Assert(translatedLabelText == "Moved into view",
             "The moved native label lost its text.", "contentview.label-text");
         context.Assert(worldNative.Frame.X == -600,
             $"Expected translated native frame, got {worldNative.Frame}.",
@@ -210,10 +217,12 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             $"outside text pixels={magentaPixelsOutsideClip}.",
             "contentview.translated-clip");
         context.Pass("Transformed content and text redraw after moving into view");
-        context.Assert(firstZoomMagentaTextPixels > magentaTextPixels &&
+        context.Assert((labelNative as NSTextField)?.StringValue == "Zoom" &&
+            zoomBaselineMagentaTextPixels > 5 &&
+            firstZoomMagentaTextPixels > zoomBaselineMagentaTextPixels &&
             zoomedMagentaTextPixels > firstZoomMagentaTextPixels,
             $"Text did not visibly scale across repeated zoom updates; pixel counts were " +
-            $"{magentaTextPixels}, {firstZoomMagentaTextPixels}, and {zoomedMagentaTextPixels}.",
+            $"{zoomBaselineMagentaTextPixels}, {firstZoomMagentaTextPixels}, and {zoomedMagentaTextPixels}.",
             "contentview.zoomed-text");
         context.Assert(firstZoomMagentaPixelsOutsideClip == 0 && zoomedMagentaPixelsOutsideClip == 0,
             $"Zoomed text escaped the clip by {firstZoomMagentaPixelsOutsideClip} and " +
@@ -347,6 +356,10 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             before = itemFrameBefore.ToString(), after = itemFrameAfter.ToString(),
             managedFrame = ((IView)itemLabel).Frame.ToString(),
         });
+        context.Assert(itemFrameAfter == itemFrameBefore,
+            $"Changing a native-positioned CollectionView item's scale reset its frame from {itemFrameBefore} to {itemFrameAfter}.",
+            "contentview.native-positioned-transform");
+        context.Pass("Transform preserves a native-positioned CollectionView item frame");
 
         _world.TranslationX = 0;
         _world.AnchorX = 0;
@@ -367,10 +380,6 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         context.Assert(scaledPixels > 5, $"Scale brought initially off-window text into view with {scaledPixels} glyph pixels.",
             "contentview.scaled-text");
         context.Pass("Scale brings initially off-window text into view");
-        context.Assert(itemFrameAfter == itemFrameBefore,
-            $"Changing a native-positioned CollectionView item's scale reset its frame from {itemFrameBefore} to {itemFrameAfter}.",
-            "contentview.native-positioned-transform");
-        context.Pass("Transform preserves a native-positioned CollectionView item frame");
     }
 
     async Task<RuntimeBitmap> CaptureAsync(RuntimeTestContext context, NSWindow window, string name)
