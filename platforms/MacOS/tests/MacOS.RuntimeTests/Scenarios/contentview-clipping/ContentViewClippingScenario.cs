@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using AppKit;
+using CoreGraphics;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
@@ -12,7 +13,7 @@ static class Registration
     public static void Register() =>
         ScenarioRegistry.Register(new("contentview-clipping", 2,
             context => new ContentViewClippingScenario().CreateDelegate(context),
-            ExpectedAssertions: 7));
+            ExpectedAssertions: 8));
 }
 
 sealed class ContentViewClippingScenario : MauiRuntimeScenario
@@ -107,7 +108,9 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         windowContent.LayoutSubtreeIfNeeded();
         var translated = context.CaptureWindowBitmap(nativeWindow, "translated.png");
         var outsideClipIsLavender = IsLavender(initial, windowContent, 300, 180);
-        var magentaTextPixels = CountMagentaPixels(translated);
+        var translatedOutsideClipIsLavender = IsLavender(translated, windowContent, 300, 180);
+        var (magentaTextPixels, magentaPixelsOutsideClip) =
+            CountMagentaPixels(translated, windowContent, clipNative.Frame);
 
         context.WriteJson("native-state.json", new
         {
@@ -115,7 +118,9 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             unclipped,
             clipsAgain,
             outsideClipIsLavender,
+            translatedOutsideClipIsLavender,
             magentaTextPixels,
+            magentaPixelsOutsideClip,
             clipFrame = clipNative.Frame.ToString(),
             worldFrame = worldNative.Frame.ToString(),
             labelFrame = labelNative.Frame.ToString(),
@@ -150,6 +155,10 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         context.Assert(magentaTextPixels > 5,
             $"Text moved into view did not render; found {magentaTextPixels} magenta text pixels.",
             "contentview.rendered-text");
+        context.Assert(!translatedOutsideClipIsLavender && magentaPixelsOutsideClip == 0,
+            $"Translated content escaped the clip: lavender={translatedOutsideClipIsLavender}, " +
+            $"outside text pixels={magentaPixelsOutsideClip}.",
+            "contentview.translated-clip");
         context.Pass("Transformed content and text redraw after moving into view");
     }
 
@@ -165,9 +174,11 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             && Math.Max(first, third) - Math.Min(first, third) >= 10;
     }
 
-    static int CountMagentaPixels(RuntimeBitmap image)
+    static (int inside, int outside) CountMagentaPixels(
+        RuntimeBitmap image, NSView view, CGRect clip)
     {
-        var count = 0;
+        var inside = 0;
+        var outside = 0;
         for (var y = 0; y < image.Height; y++)
         {
             for (var x = 0; x < image.Width; x++)
@@ -177,11 +188,16 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                     image.Pixels[offset + 1] < 140 &&
                     image.Pixels[offset + 2] > 150)
                 {
-                    count++;
+                    var logicalX = x * view.Bounds.Width / image.Width;
+                    var logicalY = y * view.Bounds.Height / image.Height;
+                    if (clip.Contains(new CGPoint(logicalX, logicalY)))
+                        inside++;
+                    else
+                        outside++;
                 }
             }
         }
-        return count;
+        return (inside, outside);
     }
 
     static NSView Native(IView view) =>

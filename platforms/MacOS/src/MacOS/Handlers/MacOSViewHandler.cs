@@ -385,6 +385,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
         else
         {
+            platformView.Layer.Transform = CATransform3D.Identity;
             SetFrame(platformView, view, view.Frame);
         }
 
