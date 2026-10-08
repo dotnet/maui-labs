@@ -27,59 +27,58 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
         new("Fourth"),
     ];
 
-    ContentPage _page = null!;
+    CollectionView _collectionView = null!;
+    GridItemsLayout _layout = null!;
 
     public override async Task RunAsync(RuntimeTestContext evidence, Window window)
     {
         var failures = new List<string>();
 
-        var tallLayout = GridLayout(3);
-        var tall = CreateCollection(tallLayout);
-        await ShowAsync(tall);
-        var tallSnapshot = Snapshot(tall);
+        await FlushLayoutAsync(_collectionView);
+        var initialSnapshot = Snapshot(_collectionView);
+
+        _layout.Span = 3;
+        await FlushLayoutAsync(_collectionView);
+        var tallSnapshot = Snapshot(_collectionView);
         evidence.WriteJson("tall-content.json", tallSnapshot);
-        evidence.Capture(CaptureView(tall), "tall-content.png");
+        evidence.Capture(CaptureView(_collectionView), "tall-content.png");
         var tallMeasured = tallSnapshot.ItemFrames.All(frame => frame.Height > 150);
         var tallRowsOrdered = RowsAreOrdered(tallSnapshot.ItemFrames, 3);
         if (!tallMeasured) failures.Add("tall-content-measurement");
         if (!tallRowsOrdered) failures.Add("tall-content-overlap");
 
-        var dynamicLayout = GridLayout(1);
-        var dynamic = CreateCollection(dynamicLayout);
-        await ShowAsync(dynamic);
-        dynamicLayout.Span = 3;
-        await FlushLayoutAsync(dynamic);
-        var dynamicSnapshot = Snapshot(dynamic);
-        evidence.WriteJson("span-change.json", dynamicSnapshot);
-        evidence.Capture(CaptureView(dynamic), "span-change.png");
-        var spanApplied = HasThreeColumns(dynamicSnapshot.ItemFrames);
-        var spanRowsOrdered = RowsAreOrdered(dynamicSnapshot.ItemFrames, 3);
+        evidence.WriteJson("span-change.json", new { initial = initialSnapshot, updated = tallSnapshot });
+        evidence.Capture(CaptureView(_collectionView), "span-change.png");
+        var spanApplied = HasThreeColumns(tallSnapshot.ItemFrames);
+        var spanRowsOrdered = RowsAreOrdered(tallSnapshot.ItemFrames, 3);
         if (!spanApplied) failures.Add("span-change-layout");
         if (!spanRowsOrdered) failures.Add("span-change-overlap");
 
-        var resizeLayout = GridLayout(3);
-        var resize = CreateCollection(resizeLayout, wrappingText: true);
-        await ShowAsync(resize);
-        var wideSnapshot = Snapshot(resize);
-        var nativeWindow = (resize.Handler?.PlatformView is NSView view ? view.Window : null)
+        var wideSnapshot = tallSnapshot;
+        var nativeWindow = (_collectionView.Handler?.PlatformView is NSView view ? view.Window : null)
             ?? throw new InvalidOperationException("CollectionView is not attached to an AppKit window.");
         var frame = nativeWindow.Frame;
         nativeWindow.SetFrame(new CGRect(frame.X, frame.Y, 420, frame.Height), true);
-        await FlushLayoutAsync(resize);
-        var narrowSnapshot = Snapshot(resize);
+        await FlushLayoutAsync(_collectionView);
+        var narrowSnapshot = Snapshot(_collectionView);
         evidence.WriteJson("resize.json", new { wide = wideSnapshot, narrow = narrowSnapshot });
-        var resizeWidthApplied = narrowSnapshot.ItemFrames[0].Width < wideSnapshot.ItemFrames[0].Width - 50;
-        var resizeRemeasured = narrowSnapshot.ItemFrames[0].Height > wideSnapshot.ItemFrames[0].Height + 20;
+        var resizeHasItems = wideSnapshot.ItemFrames.Length > 0 && narrowSnapshot.ItemFrames.Length > 0;
+        var resizeWidthApplied = resizeHasItems &&
+            narrowSnapshot.ItemFrames[0].Width < wideSnapshot.ItemFrames[0].Width - 50;
+        var resizeRemeasured = resizeHasItems &&
+            narrowSnapshot.ItemFrames[0].Height > wideSnapshot.ItemFrames[0].Height + 20;
         if (!resizeWidthApplied) failures.Add("resize-width");
         if (!resizeRemeasured) failures.Add("resize-measurement");
 
         nativeWindow.SetFrame(new CGRect(frame.X, frame.Y, frame.Width, frame.Height), true);
-        var headerLayout = GridLayout(3);
-        var withHeader = CreateCollection(headerLayout, header: "Workspace header");
-        await ShowAsync(withHeader);
-        var headerSnapshot = Snapshot(withHeader, hasHeader: true);
+        await FlushLayoutAsync(_collectionView);
+        _collectionView.Header = "Workspace header";
+        _collectionView.HeaderTemplate = new DataTemplate(() =>
+            new Label { Text = "Workspace header", FontSize = 20, Padding = 8 });
+        await FlushLayoutAsync(_collectionView);
+        var headerSnapshot = Snapshot(_collectionView, hasHeader: true);
         evidence.WriteJson("header.json", headerSnapshot);
-        evidence.Capture(CaptureView(withHeader), "header.png");
+        evidence.Capture(CaptureView(_collectionView), "header.png");
         var headerSpans = headerSnapshot.HeaderFrame is { } header &&
             header.Width >= headerSnapshot.ContainerWidth - 1;
         var headerKeepsGrid = HasThreeColumns(headerSnapshot.ItemFrames) &&
@@ -123,12 +122,6 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
         evidence.Pass("Spanning header does not consume a grid cell");
     }
 
-    async Task ShowAsync(CollectionView collectionView)
-    {
-        _page.Content = collectionView;
-        await FlushLayoutAsync(collectionView);
-    }
-
     static async Task FlushLayoutAsync(CollectionView collectionView)
     {
         await RuntimeTestContext.FlushMainQueueAsync();
@@ -138,27 +131,14 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
         scrollView.Window?.ContentView?.LayoutSubtreeIfNeeded();
     }
 
-    CollectionView CreateCollection(GridItemsLayout layout, bool wrappingText = false, object? header = null) =>
-        new()
-        {
-            ItemsSource = _cards,
-            ItemsLayout = layout,
-            Header = header,
-            HeaderTemplate = header == null ? null : new DataTemplate(() =>
-                new Label { Text = "Workspace header", FontSize = 20, Padding = 8 }),
-            ItemTemplate = new DataTemplate(() => CreateCard(wrappingText)),
-        };
-
-    static Border CreateCard(bool wrappingText)
+    static Border CreateCard()
     {
         var content = new VerticalStackLayout { Spacing = 6 };
         for (var i = 0; i < 9; i++)
         {
             content.Children.Add(new Label
             {
-                Text = wrappingText
-                    ? $"Workspace detail {i + 1}: a deliberately long value that wraps as the grid narrows"
-                    : $"Workspace detail {i + 1}",
+                Text = $"Workspace detail {i + 1}: a deliberately long value that wraps as the grid narrows",
                 LineBreakMode = LineBreakMode.WordWrap,
             });
         }
@@ -232,8 +212,19 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
 
     public override Window CreateWindow(IActivationState? activationState)
     {
-        _page = new ContentPage { Padding = 24 };
-        return new(_page)
+        _layout = GridLayout(1);
+        _collectionView = new CollectionView
+        {
+            ItemsSource = _cards,
+            ItemsLayout = _layout,
+            ItemTemplate = new DataTemplate(CreateCard),
+        };
+
+        return new(new ContentPage
+        {
+            Padding = 24,
+            Content = _collectionView,
+        })
         {
             Title = "AppKit CollectionView grid regression",
             Width = 720,
