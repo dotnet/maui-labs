@@ -505,6 +505,11 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         var toolbarNative = Native(toolbarLabel);
         using (var toolbarButton = new NSButton(new CGRect(320, 170, 160, 28)))
         {
+            toolbarButton.BezelStyle = NSBezelStyle.TexturedRounded;
+            toolbarButton.Bordered = true;
+            toolbarButton.Title = string.Empty;
+            toolbarButton.SetButtonType(NSButtonType.MomentaryPushIn);
+            toolbarButton.ImagePosition = NSCellImagePosition.NoImage;
             toolbarButton.AddSubview(toolbarNative);
             toolbarNative.TranslatesAutoresizingMaskIntoConstraints = false;
             toolbarNative.LeadingAnchor.ConstraintEqualTo(toolbarButton.LeadingAnchor).Active = true;
@@ -533,15 +538,19 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                     var resolvedFrame = toolbarNative.Frame;
                     var resolvedBounds = toolbarNative.Bounds;
                     var alignmentInsets = toolbarNative.AlignmentRectInsets;
+                    var buttonInsets = toolbarButton.AlignmentRectInsets;
                     context.AppendJson("toolbar-state.jsonl", new
                     {
                         width, button = toolbarButton.Frame.ToString(),
+                        buttonBounds = toolbarButton.Bounds.ToString(),
                         label = resolvedFrame.ToString(), bounds = resolvedBounds.ToString(),
-                        alignmentInsets = alignmentInsets.ToString(),
+                        labelLeftInset = (double)alignmentInsets.Left, labelRightInset = (double)alignmentInsets.Right,
+                        buttonLeftInset = (double)buttonInsets.Left, buttonRightInset = (double)buttonInsets.Right,
                     });
-                    context.Assert(Math.Abs(resolvedFrame.Width - alignmentInsets.Left - alignmentInsets.Right - width) < 0.0001 &&
+                    context.Assert(Math.Abs(toolbarButton.Frame.Width - buttonInsets.Left - buttonInsets.Right - width) < 0.0001 &&
+                        Math.Abs(resolvedFrame.Width - alignmentInsets.Left - alignmentInsets.Right - toolbarButton.Bounds.Width) < 0.0001 &&
                         Math.Abs(resolvedFrame.X + alignmentInsets.Left) < 0.0001,
-                        $"Toolbar Auto Layout expected alignment width {width}, got frame {resolvedFrame}, insets {alignmentInsets}.",
+                        $"Toolbar expected item alignment width {width}, button {toolbarButton.Frame}, label {resolvedFrame}.",
                         "contentview.toolbar-layout");
                     toolbarLabel.Scale = width == 160 ? 0.9 : 0.8;
                     toolbarLabel.AnchorX = width == 160 ? 0.25 : 0.75;
