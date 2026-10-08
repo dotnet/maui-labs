@@ -42,6 +42,7 @@ actor CoreAIModel {
         }
 
         private func validate(request: LanguageModelExecutorGenerationRequest) throws {
+            // Match the pinned executor's input shapes, including JSON-string tool arguments.
             var turns: [Message] = []
             for entry in request.transcript {
                 switch entry {
@@ -55,10 +56,10 @@ actor CoreAIModel {
                     let text = try text(response.segments)
                     if !text.isEmpty { turns.append(["role": "assistant", "content": text]) }
                 case .toolCalls(let toolCalls):
-                    let calls: [[String: any Sendable]] = try toolCalls.map { call in
+                    let calls: [[String: any Sendable]] = toolCalls.map { call in
                         [
                             "id": call.id, "type": "function",
-                            "function": ["name": call.toolName, "arguments": try jsonValue(call.arguments.jsonString)]
+                            "function": ["name": call.toolName, "arguments": call.arguments.jsonString]
                         ]
                     }
                     turns.append(["role": "assistant", "content": "", "tool_calls": calls])
@@ -77,8 +78,28 @@ actor CoreAIModel {
                     "parameters": try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(tool.parameters)).value
                 ]]
             }
+            let toolSpecs = specs.isEmpty ? nil : specs
+            turns = injectToolsIntoSystemMessageIfNeeded(
+                turns, toolSpecs: toolSpecs, detection: detectToolCallFormat(using: tokenizer))
+            let effort: String? = switch request.contextOptions.reasoningLevel {
+                case nil: nil
+                case .light: "low"
+                case .moderate: "medium"
+                case .deep: "high"
+                case .custom(let value): value
+                @unknown default: throw error("Unsupported native Core AI reasoning context.")
+            }
+            var extra: [String: any Sendable] = [:]
+            if let effort = effort?.trimmingCharacters(in: .whitespacesAndNewlines), !effort.isEmpty {
+                if effort.lowercased() == "none" { extra["enable_thinking"] = false }
+                else {
+                    extra["reasoning_effort"] = effort
+                    extra["enable_thinking"] = true
+                }
+            }
             do {
-                _ = try tokenizer.applyChatTemplate(messages: turns, tools: specs.isEmpty ? nil : specs)
+                _ = try tokenizer.applyChatTemplate(
+                    messages: turns, tools: toolSpecs, additionalContext: extra.isEmpty ? nil : extra)
             } catch {
                 throw Self.error("The local tokenizer cannot render this request without losing chat/tool semantics: \(error)")
             }
@@ -88,14 +109,9 @@ actor CoreAIModel {
             try segments.map { segment in
                 switch segment {
                 case .text(let text): return text.content
-                case .structure(let structure): return structure.content.jsonString
                 default: throw error("The experimental Core AI model supports text transcript segments only.")
                 }
             }.joined(separator: separator)
-        }
-
-        private func jsonValue(_ json: String) throws -> any Sendable {
-            try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8)).value
         }
 
         private static func error(_ message: String) -> NSError {
@@ -185,7 +201,7 @@ actor CoreAIModel {
             case .bool(let value): return value
             case .object(let value): return value.mapValues(\.value)
             case .array(let value): return value.map(\.value)
-            case .null: return Optional<String>.none
+            case .null: return NSNull()
             }
         }
     }

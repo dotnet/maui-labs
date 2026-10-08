@@ -42,4 +42,26 @@
     </ItemGroup>
     <Touch Files="$(_BuildXcodeProjectsStamp)" AlwaysCreate="true" />
   </Target>
+
+  <!-- The binding SDK's resource-package inputs omit XCFramework contents. -->
+  <Target Name="_TrackCoreAIBindingResourceInputs"
+          Condition="'$(IsBindingProject)' == 'true'"
+          BeforeTargets="_CreateBindingResourcePackage"
+          DependsOnTargets="_BuildXcodeProjects">
+    <ItemGroup>
+      <_FileNativeReference Include="$(_BuildXcodeProjectsStamp);%(XcodeProject.OutputPath)xcframeworks/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcframework/**/%(XcodeProject.SchemeName)">
+        <LinkToExecutable>false</LinkToExecutable>
+        <CopyToAppBundle>false</CopyToAppBundle>
+      </_FileNativeReference>
+    </ItemGroup>
+  </Target>
+
+  <!-- Consumers track the binding assembly, not the sibling resource ZIP. -->
+  <Target Name="_PropagateCoreAIBindingResourceChanges"
+          Condition="'$(IsBindingProject)' == 'true' and Exists('$(BindingResourcePath).stamp')"
+          AfterTargets="_CreateBindingResourcePackage"
+          Inputs="$(BindingResourcePath).stamp"
+          Outputs="@(IntermediateAssembly)">
+    <Touch Files="@(IntermediateAssembly)" />
+  </Target>
 </Project>

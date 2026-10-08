@@ -42,7 +42,7 @@ final class ToolNative: Tool {
 
     func call(arguments: Arguments) async throws -> Output {
         let argumentsJson = arguments.jsonString
-        let callId = arguments.id.map { extractGuid(from: String(describing: $0)) } ?? UUID().uuidString
+        let callId = try arguments.id.map { try extractIdentifier(from: String(describing: $0)) } ?? UUID().uuidString
 
         // Notify that tool is being called
         onToolCall?(callId, name, argumentsJson)
@@ -56,19 +56,14 @@ final class ToolNative: Tool {
         return try Output(json: resultJson)
     }
 
-    /// Extracts a GUID from a string matching the exact format `GenerationID(value: "UUID")`.
-    /// Returns the original string if the pattern doesn't match.
-    private func extractGuid(from string: String) -> String {
-        // Pattern matches exactly: GenerationID(value: "UUID")
-        let pattern = #"^GenerationID\(value: "([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})"\)$"#
-        
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: string, range: NSRange(string.startIndex..., in: string)),
-              let guidRange = Range(match.range(at: 1), in: string) else {
-            return string
+    // GenerationID has no public string accessor; preserve opaque IDs as well as System UUIDs.
+    private func extractIdentifier(from string: String) throws -> String {
+        let prefix = "GenerationID(value: "
+        guard string.hasPrefix(prefix), string.hasSuffix(")") else {
+            throw NSError.chatError(.invalidContent, description: "The native tool argument identifier has an unsupported representation.")
         }
-        
-        return String(string[guidRange])
+        let encoded = string.dropFirst(prefix.count).dropLast()
+        return try JSONDecoder().decode(String.self, from: Data(encoded.utf8))
     }
 
     struct Arguments: ConvertibleFromGeneratedContent {

@@ -85,23 +85,38 @@ Keep the checkpoint, export and caches under an ignored local directory
 (for example `artifacts/coreai-validation`), never in Git/library resources.
 Use the pinned [Qwen3 export recipe](https://github.com/apple/coreai-models/blob/1953c4f90ba0214c1abc7bebcb9be5107e329a46/models/qwen3/README.md):
 
-1. Check out the Apple revision and run `uv sync --frozen`.
+1. Check out the Apple revision and run `uv sync --frozen --no-default-groups`.
 2. Download the **exact checkpoint revision**, including its matching tokenizer
-   and chat template, into a local snapshot directory. Do not export a floating
-   `main` checkpoint.
-3. Export that local snapshot offline using the pinned exporter:
+   and chat template, into an isolated local Hub cache.
+3. Verify the cache's `main` alias matches that revision, then export offline.
+   The pinned exporter accepts a Hub model ID but has no revision option; its
+   memory-efficient loader does not accept a local snapshot path. The check
+   below must succeed before export, so a moved upstream checkpoint is an
+   explicit failure rather than an unpinned model.
 
 ```bash
-# Run from the pinned coreai-models checkout. CHECKPOINT and OUTPUT are absolute
-# local directories prepared explicitly; this is not an app build step.
-HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 uv run --frozen coreai.llm.export "$CHECKPOINT" \
-  --platform macOS --compression 4bit --compute-precision float16 \
+# Run from the pinned coreai-models checkout. Use ignored absolute directories;
+# this is an explicit preparation step, never an app build step.
+export HF_HOME="/absolute/path/to/ignored/coreai-hf-cache"
+OUTPUT="/absolute/path/to/ignored/exported-models"
+REVISION="70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+
+uv run --frozen --no-default-groups hf download Qwen/Qwen3-1.7B \
+  --revision "$REVISION" --cache-dir "$HF_HOME/hub" --quiet
+uv run --frozen --no-default-groups hf download Qwen/Qwen3-1.7B config.json \
+  --revision main --cache-dir "$HF_HOME/hub" --quiet
+test "$(cat "$HF_HOME/hub/models--Qwen--Qwen3-1.7B/refs/main")" = "$REVISION" \
+  || { echo "Checkpoint changed; do not export an unpinned cache." >&2; exit 1; }
+
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  uv run --frozen --no-default-groups coreai.llm.export Qwen/Qwen3-1.7B \
+  --platform macOS --compression 4bit \
   --max-context-length 4096 --output-dir "$OUTPUT" \
   --output-name qwen3_1_7b_4bit_ctx4096_dynamic
 ```
 
-4. Stage the matching `tokenizer.json`, `tokenizer_config.json` and
-   `chat_template.jinja` in the bundle's `tokenizer/` directory and verify
+4. Verify the exporter saved the matching `tokenizer.json`,
+   `tokenizer_config.json` and `chat_template.jinja` under `tokenizer/`, with
    `language.embedded_tokenizer=true` in metadata. Record exporter/checkpoint
    revisions and exported size with the validation results.
 
