@@ -38,8 +38,8 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
                 mapper[nameof(IView.FlowDirection)] = MapFlowDirection;
                 mapper[nameof(IView.AutomationId)] = MapAutomationId;
                 mapper[nameof(IView.Clip)] = MapClip;
-                mapper[nameof(IView.TranslationX)] = MapTransform;
-                mapper[nameof(IView.TranslationY)] = MapTransform;
+                mapper[nameof(IView.TranslationX)] = MapTranslation;
+                mapper[nameof(IView.TranslationY)] = MapTranslation;
                 mapper[nameof(IView.Rotation)] = MapTransform;
                 mapper[nameof(IView.RotationX)] = MapTransform;
                 mapper[nameof(IView.RotationY)] = MapTransform;
@@ -388,17 +388,25 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
             if (view.TranslationX != 0 || view.TranslationY != 0)
                 transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
         }
-        else
-        {
-            if (handler is MacOSViewHandler<TVirtualView, TPlatformView> macOSHandler)
-                macOSHandler.UpdateTranslationOrigin(platformView, view);
-        }
-
         platformView.Layer.Transform = transform;
         if (handler is MacOSViewHandler<TVirtualView, TPlatformView> viewHandler)
             viewHandler._hasLayerTransform =
                 scaleX != 1 || scaleY != 1 ||
                 view.Rotation != 0 || view.RotationX != 0 || view.RotationY != 0;
+    }
+
+    public static void MapTranslation(IViewHandler handler, IView view)
+    {
+        if (handler.PlatformView is not NSView platformView)
+            return;
+
+        if (platformView is not MacOSContainerView { ExternalFrameManagement: true } &&
+            handler is MacOSViewHandler<TVirtualView, TPlatformView> macOSHandler)
+        {
+            macOSHandler.UpdateTranslationOrigin(platformView, view);
+        }
+
+        MapTransform(handler, view);
     }
 
     public static void MapInputTransparent(IViewHandler handler, IView view)
