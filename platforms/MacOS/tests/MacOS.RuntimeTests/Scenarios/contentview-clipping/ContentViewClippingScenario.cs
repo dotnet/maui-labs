@@ -143,15 +143,14 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         var zoomBaseline = await CaptureAsync(context, nativeWindow, "zoom-base.png");
         var zoomBaselineMagentaTextPixels = CountPixels(zoomBaseline, nativeWindow, clipNative, IsMagenta);
         _world.Scale = 1.1;
-        var firstZoom = await CaptureAsync(context, nativeWindow, "zoomed-1.png");
-        var firstZoomMagentaTextPixels = CountPixels(firstZoom, nativeWindow, clipNative, IsMagenta);
-        var firstZoomMagentaPixelsOutsideClip = CountPixels(firstZoom, nativeWindow, windowContent, IsMagenta)
-            - firstZoomMagentaTextPixels;
+        var (firstZoom, firstZoomMagentaTextPixels, firstZoomMagentaPixelsOutsideClip,
+            firstZoomChangedPixels) = await CaptureChangedCompositorFrame(
+                context, nativeWindow, "zoomed-1.png", zoomBaseline, windowContent, clipNative);
+
         _world.Scale = 1.25;
-        var zoomed = await CaptureAsync(context, nativeWindow, "zoomed.png");
-        var zoomedMagentaTextPixels = CountPixels(zoomed, nativeWindow, clipNative, IsMagenta);
-        var zoomedMagentaPixelsOutsideClip = CountPixels(zoomed, nativeWindow, windowContent, IsMagenta)
-            - zoomedMagentaTextPixels;
+        var (_, zoomedMagentaTextPixels, zoomedMagentaPixelsOutsideClip,
+            zoomedChangedPixels) = await CaptureChangedCompositorFrame(
+                context, nativeWindow, "zoomed.png", firstZoom, windowContent, clipNative);
 
         context.WriteJson("native-state.json", new
         {
@@ -165,8 +164,10 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             zoomBaselineMagentaTextPixels,
             firstZoomMagentaTextPixels,
             firstZoomMagentaPixelsOutsideClip,
+            firstZoomChangedPixels,
             zoomedMagentaTextPixels,
             zoomedMagentaPixelsOutsideClip,
+            zoomedChangedPixels,
             controlPixels,
             initialOutsidePixels,
             disabledOutsidePixels,
@@ -219,6 +220,7 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             "contentview.translated-clip");
         context.Pass("Transformed content and text redraw after moving into view");
         context.Assert((labelNative as NSTextField)?.StringValue == "Zoom" &&
+            firstZoomChangedPixels > 5 && zoomedChangedPixels > 5 &&
             zoomBaselineMagentaTextPixels > 5 &&
             firstZoomMagentaTextPixels > zoomBaselineMagentaTextPixels &&
             zoomedMagentaTextPixels > firstZoomMagentaTextPixels,
@@ -549,6 +551,45 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         }
         autoresizedChild.RemoveFromSuperview();
         context.Pass("Compositor-paced scaling preserves text without synchronous redraw");
+    }
+
+    async Task<(RuntimeBitmap bitmap, int inside, int outside, int changed)>
+        CaptureChangedCompositorFrame(RuntimeTestContext context, NSWindow window, string name,
+            RuntimeBitmap previous, NSView windowContent, NSView clip)
+    {
+        var current = previous;
+        var inside = 0;
+        var outside = 0;
+        var changed = 0;
+        for (var attempt = 0; attempt < 20 && changed <= 5; attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(16);
+            current = await CaptureAsync(context, window, name);
+            inside = CountPixels(current, window, clip, IsMagenta);
+            outside = CountPixels(current, window, windowContent, IsMagenta) - inside;
+            changed = CountChangedMagentaPixels(previous, current);
+        }
+        return (current, inside, outside, changed);
+    }
+
+    static int CountChangedMagentaPixels(RuntimeBitmap first, RuntimeBitmap second)
+    {
+        if (first.Width != second.Width || first.Height != second.Height)
+            throw new InvalidOperationException("Compositor frame dimensions changed during zoom.");
+        var changed = 0;
+        for (var y = 0; y < first.Height; y++)
+        {
+            for (var x = 0; x < first.Width; x++)
+            {
+                var firstOffset = y * first.BytesPerRow + x * first.SamplesPerPixel;
+                var secondOffset = y * second.BytesPerRow + x * second.SamplesPerPixel;
+                if (IsMagenta(first.Pixels[firstOffset], first.Pixels[firstOffset + 1], first.Pixels[firstOffset + 2]) !=
+                    IsMagenta(second.Pixels[secondOffset], second.Pixels[secondOffset + 1], second.Pixels[secondOffset + 2]))
+                    changed++;
+            }
+        }
+        return changed;
     }
 
     static bool FramesMatch(CGRect actual, CGRect expected) =>

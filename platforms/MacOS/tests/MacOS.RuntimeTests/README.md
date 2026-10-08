@@ -116,6 +116,9 @@ never counts as an exit-42 reproduction. Glyph assertions scan the expected text
 regions. Ten out-and-back cycles alternate two strings with distinct glyph counts
 to detect blank or stale text. Repeated zoom uses a short, fully visible string:
 clipping a longer string can decrease its pixel count even when scaling works.
+Zoom captures poll for a changed glyph mask with a bounded deadline while
+retaining strict glyph-area growth and the independent visible-text control.
+Changed capture dimensions are rejected, not treated as changed glyphs.
 Nested ContentViews, Grid, Label and Entry are
 followed by batches of 10, 100 and 500 three-property transform updates, with and
 without 64 extra labels. `redraw-cost.jsonl` records timings, synchronous/settled
