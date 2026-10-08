@@ -145,7 +145,8 @@ internal sealed partial class FoundationModelsChatClient : IChatClient
 		StreamChunkerBase chunker = nativeOptions?.ResponseJsonSchema is not null
 			? new JsonStreamChunker()
 			: new PlainTextStreamChunker();
-		var handler = new StreamingResponseHandler(chunker, native.ModelIdentifier);
+		var handler = new StreamingResponseHandler(chunker, native.ModelIdentifier,
+			includeReasoning: options?.Reasoning?.Output != ReasoningOutput.None);
 
 		// Set up cancellation registration before invoking native to avoid race
 		CancellationTokenNative? nativeToken = null;
@@ -164,7 +165,10 @@ internal sealed partial class FoundationModelsChatClient : IChatClient
 						switch (update.UpdateType)
 						{
 							case ResponseUpdateTypeNative.Content:
-								handler.ProcessContent(update.Text);
+								handler.ProcessContent(update.Text, update.MessageId);
+								break;
+							case ResponseUpdateTypeNative.Reasoning:
+								handler.ProcessReasoning(update.MessageId, update.SegmentId, update.Text, update.ProtectedData);
 								break;
 							case ResponseUpdateTypeNative.ToolCall:
 								handler.ProcessToolCall(update.ToolCallId, update.ToolCallName, update.ToolCallArguments);
@@ -369,17 +373,18 @@ internal sealed partial class FoundationModelsChatClient : IChatClient
 			return;
 
 		ArgumentNullException.ThrowIfNull(messages);
-		if (messages.SelectMany(m => m.Contents).Any(c => c is not TextContent and not FunctionCallContent and not FunctionResultContent))
-			throw new NotSupportedException("The experimental Core AI client supports text and tool history only.");
+		if (messages.SelectMany(m => m.Contents).Any(c => c is not TextContent and not TextReasoningContent and not FunctionCallContent and not FunctionResultContent))
+			throw new NotSupportedException("The experimental Core AI client supports text, reasoning and tool history only.");
 
 		if (options is not null)
 		{
 			if (options.TopK is not null || options.TopP is not null || options.Seed is not null ||
 				options.FrequencyPenalty is not null || options.PresencePenalty is not null ||
-				options.StopSequences is { Count: > 0 } || options.Reasoning is not null ||
+				options.StopSequences is { Count: > 0 } ||
 				options.AllowMultipleToolCalls is not null ||
 				(options.ToolMode is not null && options.ToolMode != ChatToolMode.Auto && options.ToolMode != ChatToolMode.None))
-				throw new NotSupportedException("CoreAILM phase 1 supports Temperature, MaxOutputTokens, Auto/None tools, instructions and JSON schema. TopK, TopP, Seed, penalties, stop sequences, reasoning and forced/limited tool calls are not supported.");
+				throw new NotSupportedException("CoreAILM supports Temperature, MaxOutputTokens, reasoning, Auto/None tools, instructions and JSON schema. TopK, TopP, Seed, penalties, stop sequences and forced/limited tool calls are not supported.");
+			FoundationModelsReasoningOptions.GetLevel(options.Reasoning, isCoreAI: true);
 			if (options.Temperature is < 0 || options.Temperature is { } temperature && !float.IsFinite(temperature))
 				throw new ArgumentOutOfRangeException(nameof(options), "Temperature must be finite and nonnegative.");
 		}
@@ -389,7 +394,8 @@ internal sealed partial class FoundationModelsChatClient : IChatClient
 	{
 		var message = new ChatMessage
 		{
-			Role = FromNative(nativeMessage.Role)
+			Role = FromNative(nativeMessage.Role),
+			MessageId = nativeMessage.MessageId,
 		};
 
 		if (nativeMessage.Contents is not null)
@@ -419,6 +425,9 @@ internal sealed partial class FoundationModelsChatClient : IChatClient
 			TextContentNative textContent =>
 				new TextContent(textContent.Text),
 
+			TextReasoningContentNative reasoning =>
+				new TextReasoningContent(reasoning.Text) { ProtectedData = reasoning.ProtectedData },
+
 			FunctionCallContentNative functionCall =>
 #pragma warning disable IL3050, IL2026
 				new FunctionCallContent(
@@ -445,6 +454,7 @@ internal sealed partial class FoundationModelsChatClient : IChatClient
 		new()
 		{
 			Role = ToNative(message.Role),
+			MessageId = message.MessageId,
 			Contents = [.. message.Contents.SelectMany(c => ToNative(c, callIdToName))]
 		};
 
@@ -480,6 +490,8 @@ internal sealed partial class FoundationModelsChatClient : IChatClient
 			Seed = ToNative(options.Seed),
 			Temperature = ToNative(options.Temperature),
 			MaxOutputTokens = ToNative(options.MaxOutputTokens),
+			ReasoningLevel = FoundationModelsReasoningOptions.GetLevel(options.Reasoning, _modelDirectory is not null),
+			IncludeReasoning = options.Reasoning?.Output != ReasoningOutput.None,
 			ResponseJsonSchema = ToNative(options.ResponseFormat),
 			Tools = options.ToolMode == ChatToolMode.None
 				? null
@@ -529,6 +541,7 @@ internal sealed partial class FoundationModelsChatClient : IChatClient
 			// Apple Intelligence performs better when each text content chunk is separated
 			TextContent textContent when textContent.Text is not null => [new TextContentNative(textContent.Text)],
 			TextContent => Array.Empty<AIContentNative>(),
+			TextReasoningContent reasoning => [new TextReasoningContentNative(reasoning.Text, reasoning.ProtectedData)],
 
 			// Image content (analyzed by the model on 27.0+; the native layer throws below that).
 			DataContent data when IsImage(data.MediaType) => [ToNative(data)],

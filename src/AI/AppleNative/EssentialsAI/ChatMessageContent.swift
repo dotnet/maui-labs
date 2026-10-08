@@ -14,6 +14,18 @@ public class TextContentNative: AIContentNative {
     @objc public var text: String
 }
 
+@objc(TextReasoningContentNative)
+public class TextReasoningContentNative: AIContentNative {
+    @objc public var text: String?
+    @objc public var protectedData: String?
+
+    @objc public init(text: String?, protectedData: String?) {
+        self.text = text
+        self.protectedData = protectedData
+        super.init()
+    }
+}
+
 @objc(FunctionCallContentNative)
 public class FunctionCallContentNative: AIContentNative {
     @objc public var callId: String

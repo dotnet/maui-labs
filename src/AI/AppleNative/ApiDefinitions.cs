@@ -136,6 +136,8 @@ interface ChatClientNative
 [Internal]
 interface ChatMessageNative
 {
+	[NullAllowed, Export("messageId")]
+	string MessageId { get; set; }
 	// @property (nonatomic) enum ChatRoleNative role;
 	[Export("role", ArgumentSemantic.Assign)]
 	ChatRoleNative Role { get; set; }
@@ -154,6 +156,11 @@ interface ChatMessageNative
 [Internal]
 interface ChatOptionsNative
 {
+	[NullAllowed, Export("reasoningLevel")]
+	string ReasoningLevel { get; set; }
+
+	[Export("includeReasoning")]
+	bool IncludeReasoning { get; set; }
 	// @property (nonatomic, strong) NSNumber * _Nullable topK;
 	[NullAllowed, Export("topK", ArgumentSemantic.Strong)]
 	NSNumber TopK { get; set; }
@@ -272,6 +279,21 @@ interface TextContentNative
 	string Text { get; set; }
 }
 
+[BaseType(typeof(AIContentNative))]
+[DisableDefaultCtor]
+[Internal]
+interface TextReasoningContentNative
+{
+	[Export("initWithText:protectedData:")]
+	NativeHandle Constructor([NullAllowed] string text, [NullAllowed] string protectedData);
+
+	[NullAllowed, Export("text")]
+	string Text { get; set; }
+
+	[NullAllowed, Export("protectedData")]
+	string ProtectedData { get; set; }
+}
+
 // @interface ImageContentNative : AIContentNative
 [BaseType(typeof(AIContentNative))]
 [DisableDefaultCtor]
@@ -326,6 +348,14 @@ interface ImageContentNative
 [Internal]
 interface ResponseUpdateNative
 {
+	[NullAllowed, Export("messageId")]
+	string MessageId { get; }
+
+	[NullAllowed, Export("segmentId")]
+	string SegmentId { get; }
+
+	[NullAllowed, Export("protectedData")]
+	string ProtectedData { get; }
 	// @property (nonatomic, readonly) enum ResponseUpdateTypeNative updateType;
 	[Export("updateType")]
 	ResponseUpdateTypeNative UpdateType { get; }

@@ -9,4 +9,6 @@ public class ChatOptionsNative: NSObject {
     @objc public var maxOutputTokens: NSNumber? = nil
     @objc public var responseJsonSchema: NSString? = nil
     @objc public var tools: [any AIToolNative]? = nil
+    @objc public var reasoningLevel: String? = nil
+    @objc public var includeReasoning: Bool = true
 }
