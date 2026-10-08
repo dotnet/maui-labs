@@ -518,6 +518,91 @@ public sealed class ChatConversationTests
     }
 
     [Fact]
+    public async Task ExecuteTurn_NativeReasoningIdentity_CoalescesHistoryAndRetainsLateProtection()
+    {
+        ChatResponseUpdate[] updates =
+        [
+            new(ChatRole.Assistant, [new TextReasoningContent("First ")]) { MessageId = "native-first" },
+            new(ChatRole.Assistant, [new TextReasoningContent("thought")]) { MessageId = "native-first" },
+            new(ChatRole.Assistant, [new FunctionCallContent("opaque-call", "lookup")]),
+            new(ChatRole.Tool, [new FunctionResultContent("opaque-call", "code")]),
+            new(ChatRole.Assistant, [new TextReasoningContent("Second thought")]) { MessageId = "native-second" },
+            new(ChatRole.Assistant, [new TextContent("Answer")]) { MessageId = "native-answer" },
+            new(ChatRole.Assistant, [new TextReasoningContent(null) { ProtectedData = "opaque-native" }])
+                { MessageId = "native-first" },
+            new(ChatRole.Assistant, [new UsageContent(new() { TotalTokenCount = 12 })]),
+        ];
+        using var client = new ScriptedClient(new ChatResponse([]), updates);
+        var conversation = new ChatConversation();
+        var changes = await CollectChangesAsync(client, streaming: true, conversation: conversation);
+
+        var reasoningEntries = changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Reasoning).ToArray();
+        Assert.Equal(2, reasoningEntries.Length);
+        Assert.All(reasoningEntries, entry => Assert.Equal("Reasoning", entry.Label));
+        Assert.Contains(changes.OfType<TranscriptChange.EntryTextChanged>(), change => change.Text == "First thought");
+        var answer = Assert.Single(changes.OfType<TranscriptChange.EntryAdded>(),
+            entry => entry.EntryKind == TranscriptEntryKind.Assistant);
+        Assert.Contains(changes.OfType<TranscriptChange.EntryTextChanged>(),
+            change => change.EntryId == answer.EntryId && change.Text == "Answer");
+        Assert.DoesNotContain(changes.OfType<TranscriptChange.EntryTextChanged>(),
+            change => change.Text.Contains("opaque-native", StringComparison.Ordinal));
+
+        using var next = new ScriptedClient(new ChatResponse([new(ChatRole.Assistant, "Next")]), []);
+        await CollectChangesAsync(next, streaming: false, conversation: conversation);
+        var history = next.ReceivedMessages!;
+        var first = Assert.Single(history, message => message.MessageId == "native-first");
+        var reasoning = Assert.IsType<TextReasoningContent>(Assert.Single(first.Contents));
+        Assert.Equal("First thought", reasoning.Text);
+        Assert.Equal("opaque-native", reasoning.ProtectedData);
+        Assert.Equal("Second thought", Assert.IsType<TextReasoningContent>(
+            Assert.Single(Assert.Single(history, message => message.MessageId == "native-second").Contents)).Text);
+        Assert.Equal("First ", Assert.IsType<TextReasoningContent>(updates[0].Contents[0]).Text);
+        Assert.Null(Assert.IsType<TextReasoningContent>(updates[0].Contents[0]).ProtectedData);
+        var call = Assert.Single(history.SelectMany(message => message.Contents).OfType<FunctionCallContent>());
+        var result = Assert.Single(history.SelectMany(message => message.Contents).OfType<FunctionResultContent>());
+        Assert.Equal("opaque-call", call.CallId);
+        Assert.Equal(call.CallId, result.CallId);
+
+        var request = ChatRecordingSerializer.Request(history, new()
+        {
+            Reasoning = new() { Output = ReasoningOutput.Full },
+        });
+        var restored = ChatRecordingSerializer.ReadRequestMessages(request);
+        var restoredFirst = Assert.Single(restored, message => message.MessageId == first.MessageId);
+        var restoredReasoning = Assert.IsType<TextReasoningContent>(Assert.Single(restoredFirst.Contents));
+        Assert.Equal(reasoning.Text, restoredReasoning.Text);
+        Assert.Equal(reasoning.ProtectedData, restoredReasoning.ProtectedData);
+        Assert.Equal(ReasoningOutput.Full, ChatRecordingSerializer.ReadOptions(request)?.Reasoning?.Output);
+        var signatureOnly = ChatRecordingSerializer.ReadUpdate(ChatRecordingSerializer.Update(updates[6]));
+        Assert.Equal("native-first", signatureOnly.MessageId);
+        Assert.Equal("opaque-native", Assert.IsType<TextReasoningContent>(signatureOnly.Contents[0]).ProtectedData);
+    }
+
+    [Fact]
+    public async Task ExecuteTurn_ContentAndToolTransitions_EndUnsignedReasoningWithoutInventingSignatures()
+    {
+        using var client = new ScriptedClient(new ChatResponse([]),
+        [
+            new(ChatRole.Assistant, [new TextReasoningContent("Before")]),
+            new(ChatRole.Assistant, [new TextContent("Answer")]),
+            new(ChatRole.Assistant, [new TextReasoningContent("After answer")]),
+            new(ChatRole.Assistant, [new FunctionCallContent("call", "lookup")]),
+            new(ChatRole.Tool, [new FunctionResultContent("call", "code")]),
+            new(ChatRole.Assistant, [new TextReasoningContent("After tool")]),
+        ]);
+        var conversation = new ChatConversation();
+        var changes = await CollectChangesAsync(client, streaming: true, conversation: conversation);
+        Assert.Equal(new[] { "Before", "After answer", "After tool" }, changes.OfType<TranscriptChange.EntryAdded>()
+            .Where(entry => entry.EntryKind == TranscriptEntryKind.Reasoning).Select(entry => entry.Text));
+        using var next = new ScriptedClient(new ChatResponse([new(ChatRole.Assistant, "Next")]), []);
+        await CollectChangesAsync(next, streaming: false, conversation: conversation);
+        var reasoning = next.ReceivedMessages!.SelectMany(message => message.Contents).OfType<TextReasoningContent>().ToArray();
+        Assert.Equal(3, reasoning.Length);
+        Assert.All(reasoning, content => Assert.Null(content.ProtectedData));
+    }
+
+    [Fact]
     public async Task ExecuteTurn_ProtectedReasoningCompletion_SeparatesItemsWithoutChangingTheirText()
     {
         const string first = "**First heading**\n\nFirst body";

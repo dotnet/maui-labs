@@ -60,8 +60,9 @@ internal static class ChatServiceCollectionExtensions
             .UseDescriptor(new ChatClientDescriptor(
                 "core-ai-chat",
                 "Core AI (experimental)",
-                "Not loaded. The first request loads the app-owned local model. Text/tools/schema only; reasoning controls are disabled. Temperature defaults to 0.6. TopK/TopP/Seed and forced tools are unsupported.",
-                SupportsToolCalling: true))
+                "Not loaded. The first request loads the app-owned local model. Text/tools/full reasoning; guided JSON may bypass reasoning. Temperature defaults to 0.6. TopK/TopP/Seed, summaries and forced tools are unsupported.",
+                SupportsToolCalling: true,
+                SupportsFullReasoning: true))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())

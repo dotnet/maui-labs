@@ -1,4 +1,5 @@
 using Microsoft.Extensions.AI;
+using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
 

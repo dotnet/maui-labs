@@ -1,4 +1,4 @@
-# Local Core AI experiment (phase 1)
+# Local Core AI experiment (phases 1–2)
 
 This is an unpublished experiment, not a new shipping provider/package.
 It requires Xcode 27 and an OS27 Apple target. Ordinary builds still select
@@ -151,19 +151,69 @@ generation**, including post-tool turns. A missing/unrenderable local template
 fails explicitly instead of allowing the upstream adapter's plain-text fallback
 to silently lose tool semantics.
 
-Supported phase-1 options are instructions, JSON schema, `Temperature`,
+Supported options are instructions, JSON schema, `Temperature`,
 `MaxOutputTokens` and Auto/None tool selection. CoreAILM's adapter honors
 temperature and the output limit, but does not forward standard TopK/TopP/Seed.
 The client explicitly rejects those, penalties, stop sequences, forced/limited
-tool calls and `ReasoningOptions`. It defaults Core AI temperature to **0.6**
+tool calls. It defaults Core AI temperature to **0.6**
 rather than greedy Qwen thinking. Other models/exports are not validated by
 this experiment.
 
-Core AI is text-only. System image paths are unchanged. Reasoning controls stay
-disabled: native thinking may occur, but no reasoning events/tokens/signatures
-are fabricated or transported. For focused Qwen phase-1 answer/tool tests,
-`/no_think` can be placed explicitly in the **prompt**; this is not a managed
-reasoning API.
+Core AI is text-only. System image paths are unchanged. Phase-1 answer/tool
+tests retain their explicit `/no_think` prompt dialect. Phase-2 reasoning tests
+do **not** use that suffix.
+
+### Reasoning (phase 2)
+
+The shared bridge reads OS27 snapshot `transcriptEntries` **before** processing
+answer content, including reasoning-only snapshots. It emits actual native
+text as `TextReasoningContent`, never as answer `TextContent`. Repeated cumulative
+entries/segments are deduplicated by native identity; reasoning entry IDs use
+standard `ChatResponseUpdate.MessageId` / `ChatMessage.MessageId`. Final collected
+reasoning and signature-only changes are processed without repeating streamed
+text. Native tool callbacks still own invocation/result timing and opaque call
+IDs, using the existing serial callback queue.
+
+Standard `ChatOptions.Reasoning` maps as follows:
+
+| Option | Core AI behavior |
+|--------|------------------|
+| Effort unset | Preserve the provider default (`reasoningLevel: nil`) |
+| `None` | Native `.custom("none")`; the pinned Qwen adapter recognizes this |
+| `Low` / `Medium` / `High` | Native `.light` / `.moderate` / `.deep` |
+| `ExtraHigh` | Best-effort `.deep`, **not** an additional compute budget |
+| Output unset / `Full` | Return the native full reasoning text |
+| Output `None` | Suppress returned reasoning only; does **not** disable computation |
+| Output `Summary` | Explicitly unsupported; raw traces are not summaries |
+
+Qwen's template enables/disables thinking with a boolean. Its non-None levels
+do **not** guarantee distinct budgets or response quality. Guided JSON uses a
+separate CoreAILM path that can bypass reasoning; this experiment does not claim
+all reasoning/schema/tool combinations. There is no hidden answer-text injection.
+
+The default Apple system model does not report reasoning support. Its unsupported
+reasoning controls are left unset; OS26 uses the original request overloads and
+does not invent reasoning/usage. OS27 uses runtime availability checks, not a
+Swift compiler-version fallback.
+
+Unsigned Core AI reasoning can remain in standard history/recordings but is
+skipped during prompt replay: upstream CoreAILM ignores reasoning history, and
+we do not fabricate tokens or signatures. The pinned Qwen fixture has no native
+signature, so its `ProtectedData` remains null. If a provider supplies a signature,
+`ProtectedData` is an opaque versioned blob preserving the **actual** signed native
+entry (including segments/metadata), its native identity and producer affinity.
+Replay validates those fields and any supplied text. Protection-only content is
+supported; foreign/Azure blobs, altered text, missing identity, and a different
+producer are rejected explicitly. Core AI affinity uses the canonical local
+resource path; protected history is not transferable to another path/provider.
+This is lossless transport, not a new cryptographic signature or encryption scheme.
+
+The playground displays **Full reasoning** for Core AI, while Azure retains
+**Reasoning summary** with Medium effort. Unchecking Core AI reasoning hides
+returned content without setting Effort.None. History coalesces native reasoning
+fragments by message identity/content type, preserves protection-only completion,
+and keeps tool/content transitions. Record/replay uses the existing standard
+Microsoft.Extensions.AI serializer; no custom public metadata keys are added.
 
 On OS27 the bridge maps the native response's supplied input/output/total
 counts to `UsageDetails` and a final streaming `UsageContent`. It preserves
@@ -180,6 +230,30 @@ Host-only suites do not need the model or opt-in property:
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests
 dotnet test tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests
 ```
+
+Focused phase-2 selectors:
+
+```bash
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests \
+  --filter 'FullyQualifiedName~StreamingResponseHandlerTests|FullyQualifiedName~FoundationModelsReasoningOptionsTests'
+dotnet test tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests \
+  --filter 'FullyQualifiedName~ChatConversationTests|FullyQualifiedName~SettingsPaneViewModelTests|FullyQualifiedName~RecordedChatReplayTests'
+
+# macOS27 host: synthetic native entries/signatures; no model is loaded.
+# Use the host architecture (arm64 shown here), with OS26 native deployment compatibility.
+mkdir -p artifacts/coreai-validation
+xcrun swiftc -target arm64-apple-macos26.0 \
+  src/AI/AppleNative/EssentialsAI/*.swift tests/AI/NativeTests/ReasoningTests.swift \
+  -o artifacts/coreai-validation/phase2-native-host-tests
+artifacts/coreai-validation/phase2-native-host-tests
+```
+
+For real pinned-model reasoning cases, use `FullyQualifiedName~CoreAIReasoningTests`
+(also tagged `Reasoning=true`) in the device runner command below. These tests cover
+native/managed reasoning parity from the same request, tool-separated reasoning
+entries, native call IDs, full/hidden output, None effort, unsigned-history
+continuation, summary rejection, and final usage. Build/host checks are not proof
+that those device cases ran; capture actual runtime results separately.
 
 Compile the real device tests with the same app resource input:
 

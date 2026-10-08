@@ -785,8 +785,9 @@ public class ChatClientNative: NSObject {
                     if case .text(let text) = segment { return text.content }
                     return nil
                 }.joined()
-                message.contents = [TextReasoningContentNative(text: text,
-                    protectedData: try protectReasoning(reasoning))]
+                let protectedData = try protectReasoning(reasoning)
+                guard !text.isEmpty || protectedData != nil else { return nil }
+                message.contents = [TextReasoningContentNative(text: text, protectedData: protectedData)]
                 return message
             }
             return nil

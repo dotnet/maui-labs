@@ -54,14 +54,14 @@
                                    Text="Request JSON matching the playground response schema." />
 
                     <CheckBox Grid.Row="2" IsChecked="{Binding UseReasoningSummary}"
-                              IsVisible="{Binding SelectedDescriptor.SupportsReasoningSummary}"
+                              IsVisible="{Binding SelectedDescriptor.SupportsReasoning}"
                               WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
                               AutomationId="ReasoningSummaryCheckBox" />
-                    <Label Grid.Row="2" Grid.Column="1" Text="Reasoning summary" VerticalOptions="Center"
-                           IsVisible="{Binding SelectedDescriptor.SupportsReasoningSummary}" />
+                    <Label Grid.Row="2" Grid.Column="1" Text="{Binding SelectedDescriptor.ReasoningLabel}" VerticalOptions="Center"
+                           IsVisible="{Binding SelectedDescriptor.SupportsReasoning}" />
                     <local:InfoTip Grid.Row="2" Grid.Column="2"
-                                   IsVisible="{Binding SelectedDescriptor.SupportsReasoningSummary}"
-                                   Text="Request a visible summary; private reasoning is never displayed." />
+                                   IsVisible="{Binding SelectedDescriptor.SupportsReasoning}"
+                                   Text="{Binding SelectedDescriptor.ReasoningDescription}" />
                 </Grid>
 
                 <BoxView HeightRequest="1"

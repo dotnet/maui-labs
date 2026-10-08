@@ -9,6 +9,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Tool calling** — function-calling support for on-device models
+- **Experimental local reasoning** — opt-in OS27 Core AI full-reasoning streaming through standard `TextReasoningContent`; see the [unpublished experiment](../../docs/ai/core-ai-experiment.md)
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 
 ### Platform Support

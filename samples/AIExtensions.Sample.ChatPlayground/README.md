@@ -73,9 +73,14 @@ The app owns the staged `CoreAIModel/` resources. No model is downloaded by a
 build, included in NuGet, or selected through `ChatOptions.ModelId`.
 The first request loads asynchronously; status shows loading, ready or an
 explicit error, with no System/cloud fallback or System availability gate.
-Reasoning and image controls stay disabled. Temperature defaults to 0.6;
-TopK/TopP/Seed, forced tools and other unsupported options fail explicitly.
-Use tools and JSON schema as separate validation modes.
+The **Full reasoning** checkbox returns actual native reasoning separately
+from answer text; unchecking it suppresses output without disabling computation.
+Core AI has no summary API (Azure keeps its reasoning-summary setting).
+Image controls stay disabled. Temperature defaults to 0.6; TopK/TopP/Seed,
+summaries, forced tools and other unsupported options fail explicitly.
+Guided JSON may bypass reasoning; use tools and JSON schema as separate
+validation modes. Recordings retain standard reasoning identity/protected data,
+but foreign provider blobs cannot be replayed into the local Apple clients.
 
 This is local-only and not published. See the
 [Core AI experiment guide](../../docs/ai/core-ai-experiment.md) for fixture
