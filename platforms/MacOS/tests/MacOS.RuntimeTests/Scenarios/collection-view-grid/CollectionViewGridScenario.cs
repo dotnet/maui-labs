@@ -207,8 +207,7 @@ sealed class CollectionViewGridScenario : MauiRuntimeScenario
             ?? throw new InvalidOperationException("CollectionView has no native document view.");
 
     static NSView CaptureView(CollectionView collectionView) =>
-        Native(collectionView).Window?.ContentView
-            ?? throw new InvalidOperationException("CollectionView is not attached to a real AppKit window.");
+        Native(collectionView);
 
     public override Window CreateWindow(IActivationState? activationState)
     {
