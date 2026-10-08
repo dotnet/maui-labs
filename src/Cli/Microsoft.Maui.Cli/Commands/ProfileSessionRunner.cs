@@ -42,14 +42,7 @@ internal static class ProfileSessionRunner
 			if (context.OutputFormat == TraceOutputFormat.Mibc)
 			{
 				await ProfileCommand.ConvertNetTraceToMibcAsync(
-					context.Project,
-					context.Framework,
-					context.OutputPath,
-					context.PrimaryOutputPath,
-					context.BuildWorkspace.Path,
-					context.Formatter,
-					context.UseJson,
-					context.Verbose,
+					context,
 					postProcessingCancellationToken);
 			}
 		}
