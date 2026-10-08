@@ -1,0 +1,218 @@
+diff --git a/src/Comet/.squad/agents/amos/charter.md b/src/Comet/.squad/agents/amos/charter.md
+index 6dfbda8b..7ae4fcc3 100644
+--- a/src/Comet/.squad/agents/amos/charter.md
++++ b/src/Comet/.squad/agents/amos/charter.md
+@@ -14,6 +14,7 @@
+ - Controls
+ - navigation
+ - interop
++- Source-faithful UI components and sample integration
+ 
+ ## How I Work
+ 
+@@ -52,3 +53,4 @@ Data flows in, answers flow out. Keeps the plumbing tight and the contracts clea
+ ## Required Skills
+ 
+ Before reporting any task as complete, read and follow `.squad/skills/verification-protocol/SKILL.md`.
++For UI rewrites or parity work, invoke and follow the global `source-led-ui-parity` skill before editing.
+diff --git a/src/Comet/.squad/agents/bobbie/charter.md b/src/Comet/.squad/agents/bobbie/charter.md
+index 1d5555cd..27157ddb 100644
+--- a/src/Comet/.squad/agents/bobbie/charter.md
++++ b/src/Comet/.squad/agents/bobbie/charter.md
+@@ -14,6 +14,7 @@
+ - Tests
+ - validation
+ - regression
++- Source-led visual acceptance matrices and shared-component parity regression
+ 
+ ## How I Work
+ 
+@@ -52,3 +53,4 @@ Breaks things on purpose so users never break them by accident.
+ ## Required Skills
+ 
+ Before reporting any task as complete, read and follow `.squad/skills/verification-protocol/SKILL.md`.
++For UI rewrites or parity work, invoke and follow the global `source-led-ui-parity` skill before verification.
+diff --git a/src/Comet/.squad/agents/holden/charter.md b/src/Comet/.squad/agents/holden/charter.md
+index 83eee7dd..793d5bc7 100644
+--- a/src/Comet/.squad/agents/holden/charter.md
++++ b/src/Comet/.squad/agents/holden/charter.md
+@@ -14,6 +14,7 @@
+ - Core framework
+ - reconciliation
+ - hot reload
++- Cross-screen visual root causes, including Safe Area and layout ownership
+ - **Visual validation after every fix batch** — after any visual parity fixes are committed, I MUST immediately launch both apps, inspect the UI (via Appium or screenshots), and verify the fixes actually worked. Never leave fixes unvalidated.
+ 
+ ## How I Work
+@@ -53,3 +54,4 @@ Sees the big picture without losing sight of the details. Decides fast, revisits
+ ## Required Skills
+ 
+ Before reporting any task as complete, read and follow `.squad/skills/verification-protocol/SKILL.md`.
++For UI rewrites or parity work, invoke and follow the global `source-led-ui-parity` skill before editing.
+diff --git a/src/Comet/.squad/config.json b/src/Comet/.squad/config.json
+index 1a0745f1..6b4342a9 100644
+--- a/src/Comet/.squad/config.json
++++ b/src/Comet/.squad/config.json
+@@ -1,4 +1,12 @@
+ {
+   "version": 1,
+-  "defaultModel": "claude-opus-4.6"
++  "defaultModel": "gpt-5.6-sol",
++  "defaultReasoningEffort": "high",
++  "agentModelOverrides": {
++    "scribe": "gpt-5.4-mini"
++  },
++  "agentReasoningEffortOverrides": {
++    "holden": "xhigh",
++    "scribe": "medium"
++  }
+ }
+\ No newline at end of file
+diff --git a/src/Comet/.squad/decisions.md b/src/Comet/.squad/decisions.md
+index ddb49067..3abd9565 100644
+--- a/src/Comet/.squad/decisions.md
++++ b/src/Comet/.squad/decisions.md
+@@ -66,6 +66,22 @@ All squad agents must use Opus 4.6 for the BaristaNotes rewrite. Maximum effort,
+ 
+ ---
+ 
++### GPT-5.6 Model and Reasoning Directive
++
++**Date:** 2026-09-05
++**By:** David Ortinau (via Copilot)
++
++This directive supersedes the Opus 4.6 directive above.
++
++- Use GPT-5.6 Sol with high reasoning for Squad work by default.
++- Use GPT-5.6 Sol with extra-high (`xhigh`) reasoning for Holden.
++- Use GPT-5.4 mini with medium reasoning for Scribe.
++- Do not select a Claude model unless David explicitly requests it.
++
++The persistent source of truth is `.squad/config.json`.
++
++---
++
+ ### 2026-04-03T14:15:23Z: Verification & Dependency Ownership Directive
+ 
+ **By:** David Ortinau (via Copilot)
+@@ -275,6 +291,41 @@ The perceived gap vs MauiReactor's ThemeKey is **purely adoption**, not capabili
+ 
+ ---
+ 
++### Source-Led UI Parity and Root-Cause Workstreams
++
++**Author:** David Ortinau (via Copilot)
++**Date:** 2026-09-06
++**Status:** Active directive
++
++**Decision:**
++1. Use the global `source-led-ui-parity` skill for any UI rewrite or parity task
++   that has an existing reference implementation. The process is framework
++   agnostic.
++2. Treat the pinned reference source as the product specification. Use the
++   running reference app and screenshots as supporting evidence.
++3. Complete and review the full screen-state discrepancy inventory before
++   editing implementation code.
++4. Keep atomic visual observations as acceptance evidence, then map them to
++   shared implementation workstreams. Do not implement the same symptom
++   separately on each page.
++5. Fix root ownership first: Safe Area and insets, typography and tokens,
++   shared headers and viewports, fixed action rows, navigation, list templates,
++   editor templates, picker templates, and modal shells.
++6. Read framework, native platform, and third-party component source before
++   replacing or styling a named control. A look-alike is not parity.
++7. Verify every mapped screen and state after a shared fix. Automated visual
++   scores support the review but do not replace human visual acceptance.
++
++**BaristaNotes application:** The 91 observed discrepancies are consolidated
++into 16 dependency-ordered workstreams. Seven observations remain marked for
++revalidation against the latest deployed binary.
++
++**Impact:** Holden owns cross-screen root causes and framework boundaries. Amos
++owns shared controls and source-faithful sample integration. Bobbie owns the
++screen-state acceptance matrix and regression evidence.
++
++---
++
+ ## Governance
+ 
+ - All meaningful changes require team consensus
+diff --git a/src/Comet/.squad/identity/wisdom.md b/src/Comet/.squad/identity/wisdom.md
+index 2a8e102b..13b3243a 100644
+--- a/src/Comet/.squad/identity/wisdom.md
++++ b/src/Comet/.squad/identity/wisdom.md
+@@ -1,5 +1,5 @@
+ ---
+-last_updated: 2026-04-03T02:52:02.281Z
++last_updated: 2026-09-06T16:36:23-05:00
+ ---
+ 
+ # Team Wisdom
+@@ -14,7 +14,7 @@ These are David's standing instructions. They override any agent decision.
+ 2. **Tooling order:** maui-ai-debugging → MauiDevFlow → Appium (as fallback)
+ 3. **Render-only ≠ done.** Screenshots without interactive flow exercise do not count as verification.
+ 4. **Samples must match real apps.** CometBaristaNotes ground truth is `~/work/BaristaNotes` (MauiReactor). Do NOT fabricate UI.
+-5. **Always use Opus 4.6** for Squad agents.
++5. **Use GPT-5.6 Sol for Squad work.** Default to high reasoning, use extra-high (`xhigh`) reasoning for Holden, and use GPT-5.4 mini with medium reasoning for Scribe. Do not select Claude unless David explicitly requests it. This supersedes the prior Opus 4.6 directive.
+ 6. **Never use emoji in UI.** For icons, use SF Symbols via FontImageSource or Material Symbols font.
+ 7. **Nothing is too difficult or costly (tokens/time) to not obey instructions to the letter.**
+ 8. **Own your dependencies.** When a tool or dependency is broken (DevFlow won't connect, API key missing, simulator issue), FIX IT. Do not report blockers when the solution is in the repo, reference code, or docs you were given. You have the source code — build custom versions, PR fixes, solve it.
+@@ -36,3 +36,13 @@ These are David's standing instructions. They override any agent decision.
+ **Pattern:** On Android, setting Clickable=true on layout ViewGroups causes them to consume touch events, blocking child Button clicks. **Context:** Only set Clickable=true on ViewGroups with explicit Comet gestures.
+ 
+ **Pattern:** CometBaristaNotes uses Component<TState> pattern with SetState for all pages, NOT View+[Body]. **Context:** The sample app follows the Component pattern for consistency with the original MauiReactor BaristaNotes which uses MauiReactor Components.
++
++**Pattern:** Source code defines UI intent; screenshots prove rendered output. **Context:** For UI ports and rewrites, pin and read the reference source before interpreting screenshots or proposing fixes.
++
++**Pattern:** Inventory first, implement second. **Context:** Complete the screen-state matrix and discrepancy ledger before editing. Fixing during discovery hides shared defects and produces inconsistent local patches.
++
++**Pattern:** Keep atomic discrepancies, but implement root workstreams. **Context:** Multiple pages can expose one defect in Safe Area ownership, typography, headers, navigation, action rows, list rows, or modal presentation. Preserve each observation for acceptance, then fix the shared owner once.
++
++**Pattern:** Repeated edge spacing defects mean investigate inset ownership. **Context:** Do not tune page padding when headers, bottom navigation, or fixed actions fail across screens. Find the boundary container and ensure each system inset is consumed exactly once.
++
++**Pattern:** A visual score is evidence, not acceptance. **Context:** Automated screenshot comparison can miss wrong controls, stale binaries, untested states, and source-contract violations. Human side-by-side review remains required.
+diff --git a/src/Comet/.squad/routing.md b/src/Comet/.squad/routing.md
+index 20e8ab8d..3deac38e 100644
+--- a/src/Comet/.squad/routing.md
++++ b/src/Comet/.squad/routing.md
+@@ -51,3 +51,6 @@ How to decide who handles what.
+ | Roslyn generators, code generation, templates | Naomi | — |
+ | Controls, navigation, interop, samples | Amos | — |
+ | Tests, validation, regression, benchmarks | Bobbie | — |
++| Source-led UI parity and shared visual components | Amos | Holden |
++| Cross-screen Safe Area, layout ownership, and framework root causes | Holden | Amos |
++| Visual acceptance matrix and parity regression | Bobbie | Amos |
+diff --git a/src/Comet/.squad/skills/verification-protocol/SKILL.md b/src/Comet/.squad/skills/verification-protocol/SKILL.md
+index 08777f7e..74ea936d 100644
+--- a/src/Comet/.squad/skills/verification-protocol/SKILL.md
++++ b/src/Comet/.squad/skills/verification-protocol/SKILL.md
+@@ -41,6 +41,19 @@ When reference material exists (original app code at `~/work/BaristaNotes`, scre
+ `~/Downloads/baristanotes-screenshots/`), compare your result against it. Do not check if
+ "it looks reasonable."
+ 
++For a UI rewrite or parity task, invoke the global `source-led-ui-parity` skill before
++implementation. Its source audit, screen-state inventory, discrepancy backlog, and
++root-workstream consolidation are required inputs to verification.
++
++### Source-Led Visual Acceptance
++
++- Treat the pinned reference source as the specification and screenshots as evidence.
++- Verify the same state, scroll position, device class, orientation, theme, and platform.
++- Recheck every atomic discrepancy mapped to the changed workstream.
++- Regression-test every screen that uses a changed shared primitive.
++- Record OS-rendered differences separately from implementation defects.
++- Do not claim parity from an automated score or agent review without human visual approval.
++
+ ## Rule 3: Verify the Specific Change
+ 
+ Generic verification is not verification. After completing all levels, explicitly test the
+@@ -70,6 +83,9 @@ task involves a feature listed in L5. Never skip because a tool is "unavailable"
+ 
+ **L3 Inspect** — DevFlow connected (`maui-devflow wait`). Visual tree dumped (`MAUI tree --depth 15`). Screenshot taken (`MAUI screenshot`). Compared against reference screenshots.
+ 
++For source-led visual work, L3 also requires the relevant reference-source citation and the
++screen-state matrix entry being verified.
++
+ **L4 Interact** — All tabs navigated. Forms accept input (`MAUI fill`). Buttons tappable (`MAUI tap`). Push/pop navigation works. Data persists after save.
+ 
+ **L5 Feature** — Dark mode toggle renders correctly. AI features work with configured credentials. Filters produce correct results. Empty states display.
