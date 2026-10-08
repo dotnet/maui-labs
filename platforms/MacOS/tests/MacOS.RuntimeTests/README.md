@@ -16,7 +16,7 @@ A timeout is a failure, not accepted baseline evidence.
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
-| `contentview-clipping` | 2 | Missing bounds clip and transform redraw / clipped content and visible moved text |
+| `contentview-clipping` | 8 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, redraw cost, scale-only visibility and native-positioned items (105 required assertions; see known failures below) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
@@ -106,6 +106,33 @@ Native captures are composited onto white, not claimed as full-screen screenshot
 Call `Capture` and access native UI state only on AppKit's main thread, including
 after asynchronous work. JSON file writers have no additional AppKit affinity.
 `FlushMainQueueAsync()` drains two native dispatch turns, not a timed sleep.
+
+The `contentview-clipping` scenario uses `CaptureWindowBitmap`, a WindowServer
+compositor capture, rather than `CacheDisplay` (which can force the very redraw
+under test). It waits up to five seconds for a full-size window at nominal or
+backing resolution and an independent
+cyan text control in every capture; a locked display or invalid capture fails,
+never counts as an exit-42 reproduction. Glyph assertions scan the expected text
+regions. Ten out-and-back cycles alternate two strings with distinct glyph counts
+to detect blank or stale text. Nested ContentViews, Grid, Label and Entry are
+followed by batches of 10, 100 and 500 three-property transform updates, with and
+without 64 extra labels. `redraw-cost.jsonl` records timings, synchronous/settled
+Label draws, draw depth and UI-thread ownership; timings are observations, not a
+performance pass threshold. The last cases scale a newly created, initially
+off-window label into view without first translating it through the window, and
+check that a CollectionView item's transform does not overwrite its natively
+assigned frame.
+
+**Known failures at PR #640 head `f6402c1c`:** the first six cases pass, but the
+scale-only label has zero rendered glyph pixels. Changing a native-positioned
+CollectionView item's scale also moves the second item's native origin from
+`(0, 16)` to `(0, 0)` because its managed frame is still unset; the item overlaps
+the first item. `collection-state.json` records this before the scale-only
+assertion terminates the run. The strengthened scenario is an
+intentional red regression test until that defect is corrected; do not treat its
+presence as passing runtime evidence. The exact pre-fix overlay still exits 42
+only for the original observed clipping plus translated-text failures; it stops
+there and does not claim to reproduce the later scale/item cases.
 
 ## Runner manifest and baseline
 
