@@ -696,16 +696,17 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         var combined = new ContentView
         {
             Content = new AbsoluteLayout { Children = { combinedMarker } },
-            Scale = 1.5,
-            Rotation = 180,
-            TranslationX = 20,
-            TranslationY = 10,
         };
         AbsoluteLayout.SetLayoutBounds(combined, new Rect(320, 260, 80, 40));
         var root = (AbsoluteLayout)_clip.Parent!;
         root.Children.Add(combined);
-        await RuntimeTestContext.FlushMainQueueAsync();
-        var combinedRegion = new CGRect(365, 275, 60, 30);
+        await CaptureAsync(context, nativeWindow, "combined-base.png");
+        var logicalFrame = ((IView)combined).Frame;
+        var combinedRegion = new CGRect(logicalFrame.X + 45, logicalFrame.Y + 15, 60, 30);
+        combined.Scale = 1.5;
+        combined.TranslationX = 20;
+        combined.TranslationY = 10;
+        combined.Rotation = 180;
         for (var mirrored = 0; mirrored < 2; mirrored++)
         {
             if (mirrored == 1)
@@ -721,7 +722,9 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
             {
                 name, combined.Scale, combined.ScaleX, combined.Rotation,
                 combined.TranslationX, combined.TranslationY,
+                logicalFrame = logicalFrame.ToString(),
                 frame = Native(combined).Frame.ToString(), bounds = Native(combined).Bounds.ToString(),
+                transform = Native(combined).Layer?.Transform.ToString(),
                 expectedRegion = combinedRegion.ToString(), pixels,
             });
             context.Assert(pixels == 1800 * scale * scale,
