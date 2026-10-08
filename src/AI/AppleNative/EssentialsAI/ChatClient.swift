@@ -421,7 +421,7 @@ public class ChatClientNative: NSObject {
             } catch {
 #if ENABLE_CORE_AI
                 if acquired, let path = modelDirectory {
-                    await CoreAIModel.shared.release(path: path)
+                    await CoreAIModel.shared.release(path: path, interrupted: Task.isCancelled || error is CancellationError)
                 }
 #endif
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED

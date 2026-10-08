@@ -140,6 +140,12 @@ its references, without calling `unload()` during generation. Stream disposal
 cancels both native work and the managed tool's linked cancellation token.
 Tools must cooperate with cancellation.
 
+Interrupted generations discard partial engine state through the adapter's
+resource lifecycle after the executor borrow returns, before another facade
+can acquire the path. Recovery tests exercise a schema request immediately
+after cancelled or early-disposed plain/schema streams, rather than only
+another plain response.
+
 The wrapper validates chat-template rendering before **every native
 generation**, including post-tool turns. A missing/unrenderable local template
 fails explicitly instead of allowing the upstream adapter's plain-text fallback
@@ -189,6 +195,7 @@ Run the local Mac Catalyst runner, selecting only Core AI classes:
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests \
   -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true -p:EnableCoreAI=true \
   -p:CoreAIModelDirectory="$MODEL" \
+  -p:DeviceRunnersDataTimeout=240 \
   --filter 'FullyQualifiedName~CoreAI' --logger trx
 ```
 
@@ -203,6 +210,8 @@ mode, cancellation/next-request recovery, stream disposal, disposal during a
 tool, oversized context and invalid bundles/options/content.
 They do not fabricate tool events or retry unsuccessful model choices.
 The parameterless configured adapter exists only in the device tests.
+The explicit result-channel timeout allows a long recovery assertion to finish
+without the runner mistaking a quiet test for a lost connection.
 
 Check the standard build separately, **without** `EnableCoreAI`:
 
@@ -234,7 +243,28 @@ Swift6.4), the phase-1 source wiring passed:
 | Experimental package properties | `IsPackable=false`, `IsShipping=false`; normal package properties remain true |
 
 The SDK reports legacy Foundation Models `GenerationError` deprecation
-warnings in experimental native builds. Actual .NET model responses, the
-device assertion results, controlled offline execution and OS26/iOS runtime
-regression results are **separate runtime gates**, not claims made by this
-build/host-test table.
+warnings in experimental native builds.
+
+### Runtime results
+
+The final Mac Catalyst27 test application ran the real staged Qwen fixture:
+**36 passed, zero failed/skipped**. This includes matching streamed callback
+IDs against the same request's collected native transcript, managed history
+replay without another tool execution, post-tool template failures and repeated
+plain/schema interruption followed immediately by another facade's schema
+request. Interrupted engine state is discarded before path reuse.
+
+The playground also produced a real streamed `CORE AI LOCAL` answer, displayed
+the bundle model ID and supplied usage, and auto-saved the interaction. Native
+Foundation Models plain/stream/tool/schema requests additionally passed in a
+process with networking denied; this is a native offline proof, not a claim
+that the .NET playground was network-isolated.
+
+A System-provider runtime selection passed **55 of 56** assertions. The
+unchanged `GetStreamingResponseAsync_WithToolCalling_NoNullTextBeforeToolCalls`
+test rejected newline-only answer deltas *after* the tools; the unchanged
+plain-text chunker deliberately preserves those formatting deltas. No
+production whitespace filtering or unrelated test change was made.
+
+OS26 runtime and actual iOS-device execution remain unverified. The normal
+framework's OS26 deployment minimum is a build result, not those runtime proofs.

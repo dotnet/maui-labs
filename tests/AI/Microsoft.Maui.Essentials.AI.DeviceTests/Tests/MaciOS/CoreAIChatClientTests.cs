@@ -178,6 +178,78 @@ public class CoreAIChatClientTests
 		});
 	}
 
+	[Fact]
+	public async Task NativeToolStream_CallbackIdsMatchCollectedTranscript_AndHistoryReplays()
+	{
+		using var conversionClient = CoreAIModelFixture.Create();
+		var conversion = Assert.IsType<FoundationModelsChatClient>(
+			conversionClient.GetService<FoundationModelsChatClient>());
+		var code = $"ORCHID-{Guid.NewGuid():N}";
+		var calls = 0;
+		var options = CoreAIModelFixture.Options;
+		options.Tools = [AIFunctionFactory.Create((string key) =>
+		{
+			Assert.Equal("alpha", key);
+			Interlocked.Increment(ref calls);
+			return code;
+		}, name: "LookupValidationCode", description: "Read the validation code for a key. Call exactly once.")];
+		using var nativeOptions = conversion.ToNative(options, CancellationToken.None);
+		using var native = new ChatClientNative(CoreAIModelFixture.DirectoryPath);
+		var prompt = "Call LookupValidationCode exactly once with key alpha, then repeat the returned code. /no_think";
+		var completion = new TaskCompletionSource<ChatResponseNative>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+		var callbacks = new ConcurrentQueue<ResponseUpdateNative>();
+		using var token = native.StreamResponse(
+			[new ChatMessageNative { Role = ChatRoleNative.User, Contents = [new TextContentNative(prompt)] }],
+			nativeOptions,
+			update =>
+			{
+				callbacks.Enqueue(update);
+				switch (update.UpdateType)
+				{
+					case ResponseUpdateTypeNative.Content:
+						handler.ProcessContent(update.Text);
+						break;
+					case ResponseUpdateTypeNative.ToolCall:
+						handler.ProcessToolCall(update.ToolCallId, update.ToolCallName, update.ToolCallArguments);
+						break;
+					case ResponseUpdateTypeNative.ToolResult:
+						handler.ProcessToolResult(update.ToolCallId, update.ToolCallResult);
+						break;
+				}
+			},
+			(response, error) =>
+			{
+				if (error is not null) completion.TrySetException(new NSErrorException(error));
+				else completion.TrySetResult(response!);
+			});
+		try
+		{
+			var collected = await completion.Task.WaitAsync(TimeSpan.FromMinutes(3));
+			var collectedContents = collected.Messages.SelectMany(message => message.Contents).ToList();
+			var canonicalCall = Assert.Single(collectedContents.OfType<FunctionCallContentNative>());
+			var canonicalResult = Assert.Single(collectedContents.OfType<FunctionResultContentNative>());
+			var callbackCall = Assert.Single(callbacks, update => update.UpdateType == ResponseUpdateTypeNative.ToolCall);
+			var callbackResult = Assert.Single(callbacks, update => update.UpdateType == ResponseUpdateTypeNative.ToolResult);
+			Assert.Equal(canonicalCall.CallId, callbackCall.ToolCallId);
+			Assert.Equal(canonicalResult.CallId, callbackResult.ToolCallId);
+			Assert.Equal(canonicalCall.CallId, canonicalResult.CallId);
+			Assert.Equal(1, calls);
+
+			handler.Complete();
+			var updates = new List<ChatResponseUpdate>();
+			await foreach (var update in handler.ReadAllAsync(CancellationToken.None)) updates.Add(update);
+			var history = new List<ChatMessage> { new(ChatRole.User, prompt) };
+			history.AddRange(updates.ToChatResponse().Messages);
+			history.Add(new(ChatRole.User, "Repeat the validation code from the history without calling a tool. /no_think"));
+			using var replay = CoreAIModelFixture.Create().AsBuilder().UseFunctionInvocation().Build();
+			var response = await replay.GetResponseAsync(history, options).WaitAsync(TimeSpan.FromMinutes(3));
+			Assert.Contains(code, CoreAIModelFixture.Answer(response), StringComparison.Ordinal);
+			Assert.Equal(1, calls);
+		}
+		finally { token?.Cancel(); }
+	}
+
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
@@ -246,6 +318,85 @@ public class CoreAIChatClientTests
 		await AssertNextRequest(second);
 	}
 
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(true, true)]
+	public async Task InterruptedStream_AnotherFacadeCanImmediatelyGenerateSchema(bool structured, bool cancel)
+	{
+		using var first = CoreAIModelFixture.Create();
+		using var second = CoreAIModelFixture.Create();
+		for (var iteration = 0; iteration < 4; iteration++)
+		{
+			using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+			var options = CoreAIModelFixture.Options;
+			if (structured) options.ResponseFormat = ChatResponseFormat.ForJsonSchema<SchemaAnswer>();
+			var sawContent = false;
+			async Task Interrupt()
+			{
+				await foreach (var update in first.GetStreamingResponseAsync(
+					[new(ChatRole.User, structured
+						? "Return count 3 and a city string containing a long story of at least twenty paragraphs."
+						: "Write a long story of at least twenty paragraphs. /no_think")], options, cancellation.Token))
+				{
+					if (!update.Contents.OfType<TextContent>().Any()) continue;
+					sawContent = true;
+					if (cancel) cancellation.Cancel();
+					else break;
+				}
+			}
+			if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(Interrupt);
+			else await Interrupt();
+			Assert.True(sawContent);
+			await AssertSchemaNextRequest(second);
+		}
+	}
+
+	[Fact]
+	public async Task CancelledTool_AnotherFacadeWaitsForManagedCompletionBeforeGeneratingSchema()
+	{
+		using var first = CoreAIModelFixture.Create();
+		using var second = CoreAIModelFixture.Create();
+		using var cancellation = new CancellationTokenSource();
+		var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var observedCancellation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var options = CoreAIModelFixture.Options;
+		options.Tools = [AIFunctionFactory.Create(async (CancellationToken token) =>
+		{
+			entered.TrySetResult();
+			try
+			{
+				await Task.Delay(Timeout.Infinite, token);
+				return "unreachable";
+			}
+			catch (OperationCanceledException) when (token.IsCancellationRequested)
+			{
+				observedCancellation.TrySetResult();
+				await release.Task.WaitAsync(TimeSpan.FromMinutes(3));
+				throw;
+			}
+		}, name: "WaitForCancellation", description: "Wait until this request is cancelled.")];
+		var response = first.GetResponseAsync([new(ChatRole.User, "Call WaitForCancellation now. /no_think")], options, cancellation.Token);
+		try
+		{
+			await entered.Task.WaitAsync(TimeSpan.FromMinutes(3));
+			cancellation.Cancel();
+			await observedCancellation.Task.WaitAsync(TimeSpan.FromSeconds(10));
+			var next = AssertSchemaNextRequest(second);
+			Assert.NotSame(next, await Task.WhenAny(next, Task.Delay(TimeSpan.FromMilliseconds(250))));
+			release.TrySetResult();
+			await Assert.ThrowsAnyAsync<OperationCanceledException>(() => response);
+			await next;
+		}
+		finally
+		{
+			release.TrySetResult();
+			cancellation.Cancel();
+		}
+	}
+
 	[Fact]
 	public async Task CancellationAndDisposal_DuringAwaitedTool_DoNotUnloadBorrowedEngine()
 	{
@@ -302,6 +453,37 @@ public class CoreAIChatClientTests
 			client.GetResponseAsync([new(ChatRole.User, "Hello")], CoreAIModelFixture.Options));
 	}
 
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task PostToolTemplate_FailsExplicitlyWhenExecutorArgumentsAreNotRenderable(bool streaming)
+	{
+		using var fixture = new LocalFixtureCopy();
+		File.AppendAllText(Path.Combine(fixture.DirectoryPath, "tokenizer", "chat_template.jinja"), """
+
+			{% for message in messages %}
+			{% if message.tool_calls is defined %}
+			{% for tool_entry in message.tool_calls %}
+			{% for key, value in tool_entry.function.arguments.items() %}{% endfor %}
+			{% endfor %}
+			{% endif %}
+			{% endfor %}
+			""");
+		using var client = new CoreAIChatClient(fixture.DirectoryPath);
+		var calls = 0;
+		var options = CoreAIModelFixture.Options;
+		options.Tools = [AIFunctionFactory.Create((string key) =>
+		{
+			Assert.Equal("alpha", key);
+			Interlocked.Increment(ref calls);
+			return "ORCHID";
+		}, name: "LookupValidationCode", description: "Read the validation code for a key.")];
+		var error = await Assert.ThrowsAsync<NSErrorException>(() => Respond(client,
+			[new(ChatRole.User, "Call LookupValidationCode with key alpha, then repeat the returned code.")], options, streaming));
+		Assert.True(calls == 1, $"The request failed before its post-tool template: {error.Message}; calls={calls}.");
+		Assert.Contains("cannot render", error.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
 	[Fact]
 	public async Task OversizedContext_FailsExplicitly()
 	{
@@ -332,6 +514,20 @@ public class CoreAIChatClientTests
 	{
 		var response = await client.GetResponseAsync([new(ChatRole.User, "Say hello briefly. /no_think")], CoreAIModelFixture.Options);
 		Assert.False(string.IsNullOrWhiteSpace(CoreAIModelFixture.Answer(response)));
+	}
+
+	private static async Task AssertSchemaNextRequest(IChatClient client)
+	{
+		var options = CoreAIModelFixture.Options;
+		options.ResponseFormat = ChatResponseFormat.ForJsonSchema<SchemaAnswer>();
+		var response = await client.GetResponseAsync([new(ChatRole.User, "Return city Paris and count 3.")], options)
+			.WaitAsync(TimeSpan.FromMinutes(3));
+		var answer = CoreAIModelFixture.Answer(response);
+		using var json = JsonDocument.Parse(answer);
+		Assert.True(json.RootElement.TryGetProperty("city", out var city), $"Missing city after interrupted generation: {answer}");
+		Assert.True(json.RootElement.TryGetProperty("count", out var count), $"Missing count after interrupted generation: {answer}");
+		Assert.Equal("Paris", city.GetString());
+		Assert.Equal(3, count.GetInt32());
 	}
 
 	private static async Task<ChatResponse> Respond(IChatClient client, ChatMessage[] messages, ChatOptions options, bool streaming)

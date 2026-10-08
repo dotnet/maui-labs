@@ -148,7 +148,11 @@ actor CoreAIModel {
         }
     }
 
-    func release(path: String) {
+    func release(path: String, interrupted: Bool = false) {
+        if interrupted {
+            // Discard partially generated engine state only after the executor's borrow returns.
+            entries[path]?.model.unload()
+        }
         active.remove(path)
         let waiting = waiters.removeValue(forKey: path) ?? [:]
         for continuation in waiting.values { continuation.resume() }
