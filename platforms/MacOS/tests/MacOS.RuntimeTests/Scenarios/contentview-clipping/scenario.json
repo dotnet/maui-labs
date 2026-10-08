@@ -14,10 +14,7 @@
       },
       {
         "source": "platforms/MacOS/src/MacOS/Handlers/MacOSViewHandler.cs",
-        "replace": {
-          "old": "        platformView.Layer.Transform = transform;\n        RedrawTransformedSubtree(platformView);",
-          "new": "        platformView.Layer.Transform = transform;"
-        }
+        "commit": "b46ff30c6f37c70bec2297adc3453dba89579f1a"
       }
     ],
     "exitCode": 42,

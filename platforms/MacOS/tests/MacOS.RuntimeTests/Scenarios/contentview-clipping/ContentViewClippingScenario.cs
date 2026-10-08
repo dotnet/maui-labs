@@ -101,8 +101,10 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
         _clip.IsClippedToBounds = true;
         var clipsAgain = clipNative.Layer?.MasksToBounds == true;
 
+        _world.TranslationX = -500;
         _world.TranslationX = -600;
         await RuntimeTestContext.FlushMainQueueAsync();
+        windowContent.LayoutSubtreeIfNeeded();
         var translated = context.CaptureWindowBitmap(nativeWindow, "translated.png");
         var outsideClipIsLavender = IsLavender(initial, windowContent, 300, 180);
         var magentaTextPixels = CountMagentaPixels(translated);
@@ -142,8 +144,8 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
 
         context.Assert((labelNative as NSTextField)?.StringValue == "Moved into view",
             "The moved native label lost its text.", "contentview.label-text");
-        context.Assert(worldNative.Layer?.Transform.M41 == -600,
-            $"Expected translated native layer, got {worldNative.Layer?.Transform.M41}.",
+        context.Assert(worldNative.Frame.X == -600,
+            $"Expected translated native frame, got {worldNative.Frame}.",
             "contentview.translation");
         context.Assert(magentaTextPixels > 5,
             $"Text moved into view did not render; found {magentaTextPixels} magenta text pixels.",

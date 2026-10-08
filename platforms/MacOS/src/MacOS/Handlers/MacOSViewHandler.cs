@@ -378,20 +378,17 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (view.RotationY != 0)
             transform = transform.Rotate((nfloat)(view.RotationY * Math.PI / 180.0), 0, 1, 0);
 
-        if (view.TranslationX != 0 || view.TranslationY != 0)
-            transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
+        if (platformView is MacOSContainerView { ExternalFrameManagement: true })
+        {
+            if (view.TranslationX != 0 || view.TranslationY != 0)
+                transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
+        }
+        else
+        {
+            SetFrame(platformView, view, view.Frame);
+        }
 
         platformView.Layer.Transform = transform;
-        RedrawTransformedSubtree(platformView);
-    }
-
-    static void RedrawTransformedSubtree(NSView view)
-    {
-        foreach (var subview in view.Subviews)
-            RedrawTransformedSubtree(subview);
-
-        view.NeedsDisplay = true;
-        view.DisplayIfNeededIgnoringOpacity();
     }
 
     public static void MapInputTransparent(IViewHandler handler, IView view)
@@ -495,9 +492,14 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (platformView is MacOSContainerView container && container.ExternalFrameManagement)
             return;
 
+        SetFrame(platformView, VirtualView, rect);
+    }
+
+    static void SetFrame(NSView platformView, IView view, Rect rect)
+    {
         // Guard against NaN values which crash CALayer
-        var x = Sanitize(rect.X);
-        var y = Sanitize(rect.Y);
+        var x = Sanitize(rect.X + view.TranslationX);
+        var y = Sanitize(rect.Y + view.TranslationY);
         var width = Sanitize(rect.Width);
         var height = Sanitize(rect.Height);
 
