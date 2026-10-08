@@ -337,10 +337,14 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
         foreach (var idx in shouldBeVisible)
         {
-            if (_visibleViews.ContainsKey(idx))
-                continue;
-
             var info = _flatItems[idx];
+            if (_visibleViews.TryGetValue(idx, out var existing))
+            {
+                PositionItem(existing.platformView, info, idx, isHorizontal, span,
+                    containerWidth, containerHeight, itemSpacing, lineSpacing);
+                continue;
+            }
+
             var (mauiView, platformView) = CreateOrReuseView(idx, info);
 
             _itemsContainer.AddSubview(platformView);
@@ -375,7 +379,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         // then re-check if more items now fit in the viewport
         if (needsRecalc)
         {
-            var rect = new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height);
+            var rect = new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height);
             CalculatePositions(rect);
             foreach (var kvp in _visibleViews)
             {
@@ -396,9 +400,9 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         if (info.IsHeader || info.IsFooter)
         {
             if (isHorizontal)
-                platformView.Frame = new CGRect(info.Position, 0, info.Size, containerHeight);
+                platformView.SetLayoutFrame(new CGRect(info.Position, 0, info.Size, containerHeight));
             else
-                platformView.Frame = new CGRect(0, info.Position, containerWidth, info.Size);
+                platformView.SetLayoutFrame(new CGRect(0, info.Position, containerWidth, info.Size));
             return;
         }
 
@@ -409,23 +413,23 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                 var rowHeight = (containerHeight - vSpacing * (span - 1)) / span;
                 int row = index % span;
                 var y = row * (rowHeight + vSpacing);
-                platformView.Frame = new CGRect(info.Position, y, info.Size, rowHeight);
+                platformView.SetLayoutFrame(new CGRect(info.Position, y, info.Size, rowHeight));
             }
             else
             {
                 var colWidth = (containerWidth - hSpacing * (span - 1)) / span;
                 int col = index % span;
                 var x = col * (colWidth + hSpacing);
-                platformView.Frame = new CGRect(x, info.Position, colWidth, info.Size);
+                platformView.SetLayoutFrame(new CGRect(x, info.Position, colWidth, info.Size));
             }
         }
         else if (isHorizontal)
         {
-            platformView.Frame = new CGRect(info.Position, 0, info.Size, containerHeight);
+            platformView.SetLayoutFrame(new CGRect(info.Position, 0, info.Size, containerHeight));
         }
         else
         {
-            platformView.Frame = new CGRect(0, info.Position, containerWidth, info.Size);
+            platformView.SetLayoutFrame(new CGRect(0, info.Position, containerWidth, info.Size));
         }
     }
 
@@ -538,9 +542,9 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         handler.PlatformView.HasHorizontalScroller = isHorizontal;
         handler._positionsCalculated = false;
 
-        if (handler.PlatformView.Frame.Width > 0)
+        if (handler.PlatformView.Bounds.Width > 0)
         {
-            var rect = new Rect(0, 0, handler.PlatformView.Frame.Width, handler.PlatformView.Frame.Height);
+            var rect = new Rect(0, 0, handler.PlatformView.Bounds.Width, handler.PlatformView.Bounds.Height);
             handler.CalculatePositions(rect);
             handler.UpdateVisibleItems();
         }
@@ -568,7 +572,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
     public static void MapEmptyView(CollectionViewHandler handler, CollectionView view)
     {
-        var rect = new Rect(0, 0, handler.PlatformView.Frame.Width, handler.PlatformView.Frame.Height);
+        var rect = new Rect(0, 0, handler.PlatformView.Bounds.Width, handler.PlatformView.Bounds.Height);
         handler.UpdateEmptyView(rect);
     }
 
@@ -664,7 +668,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         var width = rect.Width > 0 ? rect.Width : PlatformView.Bounds.Width;
         var height = rect.Height > 0 ? rect.Height : PlatformView.Bounds.Height;
 
-        _emptyView.Frame = new CGRect(0, 0, width, height);
+        _emptyView.SetLayoutFrame(new CGRect(0, 0, width, height));
         _documentView.Frame = new CGRect(0, 0, width, height);
 
         if (_emptyMauiView != null)
@@ -886,7 +890,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         var itemsSource = VirtualView?.ItemsSource;
         if (itemsSource == null)
         {
-            var rect = new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height);
+            var rect = new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height);
             UpdateEmptyView(rect);
             return;
         }
@@ -988,9 +992,9 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             }
         }
 
-        if (PlatformView.Frame.Width > 0)
+        if (PlatformView.Bounds.Width > 0)
         {
-            var rect = new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height);
+            var rect = new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height);
             CalculatePositions(rect);
             UpdateVisibleItems();
         }

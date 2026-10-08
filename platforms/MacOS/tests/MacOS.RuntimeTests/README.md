@@ -16,7 +16,7 @@ A timeout is a failure, not accepted baseline evidence.
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
-| `contentview-clipping` | 8 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, redraw cost, scale-only visibility and native-positioned items (105 required assertions; see known failures below) |
+| `contentview-clipping` | 13 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, autoresizing, scale/anchor resets and nonuniform scale (172 assertions) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
@@ -120,21 +120,32 @@ Nested ContentViews, Grid, Label and Entry are
 followed by batches of 10, 100 and 500 three-property transform updates, with and
 without 64 extra labels. `redraw-cost.jsonl` records timings, synchronous/settled
 Label draws, draw depth and UI-thread ownership; timings are observations, not a
-performance pass threshold. The last cases check that a CollectionView item's
-transform does not overwrite its natively assigned frame, then scale a newly
-created, initially off-window label into view without first translating it
-through the window.
+performance pass threshold. Native-positive scaling preserves logical Bounds
+while transforming Frame, so AppKit's visibility calculations agree with the
+rendered scale. No descendant traversal or forced synchronous display is needed.
+Layer transforms retain rotation, collapsed/mirrored scales and externally
+managed containers' existing behavior; those special paths are not evidence of
+the cold-text positive-scale fix.
 
-**Verification status:** PR #640 head `f6402c1c` moved a native-positioned
-CollectionView item's origin from `(0, 16)` to `(0, 0)` when changing its scale.
-Head `8756a807` preserves translation state, but its shared transform mapper casts
-to a closed generic handler type and skips other handlers' translation updates.
-The accompanying type-independent dispatch correction restores ordinary
-translation. With that correction, the first seven cases pass, including the
-CollectionView frame assertion; the final scale-only label still has zero
-rendered glyph pixels. The strengthened scenario is an intentional red regression
-test until that remaining defect is corrected; do not treat its presence as
-passing runtime evidence. The exact pre-fix overlay still exits 42
+The item tests assert the entire anchored transformed frame, unchanged logical
+size, scale and translation resets, native-owner relayout with an unchanged
+transform, and a scaled CollectionView's logical item size and rendered text.
+Native layout owners use `SetLayoutFrame` to pass logical rectangles through
+the connected handler; layout sizing uses Bounds rather than the physical Frame.
+Scaling legitimately changes the physical frame; an unchanged-frame
+assertion would not test that implementation correctly. The final cases expose
+a newly created off-window label by scale alone, verify its native VisibleRect
+and glyph pixels, repeat exposure/reset, change anchors, and exercise independent
+ScaleX/ScaleY updates. Nested Label and Entry rendering is also checked during
+scale, not only after resetting it.
+An autoresizing child must retain its logical frame across repeated scaling,
+and ten compositor-paced scale updates record actual glyphs and draw counts in
+`paced-cost.jsonl`, separately from coalesced update batches.
+A cold coloured marker must occupy exactly its expected single-scale region
+and area; Entry password/plain replacement must retain native geometry and text.
+
+The scenario requires all 172 assertions and 13 cases.
+The exact pre-fix overlay still exits 42
 only for the original observed clipping plus translated-text failures; it stops
 there and does not claim to reproduce the later scale/item cases.
 

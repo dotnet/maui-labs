@@ -280,7 +280,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		if (_currentPageView != null)
 		{
 			var contentBounds = _contentView.Bounds;
-			_currentPageView.Frame = contentBounds;
+			_currentPageView.SetLayoutFrame(contentBounds);
 			LayoutCurrentPage(rect);
 		}
 	}
@@ -328,7 +328,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		if (bounds.Width <= 0 || bounds.Height <= 0)
 			return;
 
-		_currentPageView.Frame = bounds;
+		_currentPageView.SetLayoutFrame(bounds);
 		_currentPage.Measure((double)bounds.Width, (double)bounds.Height);
 		_currentPage.Arrange(new Rect(0, 0, (double)bounds.Width, (double)bounds.Height));
 	}
@@ -650,7 +650,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 				if (!IsCurrentRender())
 					return;
 
-				platformView.Frame = contentView.Bounds;
+				platformView.SetLayoutFrame(contentView.Bounds);
 				platformView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
 				if (!IsCurrentRender())
 					return;

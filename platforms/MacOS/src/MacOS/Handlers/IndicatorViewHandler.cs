@@ -75,8 +75,8 @@ public partial class IndicatorViewHandler : MacOSViewHandler<IndicatorView, NSVi
 			_container.AddSubview(dot);
 		}
 
-		if (PlatformView.Frame.Width > 0)
-			LayoutDots(new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height));
+		if (PlatformView.Bounds.Width > 0)
+			LayoutDots(new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height));
 	}
 
 	void LayoutDots(Rect rect)
