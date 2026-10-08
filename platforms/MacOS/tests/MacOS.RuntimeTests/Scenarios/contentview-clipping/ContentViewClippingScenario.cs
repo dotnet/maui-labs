@@ -520,13 +520,16 @@ sealed class ContentViewClippingScenario : MauiRuntimeScenario
                 await CaptureAsync(context, nativeWindow, $"toolbar-resize-{width}.png");
                 var resolvedFrame = toolbarNative.Frame;
                 var resolvedBounds = toolbarNative.Bounds;
+                var alignmentInsets = toolbarNative.AlignmentRectInsets;
                 context.AppendJson("toolbar-state.jsonl", new
                 {
                     width, button = toolbarButton.Frame.ToString(),
                     label = resolvedFrame.ToString(), bounds = resolvedBounds.ToString(),
+                    alignmentInsets = alignmentInsets.ToString(),
                 });
-                context.Assert(Math.Abs(resolvedFrame.Width - width) < 0.0001,
-                    $"Toolbar Auto Layout expected width {width}, got {resolvedFrame}; button {toolbarButton.Frame}.",
+                context.Assert(Math.Abs(resolvedFrame.Width - alignmentInsets.Left - alignmentInsets.Right - width) < 0.0001 &&
+                    Math.Abs(resolvedFrame.X + alignmentInsets.Left) < 0.0001,
+                    $"Toolbar Auto Layout expected alignment width {width}, got frame {resolvedFrame}, insets {alignmentInsets}.",
                     "contentview.toolbar-layout");
                 toolbarLabel.Scale = width == 160 ? 0.9 : 0.8;
                 toolbarLabel.AnchorX = width == 160 ? 0.25 : 0.75;
