@@ -699,15 +699,16 @@ scenarios:
       - "Distinguishes a proposed supported pairing from authorization to change global Xcode or workloads"
     timeout: 240
 
-  - name: "Preview 6 iOS-only app takes the simple scene path"
+  - name: ".NET 11 iOS-only app takes the simple scene path"
     prompt: |
-      Propose only, do not edit or build: our MauiDay/event-app uses .NET SDK
-      11.0.100-preview.6.26359.118, Microsoft.iOS 26.5.11720-net11-p6,
+      We are preparing for .NET 11 GA. Our MauiDay/event-app currently uses .NET
+      SDK 11.0.100-preview.6.26359.118, Microsoft.iOS 26.5.11720-net11-p6,
       Xcode 26.6 and net11.0-android;net11.0-ios. There is no Mac Catalyst TFM,
       custom AppDelegate base, ConfigureLifecycleEvents, lifecycle override
       (except CreateMauiApp), URL or shortcut code. How should we add the scene
-      lifecycle? We use Preferences; PrivacyInfo.xcprivacy still has the
-      template UserDefaults entry commented out. Stay within scene migration.
+      lifecycle, and what must we recheck against the actual GA release? We use
+      Preferences; PrivacyInfo.xcprivacy still has the template UserDefaults
+      entry commented out. Stay within scene migration.
     assertions:
       - type: output_matches
         pattern: 'MauiUISceneDelegate'
@@ -718,7 +719,7 @@ scenarios:
       - type: output_matches
         pattern: '(?i)skip.*(?:Catalyst|callback|inventory)|(?:simple|fast).*(?:path|migration)'
     rubric:
-      - "Verifies MauiUISceneDelegate in the actual installed/resolved Microsoft.Maui.dll rather than assuming every preview supports it"
+      - "Verifies MauiUISceneDelegate in the app-resolved Microsoft.Maui.dll for the selected .NET 11 release and rechecks the actual GA SDK/workload/MAUI artifacts rather than extrapolating from Preview 6"
       - "Does not apply the .NET 10 MAUI 10.0.110 package pin to .NET 11 or force an Xcode 27 build upgrade"
       - "Uses the simple delegate + manifest path, audits the result, and skips Mac Catalyst files/builds because no such TFM exists"
       - "Checks the uncommented UserDefaults reason CA92.1 and the built bundle's manifest, not only source plist syntax"

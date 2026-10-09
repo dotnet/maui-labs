@@ -71,7 +71,7 @@ bin/obj) for `ConfigureLifecycleEvents`, AppDelegate overrides other than the
 template's `CreateMauiApp`, `OpenUrl`, `ContinueUserActivity` and `ShortcutItem`.
 If none are found and the delegates have no custom base classes or scene setup,
 skip the detailed callback inventory and step 4: verify `MauiUISceneDelegate`
-availability (especially on .NET 11 previews), add the delegate + manifest in
+availability (especially when preparing for .NET 11 GA), add the delegate + manifest in
 step 3, run the audit in step 5, then complete step 6, including **built-bundle**
 and runtime checks. Absence of custom callbacks does not waive validation.
 
@@ -166,10 +166,12 @@ Keep version text inline, without surrounding whitespace. Audit plist deployment
 keys and other platform-version declarations for conflicting values.
 
 For .NET 9, present an intentional .NET 10 upgrade plan: there are no .NET 9
-Apple 27 packs. For .NET 11 previews/RCs, check that exact release's support and
-forwarding APIs, including `MauiUISceneDelegate` in the installed
-`Microsoft.Maui.dll` as described in [compatibility.md](references/compatibility.md);
-do not apply the .NET 10 MAUI 10.0.110 pin to .NET 11. The documented
+Apple 27 packs. For .NET 11, check the selected SDK/workload/MAUI release's
+support and forwarding APIs, including `MauiUISceneDelegate` in the installed
+`Microsoft.Maui.dll` as described in [compatibility.md](references/compatibility.md).
+As .NET 11 approaches GA, verify the actual GA SDK, workload and MAUI artifacts
+rather than assuming pre-release evidence applies unchanged. Do not apply the
+.NET 10 MAUI 10.0.110 pin to .NET 11. The documented
 **.NET 11 RC1 pairing requires Xcode 26.6**, not an arbitrary 26.x installation.
 RC1 has scene infrastructure but lacks the scene App Actions selector and
 Essentials URL/user-activity forwarding fixes. It is not the .NET 10 recipe.
