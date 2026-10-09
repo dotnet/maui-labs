@@ -1,10 +1,16 @@
 name: CI - DevFlow
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'platforms/Linux.Gtk4/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - '.github/extensions/maui-devflow-canvas/**'
+      - '.github/workflows/ci-devflow.yml'
+      - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +22,11 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'platforms/Linux.Gtk4/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - '.github/extensions/maui-devflow-canvas/**'
+      - '.github/workflows/ci-devflow.yml'
+      - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -24,6 +35,15 @@ on:
       - 'NuGet.config'
 
 jobs:
+  gtk-publication-guard:
+    name: GTK publication closure guard
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reject incomplete GTK publication sets
+        shell: pwsh
+        run: ./eng/scripts/Test-GtkPackageClosure.Tests.ps1
+
   build:
     uses: ./.github/workflows/_build.yml
     with:
@@ -32,3 +52,80 @@ jobs:
       run-tests: true
       pack: true
       os: '["windows-latest"]'
+
+  native-aot-smoke:
+    name: Reflection-disabled Native AOT smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Native AOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish and run agent smoke with headless MAUI backend
+        run: |
+          dotnet publish src/DevFlow/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+            -c Release -r linux-x64 -p:AotSmoke=true -p:IncludeMauiBackend=true \
+            -p:TrimmerSingleWarn=false -o artifacts/devflow-aot/agent
+          artifacts/devflow-aot/agent/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+            artifacts/devflow-aot/evidence
+
+      - name: Publish and run logging smoke
+        run: |
+          dotnet publish src/DevFlow/tools/LoggingAotSmoke/LoggingAotSmoke.csproj \
+            -c Release -r linux-x64 -o artifacts/devflow-aot/logging
+          artifacts/devflow-aot/logging/LoggingAotSmoke
+
+  hosts:
+    name: JavaScript hosts and VSIX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            src/DevFlow/js/package-lock.json
+            .github/extensions/maui-devflow-canvas/package-lock.json
+
+      - name: Build and test shared client and VS Code host
+        working-directory: src/DevFlow/js
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npm run package:vsix
+
+      - name: Test Copilot Canvas host
+        working-directory: .github/extensions/maui-devflow-canvas
+        run: |
+          npm ci
+          npm test
+          npm run selftest:recorder
+
+  # The native samples are the executable proof that a plain .NET app can host the agent, so they
+  # are built even though samples are otherwise out of the product solution filter. They need a Mac:
+  # .NET for macOS and iOS app heads cannot be bundled on Windows.
+  native-samples:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/DevFlow/DevFlow.Samples.Native.slnf
+      project-name: devflow-samples-native
+      run-tests: false
+      pack: false
+      os: '["macos-latest"]'
+      # App heads enforce the Apple SDK's Xcode requirement, which libraries do not, so this job
+      # has to pin Xcode even though the library job above gets away without it. Keep in step with
+      # the version the pinned .NET for iOS/macOS asks for — see https://aka.ms/xcode-requirement.
+      xcode-version: '26.3'
+      android-project: samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj

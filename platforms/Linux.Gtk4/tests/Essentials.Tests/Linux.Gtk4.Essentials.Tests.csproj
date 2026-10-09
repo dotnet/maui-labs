@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Tests</AssemblyName>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <ProjectReference Include="..\..\src\Linux.Gtk4.Essentials\Linux.Gtk4.Essentials.csproj" />
+    <Compile Include="..\..\..\Shared\Essentials.Tests\StaticFacadeTests.cs" Link="StaticFacadeTests.cs" />
+    <Compile Include="..\..\..\Shared\Essentials.Tests\FileSystemDirectoryTests.cs" Link="FileSystemDirectoryTests.cs" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

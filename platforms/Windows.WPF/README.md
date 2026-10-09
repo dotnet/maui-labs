@@ -9,6 +9,119 @@ This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback 
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
+## Window and page titles
+
+The native title bar belongs to `Window.Title`. Page titles are used by navigation
+and Shell headers; creating, renaming, or returning to a page does not change any
+window's title bar. Set or bind `Window.Title` explicitly to change it. An empty
+window title stays empty rather than falling back to a page title.
+
+## Shell inspection with DevFlow
+
+Shell creates only the selected page through its content controller. Template pages
+remain cached and attached to the MAUI tree, so DevFlow can inspect their labels and
+buttons without creating inactive pages.
+
+To check this in the sample, open **Shell Navigation**, select **Launch Shell App**,
+then use the sample agent's port:
+
+```powershell
+maui devflow --agent-port <port> ui tree --depth 20
+maui devflow --agent-port <port> ui query --automationId ShellHomeTitle
+maui devflow --agent-port <port> ui query --type Button
+maui devflow --agent-port <port> ui tap --automationId ShellSettingsButton
+```
+
+The tree should include `ShellHomePage` beneath `ShellContent`, the title query
+should find a MAUI `Label`, and tapping the button should navigate to Settings.
+
+### Dynamic Shell items
+
+Changes to `Shell.Items`, `ShellItem.Items`, and `ShellSection.Items` on the UI
+thread refresh the native flyout, tabs, and selected page. Collection notifications
+are coalesced on the dispatcher after Shell settles its current selection. Clearing
+the hierarchy clears the displayed page; replacing flyout items with a `TabBar`
+does not leave flyout entries behind. Inactive page templates remain lazy.
+The tab strip contains only the current item's sections and preserves its selected
+section when inactive items change.
+Deferred collection refreshes use the `Items` property mapper, including
+customizations registered with `AppendToMapping(nameof(Shell.Items), ...)`.
+
+Run the collection and lifecycle regressions on Windows:
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false --filter FullyQualifiedName~ShellItemsHandlerTests
+```
+
+The runtime regression renders add, remove, replace, and reset transitions in an
+offscreen, nonactivating WPF window. Set `SHELL_ITEMS_EVIDENCE_DIRECTORY` in the
+test process environment to save PNGs of those transitions.
+
+### Shell section selection
+
+Selecting a native tab navigates through Shell's cancellable section-selection
+pipeline, with or without `Shell.ItemTemplate`. Cancelled or deferred navigation
+keeps the native selection on the current section until Shell accepts the change.
+Rebuilding the strip does not initiate navigation or create inactive pages.
+The strip uses controller-visible sections, excluding hidden sections and sections
+without visible content. Visibility changes refresh it automatically. Plain section
+changes retain the native tab elements and synchronize selection without rebuilding,
+preserving keyboard focus.
+
+`ShellSection.IsEnabled` is projected onto native tabs and their UI Automation
+enabled state, both initially and when it changes. Enabled-state changes update
+only the matching current tab in place: they do not rebuild the strip, replay
+property mappers, replace custom headers, or navigate away from a selected section.
+Disabled sections remain visible; native UI Automation selection rejects them.
+Section observers follow collection changes and handler rebind/disconnect.
+
+The `ShellTabNavigationTests` handler regressions drive native UI Automation
+selection in an offscreen WPF window and assert the route,
+`Navigated` events, and rendered page. Set `SHELL_TAB_RESULTS` to a directory to
+capture the templated and non-templated repro states as PNG and JSON.
+Only the keyboard-focus cases activate their window; all other cases are
+nonactivating. On a shared desktop, run the focus cases only with exclusive
+foreground access. They assert actual keyboard focus, not just logical focus.
+For section switching within one Shell item, select **Launch Section Switching
+Repro**, or start the sample with `--shell-section-repro`. This uses two lazy
+pages in one `TabBar`, without calling a handler refresh workaround. The
+**GoToAsync** and **Set CurrentItem** buttons must both replace Page One with
+Page Two (and back). **Refresh state** shows the route, current page, page
+creation count, and `Navigated` count. Only one page should be created initially;
+after visiting both pages, the creation count must remain two on repeat visits.
+
+The focused Windows handler regression suite exercises real MAUI selection and
+WPF content hosting, including selection cleanup:
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests --filter FullyQualifiedName~ShellSectionSwitchingTests
+```
+
+## Layout measurement
+
+The WPF layout handler dispatches measurement and arrangement through
+`ICrossPlatformLayout`, including during native panel creation and virtual-view
+replacement. This preserves specialized implementations such as `FlexLayout`'s
+measure-mode handling. Fixed-width entries in a wrapping flex layout do not need
+an explicit height or a preliminary manual measure.
+
+Run the native layout regressions on Windows (the existing shared STA application
+host is reused; these tests do not show or activate windows):
+
+```powershell
+dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false --filter FullyQualifiedName~LayoutHandlerTests
+```
+
+These tests cover first measurement, wrapping as constraints change, native child
+frames, delegate dispatch during creation and replacement, and ordinary Grid/Stack
+layout. The native panel preserves measurements already performed by MAUI, instead
+of remeasuring each child against the whole parent's size (which can inflate flex
+lines beyond their allocated frames). Children whose native measurement is still
+invalid, including explicitly sized views MAUI did not measure, are measured by
+the panel. Nested flex panels retain fallback measurement on constraint changes,
+because the shared flex engine bypasses their native measure.
+The existing minimum-height floor is retained.
+
 ## Screenshots
 
 | Home | Controls | Layouts |
@@ -43,83 +156,117 @@ dotnet run
 
 ### Option 2: Add to an existing project manually
 
-#### 1. Create the project
+Follow the [getting-started guide](docs/getting-started.md#using-the-nuget-package-directly)
+for package references and the code-only entry point. Use a `MauiWPFApplication`
+host separate from your MAUI `Application`, with `UseMauiAppWPF<App>()` and
+`UseWPFEssentials()`.
+
+The packed template selects backend and Essentials packages from its own release
+and explicitly references the backend's MAUI Controls version. Use full release
+versions when configuring references manually: `0.1.0-preview` selects the oldest
+matching preview, not the latest.
+
+For template development, run `eng\smoke-tests\wpf-template-smoke-test.ps1` on Windows.
+It packs, generates, restores, builds, and launches the template using an isolated
+template hive. See [validation details](docs/getting-started.md#validating-template-changes).
+
+## Registered fonts
+
+Include fonts as `MauiFont` items and register them using `ConfigureFonts`:
+
+```csharp
+builder.ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"));
+```
+
+The NuGet package imports font processing through its existing
+`Microsoft.Maui.Platforms.Windows.WPF.targets` entry point; package consumers do
+not need an additional import. A `ProjectReference` to the backend does not import
+its packaged build targets into the consuming app. Source consumers must explicitly
+import the font-only target, as the repository sample does:
 
 ```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <OutputType>WinExe</OutputType>
-    <UseMaui>true</UseMaui>
-    <UseWPF>true</UseWPF>
-    <EnableDefaultXamlItems>false</EnableDefaultXamlItems>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.31" />
-    <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF" Version="*" />
-    <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF.Essentials" Version="*" />
-  </ItemGroup>
-</Project>
+<Import Project="..\..\src\Windows.WPF\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
+        Condition="'$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
 ```
 
-#### 2. App.xaml
+Adjust this path relative to your app project. Keep `UseMaui` enabled. This import
+handles only `MauiFont`; it does not enable or fix source-consumer processing of
+images, icons, splash screens, or raw assets.
+The import guard prevents loading the font target twice when another import
+already included the umbrella; it does not depend on test-scenario opt-in.
+
+WPF copies `MauiFont` files into `Resources\Fonts` in both build and publish output.
+This output layout uses leaf filenames, so font filenames must be unique even
+when their source directories differ.
+An explicitly included `MauiFont` must exist: build/publish now fails on a missing
+file instead of silently skipping it. Use a conditional item include for optional fonts.
+Aliases resolve relative to the application directory, not the process working
+directory, using the family name declared inside the font file. Embedded fonts
+registered with an assembly are extracted to a content-addressed temporary directory;
+no system font installation is required.
+
+Text controls and formatted label spans resolve aliases through the WPF font manager.
+Native WPF composite families, such as `Global User Interface`, remain supported
+for text. Font images require a physical typeface containing the requested glyphs;
+composite families produce a warning and no image rather than an unverified fallback.
+Clearing a control's MAUI font family restores its native style or inherited default.
+Entry also applies its font when creating a native password control. GraphicsView
+text drawing and measurement share the same registered-family and style resolution.
+The default public `IFontManager` and native `WPFFontManager` share one singleton.
+Replacing the portable `IFontManager` preserves its `DefaultFontSize` contract;
+native family resolution still uses the app's registered fonts. A supplied
+`WPFFontManager` override takes precedence for native resolution as well.
+`FontImageSource` uses the same resolution for Image, ImageButton, Button, Shell
+flyout icons, and NavigationPage toolbar icons. A missing or invalid font logs a warning and text uses the default UI
+font. An unresolved icon font or a character absent from that font logs a warning
+and produces no image rather than a fallback box.
+Glyph bitmaps retain the font's advance width and line box, including its internal
+padding, rather than cropping to the visible ink. This keeps icon scaling and
+alignment consistent with the font's metrics.
+Glyph sizes must be finite, positive, and no greater than 4096 device-independent
+units. At 96 DPI, the rendered bitmap, including its one-pixel padding on each side,
+is limited to 4096 pixels per side and 4,194,304 pixels total (16 MiB of pixel data).
+Out-of-range sizes, unsupported bounds, and expected native rendering failures log
+a warning and produce no image; invalid sizes are not replaced with a default size.
+Register fonts before first use. Missing-font results are cached as failures, not as
+successful fallback fonts; transient extraction I/O failures can be retried.
+
+## Packaged raw assets
+
+Declare raw files as `MauiAsset` items with their package-relative names:
 
 ```xml
-<Microsoft.Maui.Platforms.Windows.WPF:MauiWPFApplication
-    x:Class="MyApp.App"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:Microsoft.Maui.Platforms.Windows.WPF="clr-namespace:Microsoft.Maui.Platform.WPF;assembly=Microsoft.Maui.Platforms.Windows.WPF">
-</Microsoft.Maui.Platforms.Windows.WPF:MauiWPFApplication>
+<MauiAsset Include="Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 ```
 
-#### 3. App.xaml.cs
+For example, `Resources\Raw\Data\sample.txt` is copied to `Data\sample.txt`
+under the app directory in both build and publish output. Open it with
+`IFileSystem.OpenAppPackageFileAsync("Data/sample.txt")`; use
+`AppPackageFileExistsAsync` with the same name. Resolve `IFileSystem` from the
+services registered by `UseWPFEssentials()`.
 
-```csharp
-using Microsoft.Maui.Platform.WPF;
+An explicit `LogicalName` takes precedence over `Link`. Without either metadata,
+the path defaults to `%(RecursiveDir)%(Filename)%(Extension)` (a single explicitly
+included file uses its filename). Nested folders are preserved, so files with
+the same basename in different logical folders remain distinct. Do not prefix
+the runtime name with `Resources\Raw`.
 
-namespace MyApp;
-
-public partial class App : MauiWPFApplication
-{
-    protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
-}
-```
-
-#### 4. MauiProgram.cs
-
-```csharp
-using Microsoft.Maui.Platform.WPF.Hosting;
-using Microsoft.Maui.Essentials.WPF;
-
-public static class MauiProgram
-{
-    public static MauiApp CreateMauiApp()
-    {
-        var builder = MauiApp.CreateBuilder();
-        builder
-            .UseMauiAppWPF<App>()
-            .UseWPFEssentials()
-            .ConfigureFonts(fonts =>
-            {
-                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-            });
-
-        return builder.Build();
-    }
-}
-```
-
-#### 5. App class
-
-```csharp
-public class App : Application
-{
-    protected override Window CreateWindow(IActivationState? activationState)
-        => new Window(new MainPage());
-}
-```
+Run `eng\smoke-tests\wpf-assets-smoke-test.ps1 -RuntimeIdentifier win-x64` on
+Windows (choose the RID matching your selected `dotnet` host) to build and run the
+existing `Windows.WPF.Sample` with `-p:WpfTestScenarios=true`, then publish it
+without rebuilding and run it again. The opt-in `--test-scenario packaged-assets`
+entrypoint uses the actual DI-registered WPF file system without opening a window
+or starting DevFlow. Normal startup (no scenario argument) still opens the gallery.
+Scenario code and fixtures live under the sample's `TestScenarios` directory;
+additional runtime checks should use this shared host rather than new test apps.
+Launch scenarios with `dotnet Windows.WPF.Sample.dll --test-scenario <name>` to
+see console diagnostics; the normal Windows executable is a GUI application.
+The same asset definitions and expected contents are reused by `HandlerTests`,
+while the smoke verifies the real sample build/publish output through the shipping
+backend MSBuild target. `-TargetsFile` can select a historical target file for
+regression reproduction; it never changes the shipped target.
+The same explicit RID is used for build and no-build publish so Razor's generated
+manifests are read from the directory where the build wrote them.
 
 ## Samples
 
@@ -163,13 +310,28 @@ See the `samples/` directory for working examples:
 
 | Control | Status | Notes |
 |---|---|---|
-| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView |
+| CollectionView | ✅ | WPF ListBox with DataTemplateSelector, SelectedItem, SelectionMode, EmptyView, and logical parenting of realized template views; observable flat and grouped sources update live |
 | ListView | ✅ | WPF ListBox with MAUI template bridge |
 | CarouselView | ✅ | Horizontal ListBox with arrow navigation buttons |
 | IndicatorView | ✅ | Dot indicators as Ellipses |
 | TableView | ✅ | Grouped sections with TextCell, SwitchCell, EntryCell |
 | SwipeView | ✅ | Context menu approximation |
 | RefreshView | ✅ | Progress bar indicator |
+
+CollectionView's native list-item accessible names prefer the template root's
+`SemanticProperties.Description`. Without a description, visible template labels
+and buttons supply the name in visual-tree order; a described subtree replaces
+its children's text. Native container `AutomationProperties.Name` and `LabeledBy`
+remain authoritative. Names are read from the current template, including after
+binding updates and container reuse. Empty templates and unrealized items do not
+expose the data model's `ToString()`; items without a template use their displayed
+fallback text. Group headers follow the same rules as items. Changes to template
+text, semantic descriptions, visibility, or descendants invalidate the native
+automation peers so UIA clients receive name-change notifications.
+Referenced native `LabeledBy` text/content labels are observed as well, including
+changes to their own accessible names and replacement of their content.
+If template creation fails, the existing displayed fallback text remains the
+accessible name; this does not suppress information that is already visible.
 
 ### Pages & Navigation
 
@@ -214,7 +376,7 @@ All MAUI shapes render via WPF `System.Windows.Shapes`:
 | Application | ✅ | MauiWPFApplication base class |
 | Window | ✅ | Title, Size, Position, Min/Max, MenuBar, Multi-window |
 | Dispatcher | ✅ | WPF Dispatcher + DispatcherProvider |
-| Dialogs | ✅ | DisplayAlert (MessageBox), DisplayActionSheet, DisplayPromptAsync (custom windows) |
+| Dialogs | ✅ | DisplayAlert, DisplayActionSheet, DisplayPromptAsync (native WPF windows with app-provided button labels) |
 | Font Management | ✅ | IFontManager, IFontRegistrar, embedded font loading, FontImageSource glyph rendering |
 | Dark/Light Mode | ✅ | ThemeManager detects via registry + SystemEvents, fires ThemeChanged |
 | Animations | ✅ | WPFTicker at ~60fps, TranslateTo/FadeTo/ScaleTo/RotateTo all work |
@@ -228,6 +390,30 @@ All MAUI shapes render via WPF `System.Windows.Shapes`:
 | VisualStateManager | ✅ | PointerOver, Pressed, Focused, Disabled state hooks |
 
 ### Essentials
+
+Call `builder.UseWPFEssentials()` before `builder.Build()` on the WPF UI thread.
+When `Build()` returns, every registered Essentials facade (`FileSystem.Current`,
+`Preferences.Default`, `DeviceInfo.Current`, and the other supported APIs) uses the
+same instance as dependency injection, including application overrides registered
+before or after `UseWPFEssentials()`. Static calls are supported after `Build()`,
+not while configuring the builder. Unsupported desktop capabilities keep their
+existing stub behavior.
+
+Version tracking records a launch only when `VersionTracking.Track()` or a
+tracking property is used, not merely when building the app.
+
+The facades are process-wide: the most recently built app sets their instances.
+Do not use them after disposing that app.
+
+`FileSystem.AppDataDirectory` uses local application data and `CacheDirectory`
+uses the temporary directory, each with the application name appended. Both
+getters create the directory before returning it, without changing existing
+contents; filesystem errors propagate to the caller.
+
+Run the registration and filesystem regressions on Windows:
+`dotnet test platforms\Windows.WPF\tests\Essentials.Tests\Windows.WPF.Essentials.Tests.csproj -p:UseMaui=false`.
+The filesystem tests use unique application identities and real file writes;
+they remove only their own directories, never the user storage roots.
 
 | API | Status | Notes |
 |---|---|---|
@@ -299,6 +485,30 @@ dotnet test tests\UITests\UITests.csproj --no-build
 
 ## Testing
 
+The handler regression suite exercises real native container callbacks and
+selection, including CollectionView parenting, recycling, equal-valued items,
+runtime item/group template and grouping changes, group headers and footers,
+conversion failures, recursive handler disconnection, and DevFlow tree discovery. Template changes
+rebuild realized roots without requiring an ItemsSource change and preserve
+single/multiple selection of equal-valued grouped item occurrences. Single selection
+is restored from the saved native occurrence, independently of the virtual
+SelectedItem representation. Retired template roots and their descendants disconnect
+on clear, reuse, template replacement, conversion failure, and handler teardown:
+
+```powershell
+dotnet test tests\HandlerTests\HandlerTests.csproj -p:UseMaui=false
+```
+
+In the gallery, open **Collection View** and choose **CollectionView** in the
+example picker. DevFlow can find realized contact labels by text or their name
+as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the status
+to `Tapped: <name>`, providing an observable check beyond a successful tap response.
+
+The `ci-wpf.yml` compatibility matrix runs `AlertManagerSubscriptionTests` in the
+existing `HandlerTests` project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These are registration
+contract tests, not native dialog interaction tests.
+
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
 
 ```bash
@@ -317,7 +527,7 @@ Comparison screenshots are saved to `tests/UITests/Comparisons/`.
 - The platform-agnostic `ViewHandler` has no-op `PlatformArrange` and returns `Size.Zero`. `WPFViewHandler` overrides these to bridge MAUI layout to WPF `Measure`/`Arrange`.
 - WPF `System.Windows.Controls` and MAUI `Microsoft.Maui.Controls` share many type names — every handler file uses `using` aliases to disambiguate (e.g., `WButton = System.Windows.Controls.Button`).
 - The `MauiWPFApplication` base class in `App.xaml` bootstraps the MAUI runtime within a WPF `Application`.
-- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). Both the nested subscription interface in MAUI 10.0.41–10.0.60 and the top-level interface in 10.0.70+ are supported. An unrecognized contract fails during registration rather than leaving dialog tasks pending. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
 
 ## Known Limitations
 

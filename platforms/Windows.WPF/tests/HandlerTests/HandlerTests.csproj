@@ -17,10 +17,23 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Windows.WPF\Windows.WPF.csproj" />
+    <ProjectReference Include="..\..\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\..\samples\Windows.WPF.Sample\TestScenarios\AssetCases.cs" Link="AssetCases.cs" />
   </ItemGroup>
+
+  <ItemGroup>
+    <MauiFont Include="..\..\samples\Windows.WPF.Sample\Resources\Fonts\OpenSans-Regular.ttf" />
+    <MauiFont Include="..\..\..\..\src\Comet\sample\Comet.Sample\Resources\Fonts\fa_solid.ttf" />
+    <EmbeddedResource Include="..\..\samples\Windows.WPF.Sample\Resources\Fonts\OpenSans-Regular.ttf" LogicalName="HandlerTests.Embedded.ttf" />
+    <EmbeddedResource Include="..\..\..\Linux.Gtk4\samples\Linux.Gtk4.Sample\Resources\Fonts\OpenSans-Regular.ttf" LogicalName="HandlerTests.Ambiguous.ttf" />
+    <EmbeddedResource Include="..\..\..\..\src\Comet\sample\Comet.Sample\Resources\Fonts\fa_solid.ttf" LogicalName="Other.Ambiguous.ttf" />
+  </ItemGroup>
+  <Import Project="..\..\samples\Windows.WPF.Sample\TestScenarios\PackagedAssets.props" />
+  <Import Project="..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets" />
 
 </Project>

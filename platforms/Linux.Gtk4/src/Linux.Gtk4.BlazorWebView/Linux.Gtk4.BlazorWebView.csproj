@@ -15,12 +15,16 @@
   <ItemGroup>
     <PackageReference Include="GirCore.Gtk-4.0" Version="0.7.0" />
     <PackageReference Include="GirCore.WebKit-6.0" Version="0.7.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.*" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" Version="$(MicrosoftAspNetCoreComponentsWebViewVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftAspNetCoreComponentsWebViewMauiVersion)" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Linux.Gtk4\Linux.Gtk4.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.Platforms.Linux.Gtk4.Tests" />
   </ItemGroup>
 
   <ItemGroup>

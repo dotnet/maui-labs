@@ -37,9 +37,8 @@ public static class MauiProgram
 				fonts.AddFont("FluentSystemIcons-Regular.ttf", FluentUI.FontFamily);
 			});
 
-#if DEBUG
-		builder.EnableSampleRuntimeDebugging();
-#endif
+		// NOTE: EnableSampleRuntimeDebugging() was removed with the legacy Comet render path
+		// (Phase 5) — the shared RuntimeDebug host is no longer compiled into samples.
 
 		builder.Services.AddSingleton<ProjectRepository>();
 		builder.Services.AddSingleton<TaskRepository>();

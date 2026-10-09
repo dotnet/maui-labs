@@ -1,11 +1,63 @@
 #if IOS || MACCATALYST
+using System.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
+
 public class AppleIntelligenceChatClientToolCallLoggingTests
 {
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolCallbacks_InheritChatTraceAndSpanAcrossAwaits(bool streaming)
+	{
+		const string sourceName = "AppleToolCorrelationTests";
+		Activity? chatSpan = null;
+		using var listener = new ActivityListener
+		{
+			ShouldListenTo = source => source.Name == sourceName,
+			Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+			ActivityStopped = activity => chatSpan = activity,
+		};
+		ActivitySource.AddActivityListener(listener);
+		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
+		using var client = new AppleIntelligenceChatClient(logCollector).AsBuilder()
+			.UseOpenTelemetry(sourceName: sourceName, configure: telemetry => telemetry.EnableSensitiveData = false)
+			.Build();
+		Activity? beforeAwait = null;
+		Activity? afterAwait = null;
+		var weatherTool = AIFunctionFactory.Create(async (string location) =>
+		{
+			beforeAwait = Activity.Current;
+			await Task.Yield();
+			afterAwait = Activity.Current;
+			return $"Clear skies in {location}";
+		}, name: "GetWeather", description: "Gets the weather for a location");
+		var options = new ChatOptions { Tools = [weatherTool] };
+		ChatMessage[] messages = [new(ChatRole.User, "Use GetWeather to get the weather in Seattle.")];
+		if (streaming)
+		{
+			await foreach (var _ in client.GetStreamingResponseAsync(messages, options)) { }
+		}
+		else
+		{
+			await client.GetResponseAsync(messages, options);
+		}
+
+		Assert.NotNull(chatSpan);
+		Assert.Same(chatSpan, beforeAwait);
+		Assert.Same(chatSpan, afterAwait);
+		Assert.NotEmpty(logCollector.Entries);
+		Assert.All(logCollector.Entries, entry =>
+		{
+			Assert.Equal(chatSpan.TraceId, entry.TraceId);
+			Assert.Equal(chatSpan.SpanId, entry.SpanId);
+		});
+	}
+
 	// ====================================================================
 	// Single tool, Debug level
 	// Expected: exactly 2 entries
@@ -13,6 +65,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	//   [1] Debug: "GetWeather invocation completed. Duration: {timespan}"
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_SingleTool_Debug_ProducesExactly2Entries()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
@@ -51,6 +104,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	//   [1] Trace: "GetWeather invocation completed. Duration: {ts}. Result: \"Clear skies, 72°F in Seattle\""
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_SingleTool_Trace_ProducesExactly2EntriesWithSensitiveData()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Trace);
@@ -85,6 +139,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// No tools — must produce zero log entries even at Trace
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_NoTools_ProducesZeroEntries()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Trace);
@@ -101,6 +156,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// (our logging is Debug/Trace only)
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_InformationLevel_ProducesZeroEntries()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Information);
@@ -122,6 +178,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// Streaming, Debug — same 2 entries as non-streaming
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_SingleTool_Debug_ProducesExactly2Entries()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
@@ -151,6 +208,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// Streaming, Trace — same 2 entries as non-streaming, with sensitive data
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_SingleTool_Trace_ProducesExactly2EntriesWithSensitiveData()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Trace);
@@ -182,6 +240,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// Ordering: for a single tool, "Invoking" must come before "completed"
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_InvokingIsLoggedBeforeCompleted()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
@@ -209,6 +268,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// "Invoking" must precede its "completed".
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_MultipleTools_ProducesExactly4Entries()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
@@ -259,6 +319,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// Tool failure — exactly 2 entries: Invoking (Debug) + failed (Error)
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_ToolFailure_Produces2EntriesWithErrorLevel()
 	{
 		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
@@ -297,6 +358,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 	// No logger factory — tool invocation works without crashing
 	// ====================================================================
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_NoLoggerFactory_CompletesSuccessfully()
 	{
 		var client = new AppleIntelligenceChatClient();
@@ -338,7 +400,8 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		{
 			if (IsEnabled(logLevel))
 			{
-				var entry = new DeviceTestLogEntry(logLevel, formatter(state, exception));
+				var activity = Activity.Current;
+				var entry = new DeviceTestLogEntry(logLevel, formatter(state, exception), activity?.TraceId, activity?.SpanId);
 				lock (_lock)
 				{
 					Entries.Add(entry);
@@ -347,7 +410,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		}
 	}
 
-	private record DeviceTestLogEntry(LogLevel Level, string Message);
+	private record DeviceTestLogEntry(LogLevel Level, string Message, ActivityTraceId? TraceId, ActivitySpanId? SpanId);
 }
 
 #endif

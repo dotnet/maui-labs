@@ -11,8 +11,17 @@
       "features": ["css-selector", "type", "text", "accessibility-id"]
     },
     "ui.actions": {
-      "version": 1,
-      "features": ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties"]
+      "version": 2,
+      "features": ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties"],
+      "gestures": [
+        "tap",
+        "doubletap",
+        "longpress",
+        "swipe",
+        "pan",
+        "pinch",
+        "rotate"
+      ]
     },
     "ui.screenshot": {
       "version": 1,

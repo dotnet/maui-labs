@@ -27,7 +27,44 @@ tools:
 network:
   allowed:
     - defaults
+imports:
+  - shared/docs-output-body-limit.md
+
 safe-outputs:
+  steps:
+    - name: Enforce audit output AI disclosure
+      id: enforce_ai_disclosure
+      uses: actions/github-script@v8
+      env:
+        GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
+      with:
+        script: |
+          const fs = require("node:fs");
+          const disclosures = {
+            create_issue: "AI disclosure: A generative AI model, accessed through GitHub Copilot, determined that the audited documentation may need updating and drafted this issue text. Please verify the recommendation and content before acting.",
+            create_pull_request: "AI disclosure: A generative AI model, accessed through GitHub Copilot, determined that the audited documentation may need updating, proposed the documentation changes, and drafted this pull request text. Please verify the recommendation, changes, and content before acting."
+          };
+          const outputPath = process.env.GH_AW_AGENT_OUTPUT;
+          const output = JSON.parse(fs.readFileSync(outputPath, "utf8"));
+          if (!Array.isArray(output.items)) {
+            throw new Error("Expected safe-output items before enforcing AI disclosure.");
+          }
+          for (const item of output.items) {
+            if (item.type !== "create_issue" && item.type !== "create_pull_request") continue;
+            if (typeof item.body !== "string") {
+              throw new Error("Expected an audit output body before enforcing AI disclosure.");
+            }
+            const disclosure = disclosures[item.type];
+            const notice = `made with AI\n\n${disclosure}`;
+            // Put the notice outside model-authored Markdown, even if it was quoted or hidden.
+            const body = item.body.replaceAll(notice, "").replaceAll(disclosure, "")
+              .replace(/^made with AI[ \t]*\r?$/gm, "").trim();
+            item.body = `${notice}\n\n${body}`;
+            if (item.body.length > 60000) {
+              throw new Error("Audit output body exceeds the 60,000 UTF-16 code unit budget including AI disclosure. Shorten the body and retry.");
+            }
+          }
+          fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
   create-pull-request:
     title-prefix: "[ai-docs] "
     labels: [ai-docs-audit]
@@ -53,7 +90,7 @@ number, title, and changed file paths.
 
 **Focus areas** — prioritize auditing when PRs touched:
 - `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/` → MCP tools table
-- `src/Cli/Microsoft.Maui.Cli/Commands/` → CLI commands (doctor, device, android, apple, devflow, go, profile, version)
+- `src/Cli/Microsoft.Maui.Cli/Commands/` → CLI commands (doctor, device, android, apple, devflow, go, profile, version, project, port)
 - `src/DevFlow/` → DevFlow architecture, agent, driver
 - `src/Comet/`, `src/Go/` → Comet MVU framework and Go server
 - `src/AI/` → Essentials.AI
@@ -92,7 +129,7 @@ matching checklist section.
   Run `find src platforms -name "*.csproj" -not -path "*/artifacts/*" | sort` and verify every
   shipping project is represented in the products table.
 - **CLI commands**: Verify all top-level commands are documented. Current command groups:
-  `doctor`, `device`, `android`, `apple`, `devflow`, `go`, `profile`, `version`.
+  `doctor`, `device`, `android`, `apple`, `devflow`, `go`, `profile`, `version`, `project`, `port`.
   Run: `grep "new Command\|rootCommand.Add" src/Cli/Microsoft.Maui.Cli/Program.cs`
 - **MCP tools table**:
   1. Run: `grep -rn "McpServerTool" src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/*.cs`
@@ -109,8 +146,8 @@ matching checklist section.
   ```
 - **NuGet feeds**: Run `grep '<add key=' NuGet.config` and compare with the documented feed list.
 - **SDK version**: Run `cat global.json` and verify the documented SDK version matches exactly.
-- **Agent skills**: Verify `plugins/dotnet-maui/skills/` lists match what's documented.
-  Run: `ls plugins/dotnet-maui/skills/`
+- **Agent skills**: Verify plugin skill lists match what's documented.
+  Run: `find plugins -mindepth 3 -maxdepth 3 -type d -path '*/skills/*' | sort`
 
 ### .github/copilot-instructions.md
 
@@ -198,7 +235,7 @@ the configuration of this workflow itself:
 - **Agentic workflows**: Are there new `.md` workflows that might need auditing?
   Run: `ls .github/workflows/*.md`
 - **Skills**: Has the skills marketplace structure changed?
-  Run: `ls plugins/dotnet-maui/skills/`
+  Run: `find plugins -mindepth 3 -maxdepth 3 -type d -path '*/skills/*' | sort`
 
 If you find drift — paths, products, files, or audit sections that are missing
 or outdated in this workflow — open an issue on this repository with the title
@@ -234,3 +271,23 @@ an issue just to say "nothing changed."
   referenced by an AI config file section you are updating.
 - When verifying tables "match", ignore whitespace differences but content
   (names, paths, versions) must be exact. File paths are case-sensitive.
+
+## Output disclosure
+
+The trusted `safe-outputs` step prepends a visible `made with AI` line and an
+explicit AI decision-and-drafting disclosure to generated issue and pull request
+bodies before the existing handlers run. The pull request notice also identifies
+the proposed documentation changes as model-generated. Do not add another copy
+or label the edited documentation files. Existing provenance,
+draft configuration, and older-issue handling are unchanged. Framework fallback
+issues retain the notice identifying their originally intended pull request.
+The disclosed body is limited to 60,000 UTF-16 code units, reserving 5,536 for
+generated content. A shared final-payload guard rejects bodies over 65,536 before
+the GitHub request, including unexpectedly large provenance or fallback text.
+Nothing is silently truncated. Existing patch and output-count caps are unchanged.
+
+Local regression check: `node --test .github/workflows/tests/*.test.cjs`.
+Set `GH_AW_ACTIONS_DIR` to gh-aw v0.53.5's `actions/setup/js` directory to also
+exercise its handlers with mocked GitHub and git operations (no API writes).
+After editing the frontmatter, regenerate this workflow's lock file with
+`gh aw compile ai-docs-audit` using gh-aw v0.53.5.

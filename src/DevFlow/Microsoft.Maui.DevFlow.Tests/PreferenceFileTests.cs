@@ -76,7 +76,7 @@ public class PreferenceFileTests : IDisposable
 
     public void Dispose() => File.Delete(_path);
 
-    private sealed class TestService : DevFlowAgentService
+    private sealed class TestService : MauiDevFlowAgentService
     {
         public static IReadOnlyCollection<string> Read(string path, string? sharedName = null, bool nestedStore = false)
             => ReadPreferenceFileKeys(path, sharedName, nestedStore);

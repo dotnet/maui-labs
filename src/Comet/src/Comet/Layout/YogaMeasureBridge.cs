@@ -127,7 +127,13 @@ internal static class YogaMeasureBridge
 		// Cross-axis: explicit FlexAlignSelf wins; otherwise an explicit cross-axis
 		// LayoutAlignment maps to AlignSelf. If the child didn't set anything we leave
 		// AlignSelf=Auto so the parent's AlignItems governs.
-		if (flexAlignSelf != YogaFlexAlign.Auto)
+		// Baseline opt-in (.AlignBaseline()) wins on a row's cross axis: align this child to the
+		// shared text baseline. Only meaningful in a row; a column ignores it.
+		if (parentIsRow && cometView?.GetBaselineAlign() == true)
+		{
+			node.AlignSelf = YogaFlexAlign.Baseline;
+		}
+		else if (flexAlignSelf != YogaFlexAlign.Auto)
 		{
 			node.AlignSelf = explicitAlignSelf;
 		}

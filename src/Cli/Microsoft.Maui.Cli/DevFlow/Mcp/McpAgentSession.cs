@@ -1,12 +1,14 @@
 using Microsoft.Maui.Cli.DevFlow.Broker;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.DevFlow.Driver;
+using ModelContextProtocol;
 
 namespace Microsoft.Maui.Cli.DevFlow.Mcp;
 
 public class McpAgentSession
 {
 	int? _defaultAgentPort;
+	readonly string _mutationLeaseId = Guid.NewGuid().ToString("N");
 
 	public int? DefaultAgentPort
 	{
@@ -21,13 +23,19 @@ public class McpAgentSession
 	public string DefaultAgentHost { get; set; } = "localhost";
 	AgentRegistration? DefaultAgent { get; set; }
 
+	/// <summary>Creates an agent client owned by the caller. Dispose it after the tool call completes.</summary>
 	public async Task<AgentClient> GetAgentClientAsync(int? agentPort = null)
 	{
 		var selectedPort = agentPort ?? DefaultAgentPort;
 		var port = selectedPort ?? await ResolveAgentPortAsync();
 		if (selectedPort.HasValue && DefaultAgentHost.Equals("localhost", StringComparison.OrdinalIgnoreCase))
 			await TryEnsureAndroidForwardingForAgentPortAsync(port, ensureBrokerReverse: false);
-		return new AgentClient(DefaultAgentHost, port);
+		return new AgentClient(DefaultAgentHost, port)
+		{
+			MutationLeaseId = _mutationLeaseId,
+			MutationLeaseHolderKind = "mcp",
+			MutationLeaseLabel = "MCP client"
+		};
 	}
 
 	public void SetDefaultAgent(AgentRegistration agent)
@@ -64,8 +72,23 @@ public class McpAgentSession
 			return agent.Port;
 		}
 
-		var fallbackPort = BrokerClient.ReadConfigPort() ?? 9223;
-		return fallbackPort;
+		// No single agent could be resolved. Distinguish the safe "no broker / single app"
+		// path from genuine ambiguity (broker reports >1 agents). In the ambiguous case,
+		// refuse instead of silently defaulting to a port and targeting an arbitrary app
+		// (issue #343). An explicit agentPort or a selected default agent bypasses this.
+		var configPort = BrokerClient.ReadConfigPort();
+		if (!configPort.HasValue)
+		{
+			var brokerPort = BrokerClient.ReadBrokerPortPublic();
+			if (brokerPort.HasValue)
+			{
+				var agents = await BrokerClient.ListAgentsAsync(brokerPort.Value);
+				if (agents is { Length: > 1 })
+					throw new McpException(BrokerClient.BuildMultiAgentTargetingMessage(agents, optionHint: "agentPort"));
+			}
+		}
+
+		return configPort ?? 9223;
 	}
 
 	async Task TryEnsureAndroidForwardingForAgentPortAsync(int agentPort, bool ensureBrokerReverse)

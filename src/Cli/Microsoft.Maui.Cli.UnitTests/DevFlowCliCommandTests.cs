@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
@@ -234,6 +235,103 @@ public class DevFlowCliCommandTests
         Assert.Contains("-100", req.Body);
     }
 
+    // ========== ui gesture ==========
+
+    [Fact]
+    public async Task UiGesture_Pinch_SendsScaleToGestureRoute()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pinch", "--element", "el-1", "--scale", "2.0", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+        Assert.Equal("POST", req.Method);
+        Assert.Contains("\"type\":\"pinch\"", req.Body);
+        Assert.Contains("\"scale\":2", req.Body);
+        Assert.Contains("\"elementId\":\"el-1\"", req.Body);
+    }
+
+    [Fact]
+    public async Task UiGesture_Pan_SendsExplicitVector()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pan", "--element", "el-1", "--dx", "0", "--dy", "-150", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+        Assert.Contains("\"type\":\"pan\"", req.Body);
+        Assert.Contains("-150", req.Body);
+    }
+
+    [Fact]
+    public async Task UiGesture_Rotate_SendsDegrees()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "rotate", "--rotation", "45", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+        Assert.Contains("\"type\":\"rotate\"", req.Body);
+        Assert.Contains("\"rotation\":45", req.Body);
+    }
+
+    [Fact]
+    public async Task UiGesture_ReportsWhichTierHandledIt()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pinch", "--element", "el-1", "--scale", "2.0", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var payload = result.ParseJsonOutput();
+        Assert.True(payload.GetProperty("success").GetBoolean());
+        Assert.Equal("recognizer", payload.GetProperty("handledBy").GetString());
+        Assert.Equal("PinchGestureRecognizer on Grid", payload.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task UiGesture_UnknownType_FailsWithoutCallingAgent()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "wiggle", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
+    [Fact]
+    public async Task UiGesture_SwipeWithoutDirection_FailsWithoutCallingAgent()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "swipe", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
+    [Fact]
+    public async Task UiGesture_TapWithoutTarget_FailsWithoutCallingAgent()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "tap", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
     [Fact]
     public async Task UiResize_SendsResizeAction()
     {
@@ -262,6 +360,85 @@ public class DevFlowCliCommandTests
     }
 
     [Fact]
+    public async Task UiProperty_Get_NativeElementRejection_SurfacesReasonAndFails()
+    {
+        // Reproduces the raw agent behavior: GET /properties/{name} on a native element
+        // returns HTTP 400 with {"success":false,"error":"...","reason":"native-property-not-supported"}.
+        // The CLI must surface that structured error instead of exiting 0 with a null value.
+        await using var server = new MockAgentServer(rejectNativeProperty: true);
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync(
+            "devflow", "ui", "property", "native:registered:cb3c73a5cacf4474beabb80704798b43", "Opacity", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        using var document = JsonDocument.Parse(result.StdErr);
+        var error = document.RootElement.GetProperty("error").GetString();
+        Assert.Contains("native-property-not-supported", error);
+        Assert.Contains(
+            "Generic property reflection is not supported for native elements",
+            error);
+    }
+
+    [Fact]
+    public async Task UiProperty_Get_FailureWithoutReason_StillSurfacesErrorAndFails()
+    {
+        // Some rejections (e.g. "Agent not bound to app") report "success": false but omit
+        // the optional "reason" field entirely. GetPropertyAsync must still treat any
+        // explicit "success": false as an error rather than only ones that carry a reason.
+        await using var server = new MockAgentServer(propertyFailureWithoutReason: true);
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync("devflow", "ui", "property", "el-1", "Opacity", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        using var document = JsonDocument.Parse(result.StdErr);
+        var error = document.RootElement.GetProperty("error").GetString();
+        Assert.Contains("Agent not bound to app", error);
+        Assert.DoesNotContain("(reason:", error);
+    }
+
+    [Fact]
+    public async Task UiProperty_Get_MalformedResponse_FailsWithNonzeroExitAndUsefulMessage()
+    {
+        // A malformed/empty response (or a transport failure caught by GetJsonAsync) collapses
+        // to JsonValueKind.Undefined. GetPropertyAsync must throw instead of returning a
+        // success-shaped null, and the CLI must exit nonzero with a useful message.
+        await using var server = new MockAgentServer(malformedPropertyResponse: true);
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync("devflow", "ui", "property", "el-1", "Opacity", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        using var document = JsonDocument.Parse(result.StdErr);
+        var error = document.RootElement.GetProperty("error").GetString();
+        Assert.Contains("Opacity", error);
+        Assert.Contains("could not be reached", error);
+    }
+
+    [Fact]
+    public async Task UiProperty_Get_PropertyNotFound_ReturnsNullValueWithZeroExit()
+    {
+        // A genuine "property not found" is reported by the agent as HTTP 404 with
+        // "success": false and no "reason". This must keep returning a null value with
+        // exit code 0, preserving the documented not-found contract (distinct from other
+        // explicit success:false failures, which must still fail with a nonzero exit).
+        await using var server = new MockAgentServer(propertyNotFound: true);
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync("devflow", "ui", "property", "el-1", "Missing", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var root = result.ParseJsonOutput();
+        Assert.Equal("Missing", root.GetProperty("property").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, root.GetProperty("value").ValueKind);
+    }
+
+    [Fact]
     public async Task UiSetProperty_Put_HitsPropertyRoute()
     {
         var (server, cli) = await CreateFixturesAsync();
@@ -274,6 +451,86 @@ public class DevFlowCliCommandTests
         Assert.Equal("PUT", req.Method);
         Assert.Equal("/api/v1/ui/elements/el-1/properties/Text", req.Path);
         Assert.Contains("newvalue", req.Body);
+    }
+
+    [Fact]
+    public async Task UiSetProperty_Put_NativeElementRejection_SurfacesReasonAndFails()
+    {
+        // Reproduces the raw agent behavior: PUT /properties/{name} on a native element
+        // returns HTTP 400 with the detailed rejection, but the CLI previously collapsed
+        // it to a generic "Failed to set Opacity" message. It must now surface the
+        // server's error text and reason, and set a nonzero exit code.
+        await using var server = new MockAgentServer(rejectNativeProperty: true);
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync(
+            "devflow", "ui", "set-property", "native:registered:cb3c73a5cacf4474beabb80704798b43", "Opacity", "0.5", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        using var document = JsonDocument.Parse(result.StdErr);
+        var error = document.RootElement.GetProperty("error").GetString();
+        Assert.Contains("native-property-not-supported", error);
+        Assert.Contains(
+            "Generic property mutation is not supported for native elements",
+            error);
+    }
+
+    [Fact]
+    public async Task UiHitTest_InvariantDecimalCoordinates_AreAccepted()
+    {
+        // Under locales where ',' is the decimal separator, "1240.5" must still parse
+        // as the invariant value 1240.5 rather than failing argument parsing or being
+        // misinterpreted (e.g. as 12405 with ',' removed/ignored).
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "hit-test", "1240.5", "26.0", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/hit-test");
+        Assert.Contains("x=1240.5", req.QueryString);
+        Assert.Contains("y=26", req.QueryString);
+    }
+
+    [Fact]
+    public async Task UiHitTest_InvalidCoordinate_FailsWithNonzeroExit()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "hit-test", "not-a-number", "26.0", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/hit-test");
+    }
+
+    [Fact]
+    public async Task UiHitTest_UnderCommaDecimalCulture_SendsInvariantQueryString()
+    {
+        // Even when the host process' current culture uses ',' as the decimal separator,
+        // the outgoing request to the agent must still use invariant '.' formatting so the
+        // agent-side parser (which is not guaranteed to be culture-aware) receives a value
+        // it can parse, and so the round-trip of "1240.5" isn't corrupted into "1240,5".
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "hit-test", "1240.5", "26.0", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/hit-test");
+            Assert.Contains("x=1240.5", req.QueryString);
+            Assert.Contains("y=26", req.QueryString);
+            Assert.DoesNotContain(",", req.QueryString);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 
     // ========== logs ==========

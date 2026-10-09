@@ -4,6 +4,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 {
+	bool _updatingSelection;
+
 	public static IPropertyMapper<IPicker, PickerHandler> Mapper =
 		new PropertyMapper<IPicker, PickerHandler>(ViewMapper)
 		{
@@ -42,8 +44,11 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 
 	void OnSelectedChanged(GObject.Object sender, GObject.Object.NotifySignalArgs args)
 	{
-		if (args.Pspec.GetName() == "selected" && VirtualView != null)
-			VirtualView.SelectedIndex = (int)PlatformView.GetSelected();
+		if (_updatingSelection || args.Pspec.GetName() != "selected" || VirtualView == null)
+			return;
+
+		var selected = PlatformView.GetSelected();
+		VirtualView.SelectedIndex = selected == uint.MaxValue ? -1 : (int)selected;
 	}
 
 	public static void MapTitle(PickerHandler handler, IPicker picker)
@@ -53,17 +58,37 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 
 	public static void MapSelectedIndex(PickerHandler handler, IPicker picker)
 	{
-		handler.PlatformView?.SetSelected(
-			picker.SelectedIndex >= 0
-				? (uint)picker.SelectedIndex
-				: uint.MaxValue);
+		var wasUpdatingSelection = handler._updatingSelection;
+		handler._updatingSelection = true;
+		try
+		{
+			handler.PlatformView?.SetSelected(
+				picker.SelectedIndex >= 0
+					? (uint)picker.SelectedIndex
+					: uint.MaxValue);
+		}
+		finally
+		{
+			handler._updatingSelection = wasUpdatingSelection;
+		}
 	}
 
 	public static void MapItems(PickerHandler handler, IPicker picker)
 	{
 		var items = picker.Items?.ToArray() ?? Array.Empty<string>();
 		var stringList = Gtk.StringList.New(items);
-		handler.PlatformView?.SetModel(stringList);
+		var wasUpdatingSelection = handler._updatingSelection;
+		handler._updatingSelection = true;
+		try
+		{
+			// GTK selects the first item of a new model; MAUI remains the selection authority.
+			handler.PlatformView?.SetModel(stringList);
+			MapSelectedIndex(handler, picker);
+		}
+		finally
+		{
+			handler._updatingSelection = wasUpdatingSelection;
+		}
 	}
 
 	public static void MapFont(PickerHandler handler, IPicker picker)
@@ -72,13 +97,12 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 			return;
 
 		var css = handler.BuildFontCss(textStyle.Font);
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapCharacterSpacing(PickerHandler handler, IPicker picker)
 	{
-		handler.ApplyCss(handler.PlatformView, $"letter-spacing: {picker.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {picker.CharacterSpacing}px;");
 	}
 
 	public static void MapHorizontalTextAlignment(PickerHandler handler, IPicker picker)
@@ -90,13 +114,13 @@ public class PickerHandler : GtkViewHandler<IPicker, Gtk.DropDown>
 			TextAlignment.End => "right",
 			_ => "left"
 		};
-		handler.ApplyCss(handler.PlatformView, $"text-align: {align};");
+		handler.UpdateCss(handler.PlatformView, $"text-align: {align};");
 	}
 
 	public static void MapTextColor(PickerHandler handler, IPicker picker)
 	{
-		if (picker.TextColor != null)
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(picker.TextColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			picker.TextColor != null ? $"color: {ToGtkColor(picker.TextColor)};" : null);
 	}
 
 	public static void MapTitleColor(PickerHandler handler, IPicker picker)

@@ -9,6 +9,15 @@ using Microsoft.Maui;
 
 namespace Comet
 {
+	/// <summary>Horizontal list container flavor — the plain <c>LazyRow</c> or one of
+	/// the real Material 3 carousels the Jetcaster gold uses.</summary>
+	public enum ListCarousel
+	{
+		None,
+		MultiBrowse,
+		Uncontained,
+	}
+
 	public interface IListView : IView
 	{
 		int Sections();
@@ -21,6 +30,46 @@ namespace Comet
 		View FooterFor(int section);
 		bool ShouldDisposeViews { get; }
 		void OnSelected(int section, int index);
+
+		/// <summary>Node-backend scroll-state bridge (Compose <c>LazyColumn</c>). The backend node
+		/// writes <c>true</c> while the list is scrolled away from the bottom (more content below);
+		/// a view (e.g. a JumpToBottom button) reads it to show/hide reactively. No-op on the
+		/// classic MAUI handler path.</summary>
+		Comet.Reactive.Signal<bool> ScrolledAway { get; }
+
+		/// <summary>The backend node registers a delegate that animates the list to its end; calling
+		/// <see cref="ListView.ScrollToBottom"/> invokes it. Null until the node has rendered.</summary>
+		void RegisterScroller(System.Action scrollToBottom);
+
+		/// <summary>Open the list at its LAST row (chat-log semantics — Jetchat). Ordinary
+		/// lists (an inbox) leave this false and open at the top.</summary>
+		bool AnchorBottom { get; }
+
+		/// <summary>Horizontal (carousel) orientation — Compose <c>LazyRow</c>.</summary>
+		bool Horizontal { get; }
+
+		/// <summary>Adaptive grid mode: when &gt; 0 the vertical list renders as the REAL
+		/// Compose <c>LazyVerticalGrid(GridCells.Adaptive(minDp))</c> (Jetcaster Home's
+		/// Adaptive(362dp) content grid). 0 = plain <c>LazyColumn</c>.</summary>
+		double GridAdaptiveMinWidth { get; }
+
+		/// <summary>Which horizontal container renders the row items — the plain
+		/// <c>LazyRow</c> or one of the real M3 carousels (Jetcaster).</summary>
+		ListCarousel Carousel { get; }
+
+		/// <summary>Item width (Dp) for the carousel kinds: MultiBrowse's
+		/// <c>preferredItemWidth</c> / Uncontained's fixed <c>itemWidth</c>.</summary>
+		double CarouselItemWidth { get; }
+
+		/// <summary>Reactive "scrolled away from the TOP" flag (content exists above the
+		/// viewport — Compose <c>canScrollBackward</c>). Reply's ExtendedFAB collapse reads
+		/// this; <see cref="ScrolledAway"/> is the bottom-relative twin.</summary>
+		Comet.Reactive.Signal<bool> ScrolledFromTop { get; }
+
+		/// <summary>Reactive scroll DIRECTION flag: true while the most recent scroll moved
+		/// toward the start (Compose <c>LazyListState.lastScrolledBackward</c>). The gold
+		/// Reply ExtendedFAB re-expands on any upward scroll, not only at the very top.</summary>
+		Comet.Reactive.Signal<bool> LastScrolledBackward { get; }
 	}
 
 	public class ListView<T> : ListView
@@ -112,6 +161,37 @@ namespace Comet
 
 		public Func<int> Count { get; set; }
 
+		bool _reloading;
+
+		/// <summary>Re-pulls the items snapshot before signaling recomposition. A Func-backed
+		/// source that returns a NEW list per call (a filtered search) — or one reading state
+		/// via an untracked Peek — never re-fires the subscription, so the ctor-time snapshot
+		/// would stay stale forever and ReloadData would rebuild against it. The guard breaks
+		/// the notify cycle (re-evaluation with a fresh list instance fires
+		/// ViewPropertyChanged(Items), which calls ReloadData again).</summary>
+		public override void ReloadData()
+		{
+			if (_reloading)
+				return;
+			_reloading = true;
+			try
+			{
+				_items?.Reevaluate();
+				currentItems = _items?.CurrentValue;
+				// Invalidate the row-view cache: rows snapshot state at build time (an
+				// opened-row highlight), so a reload must rebuild them — serving cached
+				// views re-emits the stale snapshot. Same clear+dispose as Dispose().
+				var staleViews = CurrentViews?.ToList();
+				CurrentViews?.Clear();
+				staleViews?.ForEach(x => x.Value?.Dispose());
+				base.ReloadData();
+			}
+			finally
+			{
+				_reloading = false;
+			}
+		}
+
 		protected override int GetCount(int section) => currentItems?.Count ?? Count?.Invoke() ?? 0;
 
 		protected override object GetItemAt(int section, int index) => currentItems.SafeGetAtIndex(index, ItemFor);
@@ -150,7 +230,7 @@ namespace Comet
 		}
 	}
 
-	public class ListView : View, IEnumerable, IEnumerable<View>, IListView
+	public partial class ListView : View, IEnumerable, IEnumerable<View>, IListView
 	{
 		public static bool HandlerSupportsVirtualization { get; set; } = true;
 
@@ -161,6 +241,44 @@ namespace Comet
 		public View Footer { get; set; }
 
 		public Action<(object item,int section, int row)> ItemSelected { get; set; }
+
+		/// <summary>Reactive "scrolled away from the bottom" flag, driven by the node backend's
+		/// <c>LazyListState</c>. Bind a JumpToBottom affordance's visibility to this.</summary>
+		public Comet.Reactive.Signal<bool> ScrolledAway { get; } = new(false);
+
+		/// <summary>Open the list at its LAST row (a chat log's newest-at-bottom initial
+		/// position — Jetchat). Default false: ordinary lists (an inbox) open at the top.</summary>
+		public bool AnchorBottom { get; set; }
+
+		/// <summary>Lay the list HORIZONTALLY (a card carousel — Compose <c>LazyRow</c>).
+		/// Default false = vertical. Set before the node materializes.</summary>
+		public bool Horizontal { get; set; }
+
+		/// <summary>Adaptive-grid mode (Compose <c>LazyVerticalGrid(GridCells.Adaptive)</c>):
+		/// the minimum cell width in Dp, 0 = plain vertical list. Set before materialize.</summary>
+		public double GridAdaptiveMinWidth { get; set; }
+
+		/// <summary>Horizontal container flavor: LazyRow (default) or a real M3 carousel.</summary>
+		public ListCarousel Carousel { get; set; }
+
+		/// <summary>Carousel item width in Dp (MultiBrowse preferred / Uncontained fixed).</summary>
+		public double CarouselItemWidth { get; set; }
+
+		/// <summary>Reactive "scrolled away from the top" flag (top-relative twin of
+		/// <see cref="ScrolledAway"/>); drives Reply's ExtendedFAB collapse.</summary>
+		public Comet.Reactive.Signal<bool> ScrolledFromTop { get; } = new(false);
+
+		/// <summary>Reactive scroll direction: true while the most recent scroll moved toward
+		/// the start (<c>lastScrolledBackward</c>); the gold Reply FAB re-expands on it.</summary>
+		public Comet.Reactive.Signal<bool> LastScrolledBackward { get; } = new(false);
+
+		System.Action _scrollToBottom;
+
+		void IListView.RegisterScroller(System.Action scrollToBottom) => _scrollToBottom = scrollToBottom;
+
+		/// <summary>Animate the list to its end (newest message). No-op until the backend node has
+		/// rendered and registered its scroller.</summary>
+		public void ScrollToBottom() => _scrollToBottom?.Invoke();
 
 		protected virtual int GetSections() => 1;
 
@@ -184,6 +302,9 @@ namespace Comet
 		public virtual void ReloadData()
 		{
 			ViewHandler?.Invoke(nameof(ReloadData));
+			// Node backend (Compose/SwiftUI): re-emit the list version so the LazyColumn recomposes
+			// against the current rows (the classic handler path uses ViewHandler.Invoke above).
+			UpdateBackendNode();
 		}
 
 		protected virtual void OnSelected(int section, int index)

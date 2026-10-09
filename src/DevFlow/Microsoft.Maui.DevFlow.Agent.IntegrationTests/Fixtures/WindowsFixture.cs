@@ -13,10 +13,22 @@ public sealed class WindowsFixture : AppFixtureBase
 
     protected override async Task InitializePlatformAsync()
     {
+        if (TestFramework.IsNative)
+        {
+            throw new InvalidOperationException(
+                "There is no plain .NET (native) sample head for Windows. " +
+                "Run the native suite on android, ios, maccatalyst or macos, " +
+                "or unset DEVFLOW_TEST_FRAMEWORK to test the MAUI sample.");
+        }
+
         await WithBuildLockAsync(async () =>
         {
             var projectPath = GetSampleProjectPath();
-            await BuildSampleAsync(projectPath, "net10.0-windows10.0.19041.0");
+            var applicationId = $"com.microsoft.maui.devflow.integration{AgentPort}";
+            await BuildSampleAsync(
+                projectPath,
+                "net10.0-windows10.0.19041.0",
+                $"-p:ApplicationId={applicationId}");
 
             var exePath = FindExecutable();
             var psi = new ProcessStartInfo(exePath)

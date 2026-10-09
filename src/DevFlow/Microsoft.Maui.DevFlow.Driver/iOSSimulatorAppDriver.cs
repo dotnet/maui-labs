@@ -9,7 +9,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// Includes simctl-based permission management and accessibility-based alert detection
 /// using the apple CLI (appledev.tools) for HID tap and accessibility tree queries.
 /// </summary>
-public class iOSSimulatorAppDriver : AppDriverBase
+public class iOSSimulatorAppDriver : AppDriverBase, IAlertDriver
 {
     private static readonly string[] AcceptLabels =
     [

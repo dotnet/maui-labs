@@ -2,6 +2,9 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CoreGraphics;
+using CoreImage;
+using ImageIO;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -87,6 +90,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	{
 		var nativeMessages = ToNative(messages, options);
 		var nativeOptions = ToNative(options, cancellationToken);
+		cancellationToken.ThrowIfCancellationRequested();
 		var native = new ChatClientNative();
 		var handler = new NonStreamingResponseHandler();
 
@@ -138,11 +142,12 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	{
 		var nativeMessages = ToNative(messages, options);
 		var nativeOptions = ToNative(options, cancellationToken);
+		cancellationToken.ThrowIfCancellationRequested();
 		var native = new ChatClientNative();
 		StreamChunkerBase chunker = nativeOptions?.ResponseJsonSchema is not null
 			? new JsonStreamChunker()
 			: new PlainTextStreamChunker();
-		var handler = new StreamingResponseHandler(chunker);
+		var handler = new StreamingResponseHandler(chunker, DefaultModelId);
 
 		// Set up cancellation registration before invoking native to avoid race
 		CancellationTokenNative? nativeToken = null;
@@ -190,7 +195,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				{
 					try
 					{
-						handler.Complete();
+						handler.Complete(FromNativeUsage(finalResult?.Usage));
 					}
 					catch (Exception ex)
 					{
@@ -290,7 +295,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		if (response is null || response.Messages is null || response.Messages.Length == 0)
 		{
 			// Fallback: return empty response
-			return new ChatResponse([new ChatMessage(ChatRole.Assistant, "")]);
+			return new ChatResponse([new ChatMessage(ChatRole.Assistant, "")]) { ModelId = DefaultModelId };
 		}
 
 		// Convert all native messages to ChatMessage objects
@@ -298,9 +303,25 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			.Select(FromNative)
 			.ToList();
 
-		// Create ChatResponse with all messages
-		return new ChatResponse(messages);
+		// Create ChatResponse with all messages and native usage when available.
+		return new ChatResponse(messages)
+		{
+			ModelId = DefaultModelId,
+			Usage = FromNativeUsage(response.Usage)
+		};
 	}
+
+	private static UsageDetails? FromNativeUsage(UsageDetailsNative? usage) =>
+		usage is null
+			? null
+			: new UsageDetails
+			{
+				InputTokenCount = usage.InputTokenCount,
+				OutputTokenCount = usage.OutputTokenCount,
+				TotalTokenCount = usage.TotalTokenCount,
+				CachedInputTokenCount = usage.CachedInputTokenCount,
+				ReasoningTokenCount = usage.ReasoningTokenCount
+			};
 
 	private static ChatMessage FromNative(ChatMessageNative nativeMessage)
 	{
@@ -352,6 +373,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 					functionResult.CallId,
 					functionResult.Result),
 
+			ImageContentNative image =>
+				FromNative(image),
+
 			_ => throw new ArgumentException($"Unsupported content type: {content.GetType().Name}", nameof(content))
 		};
 
@@ -376,7 +400,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			throw new ArgumentOutOfRangeException(nameof(role), $"The role '{role}' is not supported by Apple Intelligence chat APIs.");
 	}
 
-	private ChatOptionsNative? ToNative(ChatOptions? options, CancellationToken cancellationToken)
+	internal ChatOptionsNative? ToNative(ChatOptions? options, CancellationToken cancellationToken)
 	{
 		if (options is null)
 		{
@@ -395,7 +419,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			Temperature = ToNative(options.Temperature),
 			MaxOutputTokens = ToNative(options.MaxOutputTokens),
 			ResponseJsonSchema = ToNative(options.ResponseFormat),
-			Tools = ToNative(options.Tools, cancellationToken, _functionInvocationServices)
+			Tools = options.ToolMode == ChatToolMode.None
+				? null
+				: ToNative(options.Tools, cancellationToken, _functionInvocationServices)
 		};
 	}
 
@@ -442,6 +468,10 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			TextContent textContent when textContent.Text is not null => [new TextContentNative(textContent.Text)],
 			TextContent => Array.Empty<AIContentNative>(),
 
+			// Image content (analyzed by the model on 27.0+; the native layer throws below that).
+			DataContent data when IsImage(data.MediaType) => [ToNative(data)],
+			UriContent uri when IsImage(uri.MediaType) => [ToNative(uri)],
+
 			// Function call/result content from prior tool-calling turns is converted to native types.
 			// The native Swift layer gracefully skips these when building the Transcript, since Apple's
 			// LanguageModelSession manages tool call state internally.
@@ -479,8 +509,128 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	private static NSNumber? ToNative(long? value) =>
 		value.HasValue ? NSNumber.FromInt64(value.Value) : null;
 
+	// internal for unit testing (InternalsVisibleTo).
+	internal static bool IsImage(string? mediaType) =>
+		mediaType is not null && mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+	internal static ImageContentNative ToNative(DataContent data)
+	{
+		if (ToNativeImage(data.RawRepresentation) is { } native)
+			return native;
+
+		// Byte fallback: the Swift shim decodes the bytes to a CGImage.
+		var bytes = data.Data.ToArray();
+		return new ImageContentNative(NSData.FromArray(bytes), data.MediaType ?? "image/png", default, null);
+	}
+
+	internal static ImageContentNative ToNative(UriContent uri)
+	{
+		if (ToNativeImage(uri.RawRepresentation) is { } native)
+			return native;
+
+		if (uri.Uri.IsFile)
+			return new ImageContentNative(NSUrl.FromFilename(uri.Uri.LocalPath), default, null);
+
+		throw new NotSupportedException(
+			"Apple Intelligence image prompts require in-memory DataContent or a file:// UriContent. " +
+			"Remote http(s) image URLs are not downloaded automatically.");
+	}
+
+	private static ImageContentNative? ToNativeImage(object? representation)
+	{
+		switch (representation)
+		{
+			case CGImage cg:
+				return new ImageContentNative(cg, default, null);
+#if IOS || MACCATALYST
+			case UIKit.UIImage ui when ui.CGImage is { } cg:
+				return new ImageContentNative(cg, ui.Orientation switch
+				{
+					UIKit.UIImageOrientation.Up => CGImagePropertyOrientation.Up,
+					UIKit.UIImageOrientation.UpMirrored => CGImagePropertyOrientation.UpMirrored,
+					UIKit.UIImageOrientation.Down => CGImagePropertyOrientation.Down,
+					UIKit.UIImageOrientation.DownMirrored => CGImagePropertyOrientation.DownMirrored,
+					UIKit.UIImageOrientation.LeftMirrored => CGImagePropertyOrientation.LeftMirrored,
+					UIKit.UIImageOrientation.Right => CGImagePropertyOrientation.Right,
+					UIKit.UIImageOrientation.RightMirrored => CGImagePropertyOrientation.RightMirrored,
+					UIKit.UIImageOrientation.Left => CGImagePropertyOrientation.Left,
+					_ => throw new ArgumentOutOfRangeException(nameof(representation), "Unsupported UIImage orientation.")
+				}, null);
+#elif MACOS
+			case AppKit.NSImage ns when ToCGImage(ns) is { } cg:
+				return new ImageContentNative(cg, default, null);
+#endif
+			default:
+				return null;
+		}
+	}
+
+	internal static AIContent FromNative(ImageContentNative image)
+	{
+		var orientation = image.Orientation;
+		if (orientation is { } value && (int)value is < 1 or > 8)
+			throw new InvalidDataException($"Unsupported EXIF orientation: {(int)value}.");
+
+		if (orientation is { } orientedValue && orientedValue != CGImagePropertyOrientation.Up)
+		{
+			using var decoded = image.CgImage is null ? DecodeImage(image) : null;
+			using var source = CIImage.FromCGImage(image.CgImage ?? decoded!);
+			using var oriented = source.CreateByApplyingOrientation(orientedValue);
+			using var context = new CIContext();
+			var rendered = context.CreateCGImage(oriented, oriented.Extent)
+				?? throw new InvalidDataException("Failed to render the oriented native image.");
+			return new DataContent(EncodePng(rendered), "image/png") { RawRepresentation = rendered };
+		}
+
+		var mediaType = image.MimeType ?? "image/png";
+
+		if (image.ImageUrl?.AbsoluteString is { } uri)
+			return new UriContent(uri, mediaType) { RawRepresentation = image.CgImage };
+
+		if (image.Data is { } data)
+			return new DataContent(data.ToArray(), mediaType) { RawRepresentation = image.CgImage };
+
+		if (image.CgImage is { } cg)
+			return new DataContent(EncodePng(cg), "image/png") { RawRepresentation = cg };
+
+		throw new InvalidDataException("The native image attachment has no image payload or file URL.");
+	}
+
+	private static CGImage DecodeImage(ImageContentNative image)
+	{
+		using var source = image.Data is { } data
+			? CGImageSource.FromData(data)
+			: image.ImageUrl is { IsFileUrl: true } url
+				? CGImageSource.FromUrl(url)
+				: throw new InvalidDataException("An oriented native image requires bytes or a local file URL.");
+		return source?.CreateImage(0, new CGImageOptions())
+			?? throw new InvalidDataException("Failed to decode the oriented native image.");
+	}
+
+	private static byte[] EncodePng(CGImage image)
+	{
+		using var data = new NSMutableData();
+		using var destination = CGImageDestination.Create(data, "public.png", 1)
+			?? throw new InvalidOperationException("Failed to create a PNG image destination.");
+		destination.AddImage(image);
+		if (!destination.Close())
+			throw new InvalidOperationException("Failed to encode the image to PNG.");
+		return data.ToArray();
+	}
+
+#if MACOS
+	private static CGImage? ToCGImage(AppKit.NSImage image)
+	{
+		var rect = new CGRect(0, 0, image.Size.Width, image.Size.Height);
+		return image.AsCGImage(ref rect, null, null);
+	}
+#endif
+
 	private sealed partial class AIFunctionToolAdapter(AIFunction function, ILogger logger, CancellationToken cancellationToken, IServiceProvider? services) : AIToolNative
 	{
+		// Swift invokes tools on native threads without the managed request context.
+		private readonly NativeCallbackContext _requestContext = new();
+
 		public override string Name => function.Name;
 
 		public override string Desc => function.Description;
@@ -491,6 +641,11 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 #pragma warning disable IL3050, IL2026 // DefaultJsonTypeInfoResolver is only used when reflection-based serialization is enabled
 		public override async void CallWithArguments(NSString arguments, AIToolCompletionHandler completionHandler)
+		{
+			await _requestContext.RunAsync(() => InvokeAsync(arguments, completionHandler));
+		}
+
+		private async Task InvokeAsync(NSString arguments, AIToolCompletionHandler completionHandler)
 		{
 			try
 			{

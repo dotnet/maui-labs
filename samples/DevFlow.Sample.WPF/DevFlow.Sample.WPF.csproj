@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <UseMaui>true</UseMaui>
+    <RootNamespace>DevFlow.Sample</RootNamespace>
+    <AssemblyName>DevFlow.Sample.WPF</AssemblyName>
+    <ApplicationId>com.microsoft.maui.devflow.sample.wpf</ApplicationId>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <EnableDefaultMauiItems>false</EnableDefaultMauiItems>
+    <StartupObject>DevFlow.Sample.WPF.Program</StartupObject>
+    <SkipValidateMauiImplicitPackageReferences>true</SkipValidateMauiImplicitPackageReferences>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\platforms\Windows.WPF\src\Windows.WPF\Windows.WPF.csproj" />
+    <ProjectReference Include="..\..\platforms\Windows.WPF\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\DevFlow.Sample\App.xaml.cs" Link="App.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\AppShell.xaml.cs" Link="AppShell.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\MainPage.xaml.cs" Link="MainPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\BlazorTodoPage.xaml.cs" Link="BlazorTodoPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\DialogTestPage.xaml.cs" Link="DialogTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\InteractionTestPage.xaml.cs" Link="InteractionTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\ModalTestPage.xaml.cs" Link="ModalTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\NetworkTestPage.xaml.cs" Link="NetworkTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\MultiBlazorPage.xaml.cs" Link="MultiBlazorPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\TodoService.cs" Link="TodoService.cs" />
+    <Compile Include="..\DevFlow.Sample\TodoItem.cs" Link="TodoItem.cs" />
+    <Compile Include="..\DevFlow.Sample\DebugFileLogger.cs" Link="DebugFileLogger.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <MauiXaml Include="..\DevFlow.Sample\App.xaml" Link="App.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\AppShell.xaml" Link="AppShell.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\MainPage.xaml" Link="MainPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\BlazorTodoPage.xaml" Link="BlazorTodoPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\DialogTestPage.xaml" Link="DialogTestPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\InteractionTestPage.xaml" Link="InteractionTestPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\ModalTestPage.xaml" Link="ModalTestPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\MultiBlazorPage.xaml" Link="MultiBlazorPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\NetworkTestPage.xaml" Link="NetworkTestPage.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <RazorComponent Include="..\DevFlow.Sample\Components\**\*.razor"
+                    Link="Components/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="..\DevFlow.Sample\Components\**\*.razor.css"
+             Link="Components/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="..\DevFlow.Sample\wwwroot\**"
+             Link="wwwroot/%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <MauiImage Include="..\DevFlow.Sample\Resources\Images\*"
+               Link="Resources/Images/%(Filename)%(Extension)" />
+    <MauiFont Include="..\DevFlow.Sample\Resources\Fonts\*"
+              Link="Resources/Fonts/%(Filename)%(Extension)" />
+    <MauiAsset Include="..\DevFlow.Sample\Resources\Raw\**"
+               Link="Resources/Raw/%(RecursiveDir)%(Filename)%(Extension)"
+               LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="Microsoft.Maui.DevFlowProject" Value="DevFlow.Sample.WPF" />
+    <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
+  </ItemGroup>
+
+  <Import Project="..\..\platforms\Windows.WPF\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets"
+          Condition="Exists('..\..\platforms\Windows.WPF\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets')" />
+
+</Project>

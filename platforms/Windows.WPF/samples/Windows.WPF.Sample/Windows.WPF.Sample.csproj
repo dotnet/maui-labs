@@ -64,4 +64,23 @@
     <AssemblyMetadata Include="Microsoft.Maui.DevFlowTfm" Value="$(TargetFramework)" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(WpfTestScenarios)' == 'true'">
+    <DefineConstants>$(DefineConstants);WPF_TEST_SCENARIOS;WPF_FONT_TEST_SCENARIO</DefineConstants>
+    <WpfTestTargetsPath Condition="'$(WpfTestTargetsPath)' == ''">$(MSBuildThisFileDirectory)..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets</WpfTestTargetsPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(WpfTestScenarios)' == 'true' and Exists('$(MSBuildThisFileDirectory)TestScenarios\PackagedAssetsScenario.cs')">
+    <DefineConstants>$(DefineConstants);WPF_ASSET_TEST_SCENARIO</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(WpfTestScenarios)' != 'true'">
+    <Compile Remove="TestScenarios\**\*.cs" />
+  </ItemGroup>
+
+  <!-- Project references do not import the backend's shipping NuGet build targets. -->
+  <Import Project="TestScenarios\PackagedAssets.props" Condition="'$(WpfTestScenarios)' == 'true'" />
+  <Import Project="$(WpfTestTargetsPath)" Condition="'$(WpfTestScenarios)' == 'true'" />
+  <Import Project="..\..\src\Windows.WPF\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
+          Condition="'$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
+
 </Project>

@@ -12,12 +12,14 @@ internal sealed class ProfileSessionContext
 		ProfileSessionRequest request,
 		string primaryOutputPath,
 		string profilePlatform,
-		ProfileTransportConfiguration transport)
+		ProfileTransportConfiguration transport,
+		ProfileBuildWorkspace buildWorkspace)
 	{
 		Request = request;
 		PrimaryOutputPath = primaryOutputPath;
 		ProfilePlatform = profilePlatform;
 		Transport = transport;
+		BuildWorkspace = buildWorkspace;
 		RequestedDiagnosticPort = request.DiagnosticPort;
 		DiagnosticPort = request.DiagnosticPort;
 		StartedAtUtc = DateTimeOffset.UtcNow;
@@ -33,6 +35,7 @@ internal sealed class ProfileSessionContext
 	internal string Configuration => Request.Configuration;
 	internal string? TraceProfile => Request.TraceProfile;
 	internal bool NoBuild => Request.NoBuild;
+	internal TimeSpan TraceStopTimeout => Request.TraceStopTimeout;
 	internal TimeSpan? EffectiveDuration => Request.Duration;
 	internal string? StoppingEventProvider => Request.StoppingEventProvider;
 	internal string? StoppingEventName => Request.StoppingEventName;
@@ -47,13 +50,16 @@ internal sealed class ProfileSessionContext
 	internal string PrimaryOutputPath { get; }
 	internal string ProfilePlatform { get; }
 	internal ProfileTransportConfiguration Transport { get; }
+	internal ProfileBuildWorkspace BuildWorkspace { get; }
 	internal string DsrouterKind => Transport.DsrouterKind;
 	internal string DiagnosticAddress => Transport.DiagnosticAddress;
+	internal bool RequiresExplicitDsrouter => Transport.RequiresExplicitDsrouter && !UseRuntimeOwnedTraceCollection;
 	internal int RequestedDiagnosticPort { get; }
 	internal int DiagnosticPort { get; set; }
 	internal DateTimeOffset StartedAtUtc { get; }
 	internal bool UseRuntimeOwnedTraceCollection { get; set; }
 	internal string? RuntimeOwnedTraceDevicePath { get; set; }
+	internal TaskCompletionSource<bool> TraceFinalizationStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 	internal bool StartTraceAfterLaunch =>
 		string.Equals(Transport.Platform, Platforms.Android, StringComparison.OrdinalIgnoreCase) ||
 		string.Equals(Transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase);
@@ -61,5 +67,7 @@ internal sealed class ProfileSessionContext
 	internal ReservedProfilePorts? ReservedPorts { get; set; }
 	internal ExitControlServer? ExitControlServer { get; set; }
 	internal ProfilingBuildInjection? BuildInjection { get; set; }
+	internal MonitoredProcess? DsrouterProcess { get; set; }
+	internal string? DsrouterIpcEndpoint { get; set; }
 	internal MonitoredProcess? TraceProcess { get; set; }
 }

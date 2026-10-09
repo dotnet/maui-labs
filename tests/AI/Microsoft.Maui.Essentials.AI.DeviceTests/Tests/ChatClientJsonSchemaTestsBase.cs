@@ -19,6 +19,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	public record Activity(string Name, string Description, string Time);
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithJsonSchemaFormat_ReturnsStructuredResponse()
 	{
 		var client = new T();
@@ -43,6 +44,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithJsonSchemaFormat_ReturnsValidJson()
 	{
 		var client = new T();
@@ -66,6 +68,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_WithJsonSchemaFormat_StreamsValidJson()
 	{
 		var client = new T();
@@ -154,6 +157,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithJsonSchemaFormatAndCustomOptions_Works()
 	{
 		var client = new T();
@@ -184,6 +188,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithComplexJsonSchema_ReturnsStructuredResponse()
 	{
 		var client = new T();
@@ -231,6 +236,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsyncT_ReturnsStructuredResponse()
 	{
 		var client = new T();
@@ -244,6 +250,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsyncT_WithSimpleType_ReturnsDeserializedResult()
 	{
 		var client = new T();
@@ -257,6 +264,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsyncT_WithComplexType_ReturnsStructuredResponse()
 	{
 		var client = new T();
@@ -274,6 +282,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsyncT_WithChatOptions_ReturnsStructuredResponse()
 	{
 		var client = new T();
@@ -291,6 +300,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsyncT_WithMessageList_ReturnsStructuredResponse()
 	{
 		var client = new T();
@@ -325,6 +335,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsyncT_WithCancellationToken_SupportsCancellation()
 	{
 		var client = new T();

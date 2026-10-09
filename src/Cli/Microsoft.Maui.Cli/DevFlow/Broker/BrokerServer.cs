@@ -2,8 +2,12 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Web;
+using Microsoft.Maui.Cli.DevFlow.Inspector;
 
 namespace Microsoft.Maui.Cli.DevFlow.Broker;
 
@@ -22,6 +26,10 @@ public class BrokerServer : IDisposable
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, AgentConnection> _agents = new();
+    private readonly ConcurrentDictionary<string, AgentLifetimeGate> _agentRouteGates = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _agentStateGates = new(StringComparer.Ordinal);
+    private readonly MutationLeaseRegistry _mutationLeases;
+    private readonly BrokerFlowCoordinator _flows;
     private readonly HashSet<int> _assignedPorts = new();
     private readonly object _portLock = new();
     private DateTime _lastActivity = DateTime.UtcNow;
@@ -38,6 +46,8 @@ public class BrokerServer : IDisposable
         _port = port;
         _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
         _log = log;
+        _flows = new BrokerFlowCoordinator();
+        _mutationLeases = new MutationLeaseRegistry();
     }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
@@ -45,6 +55,10 @@ public class BrokerServer : IDisposable
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _listener = new HttpListener();
         _listener.Prefixes.Add($"http://localhost:{_port}/");
+        // Also accept a literal 127.0.0.1 Host header: HTTP.sys routes by the request's Host,
+        // and a bare "localhost" prefix rejects "127.0.0.1" with 400 "Invalid Hostname". Some
+        // local clients connect with a 127.0.0.1 Host, so register the loopback IP too.
+        _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
 
         try
         {
@@ -52,10 +66,23 @@ public class BrokerServer : IDisposable
         }
         catch (HttpListenerException)
         {
-            // Fallback for platforms where localhost doesn't work
-            _listener = new HttpListener();
-            _listener.Prefixes.Add($"http://+:{_port}/");
-            _listener.Start();
+            // The 127.0.0.1 prefix can require a URL ACL reservation on some machines, whereas the
+            // "localhost" prefix is always permitted without elevation. Retry with localhost only
+            // before resorting to the strong wildcard (which itself needs elevation), so adding the
+            // loopback-IP prefix can never regress startup on a stock machine.
+            try
+            {
+                _listener = new HttpListener();
+                _listener.Prefixes.Add($"http://localhost:{_port}/");
+                _listener.Start();
+            }
+            catch (HttpListenerException)
+            {
+                // Last-resort fallback for platforms where the loopback prefixes don't bind.
+                _listener = new HttpListener();
+                _listener.Prefixes.Add($"http://+:{_port}/");
+                _listener.Start();
+            }
         }
 
         Log($"Broker started on port {_port} (PID {Environment.ProcessId})");
@@ -91,6 +118,28 @@ public class BrokerServer : IDisposable
             var path = context.Request.Url?.AbsolutePath ?? "/";
             var method = context.Request.HttpMethod;
 
+            // Defense-in-depth: the broker is designed to be reachable only on
+            // loopback, but HttpListener falls back to binding on all interfaces
+            // (http://+:port/) when localhost reservation fails — see line 56-60
+            // below. In that fallback, non-browser HTTP clients on the LAN (curl,
+            // scripts, attacker) can reach this port without sending an Origin
+            // header, so the Origin check alone (further down) doesn't help.
+            // Reject any caller whose RemoteEndPoint isn't a loopback address.
+            // Legitimate uses (CLI tool, inspector UI in a local browser, MAUI
+            // agent running on the same machine, Android emulator port-forwarded
+            // back to host loopback) all use 127.0.0.1 or ::1.
+            var remoteIp = context.Request.RemoteEndPoint?.Address;
+            if (remoteIp == null || !IPAddress.IsLoopback(remoteIp))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.ContentType = "text/plain";
+                var msg = Encoding.UTF8.GetBytes("Forbidden: loopback required");
+                context.Response.ContentLength64 = msg.Length;
+                await context.Response.OutputStream.WriteAsync(msg);
+                context.Response.Close();
+                return;
+            }
+
             // WebSocket upgrade for agents
             if (context.Request.IsWebSocketRequest && path == "/ws/agent")
             {
@@ -98,7 +147,40 @@ public class BrokerServer : IDisposable
                 return;
             }
 
+            // WebSocket upgrade for inspector event relay
+            if (context.Request.IsWebSocketRequest && path.StartsWith("/inspector", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleInspectorRoute(context, path);
+                return;
+            }
+
             // HTTP endpoints for CLI
+            // Block state-mutating endpoints from non-loopback origins BEFORE dispatching
+            // the handler — otherwise a cross-origin POST to /api/shutdown would still
+            // tear down the broker even though we return 403.
+            var origin = context.Request.Headers["Origin"];
+            if (method == "POST" && !LocalOriginValidator.IsAllowed(origin, _port))
+            {
+                context.Response.StatusCode = 403;
+                context.Response.ContentType = "application/json";
+                var forbidden = Encoding.UTF8.GetBytes(CliJson.SerializeUntyped(new JsonObject { ["error"] = "Forbidden origin" }, indented: false));
+                context.Response.ContentLength64 = forbidden.Length;
+                await context.Response.OutputStream.WriteAsync(forbidden);
+                context.Response.Close();
+                return;
+            }
+
+            if (path.StartsWith("/api/leases/", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleMutationLeaseRoute(context, method, path);
+                return;
+            }
+            if (path.StartsWith("/api/recordings/", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleRecordingRoute(context, method, path);
+                return;
+            }
+
             var (statusCode, body) = (method, path) switch
             {
                 ("GET", "/api/health") => (200, CliJson.SerializeUntyped(new JsonObject
@@ -108,15 +190,35 @@ public class BrokerServer : IDisposable
                 }, indented: false)),
                 ("GET", "/api/agents") => (200, HandleListAgents()),
                 ("POST", "/api/shutdown") => HandleShutdown(),
-                _ => (404, CliJson.SerializeUntyped(new JsonObject
-                {
-                    ["error"] = "Not found"
-                }, indented: false))
+                // Browsers auto-request /favicon.ico; answer 204 so the inspector page doesn't log a 404.
+                ("GET", "/favicon.ico") => (204, ""),
+                _ => (0, "") // handled below for inspector routes
             };
+
+            // Inspector routes — serve the web inspector for connected agents
+            if (statusCode == 0)
+            {
+                if (path.StartsWith("/inspector", StringComparison.OrdinalIgnoreCase))
+                {
+                    await HandleInspectorRoute(context, path);
+                    return;
+                }
+
+                statusCode = 404;
+                body = CliJson.SerializeUntyped(new JsonObject { ["error"] = "Not found" }, indented: false);
+            }
 
             context.Response.StatusCode = statusCode;
             context.Response.ContentType = "application/json";
-            context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+
+            // Mirror Origin only for loopback callers; the previous wildcard let any web
+            // page read /api/agents (leaking IDs) and POST /api/shutdown.
+            if (LocalOriginValidator.IsAllowed(origin, _port) && !string.IsNullOrEmpty(origin) && origin != "null")
+            {
+                context.Response.Headers.Add("Access-Control-Allow-Origin", origin);
+                context.Response.Headers.Add("Vary", "Origin");
+            }
+
             var responseBytes = Encoding.UTF8.GetBytes(body);
             context.Response.ContentLength64 = responseBytes.Length;
             await context.Response.OutputStream.WriteAsync(responseBytes);
@@ -131,6 +233,16 @@ public class BrokerServer : IDisposable
 
     private async Task HandleAgentWebSocket(HttpListenerContext context)
     {
+        // Reject cross-origin WebSocket connections; only the local agent process
+        // or CLI tools (no Origin header) may register.
+        var origin = context.Request.Headers["Origin"];
+        if (!LocalOriginValidator.IsAllowed(origin, _port))
+        {
+            context.Response.StatusCode = 403;
+            context.Response.Close();
+            return;
+        }
+
         WebSocketContext wsContext;
         try
         {
@@ -146,6 +258,7 @@ public class BrokerServer : IDisposable
 
         var ws = wsContext.WebSocket;
         var buffer = new byte[4096];
+        AgentConnection? publishedConnection = null;
 
         try
         {
@@ -161,7 +274,11 @@ public class BrokerServer : IDisposable
                 return;
             }
 
-            var id = AgentRegistration.ComputeId(registration.Project, registration.Tfm);
+            var id = AgentRegistration.ComputeId(
+                registration.Project,
+                registration.Tfm,
+                registration.SessionId,
+                registration.ProcessId);
 
             // If the agent already has an HTTP listener (late reconnection), use its current port
             int assignedPort;
@@ -193,23 +310,32 @@ public class BrokerServer : IDisposable
                 Tfm = registration.Tfm,
                 Platform = registration.Platform,
                 AppName = registration.AppName,
+                Framework = registration.Framework,
+                UiFramework = registration.UiFramework,
                 Port = assignedPort,
                 Version = registration.Version,
                 SessionId = registration.SessionId,
+                ProcessId = registration.ProcessId,
                 ConnectedAt = DateTime.UtcNow
             };
 
-            // Remove existing registration for same id (app restarted)
-            if (_agents.TryRemove(id, out var existing))
-            {
-                if (existing.Registration.Port != assignedPort)
-                    ReleasePort(existing.Registration.Port);
-                try { existing.WebSocket.Dispose(); } catch { }
-                Log($"Agent replaced: {agent.AppName}|{agent.Tfm} (was port {existing.Registration.Port})");
-            }
-
             var connection = new AgentConnection(agent, ws);
-            _agents[id] = connection;
+            // Replacing the registration is a lifetime change: wait for in-flight Inspector
+            // requests against the old connection before swapping it out.
+            await using (await AgentRouteGate(id).EnterExclusiveAsync(_cts?.Token ?? CancellationToken.None))
+            {
+                var replaced = ReplaceConnection(_agents, id, connection);
+                if (_inspectors.TryRemove(id, out var staleInspector))
+                    staleInspector.Dispose();
+                if (replaced is not null)
+                {
+                    if (replaced.Registration.Port != assignedPort)
+                        ReleasePort(replaced.Registration.Port);
+                    try { replaced.WebSocket.Dispose(); } catch { }
+                    Log($"Agent replaced: {agent.AppName}|{agent.Tfm} (was port {replaced.Registration.Port})");
+                }
+            }
+            publishedConnection = connection;
 
             Log($"Agent connected: {agent.AppName}|{agent.Tfm} → port {assignedPort} (id: {id})");
 
@@ -229,7 +355,29 @@ public class BrokerServer : IDisposable
         catch (OperationCanceledException) { }
         finally
         {
+            if (publishedConnection is not null)
+                await CleanupAgentConnectionAsync(publishedConnection);
             ws.Dispose();
+        }
+    }
+
+    internal static TConnection? ReplaceConnection<TConnection>(
+        ConcurrentDictionary<string, TConnection> connections,
+        string id,
+        TConnection connection)
+        where TConnection : class
+    {
+        while (true)
+        {
+            if (connections.TryGetValue(id, out var existing))
+            {
+                if (connections.TryUpdate(id, connection, existing))
+                    return existing;
+                continue;
+            }
+
+            if (connections.TryAdd(id, connection))
+                return null;
         }
     }
 
@@ -246,15 +394,41 @@ public class BrokerServer : IDisposable
             }
         }
         catch { }
-        finally
+    }
+
+    private async Task CleanupAgentConnectionAsync(AgentConnection connection)
+    {
+        // Use the KeyValuePair overload so a reconnecting agent that re-registered with the same ID
+        // cannot be evicted by stale cleanup from the superseded socket. Disposing the inspector is
+        // a lifetime change, so it waits for in-flight Inspector requests to finish first.
+        await using (await AgentRouteGate(connection.Registration.Id).EnterExclusiveAsync())
         {
-            if (_agents.TryRemove(connection.Registration.Id, out _))
+            if (_agents.TryRemove(new KeyValuePair<string, AgentConnection>(connection.Registration.Id, connection)))
             {
-                ReleasePort(connection.Registration.Port);
-                Log($"Agent disconnected: {connection.Registration.AppName}|{connection.Registration.Tfm}");
+                var stateGate = AgentStateGate(connection.Registration.Id);
+                await stateGate.WaitAsync();
+                try
+                {
+                    ReleasePort(connection.Registration.Port);
+                    _mutationLeases.Remove(connection.Registration.Id);
+                    _flows.RemoveAgent(connection.Registration.Id);
+                    if (_inspectors.TryRemove(connection.Registration.Id, out var inspector))
+                        inspector.Dispose();
+                    Log($"Agent disconnected: {connection.Registration.AppName}|{connection.Registration.Tfm}");
+                }
+                finally
+                {
+                    stateGate.Release();
+                }
             }
         }
     }
+
+    private AgentLifetimeGate AgentRouteGate(string agentId)
+        => _agentRouteGates.GetOrAdd(agentId, static _ => new AgentLifetimeGate());
+
+    private SemaphoreSlim AgentStateGate(string agentId)
+        => _agentStateGates.GetOrAdd(agentId, static _ => new SemaphoreSlim(1, 1));
 
     private string HandleListAgents()
     {
@@ -341,6 +515,17 @@ public class BrokerServer : IDisposable
             agent.WebSocket.Dispose();
         }
         _agents.Clear();
+        _mutationLeases.Clear();
+        _flows.Clear();
+
+        // Dispose inspector instances. Without this, a Shutdown() that doesn't
+        // go through Dispose() (e.g. /api/shutdown handler or idle timeout)
+        // leaks every InspectorServer's AgentClient (HttpClient) and CTS.
+        foreach (var insp in _inspectors.Values)
+        {
+            try { insp.Dispose(); } catch { }
+        }
+        _inspectors.Clear();
 
         // Delete state file
         DeleteBrokerState();
@@ -352,28 +537,288 @@ public class BrokerServer : IDisposable
 
     private void WriteBrokerState()
     {
+        var tmpPath = BrokerPaths.StateFile + ".tmp";
         try
         {
             var dir = BrokerPaths.ConfigDir;
             Directory.CreateDirectory(dir);
+            BrokerPaths.RestrictConfigDirectoryPermissions(dir);
 
             var state = new BrokerState
             {
                 Pid = Environment.ProcessId,
                 Port = _port,
-                StartedAt = DateTime.UtcNow
+                StartedAt = DateTime.UtcNow,
+                EmbedToken = _embedToken
             };
 
             var json = CliJson.SerializeUntyped(state, indented: true);
-            var tmpPath = BrokerPaths.StateFile + ".tmp";
             File.WriteAllText(tmpPath, json);
+            BrokerPaths.RestrictStateFilePermissions(tmpPath);
             File.Move(tmpPath, BrokerPaths.StateFile, overwrite: true);
         }
         catch (Exception ex)
         {
+            try { File.Delete(tmpPath); } catch { }
             Log($"Warning: failed to write broker state: {ex.Message}");
         }
     }
+
+    private async Task HandleMutationLeaseRoute(HttpListenerContext context, string method, string path)
+    {
+        if (!method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteJsonResponseAsync(context, 405, new JsonObject { ["error"] = "Method not allowed" });
+            return;
+        }
+
+        var segments = path.Trim('/').Split('/');
+        if (segments.Length != 3 ||
+            !segments[0].Equals("api", StringComparison.OrdinalIgnoreCase) ||
+            !segments[1].Equals("leases", StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteJsonResponseAsync(context, 404, new JsonObject { ["error"] = "Not found" });
+            return;
+        }
+
+        var agentId = Uri.UnescapeDataString(segments[2]);
+
+        if (context.Request.ContentLength64 > 64 * 1024)
+        {
+            await WriteJsonResponseAsync(context, 413, new JsonObject { ["error"] = "Request body too large" });
+            return;
+        }
+
+        JsonObject body;
+        try
+        {
+            var text = await ReadBoundedBodyAsync(
+                context.Request.InputStream,
+                context.Request.ContentEncoding ?? Encoding.UTF8,
+                64 * 1024);
+            body = string.IsNullOrWhiteSpace(text)
+                ? new JsonObject()
+                : JsonNode.Parse(text)?.AsObject() ?? new JsonObject();
+        }
+        catch (RequestBodyTooLargeException)
+        {
+            await WriteJsonResponseAsync(context, 413, new JsonObject { ["error"] = "Request body too large" });
+            return;
+        }
+        catch
+        {
+            await WriteJsonResponseAsync(context, 400, new JsonObject { ["error"] = "Invalid JSON body" });
+            return;
+        }
+
+        var action = body["action"]?.GetValue<string>()?.Trim().ToLowerInvariant() ?? "status";
+        var leaseId = body["leaseId"]?.GetValue<string>();
+        var holderKind = body["holderKind"]?.GetValue<string>();
+        var label = body["label"]?.GetValue<string>();
+        var force = body["force"]?.GetValue<bool>() ?? false;
+        var transactionId = body["transactionId"]?.GetValue<string>();
+
+        MutationLeaseSnapshot status;
+        var stateGate = AgentStateGate(agentId);
+        await stateGate.WaitAsync(_cts?.Token ?? CancellationToken.None);
+        try
+        {
+            if (!_agents.ContainsKey(agentId))
+            {
+                await WriteJsonResponseAsync(context, 404, new JsonObject { ["error"] = $"Agent '{agentId}' not found" });
+                return;
+            }
+            status = _mutationLeases.Control(agentId, action, leaseId, holderKind, label, force, transactionId);
+        }
+        catch (ArgumentException ex)
+        {
+            await WriteJsonResponseAsync(context, 400, new JsonObject { ["error"] = ex.Message });
+            return;
+        }
+        finally
+        {
+            stateGate.Release();
+        }
+
+        await WriteJsonResponseAsync(context, 200, new JsonObject
+        {
+            ["ok"] = true,
+            ["allowed"] = status.Allowed,
+            ["youHold"] = status.YouHold,
+            ["heldByOther"] = status.HeldByOther,
+            ["leaseId"] = status.LeaseId,
+            ["transactionId"] = status.TransactionId,
+            ["holderKind"] = status.HolderKind,
+            ["label"] = status.Label,
+            ["expiresInMs"] = status.ExpiresInMs,
+            ["authority"] = "broker"
+        });
+    }
+
+    private static async Task WriteJsonResponseAsync(HttpListenerContext context, int statusCode, JsonObject body)
+    {
+        var bytes = Encoding.UTF8.GetBytes(CliJson.SerializeUntyped(body, indented: false));
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/json";
+        context.Response.ContentLength64 = bytes.Length;
+        await context.Response.OutputStream.WriteAsync(bytes);
+        context.Response.Close();
+    }
+
+    private async Task HandleRecordingRoute(HttpListenerContext context, string method, string path)
+    {
+        if (!method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteJsonResponseAsync(context, 405, new JsonObject { ["error"] = "Method not allowed" });
+            return;
+        }
+
+        var segments = path.Trim('/').Split('/');
+        if (segments.Length != 3 ||
+            !segments[0].Equals("api", StringComparison.OrdinalIgnoreCase) ||
+            !segments[1].Equals("recordings", StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteJsonResponseAsync(context, 404, new JsonObject { ["error"] = "Not found" });
+            return;
+        }
+
+        var agentId = Uri.UnescapeDataString(segments[2]);
+        if (context.Request.ContentLength64 > 128 * 1024)
+        {
+            await WriteJsonResponseAsync(context, 413, new JsonObject { ["error"] = "Request body too large" });
+            return;
+        }
+
+        JsonObject body;
+        try
+        {
+            var text = await ReadBoundedBodyAsync(
+                context.Request.InputStream,
+                context.Request.ContentEncoding ?? Encoding.UTF8,
+                128 * 1024);
+            body = string.IsNullOrWhiteSpace(text)
+                ? new JsonObject()
+                : JsonNode.Parse(text)?.AsObject() ?? new JsonObject();
+        }
+        catch (RequestBodyTooLargeException)
+        {
+            await WriteJsonResponseAsync(context, 413, new JsonObject { ["error"] = "Request body too large" });
+            return;
+        }
+        catch
+        {
+            await WriteJsonResponseAsync(context, 400, new JsonObject { ["error"] = "Invalid JSON body" });
+            return;
+        }
+
+        var action = body["action"]?.GetValue<string>()?.Trim().ToLowerInvariant() ?? "status";
+        var leaseId = body["leaseId"]?.GetValue<string>();
+        var recordingId = body["recordingId"]?.GetValue<string>();
+        if (!action.Equals("status", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(leaseId))
+        {
+            await WriteJsonResponseAsync(context, 400, new JsonObject { ["error"] = "leaseId is required" });
+            return;
+        }
+        if (!action.Equals("status", StringComparison.Ordinal))
+        {
+            var lease = _mutationLeases.Control(agentId, "validate", leaseId, null, null, force: false);
+            if (!lease.Allowed)
+            {
+                await WriteJsonResponseAsync(context, 409, new JsonObject
+                {
+                    ["ok"] = false,
+                    ["reason"] = "lease",
+                    ["error"] = "Another session is driving this app.",
+                    ["holderKind"] = lease.HolderKind,
+                    ["label"] = lease.Label
+                });
+                return;
+            }
+        }
+
+        BrokerFlowResult result;
+        var stateGate = AgentStateGate(agentId);
+        await stateGate.WaitAsync(_cts?.Token ?? CancellationToken.None);
+        try
+        {
+            if (!_agents.TryGetValue(agentId, out var connection))
+            {
+                await WriteJsonResponseAsync(context, 404, new JsonObject { ["error"] = $"Agent '{agentId}' not found" });
+                return;
+            }
+
+            switch (action)
+            {
+                case "start":
+                    result = _flows.Start(
+                        agentId,
+                        body["name"]?.GetValue<string>() ?? "scenario",
+                        body["app"]?.GetValue<string>() ?? connection.Registration.AppName,
+                        body["platform"]?.GetValue<string>() ?? connection.Registration.Platform,
+                        body["preconditions"]?.GetValue<string>());
+                    break;
+                case "status":
+                    result = _flows.Status(agentId);
+                    break;
+                case "observe":
+                    var observationNode = body["observation"];
+                    var observation = observationNode?.Deserialize<FlowObservation>(
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    result = observation is null
+                        ? BrokerFlowResult.Failure("observation is required")
+                        : _flows.Observe(agentId, observation, recordingId);
+                    break;
+                case "stop":
+                    result = _flows.Stop(agentId, recordingId);
+                    break;
+                case "cancel":
+                    result = _flows.Cancel(agentId, recordingId);
+                    break;
+                case "cancel-if-empty":
+                    result = _flows.CancelIfEmpty(agentId, recordingId);
+                    break;
+                default:
+                    result = BrokerFlowResult.Failure($"Unknown recording action '{action}'.");
+                    break;
+            }
+        }
+        finally
+        {
+            stateGate.Release();
+        }
+
+        var resultNode = JsonSerializer.SerializeToNode(result, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        })?.AsObject() ?? new JsonObject();
+        await WriteJsonResponseAsync(context, result.Ok ? 200 : 400, resultNode);
+    }
+
+    internal static async Task<string> ReadBoundedBodyAsync(
+        Stream stream,
+        Encoding encoding,
+        int maxChars,
+        CancellationToken cancellationToken = default)
+    {
+        using var reader = new StreamReader(
+            stream,
+            encoding,
+            detectEncodingFromByteOrderMarks: false,
+            bufferSize: 4096,
+            leaveOpen: true);
+        var buffer = new char[Math.Min(4096, maxChars + 1)];
+        var builder = new StringBuilder(Math.Min(maxChars, 4096));
+        while (true)
+        {
+            var read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken);
+            if (read == 0) return builder.ToString();
+            if (builder.Length + read > maxChars) throw new RequestBodyTooLargeException();
+            builder.Append(buffer, 0, read);
+        }
+    }
+
+    private sealed class RequestBodyTooLargeException : Exception;
 
     private static void DeleteBrokerState()
     {
@@ -406,7 +851,225 @@ public class BrokerServer : IDisposable
         _cts?.Cancel();
         _idleTimer?.Dispose();
         try { _listener?.Close(); } catch { }
+        foreach (var inspector in _inspectors.Values)
+        {
+            try { inspector.Dispose(); } catch { }
+        }
+        _inspectors.Clear();
+        _mutationLeases.Clear();
+        _flows.Clear();
         _cts?.Dispose();
     }
     private record AgentConnection(AgentRegistration Registration, WebSocket WebSocket);
+
+    // ── Inspector integration ──
+
+    private readonly ConcurrentDictionary<string, InspectorServer> _inspectors = new();
+
+    // Unguessable per-broker token that lets local host shells (canvas, VS Code) embed the inspector
+    // in an iframe. Written to broker.json (local-only) and honored by the inspector via ?embed=.
+    private readonly string _embedToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+
+    private async Task HandleInspectorRoute(HttpListenerContext context, string path)
+    {
+        // Routes:
+        //   /inspector          → list agents with inspector links
+        //   /inspector/{id}     → 301 redirect to /inspector/{id}/ so that
+        //                         relative asset URLs in inspector.html
+        //                         (devflow.css, devflow.js) resolve against
+        //                         the per-agent base rather than the broker root.
+        //   /inspector/{id}/    → serve inspector HTML for that agent
+        //   /inspector/{id}/... → proxy sub-routes to the per-agent InspectorServer
+
+        var segments = path.TrimStart('/').Split('/', 3);
+
+        if (segments.Length == 1 || (segments.Length == 2 && string.IsNullOrEmpty(segments[1])))
+        {
+            // List agents with inspector links
+            await ServeAgentListPage(context);
+            return;
+        }
+
+        // /inspector/{id} (no trailing slash, no sub-path) → redirect to
+        // /inspector/{id}/ so that <link href="devflow.css"> on the inspector
+        // page resolves to /inspector/{id}/devflow.css instead of
+        // /inspector/devflow.css (which the broker would otherwise try to
+        // route as agent id "devflow.css"). Without the trailing slash, the
+        // browser treats {id} as a filename and resolves relatives against
+        // /inspector/ instead of /inspector/{id}/.
+        if (segments.Length == 2 && !string.IsNullOrEmpty(segments[1]) && !path.EndsWith('/'))
+        {
+            // Preserve the query string on the redirect and URL-encode the
+            // agent id so the Location header is a valid URI-reference even
+            // when the agent id contains characters that need percent-encoding
+            // (spaces, unicode, etc.).
+            var query = context.Request.Url?.Query ?? string.Empty;
+            context.Response.StatusCode = 301;
+            context.Response.RedirectLocation = $"/inspector/{Uri.EscapeDataString(segments[1])}/{query}";
+            context.Response.Close();
+            return;
+        }
+
+        var agentId = segments[1];
+
+        var subPath = segments.Length > 2 ? "/" + segments[2] : "/";
+
+        // Inspector URLs are agent-scoped. Only the explicit "default" convenience route may use
+        // the sole connected agent; a stale or mistyped real ID must never drive another app.
+        var connection = ResolveInspectorAgent(_agents, agentId);
+
+        if (connection == null)
+        {
+            context.Response.StatusCode = 404;
+            context.Response.ContentType = "text/plain";
+            var msg = Encoding.UTF8.GetBytes($"Agent '{agentId}' not found. Connected agents: {_agents.Count}");
+            await context.Response.OutputStream.WriteAsync(msg);
+            context.Response.Close();
+            return;
+        }
+
+        // Ordinary HTTP requests hold the SHARED side of the lifetime gate for the whole call, so
+        // a same-ID reconnect or a disconnect cannot replace the agent after validation but before
+        // a mutation reaches it. Shared admits concurrent requests, so a long call — a flow replay
+        // runs inline for up to two minutes — no longer serializes reads, screenshots and
+        // heartbeats behind it, and a concurrent mutation still reaches InspectorServer.RouteAsync
+        // where the replay-in-progress 409 lives. Event sockets are long-lived and read-only;
+        // replacement disposes their InspectorServer instead.
+        await using IAsyncDisposable? lifetime = context.Request.IsWebSocketRequest
+            ? null
+            : await AgentRouteGate(connection.Registration.Id)
+                .EnterSharedAsync(_cts?.Token ?? CancellationToken.None);
+
+        // Get or create inspector server for this agent.
+        // Three lifecycle hazards we have to defend against:
+        //   1. Race with disconnect — the agent may disconnect between our
+        //      TryGetValue above and creating the inspector. MonitorAgentConnection
+        //      runs its own _inspectors.TryRemove() but only sees inspectors that
+        //      already exist; one created after its cleanup would be orphaned.
+        //   2. Stale port on reconnect — if the agent restarts on a different port,
+        //      the cached inspector still holds an AgentClient pointing at the old
+        //      (dead) port. Replace it.
+        //   3. GetOrAdd factory race — the ConcurrentDictionary factory overload
+        //      may invoke the factory concurrently and silently discard the loser,
+        //      leaking its AgentClient (HttpClient) and CTS. Construct first, then
+        //      GetOrAdd(value), and dispose the loser.
+        var agentPort = connection.Registration.Port;
+        if (_inspectors.TryGetValue(connection.Registration.Id, out var inspector))
+        {
+            // Stale-port detection: the agent reconnected on a different port.
+            if (inspector.AgentPort != agentPort)
+            {
+                if (_inspectors.TryRemove(new KeyValuePair<string, InspectorServer>(connection.Registration.Id, inspector)))
+                {
+                    try { inspector.Dispose(); } catch { }
+                }
+                inspector = null;
+            }
+        }
+
+        if (inspector == null)
+        {
+            var registration = connection.Registration;
+            var created = new InspectorServer(
+                0,
+                "localhost",
+                agentPort,
+                _embedToken,
+                registration.Id,
+                registration.AppName,
+                registration.Platform,
+                registration.Project,
+                registration.SessionId);
+            inspector = _inspectors.GetOrAdd(connection.Registration.Id, created);
+            if (!ReferenceEquals(inspector, created))
+            {
+                created.Dispose();
+            }
+            else
+            {
+                Log($"Inspector created for agent: {connection.Registration.AppName} (port {agentPort})");
+            }
+
+            // Disconnect-race fix: MonitorAgentConnection may have already removed
+            // this agent ID from _agents (and tried to remove the not-yet-existing
+            // inspector). If so, our newly-stored inspector would leak — clean up
+            // and return 503 instead of routing into a dead AgentClient.
+            if (!_agents.TryGetValue(connection.Registration.Id, out var currentConnection) ||
+                !ReferenceEquals(currentConnection, connection))
+            {
+                if (_inspectors.TryRemove(new KeyValuePair<string, InspectorServer>(connection.Registration.Id, inspector)))
+                {
+                    try { inspector.Dispose(); } catch { }
+                }
+                context.Response.StatusCode = 503;
+                context.Response.ContentType = "text/plain";
+                var msg = Encoding.UTF8.GetBytes("Agent disconnected");
+                await context.Response.OutputStream.WriteAsync(msg);
+                context.Response.Close();
+                return;
+            }
+        }
+
+        if (!_agents.TryGetValue(connection.Registration.Id, out var routeConnection) ||
+            !ReferenceEquals(routeConnection, connection))
+        {
+            context.Response.StatusCode = 503;
+            context.Response.ContentType = "text/plain";
+            var msg = Encoding.UTF8.GetBytes("Agent reconnected; reload Inspector state");
+            await context.Response.OutputStream.WriteAsync(msg);
+            context.Response.Close();
+            return;
+        }
+
+        // Proxy the request through the inspector's route handler
+        await inspector.HandleBrokerRequestAsync(context, subPath);
+    }
+
+    internal static TConnection? ResolveInspectorAgent<TConnection>(
+        IReadOnlyDictionary<string, TConnection> agents,
+        string agentId)
+        where TConnection : class
+    {
+        if (agents.TryGetValue(agentId, out var connection))
+            return connection;
+        if (!string.Equals(agentId, "default", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var candidates = agents.Values.Take(2).ToArray();
+        return candidates.Length == 1 ? candidates[0] : null;
+    }
+
+    private async Task ServeAgentListPage(HttpListenerContext context)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'><title>DevFlow Inspector</title>");
+        sb.AppendLine("<style>body{font-family:system-ui;background:#1e1e1e;color:#fff;padding:20px}");
+        sb.AppendLine("a{color:#4ec9b0;text-decoration:none}a:hover{text-decoration:underline}");
+        sb.AppendLine(".agent{padding:12px;margin:8px 0;background:#2d2d2d;border-radius:6px}</style></head><body>");
+        sb.AppendLine("<h1>DevFlow Inspector</h1>");
+
+        if (_agents.IsEmpty)
+        {
+            sb.AppendLine("<p>No agents connected. Start a MAUI app with DevFlow enabled.</p>");
+        }
+        else
+        {
+            foreach (var agent in _agents.Values)
+            {
+                var reg = agent.Registration;
+                sb.AppendLine($"<div class='agent'>");
+                sb.AppendLine($"<a href='/inspector/{HttpUtility.UrlEncode(reg.Id)}/'><strong>{HttpUtility.HtmlEncode(reg.AppName)}</strong></a>");
+                sb.AppendLine($" — {HttpUtility.HtmlEncode(reg.Platform)} ({HttpUtility.HtmlEncode(reg.Tfm)}) on port {reg.Port}");
+                sb.AppendLine($"</div>");
+            }
+        }
+
+        sb.AppendLine("</body></html>");
+        context.Response.StatusCode = 200;
+        context.Response.ContentType = "text/html; charset=utf-8";
+        var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+        context.Response.ContentLength64 = bytes.Length;
+        await context.Response.OutputStream.WriteAsync(bytes);
+        context.Response.Close();
+    }
 }
