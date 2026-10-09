@@ -96,6 +96,7 @@ public sealed class DevFlowRecordingCommandTests : IDisposable
     private void SaveState(string platform, string? serial, string output) =>
         File.WriteAllText(StatePath, JsonSerializer.Serialize(new RecordingState
         {
+            RecordingPid = Environment.ProcessId,
             Platform = platform, Serial = serial, OutputFile = output,
         }));
 
