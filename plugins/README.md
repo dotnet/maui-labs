@@ -13,6 +13,25 @@ DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devf
 
 ## Installation
 
+For one skill, use a `maui` CLI build that exposes `maui ai add skill`:
+
+```bash
+maui ai list skill --env CopilotCli --json
+maui ai add skill maui-xcode27-migration --env CopilotCli --yes
+```
+
+Run these from the app project. Use `--env Claude` or `--env VsCode` for those
+clients. Restart/reload the agent session if needed, then ask it to
+"Prepare this .NET MAUI app for Xcode 27." The CLI installs instructions; the
+agent performs the migration. Review the resulting diff and validate lifecycle
+behavior with the matching released Apple toolchain.
+
+The skill must exist in the selected public catalog revision before these
+commands can discover it. Older published CLI versions may not expose the
+`ai` commands; verify `maui ai --help` and the skill listing first.
+
+Alternatively, install the complete plugin in an agent that supports marketplaces:
+
 ```bash
 # Add this repo as a marketplace
 /plugin marketplace add dotnet/maui-labs
@@ -50,6 +69,7 @@ DevFlow runtime skills (`maui-devflow-onboard`, `maui-devflow-debug`, `maui-devf
 | Advanced and migration | [maui-labs-platform-targeting](dotnet-maui/skills/maui-labs-platform-targeting/) | Target MAUI Labs GTK4, AppKit, and WPF platforms with project setup and conditional guidance. |
 | Advanced and migration | [maui-platform-invoke](dotnet-maui/skills/maui-platform-invoke/) | Wrap native platform APIs behind DI services, permissions, platform metadata, partial platform files, and lifecycle hooks. |
 | Advanced and migration | [maui-release-notes](dotnet-maui/skills/maui-release-notes/) | Convert official .NET/MAUI release notes into app upgrade notes, CI changes, requirements, and validation plans. |
+| Advanced and migration | [maui-xcode27-migration](dotnet-maui/skills/maui-xcode27-migration/) | Migrate existing iOS/Catalyst apps to Xcode 27.0 scene lifecycle compatibility, preserving custom callbacks and OS-support decisions. |
 | Advanced and migration | [xamarin-forms-migration](dotnet-maui/skills/xamarin-forms-migration/) | Audit Xamarin.Forms apps, replace namespaces/APIs, migrate DependencyService and MessagingCenter usage, and plan parity work. |
 
 ## dotnet-maui-tooling skills
