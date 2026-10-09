@@ -246,9 +246,23 @@ extends:
                 # step invokes .dotnet/dotnet directly.
                 DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - script: |
-                xcodebuild -version
-                xcodebuild -version | grep -q '^Xcode 27'
-              displayName: Verify Xcode 27
+                set -euo pipefail
+                for developer_dir in /Applications/Xcode*.app/Contents/Developer; do
+                  [[ -d "$developer_dir" ]] || continue
+                  echo "Checking $developer_dir"
+                  if version=$(DEVELOPER_DIR="$developer_dir" xcodebuild -version); then
+                    printf '%s\n' "$version"
+                    if [[ "$version" =~ ^Xcode\ 27([.[:space:]]|$) ]]; then
+                      echo "##vso[task.setvariable variable=DEVELOPER_DIR]$developer_dir"
+                      exit 0
+                    fi
+                  else
+                    echo "##vso[task.logissue type=warning]Could not query Xcode at $developer_dir; continuing."
+                  fi
+                done
+                echo "##vso[task.logissue type=error]No usable Xcode 27 installation was found under /Applications/Xcode*.app."
+                exit 1
+              displayName: Select and verify Xcode 27
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
             - script: |
