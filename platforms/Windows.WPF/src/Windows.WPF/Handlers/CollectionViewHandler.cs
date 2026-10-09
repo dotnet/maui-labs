@@ -447,6 +447,10 @@ namespace Microsoft.Maui.Handlers.WPF
 		static void MapSelectedItem(CollectionViewHandler handler, Microsoft.Maui.Controls.CollectionView view)
 		{
 			if (handler._listBox == null) return;
+			// Native selection already identifies the occurrence; mapping its data back
+			// to the first matching wrapper would move selection between duplicate items.
+			if (ReferenceEquals(GetMauiItem(handler._listBox.SelectedItem), view.SelectedItem))
+				return;
 			var selectedItem = GetPlatformItem(handler._listBox, view.SelectedItem);
 			if (handler._listBox.SelectedItem != selectedItem)
 				handler._listBox.SelectedItem = selectedItem;
