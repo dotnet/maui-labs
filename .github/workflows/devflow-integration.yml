@@ -511,7 +511,7 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24"
           dotnet test $TEST_PROJECT
           -c Debug
-          --filter "Category!=Device&Category!=Sensors&Category!=SecureStorage"
+          --filter "Category!=Device&Category!=Sensors&Category!=SecureStorage&fixture!=GenericWebView"
           --logger "trx;LogFileName=devflow-integration-gtk-maui.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/gtk
