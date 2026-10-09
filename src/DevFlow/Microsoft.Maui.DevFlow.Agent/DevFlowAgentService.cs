@@ -71,6 +71,39 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         }
     }
 
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+#if IOS || MACCATALYST || MACOS || ANDROID
+        return NativePreferenceKeys.Enumerate(sharedName);
+#elif WINDOWS
+        if (Microsoft.Maui.ApplicationModel.AppInfo.PackagingModel ==
+            Microsoft.Maui.ApplicationModel.AppPackagingModel.Unpackaged)
+            return EnumerateUnpackagedWindowsPreferenceKeys(sharedName);
+
+        var localSettings = global::Windows.Storage.ApplicationData.Current.LocalSettings;
+        global::Windows.Storage.ApplicationDataContainer? container;
+        if (string.IsNullOrWhiteSpace(sharedName))
+            container = localSettings;
+        else
+            container = localSettings.Containers.ContainsKey(sharedName)
+                ? localSettings.Containers[sharedName]
+                : null;
+
+        return container is null ? Array.Empty<string>() : new List<string>(container.Values.Keys);
+#else
+        return base.EnumerateNativePreferenceKeys(sharedName);
+#endif
+    }
+
+#if WINDOWS
+    private static IReadOnlyCollection<string>? EnumerateUnpackagedWindowsPreferenceKeys(string? sharedName)
+    {
+        var path = global::System.IO.Path.Combine(
+            Microsoft.Maui.Storage.FileSystem.AppDataDirectory, "..", "Settings", "preferences.dat");
+        return ReadPreferenceFileKeys(path, sharedName, nestedStore: true);
+    }
+#endif
+
     protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
     {
         try

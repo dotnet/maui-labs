@@ -31,6 +31,27 @@ public class GtkAgentService : MauiDevFlowAgentService
     protected override string IdiomName => "Desktop";
     protected override bool SupportsNativeElementScreenshots => true;
 
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+        // Guard against path traversal: sharedName becomes part of a file name.
+        if (!string.IsNullOrEmpty(sharedName) &&
+            (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+            throw new ArgumentException("sharedName must not contain path separators or '..'.", nameof(sharedName));
+
+        // Mirror LinuxPreferences' on-disk layout:
+        // $XDG_CONFIG_HOME (or ~/.config) / {FriendlyName} / preferences[.{shared}].json
+        var configDir = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        if (string.IsNullOrEmpty(configDir))
+            configDir = global::System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+
+        var appDir = global::System.IO.Path.Combine(configDir, AppDomain.CurrentDomain.FriendlyName);
+        var fileName = string.IsNullOrEmpty(sharedName)
+            ? "preferences.json"
+            : $"preferences.{sharedName}.json";
+        return ReadPreferenceFileKeys(global::System.IO.Path.Combine(appDir, fileName));
+    }
+
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
         try

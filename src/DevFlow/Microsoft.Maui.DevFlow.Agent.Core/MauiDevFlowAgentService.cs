@@ -5153,8 +5153,18 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     // Implementations live in the shared EssentialsAgentSupport so the optional
     // add-on for plain .NET apps can reuse them verbatim.
 
+    /// <summary>
+    /// Returns keys in the native preference store, or null when enumeration is unavailable.
+    /// A successful native result is authoritative; otherwise listing falls back to tracked keys.
+    /// </summary>
+    protected virtual IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName) => null;
+
+    protected static IReadOnlyCollection<string> ReadPreferenceFileKeys(
+        string path, string? sharedName = null, bool nestedStore = false)
+        => EssentialsAgentSupport.ReadPreferenceFileKeys(path, sharedName, nestedStore);
+
     protected override Task<HttpResponse> HandlePreferencesList(HttpRequest request)
-        => _essentials.HandlePreferencesList(request);
+        => _essentials.HandlePreferencesList(request, EnumerateNativePreferenceKeys);
 
     protected override Task<HttpResponse> HandlePreferencesGet(HttpRequest request)
         => _essentials.HandlePreferencesGet(request);

@@ -69,19 +69,69 @@ internal sealed class EssentialsAgentSupport
             SaveKnownPreferenceKeys(keys, sharedName);
     }
 
-    public Task<HttpResponse> HandlePreferencesList(HttpRequest request)
+    public static IReadOnlyCollection<string> ReadPreferenceFileKeys(
+        string path, string? sharedName = null, bool nestedStore = false)
+    {
+        if (!File.Exists(path))
+            return Array.Empty<string>();
+
+        // A concurrent save can truncate the file before writing JSON. Treat
+        // blank or malformed content as a failed read, not a complete empty store.
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var store = document.RootElement;
+        if (store.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("The preference store must be a JSON object.");
+
+        if (nestedStore)
+        {
+            if (!store.TryGetProperty(sharedName ?? string.Empty, out var bucket))
+                return Array.Empty<string>();
+            if (bucket.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("The preference store bucket must be a JSON object.");
+            store = bucket;
+        }
+
+        return store.EnumerateObject().Select(property => property.Name).ToArray();
+    }
+
+    public Task<HttpResponse> HandlePreferencesList(
+        HttpRequest request,
+        Func<string?, IReadOnlyCollection<string>?>? enumerateNativeKeys = null)
     {
         try
         {
             request.QueryParams.TryGetValue("sharedName", out var sharedName);
-            var keys = GetKnownPreferenceKeys(sharedName);
+            var registryKeys = GetKnownPreferenceKeys(sharedName);
+            IReadOnlyCollection<string>? nativeKeys;
+            string? enumerationError = null;
+            try
+            {
+                nativeKeys = enumerateNativeKeys?.Invoke(sharedName);
+                if (nativeKeys is null)
+                    enumerationError = "Native preference enumeration is not available.";
+            }
+            catch (Exception ex)
+            {
+                nativeKeys = null;
+                enumerationError = $"Native preference enumeration failed: {ex.Message}";
+            }
+
+            var keys = PreferenceKeyMerger.Merge(
+                registryKeys, nativeKeys, excludeKeys: new[] { PreferencesKeyRegistryKey });
             var entries = new List<object>();
-            foreach (var key in keys.OrderBy(k => k))
+            foreach (var key in keys.Keys)
             {
                 var (value, type) = ReadPreferenceValue(key, sharedName);
                 entries.Add(new Dictionary<string, object?> { ["key"] = key, ["value"] = value, ["type"] = type, ["sharedName"] = sharedName });
             }
-            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?> { ["keys"] = entries }));
+            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
+            {
+                ["keys"] = entries,
+                ["source"] = keys.Source,
+                ["complete"] = keys.Complete,
+                ["sharedName"] = sharedName,
+                ["enumerationError"] = enumerationError
+            }));
         }
         catch (Exception ex)
         {
