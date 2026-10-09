@@ -63,6 +63,21 @@ custom callbacks or scene behavior, not for every basic version audit.
 
 ## Workflow
 
+### Fast path: no custom lifecycle code
+
+For a standard single-window app, first check its Apple TFMs, effective MAUI/
+Apple versions and applicable Info.plist files. Search app sources (excluding
+bin/obj) for `ConfigureLifecycleEvents`, AppDelegate overrides other than the
+template's `CreateMauiApp`, `OpenUrl`, `ContinueUserActivity` and `ShortcutItem`.
+If none are found and the delegates have no custom base classes or scene setup,
+skip the detailed callback inventory and step 4: verify `MauiUISceneDelegate`
+availability (especially on .NET 11 previews), add the delegate + manifest in
+step 3, run the audit in step 5, then complete step 6, including **built-bundle**
+and runtime checks. Absence of custom callbacks does not waive validation.
+
+**Skip every Mac Catalyst step** (files, properties, minima, builds and runtime
+checks) when no `maccatalyst` TFM is present, including conditional TFMs.
+
 ### 1. Inventory before modifying the project or toolchain
 
 Read the applicable repository instructions and current diff. Inspect a supplied
@@ -99,7 +114,7 @@ xcodebuild -version
 dotnet msbuild MyApp.csproj -p:TargetFramework=net10.0-ios -getProperty:MauiVersion,MauiWorkloadVersion,SupportedOSPlatformVersion,TargetPlatformVersion
 ```
 
-Repeat property inspection for Catalyst and relevant build configurations.
+Repeat property inspection for Catalyst only if targeted, and relevant build configurations.
 MSBuild evaluation can be blocked by a missing SDK/workload; report that rather
 than claiming the effective versions are known. Inspect installed workload
 manifests and project.assets.json when needed to establish actual package/packs.
@@ -152,7 +167,9 @@ keys and other platform-version declarations for conflicting values.
 
 For .NET 9, present an intentional .NET 10 upgrade plan: there are no .NET 9
 Apple 27 packs. For .NET 11 previews/RCs, check that exact release's support and
-forwarding APIs; do not pin .NET 10 packages into .NET 11. The documented
+forwarding APIs, including `MauiUISceneDelegate` in the installed
+`Microsoft.Maui.dll` as described in [compatibility.md](references/compatibility.md);
+do not apply the .NET 10 MAUI 10.0.110 pin to .NET 11. The documented
 **.NET 11 RC1 pairing requires Xcode 26.6**, not an arbitrary 26.x installation.
 RC1 has scene infrastructure but lacks the scene App Actions selector and
 Essentials URL/user-activity forwarding fixes. It is not the .NET 10 recipe.
@@ -352,7 +369,7 @@ patch complete. Preserving a pre-existing missing shortcut acknowledgement
 
 ### 5. Run a read-only completion audit
 
-For custom lifecycle changes, run the bundled
+For all migrations, including the fast path, run the bundled
 [audit helper](scripts/audit-lifecycle.mjs) using an already available Node.js
 22+ runtime. Resolve the script from this installed skill, not from an assumed
 file in the app repository:
@@ -367,6 +384,10 @@ or modify the app. Exit **1** means warnings requiring review, not a failed
 execution; **2** means the scan was incomplete or its input was invalid.
 Exit **0** means only that these patterns were not found, **not** that the
 migration is correct. Generated/cache directories are excluded and reported.
+The report also identifies a simple-migration candidate when no lifecycle code
+is found and lists source `SceneDelegate.cs` / `UIApplicationSceneManifest`
+presence per discovered Apple platform folder. These are textual presence
+checks, not proof of delegate registration, active TFMs or a built manifest.
 
 `X27_APP_WINDOW` flags possible app-delegate window access;
 `X27_SINGLE_URL` flags direct single-item selection from `UrlContexts`.
@@ -422,10 +443,32 @@ Adapt names, frameworks and architecture to the actual project and host. Do not
 substitute an unsigned/stub compile or a custom 27.1 build for supported 27.0
 validation. A build alone does not exercise lifecycle behavior.
 
+**Required after building:** inspect the actual output bundle, not only the
+source plist:
+
+```sh
+plutil -p "<build-output>/<App>.app/Info.plist" | grep -A12 UIApplicationSceneManifest
+```
+
+Confirm the intended configuration and registered delegate in that output.
+If missing, follow the targeted `obj/.../AppManifest.plist` and
+`_CompileAppManifest.inputs` invalidation (or clean build) in
+[validation.md](references/validation.md), rebuild, then repeat this check.
+A successful incremental build can retain a stale manifest.
+
+When the app uses Preferences/NSUserDefaults, also check `PrivacyInfo.xcprivacy`
+for an **uncommented** `NSPrivacyAccessedAPICategoryUserDefaults` entry with
+reason `CA92.1` (app-only defaults access); the MAUI template may leave it
+commented out. Preserve other entries and choose reasons matching actual usage.
+
 With user-approved simulator/device access, launch on an ordinary iOS 27
 iPhone/iPad; verify startup past splash, foreground/background, warm/cold links,
 auth return, notification taps when applicable, quick actions (handled and
-unhandled), and any custom multiwindow behavior. Validate Catalyst separately.
+unhandled), and any custom multiwindow behavior. Check the simulator process
+logs for the `UIScene life cycle is now required` fault using
+[validation.md](references/validation.md). Validate Catalyst separately only
+when targeted. For a newer simulator OS, scope any necessary `DEVELOPER_DIR`
+override to `simctl` commands, **never to `dotnet build`**.
 Coordinate shared devices, do not reset/uninstall apps or modify global Xcode
 selection without permission.
 If DevFlow is already integrated, use its debugging skill for observation;
