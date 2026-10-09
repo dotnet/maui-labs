@@ -11,6 +11,23 @@ public partial class MauiDevFlowAgentService
 {
     protected override bool SupportsActiveCdpWebViewResolution => _app is not null;
 
+    internal static bool IsWebViewHost(IVisualTreeElement element)
+    {
+        if (element is WebView or HybridWebView)
+            return true;
+        for (var type = element.GetType(); type is not null; type = type.BaseType)
+        {
+            if (type.FullName is
+                "Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView" or
+                "Microsoft.Maui.Platforms.MacOS.Controls.MacOSBlazorWebView")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <inheritdoc />
     protected override async Task<HashSet<string>> GetActiveWebViewAutomationIdsAsync()
     {
@@ -48,23 +65,6 @@ public partial class MauiDevFlowAgentService
                     }
 
                     return null;
-                }
-
-                static bool IsWebViewHost(IVisualTreeElement element)
-                {
-                    if (element is WebView or HybridWebView)
-                        return true;
-                    for (var type = element.GetType(); type is not null; type = type.BaseType)
-                    {
-                        if (type.FullName is
-                            "Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebView" or
-                            "Microsoft.Maui.Platforms.MacOS.Controls.MacOSBlazorWebView")
-                        {
-                            return true;
-                        }
-                    }
-
-                    return false;
                 }
 
                 void Visit(IVisualTreeElement element)

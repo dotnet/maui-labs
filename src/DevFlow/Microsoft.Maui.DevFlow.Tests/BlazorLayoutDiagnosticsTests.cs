@@ -105,6 +105,8 @@ public class BlazorLayoutDiagnosticsTests
             capture.Nodes,
             node => node.Element.Id == "web-0-1");
         Assert.Null(parent.Text);
+        Assert.Equal("webview", parent.Element.Framework);
+        Assert.Equal("WebView.DOM.Element", parent.Element.FullType);
         Assert.NotNull(parent.ContentRegion);
         Assert.True(parent.ContentRegion.Area > parent.FullRegion.Area);
         Assert.True(text.Text?.IsTruncated);

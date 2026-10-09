@@ -9,6 +9,8 @@ public partial class MauiDevFlowAgentService
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim>
         _blazorLayoutProbeGates = new();
 
+    protected override bool IsWebViewLayoutSupported => true;
+
     protected override Task<HttpResponse> HandleLayoutDiagnosticRules(HttpRequest request)
         => Task.FromResult(HttpResponse.Json(
             LayoutDiagnosticsEngine.BuildCatalog(_treeWalker.GetLayoutRuleSupport())));

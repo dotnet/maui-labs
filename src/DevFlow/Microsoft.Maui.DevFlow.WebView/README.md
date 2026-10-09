@@ -54,8 +54,15 @@ the active host; blank/invalid values fail without dispatch. Upgrade the agent,
 CLI, Client, WebView and Blazor packages together and rebuild consumers.
 `hostKind` describes hosting (`webview`, `hybrid`, `blazor` or custom metadata), not the
 native backend or behavior dispatch. Native capture and service overrides determine
-behavior. DOM layout enrichment remains Blazor-only (`scope.includeBlazorElements`);
-generic hosts do not advertise Blazor layout coverage.
+behavior. With agent layout diagnostics enabled, ready, active, visible standard,
+Hybrid and Blazor hosts contribute DOM evidence by weak-owner/native correlation.
+`scope.includeWebViewElements` (default `true`) replaces `includeBlazorElements`;
+`false` skips DOM probes/findings while native diagnostics continue.
+Layout metadata uses `webview` / `webview-dom`, and DOM nodes use
+`framework: webview` / `fullType: WebView.DOM.Element`. Ready registration counts
+do not imply every host is active or visible. Unmapped/unready visible hosts,
+failed probes, deadlines, cross-origin frames and the 500-element per-host limit
+remain incomplete coverage, not a clean result.
 
 For Blazor apps use `AddMauiBlazorDevFlowTools` instead; it includes the generic
 registration and adds Blazor-specific readiness and client-side routing.
