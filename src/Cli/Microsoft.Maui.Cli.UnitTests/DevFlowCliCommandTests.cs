@@ -953,6 +953,21 @@ public class DevFlowCliCommandTests
     }
 
     [Fact]
+    public async Task WebViewWebViews_HumanReadableOutput_IncludesCanonicalContextId()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "webview", "webviews", "--no-json");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("ContextId", result.StdOut);
+        using var contexts = JsonDocument.Parse(MockAgentResponses.WebViews);
+        foreach (var context in contexts.RootElement.GetProperty("webviews").EnumerateArray())
+            Assert.Contains(context.GetProperty("id").GetString()!, result.StdOut);
+    }
+
+    [Fact]
     public async Task WebViewStatus_SelectsCanonicalContext()
     {
         var (server, cli) = await CreateFixturesAsync();

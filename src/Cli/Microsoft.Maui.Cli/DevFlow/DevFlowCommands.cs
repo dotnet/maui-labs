@@ -2205,16 +2205,17 @@ public class DevFlowCommands
                     return;
                 }
 
-                Console.WriteLine($"{"Index",-6} {"AutomationId",-20} {"ElementId",-12} {"Ready",-6} {"URL"}");
-                Console.WriteLine(new string('-', 70));
+                Console.WriteLine($"{"ContextId",-16} {"Index",-6} {"AutomationId",-20} {"ElementId",-12} {"Ready",-6} {"URL"}");
+                Console.WriteLine(new string('-', 87));
                 foreach (var wv in webviews.EnumerateArray())
                 {
+                    var contextId = wv.GetProperty("id").GetString();
                     var index = wv.TryGetProperty("index", out var idx) ? idx.GetInt32().ToString() : "-";
                     var autoId = wv.TryGetProperty("automationId", out var aid) ? aid.GetString() ?? "-" : "-";
                     var elemId = wv.TryGetProperty("elementId", out var eid) ? eid.GetString() ?? "-" : "-";
                     var ready = wv.TryGetProperty("ready", out var rdy) && rdy.GetBoolean() ? "Yes" : "No";
                     var url = wv.TryGetProperty("url", out var urlProp) ? urlProp.GetString() ?? "-" : "-";
-                    Console.WriteLine($"{index,-6} {autoId,-20} {elemId,-12} {ready,-6} {url}");
+                    Console.WriteLine($"{contextId,-16} {index,-6} {autoId,-20} {elemId,-12} {ready,-6} {url}");
                 }
             }
         }
