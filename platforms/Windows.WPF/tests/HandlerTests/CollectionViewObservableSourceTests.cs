@@ -76,6 +76,111 @@ public class CollectionViewObservableSourceTests
 	}
 
 	[Fact]
+	public void GroupedSingleSelection_UsesUnderlyingItem()
+	{
+		var selectedItem = new SelectionItem("Selected");
+		object? selectionChangedItem = null;
+		Run(view =>
+		{
+			view.IsGrouped = true;
+			view.ItemsSource = new[] { new[] { selectedItem } };
+			view.SelectionMode = SelectionMode.Single;
+			view.SelectionChanged += (_, args) => selectionChangedItem = args.CurrentSelection.Single();
+			return (handler, list, empty) =>
+			{
+				list.SelectedItem = list.Items[1];
+
+				Assert.Same(selectedItem, view.SelectedItem);
+				Assert.Same(selectedItem, selectionChangedItem);
+			};
+		});
+	}
+
+	[Fact]
+	public void GroupedMultipleSelection_UsesUnderlyingItems()
+	{
+		var first = new SelectionItem("First");
+		var second = new SelectionItem("Second");
+		Run(view =>
+		{
+			view.IsGrouped = true;
+			view.ItemsSource = new[] { new[] { first, second } };
+			view.SelectionMode = SelectionMode.Multiple;
+			return (handler, list, empty) =>
+			{
+				list.SelectedItems.Add(list.Items[1]);
+				list.SelectedItems.Add(list.Items[2]);
+
+				Assert.Collection(
+					view.SelectedItems,
+					item => Assert.Same(first, item),
+					item => Assert.Same(second, item));
+			};
+		});
+	}
+
+	[Fact]
+	public void GroupedSelectedItem_MapsToPlatformWrapper()
+	{
+		var selectedItem = new SelectionItem("Selected");
+		Run(view =>
+		{
+			view.IsGrouped = true;
+			view.ItemsSource = new[] { new[] { selectedItem } };
+			view.SelectionMode = SelectionMode.Single;
+			return (handler, list, empty) =>
+			{
+				view.SelectedItem = selectedItem;
+
+				Assert.Same(list.Items[1], list.SelectedItem);
+			};
+		});
+	}
+
+	[Fact]
+	public void GroupedHeaderSelection_PreservesUnderlyingItemSelection()
+	{
+		var selectedItem = new SelectionItem("Selected");
+		Run(view =>
+		{
+			view.IsGrouped = true;
+			view.ItemsSource = new[] { new[] { selectedItem } };
+			view.SelectionMode = SelectionMode.Single;
+			return (handler, list, empty) =>
+			{
+				list.SelectedItem = list.Items[1];
+				list.SelectedItem = list.Items[0];
+
+				Assert.Same(selectedItem, view.SelectedItem);
+				Assert.Same(list.Items[1], list.SelectedItem);
+			};
+		});
+	}
+
+	[Fact]
+	public void GroupedMultipleSelection_IgnoresGroupHeaders()
+	{
+		var selectedItem = new SelectionItem("Selected");
+		Run(view =>
+		{
+			view.IsGrouped = true;
+			view.ItemsSource = new[] { new[] { selectedItem } };
+			view.SelectionMode = SelectionMode.Multiple;
+			return (handler, list, empty) =>
+			{
+				var header = list.Items[0];
+				var item = list.Items[1];
+				list.SelectedItem = item;
+				list.SelectedItem = header;
+
+				Assert.Same(selectedItem, Assert.Single(view.SelectedItems));
+				Assert.Contains(item, list.SelectedItems.Cast<object>());
+				Assert.DoesNotContain(header, list.SelectedItems.Cast<object>());
+			};
+		});
+	}
+
+	[Fact]
 	public void SourceReplacementAndDisconnect_RemoveSubscriptions()
 	{
 		Run(view =>
@@ -286,6 +391,8 @@ public class CollectionViewObservableSourceTests
 		});
 		Assert.True(completed, "The STA test did not complete within its timeout.");
 	}
+
+	sealed record SelectionItem(string Name);
 
 	sealed class TrackedCollection<T> : ObservableCollection<T>
 	{
