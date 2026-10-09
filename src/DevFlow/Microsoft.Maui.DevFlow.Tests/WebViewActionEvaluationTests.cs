@@ -6,6 +6,34 @@ namespace Microsoft.Maui.DevFlow.Tests;
 public class WebViewActionEvaluationTests
 {
     [Theory]
+    [InlineData("click")]
+    [InlineData("fill")]
+    [InlineData("query")]
+    public async Task Action_CanonicalContext_UsesSelectedBridgeAndSingleEvaluation(string action)
+    {
+        using var service = new TestService();
+        service.RegisterCdpWebView(_ => throw new InvalidOperationException("Wrong bridge"), () => true, "Duplicate");
+        var evaluations = 0;
+        service.RegisterCdpWebView(command =>
+        {
+            evaluations++;
+            using var document = JsonDocument.Parse(command);
+            Assert.StartsWith("JSON.stringify(", document.RootElement.GetProperty("params").GetProperty("expression").GetString()!);
+            return Task.FromResult(action == "query"
+                ? """{"result":{"result":{"value":"[{\"index\":0,\"tagName\":\"button\"}]"}}}"""
+                : """{"result":{"result":{"value":"{\"success\":true}"}}}""");
+        }, () => true, "Duplicate");
+
+        var response = await service.ActionAsync(action, new HttpRequest
+        {
+            Body = """{"selector":"#target","text":"hello","contextId":"webview-1"}"""
+        });
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal(1, evaluations);
+    }
+
+    [Theory]
     [InlineData("{\"success\":true}")]
     [InlineData("[{\"index\":0,\"tagName\":\"button\"}]")]
     [InlineData("\"text\"")]

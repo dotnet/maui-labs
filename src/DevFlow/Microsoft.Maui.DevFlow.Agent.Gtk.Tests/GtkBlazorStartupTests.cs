@@ -172,8 +172,9 @@ public class GtkBlazorStartupTests
         await old.InitializeAsync();
         await right.InitializeAsync();
 
+        var mainContextId = Assert.Single(await agent.ActiveContextsAsync()).ContextId;
         var defaultContext = await agent.ResolveAsync(null);
-        var namedContext = await agent.ResolveAsync("BlazorWebView");
+        var namedContext = await agent.ResolveAsync(mainContextId);
         Assert.NotNull(defaultContext);
         Assert.Equal(defaultContext!.Index, namedContext!.Index);
         Assert.Same(active, defaultContext.CommandHandler.Target);
@@ -183,7 +184,7 @@ public class GtkBlazorStartupTests
         await active.InitializeAsync();
 
         defaultContext = await agent.ResolveAsync(null);
-        namedContext = await agent.ResolveAsync("BlazorWebView");
+        namedContext = await agent.ResolveAsync(mainContextId);
         Assert.True(defaultContext!.IsReady);
         Assert.Equal(defaultContext.Index, namedContext!.Index);
         Assert.Same(active, defaultContext.CommandHandler.Target);
