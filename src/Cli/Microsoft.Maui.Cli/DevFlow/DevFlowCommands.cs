@@ -39,7 +39,7 @@ public class DevFlowCommands
     internal static Func<int, Task<Broker.AgentRegistration[]?>> ListBrokerAgentsAsync { get; set; } = Broker.BrokerClient.ListAgentsAsync;
     internal static Func<AndroidDevFlowPortForwarder> CreateAndroidPortForwarder { get; set; } = AndroidDevFlowPortForwarder.CreateDefault;
     internal static Func<bool> IsAndroidAdbLikelyAvailable { get; set; } = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
-    internal static Func<string, IAppDriver> RecordingDriverFactory { get; set; } = AppDriverFactory.Create;
+    internal static Func<string, IAppDriver> RecordingDriverFactory { get; set; } = CreateDefaultRecordingDriver;
     internal static Func<RecordingState?> ReadRecordingState { get; set; } = RecordingStateManager.Load;
 
     private static IDevFlowOutputWriter Output => s_output ?? throw new InvalidOperationException("DevFlowCommands not initialized. Call CreateDevFlowCommand first.");
@@ -3656,9 +3656,10 @@ public class DevFlowCommands
 
     internal static IAppDriver CreateRecordingDriver(string platform, string? device, bool starting)
     {
+        var isIos = platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
+            || platform.Equals("iossimulator", StringComparison.OrdinalIgnoreCase);
         if (starting
-            && (platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
-                || platform.Equals("iossimulator", StringComparison.OrdinalIgnoreCase))
+            && isIos
             && string.IsNullOrWhiteSpace(device))
         {
             throw new ArgumentException("Specify --device <simulator UDID> for iOS recording.", nameof(device));
@@ -3673,6 +3674,69 @@ public class DevFlowCommands
         return driver;
     }
 
+    private static IAppDriver CreateDefaultRecordingDriver(string platform)
+        => platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
+            || platform.Equals("iossimulator", StringComparison.OrdinalIgnoreCase)
+            ? new RecordingIOSSimulatorAppDriver()
+            : AppDriverFactory.Create(platform);
+
+    internal static void EnsureRecordingProcessStarted(
+        RecordingState? state,
+        Func<int, bool>? isProcessRunning = null,
+        Action<int?>? killWatchdog = null,
+        Action? deleteState = null)
+    {
+        if (state is null)
+            throw new InvalidOperationException("Recording process did not persist startup state.");
+
+        isProcessRunning ??= static pid =>
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(pid);
+                return !process.HasExited;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        };
+
+        if (isProcessRunning(state.RecordingPid))
+            return;
+
+        try
+        {
+            (killWatchdog ?? KillRecordingWatchdog)(state.WatchdogPid);
+        }
+        finally
+        {
+            (deleteState ?? RecordingStateManager.Delete)();
+        }
+
+        throw new InvalidOperationException(
+            $"{state.Platform} recording process exited during startup.");
+    }
+
+    private static void KillRecordingWatchdog(int? watchdogPid)
+    {
+        if (watchdogPid is null)
+            return;
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(watchdogPid.Value);
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
     private static async Task RecordingStartAsync(string host, int port, string platform, string? output, int timeout, string? device)
     {
         try
@@ -3680,6 +3744,7 @@ public class DevFlowCommands
             var filename = output ?? $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
             using var driver = CreateRecordingDriver(platform, device, starting: true);
             await driver.StartRecordingAsync(filename, timeout);
+            EnsureRecordingProcessStarted(ReadRecordingState());
             Console.WriteLine($"Recording started (timeout: {timeout}s)");
             Console.WriteLine($"Output: {Path.GetFullPath(filename)}");
         }
@@ -5806,5 +5871,63 @@ public class DevFlowCommands
 
         projects.Sort(StringComparer.OrdinalIgnoreCase);
         return projects.ToArray();
+    }
+}
+
+internal sealed class RecordingIOSSimulatorAppDriver : iOSSimulatorAppDriver
+{
+    public override async Task StartRecordingAsync(string outputFile, int timeoutSeconds = 30)
+    {
+        EnsureNotRecording();
+        if (string.IsNullOrWhiteSpace(DeviceUdid))
+            throw new InvalidOperationException("DeviceUdid must be set for simulator operations.");
+
+        var fullPath = Path.GetFullPath(outputFile);
+        var startInfo = new System.Diagnostics.ProcessStartInfo("xcrun")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add("simctl");
+        startInfo.ArgumentList.Add("io");
+        startInfo.ArgumentList.Add(DeviceUdid);
+        startInfo.ArgumentList.Add("recordVideo");
+        startInfo.ArgumentList.Add("--codec");
+        startInfo.ArgumentList.Add("h264");
+        startInfo.ArgumentList.Add(fullPath);
+
+        var process = System.Diagnostics.Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start xcrun simctl io recordVideo");
+
+        await Task.Delay(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
+        process.Refresh();
+        var hasExited = process.HasExited;
+        var standardError = hasExited
+            ? await process.StandardError.ReadToEndAsync().ConfigureAwait(false)
+            : string.Empty;
+        ThrowIfProcessExited(hasExited, hasExited ? process.ExitCode : 0, standardError);
+
+        var watchdogPid = SpawnWatchdog(process.Id, timeoutSeconds);
+        RecordingStateManager.Save(new RecordingState
+        {
+            RecordingPid = process.Id,
+            WatchdogPid = watchdogPid,
+            OutputFile = fullPath,
+            Platform = "ios",
+            StartedAt = DateTimeOffset.UtcNow,
+            TimeoutSeconds = timeoutSeconds,
+        });
+    }
+
+    internal static void ThrowIfProcessExited(bool hasExited, int exitCode, string standardError)
+    {
+        if (!hasExited)
+            return;
+
+        var detail = standardError.Trim();
+        var suffix = detail.Length == 0 ? string.Empty : $": {detail}";
+        throw new InvalidOperationException(
+            $"xcrun simctl io recordVideo exited during startup with code {exitCode}{suffix}");
     }
 }

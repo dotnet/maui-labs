@@ -16,7 +16,7 @@ public class DevFlowRecordingDriverTests
         const string udid = "11111111-2222-3333-4444-555555555555";
         using var driver = DevFlowCommands.CreateRecordingDriver(platform, udid, starting: true);
 
-        Assert.Equal(udid, Assert.IsType<iOSSimulatorAppDriver>(driver).DeviceUdid);
+        Assert.Equal(udid, Assert.IsAssignableFrom<iOSSimulatorAppDriver>(driver).DeviceUdid);
     }
 
     [Theory]
@@ -36,7 +36,7 @@ public class DevFlowRecordingDriverTests
     {
         using var driver = DevFlowCommands.CreateRecordingDriver("ios", null, starting: false);
 
-        Assert.Null(Assert.IsType<iOSSimulatorAppDriver>(driver).DeviceUdid);
+        Assert.Null(Assert.IsAssignableFrom<iOSSimulatorAppDriver>(driver).DeviceUdid);
     }
 
     [Theory]
@@ -55,5 +55,42 @@ public class DevFlowRecordingDriverTests
         using var driver = DevFlowCommands.CreateRecordingDriver("maccatalyst", null, starting: true);
 
         Assert.IsType<MacCatalystAppDriver>(driver);
+    }
+
+    [Fact]
+    public void EnsureRecordingProcessStarted_ExitedProcess_KillsWatchdogDeletesStateAndThrows()
+    {
+        var state = new RecordingState
+        {
+            RecordingPid = 1234,
+            WatchdogPid = 5678,
+            OutputFile = "recording.mp4",
+            Platform = "ios",
+        };
+        int? killedWatchdogPid = null;
+        var stateDeleted = false;
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            DevFlowCommands.EnsureRecordingProcessStarted(
+                state,
+                _ => false,
+                watchdogPid => killedWatchdogPid = watchdogPid,
+                () => stateDeleted = true));
+
+        Assert.Equal(5678, killedWatchdogPid);
+        Assert.True(stateDeleted);
+        Assert.Contains("ios recording process exited during startup", error.Message);
+    }
+
+    [Fact]
+    public void RecordingIOSSimulatorAppDriver_ImmediateNonzeroExit_ReportsFailure()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            RecordingIOSSimulatorAppDriver.ThrowIfProcessExited(
+                hasExited: true,
+                exitCode: 149,
+                standardError: "Invalid device"));
+        Assert.Contains("code 149", error.Message);
+        Assert.Contains("Invalid device", error.Message);
     }
 }

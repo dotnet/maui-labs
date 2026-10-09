@@ -373,6 +373,19 @@ For application code, prefer the typed `AgentClient` in
 `Microsoft.Maui.DevFlow.Driver`; use the protocol documents when implementing a
 client in another language or integrating directly with the agent.
 
+### Native Android controls outside the MAUI tree
+
+For a native-hosted popup that is absent from the MAUI logical tree, use
+`AndroidAppDriver.GetAccessibilityTreeAsync()` to inspect the current screen.
+Confirm the target package and control bounds before calling
+`TapCoordinateAsync(x, y)`. Coordinates are physical screen pixels from the
+Android accessibility bounds, not MAUI device-independent units.
+
+Set `Serial` when more than one device is connected. The coordinate tap rejects
+negative values and ambiguous device selection. Re-read the tree and capture
+the resulting screen after a tap; a completed input command is not proof that
+the intended action occurred.
+
 ## CLI Commands
 
 All DevFlow commands are available under `maui devflow`. Run `maui devflow <command> --help` for details.
