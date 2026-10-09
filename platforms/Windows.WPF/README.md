@@ -492,7 +492,11 @@ conversion failures, recursive handler disconnection, and DevFlow tree discovery
 rebuild realized roots without requiring an ItemsSource change and preserve
 single/multiple selection of equal-valued grouped item occurrences. Single selection
 is restored from the saved native occurrence, independently of the virtual
-SelectedItem representation. Retired template roots and their descendants disconnect
+SelectedItem representation. Native selection exposes the underlying data through
+MAUI's SelectedItem without moving selection to the first equal-valued grouped row.
+Live-window cases select native rows through UI Automation and verify selection
+survives template changes and footer insertion/removal without extra selection events or taps.
+Retired template roots and their descendants disconnect
 on clear, reuse, template replacement, conversion failure, and handler teardown:
 
 ```powershell

@@ -240,6 +240,8 @@ public class CollectionViewHandlerTests
 			collection.ItemsSource = new[] { new[] { "Same item", "Same item" } };
 			Realize(list);
 			list.SelectedIndex = 2;
+			Assert.Equal(2, list.SelectedIndex);
+			Assert.True(GetContainer(list, 2).IsSelected);
 			if (mode == SelectionMode.Multiple)
 				GetContainer(list, 1).IsSelected = true;
 			var selected = list.SelectedItems.Cast<object>().ToArray();
@@ -273,6 +275,97 @@ public class CollectionViewHandlerTests
 				Assert.Same(selectedItems, collection.SelectedItems);
 				Assert.Equal(0, taps);
 				Assert.True(GetContainer(list, 2).IsSelected);
+			}
+		});
+	}
+
+	[Theory]
+	[InlineData(SelectionMode.Single)]
+	[InlineData(SelectionMode.Multiple)]
+	public void GroupedSelection_InLiveWindow_PreservesOccurrencesAcrossTemplateAndFooterChanges(SelectionMode mode)
+	{
+		Run((collection, handler, list, created) =>
+		{
+			var taps = 0;
+			DataTemplate Template(string text) => new(() =>
+			{
+				var label = new Label { Text = text };
+				label.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(() => taps++) });
+				return label;
+			});
+			collection.SelectionMode = mode;
+			collection.IsGrouped = true;
+			collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Header" });
+			collection.ItemTemplate = Template("Original");
+			collection.ItemsSource = new[] { Array.Empty<string>(), new[] { "Same item", "Same item" }, Array.Empty<string>() };
+			var window = new System.Windows.Window
+			{
+				Content = handler.PlatformView,
+				Width = 400,
+				Height = 300,
+				ShowActivated = false,
+				ShowInTaskbar = false,
+			};
+			void Layout()
+			{
+				window.UpdateLayout();
+				window.Dispatcher.Invoke(static () => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+				window.UpdateLayout();
+			}
+			System.Windows.Automation.Provider.ISelectionItemProvider Selection(int index)
+			{
+				var listPeer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(list);
+				Assert.NotNull(listPeer);
+				listPeer.ResetChildrenCache();
+				var peer = listPeer.GetChildren()[index];
+				return Assert.IsAssignableFrom<System.Windows.Automation.Provider.ISelectionItemProvider>(
+					peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.SelectionItem));
+			}
+			try
+			{
+				window.Show();
+				Layout();
+				Assert.True(list.IsLoaded);
+				Assert.NotEqual(IntPtr.Zero, new System.Windows.Interop.WindowInteropHelper(window).Handle);
+				Selection(3).Select();
+				Layout();
+				Assert.True(Selection(3).IsSelected);
+				Assert.False(Selection(2).IsSelected);
+				if (mode == SelectionMode.Multiple)
+					Selection(2).AddToSelection();
+				var selected = list.SelectedItems.Cast<object>().ToArray();
+				var selectedItem = collection.SelectedItem;
+				var selectedItems = collection.SelectedItems;
+				var changes = 0;
+				collection.SelectionChanged += (_, _) => changes++;
+				taps = 0;
+
+				collection.ItemTemplate = Template("Replacement");
+				AssertSelection(includeFooters: false);
+				collection.GroupHeaderTemplate = new DataTemplate(() => new Label { Text = "Replacement header" });
+				AssertSelection(includeFooters: false);
+				collection.GroupFooterTemplate = new DataTemplate(() => new Label { Text = "Footer" });
+				AssertSelection(includeFooters: true);
+				collection.GroupFooterTemplate = null;
+				AssertSelection(includeFooters: false);
+
+				void AssertSelection(bool includeFooters)
+				{
+					Layout();
+					Assert.Equal(includeFooters ? 8 : 5, list.Items.Count);
+					Assert.Equal(selected, list.SelectedItems.Cast<object>().ToArray());
+					Assert.Same(selectedItem, collection.SelectedItem);
+					Assert.Same(selectedItems, collection.SelectedItems);
+					Assert.True(Selection(includeFooters ? 4 : 3).IsSelected);
+					Assert.Equal(mode == SelectionMode.Multiple, Selection(includeFooters ? 3 : 2).IsSelected);
+					Assert.Equal(0, changes);
+					Assert.Equal(0, taps);
+				}
+			}
+			finally
+			{
+				window.Content = null;
+				window.Close();
 			}
 		});
 	}
@@ -504,6 +597,8 @@ public class CollectionViewHandlerTests
 			Assert.Equal(4, list.Items.Count);
 			list.SelectedIndex = 2;
 			var selected = list.SelectedItem;
+			var selectedData = collection.SelectedItem;
+			Assert.Same(groups[1][0], selectedData);
 			var changes = 0;
 			collection.SelectionChanged += (_, _) => changes++;
 
@@ -518,7 +613,7 @@ public class CollectionViewHandlerTests
 				Assert.Equal(includeFooters ? 7 : 4, list.Items.Count);
 				Assert.Equal(includeFooters ? 3 : 2, list.SelectedIndex);
 				Assert.Same(selected, list.SelectedItem);
-				Assert.Same(selected, collection.SelectedItem);
+				Assert.Same(selectedData, collection.SelectedItem);
 				Assert.Equal(0, changes);
 				Assert.All(previous, view => Assert.Null(view.Parent));
 				var current = ((IVisualTreeElement)collection).GetVisualChildren().Cast<Label>().ToArray();
@@ -728,17 +823,36 @@ public class CollectionViewHandlerTests
 			Assert.Equal("Same item", collection.SelectedItem);
 			Assert.True(GetContainer(list, 2).IsSelected);
 			Assert.Equal(0, selectionChanges);
-		}, () => new DataSelectionHandler());
+		});
 	}
 
-	// Simulate data-normalized selection without changing this PR's public selection mapper.
-	sealed class DataSelectionHandler : CollectionViewHandler
+	[Fact]
+	public void GroupedSelectedItemChange_UpdatesNativeSelection_AndClearsSelection()
 	{
-		public override void UpdateValue(string property)
+		Run((collection, handler, list, created) =>
 		{
-			if (property != nameof(CollectionView.SelectedItem))
-				base.UpdateValue(property);
-		}
+			var first = "First";
+			var second = "Second";
+			collection.SelectionMode = SelectionMode.Single;
+			collection.IsGrouped = true;
+			collection.ItemsSource = new[] { new[] { first, second } };
+			Realize(list);
+
+			collection.SelectedItem = first;
+			Assert.Equal(1, list.SelectedIndex);
+			Assert.True(GetContainer(list, 1).IsSelected);
+
+			collection.SelectedItem = second;
+			Assert.Same(second, collection.SelectedItem);
+			Assert.Equal(2, list.SelectedIndex);
+			Assert.True(GetContainer(list, 2).IsSelected);
+			Assert.False(GetContainer(list, 1).IsSelected);
+
+			collection.SelectedItem = null;
+			Assert.Null(list.SelectedItem);
+			Assert.Empty(list.SelectedItems);
+			Assert.False(GetContainer(list, 2).IsSelected);
+		});
 	}
 
 	public sealed class DisconnectTrackingLabelHandler : LabelHandler
