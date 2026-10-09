@@ -24,9 +24,16 @@ A timeout is a failure, not accepted baseline evidence.
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
 | `tap-buttons` | 3 | Left click routed to secondary recognizer / primary, secondary and dynamic `Buttons` changes |
 | `bundle-resources` | 4 | Linked image missing / assets included and loaded from the built app bundle |
+| `menu-localization` | 5 per launch | English defaults in a German app / native bundle localization, app overrides, localized app names, responder actions, custom-menu replacement and option resets |
 
 The `picker` scenario covers the native state transitions of the AppKit Picker
 handler; `bundle-resources` verifies MAUI resources in the packaged application.
+`menu-localization` also consumes the actual NuGet packages. It launches fresh
+processes with `-AppleLanguages` for German, French, Dutch, English and an unsupported
+language, then verifies an English-only host under German preferences and a partial
+host strings override, followed by default menus again to check resource isolation.
+Set `RUNTIME_TEST_PACKAGES` to a directory containing the
+backend and Essentials `.nupkg` files (default: `artifacts/runtime-packages`).
 
 ## Run on macOS
 

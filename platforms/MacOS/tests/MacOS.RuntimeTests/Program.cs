@@ -9,6 +9,10 @@ static class Program
     {
         try
         {
+            // Foundation consumes this launch-time language override from the native argv.
+            if (args is ["--scenario", _, "--evidence", _, "-AppleLanguages", _])
+                args = args[..4];
+
             if (args is ["--list"])
             {
                 var scenarios = ScenarioRegistry.All.Select(s => new
