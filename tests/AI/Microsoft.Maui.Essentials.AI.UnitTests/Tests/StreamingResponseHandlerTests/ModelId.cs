@@ -61,5 +61,24 @@ public partial class StreamingResponseHandlerTests
 			Assert.IsType<FunctionCallContent>(Assert.Single(updates[1].Contents));
 			Assert.IsType<FunctionResultContent>(Assert.Single(updates[2].Contents));
 		}
+
+		[Theory]
+		[InlineData("windows-ai-language-model")]
+		[InlineData("custom-provider-model")]
+		public async Task PassthroughUpdates_WithConfiguredModelId_TagEveryUpdate(string modelId)
+		{
+			var handler = new StreamingResponseHandler(modelId);
+
+			handler.ProcessContent("Hello");
+			handler.ProcessToolCall("call-1", "GetWeather", "{}");
+			handler.ProcessToolResult("call-1", "Sunny");
+			handler.Complete();
+
+			var updates = await ReadAll(handler);
+
+			Assert.Equal(3, updates.Count);
+			Assert.All(updates, update => Assert.Equal(modelId, update.ModelId));
+			Assert.Equal(modelId, updates.ToChatResponse().ModelId);
+		}
 	}
 }

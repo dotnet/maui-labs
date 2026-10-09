@@ -4,6 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 
+#if WINDOWS
+using System.Runtime.Versioning;
+using Microsoft.Maui.Essentials.AI;
+#endif
+
 namespace AIExtensions.Sample.ChatPlayground;
 
 internal static class ImageServiceCollectionExtensions
@@ -15,11 +20,30 @@ internal static class ImageServiceCollectionExtensions
         services.AddSingleton<ImagePlaygroundViewModel>();
         services.AddTransient<Page, ImagePage>();
 
+#if WINDOWS
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
+            services.AddSingleton<IImageGenerator>(CreateWindowsImageGenerator);
+#endif
+
         if (!string.IsNullOrWhiteSpace(settings.ImageDeploymentName))
             services.AddSingleton<IImageGenerator>(provider => CreateAzureImageGenerator(provider, settings));
 
         return services;
     }
+
+#if WINDOWS
+    [SupportedOSPlatform("windows10.0.26100.0")]
+    private static IImageGenerator CreateWindowsImageGenerator(IServiceProvider provider) =>
+        new DescribedImageGenerator(
+            new WindowsAIImageGenerator().AsBuilder()
+                .UseLogging(provider.GetRequiredService<ILoggerFactory>())
+                .Build(),
+            new ImageGeneratorDescriptor(
+                "windows-ai-image-generation",
+                "Windows AI",
+                "Generates or edits images on this device. The first request checks whether the Windows AI image model is ready.",
+                SupportsEdits: true));
+#endif
 
     private static IImageGenerator CreateAzureImageGenerator(IServiceProvider provider, AISettings settings) =>
         new DescribedImageGenerator(

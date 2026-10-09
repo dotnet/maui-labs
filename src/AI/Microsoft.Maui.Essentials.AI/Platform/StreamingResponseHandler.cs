@@ -12,7 +12,7 @@ namespace Microsoft.Maui.Essentials.AI;
 /// When a <see cref="StreamChunkerBase"/> is provided, <see cref="ProcessContent"/> expects
 /// cumulative snapshots and the chunker computes deltas (used by Apple Intelligence).
 /// When no chunker is provided, <see cref="ProcessContent"/> expects pre-chunked deltas
-/// and passes them through directly (used by Windows Phi Silica).
+/// and passes them through directly (used by Windows AI).
 /// </remarks>
 internal sealed class StreamingResponseHandler
 {
@@ -24,10 +24,12 @@ internal sealed class StreamingResponseHandler
 	/// Creates a handler that passes content through directly (no chunking).
 	/// Use when the AI model already provides incremental deltas.
 	/// </summary>
-	public StreamingResponseHandler()
+	/// <param name="modelId">Optional provider model identifier to include on every update.</param>
+	public StreamingResponseHandler(string? modelId = null)
 	{
 		_channel = Channel.CreateUnbounded<ChatResponseUpdate>(
 			new UnboundedChannelOptions { SingleReader = true });
+		_modelId = modelId;
 	}
 
 	/// <summary>
@@ -36,10 +38,9 @@ internal sealed class StreamingResponseHandler
 	/// </summary>
 	/// <param name="chunker">The chunker that computes content deltas.</param>
 	/// <param name="modelId">Optional provider model identifier to include on every update.</param>
-	public StreamingResponseHandler(StreamChunkerBase chunker, string? modelId = null) : this()
+	public StreamingResponseHandler(StreamChunkerBase chunker, string? modelId = null) : this(modelId)
 	{
 		_chunker = chunker;
-		_modelId = modelId;
 	}
 
 	/// <summary>
