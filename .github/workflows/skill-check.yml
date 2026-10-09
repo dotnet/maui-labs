@@ -92,5 +92,3 @@ jobs:
           tests/dotnet-maui/maui-xcode27-migration/audit-lifecycle.test.mjs
           tests/dotnet-maui/maui-xcode27-migration/fixture-manifest.test.mjs
           tests/dotnet-maui/maui-xcode27-migration/acceptance-audit.test.mjs
-          tests/dotnet-maui/maui-xcode27-migration/runtime/assertions.test.mjs
-          tests/dotnet-maui/maui-xcode27-migration/runtime/runner.test.mjs

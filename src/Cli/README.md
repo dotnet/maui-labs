@@ -109,33 +109,6 @@ JSONC comments cannot be retained when a configuration is rewritten; the origina
 
 The default catalog is `dotnet/maui-labs` on `main`. Source overrides use `--repo <owner/repo>` and `--branch <ref>`; managed assets retain their recorded origin for later updates unless explicitly overridden. Missing required provenance is reported rather than guessed. Bundled versions refer to the running CLI's content, not remote downloads.
 
-For an existing app's Xcode 27.0 compatibility migration, explicitly install
-`maui-xcode27-migration` (it is not an `init` recommendation):
-
-```bash
-maui ai list skill --env CopilotCli --json
-maui ai add skill maui-xcode27-migration --env CopilotCli --yes
-```
-
-Then ask the coding agent to prepare the app for Xcode 27. The CLI installs
-instructions, not an automatic project rewrite. This requires both a CLI build
-that exposes `ai add skill` and a catalog revision containing the skill.
-The skill is a **candidate for expert-reviewed testing**, not a validated
-complex-migration workflow: evaluations have still lost cold-path behavior
-despite producing compilable code. Native host audits reject covered failure
-patterns, but other behavior still needs source review. Aggregate judge scores
-are not acceptance, and supported released-toolchain build and runtime
-qualification remain incomplete. Automatic selection is not
-guaranteed, and explicit invocation is not a correctness guarantee. Inspect all
-callback mappings and validate with a matching released toolchain.
-**A minimum published CLI version has not been established**; an older tool may
-print root help for `maui ai --help`, so check that actual `ai` commands appear.
-Real GitHub installation and no-op updates have passed with an isolated
-CI-built CLI and a full-SHA catalog pin for CopilotCli, Claude and VsCode.
-That candidate-package evidence does not certify a published CLI release.
-See the [skill catalog](../../plugins/README.md) for availability, client choices,
-and the marketplace alternative.
-
 Each remote repository/ref is resolved once per plan to an immutable commit, so
 catalog discovery and downloaded content cannot mix revisions when a branch
 moves. Results report `origin.resolvedCommit` when a source is resolved, while

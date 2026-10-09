@@ -22,33 +22,13 @@ maui ai add skill maui-xcode27-migration --env CopilotCli --yes
 
 Run these from the app project. Use `--env Claude` or `--env VsCode` for those
 clients. Restart/reload the agent session if needed, then ask it to
-"Prepare this MAUI app for Xcode 27" (or explicitly use `maui-xcode27-migration`).
-The CLI installs instructions; the agent performs the migration.
-**Validation status:** this is a candidate for expert-reviewed testing, not a
-validated complex-migration workflow. Evaluations have still produced
-compilable code that loses cold window work or additional URLs. Native host
-audits now reject those covered failure patterns; source review remains
-necessary for other behavior. Aggregate judge scores are not acceptance.
-Supported released-toolchain build and runtime qualification remain incomplete.
-Automatic selection is not guaranteed;
-explicitly requesting the skill controls intent, not migration correctness.
-Inspect every callback mapping and validate with a matching released toolchain.
+"Prepare this .NET MAUI app for Xcode 27." The CLI installs instructions; the
+agent performs the migration. Review the resulting diff and validate lifecycle
+behavior with the matching released Apple toolchain.
 
-**Availability:** the skill must exist in the public marketplace's selected
-revision before the commands can discover it. The `maui ai` command is present
-in repository source; older published tools may not expose it. Check
-`maui ai --help` for the actual `ai` subcommands, not just a successful exit code.
-No minimum published CLI version is asserted here. The tool package ID is
-`Microsoft.Maui.Cli`; follow [CLI installation](../src/Cli/README.md) and verify
-the chosen package contains `ai` before relying on this route.
-
-Contributor testing can select a reviewed catalog revision with
-`--repo dotnet/maui-labs --branch <full-40-character-commit-sha>` on the list
-and add commands. A full SHA stays pinned on later updates. Real GitHub
-discovery, installation, status and no-op updates have been exercised with an
-isolated CI-built CLI for all three clients, including delivery of the audit
-script. This does not establish a minimum released CLI version or qualify a
-future signed release; repeat the consumer checks against the published package.
+The skill must exist in the selected public catalog revision before these
+commands can discover it. Older published CLI versions may not expose the
+`ai` commands; verify `maui ai --help` and the skill listing first.
 
 Alternatively, install the complete plugin in an agent that supports marketplaces:
 

@@ -200,12 +200,6 @@ Direct plugin installation remains available for agent runtimes that support plu
 
 See [plugins/](plugins/) for the full catalog and [plugins/CONTRIBUTING.md](plugins/CONTRIBUTING.md) for how to add skills.
 
-The optional [Xcode 27 migration skill](plugins/dotnet-maui/skills/maui-xcode27-migration/)
-guides existing iOS/Mac Catalyst apps through scene-lifecycle compatibility,
-including OS-support decisions and custom callbacks. See the
-[catalog installation and availability notes](plugins/README.md#installation)
-before using `maui ai add skill maui-xcode27-migration --env CopilotCli --yes`.
-
 ## Nightly Builds
 
 Preview packages from `main` are published automatically to the dotnet10 feed:

@@ -7,7 +7,7 @@
     {
       "name": "dotnet-maui",
       "source": "./plugins/dotnet-maui",
-      "description": "Skills for building .NET MAUI apps: architecture, UI, accessibility, testing, performance, platform integration, Xcode 27 compatibility, migration, and app features."
+      "description": "Skills for building .NET MAUI apps: architecture, UI, accessibility, testing, performance, platform integration, migration, and app features."
     },
     {
       "name": "dotnet-maui-tooling",

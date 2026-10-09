@@ -1,4 +1,0 @@
-<Project>
-  <!-- Retain Arcade conventions without eng/Common.targets' unrelated DevFlow app injection. -->
-  <Import Project="Sdk.targets" Sdk="Microsoft.DotNet.Arcade.Sdk" />
-</Project>
