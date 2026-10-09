@@ -939,4 +939,161 @@ public class DevFlowCliCommandTests
         Assert.Equal(0, result.ExitCode);
         Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/source");
     }
+
+    [Theory]
+    [InlineData("querySelector")]
+    [InlineData("querySelectorAll")]
+    public async Task WebViewDomQuery_ForwardsTargetOutsideJavaScript(string command)
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow", "webview", "--webview", "Right", "DOM", command, "#target");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+        Assert.Contains("webview=Right", request.QueryString);
+        using var body = JsonDocument.Parse(request.Body!);
+        var expression = body.RootElement.GetProperty("params").GetProperty("expression").GetString()!;
+        Assert.Contains("document.querySelector", expression);
+        Assert.DoesNotContain(", webview", expression);
+    }
+
+    [Fact]
+    public async Task WebViewSnapshot_ForwardsTargetOutsideJavaScript()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "webview", "--webview", "Right", "snapshot");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+        Assert.Contains("webview=Right", request.QueryString);
+        using var body = JsonDocument.Parse(request.Body!);
+        var expression = body.RootElement.GetProperty("params").GetProperty("expression").GetString()!;
+        Assert.Contains("'  '.repeat(depth)", expression);
+        Assert.DoesNotContain(", webview", expression);
+    }
+
+    [Theory]
+    [InlineData("dispatchClickEvent", "click")]
+    [InlineData("fill", "fill")]
+    [InlineData("insertText", "text")]
+    public async Task WebViewInput_UsesExistingActionEndpointAndTarget(string command, string endpoint)
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+        var arguments = new List<string> { "devflow", "webview", "--webview", "Right", "Input", command };
+        arguments.Add(command == "insertText" ? "hello" : "#target");
+        if (command == "fill")
+            arguments.Add("hello");
+
+        var result = await cli.InvokeAsync(arguments.ToArray());
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == $"/api/v1/webview/input/{endpoint}");
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal("Right", body.RootElement.GetProperty("contextId").GetString());
+        if (command != "insertText")
+            Assert.Equal("#target", body.RootElement.GetProperty("selector").GetString());
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+    }
+
+    [Fact]
+    public async Task WebViewScreenshot_UsesNativeFirstEndpoint()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "webview", "--webview", "Right", "Page", "captureScreenshot");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(MockAgentResponses.ScreenshotPng, Convert.FromBase64String(result.StdOut.Trim()));
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
+        Assert.Contains("webview=Right", request.QueryString);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+    }
+
+    [Theory]
+    [InlineData("""{"error":{"message":"WebView not ready"}}""", "WebView not ready")]
+    [InlineData("""{"result":{"exceptionDetails":{"text":"Uncaught","exception":{"description":"ReferenceError: missingVariable"}}}}""", "missingVariable")]
+    public async Task WebViewRuntimeEvaluate_Failure_ReturnsNonzeroExitAndUsefulError(string response, string expected)
+    {
+        await using var server = new MockAgentServer(webViewEvaluateResponse: response);
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync("devflow", "webview", "Runtime", "evaluate", "1+1");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(expected, result.StdErr + result.StdOut);
+    }
+
+    [Theory]
+    [InlineData("dispatchClickEvent")]
+    [InlineData("fill")]
+    public async Task WebViewInput_Failure_ReturnsNonzeroExit(string command)
+    {
+        await using var server = new MockAgentServer(
+            webViewActionResponse: """{"success":false,"error":"Element not found"}""");
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+        var arguments = new List<string> { "devflow", "webview", "Input", command, "#missing" };
+        if (command == "fill")
+            arguments.Add("hello");
+
+        var result = await cli.InvokeAsync(arguments.ToArray());
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Element not found", result.StdErr);
+        Assert.DoesNotContain("Clicked:", result.StdOut);
+        Assert.DoesNotContain("Filled:", result.StdOut);
+    }
+
+    [Fact]
+    public async Task WebViewScreenshot_InvalidPng_ReturnsNonzeroExit()
+    {
+        await using var server = new MockAgentServer(invalidWebViewScreenshot: true);
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync("devflow", "webview", "Page", "captureScreenshot");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("PNG", result.StdErr);
+    }
+
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 2)]
+    public async Task WebViewBatch_Failure_StopsUnlessContinueRequestedAndFailsProcess(bool continueOnError, int expectedCommands)
+    {
+        await using var server = new MockAgentServer(
+            webViewEvaluateResponse: """{"result":{"exceptionDetails":{"text":"Uncaught","exception":{"description":"ReferenceError: missingVariable"}}}}""");
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+        var originalInput = Console.In;
+        try
+        {
+            Console.SetIn(new StringReader("webview snapshot\nwebview source\n"));
+            var arguments = new List<string> { "devflow", "batch", "--delay", "0" };
+            if (continueOnError)
+                arguments.Add("--continue-on-error");
+            var result = await cli.InvokeAsync(arguments.ToArray());
+
+            Assert.NotEqual(0, result.ExitCode);
+            var lines = result.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(expectedCommands, lines.Length);
+            using var first = JsonDocument.Parse(lines[0]);
+            Assert.NotEqual(0, first.RootElement.GetProperty("exit_code").GetInt32());
+            Assert.Contains("missingVariable", first.RootElement.GetProperty("output").GetString());
+            Assert.Equal(continueOnError ? 1 : 0, server.RecordedRequests.Count(r => r.Path == "/api/v1/webview/source"));
+        }
+        finally
+        {
+            Console.SetIn(originalInput);
+        }
+    }
 }

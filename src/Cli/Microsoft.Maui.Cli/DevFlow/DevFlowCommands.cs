@@ -2008,8 +2008,7 @@ public class DevFlowCommands
             }
             if (evalResult.TryGetProperty("exceptionDetails", out var exception))
             {
-                var text = exception.TryGetProperty("text", out var t) ? t.GetString() : "Unknown error";
-                return $"Error: {text}";
+                throw new InvalidOperationException(exception.GetRawText());
             }
         }
 
@@ -2062,7 +2061,7 @@ public class DevFlowCommands
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 JSON.stringify((function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
+                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
                     if (!el) return null;
                     return {{
                         tagName: el.tagName.toLowerCase(),
@@ -2071,7 +2070,7 @@ public class DevFlowCommands
                         textContent: el.textContent?.trim().substring(0, 100) || null
                     }};
                 }})())
-            ");
+            ", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2083,7 +2082,7 @@ public class DevFlowCommands
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 JSON.stringify((function() {{
-                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)}, webview);
+                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)});
                     return Array.from(els).map((el, i) => ({{
                         index: i,
                         tagName: el.tagName.toLowerCase(),
@@ -2092,7 +2091,7 @@ public class DevFlowCommands
                         textContent: el.textContent?.trim().substring(0, 50) || null
                     }}));
                 }})(), null, 2)
-            ");
+            ", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2137,17 +2136,9 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Page.captureScreenshot", webview: webview);
-            if (result.HasValue &&
-                result.Value.TryGetProperty("result", out var resultProp) && 
-                resultProp.TryGetProperty("data", out var dataProp))
-            {
-                Console.WriteLine(dataProp.GetString());
-            }
-            else
-            {
-                Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
-            }
+            using var client = await CreateAgentClientAsync(host, port);
+            var bytes = await client.GetWebViewScreenshotAsync(webview);
+            Console.WriteLine(Convert.ToBase64String(bytes));
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2158,15 +2149,9 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return 'Error: Element not found';
-                    el.click();
-                    return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
-                }})()
-            ");
-            Console.WriteLine(result);
+            using var client = await CreateAgentClientAsync(host, port);
+            await client.ClickWebViewAsync(selector, webview);
+            Console.WriteLine($"Clicked: {selector}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2175,10 +2160,8 @@ public class DevFlowCommands
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Input.insertText", new JsonObject
-            {
-                ["text"] = text
-            }, webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            await client.InsertWebViewTextAsync(text, webview);
             Console.WriteLine($"Inserted: {text.Length} characters");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2188,24 +2171,9 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return 'Error: Element not found';
-                    
-                    const text = {CliJson.SerializeUntyped(text, indented: false)};
-                    if (el.isContentEditable) {{
-                        el.textContent = text;
-                    }} else {{
-                        el.value = text;
-                        el.focus();
-                    }}
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    return 'Filled: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' with ' + text.length + ' chars';
-                }})()
-            ");
-            Console.WriteLine(result);
+            using var client = await CreateAgentClientAsync(host, port);
+            await client.FillWebViewAsync(selector, text, webview);
+            Console.WriteLine($"Filled: {selector} with {text.Length} chars");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2300,7 +2268,7 @@ public class DevFlowCommands
                     function walk(node, depth) {
                         if (depth > 8) return '';
                         let result = '';
-                        const indent = '  '.repeat(depth, webview);
+                        const indent = '  '.repeat(depth);
                         
                         if (node.nodeType === 1) {
                             const tag = node.tagName.toLowerCase();
@@ -2331,7 +2299,7 @@ public class DevFlowCommands
                     
                     return 'Title: ' + document.title + '\nURL: ' + location.href + '\n\n' + walk(document.body, 0);
                 })()
-            ");
+            ", webview);
             
             Console.WriteLine(result);
         }
@@ -3000,7 +2968,7 @@ public class DevFlowCommands
         new("webview DOM querySelector", "Find element by CSS selector", false),
         new("webview DOM querySelectorAll", "Find all elements by CSS selector", false),
         new("webview DOM getOuterHTML", "Get element outer HTML", false),
-        new("webview Input click", "Click element by CSS selector", true),
+        new("webview Input dispatchClickEvent", "Click element by CSS selector", true),
         new("webview Input insertText", "Insert text at cursor", true),
         new("webview Input fill", "Fill form field by CSS selector", true),
         new("webview Page navigate", "Navigate WebView to URL", true),
@@ -5909,6 +5877,7 @@ public class DevFlowCommands
         }
 
     done:
+        _errorOccurred = failed > 0;
         if (human)
         {
             originalOut.WriteLine();

@@ -378,38 +378,32 @@ public class WebViewTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task InputClick_Button_Succeeds()
+    public async Task InputClick_Checkbox_TogglesStateExactlyOnce()
     {
         await EnsureOnBlazorPageAsync();
         await AssertCdpResponsiveAsync();
         var contextId = await GetActiveContextIdAsync();
 
-        // Use the always-present Add button. On slow renderers (Windows WebView2 on
-        // hosted runners) the component DOM can lag behind the CDP "ready" state, so
-        // poll until the element appears or a generous timeout expires.
-        HttpResponseMessage response = null!;
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
+        const string selector = ".todo-item input[type=checkbox]";
+        await WaitForAsync(async () =>
+            await ReadWebViewValueAsync($"document.querySelector('{selector}') !== null", contextId) == "True",
+            timeoutMs: 30000);
+        var before = await ReadWebViewValueAsync($"document.querySelector('{selector}').checked", contextId);
+        var expected = before == "True" ? "False" : "True";
+        var summaryBefore = await ReadWebViewValueAsync("document.querySelector('.counter').textContent", contextId);
+        try
         {
-            response = await PostWithBridgeRetryAsync("/api/v1/webview/input/click", new
-            {
-                selector = ".add-btn",
-                contextId,
-            });
-
-            if (response.IsSuccessStatusCode)
-                break;
-
-            var body = await response.Content.ReadAsStringAsync();
-            if (!body.Contains("No element matches", StringComparison.OrdinalIgnoreCase))
-                break; // Non-selector error, don't retry
-
-            await Task.Delay(1000);
+            Assert.True(await Client.ClickWebViewAsync(selector, contextId));
+            await WaitForAsync(async () =>
+                await ReadWebViewValueAsync($"document.querySelector('{selector}').checked", contextId) == expected);
+            Assert.NotEqual(summaryBefore, await ReadWebViewValueAsync("document.querySelector('.counter').textContent", contextId));
         }
-
-        Assert.True(response.IsSuccessStatusCode,
-            $"/api/v1/webview/input/click returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
-
+        finally
+        {
+            Assert.True(await Client.ClickWebViewAsync(selector, contextId));
+            await WaitForAsync(async () =>
+                await ReadWebViewValueAsync("document.querySelector('.counter').textContent", contextId) == summaryBefore);
+        }
     }
 
     [Fact]
@@ -419,19 +413,20 @@ public class WebViewTests : IntegrationTestBase
         await AssertCdpResponsiveAsync();
         var contextId = await GetActiveContextIdAsync();
 
-        var response = await PostWithBridgeRetryAsync("/api/v1/webview/input/fill", new
+        const string selector = ".add-inputs input[type=text]";
+        await WaitForAsync(async () =>
+            await ReadWebViewValueAsync($"document.querySelector('{selector}') !== null", contextId) == "True",
+            timeoutMs: 30000);
+        try
         {
-            selector = "input",
-            text = "Blazor fill test",
-            contextId,
-        });
-
-        // Some platforms may not ship an input element on /counter; a 404 from the selector
-        // is acceptable, but anything above 500 or a bridge error is not.
-        Assert.True(
-            response.IsSuccessStatusCode || (int)response.StatusCode == 404,
-            $"/api/v1/webview/input/fill returned unexpected status {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
-
+            Assert.True(await Client.FillWebViewAsync(selector, "Blazor fill test", contextId));
+            Assert.Equal("Blazor fill test", await ReadWebViewValueAsync(
+                $"document.querySelector('{selector}').value", contextId));
+        }
+        finally
+        {
+            await Client.FillWebViewAsync(selector, "", contextId);
+        }
     }
 
     [Fact]
@@ -441,14 +436,21 @@ public class WebViewTests : IntegrationTestBase
         await AssertCdpResponsiveAsync();
         var contextId = await GetActiveContextIdAsync();
 
-        var response = await PostWithBridgeRetryAsync("/api/v1/webview/input/text", new
+        const string selector = ".add-inputs input[type=text]";
+        await WaitForAsync(async () =>
+            await ReadWebViewValueAsync($"document.querySelector('{selector}') !== null", contextId) == "True",
+            timeoutMs: 30000);
+        try
         {
-            text = "Hello from test",
-            contextId,
-        });
-
-        Assert.True(response.IsSuccessStatusCode,
-            $"/api/v1/webview/input/text returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+            Assert.True(await Client.FillWebViewAsync(selector, "", contextId));
+            Assert.True(await Client.InsertWebViewTextAsync("Hello from test", contextId));
+            Assert.Equal("Hello from test", await ReadWebViewValueAsync(
+                $"document.querySelector('{selector}').value", contextId));
+        }
+        finally
+        {
+            await Client.FillWebViewAsync(selector, "", contextId);
+        }
     }
 
     [Fact]
@@ -473,7 +475,77 @@ public class WebViewTests : IntegrationTestBase
             $"/api/v1/webview/screenshot returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
 
         var bytes = await response.Content.ReadAsByteArrayAsync();
-        Assert.NotEmpty(bytes);
+        Assert.True(bytes.Length > 8);
+        Assert.Equal(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, bytes.Take(8).ToArray());
+    }
+
+    async Task<string?> ReadWebViewValueAsync(string expression, string contextId)
+    {
+        var response = await Client.SendCdpCommandAsync("Runtime.evaluate",
+            new JsonObject { ["expression"] = expression, ["returnByValue"] = true }, contextId);
+        var remoteObject = response.GetProperty("result").GetProperty("result");
+        return remoteObject.TryGetProperty("value", out var value) ? value.ToString() : null;
+    }
+
+    [Fact]
+    public async Task InputClick_MissingSelector_ThrowsWithAgentDetails()
+    {
+        await EnsureOnBlazorPageAsync();
+        var contextId = await GetActiveContextIdAsync();
+
+        var error = await Assert.ThrowsAsync<HttpRequestException>(
+            () => Client.ClickWebViewAsync("#devflow-does-not-exist", contextId));
+
+        Assert.Contains("No element matches selector", error.Message);
+    }
+
+    [Fact]
+    public async Task Evaluate_JavaScriptException_ThrowsWithDescription()
+    {
+        await EnsureOnBlazorPageAsync();
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => Client.SendCdpCommandAsync(
+            "Runtime.evaluate", new JsonObject { ["expression"] = "__devflowMissingVariable.click()" }));
+
+        Assert.Contains("__devflowMissingVariable", error.Message);
+    }
+
+    [Fact]
+    public async Task Network_BrowserCapture_ReturnsUnsupported()
+    {
+        using var response = await GetRawAsync("/api/v1/webview/network");
+        Assert.Equal(System.Net.HttpStatusCode.NotImplemented, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("webview.network", body.RootElement.GetProperty("capability").GetString());
+    }
+
+    [Fact]
+    public async Task InputFill_SelectedContext_DoesNotFillOtherWebView()
+    {
+        App.InvalidateBlazorReady();
+        const string selector = ".add-inputs input[type=text]";
+        try
+        {
+            await NavigateToPageAsync("//multiblazor", "BlazorLeft");
+            foreach (var contextId in new[] { "BlazorLeft", "BlazorRight" })
+            {
+                await WaitForAsync(async () =>
+                    await ReadWebViewValueAsync($"document.querySelector('{selector}') !== null", contextId) == "True",
+                    timeoutMs: 45000);
+            }
+
+            Assert.True(await Client.FillWebViewAsync(selector, "left-only", "BlazorLeft"));
+            Assert.True(await Client.FillWebViewAsync(selector, "right-only", "BlazorRight"));
+            Assert.Equal("left-only", await ReadWebViewValueAsync($"document.querySelector('{selector}').value", "BlazorLeft"));
+            Assert.Equal("right-only", await ReadWebViewValueAsync($"document.querySelector('{selector}').value", "BlazorRight"));
+            await Client.FillWebViewAsync(selector, "", "BlazorLeft");
+            await Client.FillWebViewAsync(selector, "", "BlazorRight");
+        }
+        finally
+        {
+            await NavigateToMainPageAsync();
+            App.InvalidateBlazorReady();
+        }
     }
 
     [Fact]

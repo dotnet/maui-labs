@@ -30,6 +30,9 @@ public sealed class MockAgentServer : IAsyncDisposable
     private readonly bool _propertyFailureWithoutReason;
     private readonly bool _propertyNotFound;
     private readonly int _capabilitiesErrorResponseCount;
+    private readonly string? _webViewEvaluateResponse;
+    private readonly string? _webViewActionResponse;
+    private readonly bool _invalidWebViewScreenshot;
     private int _capabilitiesRequestCount;
     private int _hitTestCount;
     private int _tapCount;
@@ -56,7 +59,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         bool malformedPropertyResponse = false,
         bool propertyFailureWithoutReason = false,
         bool propertyNotFound = false,
-        int capabilitiesErrorResponseCount = 0)
+        int capabilitiesErrorResponseCount = 0,
+        string? webViewEvaluateResponse = null,
+        string? webViewActionResponse = null,
+        bool invalidWebViewScreenshot = false)
     {
         _supportsCaptureEpoch = supportsCaptureEpoch;
         _failFirstHitTestCandidate = failFirstHitTestCandidate;
@@ -76,6 +82,9 @@ public sealed class MockAgentServer : IAsyncDisposable
         _propertyFailureWithoutReason = propertyFailureWithoutReason;
         _propertyNotFound = propertyNotFound;
         _capabilitiesErrorResponseCount = capabilitiesErrorResponseCount;
+        _webViewEvaluateResponse = webViewEvaluateResponse;
+        _webViewActionResponse = webViewActionResponse;
+        _invalidWebViewScreenshot = invalidWebViewScreenshot;
     }
 
     public int Port { get; private set; }
@@ -467,7 +476,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapDelete("/api/v1/storage/files/{path}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
 
-    private static void RegisterWebViewEndpoints(WebApplication app)
+    private void RegisterWebViewEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/webview/contexts", () => Results.Content(MockAgentResponses.WebViews, "application/json"));
         app.MapGet("/api/v1/webview/source", () => Results.Content(MockAgentResponses.WebViewSource, "text/html"));
@@ -475,14 +484,19 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/webview/dom/query", () => Results.Content("""{"matches":[{"tag":"div","id":"app"}]}""", "application/json"));
         app.MapGet("/api/v1/webview/network", () => Results.Content("""{"entries":[]}""", "application/json"));
         app.MapGet("/api/v1/webview/console", () => Results.Content("""{"entries":[]}""", "application/json"));
-        app.MapGet("/api/v1/webview/screenshot", () => Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
+        app.MapGet("/api/v1/webview/screenshot", () => _invalidWebViewScreenshot
+            ? Results.Content("""{"error":"Not a PNG"}""", "application/json")
+            : Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
+        app.MapPost("/api/v1/webview/input/click", () => Results.Content(_webViewActionResponse ?? """{"success":true,"tagName":"button"}""", "application/json"));
+        app.MapPost("/api/v1/webview/input/fill", () => Results.Content(_webViewActionResponse ?? """{"success":true,"textLength":5}""", "application/json"));
+        app.MapPost("/api/v1/webview/input/text", () => Results.Content(_webViewActionResponse ?? """{"success":true}""", "application/json"));
 
         app.MapPost("/api/v1/webview/evaluate", async (HttpContext context) =>
         {
             using var reader = new StreamReader(context.Request.Body);
             var body = await reader.ReadToEndAsync();
             var method = JsonDocument.Parse(body).RootElement.GetProperty("method").GetString() ?? string.Empty;
-            return Results.Content(MockAgentResponses.WebViewEvaluate(method), "application/json");
+            return Results.Content(_webViewEvaluateResponse ?? MockAgentResponses.WebViewEvaluate(method), "application/json");
         });
     }
 

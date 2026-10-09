@@ -1324,47 +1324,14 @@ paths:
     get:
       operationId: getWebViewNetworkRequests
       tags: [webview]
-      summary: List captured native .NET network requests
+      summary: Discover unsupported browser-network capture
       description: >
-        Convenience alias for `/api/v1/network/requests`. Returns captured HTTP
-        requests from the same native .NET network store, optionally filtered
-        by host, method, or status code. It does not capture browser fetch/XHR
-        traffic or filter requests by WebView context.
-      parameters:
-        - name: limit
-          in: query
-          description: Maximum number of requests to return.
-          schema:
-            type: integer
-            minimum: 1
-        - name: host
-          in: query
-          description: Filter by host name.
-          schema:
-            type: string
-        - name: method
-          in: query
-          description: Filter by HTTP method.
-          schema:
-            type: string
-        - name: status
-          in: query
-          description: Filter by status code.
-          schema:
-            type: integer
-            minimum: 100
-            maximum: 599
+        Browser fetch/XHR capture is not implemented. Returns the standard
+        not_supported envelope for webview.network. Native .NET HTTP traffic
+        remains available through /api/v1/network/requests.
       responses:
-        "200":
-          description: Array of network request summaries.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "./schemas/network.json#/$defs/NetworkRequestSummary"
-        "500":
-          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/webview/console:
     get:
