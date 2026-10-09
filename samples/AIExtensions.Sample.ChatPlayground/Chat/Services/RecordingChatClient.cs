@@ -4,9 +4,15 @@ using Microsoft.Extensions.AI;
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>Records a selected real provider without changing its streaming behavior.</summary>
-public sealed class RecordingChatClient(IChatClient inner, IChatRecordingSession recording)
+public sealed class RecordingChatClient(IChatClient inner, IChatRecordingSession recording, bool leaveOpen = false)
     : DelegatingChatClient(inner)
 {
+    protected override void Dispose(bool disposing)
+    {
+        if (!leaveOpen)
+            base.Dispose(disposing);
+    }
+
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,

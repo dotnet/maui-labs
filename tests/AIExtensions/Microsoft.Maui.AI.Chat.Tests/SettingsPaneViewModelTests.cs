@@ -12,6 +12,33 @@ public sealed class SettingsPaneViewModelTests
     }
 
     [Fact]
+    public void TextOnlyClient_UsesOrdinaryOptionsWithoutProviderSpecificProperties()
+    {
+        using var hybrid = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("hybrid", "Hybrid", "Ready"));
+        using var live = CreateClient("Live", isReplay: false);
+        var settings = new SettingsPaneViewModel([hybrid, live])
+        {
+            Instructions = "Explain clearly.",
+            EnableTemperature = true,
+            Temperature = "0.3",
+            UseStructuredJson = true,
+        };
+
+        var options = settings.CreateChatOptions([]);
+        Assert.Null(options.AdditionalProperties);
+        Assert.Null(options.Tools);
+        Assert.Null(options.Reasoning);
+        Assert.Same(ChatToolMode.None, options.ToolMode);
+        Assert.Equal("Explain clearly.", options.Instructions);
+        Assert.Equal(0.3f, options.Temperature);
+        Assert.IsType<ChatResponseFormatJson>(options.ResponseFormat);
+
+        settings.SelectedClient = live;
+        Assert.Null(settings.CreateChatOptions([]).AdditionalProperties);
+    }
+
+    [Fact]
     public void SelectedClient_ExposesActualClientAndItsDescriptor()
     {
         using var live = CreateClient("Live", isReplay: false);

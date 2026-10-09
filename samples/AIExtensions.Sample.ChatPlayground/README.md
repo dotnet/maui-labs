@@ -24,11 +24,47 @@ tool calls.
 The header's **Logs** button toggles the local, bounded diagnostics sidebar
 (also available on Embeddings and Images). It groups built-in logs and spans
 by trace, including existing tool-invocation lifecycle logs from MEAI and Apple.
+Hybrid adds a Debug entry with the selected route and model-generated reason;
+that reason can include prompt details.
 Apple's native tool callbacks retain the originating request's trace/span.
 Chat and embeddings emit spans, while the pinned MEAI version
 provides image logging only. Model and usage data appear only when emitted
 by the provider. Trace payload logging and sensitive telemetry capture are
 disabled; exceptions may still contain sensitive data. Nothing is exported.
+
+#### Hybrid chat
+
+On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses an enabled Apple
+Intelligence model to classify **only the last user message** in one local call
+per request. Routing is model-decided, not cached or deterministic; terse
+follow-ups have no earlier context for classification. Cloud is the default;
+local is reserved for obvious greetings, device time lookups and single basic
+calculations with no other work. Writing, summaries, explanations and uncertainty
+go to cloud, even when the requested answer is short. Decisions are best-effort,
+not a security boundary. It is registered only
+when both Apple and an Azure chat deployment are available. Missing or blank
+user text bypasses classification. Incomplete parsed decisions default to cloud;
+classifier failures and malformed JSON propagate.
+
+Hybrid uses the shared keyed Apple/Azure pipelines, including their tool
+middleware, and records only the outer answer interaction.
+The classifier uses
+its own short prompt, scalar JSON schema and options, never caller tools or instructions.
+The selected provider receives the original full messages (including tool
+history and provider content), instructions, tools and options without cleaning,
+summarization or redaction. Message enumerables must be repeatable. Cloud routes
+send this automatically without per-turn approval; do not send secrets or data
+that must stay on-device. Hybrid advertises tools but not images, reasoning
+summaries or image generation, since those are not shared capabilities.
+
+For cloud routes, built-in `OrderedFailoverChatClient` tries cloud, then local
+if cloud fails before any streaming update (even metadata). Caller cancellation,
+failures after output and local failures propagate. Recovery may repeat tools
+already executed by a failed non-streaming cloud attempt; use idempotent tools.
+Leaf `ConfigureOptionsChatClient` wrappers isolate options and
+stop-sequence lists, not messages. Built-in diagnostics expose classification
+and answer attempts under the outer trace, with sensitive telemetry disabled.
+Only this sample and its host tests use the newer AI routing packages.
 
 ### Embeddings
 
