@@ -416,7 +416,8 @@ paths:
       description: >
         Captures a screenshot of the entire screen or a specific element.
         Element IDs may identify MAUI visual elements or native elements
-        advertised by the visual tree.
+        advertised by the visual tree. Successful responses are always PNG;
+        the runtime does not implement format selection.
       parameters:
         - name: elementId
           in: query
@@ -438,13 +439,6 @@ paths:
             type: string
             enum: [native, auto]
             default: auto
-        - name: format
-          in: query
-          description: Image format.
-          schema:
-            type: string
-            enum: [png, jpeg]
-            default: png
         - $ref: "#/components/parameters/CaptureEpochQuery"
         - $ref: "#/components/parameters/RegistryGenerationQuery"
       responses:
@@ -468,10 +462,6 @@ paths:
                 minimum: 0
           content:
             image/png:
-              schema:
-                type: string
-                format: binary
-            image/jpeg:
               schema:
                 type: string
                 format: binary
@@ -1053,16 +1043,15 @@ paths:
       tags: [webview]
       summary: List WebView instances
       description: >
-        Returns all active WebView contexts in the application.
+        Returns all registered CDP WebView contexts, including inactive and
+        not-yet-ready registrations, inside a webviews object property.
       responses:
         "200":
-          description: Array of WebView contexts.
+          description: Registered WebView contexts.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "./schemas/webview.json#/$defs/WebViewContext"
+                $ref: "./schemas/webview.json#/$defs/WebViewContextsResponse"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1070,12 +1059,17 @@ paths:
     post:
       operationId: evaluateJavaScript
       tags: [webview]
-      summary: Execute JavaScript in WebView
+      summary: Send a CDP command to a WebView
       description: >
-        Evaluates a JavaScript expression inside a WebView context and returns the result. This
+        Forwards a raw CDP command to the registered bridge and returns its raw
+        JSON response. JavaScript evaluation uses method Runtime.evaluate with
+        expression and returnByValue inside params; a top-level expression is
+        not translated into a CDP command. This
         low-level endpoint can read or change application data. Interactive Inspector hosts require
         explicit confirmation before calling it; direct API callers are responsible for equivalent
         authorization and user intent.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
       requestBody:
         required: true
         content:
@@ -1084,13 +1078,13 @@ paths:
               $ref: "./schemas/webview.json#/$defs/EvaluateRequest"
       responses:
         "200":
-          description: Evaluation result.
+          description: Raw CDP response, including CDP errors returned by the bridge.
           content:
             application/json:
               schema:
                 $ref: "./schemas/webview.json#/$defs/EvaluateResponse"
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1098,10 +1092,12 @@ paths:
     get:
       operationId: getWebViewDom
       tags: [webview]
-      summary: Get DOM snapshot
+      summary: Get DOM HTML source
       description: >
-        Returns a simplified snapshot of the DOM tree in the WebView.
+        Alias of /api/v1/webview/source. Returns document.documentElement.outerHTML,
+        not a structured DOM tree.
       parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
         - name: contextId
           in: query
           description: WebView context ID. Uses the default context if omitted.
@@ -1109,14 +1105,13 @@ paths:
             type: string
       responses:
         "200":
-          description: Simplified DOM tree.
+          description: Page HTML source.
           content:
-            application/json:
+            text/html:
               schema:
-                type: object
-                description: Simplified DOM tree representation.
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+                type: string
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1128,6 +1123,9 @@ paths:
       description: >
         Executes a CSS selector query against the WebView DOM and returns
         matching nodes.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -1143,11 +1141,15 @@ paths:
                 type: array
                 items:
                   type: object
-                  description: Simplified DOM node.
+                  description: Matching node metadata, not a recursive DOM tree.
+                  properties:
+                    index: { type: integer, minimum: 0 }
+                    tagName: { type: [string, "null"] }
+                    id: { type: [string, "null"] }
+                    className: {}
+                    text: { type: string }
         "400":
-          $ref: "#/components/responses/InvalidSelector"
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1159,6 +1161,7 @@ paths:
       description: >
         Returns the HTML source of the WebView page.
       parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
         - name: contextId
           in: query
           description: WebView context ID. Uses the default context if omitted.
@@ -1171,8 +1174,8 @@ paths:
             text/html:
               schema:
                 type: string
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1183,6 +1186,9 @@ paths:
       summary: Navigate WebView
       description: >
         Navigates the WebView to the specified URL.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -1199,8 +1205,12 @@ paths:
                 properties:
                   success:
                     type: boolean
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+                  contextId:
+                    type: string
+                  url:
+                    type: string
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1211,6 +1221,9 @@ paths:
       summary: Click element in WebView
       description: >
         Clicks a DOM element matching the given CSS selector inside the WebView.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -1227,10 +1240,12 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  tagName:
+                    type: [string, "null"]
         "400":
-          $ref: "#/components/responses/InvalidSelector"
+          $ref: "#/components/responses/WebViewError"
         "404":
-          $ref: "#/components/responses/ElementNotFound"
+          $ref: "#/components/responses/WebViewElementNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1241,6 +1256,9 @@ paths:
       summary: Fill field in WebView
       description: >
         Clears and fills a DOM input element matching the given CSS selector.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -1257,10 +1275,13 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  textLength:
+                    type: integer
+                    minimum: 0
         "400":
-          $ref: "#/components/responses/InvalidSelector"
+          $ref: "#/components/responses/WebViewError"
         "404":
-          $ref: "#/components/responses/ElementNotFound"
+          $ref: "#/components/responses/WebViewElementNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1272,6 +1293,9 @@ paths:
       description: >
         Inserts text into the currently focused element in the WebView without
         clearing existing content.
+      parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -1288,8 +1312,11 @@ paths:
                 properties:
                   success:
                     type: boolean
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+                  textLength:
+                    type: integer
+                    minimum: 0
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1297,10 +1324,12 @@ paths:
     get:
       operationId: getWebViewNetworkRequests
       tags: [webview]
-      summary: List network requests captured from WebViews
+      summary: List captured native .NET network requests
       description: >
         Convenience alias for `/api/v1/network/requests`. Returns captured HTTP
-        requests, optionally filtered by host, method, or status code.
+        requests from the same native .NET network store, optionally filtered
+        by host, method, or status code. It does not capture browser fetch/XHR
+        traffic or filter requests by WebView context.
       parameters:
         - name: limit
           in: query
@@ -1344,6 +1373,7 @@ paths:
       summary: Query WebView console logs
       description: >
         Convenience alias for `/api/v1/logs` with the source fixed to `webview`.
+        Returns the same compact log-entry format as the native log endpoint.
       parameters:
         - name: limit
           in: query
@@ -1366,6 +1396,8 @@ paths:
                 type: array
                 items:
                   $ref: "./schemas/logs.json#/$defs/LogEntry"
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1375,8 +1407,11 @@ paths:
       tags: [webview]
       summary: Capture WebView screenshot
       description: >
-        Captures a screenshot of the WebView content.
+        Captures the registered WebView's native element first. If native capture
+        is unavailable, requests a PNG from the CDP bridge using
+        Page.captureScreenshot. Successful responses are always image/png.
       parameters:
+        - $ref: "#/components/parameters/WebViewQuery"
         - name: contextId
           in: query
           description: WebView context ID. Uses the default context if omitted.
@@ -1390,12 +1425,8 @@ paths:
               schema:
                 type: string
                 format: binary
-            image/jpeg:
-              schema:
-                type: string
-                format: binary
-        "404":
-          $ref: "#/components/responses/ElementNotFound"
+        "400":
+          $ref: "#/components/responses/WebViewError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1425,7 +1456,7 @@ paths:
       description: >
         Starts a new profiling session with the given sample interval.
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -1433,15 +1464,24 @@ paths:
               properties:
                 sampleIntervalMs:
                   type: integer
-                  minimum: 1
-                  description: Sampling interval in milliseconds.
+                  minimum: 50
+                  maximum: 60000
+                  description: Sampling interval in milliseconds. Defaults to the agent's configured interval.
       responses:
         "200":
           description: Session started.
           content:
             application/json:
               schema:
-                $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                type: object
+                required: [session, capabilities]
+                properties:
+                  session:
+                    $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                  capabilities:
+                    $ref: "./schemas/profiler.json#/$defs/ProfilerCapabilities"
+        "400":
+          $ref: "#/components/responses/ProfilerError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1465,7 +1505,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                type: object
+                required: [session, stoppedAtUtc]
+                properties:
+                  session:
+                    oneOf:
+                      - $ref: "./schemas/profiler.json#/$defs/ProfilerSessionInfo"
+                      - type: "null"
+                  stoppedAtUtc:
+                    $ref: "./schemas/common.json#/$defs/Timestamp"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -1535,7 +1583,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "./schemas/profiler.json#/$defs/ProfilerMarker"
+              type: object
+              description: Input names are case-insensitive. The server assigns the marker timestamp.
+              required: [name]
+              properties:
+                name: { type: string }
+                type: { type: [string, "null"], default: user.action }
+                payloadJson: { type: [string, "null"] }
       responses:
         "200":
           description: Marker published.
@@ -1546,6 +1600,10 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/ProfilerError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1561,7 +1619,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "./schemas/profiler.json#/$defs/ProfilerSpan"
+              type: object
+              description: Input names are case-insensitive. The server assigns spanId and computes duration.
+              required: [name]
+              properties:
+                name: { type: string }
+                kind: { type: [string, "null"], default: ui.operation }
+                status: { type: [string, "null"], default: ok }
+                parentSpanId: { type: [string, "null"] }
+                traceId: { type: [string, "null"] }
+                startTsUtc: { type: [string, "null"], format: date-time }
+                endTsUtc: { type: [string, "null"], format: date-time }
+                threadId: { type: [integer, "null"] }
+                screen: { type: [string, "null"] }
+                elementPath: { type: [string, "null"] }
+                tagsJson: { type: [string, "null"] }
+                error: { type: [string, "null"] }
       responses:
         "200":
           description: Span published.
@@ -1572,6 +1645,10 @@ paths:
                 properties:
                   success:
                     type: boolean
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/ProfilerError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1719,10 +1796,9 @@ paths:
             minimum: 0
         - name: source
           in: query
-          description: Filter by log source.
+          description: Filter by source, case-insensitively. Omit to include all sources.
           schema:
             type: string
-            enum: [native, webview, framework]
       responses:
         "200":
           description: Array of log entries.
@@ -2819,6 +2895,25 @@ paths:
 # ═══════════════════════════ Components ═══════════════════════════════
 components:
   parameters:
+    WebViewQuery:
+      name: webview
+      in: query
+      description: >
+        Registry index (decimal string), AutomationId, or elementId of a
+        registered CDP bridge. Takes precedence over contextId. Omit to use the
+        default bridge.
+      schema:
+        type: string
+
+    WebViewContextQuery:
+      name: contextId
+      in: query
+      description: >
+        Alias of webview. Takes precedence over contextId in the JSON body;
+        ignored when the webview query parameter is supplied.
+      schema:
+        type: string
+
     ElementIdPath:
       name: id
       in: path
@@ -2844,6 +2939,13 @@ components:
         minimum: 0
 
   schemas:
+    OperationError:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, const: false }
+        error: { type: string }
+
     MissingJsonMetadata:
       type: object
       description: >
@@ -2901,6 +3003,27 @@ components:
       additionalProperties: false
 
   responses:
+    WebViewError:
+      description: Missing or unknown WebView, invalid input, or bridge operation failure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OperationError"
+
+    WebViewElementNotFound:
+      description: No DOM element matches the requested selector.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OperationError"
+
+    ProfilerError:
+      description: Profiler disabled, no active session, invalid interval, or missing marker/span name.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OperationError"
+
     ActionSuccess:
       description: Action completed.
       content:
