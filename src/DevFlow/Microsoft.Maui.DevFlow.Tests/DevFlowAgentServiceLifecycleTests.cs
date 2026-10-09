@@ -141,6 +141,76 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Fact]
+    public async Task WebViewOwners_VisibleWindowsUnnamedAndDuplicateIds_CorrelateActiveContextAndScreenshot()
+    {
+        var port = GetFreePort();
+        using var service = new CapturingWebViewService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var unnamed = new Microsoft.Maui.Controls.WebView();
+        var first = new Microsoft.Maui.Controls.WebView { AutomationId = "duplicate" };
+        var second = new HybridWebView { AutomationId = "duplicate" };
+        var hidden = new Microsoft.Maui.Controls.WebView { AutomationId = "duplicate", IsVisible = false };
+        var detached = new Microsoft.Maui.Controls.WebView { AutomationId = "duplicate" };
+        var addWindow = typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = new VerticalStackLayout { Children = { unnamed, first } } })]);
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = new VerticalStackLayout { Children = { second, hidden } } })]);
+        Func<string, Task<string>> wrong = _ => throw new InvalidOperationException("Wrong owner");
+        var unnamedIndex = service.RegisterCdpWebView(wrong, () => true, owner: unnamed);
+        var firstIndex = service.RegisterCdpWebView(wrong, () => true, "duplicate", owner: first);
+        var secondIndex = service.RegisterCdpWebView(_ => Task.FromResult("""{"id":99999,"result":{}}"""), () => true,
+            "duplicate", hostKind: "hybrid", owner: second);
+        var hiddenIndex = service.RegisterCdpWebView(wrong, () => true, "duplicate", owner: hidden);
+        var detachedIndex = service.RegisterCdpWebView(wrong, () => true, "duplicate", owner: detached);
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var contexts = (await client.GetCdpWebViewsAsync()).GetProperty("webviews").EnumerateArray().ToArray();
+        Assert.Equal(5, contexts.Length);
+        foreach (var index in new[] { unnamedIndex, firstIndex, secondIndex })
+        {
+            var context = Assert.Single(contexts, value => value.GetProperty("index").GetInt32() == index);
+            Assert.True(context.GetProperty("active").GetBoolean());
+            Assert.False(string.IsNullOrEmpty(context.GetProperty("elementId").GetString()));
+            Assert.True(context.GetProperty("ready").GetBoolean());
+            Assert.True(context.GetProperty("isReady").GetBoolean());
+        }
+        foreach (var index in new[] { hiddenIndex, detachedIndex })
+            Assert.False(Assert.Single(contexts, value => value.GetProperty("index").GetInt32() == index)
+                .GetProperty("active").GetBoolean());
+        Assert.Equal("hybrid", contexts.Single(value => value.GetProperty("index").GetInt32() == secondIndex)
+            .GetProperty("hostKind").GetString());
+        await client.SendCdpCommandAsync("DOM.getDocument", webviewId: "duplicate");
+        await client.GetWebViewScreenshotAsync(unnamedIndex.ToString(CultureInfo.InvariantCulture));
+        Assert.Same(unnamed, service.CapturedOwner);
+        await client.GetWebViewScreenshotAsync(secondIndex.ToString(CultureInfo.InvariantCulture));
+        Assert.Same(second, service.CapturedOwner);
+
+        app.Windows[0].Page = new ContentPage();
+        app.Windows[1].Page = new ContentPage();
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.SendCdpCommandAsync("DOM.getDocument"));
+    }
+
+    [Fact]
+    public async Task GenericReadyHosts_DoNotAdvertiseBlazorLayoutCoverage()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port, EnableLayoutDiagnostics = true });
+        using var client = new AgentClient("localhost", port);
+        service.RegisterCdpWebView(_ => Task.FromResult("{}"), () => true, hostKind: "hybrid");
+        service.StartServerOnly(new ImmediateDispatcher());
+        var layout = (await client.GetCapabilitiesAsync()).GetProperty("capabilities").GetProperty("ui.layoutDiagnostics");
+        Assert.False(layout.GetProperty("blazor").GetProperty("supported").GetBoolean());
+        Assert.Equal(0, layout.GetProperty("blazor").GetProperty("readyWebViewCount").GetInt32());
+        Assert.DoesNotContain(layout.GetProperty("features").EnumerateArray(), feature => feature.GetString() == "blazor-dom");
+        service.RegisterCdpWebView(_ => Task.FromResult("{}"), () => true, hostKind: "blazor");
+        layout = (await client.GetCapabilitiesAsync()).GetProperty("capabilities").GetProperty("ui.layoutDiagnostics");
+        Assert.True(layout.GetProperty("blazor").GetProperty("supported").GetBoolean());
+        Assert.Equal(1, layout.GetProperty("blazor").GetProperty("readyWebViewCount").GetInt32());
+    }
+
+    [Fact]
     public async Task LayoutDiagnostics_DefaultOptions_DoNotAdvertiseExperimentalCapability()
     {
         var port = GetFreePort();
@@ -1678,6 +1748,16 @@ public class DevFlowAgentServiceLifecycleTests
             {
                 IsInsideMainThreadFallback = wasInsideMainThreadFallback;
             }
+        }
+    }
+
+    private sealed class CapturingWebViewService(AgentOptions options) : MauiDevFlowAgentService(options)
+    {
+        public VisualElement? CapturedOwner { get; private set; }
+        protected override Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)
+        {
+            CapturedOwner = element;
+            return Task.FromResult<byte[]?>(NativeScreenshotPng);
         }
     }
 

@@ -15,7 +15,8 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 | **Microsoft.Maui.DevFlow.Agent.Gtk** | GTK/Linux agent for Microsoft.Maui.Platforms.Linux.Gtk4 apps. |
 | **Microsoft.Maui.DevFlow.Agent.Native** | In-app agent for plain .NET apps with no MAUI reference — Android views, UIKit, and AppKit backends. |
 | **Microsoft.Maui.DevFlow.Agent.Native.Essentials** | Optional add-on that lights up the device, storage and sensor endpoints for native apps using MAUI Essentials. |
-| **Microsoft.Maui.DevFlow.Blazor** | Blazor WebView CDP bridge. Enables Chrome DevTools Protocol access for Blazor Hybrid content via Chobitsu. |
+| **Microsoft.Maui.DevFlow.WebView** | Generic WebView/HybridWebView adapters and shared embedded CDP engine, without ASP.NET/Razor dependencies. |
+| **Microsoft.Maui.DevFlow.Blazor** | Optional Blazor adapter over the shared engine, adding rendered-app readiness and client-side routing. |
 | **Microsoft.Maui.DevFlow.Blazor.Gtk** | Blazor CDP bridge for WebKitGTK on Linux. |
 | **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
 | **Microsoft.Maui.DevFlow.Client** | Portable protocol client: `AgentClient`, element and protocol DTOs, and their serialization. Targets `netstandard2.0`, so .NET Framework harnesses speak the same protocol as modern .NET consumers. |
@@ -115,6 +116,7 @@ dotnet publish src/DevFlow/Microsoft.Maui.DevFlow.Agent.AotSmoke \
 
 ```xml
 <PackageReference Include="Microsoft.Maui.DevFlow.Agent" />
+<PackageReference Include="Microsoft.Maui.DevFlow.WebView" /> <!-- Standard WebView or HybridWebView -->
 <PackageReference Include="Microsoft.Maui.DevFlow.Blazor" />  <!-- If using Blazor Hybrid -->
 ```
 
@@ -146,6 +148,50 @@ builder.AddMauiDevFlowAgent(options =>
 });
 ```
 
+### WebView and HybridWebView
+
+Register `builder.AddMauiWebViewDevFlowTools()` from
+`Microsoft.Maui.DevFlow.WebView` alongside the agent in Debug builds:
+
+```csharp
+using Microsoft.Maui.DevFlow.WebView;
+
+#if DEBUG
+builder.AddMauiWebViewDevFlowTools();
+#endif
+```
+
+`AddMauiBlazorDevFlowTools()` includes generic registration and adds native Blazor
+handler capture, rendered `#app` readiness and relative `Blazor.navigateTo` routing.
+The [generic package README](Microsoft.Maui.DevFlow.WebView/README.md) describes
+options, requirements and platform support; the
+[Blazor package README](Microsoft.Maui.DevFlow.Blazor/README.md) describes the adapter.
+Android, iOS, Mac Catalyst and WinUI support standard and Hybrid hosts.
+AppKit supports standard WebView; GTK/WPF generic adapters are not supplied.
+
+The shared engine injects embedded assets through native evaluation, not a Blazor
+JS initializer or hosted debug asset. Navigation delegates, Android WebViewClient,
+Hybrid resource interception and messaging remain app/MAUI-owned. Registrations
+are lazy and idempotent; generic and Blazor options are independent.
+Weak owners correlate active hosts and native screenshots, including unnamed and
+duplicate-AutomationId controls across visible pages/windows.
+
+**Breaking internal APIs:** Update the agent, CLI, Client, WebView and Blazor
+packages together and rebuild consumers. The singleton CDP properties, unguarded
+unregister, Blazor script facade, old base class, ConfigureHandler and first-bridge
+helpers are removed; all current callers use typed registration with guarded cleanup.
+External index/AutomationId/element selectors, `--webview`, `ready`/`isReady` and
+Blazor-only `includeBlazorElements` layout coverage remain unchanged in this layer.
+Use the index to disambiguate duplicate host IDs. `hostKind` describes hosting,
+not the native UI backend or behavior dispatch.
+
+The asset-free Blazor adapter uses the ordinary .NET SDK and excludes the
+application-only WebView build imports from its private compile reference.
+It does not publish Razor/static web assets. This avoids the combined MAUI/Razor
+library issue described in [dotnet/maui#25999](https://github.com/dotnet/maui/issues/25999);
+automatic-import reversal remains tracked by
+[dotnet/maui#33301](https://github.com/dotnet/maui/issues/33301).
+
 ### WebView automation correctness
 
 Blazor DOM query, snapshot and input helpers forward the selected `--webview`
@@ -161,7 +207,7 @@ payloads or silently returning `false`. Browser fetch/XHR capture is not
 implemented: `/api/v1/webview/network` now returns 501 `webview.network`, and
 `network` is no longer advertised as a WebView feature. Native .NET HTTP capture
 remains available at `/api/v1/network/requests`. Existing WebView selectors,
-readiness fields and Blazor registration APIs are unchanged.
+readiness fields and the `AddMauiBlazorDevFlowTools` entry point remain unchanged.
 
 ### GTK/Linux apps
 

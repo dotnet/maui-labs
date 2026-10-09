@@ -7,7 +7,7 @@ Complete guide for integrating MAUI DevFlow into a .NET MAUI app.
 - [Add NuGet Packages](#2-add-nuget-packages)
 - [Register in MauiProgram.cs](#3-register-in-mauiprogramcs)
 - [Port Configuration](#3b-port-configuration)
-- [Blazor Hybrid Setup](#4-blazor-hybrid-chobitsu-auto-injection)
+- [WebView debug script injection](#4-webview-debug-script-injection)
 - [Mac Catalyst Entitlements](#5-mac-catalyst-entitlements)
 - [Android Port Forwarding](#6-android-port-forwarding)
 - [Verify Setup](#7-verify-setup)
@@ -153,36 +153,24 @@ maui devflow ui status --agent-port 10224    # target specific agent
 - `EnableWebViewInspection` — Enable WebView inspection (default: true)
 - `EnableLogging` — Log debug messages (default: true in DEBUG)
 
-## 4. Blazor Hybrid: Chobitsu Auto-Injection
+## 4. WebView debug script injection
 
-**No manual setup needed for Blazor Hybrid apps.** The `Microsoft.Maui.DevFlow.Blazor` NuGet package
-automatically injects `chobitsu.js` (the CDP implementation) via a Blazor JS initializer.
-Just add the NuGet package and register in `MauiProgram.cs` — that's it.
+`Microsoft.Maui.DevFlow.WebView` embeds the shared Chobitsu engine and injects it
+through the native JavaScript evaluator after document readiness. Register
+`builder.AddMauiWebViewDevFlowTools()` for standard WebView or HybridWebView.
+For Blazor, `builder.AddMauiBlazorDevFlowTools()` adds Blazor-specific capture,
+startup readiness, and routing over that same engine.
 
-### Fallback: Manual Script Tag
+No hosted debug assets, Blazor JS initializer, manual downloads, or script tag
+are required. Keep registration in `#if DEBUG`; this is development tooling,
+not a full native browser CDP implementation or a production feature.
 
-If auto-injection doesn't work in your setup (e.g., older .NET versions), add this line
-before `</body>` in `wwwroot/index.html`:
-
-```html
-<script src="chobitsu.js"></script>
-```
-
-The library detects both approaches — manual script tags take priority over auto-injection.
-
-### What if it's not working?
-
-The library checks at runtime and logs a message:
-```
-[BlazorDevFlow] ⚠️ No chobitsu script tag found. Auto-injection via JS initializer may not have run.
-```
-
-### How the file gets there
-
-The `chobitsu.js` file is included in the NuGet package as a static web asset. It is
-automatically available at the root of your app's `wwwroot/` — no `.targets` file copying,
-no manual downloads. It works in both Debug and Release builds (though MAUI DevFlow itself
-should only be referenced in Debug configurations).
+When a context is not ready, inspect its reported state and agent logs. Real
+initialization errors are logged even when verbose debug logging is disabled.
+Native-first screenshots are supported; browser fetch/XHR capture is not.
+Upgrade the agent, CLI, Client, WebView and Blazor packages together and rebuild
+consumers. Select an index, AutomationId or element ID with `--webview`;
+indices disambiguate duplicate IDs. Contexts retain `ready` and `isReady`.
 
 ## 5. Mac Catalyst: Entitlements
 
@@ -290,7 +278,7 @@ For an AI agent setting up MAUI DevFlow in a new project:
 2. [ ] `Microsoft.Maui.DevFlow.Blazor` NuGet package added (Blazor Hybrid only; or `Microsoft.Maui.DevFlow.Blazor.Gtk` for Linux)
 3. [ ] `builder.AddMauiDevFlowAgent(...)` in MauiProgram.cs inside `#if DEBUG`
 4. [ ] `builder.AddMauiBlazorDevFlowTools(...)` in MauiProgram.cs (Blazor Hybrid only)
-5. [ ] Chobitsu auto-injected via JS initializer (Blazor Hybrid — no manual step needed)
+5. [ ] Runtime bridge reports `ready` after C#-initiated embedded asset injection
 6. [ ] Mac Catalyst entitlements include `network.server` (Mac Catalyst only)
 7. [ ] `adb reverse tcp:19223` for broker + `adb forward tcp:<port>` for agent (Android only)
 8. [ ] Linux/GTK: current `Microsoft.Maui.Platforms.Linux.Gtk4` backend and GTK agent registered

@@ -1,6 +1,7 @@
 using System.Reflection;
+using System.Collections.Concurrent;
 
-namespace Microsoft.Maui.DevFlow.Blazor;
+namespace Microsoft.Maui.DevFlow.WebView;
 
 /// <summary>
 /// Loads embedded JS/HTML resource files from the assembly.
@@ -9,7 +10,7 @@ namespace Microsoft.Maui.DevFlow.Blazor;
 internal static class ScriptResources
 {
     private static readonly Assembly Assembly = typeof(ScriptResources).Assembly;
-    private static readonly Dictionary<string, string> Cache = new();
+    private static readonly ConcurrentDictionary<string, string> Cache = new();
 
     /// <summary>
     /// Loads an embedded script resource by filename (e.g. "chobitsu-init.js").
@@ -19,7 +20,7 @@ internal static class ScriptResources
         if (Cache.TryGetValue(filename, out var cached))
             return cached;
 
-        var resourceName = $"Microsoft.Maui.DevFlow.Blazor.Resources.Scripts.{filename.Replace('/', '.')}";
+        var resourceName = $"Microsoft.Maui.DevFlow.WebView.Resources.Scripts.{filename.Replace('/', '.')}";
         using var stream = Assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Embedded resource not found: {resourceName}");
         using var reader = new StreamReader(stream);
