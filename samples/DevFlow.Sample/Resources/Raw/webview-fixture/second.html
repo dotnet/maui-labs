@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Second WebView document</title>
+    <script src="_framework/hybridwebview.js"></script>
+</head>
+<body style="background:#e2f4e7">
+    <h1 id="second-document">Second document loaded</h1>
+    <p>Message from .NET: <span id="native-message">none</span></p>
+    <a id="return-link" href="index.html">Return to fixture</a>
+    <script>
+        window.addEventListener("HybridWebViewMessageReceived", event => {
+            const message = JSON.parse(event.detail.message);
+            document.querySelector("#native-message").textContent = message.value;
+            window.HybridWebView.SendRawMessage(JSON.stringify({ action: "js-ack", value: message.value }));
+        });
+        window.HybridWebView.SendRawMessage(JSON.stringify({ action: "ready", value: document.title }));
+    </script>
+</body>
+</html>

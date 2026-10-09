@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hybrid WebView fixture</title>
+    <script src="_framework/hybridwebview.js"></script>
+    <style>
+        html { background: #e2f4e7; }
+        html:has(body[data-host="standard"]) { background: #fbe4e4; }
+        body { font: 18px system-ui; margin: 16px; }
+        input, button { font: inherit; padding: 6px; margin: 4px; max-width: 90%; }
+        #fixture-overflow { width: 60px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #fixture-clip { position: relative; width: 40px; height: 40px; overflow: hidden; }
+        #fixture-clipped { width: 80px; height: 80px; background: #345678; }
+    </style>
+</head>
+<body data-host="hybrid">
+    <h1>Generic WebView fixture</h1>
+    <p>Click count: <span id="fixture-count">0</span></p>
+    <input id="fixture-input" placeholder="Enter text">
+    <p>Input event value: <span id="fixture-input-value"></span></p>
+    <button id="fixture-button">Increment once</button>
+    <button id="fixture-log">Write console marker</button>
+    <p>Message from .NET: <span id="native-message">none</span></p>
+    <p id="fixture-overflow">Deliberately overflowing fixture text</p>
+    <div id="fixture-clip"><div id="fixture-clipped">Clipped</div></div>
+    <a id="fixture-link" href="second.html">Navigate to second document (packaged Hybrid or HTTP)</a>
+    <script>
+        let count = 0;
+        function send(action, value) {
+            if (window.HybridWebView) {
+                window.HybridWebView.SendRawMessage(JSON.stringify({ action, value }));
+            }
+        }
+        document.querySelector("#fixture-button").addEventListener("click", () => {
+            document.querySelector("#fixture-count").textContent = String(++count);
+            send("js-click", String(count));
+        });
+        document.querySelector("#fixture-input").addEventListener("input", event => {
+            document.querySelector("#fixture-input-value").textContent = event.target.value;
+        });
+        document.querySelector("#fixture-log").addEventListener("click", event => {
+            const marker = `devflow-generic-webview-console-marker-${Date.now()}-${Math.random()}`;
+            event.currentTarget.dataset.lastMarker = marker;
+            console.log(marker);
+        });
+        window.addEventListener("HybridWebViewMessageReceived", event => {
+            const message = JSON.parse(event.detail.message);
+            document.querySelector("#native-message").textContent = message.value;
+            send("js-ack", message.value);
+        });
+        send("ready", document.title);
+    </script>
+</body>
+</html>
