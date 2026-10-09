@@ -266,7 +266,9 @@ public partial class MauiDevFlowAgentService
         if (blazorHosts.Count == 0)
             return;
 
-        var webViews = GetCdpWebViewsSnapshot();
+        var webViews = GetCdpWebViewsSnapshot()
+            .Where(webView => webView.HostKind == "blazor")
+            .ToArray();
         if (webViews.Length == 0)
         {
             MarkBlazorHostsUnavailable(
