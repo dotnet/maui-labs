@@ -38,6 +38,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj" />
+        <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.WebView\Microsoft.Maui.DevFlow.WebView.csproj" />
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
                           ReferenceOutputAssembly="false"
                           OutputItemType="Analyzer" />
@@ -59,8 +60,8 @@
 
     <!-- During project-to-project references, Microsoft.Maui.DevFlow.Blazor's WebView dependency
          leaks static web assets (blazor.modules.json, blazor.webview.js) that conflict
-         with this project's own WebView reference. Remove only the _framework/ duplicates,
-         preserving the library's own assets (chobitsu.js, JS initializer). -->
+     with this project's own WebView reference. Remove only the _framework/ duplicates.
+         The runtime debug bridge injects embedded assets from C#, not static web assets. -->
     <Target Name="ResolveDuplicateStaticWebAssets" BeforeTargets="ResolveStaticWebAssetsInputs">
         <ItemGroup>
             <StaticWebAsset Remove="@(StaticWebAsset)"

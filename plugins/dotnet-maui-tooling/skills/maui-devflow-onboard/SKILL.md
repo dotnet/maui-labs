@@ -64,6 +64,7 @@ If verification fails after integration, switch to `maui-devflow-debug` for conn
 | Project flavor | Required packages |
 | --- | --- |
 | Standard MAUI | `Microsoft.Maui.DevFlow.Agent` |
+| MAUI + WebView or HybridWebView | `Microsoft.Maui.DevFlow.Agent`, `Microsoft.Maui.DevFlow.WebView` |
 | MAUI + Blazor WebView | `Microsoft.Maui.DevFlow.Agent`, `Microsoft.Maui.DevFlow.Blazor` |
 | GTK MAUI | `Microsoft.Maui.DevFlow.Agent.Gtk` |
 | GTK MAUI + Blazor WebView | `Microsoft.Maui.DevFlow.Agent.Gtk`, `Microsoft.Maui.DevFlow.Blazor.Gtk` |
@@ -101,7 +102,19 @@ builder.AddMauiDevFlowAgent();
 #endif
 ```
 
-For MAUI + Blazor WebView:
+For MAUI + WebView or HybridWebView:
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent;
+using Microsoft.Maui.DevFlow.WebView;
+
+#if DEBUG
+builder.AddMauiDevFlowAgent();
+builder.AddMauiWebViewDevFlowTools();
+#endif
+```
+
+For MAUI + Blazor WebView (includes generic WebView/HybridWebView registration):
 
 ```csharp
 using Microsoft.Maui.DevFlow.Agent;

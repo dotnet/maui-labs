@@ -15,7 +15,8 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 | **Microsoft.Maui.DevFlow.Agent.Gtk** | GTK/Linux agent for Microsoft.Maui.Platforms.Linux.Gtk4 apps. |
 | **Microsoft.Maui.DevFlow.Agent.Native** | In-app agent for plain .NET apps with no MAUI reference — Android views, UIKit, and AppKit backends. |
 | **Microsoft.Maui.DevFlow.Agent.Native.Essentials** | Optional add-on that lights up the device, storage and sensor endpoints for native apps using MAUI Essentials. |
-| **Microsoft.Maui.DevFlow.Blazor** | Blazor WebView CDP bridge. Enables Chrome DevTools Protocol access for Blazor Hybrid content via Chobitsu. |
+| **Microsoft.Maui.DevFlow.WebView** | Generic WebView/HybridWebView adapters and shared embedded CDP engine, without ASP.NET/Razor dependencies. |
+| **Microsoft.Maui.DevFlow.Blazor** | Optional Blazor adapter over the shared WebView engine, adding Blazor startup readiness and client-side routing. |
 | **Microsoft.Maui.DevFlow.Blazor.Gtk** | Blazor CDP bridge for WebKitGTK on Linux. |
 | **Microsoft.Maui.DevFlow.CLI** | DevFlow command implementation used by the unified `maui devflow` CLI surface for automation, debugging, and MCP server support. |
 | **Microsoft.Maui.DevFlow.Client** | Portable protocol client: `AgentClient`, element and protocol DTOs, and their serialization. Targets `netstandard2.0`, so .NET Framework harnesses speak the same protocol as modern .NET consumers. |
@@ -115,6 +116,7 @@ dotnet publish src/DevFlow/Microsoft.Maui.DevFlow.Agent.AotSmoke \
 
 ```xml
 <PackageReference Include="Microsoft.Maui.DevFlow.Agent" />
+<PackageReference Include="Microsoft.Maui.DevFlow.WebView" /> <!-- Standard WebView or HybridWebView -->
 <PackageReference Include="Microsoft.Maui.DevFlow.Blazor" />  <!-- If using Blazor Hybrid -->
 ```
 
@@ -145,6 +147,48 @@ builder.AddMauiDevFlowAgent(options =>
     options.EnableLayoutDiagnostics = true;
 });
 ```
+
+### WebView and HybridWebView
+
+Add `Microsoft.Maui.DevFlow.WebView` and register the generic tools in Debug builds:
+
+```csharp
+using Microsoft.Maui.DevFlow.WebView;
+
+#if DEBUG
+builder.AddMauiWebViewDevFlowTools();
+#endif
+```
+
+For Blazor use `AddMauiBlazorDevFlowTools()` from `Microsoft.Maui.DevFlow.Blazor`;
+it includes generic registration and adds Blazor handler capture, readiness, and
+relative route handling. Explicit generic registration can be combined with it.
+The [package README](Microsoft.Maui.DevFlow.WebView/README.md) has requirements and
+the platform matrix: Android, iOS, Mac Catalyst and WinUI support standard and
+Hybrid hosts; AppKit supports standard WebView; GTK/WPF generic adapters are not
+provided by this package.
+
+One shared engine provides DOM/source, JavaScript evaluation, console capture,
+navigation and input. Native navigation delegates and Hybrid message/resource
+handling remain owned by the app/MAUI. The agent correlates active hosts and layout
+diagnostics through weak owners, including controls without AutomationIds.
+Use `scope.includeWebViewElements` (default `true`) to include generic DOM layout
+nodes. The former `includeBlazorElements` option is removed.
+
+WebView screenshots use the agent's native-first endpoint, including CLI/MCP.
+Browser fetch/XHR network capture is not currently implemented: `webview.network`
+returns 501, while native .NET HTTP captures remain under `/api/v1/network/requests`.
+
+**Breaking change:** Update the agent, CLI, Client, WebView and Blazor packages
+together and rebuild older consumers. Context selection uses only the reported
+`webview-<index>` IDs: HTTP/Client/MCP use `contextId`, CLI uses `--context-id`.
+AutomationIds and native element IDs remain correlation metadata, not selection
+aliases. Contexts emit only `ready`, not `isReady`. The deprecated singleton CDP
+properties, registration overloads, Blazor script facade and compatibility-only
+Blazor base class are removed. `AddMauiBlazorDevFlowTools` remains the functional
+Blazor adapter entry point. CDP HTTP/protocol/JavaScript errors
+now throw from `AgentClient.SendCdpCommandAsync` instead of returning success-shaped
+error data, and CLI failures return nonzero exits.
 
 ### GTK/Linux apps
 
@@ -336,7 +380,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Screen Recording** — start/stop video recording of app sessions
 - **Network Monitoring** — intercept and inspect HTTP requests/responses
 - **Performance Profiling** — CPU, memory, GC, and jank detection with markers and spans
-- **Blazor CDP Bridge** — Chrome DevTools Protocol for Blazor WebViews (DOM, JS eval, navigation, input)
+- **Shared WebView CDP Bridge** — standard WebView and HybridWebView, with Blazor-specific support layered on the same engine
 - **DevFlow Web Inspector** — the shared browser UI, embedded by MAUI DevFlow Inspector hosts for VS Code and GitHub Copilot Canvas
 - **Global Mutation Lease** — prevents browser, VS Code, Canvas, MCP, and CLI callers from driving the app concurrently
 - **Workflow Recording** — broker-owned recording observes successful mutations from every host and emits replayable Markdown
@@ -394,7 +438,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 |---------------|-------------|
 | `ui` | Visual tree, element interaction, screenshots, alerts, assertions |
 | `recording` | Start, stop, and manage screen recordings of app sessions |
-| `webview` | Blazor WebView automation — DOM, JS eval, navigation, input, screenshots |
+| `webview` | WebView, HybridWebView, and BlazorWebView automation — DOM, JS eval, navigation, input, native-backed screenshots |
 | `logs` | Fetch and stream application logs |
 | `network` | Monitor and inspect HTTP requests |
 | `storage` | Read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files |

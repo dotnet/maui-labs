@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx')) or $([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst;net10.0-macos</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <UseMaui Condition="'$(TargetFramework)' != 'net10.0'">true</UseMaui>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageId>Microsoft.Maui.DevFlow.WebView</PackageId>
+    <Description>Experimental Chrome DevTools Protocol bridge for .NET MAUI WebView and HybridWebView, with a shared embedded JavaScript engine and native host adapters.</Description>
+    <PackageTags>maui;webview;hybridwebview;debugging;cdp;automation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(DevFlowMauiMinVersion)" />
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Abstractions\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
+    <EmbeddedResource Include="Resources\Scripts\*.js" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'">
+    <ProjectReference Include="..\..\..\platforms\MacOS\src\MacOS\MacOS.csproj" />
+  </ItemGroup>
+</Project>

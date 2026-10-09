@@ -57,7 +57,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
     {
         if (_agent != null && !_registrations.ContainsKey(bridge))
             _registrations.Add(bridge, _agent.RegisterCdpWebView(
-                bridge.SendCdpCommandAsync, () => bridge.IsReady, bridge.AutomationId, bridge.ElementId));
+                bridge.SendCdpCommandAsync, () => bridge.IsReady, bridge.AutomationId, bridge.ElementId,
+                hostKind: "blazor"));
     }
 
     /// <summary>
@@ -472,17 +473,6 @@ public class GtkBlazorWebViewDebugService : IDisposable
         return null;
     }
 
-    /// <summary>
-    /// Backward-compatible: sends CDP command to the first WebView bridge.
-    /// </summary>
-    public Task<string> SendCdpCommandAsync(string cdpJson)
-    {
-        var bridge = Bridges.FirstOrDefault();
-        if (bridge == null)
-            return Task.FromResult("{\"error\":\"No WebViews available\"}");
-        return bridge.SendCdpCommandAsync(cdpJson);
-    }
-
     private void Log(string message)
     {
         System.Diagnostics.Debug.WriteLine(message);
@@ -587,8 +577,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
             _disposed = true;
             _discoveryCts?.Cancel();
             _discoveryCts?.Dispose();
-            foreach (var index in _registrations.Values)
-                _agent?.UnregisterCdpWebView(index);
+            foreach (var (bridge, index) in _registrations)
+                _agent?.UnregisterCdpWebView(index, bridge.SendCdpCommandAsync);
             _registrations.Clear();
             foreach (var bridge in _bridges)
                 bridge.Dispose();

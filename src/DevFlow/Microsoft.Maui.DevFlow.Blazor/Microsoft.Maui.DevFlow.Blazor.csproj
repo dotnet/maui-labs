@@ -9,14 +9,8 @@
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
 
-    <!-- Suppress JS module manifest to avoid conflicting with consuming app's manifest.
-         The consuming app's build will discover our .lib.module.js and include it. -->
+    <!-- This adapter does not publish a JS module manifest; the engine is embedded in WebView. -->
     <GenerateJSModuleManifest>false</GenerateJSModuleManifest>
-
-    <!-- Disable static web asset fingerprinting — MAUI Blazor Hybrid's WebView file
-         provider does not resolve fingerprinted filenames, causing 404s for the
-         JS initializer and breaking Blazor startup. -->
-    <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
 
     <!-- NuGet Package Metadata -->
     <PackageId>Microsoft.Maui.DevFlow.Blazor</PackageId>
@@ -26,6 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.WebView\Microsoft.Maui.DevFlow.WebView.csproj" />
     <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(DevFlowMauiMinVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(DevFlowMauiMinVersion)" PrivateAssets="all" />
   </ItemGroup>
@@ -36,13 +31,6 @@
     <ProjectReference Include="..\..\..\platforms\MacOS\src\MacOS.BlazorWebView\MacOS.BlazorWebView.csproj" />
   </ItemGroup>
 
-  <!-- Embed JS/HTML scripts as resources to avoid inline strings in C# -->
-  <ItemGroup>
-    <EmbeddedResource Include="Resources\Scripts\*.js" />
-    <EmbeddedResource Include="Resources\Scripts\*.html" />
-    <!-- Embed chobitsu.js for C#-side fallback injection when the script tag fails to load -->
-    <EmbeddedResource Include="wwwroot\chobitsu.js" LogicalName="Microsoft.Maui.DevFlow.Blazor.chobitsu.js" />
-  </ItemGroup>
 
 
 
@@ -51,8 +39,8 @@
        into our library's SWA manifest. When consumers also reference WebView directly (as all
        MAUI Blazor apps do), they get a "Conflicting assets with the same target path" build error.
        This is a known SDK limitation: https://github.com/dotnet/maui/issues/25999
-       Until the SDK properly respects PrivateAssets for static web assets, we strip _framework/
-       entries from our manifest so only our own assets (chobitsu.js) propagate to consumers. -->
+       Until the SDK properly respects PrivateAssets for static web assets, strip _framework/
+       entries from this adapter's manifest. The shared engine has no static web assets. -->
   <Target Name="_RemoveTransitiveWebViewAssets"
           AfterTargets="ResolveBuildStaticWebAssets;ResolveAllPublishStaticWebAssets"
           BeforeTargets="GenerateStaticWebAssetsManifest;GenerateStaticWebAssetsPublishManifest">
@@ -66,20 +54,6 @@
     <ItemGroup>
       <_StaticWebAssetExcludedFromPack Include="@(StaticWebAsset)"
         Condition="$([System.String]::Copy('%(RelativePath)').StartsWith('_framework/'))" />
-    </ItemGroup>
-  </Target>
-
-  <!-- Workaround: On Windows, the Blazor wwwroot/ files (chobitsu.js, lib.module.js) get
-       indexed into the PRI by MakePri. The PRI is packed into lib/ but the wwwroot files
-       are packed into staticwebassets/ by the Razor SDK, so the PRI references paths that
-       don't exist in the NuGet package, causing MSB3030 in consuming projects. These files
-       are delivered via the Blazor static web asset pipeline (StaticWebAsset items), not
-       the Windows resource system, so exclude them from PRI generation entirely. -->
-  <Target Name="_ExcludeWwwrootFromPri"
-          BeforeTargets="GetMrtPackagingOutputs"
-          Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
-    <ItemGroup>
-      <Content Remove="wwwroot\**" />
     </ItemGroup>
   </Target>
 

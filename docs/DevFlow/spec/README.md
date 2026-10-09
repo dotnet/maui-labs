@@ -28,26 +28,35 @@ Do not commit a generated JSON copy of the OpenAPI document. If a consumer needs
 
 The DevFlow unit tests parse `openapi.yaml` with OpenAPI tooling and validate YAML/JSON syntax plus `$ref` targets across this directory.
 
-## Existing WebView contract
+## WebView hosts and contract
 
 `GET /api/v1/webview/contexts` returns `{ "webviews": [...] }` for registered CDP
-bridges, not just active hosts. Context `id` values use the registration's
-AutomationId, then elementId, then decimal index; they are not a separate stable
-ID namespace. The index can select a registration directly. `ready` and `isReady`
-are aliases; `active` reflects the backend's active AutomationIds, not generic
-host-owner correlation.
+standard WebView, HybridWebView and BlazorWebView bridges, not just active hosts.
+Every context has a unique `webview-<index>` ID for the attachment and a single
+`ready` field. `hostKind` describes the host (`webview`, `hybrid`, or `blazor`),
+not the UI backend and not a behavior-dispatch switch. `active` and `elementId`
+reflect native-owner correlation, including unnamed controls and duplicate
+AutomationIds. Default selection prefers active hosts rather than hidden pages.
 
 `POST /api/v1/webview/evaluate` accepts a raw CDP command such as
 `{ "method": "Runtime.evaluate", "params": { "expression": "document.title", "returnByValue": true } }`.
-Select its bridge with the `webview` query parameter. Other context-selecting
-WebView endpoints also accept `contextId`; query values override the JSON body's
-`contextId`. `/webview/dom` and `/webview/source` both return HTML, not a DOM-tree
+Select its bridge with the `contextId` query parameter. All context-selecting
+routes accept only canonical IDs; query values override the JSON body's
+`contextId` on the typed action/DOM-query endpoints. Numeric indices,
+AutomationIds, element IDs and the old `webview` query parameter are rejected.
+`/webview/dom` and `/webview/source` both return HTML, not a DOM-tree
 JSON object. `/webview/screenshot` returns PNG, trying the registered native
 element before the CDP screenshot fallback.
 
-`/api/v1/webview/network` is an existing HTTP 200 alias of
-`/api/v1/network/requests`: it reads the native .NET HTTP capture store, not browser
-fetch/XHR traffic. It does not associate requests with a WebView context.
+Browser fetch/XHR capture is explicitly unsupported: `/api/v1/webview/network`
+returns the standard 501 `webview.network` envelope. Native .NET traffic remains
+available at `/api/v1/network/requests`.
+
+Layout scope uses only `includeWebViewElements` (default `true`) for generic DOM
+enrichment; `includeBlazorElements` is removed. Layout capabilities use `webview`
+and the `webview-dom` feature, without the former Blazor-only duplicates. Update the agent, CLI, Client,
+WebView and Blazor packages together and rebuild older consumers. There are no
+WebView compatibility shims or duplicate readiness fields.
 
 ## Streaming payloads
 

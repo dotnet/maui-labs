@@ -255,36 +255,42 @@ public partial class MauiDevFlowAgentService
         DateTimeOffset deadline,
         CancellationToken cancellationToken)
     {
-        if (!request.Scope.IncludeBlazorElements)
+        if (!request.Scope.IncludeWebViewElements)
             return;
 
+        var activeWebViews = await GetActiveWebViewAutomationIdsAsync();
+        var webViews = GetCdpWebViewsSnapshot();
         var blazorHosts = capture.Nodes
-            .Where(node => node.Element.Type.Contains(
-                "BlazorWebView",
-                StringComparison.OrdinalIgnoreCase))
+            .Where(node => node.Element.Type.Contains("BlazorWebView", StringComparison.OrdinalIgnoreCase)
+                || node.Element.Type is "WebView" or "HybridWebView"
+                || webViews.Any(webView => webView.ElementId == node.Element.Id
+                    || webView.Owner is null && webView.AutomationId is not null
+                        && webView.AutomationId == node.Element.AutomationId))
             .ToList();
         if (blazorHosts.Count == 0)
             return;
 
-        var webViews = GetCdpWebViewsSnapshot();
         if (webViews.Length == 0)
         {
             MarkBlazorHostsUnavailable(
                 capture,
                 blazorHosts,
-                "No Blazor CDP bridge is registered.");
+                "No WebView CDP bridge is registered.");
             return;
         }
 
         var readyWebViews = webViews
-            .Where(webView => webView.IsReady)
+            .Where(webView => webView.IsReady && IsActiveCdpWebView(webView, activeWebViews) && blazorHosts.Any(host =>
+                host.Element.Id == webView.ElementId
+                || webView.Owner is null && webView.AutomationId is not null
+                    && host.Element.AutomationId == webView.AutomationId))
             .ToArray();
         if (readyWebViews.Length == 0)
         {
             MarkBlazorHostsUnavailable(
                 capture,
                 blazorHosts,
-                "The registered Blazor CDP bridge is not ready.");
+                "The registered WebView CDP bridge is not ready.");
             return;
         }
         if (readyWebViews.Length < webViews.Length)
@@ -300,7 +306,7 @@ public partial class MauiDevFlowAgentService
             if (unavailableHostFound)
             {
                 capture.MarkIncomplete(
-                    "One or more visible Blazor WebViews have a registered CDP bridge that is not ready.");
+                    "One or more visible WebViews have a registered CDP bridge that is not ready.");
             }
         }
 
@@ -309,7 +315,7 @@ public partial class MauiDevFlowAgentService
             if (unavailableCaptures.Contains(webView.Index))
             {
                 capture.MarkIncomplete(
-                    $"Blazor WebView {webView.Index} layout capture was unavailable after an earlier timeout in this scan.");
+                    $"WebView {webView.Index} layout capture was unavailable after an earlier timeout in this scan.");
                 MarkBlazorHostOpaque(capture, webView);
                 continue;
             }
@@ -358,7 +364,7 @@ public partial class MauiDevFlowAgentService
                     if (!await probeGate.WaitAsync(0, cancellationToken))
                     {
                         capture.MarkIncomplete(
-                            $"A previous Blazor WebView {webView.Index} layout probe is still running.");
+                            $"A previous WebView {webView.Index} layout probe is still running.");
                         MarkBlazorHostOpaque(capture, webView);
                         continue;
                     }
@@ -391,7 +397,7 @@ public partial class MauiDevFlowAgentService
                 if (winner != commandTask)
                 {
                     capture.MarkIncomplete(
-                        $"Blazor WebView {webView.Index} layout capture did not finish before the current scan deadline.");
+                        $"WebView {webView.Index} layout capture did not finish before the current scan deadline.");
                     pendingCaptures.Remove(webView.Index);
                     unavailableCaptures.Add(webView.Index);
                     MarkBlazorHostOpaque(capture, webView);
@@ -402,7 +408,7 @@ public partial class MauiDevFlowAgentService
                 using var document = JsonDocument.Parse(response);
                 if (!TryGetLayoutCdpValue(document.RootElement, out var value))
                 {
-                    capture.MarkIncomplete($"Blazor WebView {webView.Index} did not return layout data.");
+                    capture.MarkIncomplete($"WebView {webView.Index} did not return layout data.");
                     continue;
                 }
 
@@ -411,7 +417,7 @@ public partial class MauiDevFlowAgentService
                     var serializedLayout = value.GetString();
                     if (string.IsNullOrWhiteSpace(serializedLayout))
                     {
-                        capture.MarkIncomplete($"Blazor WebView {webView.Index} returned empty layout data.");
+                        capture.MarkIncomplete($"WebView {webView.Index} returned empty layout data.");
                         continue;
                     }
                     using var layoutDocument = JsonDocument.Parse(serializedLayout);
@@ -428,7 +434,7 @@ public partial class MauiDevFlowAgentService
             }
             catch (Exception ex)
             {
-                capture.MarkIncomplete($"Blazor WebView {webView.Index} layout capture failed: {ex.GetType().Name}");
+                capture.MarkIncomplete($"WebView {webView.Index} layout capture failed: {ex.GetType().Name}");
                 MarkBlazorHostOpaque(capture, webView);
             }
         }
@@ -486,7 +492,7 @@ public partial class MauiDevFlowAgentService
             || !value.TryGetProperty("nodes", out var nodes)
             || nodes.ValueKind != JsonValueKind.Array)
         {
-            capture.MarkIncomplete($"Blazor WebView {webView.Index} returned an invalid layout snapshot.");
+            capture.MarkIncomplete($"WebView {webView.Index} returned an invalid layout snapshot.");
             return;
         }
 
@@ -496,7 +502,7 @@ public partial class MauiDevFlowAgentService
                     webView.ElementId,
                     StringComparison.OrdinalIgnoreCase));
         host ??= capture.Nodes.FirstOrDefault(node =>
-            webView.AutomationId is not null
+            webView.Owner is null && webView.AutomationId is not null
             && (node.Element.Id.Equals(
                     webView.AutomationId,
                     StringComparison.OrdinalIgnoreCase)
@@ -506,7 +512,7 @@ public partial class MauiDevFlowAgentService
                     StringComparison.OrdinalIgnoreCase)));
         if (host is null)
         {
-            capture.MarkIncomplete($"Blazor WebView {webView.Index} could not be mapped to a native DevFlow element.");
+            capture.MarkIncomplete($"WebView {webView.Index} could not be mapped to a native DevFlow element.");
             return;
         }
         host.IsCoverageOpaque = false;
@@ -515,7 +521,7 @@ public partial class MauiDevFlowAgentService
         var viewportHeight = ReadDouble(viewport, "height");
         if (viewportWidth <= 0 || viewportHeight <= 0)
         {
-            capture.MarkIncomplete($"Blazor WebView {webView.Index} reported an empty CSS viewport.");
+            capture.MarkIncomplete($"WebView {webView.Index} reported an empty CSS viewport.");
             return;
         }
 
@@ -652,8 +658,8 @@ public partial class MauiDevFlowAgentService
                 Id = id,
                 ParentId = parentId,
                 Type = ReadString(nodeJson, "tag") ?? "element",
-                FullType = "Blazor.DOM.Element",
-                Framework = "blazor",
+                FullType = "WebView.DOM.Element",
+                Framework = "webview",
                 AutomationId = ReadString(nodeJson, "id"),
                 Role = ReadString(nodeJson, "role"),
                 IsVisible = visible,
@@ -722,7 +728,7 @@ public partial class MauiDevFlowAgentService
                 }
                 else
                 {
-                    node.InteractionOccluderId = "blazor-unmapped";
+                    node.InteractionOccluderId = "webview-unmapped";
                     node.Limitations.Add("One or more interaction blockers were outside the captured DOM node limit.");
                 }
             }
@@ -739,20 +745,20 @@ public partial class MauiDevFlowAgentService
 
         var crossOriginFrames = ReadInt(value, "crossOriginFrames");
         if (crossOriginFrames > 0)
-            capture.MarkIncomplete($"{crossOriginFrames} cross-origin iframe(s) could not be inspected in Blazor WebView {webView.Index}.");
+            capture.MarkIncomplete($"{crossOriginFrames} cross-origin iframe(s) could not be inspected in WebView {webView.Index}.");
         var totalElementCount = ReadInt(value, "totalElementCount", capturedElementCount);
         if (totalElementCount > capturedElementCount)
         {
             capture.MarkIncomplete(
-                $"Blazor WebView {webView.Index} contains {totalElementCount} DOM elements; layout capture was limited to the first 500.");
+                $"WebView {webView.Index} contains {totalElementCount} DOM elements; layout capture was limited to the first 500.");
         }
 
         var devicePixelRatio = ReadDouble(viewport, "devicePixelRatio", 1);
         var visualScale = ReadDouble(viewport, "visualScale", 1);
         if (Math.Abs(scaleX - scaleY) > 0.01)
-            capture.Limitations.Add($"Blazor WebView {webView.Index} uses non-uniform native-to-CSS scaling.");
+            capture.Limitations.Add($"WebView {webView.Index} uses non-uniform native-to-CSS scaling.");
         if (devicePixelRatio <= 0 || visualScale <= 0)
-            capture.Limitations.Add($"Blazor WebView {webView.Index} reported invalid browser scaling metadata.");
+            capture.Limitations.Add($"WebView {webView.Index} reported invalid browser scaling metadata.");
     }
 
     private static string? ReadString(JsonElement element, string name)

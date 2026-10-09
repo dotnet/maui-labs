@@ -3134,7 +3134,7 @@ public sealed class InspectorServer : IDisposable
         catch { return Ok("{\"ok\":false,\"error\":\"files unavailable\"}"); }
     }
 
-    // ── Blazor WebView CDP tab — list WebViews, view source, and evaluate JavaScript through the
+    // ── WebView CDP tab — list WebViews, view source, and evaluate JavaScript through the
     // existing chobitsu.js CDP bridge.
     private async Task<(int, string, byte[])> HandleCdpWebViewsAsync(string? body)
     {
@@ -3144,24 +3144,57 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<(int, string, byte[])> HandleCdpSourceAsync(string? body)
     {
-        var id = ReadStringField(body, "webviewId");
-        try { var src = await _client.GetCdpSourceAsync(string.IsNullOrWhiteSpace(id) ? null : id); return Ok(JsonSerializer.Serialize(new { ok = true, source = src }, CamelCase)); }
+        var (id, error) = ReadCdpContextId(body);
+        if (error is not null) return BadRequest(error);
+        try { var src = await _client.GetCdpSourceAsync(id); return Ok(JsonSerializer.Serialize(new { ok = true, source = src }, CamelCase)); }
         catch { return Ok("{\"ok\":false,\"error\":\"source unavailable\"}"); }
     }
 
     private async Task<(int, string, byte[])> HandleCdpEvalAsync(string? body)
     {
+        var (id, error) = ReadCdpContextId(body);
+        if (error is not null) return BadRequest(error);
         var expr = ReadStringField(body, "expression");
-        var id = ReadStringField(body, "webviewId");
         if (string.IsNullOrWhiteSpace(expr) || expr!.Length > 8192)
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"expression required\"}"));
         try
         {
             var pars = new System.Text.Json.Nodes.JsonObject { ["expression"] = expr, ["returnByValue"] = true };
-            var res = await _client.SendCdpCommandAsync("Runtime.evaluate", pars, string.IsNullOrWhiteSpace(id) ? null : id);
+            var res = await _client.SendCdpCommandAsync("Runtime.evaluate", pars, id);
             return Ok(JsonSerializer.Serialize(new { ok = true, result = res }, CamelCase));
         }
         catch { return Ok("{\"ok\":false,\"error\":\"evaluate failed\"}"); }
+    }
+
+    private static (string? ContextId, string? Error) ReadCdpContextId(string? body)
+    {
+        if (string.IsNullOrEmpty(body)) return (null, null);
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return (null, "Body must be a JSON object.");
+            if (root.TryGetProperty("webviewId", out _))
+                return (null, "webviewId is removed; use contextId with a canonical webview-<index> ID.");
+            if (root.EnumerateObject().Count(property => property.NameEquals("contextId")) > 1)
+                return (null, "contextId must be specified only once.");
+            if (!root.TryGetProperty("contextId", out var value) || value.ValueKind == JsonValueKind.Null)
+                return (null, null);
+            if (value.ValueKind != JsonValueKind.String)
+                return (null, "contextId must be a canonical webview-<index> string or null.");
+
+            var id = value.GetString()!;
+            if (!id.StartsWith("webview-", StringComparison.Ordinal)
+                || !int.TryParse(id.AsSpan(8), out var index)
+                || index < 0 || id != $"webview-{index}")
+                return (null, "contextId must be a canonical webview-<index> ID; omit it or use null for the active host.");
+            return (id, null);
+        }
+        catch (JsonException)
+        {
+            return (null, "Invalid JSON body.");
+        }
     }
 
     // ── Data helpers ──
