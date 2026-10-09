@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="xunit" />
+    <ProjectReference Include="..\..\src\Linux.Gtk4.BlazorWebView\Linux.Gtk4.BlazorWebView.csproj" />
     <ProjectReference Include="..\..\src\Linux.Gtk4\Linux.Gtk4.csproj" />
     <ProjectReference Include="..\..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
     <Using Include="Xunit" />
