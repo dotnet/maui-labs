@@ -316,7 +316,7 @@
         "values": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Sensor-specific values. Common shapes: {x, y, z} for accelerometer/gyroscope/magnetometer, {heading, accuracy} for compass, {pressure} for barometer."
+          "description": "Sensor-specific values: {X, Y, Z} for accelerometer/gyroscope/magnetometer, {headingMagneticNorth} for compass, {pressureInHectopascals} for barometer, and {X, Y, Z, W} for orientation."
         }
       }
     },
