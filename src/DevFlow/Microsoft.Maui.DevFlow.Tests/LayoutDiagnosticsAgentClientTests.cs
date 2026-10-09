@@ -24,6 +24,8 @@ public class LayoutDiagnosticsAgentClientTests
             Assert.Contains("POST /api/v1/ui/diagnostics/layout", request);
             Assert.Contains("\"schemaVersion\":\"1.0\"", request);
             Assert.Contains("\"profile\":\"strict\"", request);
+            Assert.Contains("\"includeWebViewElements\":false", request);
+            Assert.DoesNotContain("includeBlazorElements", request);
 
             const string body = """
                 {
@@ -58,7 +60,11 @@ public class LayoutDiagnosticsAgentClientTests
         });
 
         using var client = new AgentClient("127.0.0.1", port);
-        var result = await client.AnalyzeLayoutAsync(new LayoutInspectionRequest { Profile = "strict" });
+        var result = await client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+        {
+            Profile = "strict",
+            Scope = new LayoutInspectionScope { IncludeWebViewElements = false }
+        });
 
         Assert.NotNull(result);
         var finding = Assert.Single(result!.Findings);

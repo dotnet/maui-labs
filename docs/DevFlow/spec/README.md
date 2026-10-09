@@ -64,8 +64,26 @@ source/evaluate proxies reject malformed/non-object JSON, duplicate contextId
 fields and removed webviewId fields, even when null or alongside contextId.
 Update the agent, CLI, Client, WebView and Blazor packages together and rebuild
 consumers. No external selector or readiness compatibility shims remain.
-DOM layout enrichment remains Blazor-only (`includeBlazorElements`); generic DOM
-diagnostics belong to the next layer.
+Layout scope uses only `includeWebViewElements` (default `true`); the former
+`includeBlazorElements` property is removed from both agent and portable Client
+DTOs. `false` skips DOM probes and findings without disabling native diagnostics.
+Ready, active, visible registered standard, Hybrid and Blazor hosts contribute
+DOM layout evidence through weak-owner/native correlation. Ownerless registrations
+may use an unambiguous native ID; dead owners never fall back to another host.
+Hidden retained pages and fully clipped hosts are not probed.
+
+The `ui.layoutDiagnostics` capability exposes `webview.supported`,
+`webview.readyWebViewCount` and the `webview-dom` feature, replacing the Blazor-only
+names. The count describes ready registrations, not visible hosts in a particular
+scan. Backends without DOM layout enrichment advertise no DOM support.
+Synthetic nodes use `framework: webview`, `fullType: WebView.DOM.Element` and
+`web-<registration-index>-<DOM-index>` IDs, with parent IDs rooted at the correlated
+native host. CSS viewport geometry maps into native window-logical coordinates;
+native clipping, DOM ancestor clips, direct-text evidence and interaction sampling
+remain separate evidence. Unregistered/unready visible hosts, probe failures,
+timeouts, cross-origin frames and the 500-element per-host limit report incomplete
+coverage rather than a clean scan. Native tree revisions exclude these synthetic
+nodes; diagnostics/stability revisions include their evidence.
 
 ## Streaming payloads
 

@@ -269,6 +269,9 @@ public partial class VisualTreeWalker
         var node = new LayoutNodeSnapshot
         {
             Element = info,
+            WebViewOwner = visualTreeElement is not null && MauiDevFlowAgentService.IsWebViewHost(visualTreeElement)
+                ? new WeakReference<object>(visualTreeElement)
+                : null,
             LayoutRegion = layoutRegion,
             FullRegion = fullRegion,
             VisibleRegion = visibleRegion,

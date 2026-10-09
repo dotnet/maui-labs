@@ -125,7 +125,7 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.Equal(
             "polling",
             layoutCapabilities.GetProperty("watch").GetProperty("transport").GetString());
-        Assert.False(layoutCapabilities.GetProperty("blazor").GetProperty("supported").GetBoolean());
+        Assert.False(layoutCapabilities.GetProperty("webview").GetProperty("supported").GetBoolean());
 
         var result = await client.AnalyzeLayoutAsync(new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest
         {
@@ -195,21 +195,44 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Fact]
-    public async Task GenericReadyHosts_DoNotAdvertiseBlazorLayoutCoverage()
+    public async Task ReadyHosts_AdvertiseGenericLayoutCoverageWithoutHostKindDispatch()
     {
         var port = GetFreePort();
         using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port, EnableLayoutDiagnostics = true });
         using var client = new AgentClient("localhost", port);
-        service.RegisterCdpWebView(_ => Task.FromResult("{}"), () => true, hostKind: "hybrid");
         service.StartServerOnly(new ImmediateDispatcher());
         var layout = (await client.GetCapabilitiesAsync()).GetProperty("capabilities").GetProperty("ui.layoutDiagnostics");
-        Assert.False(layout.GetProperty("blazor").GetProperty("supported").GetBoolean());
-        Assert.Equal(0, layout.GetProperty("blazor").GetProperty("readyWebViewCount").GetInt32());
-        Assert.DoesNotContain(layout.GetProperty("features").EnumerateArray(), feature => feature.GetString() == "blazor-dom");
-        service.RegisterCdpWebView(_ => Task.FromResult("{}"), () => true, hostKind: "blazor");
+        Assert.False(layout.GetProperty("webview").GetProperty("supported").GetBoolean());
+        Assert.Equal(0, layout.GetProperty("webview").GetProperty("readyWebViewCount").GetInt32());
+        Assert.DoesNotContain(layout.GetProperty("features").EnumerateArray(), feature => feature.GetString() == "webview-dom");
+        var count = 0;
+        foreach (var kind in new[] { "webview", "hybrid", "blazor", "custom-host" })
+        {
+            service.RegisterCdpWebView(_ => Task.FromResult("{}"), () => true, hostKind: kind);
+            layout = (await client.GetCapabilitiesAsync()).GetProperty("capabilities").GetProperty("ui.layoutDiagnostics");
+            Assert.True(layout.GetProperty("webview").GetProperty("supported").GetBoolean());
+            Assert.Equal(++count, layout.GetProperty("webview").GetProperty("readyWebViewCount").GetInt32());
+            Assert.Contains(layout.GetProperty("features").EnumerateArray(), feature => feature.GetString() == "webview-dom");
+            Assert.False(layout.TryGetProperty("blazor", out _));
+            Assert.DoesNotContain(layout.GetProperty("features").EnumerateArray(), feature => feature.GetString() == "blazor-dom");
+        }
+        service.RegisterCdpWebView(_ => Task.FromResult("{}"), () => false, hostKind: "hybrid");
         layout = (await client.GetCapabilitiesAsync()).GetProperty("capabilities").GetProperty("ui.layoutDiagnostics");
-        Assert.True(layout.GetProperty("blazor").GetProperty("supported").GetBoolean());
-        Assert.Equal(1, layout.GetProperty("blazor").GetProperty("readyWebViewCount").GetInt32());
+        Assert.Equal(count, layout.GetProperty("webview").GetProperty("readyWebViewCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task BaseBackend_ReadyBridgeDoesNotAdvertiseUnimplementedDomLayout()
+    {
+        var port = GetFreePort();
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port, EnableLayoutDiagnostics = true });
+        using var client = new AgentClient("localhost", port);
+        service.RegisterCdpWebView(_ => Task.FromResult("{}"), () => true);
+        service.StartServerOnly(null);
+        var layout = (await client.GetCapabilitiesAsync()).GetProperty("capabilities").GetProperty("ui.layoutDiagnostics");
+        Assert.False(layout.GetProperty("webview").GetProperty("supported").GetBoolean());
+        Assert.Equal(0, layout.GetProperty("webview").GetProperty("readyWebViewCount").GetInt32());
+        Assert.DoesNotContain(layout.GetProperty("features").EnumerateArray(), feature => feature.GetString() == "webview-dom");
     }
 
     [Fact]

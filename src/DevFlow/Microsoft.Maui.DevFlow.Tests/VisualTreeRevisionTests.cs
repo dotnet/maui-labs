@@ -29,11 +29,11 @@ public class VisualTreeRevisionTests
     }
 
     [Fact]
-    public void Revision_ExcludesBlazorNodesOnBothSurfaces()
+    public void Revision_ExcludesWebViewNodesOnBothSurfaces()
     {
         var root = Element("root", 0, 0, 100, 200);
         var blazor = Element("web-node", 10, 10, 50, 20);
-        blazor.Framework = "blazor";
+        blazor.Framework = "webview";
         root.Children = [blazor];
 
         var capture = new LayoutCaptureSnapshot();
@@ -51,6 +51,7 @@ public class VisualTreeRevisionTests
         Assert.Equal(
             VisualTreeRevision.ComputeTree([root]),
             capture.GeometryHash);
+        Assert.Equal(VisualTreeRevision.ComputeTree([Element("root", 0, 0, 100, 200)]), capture.GeometryHash);
     }
 
     [Fact]
@@ -81,10 +82,10 @@ public class VisualTreeRevisionTests
     }
 
     [Fact]
-    public void DiagnosticsRevision_IncludesBlazorGeometryAndTextEvidence()
+    public void DiagnosticsRevision_IncludesWebViewGeometryAndTextEvidence()
     {
         var blazor = Element("web-node", 0, 0, 50, 20);
-        blazor.Framework = "blazor";
+        blazor.Framework = "webview";
         var capture = new LayoutCaptureSnapshot();
         capture.Nodes.Add(new LayoutNodeSnapshot
         {

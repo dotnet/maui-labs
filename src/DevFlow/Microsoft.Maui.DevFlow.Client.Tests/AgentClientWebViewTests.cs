@@ -5,6 +5,24 @@ namespace Microsoft.Maui.DevFlow.Client.Tests;
 public class AgentClientWebViewTests
 {
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnalyzeLayoutAsync_SerializesGenericScopeWithoutLegacyProperty(bool include)
+    {
+        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json("{}"));
+        using var client = new AgentClient("localhost", agent.Port);
+        _ = await client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+        {
+            Scope = new LayoutInspectionScope { IncludeWebViewElements = include }
+        });
+        using var body = System.Text.Json.JsonDocument.Parse(Assert.Single(agent.Requests).Body);
+        var scope = body.RootElement.GetProperty("scope");
+        Assert.Equal(include, scope.GetProperty("includeWebViewElements").GetBoolean());
+        Assert.False(scope.TryGetProperty("includeBlazorElements", out _));
+        Assert.True(new LayoutInspectionScope().IncludeWebViewElements);
+    }
+
+    [Theory]
     [InlineData("evaluate")]
     [InlineData("source")]
     [InlineData("screenshot")]
