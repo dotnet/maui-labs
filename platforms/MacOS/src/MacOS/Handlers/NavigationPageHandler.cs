@@ -70,7 +70,7 @@ public partial class NavigationPageHandler : MacOSViewHandler<IStackNavigationVi
 
         if (_currentPageView != null)
         {
-            _currentPageView.Frame = new CGRect(0, 0, bounds.Width, bounds.Height);
+            _currentPageView.SetLayoutFrame(new CGRect(0, 0, bounds.Width, bounds.Height));
 
             var currentPage = _navigationStack.LastOrDefault();
             if (currentPage != null)

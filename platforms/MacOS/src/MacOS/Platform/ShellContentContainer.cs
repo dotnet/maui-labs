@@ -71,7 +71,7 @@ internal sealed class ShellContentContainer : NSView
                 Tabs.Frame = new CGRect(Math.Max(8, (width - tabWidth) / 2), 6, tabWidth, tabHeight);
                 top = Math.Min(height, safeTop + stripHeight);
             }
-            _content.Frame = new CGRect(0, top, width, Math.Max(0, height - top));
+            _content.SetLayoutFrame(new CGRect(0, top, width, Math.Max(0, height - top)));
         }
         catch (Exception ex)
         {

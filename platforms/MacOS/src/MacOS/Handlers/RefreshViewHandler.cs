@@ -49,7 +49,7 @@ public partial class RefreshViewHandler : MacOSViewHandler<RefreshView, NSView>
 		base.PlatformArrange(rect);
 
 		if (_contentView != null)
-			_contentView.Frame = new CGRect(0, 0, rect.Width, rect.Height);
+			_contentView.SetLayoutFrame(new CGRect(0, 0, rect.Width, rect.Height));
 
 		if (_spinner != null)
 		{

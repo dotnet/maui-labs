@@ -16,6 +16,8 @@ A timeout is a failure, not accepted baseline evidence.
 | Scenario | Cases | Before/fixed behavior |
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
+| `contentview-clipping` | 19 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets, nonuniform scale, combined rotation/mirroring with translation, and zero/collapsed transitions (198 assertions) |
+| `collection-view-grid` | 4 | Incorrect composed-card measurements and grid rows / tall cards, live Span changes, resize remeasurement, and spanning headers (8 assertions) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
@@ -106,6 +108,68 @@ Native captures are composited onto white, not claimed as full-screen screenshot
 Call `Capture` and access native UI state only on AppKit's main thread, including
 after asynchronous work. JSON file writers have no additional AppKit affinity.
 `FlushMainQueueAsync()` drains two native dispatch turns, not a timed sleep.
+
+The `contentview-clipping` scenario uses `CaptureWindowBitmap`, a WindowServer
+compositor capture, rather than `CacheDisplay` (which can force the very redraw
+under test). It waits up to five seconds for a full-size window at nominal or
+backing resolution and an independent
+cyan text control in every capture; a locked display or invalid capture fails,
+never counts as an exit-42 reproduction. Glyph assertions scan the expected text
+regions. Ten out-and-back cycles alternate two strings with distinct glyph counts
+to detect blank or stale text. Repeated zoom uses a short, fully visible string:
+clipping a longer string can decrease its pixel count even when scaling works.
+Zoom captures poll for a changed glyph mask with a bounded deadline while
+retaining strict glyph-area growth and the independent visible-text control.
+Changed capture dimensions are rejected, not treated as changed glyphs.
+Nested ContentViews, Grid, Label and Entry are
+followed by batches of 10, 100 and 500 three-property transform updates, with and
+without 64 extra labels. `redraw-cost.jsonl` records timings, synchronous/settled
+Label draws, draw depth and UI-thread ownership; timings are observations, not a
+performance pass threshold. Native-positive scaling preserves logical Bounds
+while transforming Frame, so AppKit's visibility calculations agree with the
+rendered scale. No descendant traversal or forced synchronous display is needed.
+Layer transforms retain rotation, collapsed/mirrored scales and externally
+managed containers' existing behavior; those special paths are not evidence of
+the cold-text positive-scale fix.
+
+The item tests assert the entire anchored transformed frame, unchanged logical
+size, scale and translation resets, native-owner relayout with an unchanged
+transform, and a scaled CollectionView's logical item size and rendered text.
+Native layout owners use `SetLayoutFrame` to pass logical rectangles through
+the connected handler; layout sizing uses Bounds rather than the physical Frame.
+Scaling legitimately changes the physical frame; an unchanged-frame
+assertion would not test that implementation correctly. The final cases expose
+a newly created off-window label by scale alone, verify its native VisibleRect
+and glyph pixels, repeat exposure/reset, change anchors, and exercise independent
+ScaleX/ScaleY updates. Nested Label and Entry rendering is also checked during
+scale, not only after resetting it.
+An autoresizing child must retain its logical frame across repeated scaling,
+and ten compositor-paced scale updates record actual glyphs and draw counts in
+`paced-cost.jsonl`, separately from coalesced update batches.
+A cold coloured marker must occupy exactly its expected single-scale region
+and area; Entry password/plain replacement must retain native geometry and text.
+
+Combined positive scale, translation and a 180-degree rotation, followed by
+mirrored scale with translation, must match an independently constructed,
+layer-only native AppKit reference using an asymmetric two-color marker. Zero
+scale and collapsed visibility must remove every marker pixel, then restore the
+exact prior raster. These cases distinguish single scaling, orientation and
+anchor placement from double scaling or misplaced translation; they do not
+claim exhaustive 3D rotation coverage.
+
+The combined marker also requires exact single-scale pixel areas and placement
+in a 60x30-point region calculated independently from MAUI's untransformed
+arranged rectangle. Transform updates occur after attachment/layout settles;
+the unique yellow corner isolates zero-scale checks from the earlier lime marker.
+
+The scenario requires all 198 assertions and 19 cases. Native scroll notifications
+must not re-arrange unchanged composite item roots, while an ItemsLayout change
+must reposition those same roots. Auto Layout-owned toolbar
+content must retain its resolved Frame/Bounds while transformed and resized;
+these externally owned views use the existing layer-only transform path.
+The exact pre-fix overlay still exits 42
+only for the original observed clipping plus translated-text failures; it stops
+there and does not claim to reproduce the later scale/item cases.
 
 ## Runner manifest and baseline
 

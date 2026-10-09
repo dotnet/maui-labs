@@ -310,7 +310,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
             foreach (var subview in handler._contentContainer.Subviews)
                 subview.RemoveFromSuperview();
 
-            pageView.Frame = handler._contentContainer.Bounds;
+            pageView.SetLayoutFrame(handler._contentContainer.Bounds);
             pageView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
             handler._contentContainer.AddSubview(pageView);
             handler._contentContainer.ContentView = new WeakReference<IView>(page);

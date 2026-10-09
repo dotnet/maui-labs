@@ -126,7 +126,9 @@ public sealed class RuntimeTestContext
     public void AppendJson(string name, object value) =>
         File.AppendAllText(EvidencePath(name), JsonSerializer.Serialize(value) + Environment.NewLine);
 
-    public void Capture(NSView view, string name)
+    public void Capture(NSView view, string name) => _ = CaptureBitmap(view, name);
+
+    public RuntimeBitmap CaptureBitmap(NSView view, string name)
     {
         view.LayoutSubtreeIfNeeded();
         view.DisplayIfNeeded();
@@ -153,31 +155,44 @@ public sealed class RuntimeTestContext
         {
             NSGraphicsContext.GlobalRestoreGraphicsState();
         }
+        return SaveBitmap(bitmap, name);
+    }
+
+    public RuntimeBitmap CaptureWindowBitmap(NSWindow window, string name)
+    {
+        var imageHandle = CGWindowListCreateImage(
+            CGRect.Null,
+            CGWindowListOption.IncludingWindow,
+            (uint)window.WindowNumber,
+            CGWindowImageOption.BoundsIgnoreFraming);
+        if (imageHandle == IntPtr.Zero)
+            throw new InvalidOperationException("Could not capture the native window.");
+
+        using var image = Runtime.GetINativeObject<CGImage>(imageHandle, owns: true)
+            ?? throw new InvalidOperationException("Could not create the window image.");
+        using var nativeImage = new NSImage(image, new CGSize(image.Width, image.Height));
+        using var tiff = nativeImage.AsTiff()
+            ?? throw new InvalidOperationException("Could not encode the window image.");
+        using var bitmap = new NSBitmapImageRep(tiff);
+        return SaveBitmap(bitmap, name);
+    }
+
+    RuntimeBitmap SaveBitmap(NSBitmapImageRep bitmap, string name)
+    {
         using var png = bitmap.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png)
             ?? throw new InvalidOperationException("Could not encode screenshot.");
         File.WriteAllBytes(EvidencePath(name), png.ToArray());
+        var byteCount = checked((int)bitmap.BytesPerRow * (int)bitmap.PixelsHigh);
+        var pixels = new byte[byteCount];
+        Marshal.Copy(bitmap.BitmapData, pixels, 0, byteCount);
+        return new RuntimeBitmap(pixels, (int)bitmap.PixelsWide, (int)bitmap.PixelsHigh,
+            (int)bitmap.BytesPerRow, (int)bitmap.SamplesPerPixel);
     }
 
     public void Capture(NSWindow window, string name)
     {
         window.DisplayIfNeeded();
-        var imagePointer = CGWindowListCreateImage(
-            CGRect.Null,
-            CGWindowListOption.IncludingWindow,
-            (uint)window.WindowNumber,
-            CGWindowImageOption.BoundsIgnoreFraming);
-        if (imagePointer == IntPtr.Zero)
-            throw new InvalidOperationException("Could not capture the native window.");
-
-        using var image = Runtime.GetINativeObject<CGImage>(imagePointer, owns: true)
-            ?? throw new InvalidOperationException("Could not create the captured window image.");
-        using var nativeImage = new NSImage(image, new CGSize(image.Width, image.Height));
-        using var tiff = nativeImage.AsTiff()
-            ?? throw new InvalidOperationException("Could not encode the captured window.");
-        using var bitmap = new NSBitmapImageRep(tiff);
-        using var png = bitmap.RepresentationUsingTypeProperties(NSBitmapImageFileType.Png)
-            ?? throw new InvalidOperationException("Could not encode the captured window as PNG.");
-        File.WriteAllBytes(EvidencePath(name), png.ToArray());
+        _ = CaptureWindowBitmap(window, name);
     }
 
     [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
@@ -196,6 +211,9 @@ public sealed class RuntimeTestContext
         return completion.Task;
     }
 }
+
+public readonly record struct RuntimeBitmap(
+    byte[] Pixels, int Width, int Height, int BytesPerRow, int SamplesPerPixel);
 
 sealed class RuntimeAssertionException(string failureId, string message) : Exception(message)
 {
