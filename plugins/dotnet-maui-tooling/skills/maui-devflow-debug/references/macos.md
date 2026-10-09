@@ -158,7 +158,8 @@ blazorWebView.HostPage = "wwwroot/index.html";
 blazorWebView.RootComponents.Add(new RootComponent { ... });
 ```
 
-Chobitsu.js is auto-injected via the Blazor JS module initializer — no manual `<script>` tag needed.
+The runtime bridge injects embedded Chobitsu assets from C# after document readiness;
+no Blazor JS initializer or manual `<script>` tag is involved.
 
 ## Platform Differences
 

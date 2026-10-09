@@ -51,6 +51,31 @@ public class GtkBlazorStartupTests
         Assert.Equal(1, agent.WebViewCount);
     }
 
+    [Fact]
+    public void Service_DoesNotExposeSingletonCdpCompatibilityApi()
+    {
+        Assert.Null(typeof(GtkBlazorWebViewDebugService).GetMethod("SendCdpCommandAsync"));
+    }
+
+    [Fact]
+    public void Dispose_DoesNotUnregisterReplacementBridge()
+    {
+        using var agent = new TestAgent();
+        using var blazor = new GtkBlazorWebViewDebugService();
+        blazor.WireToAgent(agent);
+        var original = new GtkBlazorWebViewDebugService.GtkWebViewBridge(blazor, null!, "host")
+        {
+            ElementId = "native-element"
+        };
+        blazor.AddBridge(original);
+        agent.RegisterCdpWebView(_ => Task.FromResult("{}"), () => true, "host", "native-element",
+            hostKind: "blazor");
+
+        blazor.Dispose();
+
+        Assert.Equal(1, agent.WebViewCount);
+    }
+
     private sealed class TestAgent : DevFlowAgentService
     {
         public int WebViewCount => GetCdpWebViewsSnapshot().Length;

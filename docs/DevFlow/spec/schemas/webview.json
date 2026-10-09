@@ -46,7 +46,11 @@
         },
         "active": {
           "type": "boolean",
-          "description": "Whether the nonblank AutomationId is reported among the backend's active WebView AutomationIds."
+          "description": "Whether the registered owner is visible on an active page in any MAUI window. Ownerless backends use elementId or AutomationId correlation."
+        },
+        "hostKind": {
+          "type": "string",
+          "description": "Descriptive hosting metadata: webview, hybrid or blazor. It does not identify the native UI backend or select behavior."
         },
         "elementId": {
           "type": [

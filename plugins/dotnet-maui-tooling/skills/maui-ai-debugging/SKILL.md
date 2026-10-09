@@ -41,7 +41,7 @@ For complete setup instructions, see [references/setup.md](references/setup.md).
    - For **Linux/GTK apps** (detected via `grep -i 'GirCore\|Maui\.Gtk' *.csproj`), use `Agent.Gtk` and `Blazor.Gtk` instead
    - For **macOS (AppKit) apps** (detected via `grep -i 'Platform\.Maui\.MacOS' *.csproj`), the standard `Agent` and `Blazor` packages include macOS support
 2. Register in `MauiProgram.cs` inside `#if DEBUG`
-3. For Blazor Hybrid: chobitsu.js is auto-injected (no manual script tag needed)
+3. For Blazor Hybrid: C# injects embedded Chobitsu assets after document/app readiness; no JS initializer or script tag is needed.
 4. For Mac Catalyst: ensure `network.server` entitlement
 5. For Android: run `adb reverse` for broker + agent ports
 6. For Linux: no special network setup needed (direct localhost)
