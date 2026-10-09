@@ -33,7 +33,7 @@ internal sealed class LayoutCaptureSnapshot
         var builder = new StringBuilder();
         foreach (var node in AnalysisNodes
             .Where(node => includeBlazor
-                || !node.Element.Framework.Equals("blazor", StringComparison.OrdinalIgnoreCase))
+                || !node.Element.Framework.Equals("webview", StringComparison.OrdinalIgnoreCase))
             .OrderBy(node => node.TreeOrder))
         {
             LayoutRectInfo bounds;
@@ -181,6 +181,7 @@ internal sealed class LayoutCaptureSnapshot
 internal sealed class LayoutNodeSnapshot
 {
     public ElementInfo Element { get; set; } = new();
+    public WeakReference<object>? WebViewOwner { get; set; }
     public LayoutRegionInfo LayoutRegion { get; set; } = new();
     public LayoutRegionInfo FullRegion { get; set; } = new();
     public LayoutRegionInfo VisibleRegion { get; set; } = new();

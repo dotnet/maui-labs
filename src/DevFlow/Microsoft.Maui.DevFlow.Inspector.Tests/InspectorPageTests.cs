@@ -69,7 +69,7 @@ public partial class InspectorPageTests : IAsyncLifetime
                 Scope = new Microsoft.Maui.DevFlow.Driver.LayoutInspectionScope
                 {
                     IncludeNativeElements = false,
-                    IncludeBlazorElements = false
+                    IncludeWebViewElements = false
                 },
                 Occlusion = new Microsoft.Maui.DevFlow.Driver.LayoutOcclusionOptions { Mode = "none" }
             });

@@ -149,7 +149,7 @@ public class UiInspectionTests : IntegrationTestBase
             Scope = new LayoutInspectionScope
             {
                 IncludeNativeElements = false,
-                IncludeBlazorElements = false,
+                IncludeWebViewElements = false,
             },
             Stability = new LayoutStabilityOptions
             {
@@ -190,7 +190,7 @@ public class UiInspectionTests : IntegrationTestBase
             Scope = new LayoutInspectionScope
             {
                 IncludeNativeElements = false,
-                IncludeBlazorElements = false,
+                IncludeWebViewElements = false,
             },
             Stability = new LayoutStabilityOptions { Mode = "wait", TimeoutMs = 3000 }
         });

@@ -64,6 +64,21 @@ public class ProtocolSpecTests
     private static readonly Lazy<string> SpecRoot = new(FindSpecRoot);
 
     [Fact]
+    public void LayoutContract_DocumentsGenericScopeAndDomMetadata()
+    {
+        var openApi = LoadDocument(Path.Combine(SpecRoot.Value, "openapi.yaml"));
+        var operation = openApi["paths"]!["/api/v1/ui/diagnostics/layout"]!["post"]!;
+        var scope = operation["requestBody"]!["content"]!["application/json"]!["schema"]!["properties"]!["scope"]!["properties"]!;
+        Assert.Equal("true", scope["includeWebViewElements"]!["default"]!.ToString());
+        Assert.Equal("boolean", scope["includeWebViewElements"]!["type"]!.GetValue<string>());
+        Assert.Null(scope["includeBlazorElements"]);
+        var description = operation["description"]!.GetValue<string>();
+        Assert.Contains("WebView.DOM.Element", description);
+        Assert.Contains("framework is webview", description);
+        Assert.Contains("webview-dom", description);
+    }
+
+    [Fact]
     public void WebViewContract_DocumentsOnlyCanonicalContextSelectionAndReadiness()
     {
         var openApi = LoadDocument(Path.Combine(SpecRoot.Value, "openapi.yaml"));

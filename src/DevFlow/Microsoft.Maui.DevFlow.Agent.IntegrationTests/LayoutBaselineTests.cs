@@ -107,7 +107,7 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
             {
                 RootElementId = rootId,
                 IncludeNativeElements = false,
-                IncludeBlazorElements = false
+                IncludeWebViewElements = false
             },
             Rules = useDefaultRules ? null :
             [
