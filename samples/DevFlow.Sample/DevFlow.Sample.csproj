@@ -38,6 +38,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor\Microsoft.Maui.DevFlow.Blazor.csproj" />
+        <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.WebView\Microsoft.Maui.DevFlow.WebView.csproj" />
         <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
                           ReferenceOutputAssembly="false"
                           OutputItemType="Analyzer" />
