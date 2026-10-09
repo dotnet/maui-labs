@@ -1,4 +1,5 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
     <TargetFrameworks>net10.0;net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0-macos;net10.0-windows10.0.19041.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true'">net10.0;net10.0-android;net10.0-ios27.0;net10.0-maccatalyst27.0;net10.0-macos27.0;net10.0-windows10.0.19041.0</TargetFrameworks>
@@ -13,10 +14,17 @@
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
     <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(EnableCoreAI)' == 'true'">
+    <OutputPath>$(OutputPath)coreai/</OutputPath>
+    <IntermediateOutputPath>$(IntermediateOutputPath)coreai/</IntermediateOutputPath>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <DefineConstants>$(DefineConstants);ENABLE_CORE_AI</DefineConstants>
+  </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
-    <IsShipping>true</IsShipping>
-    <IsPackable>true</IsPackable>
+    <IsShipping Condition="'$(EnableCoreAI)' != 'true'">true</IsShipping>
+    <IsPackable Condition="'$(EnableCoreAI)' != 'true'">true</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
     <!-- Keep this package always preview on its independent NuGet version line for all package builds.
          Bump the EssentialsAI version properties in eng/Versions.props for new previews. -->
@@ -45,10 +53,18 @@
   </ItemGroup>
   <ItemGroup Condition=" $(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst')) or $(TargetFramework.Contains('-macos')) ">
     <XcodeProject Include="..\AppleNative\EssentialsAI\EssentialsAI.xcodeproj">
-      <SchemeName>EssentialsAI</SchemeName>
+      <SchemeName Condition="'$(EnableCoreAI)' != 'true'">EssentialsAI</SchemeName>
+      <SchemeName Condition="'$(EnableCoreAI)' == 'true'">EssentialsAICoreAI</SchemeName>
     </XcodeProject>
     <ObjcBindingApiDefinition Include="..\AppleNative\ApiDefinitions.cs" />
     <ObjcBindingCoreSource Include="..\AppleNative\StructsAndEnums.cs" />
   </ItemGroup>
   <Import Project="..\AppleBindings.targets" />
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="..\CoreAIExperiment.targets" Condition="'$(EnableCoreAI)' == 'true'" />
+  <Target Name="ValidateCoreAIExperiment" BeforeTargets="PrepareForBuild;Pack" Condition="'$(EnableCoreAI)' == 'true'">
+    <Error Condition="'$(UseXcode27Preview)' != 'true'" Text="EnableCoreAI requires UseXcode27Preview=true and an OS27 Apple target." />
+    <Error Condition="'$(CI)' == 'true' or '$(TF_BUILD)' == 'true'" Text="The Core AI experiment is local-only and must not enter official builds." />
+    <Error Condition="'$(TargetFramework)' != '' and ('$(TargetPlatformVersion)' != '27.0' or ('$(TargetPlatformIdentifier)' != 'ios' and '$(TargetPlatformIdentifier)' != 'maccatalyst' and '$(TargetPlatformIdentifier)' != 'macos'))" Text="EnableCoreAI requires an iOS27, Mac Catalyst27, or macOS27 target." />
+  </Target>
 </Project>

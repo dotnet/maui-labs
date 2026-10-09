@@ -59,6 +59,33 @@ image input requires 27+ and a ready vision-capable model. Apple embeddings
 require the English sentence-embedding asset, which may be absent on
 simulators. Azure-backed features also run on Android and Windows.
 
+## Optional local Core AI experiment
+
+OS27 local builds can add a distinct **Core AI (experimental)** chat provider:
+
+```sh
+dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true -p:EnableCoreAI=true \
+  -p:CoreAIModelDirectory="/absolute/path/to/complete/exported/model/folder"
+```
+
+The app owns the staged `CoreAIModel/` resources. No model is downloaded by a
+build, included in NuGet, or selected through `ChatOptions.ModelId`.
+The first request loads asynchronously; status shows loading, ready or an
+explicit error, with no System/cloud fallback or System availability gate.
+The **Full reasoning** checkbox returns actual native reasoning separately
+from answer text; unchecking it suppresses output without disabling computation.
+Core AI has no summary API (Azure keeps its reasoning-summary setting).
+Image controls stay disabled. Temperature defaults to 0.6; TopK/TopP/Seed,
+summaries, forced tools and other unsupported options fail explicitly.
+Guided JSON may bypass reasoning; use tools and JSON schema as separate
+validation modes. Recordings retain standard reasoning identity/protected data,
+but foreign provider blobs cannot be replayed into the local Apple clients.
+
+This is local-only and not published. See the
+[Core AI experiment guide](../../docs/ai/core-ai-experiment.md) for fixture
+preparation, dependency pins, cancellation/lifetime behavior and device tests.
+
 ## Optional Azure configuration
 
 No cloud credentials are needed for the on-device providers or Replay. To

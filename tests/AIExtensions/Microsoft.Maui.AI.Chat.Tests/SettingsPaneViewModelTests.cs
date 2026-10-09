@@ -6,6 +6,57 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class SettingsPaneViewModelTests
 {
     [Fact]
+    public void SystemDescriptor_DoesNotEnableUnsupportedReasoningOrImageOptions()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("core-ai-chat", "Core AI", "Not loaded.", SupportsToolCalling: true));
+        var settings = new SettingsPaneViewModel([client]) { UseReasoningSummary = true };
+
+        var options = settings.CreateChatOptions([]);
+
+        Assert.Null(options.Reasoning);
+        Assert.False(settings.SelectedDescriptor!.SupportsImageInput);
+        Assert.False(settings.SelectedDescriptor.SupportsReasoningSummary);
+        Assert.Null(options.TopK);
+        Assert.Null(options.Seed);
+        Assert.Same(ChatToolMode.Auto, options.ToolMode);
+    }
+
+    [Fact]
+    public void CoreAIDescriptor_UsesFullReasoningAndProviderDefaultEffort()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("core-ai-chat", "Core AI", "Not loaded.",
+                SupportsToolCalling: true, SupportsFullReasoning: true));
+        var settings = new SettingsPaneViewModel([client]);
+        var options = settings.CreateChatOptions([]);
+        Assert.True(settings.SelectedDescriptor!.SupportsReasoning);
+        Assert.Equal("Full reasoning", settings.SelectedDescriptor.ReasoningLabel);
+        Assert.False(settings.SelectedDescriptor.SupportsReasoningSummary);
+        Assert.False(settings.SelectedDescriptor.SupportsImageInput);
+        Assert.Equal(ReasoningOutput.Full, options.Reasoning?.Output);
+        Assert.Null(options.Reasoning?.Effort);
+        settings.UseReasoningSummary = false;
+        var hidden = settings.CreateChatOptions([]);
+        Assert.Equal(ReasoningOutput.None, hidden.Reasoning?.Output);
+        Assert.Null(hidden.Reasoning?.Effort);
+    }
+
+    [Fact]
+    public void AzureDescriptor_KeepsSummaryAndMediumEffortSemantics()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("azure", "Azure", "Ready.", SupportsReasoningSummary: true));
+        var settings = new SettingsPaneViewModel([client]);
+        var options = settings.CreateChatOptions([]);
+        Assert.Equal("Reasoning summary", settings.SelectedDescriptor!.ReasoningLabel);
+        Assert.Equal(ReasoningOutput.Summary, options.Reasoning?.Output);
+        Assert.Equal(ReasoningEffort.Medium, options.Reasoning?.Effort);
+        settings.UseReasoningSummary = false;
+        Assert.Null(settings.CreateChatOptions([]).Reasoning);
+    }
+
+    [Fact]
     public void ChatDescriptor_ToolCallingIsOptIn()
     {
         Assert.False(new ChatClientDescriptor("test", "Test", "Ready").SupportsToolCalling);

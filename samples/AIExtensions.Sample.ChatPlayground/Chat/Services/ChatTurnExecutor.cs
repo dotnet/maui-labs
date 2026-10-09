@@ -59,6 +59,8 @@ internal sealed class ChatTurnExecutor
         // Rebuild protocol history from stream fragments, grouping text until a message or tool boundary.
         var historyStart = _history.Count;
         ChatMessage? activeText = null;
+        ChatMessage? activeReasoning = null;
+        var reasoningByMessageId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
         string? messageId = null;
         var callIds = new HashSet<string>(StringComparer.Ordinal);
         var resultIds = new HashSet<string>(StringComparer.Ordinal);
@@ -66,10 +68,11 @@ internal sealed class ChatTurnExecutor
             .WithCancellation(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (update.MessageId is { } nextMessageId && messageId != nextMessageId)
+            if (messageId != update.MessageId)
             {
                 activeText = null;
-                messageId = nextMessageId;
+                activeReasoning = null;
+                messageId = update.MessageId;
             }
             List<AIContent> acceptedContents = [];
             foreach (var content in update.Contents)
@@ -79,12 +82,15 @@ internal sealed class ChatTurnExecutor
                     case FunctionCallContent call when ShouldProcess(call.CallId, callIds):
                         _history.Add(new ChatMessage(ChatRole.Assistant, [call]));
                         activeText = null;
+                        activeReasoning = null;
                         break;
                     case FunctionResultContent result when ShouldProcess(result.CallId, resultIds):
                         _history.Add(new ChatMessage(ChatRole.Tool, [result]));
                         activeText = null;
+                        activeReasoning = null;
                         break;
                     case TextContent text when !string.IsNullOrEmpty(text.Text):
+                        activeReasoning = null;
                         if (activeText is null)
                         {
                             activeText = new ChatMessage(ChatRole.Assistant, [text]);
@@ -96,17 +102,51 @@ internal sealed class ChatTurnExecutor
                         }
                         break;
                     case TextReasoningContent reasoning:
-                        _history.Add(new ChatMessage(ChatRole.Assistant, [reasoning]));
+                        activeText = null;
+                        // Final signature-only updates may refer to a reasoning item before the answer.
+                        if (string.IsNullOrEmpty(reasoning.Text) && reasoning.ProtectedData is not null &&
+                            update.MessageId is { } protectedMessageId &&
+                            reasoningByMessageId.TryGetValue(protectedMessageId, out var protectedMessage) &&
+                            ((TextReasoningContent)protectedMessage.Contents[0]).ProtectedData is null)
+                        {
+                            ((TextReasoningContent)protectedMessage.Contents[0]).ProtectedData = reasoning.ProtectedData;
+                            activeReasoning = null;
+                            break;
+                        }
+                        if (activeReasoning is null)
+                        {
+                            activeReasoning = new ChatMessage(ChatRole.Assistant,
+                                [new TextReasoningContent(reasoning.Text) { ProtectedData = reasoning.ProtectedData }])
+                                { MessageId = messageId };
+                            _history.Add(activeReasoning);
+                            if (messageId is not null)
+                                reasoningByMessageId[messageId] = activeReasoning;
+                        }
+                        else
+                        {
+                            var accumulated = (TextReasoningContent)activeReasoning.Contents[0];
+                            accumulated.Text += reasoning.Text;
+                            if (reasoning.ProtectedData is not null)
+                                accumulated.ProtectedData = reasoning.ProtectedData;
+                        }
+                        // Protection completes a reasoning item, even when a message contains multiple items.
+                        if (reasoning.ProtectedData is not null)
+                            activeReasoning = null;
                         break;
                     case DataContent image when image.MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase):
                         _history.Add(new ChatMessage(ChatRole.Assistant, [image]));
+                        activeText = null;
+                        activeReasoning = null;
                         break;
                     case ImageGenerationToolCallContent imageCall:
                         _history.Add(new ChatMessage(update.Role ?? ChatRole.Assistant, [imageCall]));
                         activeText = null;
+                        activeReasoning = null;
                         break;
                     case ImageGenerationToolResultContent imageResult:
                         _history.Add(new ChatMessage(update.Role ?? ChatRole.Tool, [imageResult]));
+                        activeText = null;
+                        activeReasoning = null;
                         break;
                     default:
                         continue;

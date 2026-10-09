@@ -31,6 +31,10 @@ internal static class ChatServiceCollectionExtensions
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
             services.AddSingleton<IChatClient>(CreateAppleChatClient);
+#if ENABLE_CORE_AI
+        if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
+            services.AddSingleton<IChatClient>(CreateCoreAIChatClient);
+#endif
 #endif
 
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
@@ -42,6 +46,29 @@ internal static class ChatServiceCollectionExtensions
     }
 
 #if IOS || MACCATALYST
+#if ENABLE_CORE_AI
+    [SupportedOSPlatform("ios27.0")]
+    [SupportedOSPlatform("maccatalyst27.0")]
+    private static IChatClient CreateCoreAIChatClient(IServiceProvider serviceProvider) =>
+        new CoreAIChatClient(
+            Path.Combine(Foundation.NSBundle.MainBundle.ResourcePath
+                ?? throw new InvalidOperationException("The app resource directory is unavailable."), "CoreAIModel"),
+            serviceProvider.GetRequiredService<ILoggerFactory>(),
+            serviceProvider)
+            .AsBuilder()
+            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
+            .UseDescriptor(new ChatClientDescriptor(
+                "core-ai-chat",
+                "Core AI (experimental)",
+                "Not loaded. The first request loads the app-owned local model. Text/tools/full reasoning; guided JSON may bypass reasoning. Temperature defaults to 0.6. TopK/TopP/Seed, summaries and forced tools are unsupported.",
+                SupportsToolCalling: true,
+                SupportsFullReasoning: true))
+            .UsePlaygroundTelemetry()
+            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+#endif
+
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
     private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>

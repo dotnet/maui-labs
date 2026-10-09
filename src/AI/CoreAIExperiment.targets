@@ -1,0 +1,67 @@
+<Project>
+  <PropertyGroup>
+    <_BuildXcodeProjectsStamp>$(_MaciOSStampDirectory)_BuildCoreAIProjects.stamp</_BuildXcodeProjectsStamp>
+  </PropertyGroup>
+
+  <!-- The SDK archive task replaces OTHER_SWIFT_FLAGS, losing the package's required
+       Lifetimes flag. Keep the workaround confined to the unpublished experiment. -->
+  <Target Name="_BuildXcodeProjects"
+          Condition="'@(XcodeProject)' != '' and $([MSBuild]::IsOSPlatform('osx'))"
+          DependsOnTargets="ValidateCoreAIExperiment;_GetBuildXcodeProjectsInputs;_CalculateXcodeProjectOutputPaths;_DetectSdkLocations"
+          Inputs="@(_XcbInputs);$(MSBuildThisFileFullPath);%(XcodeProject.FullPath)/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+          Outputs="$(_BuildXcodeProjectsStamp)">
+    <PropertyGroup>
+      <_CoreAIArchivePlatform Condition="'$(TargetPlatformIdentifier)' == 'maccatalyst'">generic/platform=macOS,variant=Mac Catalyst</_CoreAIArchivePlatform>
+      <_CoreAIArchivePlatform Condition="'$(TargetPlatformIdentifier)' == 'macos'">generic/platform=macOS</_CoreAIArchivePlatform>
+      <_CoreAIArchivePlatform Condition="'$(TargetPlatformIdentifier)' == 'ios'">generic/platform=iOS</_CoreAIArchivePlatform>
+    </PropertyGroup>
+    <RemoveDir Directories="@(XcodeProject->'%(OutputPath)archives');@(XcodeProject->'%(OutputPath)xcframeworks')" />
+    <Exec Command="&quot;$(_SdkDevPath)/usr/bin/xcodebuild&quot; archive -project &quot;%(XcodeProject.FullPath)&quot; -scheme &quot;%(XcodeProject.SchemeName)&quot; -configuration &quot;%(XcodeProject.Configuration)&quot; -destination &quot;$(_CoreAIArchivePlatform)&quot; -archivePath &quot;%(XcodeProject.OutputPath)archives/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcarchive&quot; -derivedDataPath &quot;$(_XcodeProjectDefaultOutputPathRoot)CoreAIDerivedData&quot; -disableAutomaticPackageResolution &quot;OTHER_SWIFT_FLAGS=$(inherited) -no-verify-emitted-module-interface -enable-experimental-feature Lifetimes&quot; BUILD_LIBRARY_FOR_DISTRIBUTION=YES SKIP_INSTALL=NO CODE_SIGNING_ALLOWED=NO" />
+    <Exec Condition="'$(TargetPlatformIdentifier)' == 'ios'"
+          Command="&quot;$(_SdkDevPath)/usr/bin/xcodebuild&quot; archive -project &quot;%(XcodeProject.FullPath)&quot; -scheme &quot;%(XcodeProject.SchemeName)&quot; -configuration &quot;%(XcodeProject.Configuration)&quot; -destination &quot;generic/platform=iOS Simulator&quot; -archivePath &quot;%(XcodeProject.OutputPath)archives/%(XcodeProject.SchemeName)iosSimulator.xcarchive&quot; -derivedDataPath &quot;$(_XcodeProjectDefaultOutputPathRoot)CoreAIDerivedData&quot; -disableAutomaticPackageResolution &quot;OTHER_SWIFT_FLAGS=$(inherited) -no-verify-emitted-module-interface -enable-experimental-feature Lifetimes&quot; BUILD_LIBRARY_FOR_DISTRIBUTION=YES SKIP_INSTALL=NO CODE_SIGNING_ALLOWED=NO" />
+    <!-- SwiftPM's resource accessors search the containing framework, but Xcode's
+         framework archive omits these static-package bundles. -->
+    <PropertyGroup>
+      <_CoreAIProductsSuffix Condition="'$(TargetPlatformIdentifier)' == 'maccatalyst'">-maccatalyst</_CoreAIProductsSuffix>
+      <_CoreAIProductsSuffix Condition="'$(TargetPlatformIdentifier)' == 'ios'">-iphoneos</_CoreAIProductsSuffix>
+      <_CoreAIProducts>$(_XcodeProjectDefaultOutputPathRoot)CoreAIDerivedData/Build/Intermediates.noindex/ArchiveIntermediates/EssentialsAICoreAI/BuildProductsPath/Release$(_CoreAIProductsSuffix)/</_CoreAIProducts>
+      <_CoreAIFrameworkResources>%(XcodeProject.OutputPath)archives/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcarchive/Products/Library/Frameworks/%(XcodeProject.SchemeName).framework/</_CoreAIFrameworkResources>
+      <_CoreAIFrameworkResources Condition="'$(TargetPlatformIdentifier)' != 'ios'">$(_CoreAIFrameworkResources)Versions/A/Resources/</_CoreAIFrameworkResources>
+    </PropertyGroup>
+    <Exec Command="ditto &quot;$(_CoreAIProducts)swift-transformers_Hub.bundle&quot; &quot;$(_CoreAIFrameworkResources)swift-transformers_Hub.bundle&quot; &amp;&amp; ditto &quot;$(_CoreAIProducts)swift-crypto_Crypto.bundle&quot; &quot;$(_CoreAIFrameworkResources)swift-crypto_Crypto.bundle&quot;" />
+    <Exec Condition="'$(TargetPlatformIdentifier)' == 'ios'"
+          Command="ditto &quot;$(_XcodeProjectDefaultOutputPathRoot)CoreAIDerivedData/Build/Intermediates.noindex/ArchiveIntermediates/EssentialsAICoreAI/BuildProductsPath/Release-iphonesimulator/swift-transformers_Hub.bundle&quot; &quot;%(XcodeProject.OutputPath)archives/%(XcodeProject.SchemeName)iosSimulator.xcarchive/Products/Library/Frameworks/%(XcodeProject.SchemeName).framework/swift-transformers_Hub.bundle&quot; &amp;&amp; ditto &quot;$(_XcodeProjectDefaultOutputPathRoot)CoreAIDerivedData/Build/Intermediates.noindex/ArchiveIntermediates/EssentialsAICoreAI/BuildProductsPath/Release-iphonesimulator/swift-crypto_Crypto.bundle&quot; &quot;%(XcodeProject.OutputPath)archives/%(XcodeProject.SchemeName)iosSimulator.xcarchive/Products/Library/Frameworks/%(XcodeProject.SchemeName).framework/swift-crypto_Crypto.bundle&quot;" />
+    <CreateXcFramework XcArchivePath="%(XcodeProject.OutputPath)archives"
+                       FrameworkName="%(XcodeProject.SchemeName).framework"
+                       OutputPath="%(XcodeProject.OutputPath)xcframeworks/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcframework"
+                       SdkDevPath="$(_SdkDevPath)"
+                       WorkingDirectory="%(XcodeProject.RootDir)%(XcodeProject.Directory)" />
+    <ItemGroup>
+      <NativeReference Include="%(XcodeProject.OutputPath)xcframeworks/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcframework" Kind="Framework" />
+      <FileWrites Include="$(_BuildXcodeProjectsStamp);%(XcodeProject.OutputPath)**/*" />
+    </ItemGroup>
+    <Touch Files="$(_BuildXcodeProjectsStamp)" AlwaysCreate="true" />
+  </Target>
+
+  <!-- The binding SDK's resource-package inputs omit XCFramework contents. -->
+  <Target Name="_TrackCoreAIBindingResourceInputs"
+          Condition="'$(IsBindingProject)' == 'true'"
+          BeforeTargets="_CreateBindingResourcePackage"
+          DependsOnTargets="_BuildXcodeProjects">
+    <ItemGroup>
+      <_FileNativeReference Include="$(_BuildXcodeProjectsStamp);%(XcodeProject.OutputPath)xcframeworks/%(XcodeProject.SchemeName)$(TargetPlatformIdentifier).xcframework/**/%(XcodeProject.SchemeName)">
+        <LinkToExecutable>false</LinkToExecutable>
+        <CopyToAppBundle>false</CopyToAppBundle>
+      </_FileNativeReference>
+    </ItemGroup>
+  </Target>
+
+  <!-- Consumers track the binding assembly, not the sibling resource ZIP. -->
+  <Target Name="_PropagateCoreAIBindingResourceChanges"
+          Condition="'$(IsBindingProject)' == 'true' and Exists('$(BindingResourcePath).stamp')"
+          AfterTargets="_CreateBindingResourcePackage"
+          Inputs="$(BindingResourcePath).stamp"
+          Outputs="@(IntermediateAssembly)">
+    <Touch Files="@(IntermediateAssembly)" />
+  </Target>
+</Project>

@@ -44,6 +44,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
             case FunctionCallContent call when streaming || string.IsNullOrEmpty(call.CallId) ||
                 !_toolEntriesByCallId.ContainsKey(call.CallId):
                 FlushText();
+                EndReasoning();
                 _hasToolActivity = true;
                 var arguments = $"Arguments:\n{FormatValue(call.Arguments)}";
                 var details = call.Exception is not null
@@ -58,6 +59,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
 
             case FunctionResultContent result when streaming || ShouldProcess(result.CallId, _seenResultIds):
                 FlushText();
+                EndReasoning();
                 _hasToolActivity = true;
                 var resultText = result.Exception is null ? FormatValue(result.Result) : result.Exception.Message;
                 var resultLabel = result.Exception is null ? "Result" : "Result error";
@@ -78,6 +80,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                 break;
 
             case TextContent text when !string.IsNullOrEmpty(text.Text):
+                EndReasoning();
                 _hasText = true;
                 _text.Append(text.Text);
                 if (streaming)
@@ -94,8 +97,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
 
             case TextReasoningContent reasoning when !string.IsNullOrEmpty(reasoning.Text):
                 _hasReasoning = true;
-                if (!streaming)
-                    FlushText();
+                FlushText();
                 if (streaming)
                 {
                     _reasoningText.Append(reasoning.Text);
@@ -103,7 +105,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                     {
                         _reasoningEntryId = transcript.NextEntryId();
                         emit(new TranscriptChange.EntryAdded(_reasoningEntryId.Value, TranscriptEntryKind.Reasoning,
-                            "Reasoning summary", _reasoningText.ToString(), modelId));
+                            "Reasoning", _reasoningText.ToString(), modelId));
                     }
                     else
                     {
@@ -113,7 +115,7 @@ internal sealed class ChatResponseProjector(TranscriptEmitter transcript, Action
                 else
                 {
                     emit(new TranscriptChange.EntryAdded(transcript.NextEntryId(), TranscriptEntryKind.Reasoning,
-                        "Reasoning summary", reasoning.Text, modelId));
+                        "Reasoning", reasoning.Text, modelId));
                 }
                 if (reasoning.ProtectedData is not null)
                     EndReasoning();

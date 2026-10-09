@@ -111,7 +111,12 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
             AllowMultipleToolCalls = supportsToolCalling ? AllowMultipleToolCalls : null,
             ToolMode = supportsToolCalling ? ToolMode : ChatToolMode.None,
         };
-        if (UseReasoningSummary && SelectedDescriptor?.SupportsReasoningSummary == true)
+        if (SelectedDescriptor?.SupportsFullReasoning == true)
+            options.Reasoning = new ReasoningOptions
+            {
+                Output = UseReasoningSummary ? ReasoningOutput.Full : ReasoningOutput.None,
+            };
+        else if (UseReasoningSummary && SelectedDescriptor?.SupportsReasoningSummary == true)
             options.Reasoning = new ReasoningOptions
             {
                 Effort = ReasoningEffort.Medium,

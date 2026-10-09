@@ -1,7 +1,11 @@
 import Foundation
+import Dispatch
 import CoreGraphics
 import ImageIO
 import FoundationModels
+#if ENABLE_CORE_AI
+import CoreAILanguageModels
+#endif
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
 /// Type alias for the logging action block.
@@ -26,6 +30,33 @@ public enum ChatClientError: Int {
 
 @objc(ChatClientNative)
 public class ChatClientNative: NSObject {
+    private let modelDirectory: String?
+    private let owner = UUID()
+    @objc public private(set) var modelIdentifier: String?
+#if ENABLE_CORE_AI
+    private var coreAIEntry: CoreAIModel.Entry?
+#endif
+
+    @objc public override init() {
+        modelDirectory = nil
+        modelIdentifier = "apple-intelligence"
+        super.init()
+    }
+
+    @objc public init(modelDirectory: String) {
+        self.modelDirectory = URL(fileURLWithPath: modelDirectory, isDirectory: true)
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        super.init()
+    }
+
+    deinit {
+#if ENABLE_CORE_AI
+        if let path = modelDirectory {
+            let owner = owner
+            Task { await CoreAIModel.shared.removeOwner(owner, path: path) }
+        }
+#endif
+    }
 
     // MARK: - Stream Response
 
@@ -37,7 +68,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "streamResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let cq: DispatchQueue? = callbackQueue()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -75,7 +106,7 @@ public class ChatClientNative: NSObject {
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, cq, onComplete) { session, prompt, schema, genOptions in
 
             if let jsonSchema = schema {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -84,10 +115,19 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                let responseStream = session.streamResponse(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                let responseStream: LanguageModelSession.ResponseStream<GeneratedContent>
+                if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                    responseStream = session.streamResponse(to: prompt, schema: jsonSchema, options: genOptions,
+                        contextOptions: try self.contextOptions(options, includeSchema: false))
+                } else {
+                    responseStream = session.streamResponse(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                }
 
                 for try await response in responseStream {
                     try Task.checkCancellation()
+                    if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                        try self.emitReasoning(response.transcriptEntries, options, cq, onUpdate)
+                    }
                     let text = response.content.jsonString
                     guard !text.isEmpty else { continue }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -95,17 +135,21 @@ public class ChatClientNative: NSObject {
                         log("[\(methodName)] Streaming update: \(text)")
                     }
 #endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
+                    let update = ResponseUpdateNative(updateType: .content, text: text,
+                        messageId: self.responseMessageId(response))
                     cq?.async { onUpdate(update) } ?? onUpdate(update)
                 }
 
                 let response = try await responseStream.collect()
+                if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                    try self.emitReasoning(response.transcriptEntries, options, cq, onUpdate)
+                }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.jsonString.count)")
                 }
 #endif
-                return (response.content.jsonString, response.transcriptEntries)
+                return try self.fromResponse(response, includeReasoning: options?.includeReasoning != false)
             } else {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
@@ -113,10 +157,19 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                let responseStream = session.streamResponse(to: prompt, options: genOptions)
+                let responseStream: LanguageModelSession.ResponseStream<String>
+                if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                    responseStream = session.streamResponse(to: prompt, options: genOptions,
+                        contextOptions: try self.contextOptions(options))
+                } else {
+                    responseStream = session.streamResponse(to: prompt, options: genOptions)
+                }
 
                 for try await response in responseStream {
                     try Task.checkCancellation()
+                    if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                        try self.emitReasoning(response.transcriptEntries, options, cq, onUpdate)
+                    }
                     let text = response.content
                     guard !text.isEmpty else { continue }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -124,17 +177,21 @@ public class ChatClientNative: NSObject {
                         log("[\(methodName)] Streaming update: \(text)")
                     }
 #endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
+                    let update = ResponseUpdateNative(updateType: .content, text: text,
+                        messageId: self.responseMessageId(response))
                     cq?.async { onUpdate(update) } ?? onUpdate(update)
                 }
 
                 let response = try await responseStream.collect()
+                if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                    try self.emitReasoning(response.transcriptEntries, options, cq, onUpdate)
+                }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.count)")
                 }
 #endif
-                return (response.content, response.transcriptEntries)
+                return try self.fromResponse(response, includeReasoning: options?.includeReasoning != false)
             }
         }
 
@@ -150,7 +207,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "getResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let cq: DispatchQueue? = callbackQueue()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -188,7 +245,7 @@ public class ChatClientNative: NSObject {
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, cq, onComplete) { session, prompt, schema, genOptions in
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
             if let log = AppleIntelligenceLogger.log {
@@ -198,21 +255,33 @@ public class ChatClientNative: NSObject {
 
             let response = try await {
                 if let jsonSchema = schema {
-                    let inner = try await session.respond(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                    let inner: LanguageModelSession.Response<GeneratedContent>
+                    if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                        inner = try await session.respond(to: prompt, schema: jsonSchema, options: genOptions,
+                            contextOptions: self.contextOptions(options, includeSchema: false))
+                    } else {
+                        inner = try await session.respond(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                    }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
                         log("[\(methodName)] Response received, content length: \(inner.content.jsonString.count)")
                     }
 #endif
-                    return (inner.content.jsonString, inner.transcriptEntries)
+                    return try self.fromResponse(inner, includeReasoning: options?.includeReasoning != false)
                 } else {
-                    let inner = try await session.respond(to: prompt, options: genOptions)
+                    let inner: LanguageModelSession.Response<String>
+                    if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                        inner = try await session.respond(to: prompt, options: genOptions,
+                            contextOptions: self.contextOptions(options))
+                    } else {
+                        inner = try await session.respond(to: prompt, options: genOptions)
+                    }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
                         log("[\(methodName)] Response received, content length: \(inner.content.count)")
                     }
 #endif
-                    return (inner.content, inner.transcriptEntries)
+                    return try self.fromResponse(inner, includeReasoning: options?.includeReasoning != false)
                 }
             }()
 
@@ -246,10 +315,9 @@ public class ChatClientNative: NSObject {
         }
         let otherMessages = Array(messages.dropLast())
 
-        let model = SystemLanguageModel.default
-        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *), modelDirectory == nil,
            messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) }),
-           !model.capabilities.contains(.vision) {
+           !SystemLanguageModel.default.capabilities.contains(.vision) {
             throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later and a vision-capable Apple Intelligence model. The current model does not report vision support.")
         }
 
@@ -265,7 +333,7 @@ public class ChatClientNative: NSObject {
         }
 #endif
 
-        let transcript = try Transcript(entries: otherMessages.flatMap(self.toTranscriptEntries))
+        let transcript = try Transcript(entries: normalizedReasoningHistory(otherMessages).flatMap(self.toTranscriptEntries))
         let prompt = try self.toPrompt(message: lastMessage)
 
         // Parse the JSON schema from the options
@@ -291,11 +359,37 @@ public class ChatClientNative: NSObject {
                 }
                 return .greedy
             }(),
-            temperature: options?.temperature?.doubleValue,
+            temperature: options?.temperature?.doubleValue ?? (modelDirectory == nil ? nil : 0.6),
             maximumResponseTokens: options?.maxOutputTokens?.intValue
         )
 
-        let session = LanguageModelSession(model: model, tools: tools, transcript: transcript)
+        let session: LanguageModelSession
+        if modelDirectory != nil {
+#if ENABLE_CORE_AI
+            guard #available(iOS 27.0, macOS 27.0, *), let entry = coreAIEntry else {
+                throw NSError(domain: "CoreAI", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "Core AI requires OS27 and a loaded local model."
+                ])
+            }
+            if !tools.isEmpty && !entry.model.capabilities.contains(.toolCalling) {
+                throw NSError(domain: "CoreAI", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "The selected local model does not support tool calling."
+                ])
+            }
+            if schema != nil && !entry.model.capabilities.contains(.guidedGeneration) {
+                throw NSError(domain: "CoreAI", code: 4, userInfo: [
+                    NSLocalizedDescriptionKey: "The selected local model does not support guided generation."
+                ])
+            }
+            session = LanguageModelSession(model: entry, tools: tools, transcript: transcript)
+#else
+            throw NSError(domain: "CoreAI", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "Core AI is not enabled in this build."
+            ])
+#endif
+        } else {
+            session = LanguageModelSession(model: SystemLanguageModel.default, tools: tools, transcript: transcript)
+        }
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -311,13 +405,12 @@ public class ChatClientNative: NSObject {
         _ messages: [ChatMessageNative],
         _ options: ChatOptionsNative?,
         _ toolWatcher: ToolCallWatcher?,
+        _ cq: DispatchQueue?,
         _ onComplete: @escaping (ChatResponseNative?, NSError?) -> Void,
         operation:
             @escaping (LanguageModelSession, Prompt, GenerationSchema?, GenerationOptions) async throws
-            -> (String, ArraySlice<Transcript.Entry>)
+            -> ChatResponseNative
     ) -> CancellationTokenNative? {
-
-        let cq = OperationQueue.current?.underlyingQueue
 
         guard !messages.isEmpty else {
             let error = NSError.chatError(.emptyMessages, description: "No messages provided.")
@@ -332,30 +425,43 @@ public class ChatClientNative: NSObject {
         }
 
         let task = Task {
+            var acquired = false
             do {
                 try Task.checkCancellation()
 
+#if ENABLE_CORE_AI
+                if let path = modelDirectory {
+                    coreAIEntry = try await CoreAIModel.shared.acquire(path: path, owner: owner)
+                    acquired = true
+                    modelIdentifier = coreAIEntry?.name
+                }
+#endif
                 let (session, prompt, schema, genOptions) = try await self.prepareSession(methodName, messages, options, toolWatcher)
 
-                let result = try await operation(session, prompt, schema, genOptions)
+                let response = try await operation(session, prompt, schema, genOptions)
 
                 try Task.checkCancellation()
-
-                // Convert transcript entries to messages
-                let transcriptMessages = try result.1.compactMap(self.fromTranscriptEntry)
-
-                // Create response with all transcript messages
-                let response = ChatResponseNative(messages: transcriptMessages)
+#if ENABLE_CORE_AI
+                if acquired, let path = modelDirectory {
+                    await CoreAIModel.shared.release(path: path)
+                    acquired = false
+                }
+#endif
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
-                    log("[\(methodName)] Completed with \(transcriptMessages.count) messages")
+                    log("[\(methodName)] Completed with \(response.messages.count) messages")
                     log("[\(methodName)] Response: \(self.formatResponseDetailed(response))")
                 }
 #endif
 
                 cq?.async { onComplete(response, nil) } ?? onComplete(response, nil)
             } catch {
+#if ENABLE_CORE_AI
+                if acquired, let path = modelDirectory {
+                    await CoreAIModel.shared.release(path: path, interrupted: Task.isCancelled || error is CancellationError)
+                }
+#endif
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Failed: \(error.localizedDescription)")
@@ -367,6 +473,169 @@ public class ChatClientNative: NSObject {
         }
 
         return CancellationTokenNative(task: task)
+    }
+
+    private func fromResponse<Content: Generable>(_ response: LanguageModelSession.Response<Content>, includeReasoning: Bool) throws -> ChatResponseNative {
+        let result = ChatResponseNative(messages: try response.transcriptEntries.compactMap {
+            try self.fromTranscriptEntry($0, includeReasoning: includeReasoning)
+        })
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            result.inputTokenCount = NSNumber(value: response.usage.input.totalTokenCount)
+            result.outputTokenCount = NSNumber(value: response.usage.output.totalTokenCount)
+            result.totalTokenCount = NSNumber(value: response.usage.totalTokenCount)
+        }
+        return result
+    }
+
+    @available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+    private func contextOptions(_ options: ChatOptionsNative?, includeSchema: Bool? = nil) throws -> ContextOptions {
+        // The default system model does not support reasoning controls. Leave its behavior unchanged.
+        guard modelDirectory != nil, let level = options?.reasoningLevel else {
+            return ContextOptions(includeSchemaInPrompt: includeSchema)
+        }
+#if ENABLE_CORE_AI
+        guard coreAIEntry?.model.capabilities.contains(.reasoning) == true else {
+            throw NSError.chatError(.invalidContent, description: "The selected local model does not support reasoning.")
+        }
+#endif
+        let nativeLevel: ContextOptions.ReasoningLevel
+        switch level {
+        case "none": nativeLevel = .custom("none")
+        case "light": nativeLevel = .light
+        case "moderate": nativeLevel = .moderate
+        case "deep": nativeLevel = .deep
+        default: throw NSError.chatError(.invalidContent, description: "Unsupported reasoning level: \(level).")
+        }
+        return ContextOptions(includeSchemaInPrompt: includeSchema, reasoningLevel: nativeLevel)
+    }
+
+    private func responseMessageId<Content>(_ snapshot: LanguageModelSession.ResponseStream<Content>.Snapshot) -> String? {
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            return snapshot.transcriptEntries.compactMap { entry in
+                if case .response(let response) = entry { return response.id }
+                return nil
+            }.last
+        }
+        return nil
+    }
+
+    @available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+    func emitReasoning(_ entries: ArraySlice<Transcript.Entry>, _ options: ChatOptionsNative?,
+        _ queue: DispatchQueue?, _ onUpdate: @escaping (ResponseUpdateNative) -> Void) throws {
+        guard options?.includeReasoning != false else { return }
+        for entry in entries {
+            guard case .reasoning(let reasoning) = entry else { continue }
+            for segment in reasoning.segments {
+                guard case .text(let text) = segment else { continue }
+                let update = ResponseUpdateNative(updateType: .reasoning, text: text.content,
+                    messageId: reasoning.id, segmentId: text.id)
+                queue?.async { onUpdate(update) } ?? onUpdate(update)
+            }
+            if let protectedData = try protectReasoning(reasoning) {
+                let update = ResponseUpdateNative(updateType: .reasoning,
+                    messageId: reasoning.id, protectedData: protectedData)
+                queue?.async { onUpdate(update) } ?? onUpdate(update)
+            }
+        }
+    }
+
+    private struct ProtectedReasoning: Codable {
+        let producer: String
+        let transcript: Transcript
+    }
+
+    private var reasoningProducer: String { modelDirectory.map { "coreai:\($0)" } ?? "apple-intelligence" }
+    private static let protectionPrefix = "foundation-models-reasoning-v1:"
+
+    @available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+    func protectReasoning(_ reasoning: Transcript.Reasoning) throws -> String? {
+        guard reasoning.signature != nil else { return nil }
+        // Preserve the signed native entry verbatim, including segment identities and metadata.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let payload = ProtectedReasoning(producer: reasoningProducer, transcript: Transcript(entries: [.reasoning(reasoning)]))
+        return Self.protectionPrefix + (try encoder.encode(payload)).base64EncodedString()
+    }
+
+    func replayReasoning(_ contents: [TextReasoningContentNative], messageId: String?) throws -> Transcript.Entry? {
+        let protectedValues = contents.compactMap(\.protectedData)
+        guard !protectedValues.isEmpty else {
+            // Unsigned traces are not answer text or fabricated tokens. CoreAILM ignores reasoning history.
+            return nil
+        }
+        guard #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) else {
+            throw NSError.chatError(.invalidContent, description: "Unsupported protected reasoning data.")
+        }
+        var latest: Transcript.Reasoning?
+        for value in protectedValues {
+            guard value.hasPrefix(Self.protectionPrefix),
+                  let bytes = Data(base64Encoded: String(value.dropFirst(Self.protectionPrefix.count))) else {
+                throw NSError.chatError(.invalidContent, description: "Unsupported protected reasoning data.")
+            }
+            let payload = try JSONDecoder().decode(ProtectedReasoning.self, from: bytes)
+            guard payload.producer == reasoningProducer, payload.transcript.count == 1,
+                  case .reasoning(let reasoning)? = payload.transcript.first,
+                  reasoning.signature != nil, reasoning.id == messageId else {
+                throw NSError.chatError(.invalidContent, description: "Protected reasoning must retain its native message identity and producer.")
+            }
+            latest = reasoning
+        }
+        guard let reasoning = latest else {
+            throw NSError.chatError(.invalidContent, description: "Protected reasoning has no native entry.")
+        }
+        let text = contents.compactMap(\.text).joined()
+        let signedText = reasoning.segments.compactMap { segment in
+            if case .text(let text) = segment { return text.content }
+            return nil
+        }.joined()
+        guard text.isEmpty || text == signedText else {
+            throw NSError.chatError(.invalidContent, description: "Reasoning text does not match its protected native entry.")
+        }
+        return .reasoning(reasoning)
+    }
+
+    func normalizedReasoningHistory(_ messages: [ChatMessageNative]) throws -> [ChatMessageNative] {
+        var fragments: [String: [TextReasoningContentNative]] = [:]
+        var protectedIds: Set<String> = []
+        for message in messages where message.role == .assistant {
+            let reasoning = message.contents.compactMap { $0 as? TextReasoningContentNative }
+            if reasoning.contains(where: { $0.protectedData != nil }) {
+                guard let id = message.messageId, !id.isEmpty else {
+                    throw NSError.chatError(.invalidContent, description: "Protected reasoning requires its native message identity.")
+                }
+                protectedIds.insert(id)
+            }
+            if let id = message.messageId {
+                fragments[id, default: []].append(contentsOf: reasoning)
+            }
+        }
+        var emittedIds: Set<String> = []
+        return messages.compactMap { message in
+            guard message.role == .assistant, let id = message.messageId, protectedIds.contains(id) else {
+                return message
+            }
+            let normalized = ChatMessageNative()
+            normalized.role = message.role
+            normalized.messageId = id
+            for content in message.contents {
+                if content is TextReasoningContentNative {
+                    // Standard aggregation may place final protection after answer/tool messages.
+                    // Restore all revisions at the first position of this native reasoning entry.
+                    if emittedIds.insert(id).inserted {
+                        normalized.contents.append(contentsOf: fragments[id] ?? [])
+                    }
+                } else {
+                    normalized.contents.append(content)
+                }
+            }
+            return normalized.contents.isEmpty ? nil : normalized
+        }
+    }
+
+    private func callbackQueue() -> DispatchQueue {
+        // Tool callbacks and snapshot iteration can arrive on different native tasks.
+        // One serial queue also keeps completion behind every pending update.
+        DispatchQueue(label: "EssentialsAI.response", target: OperationQueue.current?.underlyingQueue)
     }
 
     // MARK: - Conversion to Foundation Models Helpers
@@ -441,14 +710,31 @@ public class ChatClientNative: NSObject {
         return .prompt(Transcript.Prompt(segments: segments))
     }
 
-    private func toAssistantEntries(_ message: ChatMessageNative) throws -> [Transcript.Entry] {
+    func toAssistantEntries(_ message: ChatMessageNative) throws -> [Transcript.Entry] {
         // Process contents in order, flushing batches when the content type changes.
         // This preserves interleaving: [text, funcCall, text] → [.response, .toolCalls, .response]
         var entries: [Transcript.Entry] = []
         var pendingResponseSegments: [Transcript.Segment] = []
         var pendingToolCalls: [Transcript.ToolCall] = []
+        var pendingReasoning: [TextReasoningContentNative] = []
 
         for content in message.contents {
+            if let reasoning = content as? TextReasoningContentNative {
+                if !pendingResponseSegments.isEmpty {
+                    entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingResponseSegments)))
+                    pendingResponseSegments = []
+                }
+                if !pendingToolCalls.isEmpty {
+                    entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
+                    pendingToolCalls = []
+                }
+                pendingReasoning.append(reasoning)
+                continue
+            }
+            if !pendingReasoning.isEmpty {
+                if let entry = try replayReasoning(pendingReasoning, messageId: message.messageId) { entries.append(entry) }
+                pendingReasoning = []
+            }
             if let textContent = content as? TextContentNative {
                 if !pendingToolCalls.isEmpty {
                     entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
@@ -479,6 +765,9 @@ public class ChatClientNative: NSObject {
         if !pendingToolCalls.isEmpty {
             entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
         }
+        if !pendingReasoning.isEmpty {
+            if let entry = try replayReasoning(pendingReasoning, messageId: message.messageId) { entries.append(entry) }
+        }
         return entries
     }
 
@@ -499,7 +788,7 @@ public class ChatClientNative: NSObject {
 
     // MARK: - Conversion to Essentials AI Helpers
 
-    private func fromTranscriptEntry(_ entry: Transcript.Entry) throws -> ChatMessageNative? {
+    private func fromTranscriptEntry(_ entry: Transcript.Entry, includeReasoning: Bool) throws -> ChatMessageNative? {
         switch entry {
         case .prompt(let prompt):
             let message = ChatMessageNative()
@@ -510,6 +799,7 @@ public class ChatClientNative: NSObject {
         case .response(let response):
             let message = ChatMessageNative()
             message.role = .assistant
+            message.messageId = response.id
             message.contents = response.segments.compactMap(fromTranscriptSegment)
             return message
 
@@ -532,7 +822,20 @@ public class ChatClientNative: NSObject {
             return message
 
         default:
-            // Reasoning and any future entry kinds are not surfaced as messages.
+            if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+               includeReasoning, case .reasoning(let reasoning) = entry {
+                let message = ChatMessageNative()
+                message.role = .assistant
+                message.messageId = reasoning.id
+                let text = reasoning.segments.compactMap { segment in
+                    if case .text(let text) = segment { return text.content }
+                    return nil
+                }.joined()
+                let protectedData = try protectReasoning(reasoning)
+                guard !text.isEmpty || protectedData != nil else { return nil }
+                message.contents = [TextReasoningContentNative(text: text, protectedData: protectedData)]
+                return message
+            }
             return nil
         }
     }
