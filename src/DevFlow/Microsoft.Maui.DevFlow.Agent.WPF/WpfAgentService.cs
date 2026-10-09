@@ -27,41 +27,17 @@ public class WpfAgentService : DevFlowAgentService
 
     protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
     {
-        try
-        {
-            // Guard against path traversal: sharedName becomes part of a file name.
-            if (!string.IsNullOrEmpty(sharedName) &&
-                (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
-                return null;
+        // Guard against path traversal: sharedName becomes part of a file name.
+        if (!string.IsNullOrEmpty(sharedName) &&
+            (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+            throw new ArgumentException("sharedName must not contain path separators or '..'.", nameof(sharedName));
 
-            // Mirror WPFPreferences' on-disk layout:
-            // LocalApplicationData / {FriendlyName} / preferences / {shared|default}.json
-            var prefsDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                AppDomain.CurrentDomain.FriendlyName, "preferences");
-            var path = Path.Combine(prefsDir, (sharedName ?? "default") + ".json");
-
-            if (!File.Exists(path))
-                return new List<string>();
-
-            // Best-effort read; parse failures degrade to complete=false.
-            var json = File.ReadAllText(path);
-            if (string.IsNullOrWhiteSpace(json))
-                return new List<string>();
-
-            using var doc = global::System.Text.Json.JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != global::System.Text.Json.JsonValueKind.Object)
-                return new List<string>();
-
-            var keys = new List<string>();
-            foreach (var prop in doc.RootElement.EnumerateObject())
-                keys.Add(prop.Name);
-            return keys;
-        }
-        catch
-        {
-            return null;
-        }
+        // Mirror WPFPreferences' on-disk layout:
+        // LocalApplicationData / {FriendlyName} / preferences / {shared|default}.json
+        var prefsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            AppDomain.CurrentDomain.FriendlyName, "preferences");
+        return ReadPreferenceFileKeys(Path.Combine(prefsDir, (sharedName ?? "default") + ".json"));
     }
 
     protected override double GetWindowDisplayDensity(IWindow? window)

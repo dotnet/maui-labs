@@ -57,8 +57,10 @@ public class PreferencesTests : IntegrationTestBase
     // still be enumerated by `preferences list` via the native backing store,
     // not just keys DevFlow itself tracked. The response must also report
     // native enumeration as complete.
-    [Fact]
-    public async Task List_IncludesKeyWrittenDirectlyByApp()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("integration_test_shared")]
+    public async Task List_IncludesKeyWrittenDirectlyByApp(string? sharedName)
     {
         var key = $"{TestKeyPrefix}app_written";
 
@@ -67,19 +69,54 @@ public class PreferencesTests : IntegrationTestBase
             await Client.CallExtensionToolAsync(
                 "POST",
                 "/api/v1/ext/com.example.diagnostics/seed-pref",
-                JsonSerializer.SerializeToElement(new { key, value = "app_written_value" }));
+                JsonSerializer.SerializeToElement(new { key, value = "app_written_value", sharedName }));
 
-            var list = await Client.GetPreferencesAsync();
+            var list = await Client.GetPreferencesAsync(sharedName);
 
-            var listedKeys = list.GetProperty("keys").EnumerateArray()
-                .Select(e => e.GetProperty("key").GetString());
-            Assert.Contains(key, listedKeys);
+            var entry = Assert.Single(list.GetProperty("keys").EnumerateArray(),
+                e => e.GetProperty("key").GetString() == key);
+            Assert.Equal("app_written_value", entry.GetProperty("value").GetString());
+            Assert.Equal("native", list.GetProperty("source").GetString());
+            Assert.True(list.GetProperty("complete").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, list.GetProperty("enumerationError").ValueKind);
+            Assert.Equal(sharedName, list.GetProperty("sharedName").GetString());
+
+            if (sharedName is not null)
+            {
+                var defaultList = await Client.GetPreferencesAsync();
+                Assert.DoesNotContain(defaultList.GetProperty("keys").EnumerateArray(),
+                    e => e.GetProperty("key").GetString() == key);
+            }
+        }
+        finally
+        {
+            await Client.DeletePreferenceAsync(key, sharedName);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("integration_test_shared")]
+    public async Task List_DoesNotIncludeTrackedKeyRemovedDirectlyByApp(string? sharedName)
+    {
+        var key = $"{TestKeyPrefix}app_removed";
+        try
+        {
+            await Client.SetPreferenceAsync(key, "tracked_value", sharedName: sharedName);
+            await Client.CallExtensionToolAsync(
+                "POST",
+                "/api/v1/ext/com.example.diagnostics/seed-pref",
+                JsonSerializer.SerializeToElement(new { key, sharedName, remove = true }));
+
+            var list = await Client.GetPreferencesAsync(sharedName);
+            Assert.DoesNotContain(list.GetProperty("keys").EnumerateArray(),
+                e => e.GetProperty("key").GetString() == key);
             Assert.Equal("native", list.GetProperty("source").GetString());
             Assert.True(list.GetProperty("complete").GetBoolean());
         }
         finally
         {
-            await Client.DeletePreferenceAsync(key);
+            await Client.DeletePreferenceAsync(key, sharedName);
         }
     }
 

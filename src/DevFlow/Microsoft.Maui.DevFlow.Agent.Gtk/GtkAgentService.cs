@@ -21,54 +21,23 @@ public class GtkAgentService : DevFlowAgentService
 
     protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
     {
-        try
-        {
-            // Guard against path traversal: sharedName becomes part of a file name.
-            if (!string.IsNullOrEmpty(sharedName) &&
-                (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
-                return null;
+        // Guard against path traversal: sharedName becomes part of a file name.
+        if (!string.IsNullOrEmpty(sharedName) &&
+            (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+            throw new ArgumentException("sharedName must not contain path separators or '..'.", nameof(sharedName));
 
-            // Mirror LinuxPreferences' on-disk layout:
-            // $XDG_CONFIG_HOME (or ~/.config) / {FriendlyName} / preferences[.{shared}].json
-            var configDir = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-            if (string.IsNullOrEmpty(configDir))
-                configDir = global::System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+        // Mirror LinuxPreferences' on-disk layout:
+        // $XDG_CONFIG_HOME (or ~/.config) / {FriendlyName} / preferences[.{shared}].json
+        var configDir = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        if (string.IsNullOrEmpty(configDir))
+            configDir = global::System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
 
-            var appDir = global::System.IO.Path.Combine(configDir, AppDomain.CurrentDomain.FriendlyName);
-            var fileName = string.IsNullOrEmpty(sharedName)
-                ? "preferences.json"
-                : $"preferences.{sharedName}.json";
-            var path = global::System.IO.Path.Combine(appDir, fileName);
-
-            return ReadJsonObjectKeys(path);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static IReadOnlyCollection<string>? ReadJsonObjectKeys(string path)
-    {
-        if (!global::System.IO.File.Exists(path))
-            return new List<string>();
-
-        // Best-effort read: not synchronized with LinuxPreferences.Save, so a
-        // concurrent write may yield partial JSON. The caller's catch treats a
-        // parse failure as "cannot enumerate" (degrades to complete=false).
-        var json = global::System.IO.File.ReadAllText(path);
-        if (string.IsNullOrWhiteSpace(json))
-            return new List<string>();
-
-        using var doc = global::System.Text.Json.JsonDocument.Parse(json);
-        if (doc.RootElement.ValueKind != global::System.Text.Json.JsonValueKind.Object)
-            return new List<string>();
-
-        var keys = new List<string>();
-        foreach (var prop in doc.RootElement.EnumerateObject())
-            keys.Add(prop.Name);
-        return keys;
+        var appDir = global::System.IO.Path.Combine(configDir, AppDomain.CurrentDomain.FriendlyName);
+        var fileName = string.IsNullOrEmpty(sharedName)
+            ? "preferences.json"
+            : $"preferences.{sharedName}.json";
+        return ReadPreferenceFileKeys(global::System.IO.Path.Combine(appDir, fileName));
     }
 
     protected override double GetWindowDisplayDensity(IWindow? window)

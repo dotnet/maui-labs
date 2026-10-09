@@ -1579,7 +1579,9 @@ paths:
       tags: [storage]
       summary: List preferences
       description: >
-        Returns all preference entries, optionally scoped to a shared container.
+        Returns preference entries, optionally scoped to a shared container.
+        Native store enumeration is authoritative when available; otherwise the
+        tracked-key registry is returned with complete=false and an enumerationError.
       parameters:
         - name: sharedName
           in: query
@@ -1588,13 +1590,11 @@ paths:
             type: string
       responses:
         "200":
-          description: Array of preference entries.
+          description: Preference entries and enumeration completeness.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "./schemas/storage.json#/$defs/PreferenceEntry"
+                $ref: "./schemas/storage.json#/$defs/PreferencesListResponse"
         "500":
           $ref: "#/components/responses/InternalError"
 

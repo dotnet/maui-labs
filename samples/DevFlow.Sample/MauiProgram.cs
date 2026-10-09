@@ -118,7 +118,7 @@ public static class MauiProgram
 			// still appear in `preferences list` via native store enumeration.
 			diagnostics.MapTool(
 				"seed_pref",
-				"Writes a preference directly via the app's Preferences store, bypassing DevFlow tracking.",
+				"Writes or removes a preference directly via the app's Preferences store, bypassing DevFlow tracking.",
 				"POST",
 				"seed-pref",
 				request =>
@@ -126,14 +126,15 @@ public static class MauiProgram
 					using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(request.Body) ? "{}" : request.Body);
 					var root = document.RootElement;
 					var key = root.TryGetProperty("key", out var keyElement) ? keyElement.GetString() : null;
-					if (string.IsNullOrEmpty(key))
+					if (key is null)
 						return Task.FromResult(HttpResponse.Error("'key' is required."));
 
 					var value = root.TryGetProperty("value", out var valueElement) ? valueElement.GetString() : null;
 					var sharedName = root.TryGetProperty("sharedName", out var sharedElement) ? sharedElement.GetString() : null;
+					var remove = root.TryGetProperty("remove", out var removeElement) && removeElement.GetBoolean();
 
-					if (string.IsNullOrEmpty(sharedName))
-						Microsoft.Maui.Storage.Preferences.Default.Set(key, value ?? string.Empty);
+					if (remove)
+						Microsoft.Maui.Storage.Preferences.Default.Remove(key, sharedName);
 					else
 						Microsoft.Maui.Storage.Preferences.Default.Set(key, value ?? string.Empty, sharedName);
 
@@ -142,7 +143,7 @@ public static class MauiProgram
 						key,
 						value = value ?? string.Empty,
 						sharedName,
-						seeded = true
+						seeded = !remove
 					}));
 				},
 				parameters: JsonDocument.Parse("""
@@ -151,7 +152,8 @@ public static class MauiProgram
 				  "properties": {
 				    "key": { "type": "string" },
 				    "value": { "type": "string" },
-				    "sharedName": { "type": "string" }
+				    "sharedName": { "type": "string" },
+				    "remove": { "type": "boolean" }
 				  },
 				  "required": ["key"]
 				}

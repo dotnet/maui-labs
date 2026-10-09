@@ -5581,6 +5581,31 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// </returns>
     protected virtual IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName) => null;
 
+    protected static IReadOnlyCollection<string> ReadPreferenceFileKeys(
+        string path, string? sharedName = null, bool nestedStore = false)
+    {
+        if (!File.Exists(path))
+            return Array.Empty<string>();
+
+        // A concurrent save can truncate the file before writing JSON. Treat
+        // blank or malformed content as a failed read, not a complete empty store.
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var store = document.RootElement;
+        if (store.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("The preference store must be a JSON object.");
+
+        if (nestedStore)
+        {
+            if (!store.TryGetProperty(sharedName ?? string.Empty, out var bucket))
+                return Array.Empty<string>();
+            if (bucket.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("The preference store bucket must be a JSON object.");
+            store = bucket;
+        }
+
+        return store.EnumerateObject().Select(property => property.Name).ToArray();
+    }
+
     private Task<HttpResponse> HandlePreferencesList(HttpRequest request)
     {
         try
@@ -5590,14 +5615,17 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             var registryKeys = GetKnownPreferenceKeys(sharedName);
 
             IReadOnlyCollection<string>? nativeKeys;
+            string? enumerationError = null;
             try
             {
                 nativeKeys = EnumerateNativePreferenceKeys(sharedName);
+                if (nativeKeys is null)
+                    enumerationError = "Native preference enumeration is not available.";
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort: any platform failure degrades to registry-only.
                 nativeKeys = null;
+                enumerationError = $"Native preference enumeration failed: {ex.Message}";
             }
 
             var merged = PreferenceKeyMerger.Merge(
@@ -5617,7 +5645,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 keys = entries,
                 source = merged.Source,
                 complete = merged.Complete,
-                sharedName
+                sharedName,
+                enumerationError
             }));
         }
         catch (Exception ex)

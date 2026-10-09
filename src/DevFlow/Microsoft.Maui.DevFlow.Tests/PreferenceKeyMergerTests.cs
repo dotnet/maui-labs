@@ -29,16 +29,14 @@ public class PreferenceKeyMergerTests
     }
 
     [Fact]
-    public void Merge_NativeSupported_UnionsRegistryKeysWithoutRegression()
+    public void Merge_NativeSupported_DoesNotIncludeStaleRegistryKeys()
     {
-        // A key DevFlow tracked but that the native enumeration somehow missed
-        // must still be listed (no regression vs. registry-only behavior).
         var result = PreferenceKeyMerger.Merge(
             registryKeys: new[] { "tracked_only" },
             nativeKeys: new[] { "app_written" });
 
         Assert.True(result.Complete);
-        Assert.Equal(new[] { "app_written", "tracked_only" }, result.Keys);
+        Assert.Equal(new[] { "app_written" }, result.Keys);
     }
 
     [Fact]
@@ -48,7 +46,7 @@ public class PreferenceKeyMergerTests
             registryKeys: new[] { "shared", "reg" },
             nativeKeys: new[] { "shared", "nat" });
 
-        Assert.Equal(new[] { "nat", "reg", "shared" }, result.Keys);
+        Assert.Equal(new[] { "nat", "shared" }, result.Keys);
     }
 
     [Fact]
@@ -68,7 +66,7 @@ public class PreferenceKeyMergerTests
     public void Merge_NativeEmpty_IsCompleteWithNoKeys()
     {
         var result = PreferenceKeyMerger.Merge(
-            registryKeys: Array.Empty<string>(),
+            registryKeys: new[] { "deleted_by_app" },
             nativeKeys: Array.Empty<string>());
 
         Assert.Equal(PreferenceKeyMerger.SourceNative, result.Source);
@@ -77,13 +75,13 @@ public class PreferenceKeyMergerTests
     }
 
     [Fact]
-    public void Merge_IgnoresNullAndEmptyKeys()
+    public void Merge_PreservesEmptyKeysAndIgnoresNullKeys()
     {
         var result = PreferenceKeyMerger.Merge(
             registryKeys: new[] { "", "a" },
             nativeKeys: new[] { "b", "", null! });
 
-        Assert.Equal(new[] { "a", "b" }, result.Keys);
+        Assert.Equal(new[] { "", "b" }, result.Keys);
     }
 
     [Fact]

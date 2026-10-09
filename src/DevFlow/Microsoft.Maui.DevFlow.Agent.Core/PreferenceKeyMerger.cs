@@ -22,8 +22,8 @@ internal readonly record struct PreferenceKeySet(
     bool Complete);
 
 /// <summary>
-/// Pure (platform-free) helper that combines DevFlow's tracked preference-key
-/// registry with platform-enumerated keys and reports how complete the result
+/// Pure (platform-free) helper that selects platform-enumerated keys or the
+/// tracked-key fallback and reports how complete the result
 /// is. Kept free of any MAUI/platform dependency so it can be unit tested.
 /// </summary>
 internal static class PreferenceKeyMerger
@@ -32,7 +32,7 @@ internal static class PreferenceKeyMerger
     public const string SourceRegistry = "registry";
 
     /// <summary>
-    /// Merge the registry keys with the (optional) native keys.
+    /// Use authoritative native keys when available, otherwise use the registry.
     /// </summary>
     /// <param name="registryKeys">Keys DevFlow has tracked via set/delete.</param>
     /// <param name="nativeKeys">
@@ -52,23 +52,11 @@ internal static class PreferenceKeyMerger
         var set = new HashSet<string>(System.StringComparer.Ordinal);
         var nativeSupported = nativeKeys is not null;
 
-        if (nativeSupported)
+        var keys = nativeKeys is not null ? nativeKeys : registryKeys;
+        foreach (var key in keys)
         {
-            foreach (var key in nativeKeys!)
-            {
-                if (!string.IsNullOrEmpty(key))
-                    set.Add(key);
-            }
-        }
-
-        // Always union the tracked registry so previously-listed keys never regress.
-        if (registryKeys is not null)
-        {
-            foreach (var key in registryKeys)
-            {
-                if (!string.IsNullOrEmpty(key))
-                    set.Add(key);
-            }
+            if (key is not null)
+                set.Add(key);
         }
 
         set.ExceptWith(exclude);
