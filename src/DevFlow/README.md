@@ -146,6 +146,23 @@ builder.AddMauiDevFlowAgent(options =>
 });
 ```
 
+### WebView automation correctness
+
+Blazor DOM query, snapshot and input helpers forward the selected `--webview`
+outside JavaScript. Typed click/fill actions execute once, and CLI/MCP screenshots
+use the agent's native-first `/api/v1/webview/screenshot` endpoint with PNG
+signature verification. `devflow batch` stops at the first failure unless
+`--continue-on-error` is supplied; either mode returns a nonzero process exit if
+any command failed.
+
+**Breaking behavior:** `AgentClient.SendCdpCommandAsync` and the typed WebView
+action methods now throw on HTTP/CDP/JavaScript failures instead of returning error
+payloads or silently returning `false`. Browser fetch/XHR capture is not
+implemented: `/api/v1/webview/network` now returns 501 `webview.network`, and
+`network` is no longer advertised as a WebView feature. Native .NET HTTP capture
+remains available at `/api/v1/network/requests`. Existing WebView selectors,
+readiness fields and Blazor registration APIs are unchanged.
+
 ### GTK/Linux apps
 
 Use `Microsoft.Maui.DevFlow.Agent.Gtk` instead of the standard agent package with

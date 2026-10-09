@@ -1891,6 +1891,21 @@ public partial class DevFlowAgentService
 
     protected static string? TryGetCdpError(JsonElement root)
     {
+        if (root.ValueKind != JsonValueKind.Object)
+            return "Invalid CDP response";
+
+        if (root.TryGetProperty("result", out var result)
+            && result.ValueKind == JsonValueKind.Object
+            && result.TryGetProperty("exceptionDetails", out var exception))
+        {
+            if (exception.TryGetProperty("exception", out var value)
+                && value.ValueKind == JsonValueKind.Object
+                && value.TryGetProperty("description", out var description))
+                return description.GetString();
+            return exception.TryGetProperty("text", out var text)
+                ? text.GetString()
+                : exception.GetRawText();
+        }
         if (!root.TryGetProperty("error", out var errorElement))
             return null;
 
@@ -1910,11 +1925,54 @@ public partial class DevFlowAgentService
                innerResult.TryGetProperty("value", out value);
     }
 
+    protected async Task<string> SendCdpCommandWithErrorDetailsAsync(CdpWebViewInfo webView, string command)
+    {
+        var response = await webView.CommandHandler(command);
+        using var document = JsonDocument.Parse(response);
+        if (!document.RootElement.TryGetProperty("result", out var result)
+            || result.ValueKind != JsonValueKind.Object
+            || !result.TryGetProperty("exceptionDetails", out var details)
+            || !details.TryGetProperty("exception", out var exception)
+            || !exception.TryGetProperty("objectId", out var objectId)
+            || objectId.ValueKind != JsonValueKind.String)
+            return response;
+
+        // WebKit's Error.stack can omit Error.message. Read the original error
+        // object, never re-evaluate the expression that threw.
+        var propertiesResponse = await webView.CommandHandler(BuildCdpCommand(99993, "Runtime.getProperties",
+            new Dictionary<string, object?> { ["objectId"] = objectId.GetString(), ["ownProperties"] = true }));
+        using var properties = JsonDocument.Parse(propertiesResponse);
+        var propertiesError = TryGetCdpError(properties.RootElement);
+        if (!string.IsNullOrWhiteSpace(propertiesError))
+            throw new InvalidOperationException($"{TryGetCdpError(document.RootElement)}; error details failed: {propertiesError}");
+
+        if (!properties.RootElement.TryGetProperty("result", out var propertiesResult)
+            || !propertiesResult.TryGetProperty("result", out var entries)
+            || entries.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException($"{TryGetCdpError(document.RootElement)}; invalid error-properties response.");
+
+        foreach (var entry in entries.EnumerateArray())
+        {
+            if (!entry.TryGetProperty("name", out var name) || name.GetString() != "message"
+                || !entry.TryGetProperty("value", out var remoteValue)
+                || !remoteValue.TryGetProperty("value", out var message)
+                || message.ValueKind != JsonValueKind.String)
+                continue;
+
+            var className = exception.TryGetProperty("className", out var type) ? type.GetString() : "Error";
+            var normalized = System.Text.Json.Nodes.JsonNode.Parse(response)!;
+            normalized["result"]!["exceptionDetails"]!["exception"]!["description"] = $"{className}: {message.GetString()}";
+            return normalized.ToJsonString();
+        }
+
+        throw new InvalidOperationException($"{TryGetCdpError(document.RootElement)}; error object has no message.");
+    }
+
     protected async Task<JsonElement?> EvaluateWebViewExpressionAsync(CdpWebViewInfo webView, string expression, int id = 99996)
     {
-        var resultJson = await webView.CommandHandler(BuildCdpCommand(id, "Runtime.evaluate", new Dictionary<string, object?>
+        var resultJson = await SendCdpCommandWithErrorDetailsAsync(webView, BuildCdpCommand(id, "Runtime.evaluate", new Dictionary<string, object?>
         {
-            ["expression"] = expression,
+            ["expression"] = $"JSON.stringify(({expression}))",
             ["returnByValue"] = true
         }));
 
@@ -1923,46 +1981,18 @@ public partial class DevFlowAgentService
         if (!string.IsNullOrWhiteSpace(error))
             throw new InvalidOperationException(error);
 
+        // Serialize in the original evaluation: replaying an expression to recover
+        // an object reference would repeat click/fill side effects.
         if (TryGetCdpValue(doc.RootElement, out var value))
-            return value.Clone();
-
-        // Some bridges (notably Android's Chobitsu-backed path) do not reliably honor
-        // returnByValue for arrays/objects and instead hand back an object reference.
-        // Fall back to JSON.stringify() so callers still get structured data.
-        var fallbackJson = await webView.CommandHandler(BuildCdpCommand(id + 1, "Runtime.evaluate", new Dictionary<string, object?>
         {
-            ["expression"] = $"JSON.stringify(({expression}))",
-            ["returnByValue"] = true
-        }));
-
-        using var fallbackDoc = JsonDocument.Parse(fallbackJson);
-        error = TryGetCdpError(fallbackDoc.RootElement);
-        if (!string.IsNullOrWhiteSpace(error))
-            throw new InvalidOperationException(error);
-
-        if (TryGetCdpValue(fallbackDoc.RootElement, out var fallbackValue))
-        {
-            if (fallbackValue.ValueKind == JsonValueKind.String)
+            if (value.ValueKind == JsonValueKind.String)
             {
-                var json = fallbackValue.GetString();
-                if (!string.IsNullOrWhiteSpace(json) && !string.Equals(json, "undefined", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        using var jsonDoc = JsonDocument.Parse(json);
-                        return jsonDoc.RootElement.Clone();
-                    }
-                    catch
-                    {
-                        return AgentJson.SerializeToElement(json);
-                    }
-                }
+                using var result = JsonDocument.Parse(value.GetString()!);
+                return result.RootElement.Clone();
             }
-
-            return fallbackValue.Clone();
+            return value.Clone();
         }
-
-        return null;
+        throw new InvalidOperationException("WebView evaluation did not return a serialized result.");
     }
 
     protected async Task<HttpResponse> HandleCdp(HttpRequest request)
@@ -1977,7 +2007,7 @@ public partial class DevFlowAgentService
 
         try
         {
-            var result = await webView.CommandHandler(request.Body);
+            var result = await SendCdpCommandWithErrorDetailsAsync(webView, request.Body);
             return new HttpResponse
             {
                 ContentType = "application/json",
@@ -2246,7 +2276,9 @@ public partial class DevFlowAgentService
     }
 
     protected Task<HttpResponse> HandleWebViewNetwork(HttpRequest request)
-        => HandleNetworkList(request);
+        => Task.FromResult(NotSupported(
+            "webview.network",
+            "Browser-network capture is not implemented. Use /api/v1/network/requests for native .NET HTTP traffic."));
 
     protected Task<HttpResponse> HandleWebViewConsole(HttpRequest request)
     {
@@ -2274,8 +2306,11 @@ public partial class DevFlowAgentService
                 ["params"] = new Dictionary<string, object?> { ["format"] = "png" }
             });
 
-            var resultJson = await webView.CommandHandler(cdpCommand);
+            var resultJson = await SendCdpCommandWithErrorDetailsAsync(webView, cdpCommand);
             using var doc = JsonDocument.Parse(resultJson);
+            var cdpError = TryGetCdpError(doc.RootElement);
+            if (!string.IsNullOrWhiteSpace(cdpError))
+                throw new InvalidOperationException(cdpError);
             if (doc.RootElement.TryGetProperty("result", out var result) &&
                 result.TryGetProperty("data", out var data) &&
                 data.GetString() is { Length: > 0 } base64)
@@ -2335,9 +2370,12 @@ public partial class DevFlowAgentService
                 ["params"] = new Dictionary<string, object?> { ["expression"] = "document.documentElement.outerHTML", ["returnByValue"] = true }
             });
 
-            var resultJson = await webView.CommandHandler(cdpCommand);
+            var resultJson = await SendCdpCommandWithErrorDetailsAsync(webView, cdpCommand);
             using var doc = System.Text.Json.JsonDocument.Parse(resultJson);
             var root = doc.RootElement;
+            var cdpError = TryGetCdpError(root);
+            if (!string.IsNullOrWhiteSpace(cdpError))
+                return HttpResponse.Error($"Failed to get page source: {cdpError}");
 
             if (root.TryGetProperty("result", out var result) &&
                 result.TryGetProperty("result", out var innerResult) &&
