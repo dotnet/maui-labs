@@ -169,8 +169,10 @@ When a context is not ready, inspect its reported state and agent logs. Real
 initialization errors are logged even when verbose debug logging is disabled.
 Native-first screenshots are supported; browser fetch/XHR capture is not.
 Upgrade the agent, CLI, Client, WebView and Blazor packages together and rebuild
-consumers. Select an index, AutomationId or element ID with `--webview`;
-indices disambiguate duplicate IDs. Contexts retain `ready` and `isReady`.
+consumers. Select the reported canonical ID with `--context-id webview-0`
+(HTTP/Client/MCP/Inspector: `contextId`). IDs remain unique with duplicate
+AutomationIds. Only `ready` is emitted; old selector aliases and `isReady` are
+removed. Omission/null selects the active host; blank/invalid values fail.
 
 ## 5. Mac Catalyst: Entitlements
 

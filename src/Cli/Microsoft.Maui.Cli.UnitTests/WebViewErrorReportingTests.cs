@@ -22,11 +22,13 @@ public class WebViewErrorReportingTests
         await server.StartAsync();
         var cli = new CliTestHarness(server.Port);
 
-        var result = await cli.InvokeAsync("devflow", "webview", "Runtime", "evaluate", "missingVariable");
+        var result = await cli.InvokeAsync("devflow", "webview", "--context-id", "webview-1", "Runtime", "evaluate", "missingVariable");
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains(expected, result.StdErr);
         Assert.DoesNotContain("Error:", result.StdOut);
+        Assert.Equal("?contextId=webview-1",
+            Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate").QueryString);
     }
 
     [Theory]
@@ -42,9 +44,11 @@ public class WebViewErrorReportingTests
         var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
 
         var error = await Assert.ThrowsAsync<McpException>(
-            () => CdpTools.CdpEvaluate(session, "missingVariable"));
+            () => CdpTools.CdpEvaluate(session, "missingVariable", contextId: "webview-1"));
 
         Assert.Contains(expected, error.Message);
+        Assert.Equal("?contextId=webview-1",
+            Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate").QueryString);
     }
 
     [Theory]
@@ -56,7 +60,7 @@ public class WebViewErrorReportingTests
             """{"result":{"exceptionDetails":{"text":"Uncaught","exception":{"description":"Error: Element not found"}}}}""");
         await server.StartAsync();
         var cli = new CliTestHarness(server.Port);
-        var arguments = new List<string> { "devflow", "webview", "Input", action, "#missing" };
+        var arguments = new List<string> { "devflow", "webview", "--context-id", "webview-1", "Input", action, "#missing" };
         if (action == "fill")
             arguments.Add("hello");
 
@@ -64,8 +68,10 @@ public class WebViewErrorReportingTests
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("Element not found", result.StdErr);
-        using var body = System.Text.Json.JsonDocument.Parse(
-            Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate").Body!);
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+        Assert.Equal("?contextId=webview-1", request.QueryString);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path.StartsWith("/api/v1/webview/input/", StringComparison.Ordinal));
+        using var body = System.Text.Json.JsonDocument.Parse(request.Body!);
         Assert.Contains("throw new Error('Element not found')",
             body.RootElement.GetProperty("params").GetProperty("expression").GetString());
     }

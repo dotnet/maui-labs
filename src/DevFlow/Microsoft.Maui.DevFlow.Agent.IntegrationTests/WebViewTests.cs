@@ -60,7 +60,6 @@ public class WebViewTests : IntegrationTestBase
         foreach (var ctx in array.EnumerateArray())
         {
             if (ctx.ValueKind != JsonValueKind.Object) continue;
-            if (ctx.TryGetProperty("isReady", out var r1) && r1.ValueKind == JsonValueKind.True) return true;
             if (ctx.TryGetProperty("ready", out var r2) && r2.ValueKind == JsonValueKind.True) return true;
         }
 
@@ -88,8 +87,7 @@ public class WebViewTests : IntegrationTestBase
     }
 
     static bool IsReadyContext(JsonElement ctx)
-        => (ctx.TryGetProperty("isReady", out var r1) && r1.ValueKind == JsonValueKind.True)
-           || (ctx.TryGetProperty("ready", out var r2) && r2.ValueKind == JsonValueKind.True);
+        => ctx.TryGetProperty("ready", out var ready) && ready.ValueKind == JsonValueKind.True;
 
     async Task<string> GetActiveContextIdAsync(int timeoutMs = 15000)
     {
@@ -124,16 +122,30 @@ public class WebViewTests : IntegrationTestBase
                     automationId.GetString() == "BlazorWebView");
 
             var selected = pick ?? contexts[^1];
-            if (selected.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
-                return id.GetString()!;
-            if (selected.TryGetProperty("index", out var index) && index.ValueKind == JsonValueKind.Number)
-                return index.GetInt32().ToString();
-
-            return "0";
+            var id = selected.GetProperty("id").GetString()!;
+            Assert.Matches(@"^webview-(0|[1-9][0-9]*)$", id);
+            return id;
         }
 
         Assert.Fail($"Expected at least one WebView context within {timeoutMs}ms. Last payload: {lastJson}");
-        return "0";
+        throw new InvalidOperationException("No ready WebView context.");
+    }
+
+    async Task<string> GetContextIdAsync(string automationId)
+    {
+        string? contextId = null;
+        await WaitForAsync(async () =>
+        {
+            var contexts = await Client.GetCdpWebViewsAsync();
+            var selected = EnumerateContexts(contexts).LastOrDefault(context =>
+                context.GetProperty("automationId").GetString() == automationId &&
+                context.GetProperty("active").GetBoolean() && IsReadyContext(context));
+            if (selected.ValueKind == JsonValueKind.Undefined)
+                return false;
+            contextId = selected.GetProperty("id").GetString();
+            return contextId is not null;
+        }, timeoutMs: 45000);
+        return Assert.IsType<string>(contextId);
     }
 
     /// <summary>
@@ -228,7 +240,7 @@ public class WebViewTests : IntegrationTestBase
         var json = await Client.GetCdpWebViewsAsync();
         Assert.True(HasWebViewContexts(json), "Expected at least one WebView context.");
         Assert.True(AnyReadyContext(json),
-            $"Expected at least one WebView context with isReady=true. Got: {json}");
+            $"Expected at least one WebView context with ready=true. Got: {json}");
     }
 
     [Fact]
@@ -608,6 +620,46 @@ public class WebViewTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task InputFill_SelectedContext_DoesNotFillOtherWebView()
+    {
+        App.InvalidateBlazorReady();
+        const string selector = ".add-inputs input[type=text]";
+        try
+        {
+            await NavigateToPageAsync("//multiblazor", "BlazorLeft");
+            var left = await GetContextIdAsync("BlazorLeft");
+            var right = await GetContextIdAsync("BlazorRight");
+            Assert.NotEqual(left, right);
+            foreach (var contextId in new[] { left, right })
+            {
+                await WaitForAsync(async () =>
+                    await ReadWebViewValueAsync($"document.querySelector('{selector}') !== null", contextId) == "True",
+                    timeoutMs: 45000);
+            }
+
+            Assert.True(await Client.FillWebViewAsync(selector, "left-only", left));
+            Assert.True(await Client.FillWebViewAsync(selector, "right-only", right));
+            Assert.Equal("left-only", await ReadWebViewValueAsync($"document.querySelector('{selector}').value", left));
+            Assert.Equal("right-only", await ReadWebViewValueAsync($"document.querySelector('{selector}').value", right));
+            await Client.FillWebViewAsync(selector, "", left);
+            await Client.FillWebViewAsync(selector, "", right);
+        }
+        finally
+        {
+            await NavigateToMainPageAsync();
+            App.InvalidateBlazorReady();
+        }
+    }
+
+    async Task<string?> ReadWebViewValueAsync(string expression, string contextId)
+    {
+        var response = await Client.SendCdpCommandAsync("Runtime.evaluate",
+            new JsonObject { ["expression"] = expression, ["returnByValue"] = true }, contextId);
+        var remoteObject = response.GetProperty("result").GetProperty("result");
+        return remoteObject.TryGetProperty("value", out var value) ? value.ToString() : null;
+    }
+
+    [Fact]
     public async Task Evaluate_WithDomAccess_Works()
     {
         await EnsureOnBlazorPageAsync();
@@ -697,7 +749,7 @@ public class WebViewTests : IntegrationTestBase
             await Client.SendCdpCommandAsync(
                 "Runtime.evaluate",
                 JsonNode.Parse("""{"expression":"window.__devflowContext = 'right'"}"""),
-                "BlazorRight");
+                await GetContextIdAsync("BlazorRight"));
 
             await Client.NavigateAsync("//blazor");
             App.InvalidateBlazorReady();
