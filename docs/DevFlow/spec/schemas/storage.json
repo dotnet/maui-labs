@@ -34,8 +34,11 @@
           "description": "Preference value. The actual JSON type depends on the type field."
         },
         "type": {
-          "$ref": "#/$defs/PreferenceValueType",
-          "description": "Data type of the preference value."
+          "oneOf": [
+            { "$ref": "#/$defs/PreferenceValueType" },
+            { "const": "unknown" }
+          ],
+          "description": "Data type of the preference value, or unknown when the native value cannot be read as a supported Preferences type."
         }
       }
     },
