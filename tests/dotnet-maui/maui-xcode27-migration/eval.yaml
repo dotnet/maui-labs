@@ -342,7 +342,7 @@ scenarios:
       - node _acceptance/audit-lifecycle.mjs MyApp --json
     trusted_shell_files:
       - path: _acceptance/audit-lifecycle.mjs
-        sha256: a08ed6509d365725d5926ddd73cbd2d833afc0cfcc9dec40111ebc7e37c23308
+        sha256: 12e59e3e824649608b1f8ae22196ffe48a747081f3f2d6d6ee31dbdb3df6263c
     assertions:
       - type: file_contains
         path: "MyApp/Platforms/iOS/ExistingSceneDelegate.cs"
@@ -397,7 +397,7 @@ scenarios:
       - type: run_command_and_assert
         command_to_run: node
         command_arguments: &migration-audit-command >-
-          --eval "const fs=require('node:fs'),crypto=require('node:crypto'),cp=require('node:child_process'),p='_acceptance/audit-lifecycle.mjs'; if(!fs.lstatSync(p).isFile()||crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')!=='a08ed6509d365725d5926ddd73cbd2d833afc0cfcc9dec40111ebc7e37c23308')throw Error('Acceptance instrument changed'); const r=cp.spawnSync(process.execPath,[p,'MyApp','--json'],{encoding:'utf8',timeout:10000}); if(r.error)throw r.error; process.stdout.write(r.stdout??''); process.stderr.write(r.stderr??''); if(r.status===0){let report;try{report=JSON.parse(r.stdout);}catch{throw Error('Acceptance instrument did not produce a valid audit report');}if(!report||report.status!=='no-patterns-found'||!Number.isSafeInteger(report.filesScanned)||report.filesScanned<=0||!Array.isArray(report.errors)||report.errors.length!==0||!Array.isArray(report.findings)||report.findings.length!==0)throw Error('Acceptance instrument did not produce a complete no-patterns report');}process.exit(r.status??2);"
+          --eval "const fs=require('node:fs'),crypto=require('node:crypto'),cp=require('node:child_process'),p='_acceptance/audit-lifecycle.mjs'; if(!fs.lstatSync(p).isFile()||crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')!=='12e59e3e824649608b1f8ae22196ffe48a747081f3f2d6d6ee31dbdb3df6263c')throw Error('Acceptance instrument changed'); const r=cp.spawnSync(process.execPath,[p,'MyApp','--json'],{encoding:'utf8',timeout:10000}); if(r.error)throw r.error; process.stdout.write(r.stdout??''); process.stderr.write(r.stderr??''); if(r.status===0){let report;try{report=JSON.parse(r.stdout);}catch{throw Error('Acceptance instrument did not produce a valid audit report');}if(!report||report.status!=='no-patterns-found'||!Number.isSafeInteger(report.filesScanned)||report.filesScanned<=0||!Array.isArray(report.errors)||report.errors.length!==0||!Array.isArray(report.findings)||report.findings.length!==0)throw Error('Acceptance instrument did not produce a complete no-patterns report');}process.exit(r.status??2);"
         command_timeout: 20
         expected_exit_code: 0
     rubric:
@@ -697,6 +697,73 @@ scenarios:
       - "Requires matching Xcode 27.0 for the released 27.0.10722 pack and does not provide a version-check bypass as the solution"
       - "Does not infer released 27.1 packs from a merged branch PR"
       - "Distinguishes a proposed supported pairing from authorization to change global Xcode or workloads"
+    timeout: 240
+
+  - name: ".NET 11 iOS-only app takes the simple scene path"
+    prompt: |
+      We are preparing for .NET 11 GA. Our MauiDay/event-app currently uses .NET
+      SDK 11.0.100-preview.6.26359.118, Microsoft.iOS 26.5.11720-net11-p6,
+      Xcode 26.6 and net11.0-android;net11.0-ios. There is no Mac Catalyst TFM,
+      custom AppDelegate base, ConfigureLifecycleEvents, lifecycle override
+      (except CreateMauiApp), URL or shortcut code. How should we add the scene
+      lifecycle, and what must we recheck against the actual GA release? We use
+      Preferences; PrivacyInfo.xcprivacy still has the template UserDefaults
+      entry commented out. Stay within scene migration.
+    assertions:
+      - type: output_matches
+        pattern: 'MauiUISceneDelegate'
+      - type: output_matches
+        pattern: 'UIApplicationSceneManifest'
+      - type: output_matches
+        pattern: 'CA92\.1'
+      - type: output_matches
+        pattern: '(?i)skip.*(?:Catalyst|callback|inventory)|(?:simple|fast).*(?:path|migration)'
+    rubric:
+      - "Verifies MauiUISceneDelegate in the app-resolved Microsoft.Maui.dll for the selected .NET 11 release and rechecks the actual GA SDK/workload/MAUI artifacts rather than extrapolating from Preview 6"
+      - "Does not apply the .NET 10 MAUI 10.0.110 package pin to .NET 11 or force an Xcode 27 build upgrade"
+      - "Uses the simple delegate + manifest path, audits the result, and skips Mac Catalyst files/builds because no such TFM exists"
+      - "Checks the uncommented UserDefaults reason CA92.1 and the built bundle's manifest, not only source plist syntax"
+    timeout: 240
+
+  - name: "Incremental build keeps a stale scene manifest"
+    prompt: |
+      Explain only: after adding UIApplicationSceneManifest to Platforms/iOS/
+      Info.plist, plutil -lint succeeds and our net11.0-ios simulator build
+      succeeds, but the app still exits after splash. plutil -p on the built
+      MauiDay.App.app/Info.plist shows no scene manifest. Touching the source
+      plist did not help; _CompileAppManifest was skipped. What exact
+      intermediate files should I invalidate and how do I verify the fix?
+    assertions:
+      - type: output_matches
+        pattern: 'AppManifest\.plist'
+      - type: output_matches
+        pattern: '_CompileAppManifest\.inputs'
+      - type: output_matches
+        pattern: 'plutil\s+-p'
+    rubric:
+      - "Limits invalidation to the active obj directory's two generated manifest files or a target/configuration clean build"
+      - "Requires rebuilding and rechecking UIApplicationSceneManifest, configuration and registered delegate in the built bundle"
+      - "Does not mistake source lint or a successful incremental build for proof of scene readiness"
+    timeout: 240
+
+  - name: "Scene runtime verification uses simulator-only Xcode selection"
+    prompt: |
+      Explain only: our scene-migrated app builds with Preview 6 Apple SDK 26.5
+      and Xcode 26.6. We want to confirm the scene lifecycle on an ordinary
+      iOS 27 simulator, whose runtime needs simctl from another installed
+      Xcode. How do we inspect the startup fault without changing the build
+      toolchain? Do not add newer-OS or foldable layout work.
+    assertions:
+      - type: output_matches
+        pattern: 'simctl\s+spawn'
+      - type: output_matches
+        pattern: 'UIScene life cycle is now required'
+      - type: output_matches
+        pattern: 'DEVELOPER_DIR'
+    rubric:
+      - "Requires launching the rebuilt app past splash and checking process logs using log show --last 2m with a process predicate"
+      - "Scopes DEVELOPER_DIR to simctl only, never dotnet build or a global Xcode selection change"
+      - "Does not claim absence of the fault alone proves correct lifecycle behavior or newer SDK build support"
     timeout: 240
 
   - name: "Android-only app does not need Apple migration"
