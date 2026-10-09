@@ -174,6 +174,13 @@ consumers. Select the reported canonical ID with `--context-id webview-0`
 AutomationIds. Only `ready` is emitted; old selector aliases and `isReady` are
 removed. Omission/null selects the active host; blank/invalid values fail.
 
+With `EnableLayoutDiagnostics = true`, ready, active, visible standard, Hybrid
+and Blazor hosts contribute DOM layout evidence. Scope uses only
+`includeWebViewElements` (default `true`); `false` skips DOM probes while native
+diagnostics continue. The old `includeBlazorElements` property is removed.
+Layout capabilities and nodes use generic `webview` / `webview-dom` metadata;
+unmapped/unready hosts, failed probes and capture limits report incomplete coverage.
+
 ## 5. Mac Catalyst: Entitlements
 
 Mac Catalyst apps need the `com.apple.security.network.server` entitlement to allow the

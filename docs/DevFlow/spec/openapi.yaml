@@ -402,6 +402,34 @@ paths:
       operationId: analyzeLayout
       tags: [ui]
       summary: Analyze the current layout
+      description: >
+        With layout diagnostics enabled, enriches native layout with DOM evidence
+        from ready, active, visible registered standard, Hybrid and Blazor WebViews.
+        DOM element fullType is WebView.DOM.Element and framework is webview.
+        Weak-owner correlation selects the native parent, including unnamed and
+        duplicate-AutomationId hosts; ownerless ID fallback must be unambiguous.
+        Failed/unready/unmapped visible hosts, cross-origin frames, probe deadlines
+        and the 500 DOM element limit produce incomplete coverage.
+        ui.layoutDiagnostics.webview reports support and ready registration count;
+        its webview-dom feature is advertised only by a supported backend with
+        a ready bridge. Ready registrations are not necessarily active or visible.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope:
+                  type: object
+                  properties:
+                    includeWebViewElements:
+                      type: boolean
+                      default: true
+                      description: >
+                        Include generic WebView DOM probes and findings. False
+                        leaves native diagnostics enabled. Replaces the removed
+                        includeBlazorElements property; there is no compatibility alias.
       responses:
         "200":
           description: Layout diagnostic results.

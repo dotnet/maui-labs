@@ -59,6 +59,9 @@ AutomationId and element selectors, the old `webview` query and `--webview`/`-w`
 options are removed. Omission/null selects the active host; blank/invalid values fail.
 `hostKind: blazor` is descriptive metadata, not behavior dispatch.
 Contexts emit only `ready`; `isReady` is removed. Upgrade the agent, CLI, Client,
-WebView and Blazor packages together and rebuild consumers. DOM layout remains Blazor-only.
+WebView and Blazor packages together and rebuild consumers. DOM layout enrichment
+now covers standard, Hybrid and Blazor hosts with generic `webview` metadata.
+Layout scope uses only `includeWebViewElements` (default `true`), replacing
+`includeBlazorElements`; `false` skips DOM probes without disabling native diagnostics.
 CDP requests are serialized, late replies use unique wire IDs, timed-out
 mutations are never replayed, and handler detachment cancels pending work.

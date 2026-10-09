@@ -187,8 +187,11 @@ single `ready` wire field. Select with HTTP/Client/MCP/Inspector `contextId` or 
 AutomationIds do not affect selection. Omission/null selects the active host;
 explicit blank/invalid values fail without dispatch. Query contextId takes
 precedence over typed body contextId; raw CDP selection is query-only.
-Upgrade all packages together and rebuild consumers. Blazor-only
-`includeBlazorElements` layout coverage remains unchanged for the next layer.
+Upgrade all packages together and rebuild consumers. Layout scope now uses only
+`includeWebViewElements` (default `true`); `includeBlazorElements` is removed from
+agent and portable Client DTOs. DOM nodes use `framework: webview` and
+`fullType: WebView.DOM.Element`; layout capability metadata uses `webview` and
+`webview-dom` instead of the Blazor-only names.
 `hostKind` is open descriptive hosting metadata, not native backend or dispatch.
 
 The asset-free Blazor adapter uses the ordinary .NET SDK and excludes the
@@ -212,8 +215,8 @@ action methods now throw on HTTP/CDP/JavaScript failures instead of returning er
 payloads or silently returning `false`. Browser fetch/XHR capture is not
 implemented: `/api/v1/webview/network` now returns 501 `webview.network`, and
 `network` is no longer advertised as a WebView feature. Native .NET HTTP capture
-remains available at `/api/v1/network/requests`. Existing WebView selectors,
-readiness fields and the `AddMauiBlazorDevFlowTools` entry point remain unchanged.
+remains available at `/api/v1/network/requests`. The
+`AddMauiBlazorDevFlowTools` entry point remains available.
 
 ### GTK/Linux apps
 
@@ -537,6 +540,16 @@ The same result is available through:
 Results distinguish violations, observations, incomplete checks, confidence,
 clip causes, visual versus interaction occlusion, and permanent platform
 limitations. Text content is not returned by default.
+
+DOM enrichment covers ready, active, visible registered standard WebView,
+HybridWebView and BlazorWebView hosts. Weak-owner mapping preserves native parent
+identity for unnamed and duplicate-AutomationId hosts; dead owners never redirect
+to another host. `Scope.IncludeWebViewElements = false` (JSON:
+`scope.includeWebViewElements`) skips DOM capture/findings while native diagnostics
+continue. Unregistered/unready visible hosts and failed probes remain opaque and
+incomplete. Cross-origin frames, the 500 DOM element limit per host and the scan
+deadline also produce incomplete coverage. Capability `webview.readyWebViewCount`
+counts ready registrations, not the active/visible hosts analyzed in a scan.
 
 Debug builds generate XAML source maps by default, so findings can include
 `sourceFile`, `sourceLine`, and `sourceColumn`. Source-content hashes are not

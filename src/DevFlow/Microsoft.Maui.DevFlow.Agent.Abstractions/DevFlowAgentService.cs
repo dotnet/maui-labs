@@ -295,6 +295,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     private static readonly string[] s_noFeatures = [];
 
+    protected virtual bool IsWebViewLayoutSupported => false;
+
     protected static object Capability(int version, bool supported, string[] features, string? reason)
         => supported
             ? new Dictionary<string, object?> { ["version"] = version, ["supported"] = true, ["features"] = features, ["reason"] = (string?)null }
@@ -330,8 +332,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 ["schemaVersion"] = "1.0",
                 ["ruleSetVersion"] = "1.0",
                 ["features"] = new[] { "clipping", "overflow", "text-truncation", "overlap", "occlusion", "coverage", "suppressions", "watch" }
-                    .Concat(cdpWebViews.Any(view => view.HostKind == "blazor" && view.IsReady)
-                        ? ["blazor-dom"]
+                    .Concat(IsWebViewLayoutSupported && cdpWebViews.Any(view => view.IsReady)
+                        ? ["webview-dom"]
                         : Array.Empty<string>())
                     .ToArray(),
                 ["watch"] = new Dictionary<string, object?>
@@ -339,10 +341,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     ["supported"] = true,
                     ["transport"] = "polling"
                 },
-                ["blazor"] = new Dictionary<string, object?>
+                ["webview"] = new Dictionary<string, object?>
                 {
-                    ["supported"] = cdpWebViews.Any(view => view.HostKind == "blazor" && view.IsReady),
-                    ["readyWebViewCount"] = cdpWebViews.Count(view => view.HostKind == "blazor" && view.IsReady)
+                    ["supported"] = IsWebViewLayoutSupported && cdpWebViews.Any(view => view.IsReady),
+                    ["readyWebViewCount"] = IsWebViewLayoutSupported ? cdpWebViews.Count(view => view.IsReady) : 0
                 },
                 ["profiles"] = new[] { "agent", "strict", "exhaustive", "ci" },
                 ["rules"] = GetLayoutRuleSupport()
