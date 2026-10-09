@@ -323,6 +323,8 @@ Most commands accept `--json` for structured output. Some commands may emit mult
 
 Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts. Parse the output as a stream of JSON objects rather than assuming a single top-level document.
 
+Successful `maui profile startup --json` and `maui profile start --json` runs emit a final result with `snake_case` project, framework, platform, device, diagnostic, and timestamp fields. `format` identifies the output format and `output_path` points to the primary artifact; `raw_trace_path` is included for speedscope and MIBC output and omitted for nettrace output.
+
 ### Error envelope <a name="error-envelope"></a>
 
 For non-DevFlow `maui` commands, when a command throws an exception that is handled by `HandleCommandException` and `--json` is active, it writes a structured error object to stdout. The fields appear at the **top level** — there is no enclosing `"error"` wrapper. Property names are `snake_case`. Note: some commands may return non-zero exit codes without throwing (e.g. validation paths), and `OperationCanceledException` is treated as a cancellation (exit code 130) rather than an error envelope. This section does not apply to `maui devflow ...`, which uses a different JSON error shape and writes structured errors to stderr.
