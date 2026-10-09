@@ -1,4 +1,4 @@
-namespace Microsoft.Maui.DevFlow.Blazor;
+namespace Microsoft.Maui.DevFlow.WebView;
 
 internal static class WebViewNavigation
 {

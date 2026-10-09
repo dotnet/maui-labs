@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net10.0-android</TargetFrameworks>
@@ -9,25 +9,19 @@
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>
 
-    <!-- Suppress JS module manifest to avoid conflicting with consuming app's manifest.
-         The consuming app's build will discover our .lib.module.js and include it. -->
-    <GenerateJSModuleManifest>false</GenerateJSModuleManifest>
-
-    <!-- Disable static web asset fingerprinting — MAUI Blazor Hybrid's WebView file
-         provider does not resolve fingerprinted filenames, causing 404s for the
-         JS initializer and breaking Blazor startup. -->
-    <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
-
     <!-- NuGet Package Metadata -->
     <PackageId>Microsoft.Maui.DevFlow.Blazor</PackageId>
     <Description>Enable browser developer tools and Playwright MCP automation for .NET MAUI Blazor Hybrid apps. Connects Chrome DevTools Protocol to BlazorWebView via Chobitsu.</Description>
     <PackageTags>maui;blazor;debugging;devtools;cdp;playwright;mcp;automation</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.WebView\Microsoft.Maui.DevFlow.WebView.csproj" />
     <PackageReference Include="Microsoft.Maui.Controls" VersionOverride="$(DevFlowMauiMinVersion)" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(DevFlowMauiMinVersion)" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" VersionOverride="$(DevFlowMauiMinVersion)" PrivateAssets="all" ExcludeAssets="build;buildTransitive" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!-- macOS AppKit backend -->
@@ -35,55 +29,7 @@
     <ProjectReference Include="..\..\..\platforms\MacOS\src\MacOS\MacOS.csproj" />
     <ProjectReference Include="..\..\..\platforms\MacOS\src\MacOS.BlazorWebView\MacOS.BlazorWebView.csproj" />
   </ItemGroup>
-
-  <!-- Embed JS/HTML scripts as resources to avoid inline strings in C# -->
-  <ItemGroup>
-    <EmbeddedResource Include="Resources\Scripts\*.js" />
-    <EmbeddedResource Include="Resources\Scripts\*.html" />
-    <!-- Embed chobitsu.js for C#-side fallback injection when the script tag fails to load -->
-    <EmbeddedResource Include="wwwroot\chobitsu.js" LogicalName="Microsoft.Maui.DevFlow.Blazor.chobitsu.js" />
-  </ItemGroup>
-
-
-
-  <!-- Workaround: PrivateAssets="all" on the WebView PackageReference does NOT prevent its
-       _framework/ static web assets (blazor.webview.js, blazor.modules.json) from leaking
-       into our library's SWA manifest. When consumers also reference WebView directly (as all
-       MAUI Blazor apps do), they get a "Conflicting assets with the same target path" build error.
-       This is a known SDK limitation: https://github.com/dotnet/maui/issues/25999
-       Until the SDK properly respects PrivateAssets for static web assets, we strip _framework/
-       entries from our manifest so only our own assets (chobitsu.js) propagate to consumers. -->
-  <Target Name="_RemoveTransitiveWebViewAssets"
-          AfterTargets="ResolveBuildStaticWebAssets;ResolveAllPublishStaticWebAssets"
-          BeforeTargets="GenerateStaticWebAssetsManifest;GenerateStaticWebAssetsPublishManifest">
-    <ItemGroup>
-      <StaticWebAsset Remove="@(StaticWebAsset)"
-        Condition="$([System.String]::Copy('%(RelativePath)').StartsWith('_framework/'))" />
-    </ItemGroup>
-  </Target>
-
-  <Target Name="_ExcludeWebViewStaticWebAssetsFromPack" BeforeTargets="GenerateStaticWebAssetsPackFiles">
-    <ItemGroup>
-      <_StaticWebAssetExcludedFromPack Include="@(StaticWebAsset)"
-        Condition="$([System.String]::Copy('%(RelativePath)').StartsWith('_framework/'))" />
-    </ItemGroup>
-  </Target>
-
-  <!-- On Windows the Blazor wwwroot/ files (chobitsu.js) are indexed into this project's PRI by
-       MakePri, while the Razor SDK packs them into staticwebassets/ and the PRI is packed into
-       lib/. Consumers expand every referenced .pri (WindowsAppSDK's MrtCore.PriGen.targets,
-       AddPriPayloadFilesToCopyToOutputDirectoryItems) and resolve its payload against the .pri's
-       OWN folder, so a consuming build demands
-       lib/<tfm>/Microsoft.Maui.DevFlow.Blazor/wwwroot/chobitsu.js and fails with MSB3030.
-
-       These files are delivered by the Blazor static web asset pipeline, not the Windows resource
-       system, so this project's PRI has no legitimate content at all — its only entry is the one
-       that breaks consumers. Don't pack it.
-
-       Two approaches that do NOT work, recorded so they are not retried:
-         - Removing the Content items before GetMrtPackagingOutputs (what this block used to do)
-           does not change what MakePri indexes; the shipped PRI still carried the wwwroot entry.
-         - AppxGeneratePriEnabled=false stops generation, but pack still expects the file: NU5026. -->
+  <!-- This asset-free adapter has no Windows resource payload to ship. -->
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
     <IncludeProjectPriFile>false</IncludeProjectPriFile>
   </PropertyGroup>

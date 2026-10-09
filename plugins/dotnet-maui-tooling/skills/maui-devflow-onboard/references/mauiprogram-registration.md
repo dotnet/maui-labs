@@ -12,7 +12,19 @@ builder.AddMauiDevFlowAgent();
 #endif
 ```
 
-MAUI + Blazor WebView:
+MAUI + WebView or HybridWebView:
+
+```csharp
+using Microsoft.Maui.DevFlow.Agent;
+using Microsoft.Maui.DevFlow.WebView;
+
+#if DEBUG
+builder.AddMauiDevFlowAgent();
+builder.AddMauiWebViewDevFlowTools();
+#endif
+```
+
+MAUI + Blazor WebView (also enables generic WebView/HybridWebView attachment):
 
 ```csharp
 using Microsoft.Maui.DevFlow.Agent;
