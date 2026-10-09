@@ -702,50 +702,43 @@ public static class ProfileCommand
 			: cancellationToken;
 
 	internal static async Task ConvertNetTraceToMibcAsync(
-		ResolvedMauiProject project,
-		string framework,
-		string netTracePath,
-		string mibcPath,
-		string buildArtifactsPath,
-		IOutputFormatter formatter,
-		bool useJson,
-		bool verbose,
+		ProfileSessionContext context,
 		CancellationToken cancellationToken)
 	{
-		if (!File.Exists(netTracePath))
+		if (!File.Exists(context.OutputPath))
 		{
 			throw new MauiToolException(
 				ErrorCodes.InternalError,
-				$"Raw trace '{netTracePath}' was not created, so MIBC conversion cannot continue.");
+				$"Raw trace '{context.OutputPath}' was not created, so MIBC conversion cannot continue.");
 		}
 
 		var dotnetPgoPath = DotnetPgoInstaller.ResolvePathOrThrow();
-		var referenceAssemblies = ResolveMibcReferenceAssemblies(project, buildArtifactsPath);
+		var referenceAssemblies = await ProfileMibcReferenceResolver.ResolveAsync(context, cancellationToken);
 		if (referenceAssemblies.Count == 0)
 		{
 			throw MauiToolException.UserActionRequired(
 				ErrorCodes.DiagnosticsToolNotFound,
-				$"MIBC conversion could not find any reference assemblies for '{project.ProjectName}'.",
+				$"MIBC conversion could not find any reference assemblies for '{context.Project.ProjectName}' targeting '{context.Framework}'.",
 				[
-					$"Build the target '{framework}' first so its output assemblies exist.",
+					$"Check that the target '{context.Framework}' produces assemblies for the selected device.",
 					"Then run 'maui profile startup --format mibc' again."
 				]);
 		}
 
-		if (!useJson)
-			formatter.WriteInfo("Converting the raw trace to MIBC...");
+		if (!context.UseJson)
+			context.Formatter.WriteInfo("Converting the raw trace to MIBC...");
 
-		var args = BuildMibcArguments(netTracePath, mibcPath, referenceAssemblies).ToArray();
+		var args = BuildMibcArguments(context.OutputPath, context.PrimaryOutputPath, referenceAssemblies).ToArray();
 		ProfileCommandProcessHelpers.WriteVerbose(
-			formatter,
-			useJson,
-			verbose,
+			context.Formatter,
+			context.UseJson,
+			context.Verbose,
 			$"dotnet-pgo command: {ProfileCommandProcessHelpers.FormatCommandLine(dotnetPgoPath, args)}");
 
 		var result = await ProcessRunner.RunAsync(
 			dotnetPgoPath,
 			args,
-			project.ProjectDirectory,
+			context.Project.ProjectDirectory,
 			timeout: s_buildLaunchTimeout,
 			cancellationToken: cancellationToken);
 
@@ -774,51 +767,6 @@ public static class ProfileCommand
 		}
 
 		return args;
-	}
-
-	static IReadOnlyList<string> ResolveMibcReferenceAssemblies(
-		ResolvedMauiProject project,
-		string buildArtifactsPath)
-	{
-		var candidateRoots = GetIsolatedMibcReferenceSearchRoots(project, buildArtifactsPath)
-			.Where(Directory.Exists)
-			.ToArray();
-		if (candidateRoots.Length == 0)
-			return [];
-
-		var linkedOrShrunkAssemblies = candidateRoots
-			.SelectMany(root => Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
-			.Where(static path => path.Contains($"{Path.DirectorySeparatorChar}linked{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-				|| path.Contains($"{Path.AltDirectorySeparatorChar}linked{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-				|| path.Contains($"{Path.DirectorySeparatorChar}shrunk{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-				|| path.Contains($"{Path.AltDirectorySeparatorChar}shrunk{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-			.Distinct(StringComparer.OrdinalIgnoreCase)
-			.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-			.ToArray();
-
-		if (linkedOrShrunkAssemblies.Length > 0)
-			return linkedOrShrunkAssemblies;
-
-		return candidateRoots
-			.SelectMany(root => Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
-			.Distinct(StringComparer.OrdinalIgnoreCase)
-			.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-			.ToArray();
-	}
-
-	static IEnumerable<string> GetIsolatedMibcReferenceSearchRoots(
-		ResolvedMauiProject project,
-		string buildArtifactsPath)
-	{
-		foreach (var rootName in new[] { "obj", "bin" })
-		{
-			var rootPath = Path.Combine(buildArtifactsPath, rootName);
-			if (!Directory.Exists(rootPath))
-				continue;
-
-			foreach (var projectPath in Directory.EnumerateDirectories(rootPath, $"{project.ProjectName}-*", SearchOption.TopDirectoryOnly))
-				yield return projectPath;
-		}
 	}
 
 	internal static int FindAvailableTcpPort(int startingPort, int maxPort = IPEndPoint.MaxPort)

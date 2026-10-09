@@ -277,6 +277,8 @@ The iOS driver stops its saved recording process. Without a saved recording,
 
 Profiling commands wait up to two minutes for `dotnet-trace` to finish rundown and flush after a manual, timed, or event-driven stop. Use `--trace-stop-timeout` to adjust that finalization window independently of `--duration`.
 
+MIBC conversion uses the selected target framework and configuration's isolated build outputs, filtered to the app's runtime identifier (ABI). An explicit `RuntimeIdentifier` is honored; for multi-ABI builds, the selected device's runtime identifier chooses the references (iOS simulators without architecture metadata use the host architecture). RID-specific output paths are evaluated separately so SDK artifact layouts are supported. The evaluated build settings determine the assembly-processing stage: shrinking uses only `shrunk`, linking without shrinking uses only `linked`, and untrimmed builds use neither. Reference-only assemblies are excluded. Missing stage outputs or missing/ambiguous ABI information are reported as errors rather than falling back to another stage or ABI.
+
 For the shared Inspector UI and its host integrations, see the
 [MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md).
 

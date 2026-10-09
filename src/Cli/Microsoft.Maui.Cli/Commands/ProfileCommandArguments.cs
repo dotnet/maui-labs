@@ -83,6 +83,42 @@ internal static class ProfileCommandArguments
 		return [.. args];
 	}
 
+	internal static string[] BuildMibcPropertyArguments(ProfileSessionContext context, string? runtimeIdentifier = null)
+	{
+		var args = new List<string>
+		{
+			"msbuild",
+			context.Project.ProjectPath,
+			"-nologo",
+			$"-p:ArtifactsPath={context.BuildWorkspace.Path}",
+			$"-p:DirectoryBuildPropsPath={context.BuildWorkspace.DirectoryBuildPropsPath}",
+			$"-p:CustomAfterDirectoryBuildTargets={context.BuildWorkspace.DirectoryBuildTargetsPath}",
+			$"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={context.BuildWorkspace.DirectoryBuildTargetsPath}",
+			$"-p:Configuration={context.Configuration}",
+			$"-p:TargetFramework={context.Framework}",
+			$"-p:Device={context.Device.Id}",
+			"-p:WaitForExit=false",
+			"-getProperty:IntermediateOutputPath,OutputPath,RuntimeIdentifier,RuntimeIdentifiers,PublishTrimmed,AndroidLinkMode,AndroidIncludeDebugSymbols",
+		};
+		AppendEnableDiagnosticsArgument(args);
+		if (!UsesRuntimeOwnedEventPipe(context.BuildInjection))
+			AppendDiagnosticArguments(args, context.Transport, context.DiagnosticPort, context.DiagnosticSuspend);
+		if (string.Equals(context.Transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
+		{
+			args.Add("-p:_MlaunchWaitForExit=false");
+			// iOS computes PublishTrimmed during target execution, not property evaluation.
+			args.Add("-target:_ComputePublishTrimmed");
+		}
+		AppendBuildInjectionArguments(args, context.Project.ProjectPath, context.BuildInjection);
+		if (!string.IsNullOrWhiteSpace(runtimeIdentifier))
+		{
+			args.Add($"-p:RuntimeIdentifier={runtimeIdentifier}");
+			args.Add("-p:RuntimeIdentifiers=");
+			args.Add("-p:AppendRuntimeIdentifierToOutputPath=true");
+		}
+		return [.. args];
+	}
+
 	static void AppendDiagnosticArguments(List<string> args, ProfileTransportConfiguration transport, int diagnosticPort, bool diagnosticSuspend)
 	{
 		args.Add($"-p:DiagnosticAddress={transport.DiagnosticAddress}");
