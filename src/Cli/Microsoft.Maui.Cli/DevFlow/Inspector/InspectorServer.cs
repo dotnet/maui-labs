@@ -3144,7 +3144,7 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<(int, string, byte[])> HandleCdpSourceAsync(string? body)
     {
-        var id = ReadStringField(body, "webviewId");
+        var id = ReadStringField(body, "contextId");
         try { var src = await _client.GetCdpSourceAsync(string.IsNullOrWhiteSpace(id) ? null : id); return Ok(JsonSerializer.Serialize(new { ok = true, source = src }, CamelCase)); }
         catch { return Ok("{\"ok\":false,\"error\":\"source unavailable\"}"); }
     }
@@ -3152,7 +3152,7 @@ public sealed class InspectorServer : IDisposable
     private async Task<(int, string, byte[])> HandleCdpEvalAsync(string? body)
     {
         var expr = ReadStringField(body, "expression");
-        var id = ReadStringField(body, "webviewId");
+        var id = ReadStringField(body, "contextId");
         if (string.IsNullOrWhiteSpace(expr) || expr!.Length > 8192)
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"expression required\"}"));
         try

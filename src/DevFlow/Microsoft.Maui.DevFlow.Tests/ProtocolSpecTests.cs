@@ -64,6 +64,30 @@ public class ProtocolSpecTests
     private static readonly Lazy<string> SpecRoot = new(FindSpecRoot);
 
     [Fact]
+    public void WebViewContract_DocumentsOnlyCanonicalContextSelectionAndReadiness()
+    {
+        var openApi = LoadDocument(Path.Combine(SpecRoot.Value, "openapi.yaml"));
+        var contextParameter = openApi["components"]!["parameters"]!["WebViewContextQuery"]!;
+        Assert.Equal("contextId", contextParameter["name"]!.GetValue<string>());
+        Assert.Null(openApi["components"]!["parameters"]!["WebViewQuery"]);
+        foreach (var route in new[] { "evaluate", "dom", "dom/query", "source", "navigate", "input/click", "input/fill", "input/text", "screenshot" })
+        {
+            var path = openApi["paths"]![$"/api/v1/webview/{route}"]!;
+            var operation = path["get"] ?? path["post"]!;
+            var parameter = Assert.Single(operation["parameters"]!.AsArray());
+            Assert.Equal("#/components/parameters/WebViewContextQuery", parameter!["$ref"]!.GetValue<string>());
+        }
+        var schema = LoadDocument(Path.Combine(SpecRoot.Value, "schemas", "webview.json"));
+        var properties = schema["$defs"]!["WebViewContext"]!["properties"]!;
+        Assert.NotNull(properties["ready"]);
+        Assert.Null(properties["isReady"]);
+        Assert.Equal("^webview-(0|[1-9][0-9]*)$", properties["id"]!["pattern"]!.GetValue<string>());
+        Assert.NotNull(properties["hostKind"]);
+        Assert.Equal("#/components/responses/BackendNotSupported",
+            openApi["paths"]!["/api/v1/webview/network"]!["get"]!["responses"]!["501"]!["$ref"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task OpenApiYaml_CanBeParsedByOpenApiTooling()
     {
         var openApiPath = Path.Combine(SpecRoot.Value, "openapi.yaml");

@@ -81,8 +81,8 @@ public sealed class LayoutInspectionScope
     [JsonPropertyName("includeNativeElements")]
     public bool IncludeNativeElements { get; set; } = true;
 
-    [JsonPropertyName("includeBlazorElements")]
-    public bool IncludeBlazorElements { get; set; } = true;
+    [JsonPropertyName("includeWebViewElements")]
+    public bool IncludeWebViewElements { get; set; } = true;
 
     [JsonPropertyName("maxDepth")]
     public int MaxDepth { get; set; }

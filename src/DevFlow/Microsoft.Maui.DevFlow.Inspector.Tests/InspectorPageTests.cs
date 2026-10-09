@@ -2081,6 +2081,47 @@ public class InspectorPageTests : IAsyncLifetime
     }
 
     [LiveInspectorFact]
+    public async Task WebViewSource_SelectsActiveCanonicalContext()
+    {
+        var requestedContexts = new List<string>();
+        await _page.RouteAsync("**/api/cdp/webviews", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = """
+                {"ok":true,"webviews":{"webviews":[
+                    {"id":"webview-1","title":"Inactive","ready":true,"active":false},
+                    {"id":"webview-2","title":"Active","ready":true,"active":true}
+                ]}}
+                """,
+        }));
+        await _page.RouteAsync("**/api/cdp/source", route =>
+        {
+            using var body = JsonDocument.Parse(route.Request.PostData ?? "{}");
+            var contextId = body.RootElement.GetProperty("contextId").GetString()!;
+            Assert.False(body.RootElement.TryGetProperty("webview", out _));
+            requestedContexts.Add(contextId);
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = JsonSerializer.Serialize(new { ok = true, source = $"<html>{contextId}</html>" }),
+            });
+        });
+
+        await _page.GotoAsync(BaseUrl);
+        await OpenDataDockAsync();
+        await _page.Locator("[data-tab='webview']").ClickAsync();
+        await Expect(_page.Locator("#df-dock-body select")).ToHaveValueAsync("webview-2");
+        await _page.GetByRole(AriaRole.Button, new() { Name = "View source", Exact = true }).ClickAsync();
+        await Expect(_page.Locator("#df-cdp-out")).ToContainTextAsync("webview-2");
+        await _page.Locator("#df-dock-body select").SelectOptionAsync("webview-1");
+        await _page.GetByRole(AriaRole.Button, new() { Name = "View source", Exact = true }).ClickAsync();
+        await Expect(_page.Locator("#df-cdp-out")).ToContainTextAsync("webview-1");
+        Assert.Equal(new[] { "webview-2", "webview-1" }, requestedContexts);
+    }
+
+    [LiveInspectorFact]
     public async Task WebViewJavaScriptRequiresExplicitConfirmation()
     {
         var evalRequests = 0;
@@ -2094,12 +2135,12 @@ public class InspectorPageTests : IAsyncLifetime
         {
             Status = 200,
             ContentType = "application/json",
-            Body = "{\"ok\":true,\"webviews\":{\"webviews\":[{\"id\":\"web-1\",\"title\":\"App\"},{\"id\":\"web-2\",\"title\":\"Other\"}]}}",
+            Body = "{\"ok\":true,\"webviews\":{\"webviews\":[{\"id\":\"webview-1\",\"title\":\"App\"},{\"id\":\"webview-2\",\"title\":\"Other\"}]}}",
         }));
         await _page.RouteAsync("**/api/cdp/eval", route =>
         {
             using var body = JsonDocument.Parse(route.Request.PostData ?? "{}");
-            Assert.Equal("web-1", body.RootElement.GetProperty("webviewId").GetString());
+            Assert.Equal("webview-1", body.RootElement.GetProperty("contextId").GetString());
             Interlocked.Increment(ref evalRequests);
             return route.FulfillAsync(new()
             {
@@ -2120,7 +2161,7 @@ public class InspectorPageTests : IAsyncLifetime
         Assert.Equal(0, evalRequests);
         await _page.Locator("#df-dock-body select").EvaluateAsync("""
             select => {
-                select.value = 'web-2';
+                select.value = 'webview-2';
                 select.dispatchEvent(new Event('change', { bubbles: true }));
             }
             """);

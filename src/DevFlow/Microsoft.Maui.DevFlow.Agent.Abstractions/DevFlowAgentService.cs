@@ -326,7 +326,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 ["ruleSetVersion"] = "1.0",
                 ["features"] = new[] { "clipping", "overflow", "text-truncation", "overlap", "occlusion", "coverage", "suppressions", "watch" }
                     .Concat(cdpWebViews.Any(view => view.IsReady)
-                        ? ["blazor-dom"]
+                        ? ["webview-dom"]
                         : Array.Empty<string>())
                     .ToArray(),
                 ["watch"] = new Dictionary<string, object?>
@@ -334,7 +334,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     ["supported"] = true,
                     ["transport"] = "polling"
                 },
-                ["blazor"] = new Dictionary<string, object?>
+                ["webview"] = new Dictionary<string, object?>
                 {
                     ["supported"] = cdpWebViews.Any(view => view.IsReady),
                     ["readyWebViewCount"] = cdpWebViews.Count(view => view.IsReady)
@@ -347,7 +347,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         // Listed unconditionally so clients can discover the group and see *why* it is unavailable,
         // per the capability protocol: unsupported groups report supported:false rather than vanish.
         capabilities["webview"] = Capability(1, cdpWebViews.Length > 0,
-            ["evaluate", "contexts", "source", "dom", "dom-query", "network", "console", "screenshot"],
+            ["evaluate", "contexts", "source", "dom", "dom-query", "console", "screenshot"],
             "No WebView has registered a CDP endpoint with this agent.");
 
         capabilities["profiler"] = Capability(1, IsProfilerFeatureAvailable, BuildProfilerFeatureList(), "Profiler collector is unavailable on this platform.");

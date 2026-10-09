@@ -125,7 +125,16 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.Equal(
             "polling",
             layoutCapabilities.GetProperty("watch").GetProperty("transport").GetString());
-        Assert.False(layoutCapabilities.GetProperty("blazor").GetProperty("supported").GetBoolean());
+        Assert.False(layoutCapabilities.GetProperty("webview").GetProperty("supported").GetBoolean());
+        Assert.False(layoutCapabilities.TryGetProperty("blazor", out _));
+        service.RegisterCdpWebView(_ => Task.FromResult("{}"), () => true);
+        var readyCapabilities = (await client.GetCapabilitiesAsync())
+            .GetProperty("capabilities").GetProperty("ui.layoutDiagnostics");
+        Assert.True(readyCapabilities.GetProperty("webview").GetProperty("supported").GetBoolean());
+        Assert.Contains(readyCapabilities.GetProperty("features").EnumerateArray(),
+            feature => feature.GetString() == "webview-dom");
+        Assert.DoesNotContain(readyCapabilities.GetProperty("features").EnumerateArray(),
+            feature => feature.GetString() == "blazor-dom");
 
         var result = await client.AnalyzeLayoutAsync(new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest
         {

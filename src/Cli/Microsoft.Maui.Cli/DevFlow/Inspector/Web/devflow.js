@@ -2819,26 +2819,21 @@ import { createElementTreeController } from './inspector-tree.js';
     dockBodyEl.replaceChildren(fragment);
   }
 
-  // ── Blazor WebView CDP tab — list WebViews, view source, evaluate JS ──
+  // ── WebView CDP tab — list contexts, view source, evaluate JS ──
   function extractWebviews(v) {
-    let arr = [];
-    if (Array.isArray(v)) arr = v;
-    else if (v && Array.isArray(v.webViews)) arr = v.webViews;
-    else if (v && Array.isArray(v.webviews)) arr = v.webviews;
-    else if (v && Array.isArray(v.targets)) arr = v.targets;
-    return arr.map((w) => (typeof w === 'string'
-      ? { id: w, label: w }
-      : { id: w.id || w.targetId || w.webviewId || '', label: w.title || w.url || w.id || 'webview' })).filter((w) => w.id);
+    const contexts = v && Array.isArray(v.webviews) ? v.webviews : [];
+    return contexts.map((w) => ({ id: w.id, label: w.title || w.url || w.id, active: w.active }));
   }
 
   async function renderWebView(j) {
     const wvs = extractWebviews(j && j.webviews);
-    if (!wvs.length) { dockEmpty((j && j.error) || 'No Blazor WebViews in this app.'); return; }
+    if (!wvs.length) { dockEmpty((j && j.error) || 'No registered WebViews in this app.'); return; }
     const frag = document.createDocumentFragment();
     const bar = elh('div', null, elh('span', { class: 'df-kv-key', text: 'WebView: ' }));
     const sel = elh('select', { class: 'df-dock-btn' });
     for (const w of wvs) sel.append(elh('option', { value: w.id, text: w.label }));
-    if (!cdpWebviewId || !wvs.some((w) => w.id === cdpWebviewId)) cdpWebviewId = wvs[0].id;
+    if (!cdpWebviewId || !wvs.some((w) => w.id === cdpWebviewId))
+      cdpWebviewId = (wvs.find((w) => w.active) || wvs[0]).id;
     sel.value = cdpWebviewId;
     sel.addEventListener('change', () => { cdpWebviewId = sel.value; });
     bar.append(sel);
@@ -2868,7 +2863,7 @@ import { createElementTreeController } from './inspector-tree.js';
   async function cdpViewSource() {
     const out = document.getElementById('df-cdp-out');
     if (out) out.textContent = 'Loading…';
-    const j = await apiPost('/api/cdp/source', { webviewId: cdpWebviewId });
+    const j = await apiPost('/api/cdp/source', { contextId: cdpWebviewId });
     if (out) out.replaceChildren(elh('pre', { class: 'df-log-row', text: (j && j.ok && j.source != null) ? String(j.source) : ((j && j.error) || 'No source.') }));
   }
 
@@ -2884,7 +2879,7 @@ import { createElementTreeController } from './inspector-tree.js';
       'Run JavaScript');
     if (!confirmed) return;
     if (out) out.textContent = 'Running…';
-    const j = await apiPost('/api/cdp/eval', { expression: expr, webviewId: targetWebViewId });
+    const j = await apiPost('/api/cdp/eval', { expression: expr, contextId: targetWebViewId });
     if (out) out.replaceChildren(jsonView(j && j.ok ? j.result : ((j && j.error) || 'evaluate failed')));
   }
 

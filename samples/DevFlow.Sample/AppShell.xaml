@@ -9,6 +9,12 @@
                   ContentTemplate="{DataTemplate local:MainPage}" />
     <ShellContent Title="Blazor" Route="blazor"
                   ContentTemplate="{DataTemplate local:BlazorTodoPage}" />
+    <ShellContent Title="WebView" Route="webview"
+                  ContentTemplate="{DataTemplate local:WebViewTestPage}" />
+    <ShellContent Title="HybridWebView" Route="hybrid"
+                  ContentTemplate="{DataTemplate local:HybridWebViewTestPage}" />
+    <ShellContent Title="Mixed WebViews" Route="mixedwebviews"
+                  ContentTemplate="{DataTemplate local:MixedWebViewTestPage}" />
     <ShellContent Title="Multi-Blazor" Route="multiblazor"
                   ContentTemplate="{DataTemplate local:MultiBlazorPage}" />
     <ShellContent Title="Interactions" Route="interactions"

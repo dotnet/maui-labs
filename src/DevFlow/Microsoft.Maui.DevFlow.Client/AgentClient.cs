@@ -1694,13 +1694,13 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>
-    /// Send a CDP command to a Blazor WebView.
+    /// Send a CDP command to a registered WebView.
     /// </summary>
-    public async Task<JsonElement> SendCdpCommandAsync(string method, JsonNode? @params = null, string? webviewId = null)
+    public async Task<JsonElement> SendCdpCommandAsync(string method, JsonNode? @params = null, string? contextId = null)
     {
         var path = $"{WebViewApi}/evaluate";
-        if (!string.IsNullOrEmpty(webviewId))
-            path += $"?webview={Uri.EscapeDataString(webviewId)}";
+        if (contextId is not null)
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
 
         var body = new JsonObject
         {
@@ -1715,7 +1715,45 @@ public class AgentClient : IDisposable
             return await _http.PostAsync($"{_baseUrl}{path}", content);
         });
         var responseBody = await response.Content.ReadAsStringAsync();
-        return ProtocolJson.ParseElement(responseBody);
+        if (!response.IsSuccessStatusCode)
+            throw CreateHttpRequestException(
+                $"WebView command '{method}' failed with HTTP {(int)response.StatusCode}: {responseBody}",
+                null,
+                response.StatusCode);
+
+        var result = ProtocolJson.ParseElement(responseBody);
+        ThrowIfCdpFailed(result, method);
+        return result;
+    }
+
+    private static void ThrowIfCdpFailed(JsonElement response, string method)
+    {
+        if (response.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException($"WebView command '{method}' returned an invalid CDP response.");
+
+        if (response.TryGetProperty("error", out var error))
+        {
+            var message = error.ValueKind == JsonValueKind.String
+                ? error.GetString()
+                : error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out var detail)
+                    ? detail.GetString()
+                    : error.GetRawText();
+            throw new InvalidOperationException($"WebView command '{method}' failed: {message}");
+        }
+
+        if (response.TryGetProperty("result", out var result)
+            && result.ValueKind == JsonValueKind.Object
+            && result.TryGetProperty("exceptionDetails", out var exception))
+        {
+            var message = exception.TryGetProperty("exception", out var exceptionValue)
+                && exceptionValue.ValueKind == JsonValueKind.Object
+                && exceptionValue.TryGetProperty("description", out var description)
+                    ? description.GetString()
+                    : exception.TryGetProperty("text", out var text)
+                        ? text.GetString()
+                        : exception.GetRawText();
+            throw new InvalidOperationException($"WebView command '{method}' threw: {message}");
+        }
     }
 
     /// <summary>
@@ -1726,12 +1764,37 @@ public class AgentClient : IDisposable
         return await GetJsonAsync($"{WebViewApi}/contexts");
     }
 
-    public async Task<string> GetCdpSourceAsync(string? webviewId = null)
+    public async Task<string> GetCdpSourceAsync(string? contextId = null)
     {
         var path = $"{WebViewApi}/source";
-        if (!string.IsNullOrEmpty(webviewId))
-            path += $"?webview={Uri.EscapeDataString(webviewId)}";
+        if (contextId is not null)
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
         return await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
+    }
+
+    /// <summary>Capture the registered WebView using the agent's native-first screenshot path.</summary>
+    public async Task<byte[]> GetWebViewScreenshotAsync(string? contextId = null)
+    {
+        var path = $"{WebViewApi}/screenshot";
+        if (contextId is not null)
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
+
+        using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync($"{_baseUrl}{path}"));
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw CreateHttpRequestException(
+                $"WebView screenshot failed with HTTP {(int)response.StatusCode}: {error}",
+                null,
+                response.StatusCode);
+        }
+
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        if (bytes.Length < 8
+            || bytes[0] != 137 || bytes[1] != 80 || bytes[2] != 78 || bytes[3] != 71
+            || bytes[4] != 13 || bytes[5] != 10 || bytes[6] != 26 || bytes[7] != 10)
+            throw new InvalidOperationException("The WebView screenshot endpoint did not return a PNG image.");
+        return bytes;
     }
 
     public async Task<bool> NavigateWebViewAsync(string url, string? contextId = null)
@@ -1741,7 +1804,7 @@ public class AgentClient : IDisposable
             ["url"] = url
         };
 
-        if (!string.IsNullOrWhiteSpace(contextId))
+        if (contextId is not null)
             payload["contextId"] = contextId;
 
         return await PostActionAsync($"{WebViewApi}/navigate", payload);
@@ -1754,7 +1817,7 @@ public class AgentClient : IDisposable
             ["selector"] = selector
         };
 
-        if (!string.IsNullOrWhiteSpace(contextId))
+        if (contextId is not null)
             payload["contextId"] = contextId;
 
         return await PostActionAsync($"{WebViewApi}/input/click", payload);
@@ -1768,7 +1831,7 @@ public class AgentClient : IDisposable
             ["text"] = text
         };
 
-        if (!string.IsNullOrWhiteSpace(contextId))
+        if (contextId is not null)
             payload["contextId"] = contextId;
 
         return await PostActionAsync($"{WebViewApi}/input/fill", payload);
@@ -1781,7 +1844,7 @@ public class AgentClient : IDisposable
             ["text"] = text
         };
 
-        if (!string.IsNullOrWhiteSpace(contextId))
+        if (contextId is not null)
             payload["contextId"] = contextId;
 
         return await PostActionAsync($"{WebViewApi}/input/text", payload);

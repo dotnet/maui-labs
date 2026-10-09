@@ -60,7 +60,6 @@ public class WebViewTests : IntegrationTestBase
         foreach (var ctx in array.EnumerateArray())
         {
             if (ctx.ValueKind != JsonValueKind.Object) continue;
-            if (ctx.TryGetProperty("isReady", out var r1) && r1.ValueKind == JsonValueKind.True) return true;
             if (ctx.TryGetProperty("ready", out var r2) && r2.ValueKind == JsonValueKind.True) return true;
         }
 
@@ -88,8 +87,7 @@ public class WebViewTests : IntegrationTestBase
     }
 
     static bool IsReadyContext(JsonElement ctx)
-        => (ctx.TryGetProperty("isReady", out var r1) && r1.ValueKind == JsonValueKind.True)
-           || (ctx.TryGetProperty("ready", out var r2) && r2.ValueKind == JsonValueKind.True);
+        => ctx.TryGetProperty("ready", out var ready) && ready.ValueKind == JsonValueKind.True;
 
     async Task<string> GetActiveContextIdAsync(int timeoutMs = 15000)
     {
@@ -126,14 +124,11 @@ public class WebViewTests : IntegrationTestBase
             var selected = pick ?? contexts[^1];
             if (selected.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
                 return id.GetString()!;
-            if (selected.TryGetProperty("index", out var index) && index.ValueKind == JsonValueKind.Number)
-                return index.GetInt32().ToString();
-
-            return "0";
+            Assert.Fail($"Context has no canonical id: {selected}");
         }
 
         Assert.Fail($"Expected at least one WebView context within {timeoutMs}ms. Last payload: {lastJson}");
-        return "0";
+        throw new InvalidOperationException("No ready WebView context.");
     }
 
     /// <summary>
@@ -228,7 +223,7 @@ public class WebViewTests : IntegrationTestBase
         var json = await Client.GetCdpWebViewsAsync();
         Assert.True(HasWebViewContexts(json), "Expected at least one WebView context.");
         Assert.True(AnyReadyContext(json),
-            $"Expected at least one WebView context with isReady=true. Got: {json}");
+            $"Expected at least one WebView context with ready=true. Got: {json}");
     }
 
     [Fact]
@@ -282,7 +277,7 @@ public class WebViewTests : IntegrationTestBase
                 MinimumSeverity = "info",
                 Scope = new LayoutInspectionScope
                 {
-                    IncludeBlazorElements = true,
+                    IncludeWebViewElements = true,
                     IncludeNativeElements = false
                 },
                 Stability = new LayoutStabilityOptions { Mode = "immediate" }
@@ -566,7 +561,7 @@ public class WebViewTests : IntegrationTestBase
             await Client.SendCdpCommandAsync(
                 "Runtime.evaluate",
                 JsonNode.Parse("""{"expression":"window.__devflowContext = 'right'"}"""),
-                "BlazorRight");
+                Assert.Single(EnumerateContexts(contexts), c => c.GetProperty("automationId").GetString() == "BlazorRight").GetProperty("id").GetString());
 
             await Client.NavigateAsync("//blazor");
             App.InvalidateBlazorReady();
@@ -575,7 +570,7 @@ public class WebViewTests : IntegrationTestBase
             await Client.SendCdpCommandAsync(
                 "Runtime.evaluate",
                 JsonNode.Parse("""{"expression":"window.__devflowContext = 'main'"}"""),
-                "BlazorWebView");
+                await GetActiveContextIdAsync());
             var defaultResult = await Client.SendCdpCommandAsync(
                 "Runtime.evaluate",
                 JsonNode.Parse("""{"expression":"window.__devflowContext"}"""));

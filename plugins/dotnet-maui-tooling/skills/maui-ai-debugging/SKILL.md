@@ -233,16 +233,17 @@ until the app restarts — safe for experimentation.
 4. `maui devflow webview Runtime evaluate "js-expression"` — run JS
 
 **Multiple BlazorWebViews:** If the app has more than one `BlazorWebView`, each is
-registered independently with its `AutomationId`. Use `webview webviews` to list them,
-then target a specific one with `--webview` (or `-w`):
+registered independently with native owner correlation. Use `webview webviews` to
+list canonical context IDs, then target one with `--context-id`:
 
 ```bash
 maui devflow webview webviews                                  # list all WebViews
-maui devflow webview -w BlazorLeft snapshot                    # snapshot of a specific WebView
-maui devflow webview -w 1 Runtime evaluate "document.title"    # target by index
+maui devflow webview --context-id webview-0 snapshot
+maui devflow webview --context-id webview-1 Runtime evaluate "document.title"
 ```
 
-Without `--webview`, commands target the first (index 0) WebView.
+Without `--context-id`, commands select an active host. Update the agent, CLI,
+Client and bridge packages together; older consumers must rebuild.
 
 **Live CSS/DOM editing in Blazor (no rebuild needed):**
 ```bash
@@ -485,8 +486,9 @@ are stable across rebuilds (they come from XAML), so prefer `--automationId` for
 
 Global options: `--agent-host` (default localhost), `--agent-port` (auto-discovered via broker).
 CDP commands use the same agent port — all communication goes through a single port.
-Use `--webview <id>` (or `-w <id>`) on any CDP command to target a specific WebView
-by index, AutomationId, or element ID. Default: first WebView.
+Use `--context-id webview-<index>` on any CDP command to target a reported context.
+AutomationIds, element IDs and numeric indices are not selection aliases.
+Default: an active WebView.
 
 | Command | Description |
 |---------|-------------|
@@ -508,8 +510,8 @@ by index, AutomationId, or element ID. Default: first WebView.
 | `cdp Input fill <selector> <text>` | Focus + fill text into element |
 
 **Multi-WebView targeting:** If the app has multiple BlazorWebViews, use `cdp webviews`
-to list them, then `--webview <index-or-automationId>` on any command to target a specific one.
-Example: `maui devflow webview --webview 1 snapshot` or `maui devflow webview -w MyWebView Runtime evaluate "1+1"`.
+to list them, then `--context-id webview-<index>` on any command to target one.
+Example: `maui devflow webview --context-id webview-1 snapshot`.
 
 ### maui devflow broker & discovery
 

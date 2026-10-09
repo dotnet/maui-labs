@@ -10,11 +10,11 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class CdpTools
 {
-    [McpServerTool(Name = "maui_cdp_evaluate"), Description("Execute JavaScript in a Blazor WebView via Chrome DevTools Protocol. Returns the evaluation result.")]
+    [McpServerTool(Name = "maui_cdp_evaluate"), Description("Execute JavaScript in a registered WebView, HybridWebView, or BlazorWebView via Chrome DevTools Protocol. Returns the evaluation result.")]
     public static async Task<string> CdpEvaluate(
         McpAgentSession session,
         [Description("JavaScript expression to evaluate")] string expression,
-        [Description("WebView ID or index to target (optional if only one WebView)")] string? webviewId = null,
+        [Description("Canonical context ID from maui_cdp_webviews (webview-<index>); omitted selects an active host")] string? contextId = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         using var agent = await session.GetAgentClientAsync(agentPort);
@@ -22,61 +22,45 @@ public sealed class CdpTools
         {
             ["expression"] = expression,
             ["returnByValue"] = true
-        }, webviewId);
+        }, contextId);
 
-        try
+        if (content.TryGetProperty("result", out var result) &&
+            result.TryGetProperty("result", out var inner) &&
+            inner.TryGetProperty("value", out var value))
         {
-            if (content.TryGetProperty("result", out var result) &&
-                result.TryGetProperty("result", out var inner) &&
-                inner.TryGetProperty("value", out var value))
-            {
-                return value.ToString();
-            }
-            return content.ToString();
+            return value.ToString();
         }
-        catch
-        {
-            return content.ToString();
-        }
+        return content.ToString();
     }
 
-    [McpServerTool(Name = "maui_cdp_screenshot"), Description("Capture a screenshot of a Blazor WebView via Chrome DevTools Protocol. Returns the image directly.")]
+    [McpServerTool(Name = "maui_cdp_screenshot"), Description("Capture a registered WebView, HybridWebView, or BlazorWebView using the agent's native-first screenshot path. Returns the image directly.")]
     public static async Task<ContentBlock[]> CdpScreenshot(
         McpAgentSession session,
-        [Description("WebView ID or index to target (optional if only one WebView)")] string? webviewId = null,
+        [Description("Canonical context ID from maui_cdp_webviews (webview-<index>); omitted selects an active host")] string? contextId = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         using var agent = await session.GetAgentClientAsync(agentPort);
-        var json = await agent.SendCdpCommandAsync("Page.captureScreenshot", new JsonObject
-        {
-            ["format"] = "png"
-        }, webviewId);
-
-        if (json.TryGetProperty("result", out var result) &&
-            result.TryGetProperty("data", out var data))
-        {
-            var pngBytes = Convert.FromBase64String(data.GetString()!);
-            return [
-                new TextContentBlock { Text = $"WebView screenshot captured ({pngBytes.Length} bytes)" },
-                ImageContentBlock.FromBytes(pngBytes, "image/png")
-            ];
-        }
-
-        throw new McpException("Failed to capture WebView screenshot. Is a Blazor WebView active?");
+        var pngBytes = await agent.GetWebViewScreenshotAsync(contextId);
+        return [
+            new TextContentBlock { Text = $"WebView screenshot captured ({pngBytes.Length} bytes)" },
+            ImageContentBlock.FromBytes(pngBytes, "image/png")
+        ];
     }
 
-    [McpServerTool(Name = "maui_cdp_source"), Description("Get the HTML source of a Blazor WebView.")]
+    [McpServerTool(Name = "maui_cdp_source"), Description("Get the HTML source of a registered WebView, HybridWebView, or BlazorWebView.")]
     public static async Task<string> CdpSource(
         McpAgentSession session,
-        [Description("WebView ID or index to target (optional if only one WebView)")] string? webviewId = null,
+        [Description("Canonical context ID from maui_cdp_webviews (webview-<index>); omitted selects an active host")] string? contextId = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         using var agent = await session.GetAgentClientAsync(agentPort);
-        var source = await agent.GetCdpSourceAsync(webviewId);
-        return string.IsNullOrEmpty(source) ? "No WebView source available." : source;
+        var source = await agent.GetCdpSourceAsync(contextId);
+        if (string.IsNullOrEmpty(source))
+            throw new McpException("The selected WebView returned no HTML source.");
+        return source;
     }
 
-    [McpServerTool(Name = "maui_cdp_webviews"), Description("List all registered Blazor WebViews in the running app.")]
+    [McpServerTool(Name = "maui_cdp_webviews"), Description("List registered WebView, HybridWebView, and BlazorWebView contexts in the running app, including their readiness and active state.")]
     public static async Task<string> CdpWebViews(
         McpAgentSession session,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
