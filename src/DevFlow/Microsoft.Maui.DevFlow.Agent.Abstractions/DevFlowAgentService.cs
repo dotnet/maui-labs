@@ -245,6 +245,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                     ["storage"] = IsStorageSupported,
                     ["profiler"] = IsProfilerFeatureAvailable,
                     ["jobs"] = IsJobsSupported,
+                    ["menus"] = IsMenusSupported,
                     ["theme"] = IsThemeSupported,
                     ["mutationLease"] = _options.RequireMutationLease,
                 },
@@ -283,6 +284,9 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     /// <summary>Whether app theme endpoints are backed by an implementation.</summary>
     protected virtual bool IsThemeSupported => false;
 
+    /// <summary>Whether the backend can inspect and invoke application menus.</summary>
+    protected virtual bool IsMenusSupported => false;
+
     /// <summary>
     /// Reason surfaced to clients when a capability group is unavailable.
     /// </summary>
@@ -316,6 +320,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         capabilities["ui.screenshot"] = Capability(1, IsScreenshotSupported,
             ["element", "fullscreen", "selector"], reason);
         capabilities["ui.events"] = Capability(1, true, ["stream", "subscribe"], null);
+        capabilities["ui.menus"] = Capability(1, IsMenusSupported, ["list", "invoke"], reason);
 
         if (_options.EnableLayoutDiagnostics)
         {
@@ -435,6 +440,10 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
 
     /// <summary>Handles <c>GET /api/v1/ui/tree</c>.</summary>
     protected virtual Task<HttpResponse> HandleTree(HttpRequest request) => NotSupportedTask("ui.tree");
+
+    protected virtual Task<HttpResponse> HandleMenusList(HttpRequest request) => NotSupportedTask("ui.menus");
+
+    protected virtual Task<HttpResponse> HandleMenuInvoke(HttpRequest request) => NotSupportedTask("ui.menus");
 
     /// <summary>Handles <c>GET /api/v1/ui/element/{id}</c>.</summary>
     protected virtual Task<HttpResponse> HandleElement(HttpRequest request) => NotSupportedTask("ui.tree");

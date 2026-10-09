@@ -484,6 +484,143 @@ paths:
         "501":
           $ref: "#/components/responses/BackendNotSupported"
 
+  /api/v1/ui/menus:
+    get:
+      operationId: listMenus
+      tags: [ui]
+      summary: List application menus
+      description: >
+        Returns the application menu bar: the cross-platform MAUI MenuBarItems
+        tree plus, where supported, the platform's native application menu
+        (macOS AppKit NSMenu or Mac Catalyst responder-chain key commands). The
+        native menu bar is not part of the MAUI visual tree returned by the tree
+        endpoint. Ids are positional and can change when menus change. Refresh the
+        listing before using an id. MAUI and AppKit paths escape percent, slash and
+        backslash within title segments as %25, %2F and %5C. Catalyst paths are flat titles.
+        MAUI leaf items expose all declared shortcuts in accelerators; key and modifiers
+        retain the first shortcut for compatibility. Menus on the deepest active page
+        with menu definitions take precedence over its active ancestor containers.
+      parameters:
+        - name: window
+          in: query
+          description: Window index to scope the MAUI menu walk. Defaults to all windows.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: The application menus.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  platform:
+                    type: string
+                  mauiSupported:
+                    type: boolean
+                  nativeSupported:
+                    type: boolean
+                  menuBar:
+                    type: object
+                    description: The cross-platform MAUI MenuBarItems tree.
+                  native:
+                    description: The platform native menu, or null when unavailable.
+        "400":
+          $ref: "#/components/responses/InvalidArgument"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/menus/invoke:
+    post:
+      operationId: invokeMenu
+      tags: [ui]
+      summary: Invoke an application menu item
+      description: >
+        Invokes an application menu item identified by id, path (slash-joined
+        titles), title, or key plus modifiers. The target selects the menu
+        layer: auto (default, tries the MAUI menu then the native menu), maui,
+        or native. Auto falls back only when no MAUI item matches, not when a
+        matched item is disabled. Copy paths from the list response. Title and
+        key matching select the first match; use a window index or id to disambiguate
+        MAUI menus in multi-window apps. Native menus use the active application
+        responder chain, independently of the MAUI window scope.
+        A native action that remains inside a modal event loop returns 202 with
+        status dispatched after five seconds; this acknowledges dispatch, not
+        completion. Inspect and dismiss the dialog to complete the operation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: Positional menu item id from a fresh list response.
+                path:
+                  type: string
+                  description: Path from the list response. MAUI/AppKit escape %, / and backslash within title segments; Catalyst paths are flat titles.
+                title:
+                  type: string
+                  description: Menu item title (first match).
+                key:
+                  type: string
+                  description: Key equivalent (combine with modifiers).
+                modifiers:
+                  type: string
+                  description: Comma or plus separated modifiers, e.g. "cmd,shift".
+                target:
+                  type: string
+                  enum: [auto, maui, native]
+                  default: auto
+                window:
+                  type: integer
+                  minimum: 0
+                  description: Optional window index to scope MAUI menu invocation.
+      responses:
+        "200":
+          description: The menu item was invoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  source:
+                    type: string
+                  title:
+                    type: string
+                  path:
+                    type: string
+        "202":
+          description: Native action started and is still pending (for example, a modal dialog).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, source, status]
+                properties:
+                  success:
+                    const: true
+                  source:
+                    type: string
+                  status:
+                    const: dispatched
+        "404":
+          $ref: "#/components/responses/MenuError"
+        "400":
+          $ref: "#/components/responses/MenuError"
+        "409":
+          $ref: "#/components/responses/MenuError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   # ─────────────────────────── UI Actions ──────────────────────────────
   /api/v1/ui/actions/tap:
     post:
@@ -2792,6 +2929,25 @@ components:
                 reason: ui-mutation-busy
                 details:
                   retryable: true
+
+    MenuError:
+      description: Invalid menu request, missing item, or an item that cannot be invoked. The error field explains the failure.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [success, error]
+            properties:
+              success:
+                const: false
+              error:
+                type: string
+              reason:
+                type: string
+          example:
+            success: false
+            error: Menu item is disabled
+            reason: menu-not-invokable
 
     ElementNotFound:
       description: Element not found.

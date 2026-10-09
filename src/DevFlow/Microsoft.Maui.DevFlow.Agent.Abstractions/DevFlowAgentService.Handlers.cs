@@ -453,6 +453,9 @@ public partial class DevFlowAgentService
         _server.MapPut("/api/v1/storage/files/{path}", HandleFileUpload);
         _server.MapDelete("/api/v1/storage/files/{path}", HandleFileDelete);
 
+        _server.MapGet("/api/v1/ui/menus", HandleMenusList);
+        _server.MapPost("/api/v1/ui/menus/invoke", request => ExecuteUiMutationAsync(request, HandleMenuInvoke));
+
         // Invoke / reflection
         _server.MapGet("/api/v1/invoke/actions", HandleListActions);
         _server.MapPost("/api/v1/invoke/actions/{name}", HandleInvokeAction);

@@ -126,6 +126,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// <inheritdoc />
     protected override void PopulateCapabilities(Dictionary<string, object> capabilities)
     {
+        capabilities["ui.menus"] = new Dictionary<string, object?>
+        {
+            ["version"] = 1,
+            ["supported"] = IsMenusSupported,
+            ["features"] = new[] { "list", "invoke" },
+            ["maui"] = true,
+            ["native"] = IsNativeMenusSupported,
+            ["reason"] = (string?)null,
+        };
         capabilities["ui.tree"] = Capability(2, supported: true,
             ["css-selector", "type", "text", "accessibility-id", "native-owner", "capture-epoch", "registry-generation", "window-id"],
             reason: null);

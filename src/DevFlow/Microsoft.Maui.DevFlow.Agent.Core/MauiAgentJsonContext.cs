@@ -9,5 +9,6 @@ public partial class MauiDevFlowAgentService
     [JsonSerializable(typeof(LayoutInspectionResult))]
     [JsonSerializable(typeof(LayoutRuleCatalog))]
     [JsonSerializable(typeof(ThemeInfoPayload))]
+    [JsonSerializable(typeof(MenuInvokeRequest))]
     private partial class MauiAgentJsonContext : JsonSerializerContext;
 }

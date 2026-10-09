@@ -2619,6 +2619,50 @@ public class AgentClient : IDisposable
         catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
 
+    // ── Menus ──
+
+    /// <summary>Lists MAUI menu definitions and supported native application menus.</summary>
+    public async Task<JsonElement> GetMenusAsync(int? window = null)
+    {
+        var path = window.HasValue ? $"{UiApi}/menus?window={window.Value}" : $"{UiApi}/menus";
+        return await GetJsonAsync(path);
+    }
+
+    /// <summary>
+    /// Invokes an application menu item by id, slash-joined title path, title, or key and modifiers.
+    /// The target selects the menu layer: auto (default), maui, or native.
+    /// </summary>
+    public async Task<JsonElement> InvokeMenuAsync(
+        string? id = null,
+        string? path = null,
+        string? title = null,
+        string? key = null,
+        string? modifiers = null,
+        string? target = null,
+        int? window = null)
+    {
+        var payload = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(id)) payload["id"] = id;
+        if (!string.IsNullOrWhiteSpace(path)) payload["path"] = path;
+        if (!string.IsNullOrWhiteSpace(title)) payload["title"] = title;
+        if (!string.IsNullOrWhiteSpace(key)) payload["key"] = key;
+        if (!string.IsNullOrWhiteSpace(modifiers)) payload["modifiers"] = modifiers;
+        if (!string.IsNullOrWhiteSpace(target)) payload["target"] = target;
+        if (window.HasValue) payload["window"] = window.Value;
+
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+            {
+                using var content = ProtocolJson.CreateJsonContent(payload);
+                return await _http.PostAsync($"{_baseUrl}{UiApi}/menus/invoke", content);
+            });
+            var responseBody = await response.Content.ReadAsStringAsync();
+            return string.IsNullOrWhiteSpace(responseBody) ? default : ProtocolJson.ParseElement(responseBody);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
+    }
+
     // ── Files ──
 
     public async Task<JsonElement> ListStorageRootsAsync()
@@ -2968,6 +3012,8 @@ public class AgentCapabilities
     public bool Profiler { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("jobs")]
     public bool Jobs { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("menus")]
+    public bool Menus { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("theme")]
     public bool Theme { get; set; }
 }

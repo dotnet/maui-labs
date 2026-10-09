@@ -31,6 +31,7 @@ static class MauiBackendSmoke
         await agent.AssertPropertyAsync("maui-button", "Text", "Updated");
         await agent.AssertDescriptorsAsync();
         await agent.AssertThemeAsync();
+        await agent.AssertMenusAsync();
         _ = new HttpRequest { Body = "{}" }.BodyAs<LayoutInspectionRequest>();
         _ = HttpResponse.Json(new LayoutInspectionResult());
         using var sensors = new SensorManager();
@@ -104,6 +105,19 @@ static class MauiBackendSmoke
             if (document.RootElement.GetProperty("supportedThemes").GetArrayLength() != 3
                 || document.RootElement.GetProperty("message").ValueKind != JsonValueKind.Null)
                 throw new InvalidOperationException("Theme response metadata or null policy changed.");
+        }
+
+        public async Task AssertMenusAsync()
+        {
+            var response = await HandleMenusList(new HttpRequest());
+            Check(response);
+            using var document = JsonDocument.Parse(response.Body!);
+            if (!document.RootElement.GetProperty("mauiSupported").GetBoolean())
+                throw new InvalidOperationException("MAUI menu listing lost its JSON contract.");
+
+            var invoke = await HandleMenuInvoke(new HttpRequest { Body = """{"path":"File/Save","target":"maui"}""" });
+            if (invoke.StatusCode != 404 || !invoke.Body!.Contains("Menu item not found", StringComparison.Ordinal))
+                throw new InvalidOperationException($"MAUI menu request metadata failed: {invoke.Body}");
         }
 
         private static void Check(HttpResponse response)

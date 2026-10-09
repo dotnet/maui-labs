@@ -332,6 +332,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI
 - **Layout Diagnostics** — detect clipping, lost overflow, text truncation, overlap, and interaction occlusion with platform-specific evidence and confidence
 - **Element Interaction** — tap, fill, scroll, navigate, focus, resize, and mutate properties
+- **Application Menus** — inspect and invoke the app menu bar: the cross-platform MAUI `MenuBarItems` tree plus the native macOS AppKit `NSMenu` and active Mac Catalyst responder-chain key commands. Disabled items and disabled ancestors are respected; unhandled native actions report failure.
 - **Screenshots** — capture PNG screenshots from any platform (full window or per-element)
 - **Screen Recording** — start/stop video recording of app sessions
 - **Network Monitoring** — intercept and inspect HTTP requests/responses
@@ -392,7 +393,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 
 | Command Group | Description |
 |---------------|-------------|
-| `ui` | Visual tree, element interaction, screenshots, alerts, assertions |
+| `ui` | Visual tree, element interaction, screenshots, alerts, assertions, application menus |
 | `recording` | Start, stop, and manage screen recordings of app sessions |
 | `webview` | Blazor WebView automation — DOM, JS eval, navigation, input, screenshots |
 | `logs` | Fetch and stream application logs |
@@ -404,6 +405,38 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 | `batch` | Execute command sequences from stdin |
 | `commands` | List all available commands (schema discovery) |
 | `mcp` | Start the MCP server for AI agent integration |
+
+### Application menus
+
+```bash
+maui devflow ui menu list --window 1
+maui devflow ui menu invoke --path "File/Save" --window 1
+maui devflow ui menu invoke --key s --modifiers cmd --target native
+```
+
+MAUI menus follow the visible page, including navigation, tabs, flyout detail and
+modal pages. Invocation defaults to the first matching MAUI item, then tries the
+native menu only if no MAUI item matched. A disabled item (or disabled ancestor)
+is a failure, not permission to run a different native command. Use `--window` to
+scope MAUI path/title/key matching; native menus use the active application
+responder chain.
+
+Copy paths from `menu list`: MAUI/AppKit title segments escape `%`, `/`, and
+backslash as `%25`, `%2F`, and `%5C`. Catalyst native paths are flat titles;
+fabricated hierarchical paths are not matched. Menu ids are positional and can
+change when menus change, so refresh the listing before invoking by id.
+MAUI items list all declared shortcuts in `accelerators`; `key` and `modifiers`
+retain the first shortcut. Menus on the deepest active page with definitions
+take precedence over its active ancestor containers. Menu invocation uses the
+same UI-mutation gate as other actions; containers and separators are not invokable.
+Prefer key plus modifiers for Catalyst. Invalid arguments return HTTP 400,
+missing items 404, disabled/unhandled actions 409, and unsupported backends 501.
+Native actions that stay inside a modal event loop return HTTP 202 with
+`status: "dispatched"` after five seconds. This acknowledges dispatch, not
+completion; inspect and dismiss the dialog before continuing.
+The client methods are `AgentClient.GetMenusAsync(window)` and
+`InvokeMenuAsync(..., window: window)` in the portable Client package (also
+available through Driver).
 
 ### Layout diagnostics
 
