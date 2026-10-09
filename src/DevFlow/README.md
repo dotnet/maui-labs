@@ -425,6 +425,10 @@ Copy paths from `menu list`: MAUI/AppKit title segments escape `%`, `/`, and
 backslash as `%25`, `%2F`, and `%5C`. Catalyst native paths are flat titles;
 fabricated hierarchical paths are not matched. Menu ids are positional and can
 change when menus change, so refresh the listing before invoking by id.
+MAUI items list all declared shortcuts in `accelerators`; `key` and `modifiers`
+retain the first shortcut. Menus on the deepest active page with definitions
+take precedence over its active ancestor containers. Menu invocation uses the
+same UI-mutation gate as other actions; containers and separators are not invokable.
 Prefer key plus modifiers for Catalyst. Invalid arguments return HTTP 400,
 missing items 404, disabled/unhandled actions 409, and unsupported backends 501.
 Native actions that stay inside a modal event loop return HTTP 202 with

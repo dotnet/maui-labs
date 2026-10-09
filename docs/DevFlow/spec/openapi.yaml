@@ -497,6 +497,9 @@ paths:
         endpoint. Ids are positional and can change when menus change. Refresh the
         listing before using an id. MAUI and AppKit paths escape percent, slash and
         backslash within title segments as %25, %2F and %5C. Catalyst paths are flat titles.
+        MAUI leaf items expose all declared shortcuts in accelerators; key and modifiers
+        retain the first shortcut for compatibility. Menus on the deepest active page
+        with menu definitions take precedence over its active ancestor containers.
       parameters:
         - name: window
           in: query

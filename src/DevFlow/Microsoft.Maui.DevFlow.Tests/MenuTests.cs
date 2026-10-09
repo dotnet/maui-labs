@@ -183,6 +183,21 @@ public class MenuTests
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.False(json.RootElement.GetProperty("success").GetBoolean());
         Assert.Equal("Native action was not handled", json.RootElement.GetProperty("error").GetString());
+        Assert.Equal(1, ((NativeMenuService)harness.Service).MutationGateCalls);
+    }
+
+    [Theory]
+    [InlineData("maui:w0/0", null)]
+    [InlineData(null, "File")]
+    [InlineData("maui:w0/0/2", null)]
+    [InlineData(null, "File/Recent")]
+    [InlineData("maui:w0/0/1", null)]
+    public async Task InvokeMenu_ContainerOrSeparator_ReturnsNonInvokable(string? id, string? path)
+    {
+        using var harness = await MenuTestHarness.CreateAsync(() => BuildMenuPage(null));
+        var result = await harness.Client.InvokeMenuAsync(id: id, path: path);
+        Assert.False(result.GetProperty("success").GetBoolean());
+        Assert.Equal("menu-not-invokable", result.GetProperty("reason").GetString());
     }
 
     [Theory]
@@ -208,12 +223,20 @@ public class MenuTests
     [InlineData("tabs")]
     [InlineData("flyout")]
     [InlineData("navigation")]
+    [InlineData("intermediate")]
     public async Task GetMenus_VisibleContainerPage_ListsAndInvokesCurrentMenu(string container)
     {
         var clicked = false;
         using var harness = await MenuTestHarness.CreateAsync(() =>
         {
             var current = BuildMenuPage(() => clicked = true);
+            if (container == "intermediate")
+            {
+                var navigation = new NavigationPage(new ContentPage());
+                foreach (var bar in current.MenuBarItems)
+                    navigation.MenuBarItems.Add(bar);
+                return new FlyoutPage { Flyout = new ContentPage { Title = "Menu" }, Detail = navigation };
+            }
             if (container == "navigation") return new NavigationPage(current);
             if (container == "flyout") return new FlyoutPage { Flyout = new ContentPage { Title = "Menu" }, Detail = new NavigationPage(current) };
             var previous = DispatcherProvider.Current;
@@ -293,6 +316,11 @@ public class MenuTests
             return page;
         });
 
+        var menus = await harness.Client.GetMenusAsync();
+        var accelerators = menus.GetProperty("menuBar").GetProperty("items")[1].GetProperty("items")[0].GetProperty("accelerators");
+        Assert.Equal(2, accelerators.GetArrayLength());
+        Assert.Equal("q", accelerators[1].GetProperty("key").GetString());
+        Assert.Equal("ctrl", accelerators[1].GetProperty("modifiers")[0].GetString());
         var result = await harness.Client.InvokeMenuAsync(key: "q", modifiers: "control");
         Assert.True(result.GetProperty("success").GetBoolean());
         Assert.True(clicked);
@@ -374,7 +402,13 @@ public class MenuTests
     private sealed class NativeMenuService(AgentOptions options, bool success, string? status = null) : MauiDevFlowAgentService(options)
     {
         public int Invocations { get; private set; }
+        public int MutationGateCalls { get; private set; }
         protected override bool IsNativeMenusSupported => true;
+        protected override Task<HttpResponse> ExecuteUiMutationAsync(HttpRequest request, Func<HttpRequest, Task<HttpResponse>> handler)
+        {
+            MutationGateCalls++;
+            return base.ExecuteUiMutationAsync(request, handler);
+        }
         protected override Task<MenuInvokeResult?> InvokeNativeMenuAsync(MenuInvokeRequest request)
         {
             Invocations++;

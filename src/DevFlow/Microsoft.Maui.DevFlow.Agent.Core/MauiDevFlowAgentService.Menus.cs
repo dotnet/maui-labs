@@ -261,6 +261,11 @@ public partial class MauiDevFlowAgentService
                         ["hasSubmenu"] = false,
                         ["key"] = key,
                         ["modifiers"] = mods,
+                        ["accelerators"] = flyout.KeyboardAccelerators.Select(accelerator => new Dictionary<string, object?>
+                        {
+                            ["key"] = accelerator.Key,
+                            ["modifiers"] = ModifiersToList(accelerator.Modifiers),
+                        }).ToList(),
                     });
                     break;
                 }
@@ -297,12 +302,17 @@ public partial class MauiDevFlowAgentService
                 var bar = barItems[b];
                 if (bar == null) continue;
 
+                if (MauiExactSelectorMatches($"maui:w{wIndex}/{b}", EscapeMenuTitle(bar.Text ?? string.Empty), request))
+                    return new MenuInvokeResult { Source = "maui", Error = "Menu containers have no invokable action" };
+
                 var match = FindMauiMatch(bar, $"maui:w{wIndex}/{b}", EscapeMenuTitle(bar.Text ?? string.Empty), request, bar.IsEnabled);
                 if (match == null) continue;
 
                 var (item, path, enabled) = match.Value;
                 if (!enabled)
                     return new MenuInvokeResult { Success = false, Source = "maui", Error = $"Menu item '{path}' is disabled" };
+                if (item == null)
+                    return new MenuInvokeResult { Source = "maui", Error = $"Menu item '{path}' has no invokable action" };
 
                 ((IMenuItemController)item).Activate();
                 return new MenuInvokeResult { Success = true, Source = "maui", Title = item.Text, Path = path };
@@ -312,7 +322,7 @@ public partial class MauiDevFlowAgentService
         return null;
     }
 
-    private (MenuItem item, string path, bool enabled)? FindMauiMatch(IEnumerable<IMenuElement> elements, string idPrefix, string pathPrefix, MenuInvokeRequest request, bool parentEnabled)
+    private (MenuItem? item, string path, bool enabled)? FindMauiMatch(IEnumerable<IMenuElement> elements, string idPrefix, string pathPrefix, MenuInvokeRequest request, bool parentEnabled)
     {
         var i = 0;
         foreach (var element in elements)
@@ -323,11 +333,16 @@ public partial class MauiDevFlowAgentService
             switch (element)
             {
                 case MenuFlyoutSeparator:
+                    if (MauiExactSelectorMatches(id, null, request))
+                        return (null, id, parentEnabled);
                     break;
 
                 case MenuFlyoutSubItem sub:
                 {
-                    var nested = FindMauiMatch(sub, id, CombineMenuPath(pathPrefix, sub.Text ?? string.Empty), request, parentEnabled && sub.IsEnabled);
+                    var path = CombineMenuPath(pathPrefix, sub.Text ?? string.Empty);
+                    if (MauiExactSelectorMatches(id, path, request))
+                        return (null, path, parentEnabled && sub.IsEnabled);
+                    var nested = FindMauiMatch(sub, id, path, request, parentEnabled && sub.IsEnabled);
                     if (nested != null) return nested;
                     break;
                 }
@@ -347,11 +362,8 @@ public partial class MauiDevFlowAgentService
 
     private static bool MauiItemMatches(MenuItem item, string id, string path, MenuInvokeRequest request)
     {
-        if (!string.IsNullOrWhiteSpace(request.Id))
-            return string.Equals(request.Id.Trim(), id, StringComparison.OrdinalIgnoreCase);
-
-        if (!string.IsNullOrWhiteSpace(request.Path))
-            return string.Equals(NormalizeMenuPath(request.Path), path, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(request.Id) || !string.IsNullOrWhiteSpace(request.Path))
+            return MauiExactSelectorMatches(id, path, request);
 
         if (!string.IsNullOrWhiteSpace(request.Title))
             return string.Equals(request.Title.Trim(), item.Text?.Trim(), StringComparison.OrdinalIgnoreCase);
@@ -366,6 +378,14 @@ public partial class MauiDevFlowAgentService
         }
 
         return false;
+    }
+
+    private static bool MauiExactSelectorMatches(string id, string? path, MenuInvokeRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Id))
+            return string.Equals(request.Id.Trim(), id, StringComparison.OrdinalIgnoreCase);
+        return !string.IsNullOrWhiteSpace(request.Path) && path != null &&
+            string.Equals(NormalizeMenuPath(request.Path), path, StringComparison.OrdinalIgnoreCase);
     }
 
     // ── Helpers ──
@@ -388,19 +408,13 @@ public partial class MauiDevFlowAgentService
 
     private static IList<MenuBarItem>? GetMenuBarItemsForWindow(Window window)
     {
-        var active = ResolveActiveMenuPage(window);
-        var items = active?.MenuBarItems;
-        if ((items == null || items.Count == 0) && window.Page is Page root && !ReferenceEquals(root, active))
-            items = root.MenuBarItems;
-        return items;
-    }
-
-    private static Page? ResolveActiveMenuPage(Window window)
-    {
         var page = window.Page;
         var seen = new HashSet<Page>();
+        IList<MenuBarItem>? items = null;
         while (page != null && seen.Add(page))
         {
+            if (page.MenuBarItems.Count > 0)
+                items = page.MenuBarItems;
             var modal = page.Navigation.ModalStack.LastOrDefault();
             if (modal != null && seen.Contains(modal))
                 modal = null;
@@ -415,7 +429,7 @@ public partial class MauiDevFlowAgentService
             if (next == null || ReferenceEquals(next, page)) break;
             page = next;
         }
-        return page;
+        return items;
     }
 
     private static (string? key, List<string>? modifiers) GetAcceleratorInfo(MenuFlyoutItem item)

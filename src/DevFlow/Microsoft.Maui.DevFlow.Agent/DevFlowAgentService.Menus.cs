@@ -105,9 +105,15 @@ public partial class PlatformAgentService
         for (nint i = 0; i < menu.Count; i++)
         {
             var item = menu.ItemAt(i);
-            if (item == null || item.IsSeparatorItem) continue;
+            if (item == null) continue;
 
             var id = $"{idPrefix}{i}";
+            if (item.IsSeparatorItem)
+            {
+                if (string.Equals(request.Id?.Trim(), id, StringComparison.OrdinalIgnoreCase))
+                    return new MenuInvokeResult { Source = "appkit", Error = "Menu separators have no invokable action" };
+                continue;
+            }
             var path = CombineMenuPath(pathPrefix, item.Title ?? string.Empty);
 
             var exactSelector = !string.IsNullOrWhiteSpace(request.Id) || !string.IsNullOrWhiteSpace(request.Path);
