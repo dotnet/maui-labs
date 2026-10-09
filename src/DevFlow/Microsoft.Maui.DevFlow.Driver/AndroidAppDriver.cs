@@ -452,7 +452,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             return;
 
         var exitCode = await recordingTask.ConfigureAwait(false);
-        var detail = error.ToString().Trim();
+        var detail = error.ToString()?.Trim() ?? string.Empty;
         var suffix = detail.Length == 0 ? string.Empty : $": {detail}";
         throw new InvalidOperationException(
             $"{command} exited during startup with code {exitCode}{suffix}");
