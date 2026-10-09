@@ -71,7 +71,7 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps â€
 - **[MAUI DevFlow Inspector](docs/DevFlow/inspector.md)** in a browser, VS Code, the GitHub Copilot
   desktop app, or Copilot CLI
 - **Works without MAUI** â€” the same agent, CLI, and MCP tools drive plain .NET apps via Android views, UIKit, and AppKit backends
-- **Blazor CDP bridge** for Chrome DevTools Protocol on Blazor WebViews
+- **Shared WebView CDP bridge** for standard WebView, HybridWebView, and BlazorWebView, with an optional Blazor-specific adapter
 - **MCP server** for AI agent integration (via `maui devflow mcp`)
 - **Platform drivers** for iOS, Android, Mac Catalyst, Windows, and Linux/GTK
 - **Network monitoring** and **performance profiling**
@@ -87,6 +87,7 @@ A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps â€
 | [![NuGet: Microsoft.Maui.DevFlow.Agent.Native](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Native.svg?label=Microsoft.Maui.DevFlow.Agent.Native)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Native/) | In-app agent for plain .NET Android, iOS, Mac Catalyst, and macOS apps |
 | [![NuGet: Microsoft.Maui.DevFlow.Agent.Native.Essentials](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Native.Essentials.svg?label=Microsoft.Maui.DevFlow.Agent.Native.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Native.Essentials/) | Optional device, storage, and sensor endpoints for native apps |
 | [![NuGet: Microsoft.Maui.DevFlow.Agent.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Gtk.svg?label=Microsoft.Maui.DevFlow.Agent.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Gtk/) | GTK/Linux agent |
+| [![NuGet: Microsoft.Maui.DevFlow.WebView](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.WebView.svg?label=Microsoft.Maui.DevFlow.WebView)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.WebView/) | Generic WebView/HybridWebView bridge and shared engine |
 | [![NuGet: Microsoft.Maui.DevFlow.Blazor](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.svg?label=Microsoft.Maui.DevFlow.Blazor)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor/) | Blazor WebView CDP bridge |
 | [![NuGet: Microsoft.Maui.DevFlow.Blazor.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.Gtk.svg?label=Microsoft.Maui.DevFlow.Blazor.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor.Gtk/) | WebKitGTK CDP bridge |
 | [![NuGet: Microsoft.Maui.DevFlow.Client](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Client.svg?label=Microsoft.Maui.DevFlow.Client)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Client/) | Portable (`netstandard2.0`) agent protocol client |

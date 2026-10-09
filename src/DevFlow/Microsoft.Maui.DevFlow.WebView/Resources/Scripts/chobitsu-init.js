@@ -4,13 +4,12 @@
         console.log('[ChobitsuDebug] Already initialized');
         return 'already_initialized';
     }
-    window.__chobitsuDebugEnabled = true;
-    
     if (typeof chobitsu === 'undefined') {
         console.error('[ChobitsuDebug] chobitsu not found');
         return 'chobitsu_not_found';
     }
     
+    window.__chobitsuDebugEnabled = true;
     console.log('[ChobitsuDebug] Chobitsu initialized for single-eval CDP.');
     window.__chobitsuReady = true;
     return 'ready';

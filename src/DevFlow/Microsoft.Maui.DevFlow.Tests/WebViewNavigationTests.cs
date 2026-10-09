@@ -1,4 +1,4 @@
-using Microsoft.Maui.DevFlow.Blazor;
+using Microsoft.Maui.DevFlow.WebView;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 

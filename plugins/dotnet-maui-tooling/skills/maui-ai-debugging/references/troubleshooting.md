@@ -62,7 +62,7 @@ profiles via `apple appstoreconnect profiles list`.
 
 If `maui devflow webview status` fails but `ui status` works:
 
-1. **Chobitsu not loading?** Check logs for `[BlazorDevFlow]` messages. If auto-injection failed, add `<script src="chobitsu.js"></script>` manually to `wwwroot/index.html`
+1. **Bridge not ready?** Check agent error logs for native evaluation, document readiness or embedded injection failures. The shared bridge injects assets from C#; no script tag or Blazor JS initializer is needed.
 2. **Blazor not initialized?** Navigate to a Blazor page first, then retry
 3. Check app logs: `maui devflow logs --limit 20` — look for `[BlazorDevFlow]` errors
 
