@@ -12,6 +12,7 @@ using Visibility = System.Windows.Visibility;
 
 namespace HandlerTests;
 
+[Collection("CollectionView native lifecycle")]
 public class CollectionViewObservableSourceTests
 {
 	[Fact]
@@ -136,6 +137,36 @@ public class CollectionViewObservableSourceTests
 		});
 	}
 
+	[Fact]
+	public void IsGroupedToggle_PreservesSelectionAcrossWrapperShapeChange()
+	{
+		Run(view =>
+		{
+			var group = new ObservableCollection<string> { "Hello" };
+			view.ItemsSource = new[] { group };
+			view.SelectionMode = SelectionMode.Single;
+			return (handler, list, empty) =>
+			{
+				// Flat (ungrouped): the single list item IS the raw group collection itself
+				// (matches IsGroupedChange_UpdatesSubscriptionsAndRepresentation's shape).
+				list.SelectedItem = list.Items[0];
+				Assert.Same(group, list.SelectedItem);
+
+				// Toggling IsGrouped rebuilds ItemsSource with GroupedItem wrappers around the
+				// same underlying group; selection should resolve to the header entry that
+				// wraps that same group instance, not be silently dropped.
+				view.IsGrouped = true;
+				Assert.NotNull(list.SelectedItem);
+				Assert.Same(group, GroupData(list.SelectedItem));
+
+				// Toggling back to ungrouped rebuilds with raw data objects again; selection
+				// should resolve to the same group object, not be dropped.
+				view.IsGrouped = false;
+				Assert.Same(group, list.SelectedItem);
+			};
+		});
+	}
+
 	static object? GroupData(object item) => item.GetType().GetProperty("Data")!.GetValue(item);
 
 	[Fact]
@@ -152,9 +183,7 @@ public class CollectionViewObservableSourceTests
 			});
 			return (handler, list, empty) =>
 			{
-				var cache = (IDictionary<object, View>)typeof(MauiCollectionListBox)
-					.GetProperty("ItemMauiViews", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-					.GetValue(list)!;
+				View[] MaterializedViews() => ((IVisualTreeElement)view).GetVisualChildren().Cast<View>().ToArray();
 				void Layout()
 				{
 					list.Measure(new System.Windows.Size(400, 400));
@@ -162,29 +191,32 @@ public class CollectionViewObservableSourceTests
 					list.UpdateLayout();
 				}
 				Layout();
-				Assert.Single(cache);
+				Assert.Single(MaterializedViews());
 				for (var i = 0; i < 5; i++)
 				{
-					var oldHandlers = cache.Values
+					var oldViews = MaterializedViews();
+					var oldHandlers = oldViews
 						.SelectMany(item => ((IVisualTreeElement)item).GetVisualChildren().OfType<View>().Prepend(item))
 						.Select(item => item.Handler!).ToArray();
 					Assert.All(oldHandlers, Assert.NotNull);
 					group.Add($"Item {i}");
 					Layout();
-					Assert.Equal(group.Count, cache.Count);
+					Assert.Equal(group.Count, MaterializedViews().Length);
+					Assert.All(oldViews, item => Assert.Null(item.Parent));
 					Assert.All(oldHandlers, oldHandler => Assert.Null(oldHandler.VirtualView));
 				}
 				view.IsGrouped = false;
 				Layout();
-				var flatView = Assert.Single(cache).Value;
+				var flatView = Assert.Single(MaterializedViews());
 				var flatHandler = flatView.Handler;
 				handler.UpdateValue(nameof(ItemsView.ItemsSource));
 				Layout();
-				Assert.Same(flatView, Assert.Single(cache).Value);
+				Assert.Same(flatView, Assert.Single(MaterializedViews()));
 				Assert.Same(flatHandler, flatView.Handler);
 				Assert.NotNull(flatHandler!.VirtualView);
 				((IElementHandler)handler).DisconnectHandler();
-				Assert.Empty(cache);
+				Assert.Empty(MaterializedViews());
+				Assert.Null(flatView.Parent);
 				Assert.Null(flatHandler.VirtualView);
 			};
 		});

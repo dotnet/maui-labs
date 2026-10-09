@@ -67,6 +67,7 @@ jobs:
           - scenario: picker
             maui-version: ''
           - scenario: tap-buttons
+          - scenario: collection-view-grid
             maui-version: ''
           - scenario: bundle-resources
             maui-version: ''
