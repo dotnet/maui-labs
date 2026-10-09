@@ -73,37 +73,8 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
 
     protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
     {
-#if IOS || MACCATALYST || MACOS
-        // Enumerate only the app's persistent domain, not global/system defaults.
-        var domain = !string.IsNullOrWhiteSpace(sharedName)
-            ? sharedName!
-            : NSBundle.MainBundle.BundleIdentifier;
-        if (string.IsNullOrEmpty(domain))
-            return null;
-
-        using var representation = NSUserDefaults.StandardUserDefaults.PersistentDomainForName(domain);
-        if (representation is null)
-            return Array.Empty<string>();
-
-        var keys = new List<string>();
-        foreach (var key in representation.Keys)
-        {
-            var name = key?.ToString();
-            if (name is not null)
-                keys.Add(name);
-        }
-        return keys;
-#elif ANDROID
-        // Mirror Essentials' default or private named SharedPreferences store.
-        var context = global::Android.App.Application.Context;
-        using var prefs = string.IsNullOrWhiteSpace(sharedName)
-#pragma warning disable CS0618, CA1422 // Match Essentials' default store, including on Android 29+; the deprecated API remains supported.
-            ? global::Android.Preferences.PreferenceManager.GetDefaultSharedPreferences(context)
-#pragma warning restore CS0618, CA1422
-            : context.GetSharedPreferences(sharedName, global::Android.Content.FileCreationMode.Private);
-        var all = prefs?.All
-            ?? throw new InvalidOperationException("The Android preference store is unavailable.");
-        return new List<string>(all.Keys);
+#if IOS || MACCATALYST || MACOS || ANDROID
+        return NativePreferenceKeys.Enumerate(sharedName);
 #elif WINDOWS
         if (Microsoft.Maui.ApplicationModel.AppInfo.PackagingModel ==
             Microsoft.Maui.ApplicationModel.AppPackagingModel.Unpackaged)

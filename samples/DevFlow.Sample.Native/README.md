@@ -74,3 +74,17 @@ get/set property, screenshot) plus everything already framework-neutral (logs, n
 actions, extensions). Device, storage, sensor, theme and background-job endpoints answer `501` with
 `{ "error": "not_supported", "capability": …, "reason": … }` until the optional Essentials add-on
 is referenced.
+
+## Native Essentials preference regression
+
+The Android head can opt into the Essentials add-on without changing the default
+MAUI-free sample. This mode shares the MAUI sample's direct-write diagnostic tool,
+so the same tests cover app-written keys, app-side removals, and named stores:
+
+```bash
+DevFlowSampleEssentials=true DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=android \
+  dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter Category=Preferences
+```
+
+For a standalone build, pass `-p:DevFlowSampleEssentials=true` to the Android sample.
+Native preference enumeration is shared with the MAUI agent on Android and Apple.

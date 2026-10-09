@@ -5,6 +5,9 @@ using Android.OS;
 using Android.Views;
 using Android.Widget;
 using Microsoft.Maui.DevFlow.Agent.Native;
+#if DEVFLOW_SAMPLE_ESSENTIALS
+using Microsoft.Maui.DevFlow.Agent.Native.Essentials;
+#endif
 
 namespace DevFlow.Sample.Native.Android;
 
@@ -35,7 +38,16 @@ public class MainActivity : Activity
         base.OnCreate(savedInstanceState);
 
         // Explicit bootstrap — the agent never starts itself.
+#if DEVFLOW_SAMPLE_ESSENTIALS
+        Microsoft.Maui.ApplicationModel.Platform.Init(this, savedInstanceState);
+        var options = SampleAgentOptions.Create();
+        var diagnostics = options.RegisterExtension(
+            "com.example.diagnostics", "Native Essentials preference regression tools", "1.0.0", new[] { "seed_pref" });
+        global::DevFlow.Sample.PreferenceDiagnostics.Register(diagnostics);
+        this.StartDevFlowAgentWithEssentials(options);
+#else
         this.StartDevFlowAgent(SampleAgentOptions.Create());
+#endif
 
         SetContentView(BuildContent());
         RefreshTodos();

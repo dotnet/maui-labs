@@ -113,67 +113,7 @@ public static class MauiProgram
 					Category = "diagnostics"
 				});
 
-			// Writes a preference directly via Microsoft.Maui.Storage.Preferences,
-			// bypassing DevFlow's /preferences endpoints (so the key is NOT recorded
-			// in DevFlow's tracked-key registry). Reproduces issue #344: such keys must
-			// still appear in `preferences list` via native store enumeration.
-			diagnostics.MapTool(
-				"seed_pref",
-				"Writes or removes a preference directly via the app's Preferences store, bypassing DevFlow tracking.",
-				"POST",
-				"seed-pref",
-				request =>
-				{
-					using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(request.Body) ? "{}" : request.Body);
-					var root = document.RootElement;
-					var key = root.TryGetProperty("key", out var keyElement) ? keyElement.GetString() : null;
-					if (key is null)
-						return Task.FromResult(HttpResponse.Error("'key' is required."));
-
-					var value = root.TryGetProperty("value", out var valueElement) ? valueElement.GetString() : null;
-					var sharedName = root.TryGetProperty("sharedName", out var sharedElement) ? sharedElement.GetString() : null;
-					var remove = root.TryGetProperty("remove", out var removeElement) && removeElement.GetBoolean();
-
-					if (remove)
-						Microsoft.Maui.Storage.Preferences.Default.Remove(key, sharedName);
-					else
-						Microsoft.Maui.Storage.Preferences.Default.Set(key, value ?? string.Empty, sharedName);
-
-					return Task.FromResult(HttpResponse.Json(new
-					{
-						key,
-						value = value ?? string.Empty,
-						sharedName,
-						seeded = !remove
-					}));
-				},
-				parameters: JsonDocument.Parse("""
-				{
-				  "type": "object",
-				  "properties": {
-				    "key": { "type": "string" },
-				    "value": { "type": "string" },
-				    "sharedName": { "type": "string" },
-				    "remove": { "type": "boolean" }
-				  },
-				  "required": ["key"]
-				}
-				""").RootElement.Clone(),
-				returns: JsonDocument.Parse("""
-				{
-				  "type": "object",
-				  "properties": {
-				    "key": { "type": "string" },
-				    "value": { "type": "string" },
-				    "sharedName": { "type": "string" },
-				    "seeded": { "type": "boolean" }
-				  }
-				}
-				""").RootElement.Clone(),
-				annotations: new ExtensionToolAnnotations
-				{
-					Category = "diagnostics"
-				});
+			PreferenceDiagnostics.Register(diagnostics);
 		});
 		builder.AddMauiBlazorDevFlowTools();
 #endif

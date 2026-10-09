@@ -19,7 +19,9 @@
 
   <!-- Essentials endpoint implementations, shared with the optional add-on for plain .NET apps. -->
   <ItemGroup>
-    <Compile Include="..\Shared.Essentials\**\*.cs" LinkBase="Essentials" />
+    <Compile Include="..\Shared.Essentials\**\*.cs"
+             Exclude="..\Shared.Essentials\NativePreferenceKeys.cs"
+             LinkBase="Essentials" />
   </ItemGroup>
 
   <ItemGroup>
