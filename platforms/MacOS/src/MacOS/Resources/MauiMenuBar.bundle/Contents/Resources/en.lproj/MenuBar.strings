@@ -1,0 +1,17 @@
+"AboutApp" = "About {0}";
+"HideApp" = "Hide {0}";
+"HideOthers" = "Hide Others";
+"ShowAll" = "Show All";
+"QuitApp" = "Quit {0}";
+"Edit" = "Edit";
+"Undo" = "Undo";
+"Redo" = "Redo";
+"Cut" = "Cut";
+"Copy" = "Copy";
+"Paste" = "Paste";
+"Delete" = "Delete";
+"SelectAll" = "Select All";
+"Window" = "Window";
+"Minimize" = "Minimize";
+"Zoom" = "Zoom";
+"EnterFullScreen" = "Enter Full Screen";

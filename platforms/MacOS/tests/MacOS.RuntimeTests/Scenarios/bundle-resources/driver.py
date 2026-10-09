@@ -2,43 +2,10 @@
 
 import os
 from pathlib import Path
-import xml.etree.ElementTree as ET
-from zipfile import ZipFile
-
-from run import REPO
+from run import REPO, package_properties
 
 
 PACKAGE_IDS = ("Microsoft.Maui.Platforms.MacOS", "Microsoft.Maui.Platforms.MacOS.Essentials")
-
-
-def package_properties(directory):
-    packages = {}
-    for path in Path(directory).rglob("*.nupkg"):
-        with ZipFile(path) as archive:
-            nuspecs = [name for name in archive.namelist() if name.endswith(".nuspec")]
-            if len(nuspecs) != 1:
-                raise ValueError(f"Expected one nuspec in {path}.")
-            metadata = ET.fromstring(archive.read(nuspecs[0])).find("{*}metadata")
-            package_id = metadata.findtext("{*}id")
-            if package_id not in PACKAGE_IDS:
-                continue
-            if package_id in packages:
-                raise ValueError(f"Ambiguous package: {package_id}")
-            version = metadata.findtext("{*}version")
-            if not version:
-                raise ValueError(f"Missing package version: {path}")
-            packages[package_id] = (version, path.parent.resolve())
-    if set(packages) != set(PACKAGE_IDS):
-        raise ValueError(f"Expected core and Essentials packages under {directory}.")
-    versions = {version for version, _ in packages.values()}
-    if len(versions) != 1:
-        raise ValueError("Core and Essentials package versions must match.")
-    sources = sorted({str(source) for _, source in packages.values()})
-    return {
-        "RuntimeTestsUseProjectReferences": "false",
-        "ResourceTestPackageVersion": versions.pop(),
-        "RestoreAdditionalProjectSources": "%3B".join(sources),
-    }
 
 
 def assert_package_references(path, version):

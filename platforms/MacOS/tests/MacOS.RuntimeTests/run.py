@@ -11,11 +11,45 @@ import re
 import signal
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
+from zipfile import ZipFile
 
 
 HOST = Path(__file__).resolve().parent
 REPO = HOST.parents[3]
 IDENTIFIER = re.compile(r"[a-z][a-z0-9-]*\Z")
+
+
+def package_properties(directory):
+    """Resolve the backend and Essentials from an actual product package artifact."""
+    package_ids = ("Microsoft.Maui.Platforms.MacOS", "Microsoft.Maui.Platforms.MacOS.Essentials")
+    packages = {}
+    for path in Path(directory).rglob("*.nupkg"):
+        with ZipFile(path) as archive:
+            nuspecs = [name for name in archive.namelist() if name.endswith(".nuspec")]
+            if len(nuspecs) != 1:
+                raise ValueError(f"Expected one nuspec in {path}.")
+            metadata = ET.fromstring(archive.read(nuspecs[0])).find("{*}metadata")
+            package_id = metadata.findtext("{*}id")
+            if package_id not in package_ids:
+                continue
+            if package_id in packages:
+                raise ValueError(f"Ambiguous package: {package_id}")
+            version = metadata.findtext("{*}version")
+            if not version:
+                raise ValueError(f"Missing package version: {path}")
+            packages[package_id] = (version, path.parent.resolve())
+    if set(packages) != set(package_ids):
+        raise ValueError(f"Expected core and Essentials packages under {directory}.")
+    versions = {version for version, _ in packages.values()}
+    if len(versions) != 1:
+        raise ValueError("Core and Essentials package versions must match.")
+    sources = sorted({str(source) for _, source in packages.values()})
+    return {
+        "RuntimeTestsUseProjectReferences": "false",
+        "ResourceTestPackageVersion": versions.pop(),
+        "RestoreAdditionalProjectSources": "%3B".join(sources),
+    }
 
 
 def contained(root, relative):
@@ -187,13 +221,13 @@ class RuntimeRunner:
             raise RuntimeError("Host did not reject an unregistered selector.")
         return output
 
-    def launch(self, output, stage, expectation=None, required_evidence=None):
+    def launch(self, output, stage, expectation=None, required_evidence=None, extra_args=()):
         directory = self.stage_directory(stage)
         result_path = directory / "result.json"
         if result_path.exists():
             raise RuntimeError(f"Refusing stale terminal evidence: {result_path}")
         log = directory / "runtime.log"
-        code = self.command([output.executable, "--scenario", self.name, "--evidence", directory],
+        code = self.command([output.executable, "--scenario", self.name, "--evidence", directory, *extra_args],
                             log, timeout=self.manifest.get("timeoutSeconds", 120), allow_failure=True)
         print(log.read_text(), flush=True)
         if not result_path.is_file():
