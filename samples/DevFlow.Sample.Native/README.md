@@ -88,3 +88,8 @@ DevFlowSampleEssentials=true DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM
 
 For a standalone build, pass `-p:DevFlowSampleEssentials=true` to the Android sample.
 Native preference enumeration is shared with the MAUI agent on Android and Apple.
+
+The on-demand **DevFlow Integration Tests** workflow can run these regressions
+on both Android backends: select `platforms=android`, `framework=both`, and
+`android-preferences-only=true`. This enables Essentials only in the native
+sample and selects the preference tests without changing the default native run.
