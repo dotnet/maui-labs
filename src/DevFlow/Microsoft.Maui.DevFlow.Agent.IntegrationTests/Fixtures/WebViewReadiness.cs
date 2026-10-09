@@ -1,5 +1,5 @@
-using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 
@@ -76,13 +76,18 @@ internal static class WebViewReadiness
     {
         if (context.ValueKind == JsonValueKind.Undefined)
             return null;
-        return context.GetProperty("index").GetInt32().ToString(CultureInfo.InvariantCulture);
+        if (context.TryGetProperty("id", out var id) &&
+            id.ValueKind == JsonValueKind.String &&
+            id.GetString() is { } contextId &&
+            Regex.IsMatch(contextId, @"\Awebview-(0|[1-9][0-9]*)\z", RegexOptions.CultureInvariant))
+            return contextId;
+        throw new InvalidOperationException(
+            $"The newest active Main registration must have a canonical webview-<index> id. Context: {context}");
     }
 
     static bool IsReady(JsonElement context)
         => context.ValueKind != JsonValueKind.Undefined &&
-            (context.TryGetProperty("ready", out var ready) && ready.ValueKind == JsonValueKind.True ||
-             context.TryGetProperty("isReady", out var legacyReady) && legacyReady.ValueKind == JsonValueKind.True);
+            context.TryGetProperty("ready", out var ready) && ready.ValueKind == JsonValueKind.True;
 
     static bool HasValue(JsonElement response, JsonValueKind kind, string expected)
         => response.GetProperty("result").GetProperty("result").TryGetProperty("value", out var value) &&

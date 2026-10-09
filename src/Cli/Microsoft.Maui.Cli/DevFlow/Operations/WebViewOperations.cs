@@ -6,13 +6,13 @@ namespace Microsoft.Maui.Cli.DevFlow;
 
 internal sealed class WebViewOperations(AgentClient client)
 {
-    internal async Task<string> EvaluateAsync(string expression, string? webview = null)
+    internal async Task<string> EvaluateAsync(string expression, string? contextId = null)
     {
         var root = await client.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
         {
             ["expression"] = expression,
             ["returnByValue"] = true
-        }, webview);
+        }, contextId);
 
         if (root.TryGetProperty("result", out var evalResult))
         {
@@ -40,13 +40,13 @@ internal sealed class WebViewOperations(AgentClient client)
         return root.ToString();
     }
 
-    internal async Task<JsonElement?> BrowserGetVersionAsync(string? webview = null) =>
-        await client.SendCdpCommandAsync("Browser.getVersion", webviewId: webview);
+    internal async Task<JsonElement?> BrowserGetVersionAsync(string? contextId = null) =>
+        await client.SendCdpCommandAsync("Browser.getVersion", contextId: contextId);
 
-    internal async Task<JsonElement?> DomGetDocumentAsync(string? webview = null) =>
-        await client.SendCdpCommandAsync("DOM.getDocument", webviewId: webview);
+    internal async Task<JsonElement?> DomGetDocumentAsync(string? contextId = null) =>
+        await client.SendCdpCommandAsync("DOM.getDocument", contextId: contextId);
 
-    internal Task<string> DomQuerySelectorAsync(string selector, string? webview = null) =>
+    internal Task<string> DomQuerySelectorAsync(string selector, string? contextId = null) =>
         EvaluateAsync($@"
                 JSON.stringify((function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
@@ -58,9 +58,9 @@ internal sealed class WebViewOperations(AgentClient client)
                         textContent: el.textContent?.trim().substring(0, 100) || null
                     }};
                 }})())
-            ", webview);
+            ", contextId);
 
-    internal Task<string> DomQuerySelectorAllAsync(string selector, string? webview = null) =>
+    internal Task<string> DomQuerySelectorAllAsync(string selector, string? contextId = null) =>
         EvaluateAsync($@"
                 JSON.stringify((function() {{
                     const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)});
@@ -72,27 +72,27 @@ internal sealed class WebViewOperations(AgentClient client)
                         textContent: el.textContent?.trim().substring(0, 50) || null
                     }}));
                 }})(), null, 2)
-            ", webview);
+            ", contextId);
 
-    internal Task<string> DomGetOuterHtmlAsync(string selector, string? webview = null) =>
-        EvaluateAsync($@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", webview);
+    internal Task<string> DomGetOuterHtmlAsync(string selector, string? contextId = null) =>
+        EvaluateAsync($@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", contextId);
 
-    internal async Task PageNavigateAsync(string url, string? webview = null) =>
+    internal async Task PageNavigateAsync(string url, string? contextId = null) =>
         await client.SendCdpCommandAsync("Page.navigate", new JsonObject
         {
             ["url"] = url
-        }, webview);
+        }, contextId);
 
-    internal async Task PageReloadAsync(string? webview = null) =>
-        await client.SendCdpCommandAsync("Page.reload", webviewId: webview);
+    internal async Task PageReloadAsync(string? contextId = null) =>
+        await client.SendCdpCommandAsync("Page.reload", contextId: contextId);
 
-    internal async Task<string?> PageCaptureScreenshotAsync(string? webview = null)
+    internal async Task<string?> PageCaptureScreenshotAsync(string? contextId = null)
     {
-        var bytes = await client.GetWebViewScreenshotAsync(webview);
+        var bytes = await client.GetWebViewScreenshotAsync(contextId);
         return Convert.ToBase64String(bytes);
     }
 
-    internal Task<string> InputDispatchClickAsync(string selector, string? webview = null) =>
+    internal Task<string> InputDispatchClickAsync(string selector, string? contextId = null) =>
         EvaluateAsync($@"
                 (function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
@@ -100,15 +100,15 @@ internal sealed class WebViewOperations(AgentClient client)
                     el.click();
                     return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
                 }})()
-            ", webview);
+            ", contextId);
 
-    internal async Task InputInsertTextAsync(string text, string? webview = null) =>
+    internal async Task InputInsertTextAsync(string text, string? contextId = null) =>
         await client.SendCdpCommandAsync("Input.insertText", new JsonObject
         {
             ["text"] = text
-        }, webview);
+        }, contextId);
 
-    internal Task<string> InputFillAsync(string selector, string text, string? webview = null) =>
+    internal Task<string> InputFillAsync(string selector, string text, string? contextId = null) =>
         EvaluateAsync($@"
                 (function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
@@ -125,28 +125,28 @@ internal sealed class WebViewOperations(AgentClient client)
                     el.dispatchEvent(new Event('change', {{ bubbles: true }}));
                     return 'Filled: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' with ' + text.length + ' chars';
                 }})()
-            ", webview);
+            ", contextId);
 
-    internal async Task<(bool IsReady, int WebViewCount)> GetStatusAsync()
+    internal async Task<(bool IsReady, int WebViewCount)> GetStatusAsync(string? contextId = null)
     {
-        // AgentStatus does not expose these legacy CDP fields.
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        using var response = await http.GetAsync($"{client.BaseUrl}/api/v1/agent/status");
-        var body = await response.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(body);
-        var root = doc.RootElement;
-        var cdpReady = root.TryGetProperty("cdpReady", out var cdpProp) && cdpProp.GetBoolean();
-        var cdpCount = root.TryGetProperty("cdpWebViewCount", out var countProp) ? countProp.GetInt32() : 0;
-        return (cdpReady, cdpCount);
+        var contexts = (await client.GetCdpWebViewsAsync()).GetProperty("webviews").EnumerateArray().ToArray();
+        if (contextId is not null)
+        {
+            var selected = contexts.SingleOrDefault(context => context.GetProperty("id").GetString() == contextId);
+            if (selected.ValueKind == JsonValueKind.Undefined)
+                throw new InvalidOperationException($"WebView context '{contextId}' not found. Use webview webviews to list canonical context IDs.");
+            return (selected.GetProperty("ready").GetBoolean(), contexts.Length);
+        }
+        return (contexts.Any(context => context.GetProperty("ready").GetBoolean()), contexts.Length);
     }
 
     internal Task<JsonElement> GetWebViewsAsync() =>
         client.GetCdpWebViewsAsync();
 
-    internal Task<string> GetSourceAsync(string? webview = null) =>
-        client.GetCdpSourceAsync(webview);
+    internal Task<string> GetSourceAsync(string? contextId = null) =>
+        client.GetCdpSourceAsync(contextId);
 
-    internal Task<string> SnapshotAsync(string? webview = null) =>
+    internal Task<string> SnapshotAsync(string? contextId = null) =>
         EvaluateAsync(@"
                 (function() {
                     function walk(node, depth) {
@@ -183,5 +183,5 @@ internal sealed class WebViewOperations(AgentClient client)
 
                     return 'Title: ' + document.title + '\nURL: ' + location.href + '\n\n' + walk(document.body, 0);
                 })()
-            ", webview);
+            ", contextId);
 }

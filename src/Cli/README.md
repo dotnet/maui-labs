@@ -377,18 +377,18 @@ maui devflow storage files download logs/app.log --output ./downloads/
 maui devflow storage files download logs/app.log --output ./downloads/app-copy.log
 ```
 
-DevFlow WebView DOM and input helpers accept `--webview` (or `-w`) to select a
-WebView by index, AutomationId, or element ID; omitting it selects the first
-WebView. The `cdp` alias accepts the same options. The target is sent with the
+DevFlow WebView DOM and input helpers accept `--context-id` with a canonical ID
+from `webview webviews`; omitting it selects the active WebView. The `cdp`
+alias accepts the same option. Blank and invalid IDs fail. The target is sent with the
 request, not inserted into the generated JavaScript:
 
 ```bash
 maui devflow webview webviews
-maui devflow webview --webview Right DOM querySelector "#name"
-maui devflow webview -w Right snapshot
-maui devflow webview -w Right Input fill "#name" "Hello"
-maui devflow webview -w Right Input dispatchClickEvent "#submit"
-maui devflow webview -w Right Input insertText "More text"
+maui devflow webview --context-id webview-1 DOM querySelector "#name"
+maui devflow webview --context-id webview-1 snapshot
+maui devflow webview --context-id webview-1 Input fill "#name" "Hello"
+maui devflow webview --context-id webview-1 Input dispatchClickEvent "#submit"
+maui devflow webview --context-id webview-1 Input insertText "More text"
 ```
 
 `fill` sets the matching field's value and dispatches input/change events;

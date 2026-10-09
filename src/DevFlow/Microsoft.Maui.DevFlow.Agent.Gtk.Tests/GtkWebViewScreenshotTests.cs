@@ -30,7 +30,7 @@ public class GtkWebViewScreenshotTests
         service.AddBridge(second);
         await Task.WhenAll(first.InitializeAsync(), second.InitializeAsync());
 
-        using var response = JsonDocument.Parse(await agent.SendToAsync("BlazorWebView",
+        using var response = JsonDocument.Parse(await agent.SendToAsync("webview-1",
             """{"id":71,"method":"Page.captureScreenshot","params":{"format":"png"}}"""));
 
         Assert.Equal(71, response.RootElement.GetProperty("id").GetInt32());

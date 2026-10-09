@@ -16,7 +16,7 @@ public class WebViewScreenshotToolsTests
         await server.StartAsync();
         var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
 
-        var content = await CdpTools.WebViewScreenshot(session, "Left View/#");
+        var content = await CdpTools.WebViewScreenshot(session, contextId: "webview-1");
 
         Assert.Contains("screenshot captured", Assert.IsType<TextContentBlock>(content[0]).Text);
         var image = Assert.IsType<ImageContentBlock>(content[1]);
@@ -25,7 +25,7 @@ public class WebViewScreenshotToolsTests
             Convert.FromBase64String(System.Text.Encoding.UTF8.GetString(image.Data.Span)));
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
         Assert.Equal("GET", request.Method);
-        Assert.Contains("webview=Left%20View%2F%23", request.QueryString);
+        Assert.Equal("?contextId=webview-1", request.QueryString);
         Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
     }
 
@@ -39,8 +39,11 @@ public class WebViewScreenshotToolsTests
         await server.StartAsync();
         var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
 
-        var error = await Assert.ThrowsAsync<McpException>(() => CdpTools.WebViewScreenshot(session));
+        var error = await Assert.ThrowsAsync<McpException>(() => CdpTools.WebViewScreenshot(session, contextId: "webview-1"));
 
         Assert.Contains(expected, error.Message);
+        Assert.Equal("?contextId=webview-1",
+            Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot").QueryString);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
     }
 }

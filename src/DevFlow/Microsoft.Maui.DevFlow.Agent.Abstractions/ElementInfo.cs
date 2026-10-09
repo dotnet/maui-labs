@@ -407,6 +407,9 @@ public class ElementNativeViewInfo
 /// </summary>
 public class CdpWebViewInfo
 {
+    [JsonPropertyName("id")]
+    public string ContextId => $"webview-{Index}";
+
     [JsonPropertyName("index")]
     public int Index { get; set; }
 
@@ -425,7 +428,7 @@ public class CdpWebViewInfo
     [JsonPropertyName("hostKind")]
     public string HostKind { get; set; } = "webview";
 
-    [JsonPropertyName("isReady")]
+    [JsonPropertyName("ready")]
     public bool IsReady => ReadyCheck?.Invoke() ?? false;
 
     [JsonIgnore]

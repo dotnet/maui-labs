@@ -25,10 +25,8 @@ public class WebViewCliTargetingTests
 
         foreach (var (alias, option, target) in new[]
         {
-            ("webview", "--webview", "Left"),
-            ("cdp", "-w", "Right"),
-            ("webview", "-w", "1"),
-            ("webview", "--webview", "el-right & pane")
+            ("webview", "--context-id", "webview-0"),
+            ("cdp", "--context-id", "webview-1")
         })
         {
             server.ClearRecordedRequests();
@@ -36,7 +34,7 @@ public class WebViewCliTargetingTests
 
             Assert.Equal(0, result.ExitCode);
             var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
-            Assert.Equal($"?webview={Uri.EscapeDataString(target)}", request.QueryString);
+            Assert.Equal($"?contextId={target}", request.QueryString);
             AssertExpression(request, command);
             Assert.DoesNotContain(server.RecordedRequests, r => r.Path.StartsWith("/api/v1/webview/input/", StringComparison.Ordinal));
         }
@@ -64,8 +62,8 @@ public class WebViewCliTargetingTests
     }
 
     [Theory]
-    [InlineData("webview", "--webview", "Left")]
-    [InlineData("cdp", "-w", "Right")]
+    [InlineData("webview", "--context-id", "webview-0")]
+    [InlineData("cdp", "--context-id", "webview-1")]
     [InlineData("webview", null, null)]
     public async Task InsertText_PreservesCdpMethodAndTarget(string alias, string? option, string? target)
     {
@@ -81,7 +79,7 @@ public class WebViewCliTargetingTests
         Assert.Equal(0, result.ExitCode);
         Assert.Equal($"Inserted: {Text.Length} characters", result.StdOut);
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
-        Assert.Equal(target is null ? string.Empty : $"?webview={Uri.EscapeDataString(target)}", request.QueryString);
+        Assert.Equal(target is null ? string.Empty : $"?contextId={target}", request.QueryString);
         using var body = JsonDocument.Parse(request.Body!);
         Assert.Equal("Input.insertText", body.RootElement.GetProperty("method").GetString());
         Assert.Equal(Text, body.RootElement.GetProperty("params").GetProperty("text").GetString());

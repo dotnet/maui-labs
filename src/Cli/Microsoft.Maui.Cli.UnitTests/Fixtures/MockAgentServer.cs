@@ -117,6 +117,7 @@ public sealed class MockAgentServer : IAsyncDisposable
     public bool BindToLocalhost { get; init; }
 
     public string? WebViewEvaluateResponse { get; set; }
+    public string? WebViewContextsResponse { get; set; }
     public string? AgentStatusResponse { get; set; }
     public string? FileDownloadResponse { get; set; }
     public string BrokerHealthResponse { get; set; } = """{"agents":2}""";
@@ -602,7 +603,7 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     private void RegisterWebViewEndpoints(WebApplication app)
     {
-        app.MapGet("/api/v1/webview/contexts", () => Results.Content(MockAgentResponses.WebViews, "application/json"));
+        app.MapGet("/api/v1/webview/contexts", () => Results.Content(WebViewContextsResponse ?? MockAgentResponses.WebViews, "application/json"));
         app.MapGet("/api/v1/webview/source", () => Results.Content(
             _webViewSourceResponse ?? MockAgentResponses.WebViewSource, "text/html", statusCode: _webViewResponseStatusCode));
         app.MapGet("/api/v1/webview/dom", () => Results.Content("""{"root":{"tag":"html"}}""", "application/json"));

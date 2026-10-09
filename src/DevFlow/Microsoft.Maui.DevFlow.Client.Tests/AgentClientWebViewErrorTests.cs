@@ -6,6 +6,45 @@ namespace Microsoft.Maui.DevFlow.Client.Tests;
 public class AgentClientWebViewErrorTests
 {
     [Theory]
+    [InlineData("evaluate")]
+    [InlineData("source")]
+    [InlineData("screenshot")]
+    [InlineData("navigate")]
+    [InlineData("click")]
+    [InlineData("fill")]
+    [InlineData("text")]
+    public async Task ContextSelection_ExplicitInvalidValues_AreForwardedNotNormalized(string operation)
+    {
+        foreach (var contextId in new[] { "", " ", "\t", "1", "AutomationId", "element-id", "webview-01", "webview-2" })
+        {
+            using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json(
+                """{"success":false,"error":"Invalid contextId"}""", statusCode: 400));
+            using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
+            await Assert.ThrowsAsync<HttpRequestException>(async () =>
+            {
+                switch (operation)
+                {
+                    case "evaluate": await client.SendCdpCommandAsync("Runtime.evaluate", contextId: contextId); break;
+                    case "source": await client.GetCdpSourceAsync(contextId); break;
+                    case "screenshot": await client.GetWebViewScreenshotAsync(contextId); break;
+                    case "navigate": await client.NavigateWebViewAsync("/next", contextId); break;
+                    case "click": await client.ClickWebViewAsync("button", contextId); break;
+                    case "fill": await client.FillWebViewAsync("input", "hello", contextId); break;
+                    case "text": await client.InsertWebViewTextAsync("typed", contextId); break;
+                }
+            });
+            var request = Assert.Single(agent.Requests);
+            if (operation is "evaluate" or "source" or "screenshot")
+                Assert.Equal($"contextId={Uri.EscapeDataString(contextId)}", request.Query);
+            else
+            {
+                using var body = System.Text.Json.JsonDocument.Parse(request.Body);
+                Assert.Equal(contextId, body.RootElement.GetProperty("contextId").GetString());
+            }
+        }
+    }
+
+    [Theory]
     [InlineData("""{"success":false,"error":"No WebViews registered"}""", "No WebViews registered")]
     [InlineData("<html>Bridge unavailable</html>", "Bridge unavailable")]
     public async Task SendCdpCommandAsync_HttpFailure_ThrowsWithAgentError(string response, string expected)
@@ -54,15 +93,31 @@ public class AgentClientWebViewErrorTests
     }
 
     [Fact]
+    public async Task SendCdpCommandAsync_ForwardsContextInQueryOutsideRawCommand()
+    {
+        using var agent = FakeAgent.StartJson("""{"result":{"result":{"value":2}}}""");
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
+
+        var result = await client.SendCdpCommandAsync("Runtime.evaluate", contextId: "webview-1");
+
+        Assert.Equal(2, result.GetProperty("result").GetProperty("result").GetProperty("value").GetInt32());
+        var request = Assert.Single(agent.Requests);
+        Assert.Equal("contextId=webview-1", request.Query);
+        using var body = System.Text.Json.JsonDocument.Parse(request.Body);
+        Assert.False(body.RootElement.TryGetProperty("contextId", out _));
+    }
+
+    [Fact]
     public async Task GetCdpSourceAsync_HttpFailure_ThrowsWithAgentDetails()
     {
         using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json(
             """{"success":false,"error":"ReferenceError: source failed"}""", statusCode: 400));
         using var client = new AgentClient("localhost", agent.Port);
 
-        var error = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetCdpSourceAsync());
+        var error = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetCdpSourceAsync("webview-1"));
 
         Assert.Contains("ReferenceError: source failed", error.Message);
+        Assert.Equal("contextId=webview-1", Assert.Single(agent.Requests).Query);
     }
 
     [Theory]
@@ -109,14 +164,17 @@ public class AgentClientWebViewErrorTests
         using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
         Assert.True(await PerformActionAsync(client, action));
+        using var body = System.Text.Json.JsonDocument.Parse(Assert.Single(agent.Requests).Body);
+        Assert.Equal("webview-1", body.RootElement.GetProperty("contextId").GetString());
     }
 
     private static Task<bool> PerformActionAsync(AgentClient client, string action) => action switch
     {
-        "navigate" => client.NavigateWebViewAsync("/next"),
-        "click" => client.ClickWebViewAsync("button"),
-        "fill" => client.FillWebViewAsync("input", "hello"),
-        "text" => client.InsertWebViewTextAsync("typed"),
+        "navigate" => client.NavigateWebViewAsync("/next", "webview-1"),
+        "click" => client.ClickWebViewAsync("button", "webview-1"),
+        "fill" => client.FillWebViewAsync("input", "hello", "webview-1"),
+        "text" => client.InsertWebViewTextAsync("typed", "webview-1"),
         _ => throw new ArgumentOutOfRangeException(nameof(action))
     };
+
 }

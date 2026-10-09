@@ -10,6 +10,92 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class WebViewOperationsTests
 {
     [Theory]
+    [InlineData("evaluate")]
+    [InlineData("version")]
+    [InlineData("document")]
+    [InlineData("query")]
+    [InlineData("queryAll")]
+    [InlineData("html")]
+    [InlineData("navigate")]
+    [InlineData("reload")]
+    [InlineData("screenshot")]
+    [InlineData("click")]
+    [InlineData("text")]
+    [InlineData("fill")]
+    [InlineData("status")]
+    [InlineData("contexts")]
+    [InlineData("source")]
+    [InlineData("snapshot")]
+    public async Task AllOperations_UseCanonicalContextOutsideCommandPayload(string operation)
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port) { AutoAcquireMutationLease = false };
+        var operations = new WebViewOperations(client);
+        using var listed = JsonDocument.Parse(MockAgentResponses.WebViews);
+        var contextId = Assert.Single(listed.RootElement.GetProperty("webviews").EnumerateArray())
+            .GetProperty("id").GetString()!;
+
+        switch (operation)
+        {
+            case "evaluate": await operations.EvaluateAsync("1+1", contextId: contextId); break;
+            case "version": await operations.BrowserGetVersionAsync(contextId: contextId); break;
+            case "document": await operations.DomGetDocumentAsync(contextId: contextId); break;
+            case "query": await operations.DomQuerySelectorAsync("#target", contextId: contextId); break;
+            case "queryAll": await operations.DomQuerySelectorAllAsync("#target", contextId: contextId); break;
+            case "html": await operations.DomGetOuterHtmlAsync("#target", contextId: contextId); break;
+            case "navigate": await operations.PageNavigateAsync("/next", contextId: contextId); break;
+            case "reload": await operations.PageReloadAsync(contextId: contextId); break;
+            case "screenshot": await operations.PageCaptureScreenshotAsync(contextId: contextId); break;
+            case "click": await operations.InputDispatchClickAsync("#target", contextId: contextId); break;
+            case "text": await operations.InputInsertTextAsync("text", contextId: contextId); break;
+            case "fill": await operations.InputFillAsync("#target", "text", contextId: contextId); break;
+            case "status": Assert.Equal((true, 1), await operations.GetStatusAsync(contextId: contextId)); break;
+            case "contexts": await operations.GetWebViewsAsync(); break;
+            case "source": await operations.GetSourceAsync(contextId: contextId); break;
+            case "snapshot": await operations.SnapshotAsync(contextId: contextId); break;
+            default: throw new ArgumentOutOfRangeException(nameof(operation));
+        }
+
+        var request = Assert.Single(server.RecordedRequests);
+        Assert.Equal(operation switch
+        {
+            "screenshot" => "/api/v1/webview/screenshot",
+            "source" => "/api/v1/webview/source",
+            "status" or "contexts" => "/api/v1/webview/contexts",
+            _ => "/api/v1/webview/evaluate"
+        }, request.Path);
+        Assert.Equal(operation is "status" or "contexts" ? "" : $"?contextId={contextId}", request.QueryString);
+        if (request.Body is not null)
+        {
+            using var body = JsonDocument.Parse(request.Body);
+            Assert.False(body.RootElement.TryGetProperty("contextId", out _));
+            Assert.False(body.RootElement.TryGetProperty("webviewId", out _));
+        }
+        Assert.DoesNotContain(server.RecordedRequests, request => request.Path.StartsWith("/api/v1/webview/input/", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("1")]
+    [InlineData("Main")]
+    [InlineData("main-element")]
+    [InlineData("webview-01")]
+    public async Task GetStatusAsync_InvalidExplicitTarget_DoesNotUseDefaultOrDispatchCdp(string contextId)
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new WebViewOperations(client).GetStatusAsync(contextId));
+
+        Assert.Contains("not found", error.Message);
+        Assert.Equal("/api/v1/webview/contexts", Assert.Single(server.RecordedRequests).Path);
+    }
+
+    [Theory]
     [InlineData("""{"result":{"result":{"value":"hello\n'world'\\"}}}""", "hello\n'world'\\")]
     [InlineData("""{"result":{"result":{"value":2}}}""", "2")]
     [InlineData("""{"result":{"result":{"value":true}}}""", "True")]
@@ -26,11 +112,11 @@ public class WebViewOperationsTests
         using var client = new AgentClient("localhost", server.Port);
         var operations = new WebViewOperations(client);
 
-        var actual = await operations.EvaluateAsync("fixtureExpression", "Right & pane");
+        var actual = await operations.EvaluateAsync("fixtureExpression", contextId: "webview-1");
 
         Assert.Equal(expected, actual.Replace("\r\n", "\n"));
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
-        Assert.Equal("?webview=Right%20%26%20pane", request.QueryString);
+        Assert.Equal("?contextId=webview-1", request.QueryString);
         using var body = JsonDocument.Parse(request.Body!);
         Assert.Equal("Runtime.evaluate", body.RootElement.GetProperty("method").GetString());
         Assert.Equal("fixtureExpression", body.RootElement.GetProperty("params").GetProperty("expression").GetString());
@@ -48,7 +134,7 @@ public class WebViewOperationsTests
         using var client = new AgentClient("localhost", server.Port);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => new WebViewOperations(client).EvaluateAsync("fixtureExpression", "Right"));
+            () => new WebViewOperations(client).EvaluateAsync("fixtureExpression", contextId: "webview-1"));
 
         Assert.Contains(expected, error.Message);
         Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
@@ -91,27 +177,27 @@ public class WebViewOperationsTests
         switch (method)
         {
             case "Browser.getVersion":
-                var version = await operations.BrowserGetVersionAsync("Right");
+                var version = await operations.BrowserGetVersionAsync(contextId: "webview-1");
                 Assert.Equal("Chrome/120.0", version!.Value.GetProperty("result").GetProperty("product").GetString());
                 break;
             case "DOM.getDocument":
-                var document = await operations.DomGetDocumentAsync("Right");
+                var document = await operations.DomGetDocumentAsync(contextId: "webview-1");
                 Assert.Equal("#document", document!.Value.GetProperty("result").GetProperty("root").GetProperty("nodeName").GetString());
                 break;
             case "Page.navigate":
-                await operations.PageNavigateAsync(value, "Right");
+                await operations.PageNavigateAsync(value, contextId: "webview-1");
                 break;
             case "Page.reload":
-                await operations.PageReloadAsync("Right");
+                await operations.PageReloadAsync(contextId: "webview-1");
                 break;
             case "Input.insertText":
-                await operations.InputInsertTextAsync(value, "Right");
+                await operations.InputInsertTextAsync(value, contextId: "webview-1");
                 break;
         }
 
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
         Assert.Equal("POST", request.Method);
-        Assert.Equal("?webview=Right", request.QueryString);
+        Assert.Equal("?contextId=webview-1", request.QueryString);
         using var body = JsonDocument.Parse(request.Body!);
         Assert.Equal(method, body.RootElement.GetProperty("method").GetString());
         if (method is "Page.navigate" or "Input.insertText")
@@ -143,12 +229,12 @@ public class WebViewOperationsTests
         await server.StartAsync();
         using var client = new AgentClient("localhost", server.Port);
 
-        var actual = await new WebViewOperations(client).PageCaptureScreenshotAsync("1");
+        var actual = await new WebViewOperations(client).PageCaptureScreenshotAsync(contextId: "webview-1");
 
         Assert.Equal(MockAgentResponses.ScreenshotPng, Convert.FromBase64String(actual!));
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
         Assert.Equal("GET", request.Method);
-        Assert.Equal("?webview=1", request.QueryString);
+        Assert.Equal("?contextId=webview-1", request.QueryString);
         Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
     }
 
@@ -180,18 +266,18 @@ public class WebViewOperationsTests
     }
 
     [Theory]
-    [InlineData("""{"cdpReady":true,"cdpWebViewCount":2}""", true, 2)]
-    [InlineData("{}", false, 0)]
-    public async Task GetStatusAsync_ReadsLegacyFieldsWithoutCdpOrLeaseCalls(string response, bool ready, int count)
+    [InlineData("""{"webviews":[{"id":"webview-0","ready":false},{"id":"webview-1","ready":true}]}""", true, 2)]
+    [InlineData("""{"webviews":[]}""", false, 0)]
+    public async Task GetStatusAsync_ReadsCanonicalReadinessWithoutCdpOrLeaseCalls(string response, bool ready, int count)
     {
-        await using var server = new MockAgentServer { AgentStatusResponse = response };
+        await using var server = new MockAgentServer { WebViewContextsResponse = response };
         await server.StartAsync();
         using var client = new AgentClient("localhost", server.Port);
 
         var result = await new WebViewOperations(client).GetStatusAsync();
 
         Assert.Equal((ready, count), result);
-        Assert.Equal("/api/v1/agent/status", Assert.Single(server.RecordedRequests).Path);
+        Assert.Equal("/api/v1/webview/contexts", Assert.Single(server.RecordedRequests).Path);
     }
 
     [Fact]
@@ -199,7 +285,7 @@ public class WebViewOperationsTests
     {
         await using var server = new MockAgentServer
         {
-            AgentStatusResponse = """{"cdpReady":true,"cdpWebViewCount":2}"""
+            WebViewContextsResponse = """{"webviews":[{"id":"webview-0","ready":false},{"id":"webview-1","ready":true}]}"""
         };
         await server.StartAsync();
         var cli = new CliTestHarness(server.Port);
@@ -207,12 +293,12 @@ public class WebViewOperationsTests
         DevFlowCommands.ResolveRunningBrokerPortAsync = () => throw new InvalidOperationException("Status must not discover broker labels or forwarding.");
         try
         {
-            var result = await cli.InvokeAsync("devflow", "webview", "status", "--webview", "Right");
+            var result = await cli.InvokeAsync("devflow", "webview", "status", "--context-id", "webview-1");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Equal("Connected: CDP ready (2 WebViews)", result.StdOut);
+            Assert.Equal("Connected: webview-1 ready", result.StdOut);
             Assert.Equal("", result.StdErr);
-            Assert.Equal("/api/v1/agent/status", Assert.Single(server.RecordedRequests).Path);
+            Assert.Equal("/api/v1/webview/contexts", Assert.Single(server.RecordedRequests).Path);
         }
         finally
         {
@@ -229,12 +315,12 @@ public class WebViewOperationsTests
         var operations = new WebViewOperations(client);
 
         var contexts = await operations.GetWebViewsAsync();
-        var source = await operations.GetSourceAsync("el-right & pane");
+        var source = await operations.GetSourceAsync(contextId: "webview-1");
 
-        Assert.Equal("webview-1", Assert.Single(contexts.EnumerateArray()).GetProperty("id").GetString());
+        Assert.Equal("webview-1", Assert.Single(contexts.GetProperty("webviews").EnumerateArray()).GetProperty("id").GetString());
         Assert.Equal(MockAgentResponses.WebViewSource, source);
         var sourceRequest = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/source");
-        Assert.Equal("?webview=el-right%20%26%20pane", sourceRequest.QueryString);
+        Assert.Equal("?contextId=webview-1", sourceRequest.QueryString);
         Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/agent/lease");
     }
 
