@@ -224,7 +224,7 @@ extends:
             pool:
               name: AcesShared
               demands:
-              - ImageOverride -equals ACES_VM_SharedPool_Tahoe
+              - ImageOverride -equals ACES_VM_SharedPool_GoldenGate
               os: macOS
             templateContext:
               outputs:
@@ -246,9 +246,13 @@ extends:
                 # step invokes .dotnet/dotnet directly.
                 DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
             - script: |
-                xcodebuild -version
-                xcodebuild -version | grep -q '^Xcode 27'
-              displayName: Verify Xcode 27
+                set -euo pipefail
+                export DEVELOPER_DIR=/Applications/Xcode_27.app/Contents/Developer
+                version=$(xcodebuild -version)
+                printf '%s\n' "$version"
+                printf '%s\n' "$version" | grep -Eq '^Xcode 27([.[:space:]]|$)'
+                echo "##vso[task.setvariable variable=DEVELOPER_DIR]$DEVELOPER_DIR"
+              displayName: Select and verify Xcode 27
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
             - script: |
