@@ -4,6 +4,45 @@ namespace Microsoft.Maui.DevFlow.Client.Tests;
 
 public class AgentClientWebViewTests
 {
+    [Theory]
+    [InlineData("evaluate")]
+    [InlineData("source")]
+    [InlineData("screenshot")]
+    [InlineData("navigate")]
+    [InlineData("click")]
+    [InlineData("fill")]
+    [InlineData("text")]
+    public async Task ContextSelection_ExplicitInvalidValues_AreForwardedNotNormalized(string operation)
+    {
+        foreach (var contextId in new[] { "", " ", "\t", "1", "AutomationId", "element-id", "webview-01", "webview-2" })
+        {
+            using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json(
+                """{"success":false,"error":"Invalid contextId"}""", statusCode: 400));
+            using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
+            await Assert.ThrowsAsync<HttpRequestException>(async () =>
+            {
+                switch (operation)
+                {
+                    case "evaluate": await client.SendCdpCommandAsync("Runtime.evaluate", contextId: contextId); break;
+                    case "source": await client.GetCdpSourceAsync(contextId); break;
+                    case "screenshot": await client.GetWebViewScreenshotAsync(contextId); break;
+                    case "navigate": await client.NavigateWebViewAsync("/next", contextId); break;
+                    case "click": await client.ClickWebViewAsync("button", contextId); break;
+                    case "fill": await client.FillWebViewAsync("input", "hello", contextId); break;
+                    case "text": await client.InsertWebViewTextAsync("typed", contextId); break;
+                }
+            });
+            var request = Assert.Single(agent.Requests);
+            if (operation is "evaluate" or "source" or "screenshot")
+                Assert.Equal($"contextId={Uri.EscapeDataString(contextId)}", request.Query);
+            else
+            {
+                using var body = System.Text.Json.JsonDocument.Parse(request.Body);
+                Assert.Equal(contextId, body.RootElement.GetProperty("contextId").GetString());
+            }
+        }
+    }
+
     [Fact]
     public async Task SendCdpCommandAsync_HttpFailure_ThrowsWithAgentError()
     {
@@ -42,10 +81,10 @@ public class AgentClientWebViewTests
         using var agent = FakeAgent.StartJson("""{"result":{"result":{"value":2}}}""");
         using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
 
-        var result = await client.SendCdpCommandAsync("Runtime.evaluate", webviewId: "Left View/#");
+        var result = await client.SendCdpCommandAsync("Runtime.evaluate", contextId: "Left View/#");
 
         Assert.Equal(2, result.GetProperty("result").GetProperty("result").GetProperty("value").GetInt32());
-        Assert.Equal("webview=Left%20View%2F%23", Assert.Single(agent.Requests).Query);
+        Assert.Equal("contextId=Left%20View%2F%23", Assert.Single(agent.Requests).Query);
     }
 
     [Fact]
@@ -58,7 +97,7 @@ public class AgentClientWebViewTests
         var error = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetCdpSourceAsync("Left View/#"));
 
         Assert.Contains("ReferenceError: source failed", error.Message);
-        Assert.Equal("webview=Left%20View%2F%23", Assert.Single(agent.Requests).Query);
+        Assert.Equal("contextId=Left%20View%2F%23", Assert.Single(agent.Requests).Query);
     }
 
     [Theory]
@@ -101,15 +140,15 @@ public class AgentClientWebViewTests
 
         Assert.True(await PerformActionAsync(client, action));
         using var body = System.Text.Json.JsonDocument.Parse(Assert.Single(agent.Requests).Body);
-        Assert.Equal("LeftWebView", body.RootElement.GetProperty("contextId").GetString());
+        Assert.Equal("webview-1", body.RootElement.GetProperty("contextId").GetString());
     }
 
     private static Task<bool> PerformActionAsync(AgentClient client, string action) => action switch
     {
-        "navigate" => client.NavigateWebViewAsync("/next", "LeftWebView"),
-        "click" => client.ClickWebViewAsync("button", "LeftWebView"),
-        "fill" => client.FillWebViewAsync("input", "hello", "LeftWebView"),
-        "text" => client.InsertWebViewTextAsync("typed", "LeftWebView"),
+        "navigate" => client.NavigateWebViewAsync("/next", "webview-1"),
+        "click" => client.ClickWebViewAsync("button", "webview-1"),
+        "fill" => client.FillWebViewAsync("input", "hello", "webview-1"),
+        "text" => client.InsertWebViewTextAsync("typed", "webview-1"),
         _ => throw new ArgumentOutOfRangeException(nameof(action))
     };
 
@@ -125,7 +164,7 @@ public class AgentClientWebViewTests
         var request = Assert.Single(agent.Requests);
         Assert.Equal("GET", request.Method);
         Assert.Equal("/api/v1/webview/screenshot", request.Path);
-        Assert.Equal("webview=Left%20View%2F%23", request.Query);
+        Assert.Equal("contextId=Left%20View%2F%23", request.Query);
     }
 
     [Theory]

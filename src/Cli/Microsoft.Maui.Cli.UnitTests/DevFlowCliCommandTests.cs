@@ -875,6 +875,61 @@ public class DevFlowCliCommandTests
     // ========== webview / CDP ==========
 
     [Fact]
+    public async Task WebViewWebViews_HumanReadableOutput_ShowsCanonicalIdsAndReady()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+        var result = await cli.InvokeAsync("devflow", "webview", "webviews", "--no-json");
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("ContextId", result.StdOut);
+        Assert.Contains("Yes", result.StdOut);
+        using var contexts = JsonDocument.Parse(MockAgentResponses.WebViews);
+        foreach (var context in contexts.RootElement.GetProperty("webviews").EnumerateArray())
+            Assert.Contains(context.GetProperty("id").GetString()!, result.StdOut);
+    }
+
+    [Theory]
+    [InlineData("--webview")]
+    [InlineData("-w")]
+    public async Task WebViewSource_RemovedOption_IsRejectedWithoutDispatch(string option)
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+        var result = await cli.InvokeAsync("devflow", "webview", "source", option, "webview-1");
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/source");
+    }
+
+    [Theory]
+    [InlineData("webview-1", true)]
+    [InlineData("1", false)]
+    [InlineData("Main", false)]
+    [InlineData("main-element", false)]
+    [InlineData("", false)]
+    [InlineData(" ", false)]
+    [InlineData("webview-01", false)]
+    public async Task WebViewStatus_SelectsOnlyCanonicalContext(string contextId, bool valid)
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+        var result = await cli.InvokeAsync("devflow", "webview", "status", "--context-id", contextId);
+        Assert.Equal(valid, result.ExitCode == 0);
+        Assert.Contains(valid ? "webview-1 ready" : "not found", result.StdOut + result.StdErr);
+        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/contexts");
+    }
+
+    [Fact]
+    public async Task WebViewSource_ForwardsCanonicalContext()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+        var result = await cli.InvokeAsync("devflow", "webview", "source", "--context-id", "webview-1");
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("?contextId=webview-1",
+            Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/source").QueryString);
+    }
+
+    [Fact]
     public async Task WebViewRuntimeEvaluate_HitsEvaluateRoute()
     {
         var (server, cli) = await CreateFixturesAsync();
@@ -949,11 +1004,11 @@ public class DevFlowCliCommandTests
         await using var _ = server;
 
         var result = await cli.InvokeAsync(
-            "devflow", "webview", "--webview", "Right", "DOM", command, "#target");
+            "devflow", "webview", "--context-id", "webview-1", "DOM", command, "#target");
 
         Assert.Equal(0, result.ExitCode);
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
-        Assert.Contains("webview=Right", request.QueryString);
+        Assert.Contains("contextId=webview-1", request.QueryString);
         using var body = JsonDocument.Parse(request.Body!);
         var expression = body.RootElement.GetProperty("params").GetProperty("expression").GetString()!;
         Assert.Contains("document.querySelector", expression);
@@ -966,11 +1021,11 @@ public class DevFlowCliCommandTests
         var (server, cli) = await CreateFixturesAsync();
         await using var _ = server;
 
-        var result = await cli.InvokeAsync("devflow", "webview", "--webview", "Right", "snapshot");
+        var result = await cli.InvokeAsync("devflow", "webview", "--context-id", "webview-1", "snapshot");
 
         Assert.Equal(0, result.ExitCode);
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
-        Assert.Contains("webview=Right", request.QueryString);
+        Assert.Contains("contextId=webview-1", request.QueryString);
         using var body = JsonDocument.Parse(request.Body!);
         var expression = body.RootElement.GetProperty("params").GetProperty("expression").GetString()!;
         Assert.Contains("'  '.repeat(depth)", expression);
@@ -985,7 +1040,7 @@ public class DevFlowCliCommandTests
     {
         var (server, cli) = await CreateFixturesAsync();
         await using var _ = server;
-        var arguments = new List<string> { "devflow", "webview", "--webview", "Right", "Input", command };
+        var arguments = new List<string> { "devflow", "webview", "--context-id", "webview-1", "Input", command };
         arguments.Add(command == "insertText" ? "hello" : "#target");
         if (command == "fill")
             arguments.Add("hello");
@@ -995,7 +1050,7 @@ public class DevFlowCliCommandTests
         Assert.Equal(0, result.ExitCode);
         var request = Assert.Single(server.RecordedRequests, r => r.Path == $"/api/v1/webview/input/{endpoint}");
         using var body = JsonDocument.Parse(request.Body!);
-        Assert.Equal("Right", body.RootElement.GetProperty("contextId").GetString());
+        Assert.Equal("webview-1", body.RootElement.GetProperty("contextId").GetString());
         if (command != "insertText")
             Assert.Equal("#target", body.RootElement.GetProperty("selector").GetString());
         Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
@@ -1007,12 +1062,12 @@ public class DevFlowCliCommandTests
         var (server, cli) = await CreateFixturesAsync();
         await using var _ = server;
 
-        var result = await cli.InvokeAsync("devflow", "webview", "--webview", "Right", "Page", "captureScreenshot");
+        var result = await cli.InvokeAsync("devflow", "webview", "--context-id", "webview-1", "Page", "captureScreenshot");
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(MockAgentResponses.ScreenshotPng, Convert.FromBase64String(result.StdOut.Trim()));
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
-        Assert.Contains("webview=Right", request.QueryString);
+        Assert.Contains("contextId=webview-1", request.QueryString);
         Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
     }
 

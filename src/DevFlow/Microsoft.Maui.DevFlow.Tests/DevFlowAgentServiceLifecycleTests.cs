@@ -174,17 +174,19 @@ public class DevFlowAgentServiceLifecycleTests
             Assert.True(context.GetProperty("active").GetBoolean());
             Assert.False(string.IsNullOrEmpty(context.GetProperty("elementId").GetString()));
             Assert.True(context.GetProperty("ready").GetBoolean());
-            Assert.True(context.GetProperty("isReady").GetBoolean());
+            Assert.Equal($"webview-{index}", context.GetProperty("id").GetString());
+            Assert.False(context.TryGetProperty("isReady", out _));
         }
         foreach (var index in new[] { hiddenIndex, detachedIndex })
             Assert.False(Assert.Single(contexts, value => value.GetProperty("index").GetInt32() == index)
                 .GetProperty("active").GetBoolean());
         Assert.Equal("hybrid", contexts.Single(value => value.GetProperty("index").GetInt32() == secondIndex)
             .GetProperty("hostKind").GetString());
-        await client.SendCdpCommandAsync("DOM.getDocument", webviewId: "duplicate");
-        await client.GetWebViewScreenshotAsync(unnamedIndex.ToString(CultureInfo.InvariantCulture));
+        Assert.Equal(5, contexts.Select(context => context.GetProperty("id").GetString()).Distinct().Count());
+        await client.SendCdpCommandAsync("DOM.getDocument", contextId: $"webview-{secondIndex}");
+        await client.GetWebViewScreenshotAsync($"webview-{unnamedIndex}");
         Assert.Same(unnamed, service.CapturedOwner);
-        await client.GetWebViewScreenshotAsync(secondIndex.ToString(CultureInfo.InvariantCulture));
+        await client.GetWebViewScreenshotAsync($"webview-{secondIndex}");
         Assert.Same(second, service.CapturedOwner);
 
         app.Windows[0].Page = new ContentPage();

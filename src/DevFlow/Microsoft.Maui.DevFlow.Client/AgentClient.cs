@@ -1694,13 +1694,13 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>
-    /// Send a CDP command to a Blazor WebView.
+    /// Send a CDP command to a registered WebView. An omitted contextId selects the active host.
     /// </summary>
-    public async Task<JsonElement> SendCdpCommandAsync(string method, JsonNode? @params = null, string? webviewId = null)
+    public async Task<JsonElement> SendCdpCommandAsync(string method, JsonNode? @params = null, string? contextId = null)
     {
         var path = $"{WebViewApi}/evaluate";
-        if (!string.IsNullOrEmpty(webviewId))
-            path += $"?webview={Uri.EscapeDataString(webviewId)}";
+        if (contextId is not null)
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
 
         var body = new JsonObject
         {
@@ -1767,11 +1767,11 @@ public class AgentClient : IDisposable
         return await GetJsonAsync($"{WebViewApi}/contexts");
     }
 
-    public async Task<string> GetCdpSourceAsync(string? webviewId = null)
+    public async Task<string> GetCdpSourceAsync(string? contextId = null)
     {
         var path = $"{WebViewApi}/source";
-        if (!string.IsNullOrEmpty(webviewId))
-            path += $"?webview={Uri.EscapeDataString(webviewId)}";
+        if (contextId is not null)
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
         using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync($"{_baseUrl}{path}"));
         var body = await response.Content.ReadAsStringAsync();
         if (!response.IsSuccessStatusCode)
@@ -1781,11 +1781,11 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>Capture the registered WebView using the agent's native-first screenshot path.</summary>
-    public async Task<byte[]> GetWebViewScreenshotAsync(string? webviewId = null)
+    public async Task<byte[]> GetWebViewScreenshotAsync(string? contextId = null)
     {
         var path = $"{WebViewApi}/screenshot";
-        if (!string.IsNullOrEmpty(webviewId))
-            path += $"?webview={Uri.EscapeDataString(webviewId)}";
+        if (contextId is not null)
+            path += $"?contextId={Uri.EscapeDataString(contextId)}";
 
         using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync($"{_baseUrl}{path}"));
         if (!response.IsSuccessStatusCode)
@@ -1812,7 +1812,7 @@ public class AgentClient : IDisposable
             ["url"] = url
         };
 
-        if (!string.IsNullOrWhiteSpace(contextId))
+        if (contextId is not null)
             payload["contextId"] = contextId;
 
         return await PostWebViewActionAsync($"{WebViewApi}/navigate", payload);
@@ -1825,7 +1825,7 @@ public class AgentClient : IDisposable
             ["selector"] = selector
         };
 
-        if (!string.IsNullOrWhiteSpace(contextId))
+        if (contextId is not null)
             payload["contextId"] = contextId;
 
         return await PostWebViewActionAsync($"{WebViewApi}/input/click", payload);
@@ -1839,7 +1839,7 @@ public class AgentClient : IDisposable
             ["text"] = text
         };
 
-        if (!string.IsNullOrWhiteSpace(contextId))
+        if (contextId is not null)
             payload["contextId"] = contextId;
 
         return await PostWebViewActionAsync($"{WebViewApi}/input/fill", payload);
@@ -1852,7 +1852,7 @@ public class AgentClient : IDisposable
             ["text"] = text
         };
 
-        if (!string.IsNullOrWhiteSpace(contextId))
+        if (contextId is not null)
             payload["contextId"] = contextId;
 
         return await PostWebViewActionAsync($"{WebViewApi}/input/text", payload);

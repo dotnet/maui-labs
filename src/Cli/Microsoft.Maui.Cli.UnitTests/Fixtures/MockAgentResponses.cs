@@ -428,14 +428,19 @@ internal static class MockAgentResponses
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
 
     public const string WebViews = """
-        [
+        { "webviews": [
           {
             "id": "webview-1",
+            "index": 1,
+            "automationId": "Main",
+            "elementId": "main-element",
+            "hostKind": "blazor",
             "title": "Main BlazorWebView",
             "url": "https://0.0.0.0/",
-            "isReady": true
+            "ready": true,
+            "active": true
           }
-        ]
+        ] }
         """;
 
     public static string WebViewEvaluate(string method) => method switch

@@ -2215,7 +2215,7 @@ import { createElementTreeController } from './inspector-tree.js';
   let filesRoot = null, filesPath = '';
   let filesRoots = [];
   let filesLoadGeneration = 0;
-  let cdpWebviewId = null;
+  let cdpContextId = null;
   let dockViewGeneration = 0;
   let networkDetailId = null;
   let networkListSignature = '';
@@ -2819,28 +2819,24 @@ import { createElementTreeController } from './inspector-tree.js';
     dockBodyEl.replaceChildren(fragment);
   }
 
-  // ── Blazor WebView CDP tab — list WebViews, view source, evaluate JS ──
+  // ── WebView CDP tab — list WebViews, view source, evaluate JS ──
   function extractWebviews(v) {
-    let arr = [];
-    if (Array.isArray(v)) arr = v;
-    else if (v && Array.isArray(v.webViews)) arr = v.webViews;
-    else if (v && Array.isArray(v.webviews)) arr = v.webviews;
-    else if (v && Array.isArray(v.targets)) arr = v.targets;
-    return arr.map((w) => (typeof w === 'string'
-      ? { id: w, label: w }
-      : { id: w.id || w.targetId || w.webviewId || '', label: w.title || w.url || w.id || 'webview' })).filter((w) => w.id);
+    const arr = v && Array.isArray(v.webviews) ? v.webviews : [];
+    return arr.filter((w) => w && typeof w.id === 'string' && /^webview-(0|[1-9][0-9]*)$/.test(w.id))
+      .map((w) => ({ id: w.id, label: w.title || w.url || w.id, active: w.active === true, ready: w.ready === true }));
   }
 
   async function renderWebView(j) {
     const wvs = extractWebviews(j && j.webviews);
-    if (!wvs.length) { dockEmpty((j && j.error) || 'No Blazor WebViews in this app.'); return; }
+    if (!wvs.length) { dockEmpty((j && j.error) || 'No WebViews in this app.'); return; }
     const frag = document.createDocumentFragment();
     const bar = elh('div', null, elh('span', { class: 'df-kv-key', text: 'WebView: ' }));
     const sel = elh('select', { class: 'df-dock-btn' });
     for (const w of wvs) sel.append(elh('option', { value: w.id, text: w.label }));
-    if (!cdpWebviewId || !wvs.some((w) => w.id === cdpWebviewId)) cdpWebviewId = wvs[0].id;
-    sel.value = cdpWebviewId;
-    sel.addEventListener('change', () => { cdpWebviewId = sel.value; });
+    if (!cdpContextId || !wvs.some((w) => w.id === cdpContextId))
+      cdpContextId = (wvs.find((w) => w.active && w.ready) || wvs.find((w) => w.active) || wvs[0]).id;
+    sel.value = cdpContextId;
+    sel.addEventListener('change', () => { cdpContextId = sel.value; });
     bar.append(sel);
     bar.append(document.createTextNode(' '));
     bar.append(elh('button', { class: 'df-dock-btn', text: 'View source', onclick: cdpViewSource }));
@@ -2868,7 +2864,7 @@ import { createElementTreeController } from './inspector-tree.js';
   async function cdpViewSource() {
     const out = document.getElementById('df-cdp-out');
     if (out) out.textContent = 'Loading…';
-    const j = await apiPost('/api/cdp/source', { webviewId: cdpWebviewId });
+    const j = await apiPost('/api/cdp/source', { contextId: cdpContextId });
     if (out) out.replaceChildren(elh('pre', { class: 'df-log-row', text: (j && j.ok && j.source != null) ? String(j.source) : ((j && j.error) || 'No source.') }));
   }
 
@@ -2878,13 +2874,13 @@ import { createElementTreeController } from './inspector-tree.js';
     const expr = inp ? inp.value : '';
     if (!expr) return;
     if (!ensureCanDrive()) return;
-    const targetWebViewId = cdpWebviewId;
+    const targetContextId = cdpContextId;
     const confirmed = await confirmModal(
       'Run this JavaScript in the selected LIVE WebView? It can read or change application data.',
       'Run JavaScript');
     if (!confirmed) return;
     if (out) out.textContent = 'Running…';
-    const j = await apiPost('/api/cdp/eval', { expression: expr, webviewId: targetWebViewId });
+    const j = await apiPost('/api/cdp/eval', { expression: expr, contextId: targetContextId });
     if (out) out.replaceChildren(jsonView(j && j.ok ? j.result : ((j && j.error) || 'evaluate failed')));
   }
 

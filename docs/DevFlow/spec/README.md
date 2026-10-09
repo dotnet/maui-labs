@@ -28,20 +28,24 @@ Do not commit a generated JSON copy of the OpenAPI document. If a consumer needs
 
 The DevFlow unit tests parse `openapi.yaml` with OpenAPI tooling and validate YAML/JSON syntax plus `$ref` targets across this directory.
 
-## Existing WebView contract
+## WebView hosts and contract
 
 `GET /api/v1/webview/contexts` returns `{ "webviews": [...] }` for registered CDP
-bridges, not just active hosts. Context `id` values use the registration's
-AutomationId, then elementId, then decimal index; they are not a separate stable
-ID namespace. The index can select a registration directly. `ready` and `isReady`
-are aliases; `active` reflects the backend's active AutomationIds, not generic
-host-owner correlation.
+standard WebView, HybridWebView and BlazorWebView bridges, not just active hosts.
+Every context has a unique `webview-<index>` ID for the attachment and a single
+`ready` field. `hostKind` is open descriptive metadata, not the UI backend or a
+behavior-dispatch switch. `active` and `elementId` reflect native-owner correlation,
+including unnamed controls and duplicate AutomationIds. Default selection prefers
+active hosts rather than hidden pages.
 
 `POST /api/v1/webview/evaluate` accepts a raw CDP command such as
 `{ "method": "Runtime.evaluate", "params": { "expression": "document.title", "returnByValue": true } }`.
-Select its bridge with the `webview` query parameter. Other context-selecting
-WebView endpoints also accept `contextId`; query values override the JSON body's
-`contextId`. `/webview/dom` and `/webview/source` both return HTML, not a DOM-tree
+Select its bridge with the `contextId` query parameter, not arbitrary CDP params
+or body properties. All context-selecting routes accept only canonical IDs;
+query values override the JSON body's `contextId` on typed action/DOM-query
+endpoints. Omission or JSON-null selects the active host. Empty, whitespace,
+numeric index, AutomationId, element ID and old `webview` query selections are
+rejected without document dispatch. `/webview/dom` and `/webview/source` both return HTML, not a DOM-tree
 JSON object. `/webview/screenshot` returns PNG, trying the registered native
 element before the CDP screenshot fallback.
 
@@ -55,7 +59,13 @@ evaluation, without replaying mutations to retrieve structured data. Client
 CDP and typed action failures now throw with HTTP/CDP/JavaScript error details;
 CLI commands and batches return nonzero exits on failure. CLI/MCP screenshots use
 the native-first `/webview/screenshot` endpoint and verify the PNG signature.
-Existing context selection formats and readiness aliases are unchanged.
+The CLI uses `--context-id`; MCP and Inspector use `contextId`. Inspector's
+source/evaluate proxies reject malformed/non-object JSON, duplicate contextId
+fields and removed webviewId fields, even when null or alongside contextId.
+Update the agent, CLI, Client, WebView and Blazor packages together and rebuild
+consumers. No external selector or readiness compatibility shims remain.
+DOM layout enrichment remains Blazor-only (`includeBlazorElements`); generic DOM
+diagnostics belong to the next layer.
 
 ## Streaming payloads
 

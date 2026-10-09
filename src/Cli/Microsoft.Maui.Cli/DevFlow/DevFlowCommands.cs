@@ -90,14 +90,14 @@ public class DevFlowCommands
         noJsonOption.Recursive = true;
         devflowCommand.Add(noJsonOption);
 
-        // ===== WebView commands (Blazor WebView / CDP) =====
+        // ===== WebView commands (standard, Hybrid and Blazor / CDP) =====
         
-        var cdpCommand = new Command("webview", "Blazor WebView automation via Chrome DevTools Protocol");
+        var cdpCommand = new Command("webview", "WebView automation via Chrome DevTools Protocol");
         cdpCommand.Aliases.Add("cdp");
 
-        var webviewOption = new Option<string?>("--webview", "-w") { Description = "Target WebView by index, AutomationId, or element ID (default: first WebView)", DefaultValueFactory = _ => null };
-        webviewOption.Recursive = true;
-        cdpCommand.Add(webviewOption);
+        var contextIdOption = new Option<string?>("--context-id") { Description = "Canonical context ID from webview webviews (webview-<index>; default: active WebView)", DefaultValueFactory = _ => null };
+        contextIdOption.Recursive = true;
+        cdpCommand.Add(contextIdOption);
         
         // Browser domain commands
         var browserCommand = new Command("Browser", "Browser domain commands");
@@ -107,7 +107,7 @@ public class DevFlowCommands
         {
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await BrowserGetVersionAsync(host, port, wv);
         });
         browserCommand.Add(getVersionCmd);
@@ -124,7 +124,7 @@ public class DevFlowCommands
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
             var expr = ctx.GetValue(evaluateArg)!;
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await RuntimeEvaluateAsync(host, port, expr, wv);
         });
         runtimeCommand.Add(evaluateCmd);
@@ -139,7 +139,7 @@ public class DevFlowCommands
         {
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await DomGetDocumentAsync(host, port, wv);
         });
         domCommand.Add(getDocumentCmd);
@@ -151,7 +151,7 @@ public class DevFlowCommands
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
             var selector = ctx.GetValue(querySelectorArg)!;
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await DomQuerySelectorAsync(host, port, selector, wv);
         });
         domCommand.Add(querySelectorCmd);
@@ -163,7 +163,7 @@ public class DevFlowCommands
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
             var selector = ctx.GetValue(querySelectorAllArg)!;
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await DomQuerySelectorAllAsync(host, port, selector, wv);
         });
         domCommand.Add(querySelectorAllCmd);
@@ -175,7 +175,7 @@ public class DevFlowCommands
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
             var selector = ctx.GetValue(getOuterHtmlArg)!;
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await DomGetOuterHtmlAsync(host, port, selector, wv);
         });
         domCommand.Add(getOuterHtmlCmd);
@@ -192,7 +192,7 @@ public class DevFlowCommands
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
             var url = ctx.GetValue(navigateArg)!;
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await PageNavigateAsync(host, port, url, wv);
         });
         pageCommand.Add(navigateCmd);
@@ -202,7 +202,7 @@ public class DevFlowCommands
         {
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await PageReloadAsync(host, port, wv);
         });
         pageCommand.Add(reloadCmd);
@@ -212,7 +212,7 @@ public class DevFlowCommands
         {
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await PageCaptureScreenshotAsync(host, port, wv);
         });
         pageCommand.Add(captureScreenshotCmd);
@@ -229,7 +229,7 @@ public class DevFlowCommands
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
             var selector = ctx.GetValue(clickSelectorArg)!;
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await InputDispatchClickAsync(host, port, selector, wv);
         });
         inputCommand.Add(dispatchClickCmd);
@@ -241,7 +241,7 @@ public class DevFlowCommands
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
             var text = ctx.GetValue(insertTextArg)!;
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await InputInsertTextAsync(host, port, text, wv);
         });
         inputCommand.Add(insertTextCmd);
@@ -255,7 +255,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var selector = ctx.GetValue(fillSelectorArg)!;
             var text = ctx.GetValue(fillTextArg)!;
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await InputFillAsync(host, port, selector, text, wv);
         });
         inputCommand.Add(fillCmd);
@@ -268,7 +268,7 @@ public class DevFlowCommands
         {
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await CdpStatusAsync(host, port, wv);
         });
         cdpCommand.Add(statusCmd);
@@ -278,7 +278,7 @@ public class DevFlowCommands
         {
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await SnapshotAsync(host, port, wv);
         });
         cdpCommand.Add(snapshotCmd);
@@ -299,7 +299,7 @@ public class DevFlowCommands
         {
             var host = ctx.GetValue(agentHostOption)!;
             var port = ctx.GetValue(agentPortOption);
-            var wv = ctx.GetValue(webviewOption);
+            var wv = ctx.GetValue(contextIdOption);
             await CdpSourceAsync(host, port, wv);
         });
         cdpCommand.Add(sourceCmd);
@@ -1975,20 +1975,20 @@ public class DevFlowCommands
         };
     }
 
-    private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, JsonNode? parameters = null, string? webview = null)
+    private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, JsonNode? parameters = null, string? contextId = null)
     {
         using var client = await CreateAgentClientAsync(host, port);
-        var result = await client.SendCdpCommandAsync(method, parameters, webview);
+        var result = await client.SendCdpCommandAsync(method, parameters, contextId);
         return result;
     }
 
-    private static async Task<string> CdpEvaluateAsync(string host, int port, string expression, string? webview = null)
+    private static async Task<string> CdpEvaluateAsync(string host, int port, string expression, string? contextId = null)
     {
         var result = await SendCdpCommandAsync(host, port, "Runtime.evaluate", new JsonObject
         {
             ["expression"] = expression,
             ["returnByValue"] = true
-        }, webview);
+        }, contextId);
 
         if (result == null) return "null";
         var root = result.Value;
@@ -2021,11 +2021,11 @@ public class DevFlowCommands
 
     // ===== Browser Domain =====
     
-    private static async Task BrowserGetVersionAsync(string host, int port, string? webview = null)
+    private static async Task BrowserGetVersionAsync(string host, int port, string? contextId = null)
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Browser.getVersion", webview: webview);
+            var result = await SendCdpCommandAsync(host, port, "Browser.getVersion", contextId: contextId);
             Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2033,11 +2033,11 @@ public class DevFlowCommands
     
     // ===== Runtime Domain =====
     
-    private static async Task RuntimeEvaluateAsync(string host, int port, string expression, string? webview = null)
+    private static async Task RuntimeEvaluateAsync(string host, int port, string expression, string? contextId = null)
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, expression, webview);
+            var result = await CdpEvaluateAsync(host, port, expression, contextId);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2045,17 +2045,17 @@ public class DevFlowCommands
     
     // ===== DOM Domain =====
     
-    private static async Task DomGetDocumentAsync(string host, int port, string? webview = null)
+    private static async Task DomGetDocumentAsync(string host, int port, string? contextId = null)
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "DOM.getDocument", webview: webview);
+            var result = await SendCdpCommandAsync(host, port, "DOM.getDocument", contextId: contextId);
             Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
     
-    private static async Task DomQuerySelectorAsync(string host, int port, string selector, string? webview = null)
+    private static async Task DomQuerySelectorAsync(string host, int port, string selector, string? contextId = null)
     {
         try
         {
@@ -2070,13 +2070,13 @@ public class DevFlowCommands
                         textContent: el.textContent?.trim().substring(0, 100) || null
                     }};
                 }})())
-            ", webview);
+            ", contextId);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
     
-    private static async Task DomQuerySelectorAllAsync(string host, int port, string selector, string? webview = null)
+    private static async Task DomQuerySelectorAllAsync(string host, int port, string selector, string? contextId = null)
     {
         try
         {
@@ -2091,17 +2091,17 @@ public class DevFlowCommands
                         textContent: el.textContent?.trim().substring(0, 50) || null
                     }}));
                 }})(), null, 2)
-            ", webview);
+            ", contextId);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
     
-    private static async Task DomGetOuterHtmlAsync(string host, int port, string selector, string? webview = null)
+    private static async Task DomGetOuterHtmlAsync(string host, int port, string selector, string? contextId = null)
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", webview);
+            var result = await CdpEvaluateAsync(host, port, $@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", contextId);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2109,35 +2109,35 @@ public class DevFlowCommands
     
     // ===== Page Domain =====
     
-    private static async Task PageNavigateAsync(string host, int port, string url, string? webview = null)
+    private static async Task PageNavigateAsync(string host, int port, string url, string? contextId = null)
     {
         try
         {
             await SendCdpCommandAsync(host, port, "Page.navigate", new JsonObject
             {
                 ["url"] = url
-            }, webview);
+            }, contextId);
             Console.WriteLine($"Navigated to: {url}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
     
-    private static async Task PageReloadAsync(string host, int port, string? webview = null)
+    private static async Task PageReloadAsync(string host, int port, string? contextId = null)
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Page.reload", webview: webview);
+            await SendCdpCommandAsync(host, port, "Page.reload", contextId: contextId);
             Console.WriteLine("Page reloaded");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
     
-    private static async Task PageCaptureScreenshotAsync(string host, int port, string? webview = null)
+    private static async Task PageCaptureScreenshotAsync(string host, int port, string? contextId = null)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var bytes = await client.GetWebViewScreenshotAsync(webview);
+            var bytes = await client.GetWebViewScreenshotAsync(contextId);
             Console.WriteLine(Convert.ToBase64String(bytes));
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2145,34 +2145,34 @@ public class DevFlowCommands
     
     // ===== Input Domain =====
     
-    private static async Task InputDispatchClickAsync(string host, int port, string selector, string? webview = null)
+    private static async Task InputDispatchClickAsync(string host, int port, string selector, string? contextId = null)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            await client.ClickWebViewAsync(selector, webview);
+            await client.ClickWebViewAsync(selector, contextId);
             Console.WriteLine($"Clicked: {selector}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
     
-    private static async Task InputInsertTextAsync(string host, int port, string text, string? webview = null)
+    private static async Task InputInsertTextAsync(string host, int port, string text, string? contextId = null)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            await client.InsertWebViewTextAsync(text, webview);
+            await client.InsertWebViewTextAsync(text, contextId);
             Console.WriteLine($"Inserted: {text.Length} characters");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
     
-    private static async Task InputFillAsync(string host, int port, string selector, string text, string? webview = null)
+    private static async Task InputFillAsync(string host, int port, string selector, string text, string? contextId = null)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            await client.FillWebViewAsync(selector, text, webview);
+            await client.FillWebViewAsync(selector, text, contextId);
             Console.WriteLine($"Filled: {selector} with {text.Length} chars");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2180,22 +2180,26 @@ public class DevFlowCommands
     
     // ===== Convenience Commands =====
     
-    private static async Task CdpStatusAsync(string host, int port, string? webview = null)
+    private static async Task CdpStatusAsync(string host, int port, string? contextId = null)
     {
-        EnsureAgentPortResolved(port);
         try
         {
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(5);
-            var response = await http.GetAsync($"http://{host}:{port}/api/v1/agent/status");
-            var body = await response.Content.ReadAsStringAsync();
-            var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
+            using var client = await CreateAgentClientAsync(host, port);
+            var contexts = await client.GetCdpWebViewsAsync();
+            var webviews = contexts.GetProperty("webviews").EnumerateArray().ToArray();
+            if (contextId is not null)
+            {
+                var selected = webviews.SingleOrDefault(w => w.GetProperty("id").GetString() == contextId);
+                if (selected.ValueKind == JsonValueKind.Undefined)
+                    throw new InvalidOperationException($"WebView context '{contextId}' not found. Use webview webviews to list canonical context IDs.");
+                Console.WriteLine(selected.GetProperty("ready").GetBoolean()
+                    ? $"Connected: {contextId} ready"
+                    : $"Agent connected but {contextId} not ready");
+                return;
+            }
 
-            var cdpReady = root.TryGetProperty("cdpReady", out var cdpProp) && cdpProp.GetBoolean();
-            var cdpCount = root.TryGetProperty("cdpWebViewCount", out var countProp) ? countProp.GetInt32() : 0;
-            Console.WriteLine(cdpReady
-                ? $"Connected: CDP ready ({cdpCount} WebView{(cdpCount != 1 ? "s" : "")})"
+            Console.WriteLine(webviews.Any(w => w.GetProperty("ready").GetBoolean())
+                ? $"Connected: CDP ready ({webviews.Length} WebView{(webviews.Length != 1 ? "s" : "")})"
                 : "Agent connected but CDP not ready");
         }
         catch (Exception ex)
@@ -2226,16 +2230,17 @@ public class DevFlowCommands
                     return;
                 }
 
-                Console.WriteLine($"{"Index",-6} {"AutomationId",-20} {"ElementId",-12} {"Ready",-6} {"URL"}");
-                Console.WriteLine(new string('-', 70));
+                Console.WriteLine($"{"ContextId",-16} {"Index",-6} {"AutomationId",-20} {"ElementId",-12} {"Ready",-6} {"URL"}");
+                Console.WriteLine(new string('-', 87));
                 foreach (var wv in webviews.EnumerateArray())
                 {
+                    var contextId = wv.GetProperty("id").GetString();
                     var index = wv.TryGetProperty("index", out var idx) ? idx.GetInt32().ToString() : "-";
                     var autoId = wv.TryGetProperty("automationId", out var aid) ? aid.GetString() ?? "-" : "-";
                     var elemId = wv.TryGetProperty("elementId", out var eid) ? eid.GetString() ?? "-" : "-";
-                    var ready = wv.TryGetProperty("isReady", out var rdy) && rdy.GetBoolean() ? "Yes" : "No";
+                    var ready = wv.GetProperty("ready").GetBoolean() ? "Yes" : "No";
                     var url = wv.TryGetProperty("url", out var urlProp) ? urlProp.GetString() ?? "-" : "-";
-                    Console.WriteLine($"{index,-6} {autoId,-20} {elemId,-12} {ready,-6} {url}");
+                    Console.WriteLine($"{contextId,-16} {index,-6} {autoId,-20} {elemId,-12} {ready,-6} {url}");
                 }
             }
         }
@@ -2245,12 +2250,12 @@ public class DevFlowCommands
         }
     }
     
-    private static async Task CdpSourceAsync(string host, int port, string? webview = null)
+    private static async Task CdpSourceAsync(string host, int port, string? contextId = null)
     {
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var source = await client.GetCdpSourceAsync(webview);
+            var source = await client.GetCdpSourceAsync(contextId);
             Console.WriteLine(source);
         }
         catch (Exception ex)
@@ -2259,7 +2264,7 @@ public class DevFlowCommands
         }
     }
 
-    private static async Task SnapshotAsync(string host, int port, string? webview = null)
+    private static async Task SnapshotAsync(string host, int port, string? contextId = null)
     {
         try
         {
@@ -2299,7 +2304,7 @@ public class DevFlowCommands
                     
                     return 'Title: ' + document.title + '\nURL: ' + location.href + '\n\n' + walk(document.body, 0);
                 })()
-            ", webview);
+            ", contextId);
             
             Console.WriteLine(result);
         }

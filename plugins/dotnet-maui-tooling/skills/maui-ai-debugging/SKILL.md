@@ -232,17 +232,18 @@ until the app restarts — safe for experimentation.
 3. `maui devflow webview Input dispatchClickEvent "css-selector"` — click elements
 4. `maui devflow webview Runtime evaluate "js-expression"` — run JS
 
-**Multiple BlazorWebViews:** If the app has more than one `BlazorWebView`, each is
-registered independently with its `AutomationId`. Use `webview webviews` to list them,
-then target a specific one with `--webview` (or `-w`):
+**Multiple WebViews:** Each standard, Hybrid or Blazor WebView is registered with
+a unique canonical context ID, independently of descriptive AutomationIds.
+Use `webview webviews` to list them, then target one with `--context-id`:
 
 ```bash
 maui devflow webview webviews                                  # list all WebViews
-maui devflow webview -w BlazorLeft snapshot                    # snapshot of a specific WebView
-maui devflow webview -w 1 Runtime evaluate "document.title"    # target by index
+maui devflow webview --context-id webview-0 snapshot           # reported canonical ID
+maui devflow webview --context-id webview-1 Runtime evaluate "document.title"
 ```
 
-Without `--webview`, commands target the first (index 0) WebView.
+Without `--context-id`, commands select the active host. Empty/invalid selectors
+fail; numeric, AutomationId and element-ID aliases are not accepted.
 
 **Live CSS/DOM editing in Blazor (no rebuild needed):**
 ```bash
@@ -485,13 +486,15 @@ are stable across rebuilds (they come from XAML), so prefer `--automationId` for
 
 Global options: `--agent-host` (default localhost), `--agent-port` (auto-discovered via broker).
 CDP commands use the same agent port — all communication goes through a single port.
-Use `--webview <id>` (or `-w <id>`) on any CDP command to target a specific WebView
-by index, AutomationId, or element ID. Default: first WebView.
+Use `--context-id webview-<index>` on any CDP command to select a reported
+canonical ID. Default: active host. HTTP/Client/MCP/Inspector use `contextId`.
+Readiness is `ready` only. Upgrade the agent, CLI, Client, WebView and Blazor
+packages together and rebuild older consumers; old selectors/options are removed.
 
 | Command | Description |
 |---------|-------------|
 | `cdp status` | CDP connection status and WebView count |
-| `cdp webviews [--json]` | List available CDP WebViews (index, AutomationId, ready status) |
+| `cdp webviews [--json]` | List canonical context IDs, descriptive metadata and ready status |
 | `cdp snapshot` | Accessible DOM text (best for AI agents) |
 | `cdp source` | Get full page HTML source |
 | `cdp Browser getVersion` | Browser/WebView version info |
@@ -507,9 +510,10 @@ by index, AutomationId, or element ID. Default: first WebView.
 | `cdp Input insertText <text>` | Insert text at focused element |
 | `cdp Input fill <selector> <text>` | Focus + fill text into element |
 
-**Multi-WebView targeting:** If the app has multiple BlazorWebViews, use `cdp webviews`
-to list them, then `--webview <index-or-automationId>` on any command to target a specific one.
-Example: `maui devflow webview --webview 1 snapshot` or `maui devflow webview -w MyWebView Runtime evaluate "1+1"`.
+**Multi-WebView targeting:** Use `cdp webviews` to list registered hosts, then
+`--context-id <reported-id>` on any command to target one.
+Example: `maui devflow webview --context-id webview-1 snapshot` or
+`maui devflow webview --context-id webview-0 Runtime evaluate "1+1"`.
 
 ### maui devflow broker & discovery
 

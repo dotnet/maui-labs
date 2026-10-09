@@ -1069,7 +1069,7 @@ paths:
         explicit confirmation before calling it; direct API callers are responsible for equivalent
         authorization and user intent.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
+        - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
         content:
@@ -1097,12 +1097,7 @@ paths:
         Alias of /api/v1/webview/source. Returns document.documentElement.outerHTML,
         not a structured DOM tree.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
-        - name: contextId
-          in: query
-          description: WebView context ID. Uses the default context if omitted.
-          schema:
-            type: string
+        - $ref: "#/components/parameters/WebViewContextQuery"
       responses:
         "200":
           description: Page HTML source.
@@ -1124,7 +1119,6 @@ paths:
         Executes a CSS selector query against the WebView DOM and returns
         matching nodes.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
         - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
@@ -1161,12 +1155,7 @@ paths:
       description: >
         Returns the HTML source of the WebView page.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
-        - name: contextId
-          in: query
-          description: WebView context ID. Uses the default context if omitted.
-          schema:
-            type: string
+        - $ref: "#/components/parameters/WebViewContextQuery"
       responses:
         "200":
           description: Page HTML source.
@@ -1187,7 +1176,6 @@ paths:
       description: >
         Navigates the WebView to the specified URL.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
         - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
@@ -1222,7 +1210,6 @@ paths:
       description: >
         Clicks a DOM element matching the given CSS selector inside the WebView.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
         - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
@@ -1257,7 +1244,6 @@ paths:
       description: >
         Clears and fills a DOM input element matching the given CSS selector.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
         - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
@@ -1294,7 +1280,6 @@ paths:
         Inserts text into the currently focused element in the WebView without
         clearing existing content.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
         - $ref: "#/components/parameters/WebViewContextQuery"
       requestBody:
         required: true
@@ -1378,12 +1363,7 @@ paths:
         is unavailable, requests a PNG from the CDP bridge using
         Page.captureScreenshot. Successful responses are always image/png.
       parameters:
-        - $ref: "#/components/parameters/WebViewQuery"
-        - name: contextId
-          in: query
-          description: WebView context ID. Uses the default context if omitted.
-          schema:
-            type: string
+        - $ref: "#/components/parameters/WebViewContextQuery"
       responses:
         "200":
           description: Screenshot image.
@@ -2862,24 +2842,17 @@ paths:
 # ═══════════════════════════ Components ═══════════════════════════════
 components:
   parameters:
-    WebViewQuery:
-      name: webview
-      in: query
-      description: >
-        Registry index (decimal string), AutomationId, or elementId of a
-        registered CDP bridge. Takes precedence over contextId. Omit to use the
-        default bridge.
-      schema:
-        type: string
-
     WebViewContextQuery:
       name: contextId
       in: query
       description: >
-        Alias of webview. Takes precedence over contextId in the JSON body;
-        ignored when the webview query parameter is supplied.
+        Canonical webview-<index> ID returned by /webview/contexts. Takes
+        precedence over contextId in typed request bodies. Omit to select an
+        active host. Blank values, numeric indices, AutomationIds, element IDs
+        and the removed webview query parameter are rejected.
       schema:
         type: string
+        pattern: "^webview-(0|[1-9][0-9]*)$"
 
     ElementIdPath:
       name: id
