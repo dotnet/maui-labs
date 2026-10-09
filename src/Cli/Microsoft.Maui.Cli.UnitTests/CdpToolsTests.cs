@@ -16,13 +16,13 @@ public class CdpToolsTests
         await server.StartAsync();
         var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
 
-        var content = await CdpTools.CdpScreenshot(session, "Right");
+        var content = await CdpTools.CdpScreenshot(session, contextId: "webview-1");
 
         var image = Assert.IsType<ImageContentBlock>(content[1]);
         Assert.Equal("image/png", image.MimeType);
         Assert.Equal(MockAgentResponses.ScreenshotPng,
             Convert.FromBase64String(System.Text.Encoding.UTF8.GetString(image.Data.Span)));
-        Assert.Contains("webview=Right", Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot").QueryString);
+        Assert.Contains("contextId=webview-1", Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot").QueryString);
         Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
     }
 
@@ -46,8 +46,21 @@ public class CdpToolsTests
         var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
 
         var error = await Assert.ThrowsAsync<McpException>(
-            () => CdpTools.CdpEvaluate(session, "missingVariable", "Right"));
+            () => CdpTools.CdpEvaluate(session, "missingVariable", contextId: "webview-1"));
 
         Assert.Contains("missingVariable", error.Message);
+        Assert.Equal("?contextId=webview-1",
+            Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate").QueryString);
+    }
+
+    [Fact]
+    public async Task Source_ForwardsCanonicalContext()
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
+        Assert.Contains("Hello Blazor", await CdpTools.CdpSource(session, contextId: "webview-1"));
+        Assert.Equal("?contextId=webview-1",
+            Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/source").QueryString);
     }
 }

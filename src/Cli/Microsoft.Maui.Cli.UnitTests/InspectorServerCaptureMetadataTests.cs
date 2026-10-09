@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Maui.Cli.DevFlow.Inspector;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
 using Xunit;
@@ -704,6 +705,97 @@ public class InspectorServerCaptureMetadataTests
         {
             await inspector.StopAsync();
         }
+    }
+
+    [Theory]
+    [InlineData("/api/cdp/source")]
+    [InlineData("/api/cdp/eval")]
+    public async Task WebViewProxy_InvalidSelection_IsRejectedWithoutDispatch(string path)
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+        var port = GetFreePort();
+        using var inspector = new InspectorServer(port, "localhost", agent.Port);
+        inspector.Start();
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri($"http://localhost:{port}") };
+            await AddInspectorTokenAsync(client);
+            foreach (var body in new[]
+            {
+                """{"expression":"1+1","contextId":""}""",
+                """{"expression":"1+1","contextId":" "}""",
+                """{"expression":"1+1","contextId":"\t"}""",
+                """{"expression":"1+1","contextId":1}""",
+                """{"expression":"1+1","contextId":true}""",
+                """{"expression":"1+1","contextId":{}}""",
+                """{"expression":"1+1","contextId":[]}""",
+                """{"expression":"1+1","contextId":"1"}""",
+                """{"expression":"1+1","contextId":"webview-01"}""",
+                """{"expression":"1+1","webviewId":"webview-1"}""",
+                """{"expression":"1+1","webviewId":null}""",
+                """{"expression":"1+1","webviewId":"webview-1","contextId":"webview-2"}""",
+                """{"expression":"1+1","contextId":"webview-1","contextId":null}""",
+                """{"expression":"1+1","contextId":""",
+                " ", "[]", "null", "\"webview-1\"",
+                """{"expression":"1+1","contextId":"webview-1\n"}""",
+                """{"expression":"1+1","contextId":"AutomationId"}"""
+            })
+            {
+                using var content = new StringContent(body, Encoding.UTF8, "application/json");
+                using var response = await client.PostAsync(path, content);
+                Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+                using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                Assert.False(string.IsNullOrWhiteSpace(error.RootElement.GetProperty("error").GetString()));
+                Assert.DoesNotContain(agent.RecordedRequests,
+                    request => request.Path is "/api/v1/webview/source" or "/api/v1/webview/evaluate");
+            }
+        }
+        finally { await inspector.StopAsync(); }
+    }
+
+    [Theory]
+    [InlineData("/api/cdp/source", "/api/v1/webview/source")]
+    [InlineData("/api/cdp/eval", "/api/v1/webview/evaluate")]
+    public async Task WebViewProxy_CanonicalOrDefaultSelection_IsForwarded(string path, string agentPath)
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+        var port = GetFreePort();
+        using var inspector = new InspectorServer(port, "localhost", agent.Port);
+        inspector.Start();
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri($"http://localhost:{port}") };
+            await AddInspectorTokenAsync(client);
+            var count = 0;
+            foreach (var (body, query) in new[]
+            {
+                ("""{"expression":"1+1","contextId":"webview-2"}""", "?contextId=webview-2"),
+                ("""{"expression":"1+1"}""", ""),
+                ("""{"expression":"1+1","contextId":null}""", "")
+            })
+            {
+                using var content = new StringContent(body, Encoding.UTF8, "application/json");
+                using var response = await client.PostAsync(path, content);
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                using var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                Assert.True(result.RootElement.GetProperty("ok").GetBoolean());
+                var requests = agent.RecordedRequests.Where(request => request.Path == agentPath).ToArray();
+                Assert.Equal(++count, requests.Length);
+                Assert.Equal(query, requests[^1].QueryString);
+            }
+        }
+        finally { await inspector.StopAsync(); }
+    }
+
+    private static async Task AddInspectorTokenAsync(HttpClient client)
+    {
+        var html = await client.GetStringAsync("/");
+        var token = Regex.Match(html, """<meta name="devflow-inspector-token" content="([a-f0-9]+)">""")
+            .Groups[1].Value;
+        Assert.NotEmpty(token);
+        client.DefaultRequestHeaders.Add("X-DevFlow-Inspector-Token", token);
     }
 
     private static int GetFreePort()

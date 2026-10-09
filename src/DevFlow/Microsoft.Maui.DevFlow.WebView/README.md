@@ -45,10 +45,14 @@ replace Android's WebViewClient, WK navigation delegates, or WebView2 initializa
 handlers. Give controls `AutomationId`s for convenient native correlation; owner correlation
 also works without one.
 
-List contexts with `maui devflow webview webviews`, then select a host by its
-index, AutomationId or element ID with `--webview` (HTTP: `webview` or `contextId`).
-Use the index to disambiguate duplicate AutomationIds. Contexts retain both `ready`
-and `isReady`. `hostKind` describes hosting (`webview`, `hybrid`, `blazor`), not the
+List contexts with `maui devflow webview webviews`, then select the reported
+canonical ID using `--context-id webview-0` (HTTP/Client/MCP/Inspector: `contextId`).
+IDs are unique even for unnamed hosts or duplicate AutomationIds. Only `ready`
+is emitted; numeric/AutomationId/element selectors and the old `webview` query,
+`--webview`/`-w` options and `isReady` field are removed. Omission/null selects
+the active host; blank/invalid values fail without dispatch. Upgrade the agent,
+CLI, Client, WebView and Blazor packages together and rebuild consumers.
+`hostKind` describes hosting (`webview`, `hybrid`, `blazor` or custom metadata), not the
 native backend or behavior dispatch. Native capture and service overrides determine
 behavior. DOM layout enrichment remains Blazor-only (`scope.includeBlazorElements`);
 generic hosts do not advertise Blazor layout coverage.

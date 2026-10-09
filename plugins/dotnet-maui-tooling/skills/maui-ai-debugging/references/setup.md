@@ -167,9 +167,11 @@ message handlers remain owned by MAUI/the app.
 
 For failures, inspect context `ready` and the agent's error logs rather than
 looking for a missing initializer. Update the agent, CLI, Client, WebView and
-Blazor packages together and rebuild older consumers. Select a reported index,
-AutomationId or element ID through `webview` (CLI: `--webview`); use indices to
-disambiguate duplicate IDs. Contexts retain both `ready` and `isReady`.
+Blazor packages together and rebuild older consumers. Select the reported
+canonical ID using `contextId` (CLI: `--context-id webview-0`).
+IDs are unique even with duplicate AutomationIds. Only `ready` is emitted;
+old selector aliases and `isReady` are removed. Omission/null selects the active
+host; blank/invalid values fail.
 
 ## 5. Mac Catalyst: Entitlements
 

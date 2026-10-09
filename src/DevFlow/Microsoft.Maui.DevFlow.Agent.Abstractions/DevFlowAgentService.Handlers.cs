@@ -148,13 +148,13 @@ public partial class DevFlowAgentService
     }
 
     protected CdpWebViewInfo? ResolveCdpWebView(
-        string? webviewId,
+        string? contextId,
         IReadOnlySet<string>? activeAutomationIds = null)
     {
         var webViews = GetCdpWebViewsSnapshot();
 
         if (webViews.Length == 0) return null;
-        if (string.IsNullOrEmpty(webviewId))
+        if (contextId is null)
         {
             if (activeAutomationIds is { Count: > 0 })
             {
@@ -177,25 +177,7 @@ public partial class DevFlowAgentService
             return webViews.LastOrDefault(w => w.IsReady) ?? webViews[^1];
         }
 
-        // Try index
-        if (int.TryParse(webviewId, out var idx))
-        {
-            var byIndex = webViews.FirstOrDefault(w => w.Index == idx);
-            if (byIndex != null) return byIndex;
-        }
-
-        // Try AutomationId
-        var byAutomationId = webViews.LastOrDefault(w =>
-            (activeAutomationIds is null || !SupportsActiveCdpWebViewResolution || IsActiveCdpWebView(w, activeAutomationIds)) &&
-            !string.IsNullOrEmpty(w.AutomationId) && w.AutomationId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
-        if (byAutomationId != null) return byAutomationId;
-
-        // Try ElementId
-        var byElementId = webViews.LastOrDefault(w =>
-            !string.IsNullOrEmpty(w.ElementId) && w.ElementId.Equals(webviewId, StringComparison.OrdinalIgnoreCase));
-        if (byElementId != null) return byElementId;
-
-        return null;
+        return webViews.FirstOrDefault(w => string.Equals(w.ContextId, contextId, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1816,31 +1798,35 @@ public partial class DevFlowAgentService
         return Task.FromResult(HttpResponse.Json(entries));
     }
 
-    protected static string? GetRequestedWebViewId(HttpRequest request, string? contextId = null)
-        => request.QueryParams.GetValueOrDefault("webview")
-            ?? request.QueryParams.GetValueOrDefault("contextId")
-            ?? contextId;
-
     protected async Task<(CdpWebViewInfo? WebView, HttpResponse? Error)> ResolveReadyCdpWebViewAsync(
-        string? webviewId)
+        HttpRequest request, string? contextId = null)
     {
+        if (request.QueryParams.ContainsKey("webview"))
+            return (null, HttpResponse.Error("The webview query parameter was removed. Use contextId from /api/v1/webview/contexts."));
+
+        if (request.QueryParams.TryGetValue("contextId", out var queryContextId))
+            contextId = queryContextId;
+
         var webViews = GetCdpWebViewsSnapshot();
+        if (contextId is not null && !webViews.Any(w => string.Equals(w.ContextId, contextId, StringComparison.Ordinal)))
+            return (null, HttpResponse.Error($"WebView context '{contextId}' not found. Use a canonical contextId from /api/v1/webview/contexts."));
+
         if (webViews.Length == 0)
         {
             return (null, HttpResponse.Error("CDP not available (no WebViews registered)"));
         }
 
         var activeAutomationIds = SupportsActiveCdpWebViewResolution
-            || string.IsNullOrWhiteSpace(webviewId) && webViews.Length > 1
+            || contextId is null && webViews.Length > 1
             ? await GetActiveWebViewAutomationIdsAsync()
             : null;
-        var webView = ResolveCdpWebView(webviewId, activeAutomationIds);
+        var webView = ResolveCdpWebView(contextId, activeAutomationIds);
         if (webView == null)
         {
             return (
                 null,
                 HttpResponse.Error(
-                    $"WebView '{webviewId}' not found. Use GET /api/v1/webview/contexts to list available WebViews."));
+                    $"WebView context '{contextId}' not found. Use GET /api/v1/webview/contexts to list available WebViews."));
         }
 
         // Do not hard-block transient "not ready" states here. The underlying
@@ -1961,8 +1947,7 @@ public partial class DevFlowAgentService
 
     protected async Task<HttpResponse> HandleCdp(HttpRequest request)
     {
-        request.QueryParams.TryGetValue("webview", out var webviewId);
-        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(request);
         if (webView is null)
             return error!;
 
@@ -1996,8 +1981,7 @@ public partial class DevFlowAgentService
         if (string.IsNullOrWhiteSpace(body?.Url))
             return HttpResponse.Error("url is required");
 
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(request, body.ContextId);
         if (webView is null)
             return error!;
 
@@ -2024,7 +2008,7 @@ public partial class DevFlowAgentService
             return HttpResponse.Json(new Dictionary<string, object?>
             {
                 ["success"] = true,
-                ["contextId"] = webviewId ?? webView.Index.ToString(),
+                ["contextId"] = webView.ContextId,
                 ["url"] = body.Url
             });
         }
@@ -2040,8 +2024,7 @@ public partial class DevFlowAgentService
         if (string.IsNullOrWhiteSpace(body?.Selector))
             return HttpResponse.Error("selector is required");
 
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(request, body.ContextId);
         if (webView is null)
             return error!;
 
@@ -2090,8 +2073,7 @@ public partial class DevFlowAgentService
         if (body.Text == null)
             return HttpResponse.Error("text is required");
 
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(request, body.ContextId);
         if (webView is null)
             return error!;
 
@@ -2158,8 +2140,7 @@ public partial class DevFlowAgentService
         if (body?.Text == null)
             return HttpResponse.Error("text is required");
 
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(request, body.ContextId);
         if (webView is null)
             return error!;
 
@@ -2174,7 +2155,7 @@ public partial class DevFlowAgentService
             PublishUiEvent("treeChange", new Dictionary<string, object?>
             {
                 ["changeType"] = "modified",
-                ["elementId"] = body.ContextId ?? webviewId ?? webView.Index.ToString(),
+                ["elementId"] = webView.ContextId,
                 ["elementType"] = "webview-input",
                 ["parentId"] = (string?)null,
                 ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
@@ -2201,8 +2182,7 @@ public partial class DevFlowAgentService
         if (string.IsNullOrWhiteSpace(body?.Selector))
             return HttpResponse.Error("selector is required");
 
-        var webviewId = GetRequestedWebViewId(request, body.ContextId);
-        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(request, body.ContextId);
         if (webView is null)
             return error!;
 
@@ -2252,8 +2232,7 @@ public partial class DevFlowAgentService
 
     protected async Task<HttpResponse> HandleWebViewScreenshot(HttpRequest request)
     {
-        var webviewId = GetRequestedWebViewId(request);
-        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(request);
         if (webView is null)
             return error!;
 
@@ -2299,11 +2278,7 @@ public partial class DevFlowAgentService
         var activeAutomationIds = await GetActiveWebViewAutomationIdsAsync();
         var webviews = GetCdpWebViewsSnapshot().Select(w => new Dictionary<string, object?>
         {
-            ["id"] = !string.IsNullOrWhiteSpace(w.AutomationId)
-                ? w.AutomationId
-                : !string.IsNullOrWhiteSpace(w.ElementId)
-                    ? w.ElementId
-                    : w.Index.ToString(),
+            ["id"] = w.ContextId,
             ["index"] = w.Index,
             ["automationId"] = w.AutomationId,
             ["elementId"] = w.ElementId,
@@ -2311,7 +2286,6 @@ public partial class DevFlowAgentService
             ["hostKind"] = w.HostKind,
             ["title"] = (string?)null,
             ["ready"] = w.IsReady,
-            ["isReady"] = w.IsReady,
             ["active"] = IsActiveCdpWebView(w, activeAutomationIds),
         }).ToList();
 
@@ -2320,8 +2294,7 @@ public partial class DevFlowAgentService
 
     protected async Task<HttpResponse> HandleCdpSource(HttpRequest request)
     {
-        var webviewId = GetRequestedWebViewId(request);
-        var (webView, error) = await ResolveReadyCdpWebViewAsync(webviewId);
+        var (webView, error) = await ResolveReadyCdpWebViewAsync(request);
         if (webView is null)
             return error!;
 

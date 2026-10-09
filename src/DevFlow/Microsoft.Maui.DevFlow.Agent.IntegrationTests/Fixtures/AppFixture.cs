@@ -215,8 +215,6 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
             if (ctx.ValueKind != JsonValueKind.Object)
                 continue;
 
-            if (ctx.TryGetProperty("isReady", out var r1) && r1.ValueKind == JsonValueKind.True)
-                return true;
             if (ctx.TryGetProperty("ready", out var r2) && r2.ValueKind == JsonValueKind.True)
                 return true;
         }

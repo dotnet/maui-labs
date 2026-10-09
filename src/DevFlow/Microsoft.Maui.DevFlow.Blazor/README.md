@@ -52,9 +52,13 @@ or script tag is needed. Native navigation and messaging remain app/MAUI-owned.
 The asset-free adapter uses the ordinary .NET SDK, excludes application-only
 WebView build imports and does not produce a Razor static-asset manifest.
 
-List contexts using `maui devflow webview webviews`; select an index, AutomationId
-or element ID using `--webview`. Use the index for duplicate IDs.
+List contexts using `maui devflow webview webviews`; select the reported canonical
+ID using `--context-id webview-0` (HTTP/Client/MCP/Inspector: `contextId`).
+IDs uniquely select registrations even with duplicate AutomationIds. Numeric,
+AutomationId and element selectors, the old `webview` query and `--webview`/`-w`
+options are removed. Omission/null selects the active host; blank/invalid values fail.
 `hostKind: blazor` is descriptive metadata, not behavior dispatch.
-Contexts retain `ready` and `isReady`; DOM layout remains Blazor-only.
+Contexts emit only `ready`; `isReady` is removed. Upgrade the agent, CLI, Client,
+WebView and Blazor packages together and rebuild consumers. DOM layout remains Blazor-only.
 CDP requests are serialized, late replies use unique wire IDs, timed-out
 mutations are never replayed, and handler detachment cancels pending work.

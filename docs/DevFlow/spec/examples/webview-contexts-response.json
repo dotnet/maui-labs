@@ -1,25 +1,25 @@
 {
   "webviews": [
     {
-      "id": "MainBlazorWebView",
+      "id": "webview-0",
       "index": 0,
       "automationId": "MainBlazorWebView",
       "elementId": "blazor_main",
       "url": "https://app/_content/index.html",
       "title": null,
       "ready": true,
-      "isReady": true,
+      "hostKind": "blazor",
       "active": true
     },
     {
-      "id": "help_webview",
+      "id": "webview-1",
       "index": 1,
       "automationId": null,
       "elementId": "help_webview",
       "url": null,
       "title": null,
       "ready": false,
-      "isReady": false,
+      "hostKind": "webview",
       "active": false
     }
   ]

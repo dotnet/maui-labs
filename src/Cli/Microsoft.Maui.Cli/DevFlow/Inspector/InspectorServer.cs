@@ -3134,7 +3134,7 @@ public sealed class InspectorServer : IDisposable
         catch { return Ok("{\"ok\":false,\"error\":\"files unavailable\"}"); }
     }
 
-    // ── Blazor WebView CDP tab — list WebViews, view source, and evaluate JavaScript through the
+    // ── WebView CDP tab — list WebViews, view source, and evaluate JavaScript through the
     // existing chobitsu.js CDP bridge.
     private async Task<(int, string, byte[])> HandleCdpWebViewsAsync(string? body)
     {
@@ -3144,24 +3144,64 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<(int, string, byte[])> HandleCdpSourceAsync(string? body)
     {
-        var id = ReadStringField(body, "webviewId");
-        try { var src = await _client.GetCdpSourceAsync(string.IsNullOrWhiteSpace(id) ? null : id); return Ok(JsonSerializer.Serialize(new { ok = true, source = src }, CamelCase)); }
-        catch { return Ok("{\"ok\":false,\"error\":\"source unavailable\"}"); }
+        if (!TryReadWebViewContext(body, out var contextId, out var error))
+            return BadRequest(error!);
+        try { var src = await _client.GetCdpSourceAsync(contextId); return Ok(JsonSerializer.Serialize(new { ok = true, source = src }, CamelCase)); }
+        catch (Exception ex) { return Ok(JsonSerializer.Serialize(new { ok = false, error = $"source unavailable: {ex.Message}" }, CamelCase)); }
     }
 
     private async Task<(int, string, byte[])> HandleCdpEvalAsync(string? body)
     {
+        if (!TryReadWebViewContext(body, out var contextId, out var error))
+            return BadRequest(error!);
         var expr = ReadStringField(body, "expression");
-        var id = ReadStringField(body, "webviewId");
         if (string.IsNullOrWhiteSpace(expr) || expr!.Length > 8192)
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"expression required\"}"));
         try
         {
             var pars = new System.Text.Json.Nodes.JsonObject { ["expression"] = expr, ["returnByValue"] = true };
-            var res = await _client.SendCdpCommandAsync("Runtime.evaluate", pars, string.IsNullOrWhiteSpace(id) ? null : id);
+            var res = await _client.SendCdpCommandAsync("Runtime.evaluate", pars, contextId);
             return Ok(JsonSerializer.Serialize(new { ok = true, result = res }, CamelCase));
         }
-        catch { return Ok("{\"ok\":false,\"error\":\"evaluate failed\"}"); }
+        catch (Exception ex) { return Ok(JsonSerializer.Serialize(new { ok = false, error = $"evaluate failed: {ex.Message}" }, CamelCase)); }
+    }
+
+    private static bool TryReadWebViewContext(string? body, out string? contextId, out string? error)
+    {
+        contextId = null;
+        error = null;
+        try
+        {
+            using var document = JsonDocument.Parse(body ?? "{}");
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                throw new JsonException("Expected a JSON object.");
+
+            var seenContext = false;
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (property.Name == "webviewId")
+                    throw new JsonException("webviewId was removed; use contextId.");
+                if (property.Name != "contextId")
+                    continue;
+                if (seenContext)
+                    throw new JsonException("Duplicate contextId.");
+                seenContext = true;
+                if (property.Value.ValueKind == JsonValueKind.Null)
+                    continue;
+                if (property.Value.ValueKind != JsonValueKind.String)
+                    throw new JsonException("contextId must be a canonical string or null.");
+                contextId = property.Value.GetString();
+                if (contextId is null || !System.Text.RegularExpressions.Regex.IsMatch(
+                        contextId, @"\Awebview-(0|[1-9][0-9]*)\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                    throw new JsonException("contextId must be webview-<nonnegative registry index>.");
+            }
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            error = $"Invalid WebView selection: {ex.Message}";
+            return false;
+        }
     }
 
     // ── Data helpers ──

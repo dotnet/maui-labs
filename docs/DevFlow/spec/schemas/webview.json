@@ -30,12 +30,13 @@
       "properties": {
         "id": {
           "type": "string",
-          "description": "Selection alias: AutomationId when nonblank, otherwise elementId when nonblank, otherwise the decimal registry index. Not guaranteed unique when aliases are reused."
+          "pattern": "^webview-(0|[1-9][0-9]*)$",
+          "description": "Unique canonical attachment ID. The only supported context-selection value."
         },
         "index": {
           "type": "integer",
           "minimum": 0,
-          "description": "Registry index; its decimal string can select this registration."
+          "description": "Registry index used in the canonical webview-<index> ID; not itself a selection alias."
         },
         "automationId": {
           "type": [
@@ -76,10 +77,6 @@
         "ready": {
           "type": "boolean",
           "description": "Readiness reported by the registered CDP bridge."
-        },
-        "isReady": {
-          "type": "boolean",
-          "description": "Alias of ready, emitted by the existing handler."
         }
       }
     },
@@ -101,7 +98,7 @@
         "params": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Method-specific CDP parameters. Context selection uses the webview query parameter, not the command body."
+          "description": "Method-specific CDP parameters. Context selection uses the contextId query parameter, not the command body."
         }
       }
     },
@@ -139,7 +136,8 @@
             "string",
             "null"
           ],
-          "description": "Target WebView context identifier."
+          "pattern": "^webview-(0|[1-9][0-9]*)$",
+          "description": "Canonical WebView context ID. Omission or null selects the active host; query contextId takes precedence."
         }
       }
     },
@@ -159,7 +157,8 @@
             "string",
             "null"
           ],
-          "description": "Target WebView context identifier."
+          "pattern": "^webview-(0|[1-9][0-9]*)$",
+          "description": "Canonical WebView context ID. Omission or null selects the active host; query contextId takes precedence."
         }
       }
     },
@@ -179,7 +178,8 @@
             "string",
             "null"
           ],
-          "description": "Target WebView context identifier."
+          "pattern": "^webview-(0|[1-9][0-9]*)$",
+          "description": "Canonical WebView context ID. Omission or null selects the active host; query contextId takes precedence."
         }
       }
     },
@@ -204,7 +204,8 @@
             "string",
             "null"
           ],
-          "description": "Target WebView context identifier."
+          "pattern": "^webview-(0|[1-9][0-9]*)$",
+          "description": "Canonical WebView context ID. Omission or null selects the active host; query contextId takes precedence."
         }
       }
     },
@@ -224,7 +225,8 @@
             "string",
             "null"
           ],
-          "description": "Target WebView context identifier."
+          "pattern": "^webview-(0|[1-9][0-9]*)$",
+          "description": "Canonical WebView context ID. Omission or null selects the active host; query contextId takes precedence."
         }
       }
     }

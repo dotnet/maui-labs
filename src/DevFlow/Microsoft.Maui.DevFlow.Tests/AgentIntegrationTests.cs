@@ -730,7 +730,7 @@ public class AgentHttpServerTests : IDisposable
 
             Assert.Contains("POST /api/v1/webview/navigate", request);
             Assert.Contains("https://example.com", request);
-            Assert.Contains("BlazorMain", request);
+            Assert.Contains("webview-0", request);
 
             var body = """{"success":true}""";
             var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
@@ -738,7 +738,7 @@ public class AgentHttpServerTests : IDisposable
         });
 
         using var agentClient = CreateUncoordinatedClient();
-        var result = await agentClient.NavigateWebViewAsync("https://example.com", "BlazorMain");
+        var result = await agentClient.NavigateWebViewAsync("https://example.com", "webview-0");
 
         Assert.True(result);
 
