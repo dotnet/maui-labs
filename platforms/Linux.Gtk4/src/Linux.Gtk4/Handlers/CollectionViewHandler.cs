@@ -22,6 +22,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	Gtk.Label? _emptyLabel;
 	readonly List<object?> _items = [];
 	readonly HashSet<int> _groupHeaderIndices = [];
+	readonly Dictionary<nint, (Gtk.ListItem Item, CollectionView Owner, View View)> _realizedViews = [];
 	bool _updatingSelection;
 	INotifyCollectionChanged? _observedCollection;
 	readonly Dictionary<Gtk.Widget, GtkAllocationObserver> _templateAllocations = [];
@@ -41,6 +42,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			["FooterTemplate"] = MapFooter,
 			["ItemsLayout"] = MapItemsLayout,
 			["ItemTemplate"] = MapItemTemplate,
+			["GroupHeaderTemplate"] = MapItemTemplate,
 			["ItemSizingStrategy"] = MapItemSizingStrategy,
 			["ItemsUpdatingScrollMode"] = MapItemsUpdatingScrollMode,
 			["IsGrouped"] = MapIsGrouped,
@@ -81,8 +83,16 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 	void RebuildListView()
 	{
+		if (_listView != null)
+		{
+			_listView.SetModel(null);
+			_listView.SetFactory(null);
+			ClearRealizedViews();
+		}
 		ClearTemplateAllocations();
-		var hasTemplate = VirtualView is CollectionView cv && cv.ItemTemplate != null;
+
+		var hasTemplate = VirtualView is CollectionView cv &&
+			(cv.ItemTemplate != null || cv.GroupHeaderTemplate != null);
 		Gtk.ListItemFactory factory;
 
 		if (hasTemplate)
@@ -111,13 +121,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		factory.OnSetup += (_, args) =>
 		{
 			var listItem = (Gtk.ListItem)args.Object;
-			var label = Gtk.Label.New(string.Empty);
-			label.SetHalign(Gtk.Align.Start);
-			label.SetXalign(0f);
-			label.SetMarginStart(12);
-			label.SetMarginEnd(12);
-			label.SetMarginTop(8);
-			label.SetMarginBottom(8);
+			var label = CreateItemLabel(string.Empty);
 
 			// Add a one-time CSS provider for group header styling via CSS class
 			var cssProvider = Gtk.CssProvider.New();
@@ -144,6 +148,18 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		return factory;
 	}
 
+	static Gtk.Label CreateItemLabel(string text)
+	{
+		var label = Gtk.Label.New(text);
+		label.SetHalign(Gtk.Align.Start);
+		label.SetXalign(0f);
+		label.SetMarginStart(12);
+		label.SetMarginEnd(12);
+		label.SetMarginTop(8);
+		label.SetMarginBottom(8);
+		return label;
+	}
+
 	Gtk.SignalListItemFactory BuildTemplateFactory()
 	{
 		var factory = Gtk.SignalListItemFactory.New();
@@ -155,6 +171,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		factory.OnBind += (_, args) =>
 		{
 			var listItem = (Gtk.ListItem)args.Object;
+			RemoveRealizedView(listItem);
 
 			var idx = (int)listItem.GetPosition();
 			if (idx < 0 || idx >= _items.Count) return;
@@ -166,23 +183,27 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			// Check if this is a group header
 			if (_groupHeaderIndices.Contains(idx))
 			{
-				var headerWidget = BuildGroupHeader(collectionView, dataItem);
+				var headerWidget = BuildGroupHeader(collectionView, dataItem, listItem);
 				headerWidget.SetSizeRequest(-1, 36);
 				listItem.SetChild(headerWidget);
 				return;
 			}
 
 			if (collectionView.ItemTemplate == null)
+			{
+				listItem.SetChild(CreateItemLabel(dataItem?.ToString() ?? string.Empty));
 				return;
+			}
 
 			try
 			{
-				var (nativeWidget, measuredHeight) = InflateTemplate(collectionView, dataItem);
+				var (nativeWidget, measuredHeight) = InflateTemplate(collectionView, dataItem, listItem);
 				if (nativeWidget != null)
 					listItem.SetChild(nativeWidget);
 			}
 			catch (Exception ex)
 			{
+				RemoveRealizedView(listItem);
 				var fallback = Gtk.Label.New(dataItem?.ToString() ?? "(error)");
 				fallback.SetHalign(Gtk.Align.Start);
 				fallback.SetMarginStart(12);
@@ -195,15 +216,40 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			var listItem = (Gtk.ListItem)args.Object;
 			if (listItem.GetChild() is { } child && _templateAllocations.Remove(child, out var observer))
 				observer.Dispose();
-			listItem.SetChild(null);
+			RemoveRealizedView(listItem);
 		};
 		factory.OnTeardown += (_, args) =>
 		{
+			RemoveRealizedView((Gtk.ListItem)args.Object);
 		};
 		return factory;
 	}
 
-	Gtk.Widget BuildGroupHeader(CollectionView collectionView, object? groupData)
+	void RemoveRealizedView(Gtk.ListItem listItem)
+	{
+		if (_realizedViews.Remove(listItem.Handle.DangerousGetHandle(), out var entry))
+		{
+			entry.Owner.RemoveLogicalChild(entry.View);
+			listItem.SetChild(null);
+			entry.View.DisconnectHandlers();
+			return;
+		}
+		listItem.SetChild(null);
+	}
+
+	void ClearRealizedViews()
+	{
+		var entries = _realizedViews.Values.ToArray();
+		_realizedViews.Clear();
+		foreach (var entry in entries)
+		{
+			entry.Owner.RemoveLogicalChild(entry.View);
+			entry.Item.SetChild(null);
+			entry.View.DisconnectHandlers();
+		}
+	}
+
+	Gtk.Widget BuildGroupHeader(CollectionView collectionView, object? groupData, Gtk.ListItem listItem)
 	{
 		// Try GroupHeaderTemplate first — inflate via handler pipeline
 		if (collectionView.GroupHeaderTemplate != null && MauiContext != null)
@@ -214,10 +260,14 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 				if (content is View mauiView)
 				{
 					mauiView.BindingContext = groupData;
-					return InflateView(mauiView).widget;
+					return InflateView(mauiView, collectionView, listItem).widget;
 				}
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				RemoveRealizedView(listItem);
+				Console.WriteLine($"[CollectionView] GroupHeaderTemplate error: {ex.Message}");
+			}
 		}
 
 		// Default group header: bold label with separator
@@ -245,7 +295,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	/// Each view gets its proper handler (BorderHandler, LayoutHandler, etc.)
 	/// rather than being manually reconstructed as GTK widgets.
 	/// </summary>
-	(Gtk.Widget? widget, int height) InflateTemplate(CollectionView collectionView, object? dataItem)
+	(Gtk.Widget? widget, int height) InflateTemplate(CollectionView collectionView, object? dataItem, Gtk.ListItem listItem)
 	{
 		var template = collectionView.ItemTemplate;
 		var content = template is DataTemplateSelector selector
@@ -256,17 +306,20 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			return (null, 0);
 
 		mauiView.BindingContext = dataItem;
-		return InflateView(mauiView);
+		return InflateView(mauiView, collectionView, listItem);
 	}
 
 	/// <summary>
 	/// Converts a MAUI View to a native GTK widget using ToPlatform, then measures
 	/// and sizes it so GTK's layout engine gives the row correct height.
 	/// </summary>
-	(Gtk.Widget widget, int height) InflateView(View mauiView)
+	(Gtk.Widget widget, int height) InflateView(View mauiView, CollectionView owner, Gtk.ListItem listItem)
 	{
 		if (MauiContext == null)
 			throw new InvalidOperationException("MauiContext not set.");
+
+		_realizedViews[listItem.Handle.DangerousGetHandle()] = (listItem, owner, mauiView);
+		owner.AddLogicalChild(mauiView);
 
 		var widthConstraint = _listView?.GetAllocatedWidth() ?? 400;
 		if (widthConstraint <= 0) widthConstraint = 400;
@@ -345,6 +398,9 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 
 		UnhookCollectionChanged();
 		UnhookSelectionChanged();
+		_listView?.SetModel(null);
+		_listView?.SetFactory(null);
+		ClearRealizedViews();
 		ClearTemplateAllocations();
 
 		base.DisconnectHandler(platformView);
@@ -687,8 +743,9 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	{
 		// Rebuild the ListView with the appropriate factory (string vs template)
 		handler.RebuildListView();
-		handler.HookSelectionChanged();
-		MapItemsSource(handler, view);
+		MapItemsLayout(handler, view);
+		if (view is CollectionView collectionView)
+			handler.UpdateDisplayedChild(collectionView);
 	}
 
 	public static void MapItemSizingStrategy(CollectionViewHandler handler, IView view) { }

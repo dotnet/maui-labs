@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using CoreGraphics;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
@@ -43,6 +44,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     MacOSContainerView? _itemsContainer;
     INotifyCollectionChanged? _observableSource;
     NSObject? _scrollObserver;
+    INotifyPropertyChanged? _itemsLayoutNotifier;
 
     // Virtualization state
     readonly List<ItemInfo> _flatItems = new();
@@ -58,6 +60,8 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     bool _remainingThresholdFired;
     bool _isInLayout;
     bool _isReloading;
+    nfloat _lastMeasurementConstraint = -1;
+    bool _lastMeasurementWasHorizontal;
 
     // Threshold: render items this far beyond the visible rect
     static readonly nfloat OverScanPixels = 200;
@@ -88,6 +92,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     {
         base.ConnectHandler(platformView);
         SubscribeScroll();
+        SubscribeItemsLayout((VirtualView as StructuredItemsView)?.ItemsLayout);
         if (VirtualView is ItemsView itemsView)
             itemsView.ScrollToRequested += OnScrollToRequested;
     }
@@ -96,6 +101,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     {
         UnsubscribeScroll();
         UnsubscribeCollection();
+        SubscribeItemsLayout(null);
         if (VirtualView is ItemsView itemsView)
             itemsView.ScrollToRequested -= OnScrollToRequested;
         base.DisconnectHandler(platformView);
@@ -112,6 +118,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             _isInLayout = true;
             try
             {
+                InvalidateMeasurementsForConstraintChange(rect);
                 CalculatePositions(rect);
                 UpdateVisibleItems(rect);
             }
@@ -164,6 +171,9 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         public nfloat Position { get; set; }
         public nfloat Size { get; set; }
         public bool Measured { get; set; }
+        public int CrossPosition { get; set; }
+
+        public bool SpansGrid => IsHeader || IsFooter;
     }
 
     void CalculatePositions(Rect rect)
@@ -196,7 +206,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
         // Resize document/container
         var totalSize = _flatItems.Count > 0
-            ? _flatItems[^1].Position + _flatItems[^1].Size
+            ? _flatItems.Max(info => info.Position + info.Size)
             : 0;
 
         if (isHorizontal)
@@ -229,22 +239,40 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     {
         if (isHorizontal)
         {
-            var rowHeight = ((nfloat)rect.Height - vSpacing * (span - 1)) / span;
-            if (rowHeight < 20) rowHeight = 20;
-
             nfloat x = 0;
-            nfloat maxColWidth = _estimatedItemHeight;
+            nfloat columnWidth = 0;
+            int columnCount = 0;
             for (int i = 0; i < _flatItems.Count; i++)
             {
-                int row = i % span;
-                if (row == 0 && i > 0)
+                var info = _flatItems[i];
+                if (info.SpansGrid)
                 {
-                    x += maxColWidth + hSpacing;
-                    maxColWidth = _estimatedItemHeight;
+                    if (columnCount > 0)
+                    {
+                        x += columnWidth + hSpacing;
+                        columnWidth = 0;
+                        columnCount = 0;
+                    }
+                    info.Position = x;
+                    info.CrossPosition = 0;
+                    if (!info.Measured)
+                        info.Size = _estimatedItemHeight;
+                    x += info.Size + hSpacing;
+                    continue;
                 }
-                _flatItems[i].Position = x;
-                _flatItems[i].Size = _flatItems[i].Measured ? _flatItems[i].Size : _estimatedItemHeight;
-                if (_flatItems[i].Size > maxColWidth) maxColWidth = _flatItems[i].Size;
+
+                if (columnCount == span)
+                {
+                    x += columnWidth + hSpacing;
+                    columnWidth = 0;
+                    columnCount = 0;
+                }
+                info.Position = x;
+                info.CrossPosition = columnCount++;
+                if (!info.Measured)
+                    info.Size = _estimatedItemHeight;
+                if (info.Size > columnWidth)
+                    columnWidth = info.Size;
             }
         }
         else
@@ -253,14 +281,40 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             var colWidth = ((nfloat)rect.Width - totalHSpacing) / span;
             if (colWidth < 20) colWidth = 20;
 
-            var colTops = new nfloat[span];
+            nfloat y = 0;
+            nfloat rowHeight = 0;
+            int rowCount = 0;
             for (int i = 0; i < _flatItems.Count; i++)
             {
-                int col = i % span;
-                _flatItems[i].Position = colTops[col];
-                if (!_flatItems[i].Measured)
-                    _flatItems[i].Size = _estimatedItemHeight;
-                colTops[col] += _flatItems[i].Size + vSpacing;
+                var info = _flatItems[i];
+                if (info.SpansGrid)
+                {
+                    if (rowCount > 0)
+                    {
+                        y += rowHeight + vSpacing;
+                        rowHeight = 0;
+                        rowCount = 0;
+                    }
+                    info.Position = y;
+                    info.CrossPosition = 0;
+                    if (!info.Measured)
+                        info.Size = _estimatedItemHeight;
+                    y += info.Size + vSpacing;
+                    continue;
+                }
+
+                if (rowCount == span)
+                {
+                    y += rowHeight + vSpacing;
+                    rowHeight = 0;
+                    rowCount = 0;
+                }
+                info.Position = y;
+                info.CrossPosition = rowCount++;
+                if (!info.Measured)
+                    info.Size = _estimatedItemHeight;
+                if (info.Size > rowHeight)
+                    rowHeight = info.Size;
             }
         }
     }
@@ -338,29 +392,39 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         foreach (var idx in shouldBeVisible)
         {
             var info = _flatItems[idx];
-            if (_visibleViews.TryGetValue(idx, out var existing))
+            IView mauiView;
+            NSView platformView;
+            if (_visibleViews.TryGetValue(idx, out var visible))
             {
-                // Scrolling only changes visibility; explicit layout and the
-                // measurement recalculation below reposition existing items.
-                if (viewportOverride is not null)
-                    PositionItem(existing.platformView, info, idx, isHorizontal, span,
-                        containerWidth, containerHeight, itemSpacing, lineSpacing);
-                continue;
+                if (info.Measured && viewportOverride is null)
+                    continue;
+                (mauiView, platformView) = visible;
             }
-
-            var (mauiView, platformView) = CreateOrReuseView(idx, info);
-
-            _itemsContainer.AddSubview(platformView);
-            _visibleViews[idx] = (mauiView, platformView);
-            if (mauiView is Element elem && VirtualView is Element parent)
-                parent.AddLogicalChild(elem);
+            else
+            {
+                (mauiView, platformView) = CreateOrReuseView(idx, info);
+                _itemsContainer.AddSubview(platformView);
+                _visibleViews[idx] = (mauiView, platformView);
+                if (mauiView is Element elem && VirtualView is Element parent)
+                    parent.AddLogicalChild(elem);
+            }
 
             // Measure and position
             if (!info.Measured)
             {
+                var availableWidth = span > 1 && !isHorizontal && !info.SpansGrid
+                    ? (containerWidth - itemSpacing * (span - 1)) / span
+                    : containerWidth;
+                if (availableWidth < 20)
+                    availableWidth = 20;
+                var availableHeight = span > 1 && isHorizontal && !info.SpansGrid
+                    ? (containerHeight - lineSpacing * (span - 1)) / span
+                    : containerHeight;
+                if (availableHeight < 20)
+                    availableHeight = 20;
                 var measuredSize = isHorizontal
-                    ? MeasureItemWidth(platformView, containerHeight)
-                    : MeasureItemHeight(platformView, containerWidth);
+                    ? MeasureItemWidth(platformView, availableHeight)
+                    : MeasureItemHeight(platformView, availableWidth);
 
                 if (Math.Abs(measuredSize - info.Size) > 1)
                 {
@@ -414,14 +478,14 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             if (isHorizontal)
             {
                 var rowHeight = (containerHeight - vSpacing * (span - 1)) / span;
-                int row = index % span;
+                int row = info.CrossPosition;
                 var y = row * (rowHeight + vSpacing);
                 platformView.SetLayoutFrame(new CGRect(info.Position, y, info.Size, rowHeight));
             }
             else
             {
                 var colWidth = (containerWidth - hSpacing * (span - 1)) / span;
-                int col = index % span;
+                int col = info.CrossPosition;
                 var x = col * (colWidth + hSpacing);
                 platformView.SetLayoutFrame(new CGRect(x, info.Position, colWidth, info.Size));
             }
@@ -485,11 +549,70 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
     #region Layout Helpers
 
+    void SubscribeItemsLayout(IItemsLayout? layout)
+    {
+        if (ReferenceEquals(_itemsLayoutNotifier, layout))
+            return;
+
+        if (_itemsLayoutNotifier != null)
+            _itemsLayoutNotifier.PropertyChanged -= OnItemsLayoutPropertyChanged;
+
+        _itemsLayoutNotifier = layout as INotifyPropertyChanged;
+        if (_itemsLayoutNotifier != null)
+            _itemsLayoutNotifier.PropertyChanged += OnItemsLayoutPropertyChanged;
+    }
+
+    void OnItemsLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        InvalidateItemMeasurements();
+        if (PlatformView.Bounds.Width <= 0 || PlatformView.Bounds.Height <= 0)
+            return;
+
+        var layout = (VirtualView as StructuredItemsView)?.ItemsLayout;
+        var isHorizontal = GetOrientation(layout) == ItemsLayoutOrientation.Horizontal;
+        PlatformView.HasVerticalScroller = !isHorizontal;
+        PlatformView.HasHorizontalScroller = isHorizontal;
+        if (_isInLayout)
+            return;
+
+        var rect = new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height);
+        CalculatePositions(rect);
+        UpdateVisibleItems(rect);
+    }
+
+    void InvalidateMeasurementsForConstraintChange(Rect rect)
+    {
+        var isHorizontal = GetOrientation((VirtualView as StructuredItemsView)?.ItemsLayout) ==
+            ItemsLayoutOrientation.Horizontal;
+        var constraint = (nfloat)(isHorizontal ? rect.Height : rect.Width);
+        if (_lastMeasurementConstraint >= 0 &&
+            (_lastMeasurementWasHorizontal != isHorizontal ||
+             Math.Abs(constraint - _lastMeasurementConstraint) > 1))
+        {
+            InvalidateItemMeasurements();
+        }
+        _lastMeasurementConstraint = constraint;
+        _lastMeasurementWasHorizontal = isHorizontal;
+    }
+
+    void InvalidateItemMeasurements()
+    {
+        foreach (var info in _flatItems)
+        {
+            info.Measured = false;
+            info.Size = _estimatedItemHeight;
+        }
+        _positionsCalculated = false;
+    }
+
     static nfloat MeasureItemHeight(NSView subview, nfloat width)
     {
-        var fittingSize = subview is MacOSContainerView container
-            ? container.SizeThatFits(new CGSize(width, nfloat.MaxValue))
-            : subview.IntrinsicContentSize;
+        var fittingSize = subview switch
+        {
+            MacOSContainerView container => container.SizeThatFits(new CGSize(width, nfloat.MaxValue)),
+            BorderNSView border => border.SizeThatFits(new CGSize(width, nfloat.MaxValue)),
+            _ => subview.IntrinsicContentSize,
+        };
         var height = fittingSize.Height > 0 && fittingSize.Height < 10000
             ? fittingSize.Height : (nfloat)44;
         return height;
@@ -497,9 +620,12 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
     static nfloat MeasureItemWidth(NSView subview, nfloat height)
     {
-        var fittingSize = subview is MacOSContainerView container
-            ? container.SizeThatFits(new CGSize(nfloat.MaxValue, height))
-            : subview.IntrinsicContentSize;
+        var fittingSize = subview switch
+        {
+            MacOSContainerView container => container.SizeThatFits(new CGSize(nfloat.MaxValue, height)),
+            BorderNSView border => border.SizeThatFits(new CGSize(nfloat.MaxValue, height)),
+            _ => subview.IntrinsicContentSize,
+        };
         var width = fittingSize.Width > 0 && fittingSize.Width < 10000
             ? fittingSize.Width : (nfloat)120;
         return width;
@@ -540,10 +666,11 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     public static void MapItemsLayout(CollectionViewHandler handler, CollectionView view)
     {
         var layout = view.ItemsLayout;
+        handler.SubscribeItemsLayout(layout);
         var isHorizontal = GetOrientation(layout) == ItemsLayoutOrientation.Horizontal;
         handler.PlatformView.HasVerticalScroller = !isHorizontal;
         handler.PlatformView.HasHorizontalScroller = isHorizontal;
-        handler._positionsCalculated = false;
+        handler.InvalidateItemMeasurements();
 
         if (handler.PlatformView.Bounds.Width > 0)
         {

@@ -17,6 +17,7 @@ A timeout is a failure, not accepted baseline evidence.
 |---|---|---|
 | `layout` | 6 | Exact missing native child failure / add, insert, replace, remove, clear, re-add |
 | `contentview-clipping` | 19 | Missing bounds clip and transform redraw / clipping toggles, pan/zoom, translated fresh text, nested controls, Entry replacement, redraw cost, scale-only visibility and extent, native owner relayout, scaled collections, composite scroll cost and layout changes, Auto Layout toolbar geometry, autoresizing, scale/anchor resets, nonuniform scale, combined rotation/mirroring with translation, and zero/collapsed transitions (198 assertions) |
+| `collection-view-grid` | 4 | Incorrect composed-card measurements and grid rows / tall cards, live Span changes, resize remeasurement, and spanning headers (8 assertions) |
 | `shell-sections` | 1 | Lazy route target missing / section and content switching, dynamic insertion and handler lifecycle (59 assertions) |
 | `dialog-registration` | 1 | Fixed subscription, proxy and singleton registration across four MAUI versions |
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |

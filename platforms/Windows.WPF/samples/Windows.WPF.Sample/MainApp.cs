@@ -172,7 +172,13 @@ class MainShell : FlyoutPage
 							var page = _pages[idx].factory();
 							if (page is ContentPage cp) Detail = new NavigationPage(cp);
 							else Detail = page;
-							IsPresented = false;
+							// FlyoutLayoutBehavior.Default resolves to a split-style layout on this
+							// wide desktop window, where MAUI core's FlyoutPage disallows toggling
+							// IsPresented at all (InvalidOperationException: "Can't change IsPresented
+							// when setting Default"). Only Popover behavior supports IsPresented, so
+							// only attempt to close the flyout overlay when that's the active layout.
+							if (FlyoutLayoutBehavior == FlyoutLayoutBehavior.Popover)
+								IsPresented = false;
 						}
 						catch (Exception ex) { err = ex.GetType().Name + ": " + ex.Message; }
 					});

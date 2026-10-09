@@ -189,6 +189,12 @@ public sealed class RuntimeTestContext
             (int)bitmap.BytesPerRow, (int)bitmap.SamplesPerPixel);
     }
 
+    public void Capture(NSWindow window, string name)
+    {
+        window.DisplayIfNeeded();
+        _ = CaptureWindowBitmap(window, name);
+    }
+
     [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
     static extern IntPtr CGWindowListCreateImage(
         CGRect screenBounds,
