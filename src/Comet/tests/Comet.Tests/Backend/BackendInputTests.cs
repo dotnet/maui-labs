@@ -32,6 +32,27 @@ namespace Comet.Tests.Backend
 		}
 
 		[Fact]
+		public void TextField_EmitsRequestedFontContract()
+		{
+			var node = Bridge(new VStack
+			{
+				new TextField("5")
+					.FontSize(22)
+					.FontFamily("ManropeSemibold")
+					.FontWeight(Microsoft.Maui.FontWeight.Semibold)
+					.FontSlant(Microsoft.Maui.FontSlant.Oblique),
+			});
+			var field = node.Children[0];
+
+			Assert.Equal(22, field.Get(PropertyIds.Text_FontSize).AsDouble);
+			Assert.Equal("ManropeSemibold", field.Get(PropertyIds.Text_FontFamily).AsString);
+			Assert.Equal(
+				(int)Microsoft.Maui.FontWeight.Semibold,
+				field.Get(PropertyIds.Text_FontWeight).AsInt);
+			Assert.True(field.Get(PropertyIds.Text_Italic).AsBool);
+		}
+
+		[Fact]
 		public void TextField_Edit_WritesBackToSignal()
 		{
 			var name = new Signal<string>("");

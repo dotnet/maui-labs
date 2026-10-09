@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Comet.Reflection
 {
@@ -19,7 +21,15 @@ namespace Comet.Reflection
 		// Walks the type hierarchy using DeclaredOnly so that a `new` (shadowing)
 		// property with a different return type doesn't raise AmbiguousMatchException.
 		// The most-derived declaration wins, matching C# member-lookup semantics.
-		internal static PropertyInfo GetPropertySafe(this Type type, string name,
+		[UnconditionalSuppressMessage(
+			"Trimming",
+			"IL2075",
+			Justification = "NativeAOT callers pass View runtime types whose class-level contract preserves properties throughout the inheritance chain; the linker does not propagate that contract through Type.BaseType.")]
+		internal static PropertyInfo GetPropertySafe(
+			[DynamicallyAccessedMembers(
+				DynamicallyAccessedMemberTypes.PublicProperties |
+				DynamicallyAccessedMemberTypes.NonPublicProperties)] this Type type,
+			string name,
 			BindingFlags flags = InstanceBindingFlags)
 		{
 			var declaredFlags = flags | BindingFlags.DeclaredOnly;
@@ -44,7 +54,38 @@ namespace Comet.Reflection
 			return null;
 		}
 
+		[RequiresUnreferencedCode(
+			"Setting members on arbitrary objects requires runtime property and field metadata. " +
+			"Use the View overload for Comet views in trimmed applications.")]
 		public static bool SetPropertyValue<T>(this object obj, string name, T value)
+		{
+			if (obj is View view)
+				return SetPropertyValue(view, name, value);
+
+			var type = obj.GetType();
+			var key = (type, name);
+			var setter = SetterCache<T>.Get(key);
+			if (setter is not null)
+			{
+				setter(obj, value);
+				return true;
+			}
+
+			if (!SetterCache<T>.Has(key))
+			{
+				var created = CreateSetter<T>(type, name);
+				SetterCache<T>.Set(key, created);
+				if (created is not null)
+				{
+					created(obj, value);
+					return true;
+				}
+			}
+
+			return SetPropertyValue(obj, name, (object)value);
+		}
+
+		public static bool SetPropertyValue<T>(this View obj, string name, T value)
 		{
 			var type = obj.GetType();
 			var key = (type, name);
@@ -80,7 +121,13 @@ namespace Comet.Reflection
 			public static bool Has((Type, string) key) => Cache.ContainsKey(key);
 		}
 
-		static Action<object, T> CreateSetter<T>(Type type, string name)
+		static Action<object, T> CreateSetter<T>(
+			[DynamicallyAccessedMembers(
+				DynamicallyAccessedMemberTypes.PublicFields |
+				DynamicallyAccessedMemberTypes.NonPublicFields |
+				DynamicallyAccessedMemberTypes.PublicProperties |
+				DynamicallyAccessedMemberTypes.NonPublicProperties)] Type type,
+			string name)
 		{
 			var property = type.GetPropertySafe(name);
 			if (property is not null && property.CanWrite)
@@ -147,7 +194,69 @@ namespace Comet.Reflection
 
 		static readonly Dictionary<(Type, string), Action<object, object>> _setterCache = new Dictionary<(Type, string), Action<object, object>>();
 
+		[RequiresUnreferencedCode(
+			"Setting members on arbitrary objects requires runtime property and field metadata. " +
+			"Use the View overload for Comet views in trimmed applications.")]
 		public static bool SetPropertyValue(this object obj, string name, object value)
+		{
+			if (obj is View view)
+				return SetPropertyValue(view, name, value);
+
+			var type = obj.GetType();
+			var cacheKey = (type, name);
+
+			if (_setterCache.TryGetValue(cacheKey, out var setter))
+			{
+				if (setter is not null)
+				{
+					setter(obj, value);
+					return true;
+				}
+			}
+			else
+			{
+				var created = CreateSetter(type, name);
+				_setterCache[cacheKey] = created;
+				if (created is not null)
+				{
+					created(obj, value);
+					return true;
+				}
+			}
+
+			if (!_setMemberCache.TryGetValue(cacheKey, out var member))
+			{
+				var info = type.GetPropertySafe(name);
+				if (info is not null && info.CanWrite)
+				{
+					if (info.PropertyType.IsDeepSubclass(typeof(Comet.Reactive.PropertySubscription<>)))
+						member = null;
+					else
+						member = info;
+				}
+				else
+				{
+					member = type.GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+				}
+				_setMemberCache[cacheKey] = member;
+			}
+
+			if (member is PropertyInfo property)
+			{
+				property.SetValue(obj, Convert(value, property.PropertyType));
+				return true;
+			}
+
+			if (member is FieldInfo field)
+			{
+				field.SetValue(obj, Convert(value, field.FieldType));
+				return true;
+			}
+
+			return false;
+		}
+
+		public static bool SetPropertyValue(this View obj, string name, object value)
 		{
 			var type = obj.GetType();
 			var cacheKey = (type, name);
@@ -206,7 +315,13 @@ namespace Comet.Reflection
 			return false;
 		}
 
-		static Action<object, object> CreateSetter(Type type, string name)
+		static Action<object, object> CreateSetter(
+			[DynamicallyAccessedMembers(
+				DynamicallyAccessedMemberTypes.PublicFields |
+				DynamicallyAccessedMemberTypes.NonPublicFields |
+				DynamicallyAccessedMemberTypes.PublicProperties |
+				DynamicallyAccessedMemberTypes.NonPublicProperties)] Type type,
+			string name)
 		{
 			try
 			{
@@ -263,25 +378,72 @@ namespace Comet.Reflection
 			var newType = obj.GetType();
 			if (type.IsAssignableFrom(newType))
 				return obj;
-			var typeName = obj?.GetType().Name;
-			if ((typeName == "State`1" || typeName == "Reactive`1") && type.Name != "State`1" && type.Name != "Reactive`1")
+			if (obj is Comet.Reactive.IUntypedValue valueSource &&
+				!type.IsInstanceOfType(obj))
 			{
-				return obj.GetPropValue<object>("Value");
-			}
-			else if(obj?.GetType().Name == "PropertySubscription`1" && type.Name != "PropertySubscription`1")
-			{
-				return obj.GetPropValue<object>("CurrentValue");
+				return valueSource.UntypedValue;
 			}
 			//if (type == typeof(String))
 			//    return obj.ToString();
 			return System.Convert.ChangeType(obj, type);
 		}
 
+		[RequiresUnreferencedCode(
+			"Setting nested members on arbitrary objects requires runtime property and field metadata. " +
+			"Use SetDirectPropertyValue for direct Comet View members in trimmed applications.")]
 		public static bool SetDeepPropertyValue(this object obj, string name, object value)
+		{
+			if (obj is View view)
+				return SetDeepPropertyValue(view, name, value);
+			if (obj is null)
+				return false;
+			return SetNestedPropertyValue(obj, name, value);
+		}
+
+		/// <summary>Sets a View member or a nested property path. Nested object metadata must be preserved.</summary>
+		[RequiresUnreferencedCode(
+			"Nested property paths require runtime property and field metadata. " +
+			"Use SetDirectPropertyValue for direct Comet View members in trimmed applications.")]
+		public static bool SetDeepPropertyValue(this View obj, string name, object value)
 		{
 			if (obj is null)
 				return false;
-			var lastObect = obj;
+
+			if (!name.Contains('.'))
+				return SetDirectPropertyValue(obj, name, value);
+
+			return SetNestedPropertyValue(obj, name, value);
+		}
+
+		/// <summary>Sets a direct View property or field without conversion. Nested paths are not supported.</summary>
+		public static bool SetDirectPropertyValue(this View obj, string name, object value)
+		{
+			if (obj is null)
+				return false;
+			if (name.Contains('.'))
+				throw new ArgumentException("A direct View member name cannot contain a nested path.", nameof(name));
+
+			var type = obj.GetType();
+			var property = type.GetDeepProperty(name);
+			if (property is not null)
+			{
+				property.SetValue(obj, value);
+				return true;
+			}
+
+			var field = type.GetDeepField(name);
+			if (field is null)
+				return false;
+
+			field.SetValue(obj, value);
+			return true;
+		}
+
+		[RequiresUnreferencedCode(
+			"Nested property paths require runtime property and field metadata.")]
+		static bool SetNestedPropertyValue(object obj, string name, object value)
+		{
+			var lastObject = obj;
 			FieldInfo field = null;
 			PropertyInfo info = null;
 			foreach (var part in name.Split('.'))
@@ -291,7 +453,7 @@ namespace Comet.Reflection
 				info = null;
 				field = null;
 				var type = obj?.GetType();
-				lastObect = obj;
+				lastObject = obj;
 				info = type?.GetDeepProperty(part);
 				if (info is not null)
 				{
@@ -307,18 +469,26 @@ namespace Comet.Reflection
 			}
 			if (field is not null)
 			{
-				field.SetValue(lastObect, value);
+				field.SetValue(lastObject, value);
 				return true;
 			}
 			else if (info is not null)
 			{
-				info.SetValue(lastObect, value);
+				info.SetValue(lastObject, value);
 				return true;
 			}
 			return false;
 		}
 
-		public static FieldInfo GetDeepField(this Type type, string name)
+		[UnconditionalSuppressMessage(
+			"Trimming",
+			"IL2072",
+			Justification = "NativeAOT callers pass View runtime types whose class-level contract preserves fields throughout the inheritance chain; the linker does not propagate that contract through Type.BaseType.")]
+		public static FieldInfo GetDeepField(
+			[DynamicallyAccessedMembers(
+				DynamicallyAccessedMemberTypes.PublicFields |
+				DynamicallyAccessedMemberTypes.NonPublicFields)] this Type type,
+			string name)
 		{
 			var fieldInfo = type.GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
 			if (fieldInfo is null && type.BaseType is not null)
@@ -326,11 +496,19 @@ namespace Comet.Reflection
 			return fieldInfo;
 		}
 
-		public static PropertyInfo GetDeepProperty(this Type type, string name)
+		public static PropertyInfo GetDeepProperty(
+			[DynamicallyAccessedMembers(
+				DynamicallyAccessedMemberTypes.PublicProperties |
+				DynamicallyAccessedMemberTypes.NonPublicProperties)] this Type type,
+			string name)
 		{
 			return type.GetPropertySafe(name);
 		}
-		public static List<PropertyInfo> GetDeepProperties(this Type type, BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+		public static List<PropertyInfo> GetDeepProperties(
+			[DynamicallyAccessedMembers(
+				DynamicallyAccessedMemberTypes.PublicProperties |
+				DynamicallyAccessedMemberTypes.NonPublicProperties)] this Type type,
+			BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
 		{
 			var properties = type.GetProperties(flags).ToList();
 			if (type.BaseType is not null)
@@ -338,14 +516,46 @@ namespace Comet.Reflection
 			return properties;
 		}
 
-		public static MethodInfo GetDeepMethodInfo(this Type type, string name)
+		[UnconditionalSuppressMessage(
+			"Trimming",
+			"IL2072",
+			Justification = "NativeAOT callers pass View runtime types whose class-level contract preserves methods throughout the inheritance chain; the linker does not propagate that contract through Type.BaseType.")]
+		public static MethodInfo GetDeepMethodInfo(
+			[DynamicallyAccessedMembers(
+				DynamicallyAccessedMemberTypes.PublicMethods |
+				DynamicallyAccessedMemberTypes.NonPublicMethods)] this Type type,
+			string name)
 		{
 			var methodInfo = type.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
 			if (methodInfo is null && type.BaseType is not null)
 				methodInfo = GetDeepMethodInfo(type.BaseType, name);
 			return methodInfo;
 		}
-		public static MethodInfo GetDeepMethodInfo(this Type type, Type withAttribute)
+
+		[UnconditionalSuppressMessage(
+			"Trimming",
+			"IL2072",
+			Justification = "NativeAOT callers pass View runtime types whose class-level contract preserves non-public methods throughout the inheritance chain; the linker does not propagate that contract through Type.BaseType.")]
+		internal static MethodInfo GetDeepNonPublicMethodInfo(
+			[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods)] this Type type,
+			Type withAttribute)
+		{
+			var methodInfo = type
+				.GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
+				.FirstOrDefault(method => method.GetCustomAttributes(withAttribute, false).Length > 0);
+			if (methodInfo is null && type.BaseType is not null)
+				methodInfo = GetDeepNonPublicMethodInfo(type.BaseType, withAttribute);
+			return methodInfo;
+		}
+		[UnconditionalSuppressMessage(
+			"Trimming",
+			"IL2072",
+			Justification = "NativeAOT callers pass View runtime types whose class-level contract preserves methods throughout the inheritance chain; the linker does not propagate that contract through Type.BaseType.")]
+		public static MethodInfo GetDeepMethodInfo(
+			[DynamicallyAccessedMembers(
+				DynamicallyAccessedMemberTypes.PublicMethods |
+				DynamicallyAccessedMemberTypes.NonPublicMethods)] this Type type,
+			Type withAttribute)
 		{
 			var methodInfo = type.GetMethods(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance).Where(m => m.GetCustomAttributes(withAttribute, false).Length > 0).FirstOrDefault();
 			if (methodInfo is null && type.BaseType is not null)
@@ -353,7 +563,50 @@ namespace Comet.Reflection
 			return methodInfo;
 		}
 
+		[RequiresUnreferencedCode(
+			"Reading members on arbitrary objects requires runtime property and field metadata. " +
+			"Use GetDirectPropertyValue for direct Comet View members in trimmed applications.")]
 		public static object GetPropertyValue(this object obj, string name)
+		{
+			if (obj is View view)
+				return GetPropertyValue(view, name);
+			return GetNestedPropertyValue(obj, name);
+		}
+
+		/// <summary>Reads a View member or a nested property path. Nested object metadata must be preserved.</summary>
+		[RequiresUnreferencedCode(
+			"Nested property paths require runtime property and field metadata. " +
+			"Use GetDirectPropertyValue for direct Comet View members in trimmed applications.")]
+		public static object GetPropertyValue(this View obj, string name)
+		{
+			if (obj is null)
+				return null;
+
+			if (!name.Contains('.'))
+				return GetDirectPropertyValue(obj, name);
+
+			return GetNestedPropertyValue(obj, name);
+		}
+
+		/// <summary>Reads a direct View property or field. Nested paths are not supported.</summary>
+		public static object GetDirectPropertyValue(this View obj, string name)
+		{
+			if (obj is null)
+				return null;
+			if (name.Contains('.'))
+				throw new ArgumentException("A direct View member name cannot contain a nested path.", nameof(name));
+
+			var type = obj.GetType();
+			var info = type.GetDeepProperty(name);
+			if (info is not null)
+				return info.GetValue(obj, null);
+
+			return type.GetDeepField(name)?.GetValue(obj);
+		}
+
+		[RequiresUnreferencedCode(
+			"Nested property paths require runtime property and field metadata.")]
+		static object GetNestedPropertyValue(object obj, string name)
 		{
 			foreach (var part in name.Split('.'))
 			{
@@ -376,9 +629,38 @@ namespace Comet.Reflection
 			return obj;
 		}
 
+		[RequiresUnreferencedCode(
+			"Reading members on arbitrary objects requires runtime property and field metadata. " +
+			"Use GetDirectPropValue for direct Comet View members in trimmed applications.")]
 		public static T GetPropValue<T>(this object obj, string name)
 		{
 			var retval = GetPropertyValue(obj, name);
+			if (retval is null)
+				return default;
+			return (T)retval;
+		}
+
+		[RequiresUnreferencedCode(
+			"Nested property paths require runtime property and field metadata. " +
+			"Use GetDirectPropValue for direct Comet View members in trimmed applications.")]
+		public static T GetPropValue<T>(this View obj, string name)
+		{
+			var retval = GetPropertyValue(obj, name);
+			if (retval is null)
+				return default;
+			return (T)retval;
+		}
+
+		[RequiresUnreferencedCode(
+			"Reading members on arbitrary IView implementations requires runtime property and field metadata. " +
+			"Use GetDirectPropValue for direct Comet View members in trimmed applications.")]
+		public static T GetPropValue<T>(this Microsoft.Maui.IView obj, string name)
+			=> GetPropValue<T>((object)obj, name);
+
+		/// <summary>Reads a direct View property or field, returning default when absent or null.</summary>
+		public static T GetDirectPropValue<T>(this View obj, string name)
+		{
+			var retval = GetDirectPropertyValue(obj, name);
 			if (retval is null)
 				return default;
 			return (T)retval;

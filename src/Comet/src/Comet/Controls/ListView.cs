@@ -18,6 +18,13 @@ namespace Comet
 		Uncontained,
 	}
 
+	/// <summary>Placement used when a list performs its one-shot initial scroll.</summary>
+	public enum ListScrollPosition
+	{
+		Start,
+		Center,
+	}
+
 	public interface IListView : IView
 	{
 		int Sections();
@@ -40,6 +47,10 @@ namespace Comet
 		/// <summary>The backend node registers a delegate that animates the list to its end; calling
 		/// <see cref="ListView.ScrollToBottom"/> invokes it. Null until the node has rendered.</summary>
 		void RegisterScroller(System.Action scrollToBottom);
+
+		/// <summary>The backend node registers a delegate for an indexed scroll request. The
+		/// position controls whether the target row is revealed at the start or center.</summary>
+		void RegisterScrollTo(System.Action<int, ListScrollPosition, bool> scrollTo);
 
 		/// <summary>Open the list at its LAST row (chat-log semantics — Jetchat). Ordinary
 		/// lists (an inbox) leave this false and open at the top.</summary>
@@ -70,12 +81,24 @@ namespace Comet
 		/// toward the start (Compose <c>LazyListState.lastScrolledBackward</c>). The gold
 		/// Reply ExtendedFAB re-expands on any upward scroll, not only at the very top.</summary>
 		Comet.Reactive.Signal<bool> LastScrolledBackward { get; }
+
+		/// <summary>Zero-based row to reveal once after the native list receives its viewport.
+		/// A negative value leaves the platform's default initial position unchanged. Native
+		/// start/end spacing keeps boundary rows centerable.</summary>
+		int InitialScrollIndex { get; }
+
+		/// <summary>Viewport placement for <see cref="InitialScrollIndex"/>.</summary>
+		ListScrollPosition InitialScrollPosition { get; }
+
+		/// <summary>Use the platform's native centered snap behavior when supported.</summary>
+		bool SnapToCenter { get; }
 	}
 
 	public class ListView<T> : ListView
 	{
 		//TODO Evaluate if 30 is a good number
 		protected IDictionary<(int section, int row, object item), View> CurrentViews { get; }
+		bool _clearingCachedViews;
 
 		PropertySubscription<IReadOnlyList<T>> _items;
 		PropertySubscription<IReadOnlyList<T>> Items
@@ -108,8 +131,12 @@ namespace Comet
 				{
 					OnDequeue = (pair) =>
 					{
+						if (_clearingCachedViews)
+							return;
 						var view = pair.Value;
-						if (view?.ViewHandler ?.PlatformView is null)
+						if (view is null || !ReferenceEquals(view.Parent, this))
+							return;
+						if (view.ViewHandler?.PlatformView is null)
 							view.Dispose();
 						else
 							CurrentViews[pair.Key] = view;
@@ -181,9 +208,8 @@ namespace Comet
 				// Invalidate the row-view cache: rows snapshot state at build time (an
 				// opened-row highlight), so a reload must rebuild them — serving cached
 				// views re-emits the stale snapshot. Same clear+dispose as Dispose().
-				var staleViews = CurrentViews?.ToList();
-				CurrentViews?.Clear();
-				staleViews?.ForEach(x => x.Value?.Dispose());
+				var staleViews = ClearCachedViews();
+				DisposeOwnedCachedViews(staleViews);
 				base.ReloadData();
 			}
 			finally
@@ -223,10 +249,42 @@ namespace Comet
 
 			DisposeObservable();
 
-			var currentViews = CurrentViews?.ToList();
-			CurrentViews?.Clear();
-			currentViews?.ForEach(x => x.Value?.Dispose());
+			var currentViews = ClearCachedViews();
+			DisposeOwnedCachedViews(currentViews);
 			base.Dispose(disposing);
+		}
+
+		List<KeyValuePair<(int section, int row, object item), View>> ClearCachedViews()
+		{
+			var cachedViews = CurrentViews.ToList();
+
+			_clearingCachedViews = true;
+			try
+			{
+				CurrentViews.Clear();
+			}
+			finally
+			{
+				_clearingCachedViews = false;
+			}
+			return cachedViews;
+		}
+
+		void DisposeOwnedCachedViews(
+			IEnumerable<KeyValuePair<(int section, int row, object item), View>> cachedViews)
+		{
+			if (cachedViews is null)
+				return;
+
+			var disposed = new HashSet<View>();
+			foreach (var pair in cachedViews)
+			{
+				var view = pair.Value;
+				if (view is not null &&
+					ReferenceEquals(view.Parent, this) &&
+					disposed.Add(view))
+					view.Dispose();
+			}
 		}
 	}
 
@@ -272,13 +330,33 @@ namespace Comet
 		/// the start (<c>lastScrolledBackward</c>); the gold Reply FAB re-expands on it.</summary>
 		public Comet.Reactive.Signal<bool> LastScrolledBackward { get; } = new(false);
 
+		/// <summary>Zero-based row to reveal once when the native list is first arranged.
+		/// Set to a negative value (the default) to preserve the platform's normal start.</summary>
+		public int InitialScrollIndex { get; set; } = -1;
+
+		/// <summary>Placement of <see cref="InitialScrollIndex"/> in the viewport.</summary>
+		public ListScrollPosition InitialScrollPosition { get; set; } = ListScrollPosition.Start;
+
+		/// <summary>Use the platform's native centered snap behavior when supported.</summary>
+		public bool SnapToCenter { get; set; }
+
 		System.Action _scrollToBottom;
+		System.Action<int, ListScrollPosition, bool> _scrollTo;
 
 		void IListView.RegisterScroller(System.Action scrollToBottom) => _scrollToBottom = scrollToBottom;
+		void IListView.RegisterScrollTo(System.Action<int, ListScrollPosition, bool> scrollTo) => _scrollTo = scrollTo;
 
 		/// <summary>Animate the list to its end (newest message). No-op until the backend node has
 		/// rendered and registered its scroller.</summary>
 		public void ScrollToBottom() => _scrollToBottom?.Invoke();
+
+		/// <summary>Reveal a row in the requested viewport position. Native list backends
+		/// perform the platform-specific centering and animation.</summary>
+		public void ScrollTo(
+			int index,
+			ListScrollPosition position = ListScrollPosition.Start,
+			bool animate = true) =>
+			_scrollTo?.Invoke(index, position, animate);
 
 		protected virtual int GetSections() => 1;
 

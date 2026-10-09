@@ -84,6 +84,16 @@ public sealed class LazyListState
     /// </summary>
     public int FirstVisibleItemIndex => Jvm.FirstVisibleItemIndex;
 
+    /// <summary>Last visible row index, or -1 before the list has visible content.</summary>
+    public int LastVisibleItemIndex
+    {
+        get
+        {
+            var items = Jvm.LayoutInfo.VisibleItemsInfo;
+            return items.Count == 0 ? -1 : items[items.Count - 1].Index;
+        }
+    }
+
     /// <summary>
     /// Scroll offset of the first visible item, in pixels. Mirrors
     /// Kotlin's <c>LazyListState.firstVisibleItemScrollOffset</c>.

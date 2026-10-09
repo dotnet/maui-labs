@@ -3,12 +3,40 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
+using Comet.Backend;
+using Comet.Tests.Backend;
 using Xunit;
 
 namespace Comet.Tests
 {
 	public class ListViewTests : TestBase
 	{
+		sealed class EmptyServiceProvider : IServiceProvider
+		{
+			public object GetService(Type serviceType) => null;
+		}
+
+		sealed class FakeListNode : FakeBackendNode, IBackendManagesOwnContent
+		{
+			public FakeListNode() : base("list") { }
+		}
+
+		sealed class TrackingText : Text
+		{
+			public TrackingText(string value) : base(value) { }
+
+			public int DisposeCount { get; private set; }
+
+			protected override void Dispose(bool disposing)
+			{
+				if (disposing)
+					DisposeCount++;
+				base.Dispose(disposing);
+			}
+		}
+
+		static readonly BackendContext Ctx = new(new EmptyServiceProvider());
+
 		// ---- ListView<T> core functionality ----
 
 		[Fact]
@@ -450,6 +478,68 @@ namespace Comet.Tests
 			Assert.Equal(2, createdViews.Count);
 			lv.Dispose();
 			Assert.All(createdViews, v => Assert.True(v.IsDisposed));
+		}
+
+		[Fact]
+		public void ListViewGeneric_DisposeDeduplicatesSharedCachedRows()
+		{
+			var sharedRow = new TrackingText("shared");
+			var list = new ListView<int>(new[] { 1, 2 })
+			{
+				ViewFor = _ => sharedRow,
+			};
+			var source = (IListView)list;
+
+			Assert.Same(sharedRow, source.ViewFor(0, 0));
+			Assert.Same(sharedRow, source.ViewFor(0, 1));
+
+			list.Dispose();
+
+			Assert.Equal(1, sharedRow.DisposeCount);
+		}
+
+		[Fact]
+		public void KeyedListView_DisposeSkipsSharedRowClaimedByReplacement()
+		{
+			var sharedRow = new TrackingText("shared").Key("row");
+			var removedRow = new TrackingText("removed").Key("removed");
+			var oldList = new ListView<int>(new[] { 1, 2 })
+			{
+				ViewFor = value => value == 1 ? sharedRow : removedRow,
+			}.Key("list");
+			var oldRoot = new VStack { oldList };
+			CometBackendBridge.Materialize(
+				oldRoot,
+				view => view is IListView
+					? new FakeListNode()
+					: new FakeBackendNode(view.GetType().Name),
+				Ctx);
+			var oldSource = (IListView)oldList;
+			Assert.Same(sharedRow, oldSource.ViewFor(0, 0));
+			Assert.Same(removedRow, oldSource.ViewFor(0, 1));
+
+			var replacementList = new ListView<int>(new[] { 1 })
+			{
+				ViewFor = _ => sharedRow,
+			}.Key("list");
+			var replacementSource = (IListView)replacementList;
+			Assert.Same(sharedRow, replacementSource.ViewFor(0, 0));
+			var replacementRoot = new VStack { replacementList };
+
+			Assert.Same(replacementList, sharedRow.Parent);
+			replacementRoot.Diff(oldRoot, false);
+			Assert.Same(replacementList, sharedRow.Parent);
+			oldRoot.Dispose();
+
+			Assert.False(sharedRow.IsDisposed);
+			Assert.Equal(0, sharedRow.DisposeCount);
+			Assert.Same(replacementList, sharedRow.Parent);
+			Assert.True(removedRow.IsDisposed);
+			Assert.Equal(1, removedRow.DisposeCount);
+
+			replacementRoot.Dispose();
+			Assert.Equal(1, sharedRow.DisposeCount);
+			Assert.Equal(1, removedRow.DisposeCount);
 		}
 
 		[Fact]

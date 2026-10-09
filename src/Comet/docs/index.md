@@ -84,6 +84,9 @@ decisions. Useful for contributors and anyone working on the framework internals
 Background research, multi-model analysis, and independent reviews that fed into
 design decisions. Reference material, not prescriptive.
 
+- [BaristaNotes Performance Investigation](baristanotes-performance-status.md) --
+  Pixel 5 startup, APK size, memory and page-transition results, with samples,
+  measurement limits and evidence identities. Closed on 2026-09-24.
 - [Comet vs MauiReactor Comparison](research/state-management-comparison.md) --
   Side-by-side analysis of both frameworks' state management systems.
 - [State Management Deep Dive (GPT)](research/state-management-gpt.md) --
@@ -110,6 +113,5 @@ Independent reviews of the state management v2 proposal across multiple rounds:
 - [Gemini Review](research/reviews/SPEC_REVIEW_GEMINI.md)
 - [GPT-5.4 Final Review](research/reviews/SPEC_FINAL_REVIEW_GPT54.md)
 - [Review Response (Holden)](research/reviews/REVIEW_RESPONSE.md)
-
 
 

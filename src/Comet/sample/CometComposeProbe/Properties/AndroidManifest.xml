@@ -2,7 +2,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 	<uses-sdk android:minSdkVersion="24" android:targetSdkVersion="37" />
 	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission android:name="android.permission.RECORD_AUDIO" />
+	<queries>
+		<intent>
+			<action android:name="android.speech.RecognitionService" />
+		</intent>
+	</queries>
+	<queries>
+		<intent>
+			<action android:name="android.media.action.IMAGE_CAPTURE" />
+		</intent>
+		<intent>
+			<action android:name="android.intent.action.OPEN_DOCUMENT" />
+			<data android:mimeType="image/*" />
+		</intent>
+	</queries>
 	<!-- Label comes from the per-variant string resource (Icons/<variant>/strings.xml,
 	     selected by -p:CometSample) so standalone sample apps get their own launcher name. -->
-	<application android:label="@string/comet_app_name" android:theme="@android:style/Theme.Material.Light"></application>
+	<application android:label="@string/comet_app_name" android:theme="@android:style/Theme.Material.Light">
+		<provider
+			android:name="androidx.core.content.FileProvider"
+			android:authorities="${applicationId}.baristanotes.files"
+			android:exported="false"
+			android:grantUriPermissions="true">
+			<meta-data
+				android:name="android.support.FILE_PROVIDER_PATHS"
+				android:resource="@xml/baristanotes_file_paths" />
+		</provider>
+	</application>
 </manifest>

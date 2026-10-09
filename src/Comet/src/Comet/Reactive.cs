@@ -17,7 +17,7 @@ namespace Comet
 	///   count.Value++;                               // triggers re-render
 	///   new Text(() =&gt; $"Count: {count.Value}")   // automatic binding
 	/// </summary>
-	public class Reactive<T> : IReactiveSource, INotifyPropertyRead, IDisposable
+	public class Reactive<T> : IReactiveSource, INotifyPropertyRead, IUntypedValue, IDisposable
 	{
 		static readonly PropertyChangedEventArgs ValueChangedArgs = new("Value");
 
@@ -50,6 +50,7 @@ namespace Comet
 				PropertyRead?.Invoke(this, ValueChangedArgs);
 				return _box.Value;
 			}
+
 			set
 			{
 				if (_comparer.Equals(_box.Value, value))
@@ -62,6 +63,8 @@ namespace Comet
 				ReactiveScheduler.EnsureFlushScheduled();
 			}
 		}
+
+		object? IUntypedValue.UntypedValue => Value;
 
 		public uint Version => _version;
 		public Action<T>? ValueChanged { get; set; }
