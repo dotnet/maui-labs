@@ -14,8 +14,7 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 /// <summary>
 /// Shell handler for macOS. Renders Shell as a split view with:
 /// - Left sidebar (flyout) showing Shell items
-/// - Right content area showing the current page
-/// On macOS, the flyout is always visible (like a source list sidebar).
+/// - Right content area showing section tabs and the current page
 /// </summary>
 public partial class ShellHandler : ViewHandler<Shell, NSView>
 {
@@ -43,6 +42,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	NSObject? _contentFrameChangedObserver;
 	NSView? _currentPageView;
 	Page? _currentPage;
+	int _pageRenderGeneration;
 	Shell? _shell;
 	nfloat _flyoutWidth = 300;
 
@@ -58,10 +58,22 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	SidebarOutlineViewDelegate? _outlineDelegate;
 	// Maps leaf MacOSSidebarItem → (ShellItem, ShellSection, ShellContent)
 	Dictionary<MacOSSidebarItem, (ShellItem, ShellSection, ShellContent)>? _itemNavMap;
+	readonly HashSet<NSObject> _registeredNativeElements = new();
 	bool _isUpdatingSelection;
 
 	public ShellHandler() : base(Mapper, CommandMapper)
 	{
+	}
+
+	public override void SetVirtualView(IView view)
+	{
+		if (!ReferenceEquals(_shell, view))
+			DisconnectShellEvents();
+		base.SetVirtualView(view);
+		ConnectShellEvents();
+		EnsureShellItemHandlers();
+		BuildSidebar();
+		ShowCurrentPage();
 	}
 
 	/// <summary>
@@ -144,7 +156,8 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		sidebarVC.View = _sidebarView;
 
 		var contentVC = new NSViewController();
-		contentVC.View = _contentView;
+		_contentContainer = new ShellContentContainer(_contentView);
+		contentVC.View = _contentContainer;
 
 		_sidebarSplitItem = NSSplitViewItem.CreateSidebar(sidebarVC);
 		_sidebarSplitItem.MinimumThickness = 150;
@@ -180,19 +193,8 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 	protected override void ConnectHandler(NSView platformView)
 	{
 		base.ConnectHandler(platformView);
-		_shell = VirtualView;
-
-		if (_shell != null)
-		{
-			((INotifyCollectionChanged)_shell.Items).CollectionChanged += OnShellItemsChanged;
-			_shell.Navigating += OnShellNavigating;
-			_shell.Navigated += OnShellNavigated;
-			_shell.PropertyChanged += OnShellPropertyChanged;
-
-			// Ensure handlers are created for all Shell sub-elements so
-			// Shell's internal navigation system (GoToAsync) can resolve them
-			EnsureShellItemHandlers();
-		}
+		ConnectShellEvents();
+		EnsureShellItemHandlers();
 
 		// Set initial sidebar width
 		_splitViewController?.SplitView?.SetPositionOfDivider(_flyoutWidth, 0);
@@ -202,19 +204,13 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 
 	protected override void DisconnectHandler(NSView platformView)
 	{
-		if (_shell != null)
-		{
-			((INotifyCollectionChanged)_shell.Items).CollectionChanged -= OnShellItemsChanged;
-			_shell.Navigating -= OnShellNavigating;
-			_shell.Navigated -= OnShellNavigated;
-			_shell.PropertyChanged -= OnShellPropertyChanged;
-		}
+		UnregisterNativeElements();
+		DisconnectShellEvents();
 		if (_contentFrameChangedObserver != null)
 		{
 			NSNotificationCenter.DefaultCenter.RemoveObserver(_contentFrameChangedObserver);
 			_contentFrameChangedObserver = null;
 		}
-		_shell = null;
 		base.DisconnectHandler(platformView);
 	}
 
@@ -284,7 +280,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		if (_currentPageView != null)
 		{
 			var contentBounds = _contentView.Bounds;
-			_currentPageView.Frame = contentBounds;
+			_currentPageView.SetLayoutFrame(contentBounds);
 			LayoutCurrentPage(rect);
 		}
 	}
@@ -332,7 +328,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		if (bounds.Width <= 0 || bounds.Height <= 0)
 			return;
 
-		_currentPageView.Frame = bounds;
+		_currentPageView.SetLayoutFrame(bounds);
 		_currentPage.Measure((double)bounds.Width, (double)bounds.Height);
 		_currentPage.Arrange(new Rect(0, 0, (double)bounds.Width, (double)bounds.Height));
 	}
@@ -342,6 +338,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		if (_shell == null || MauiContext == null)
 			return;
 
+		UnregisterNativeElements();
 		if (_useNativeSidebar)
 			BuildNativeSidebar();
 		else
@@ -416,7 +413,10 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		}
 
 		_outlineDataSource = new SidebarOutlineViewDataSource(sidebarItems);
-		_outlineDelegate = new SidebarOutlineViewDelegate(_outlineDataSource, OnNativeSidebarItemSelected);
+		_outlineDelegate = new SidebarOutlineViewDelegate(
+			_outlineDataSource,
+			OnNativeSidebarItemSelected,
+			OnNativeSidebarItemRealized);
 
 		_outlineView.DataSource = _outlineDataSource;
 		_outlineView.Delegate = _outlineDelegate;
@@ -510,6 +510,7 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 		if (_sidebarContent == null || _shell == null || MauiContext == null)
 			return;
 
+		UnregisterNativeElements();
 		// Clear existing sidebar items
 		foreach (var subview in _sidebarContent.Subviews)
 			subview.RemoveFromSuperview();
@@ -568,7 +569,30 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			itemView.SetSelected(true);
 		}
 
+		RegisterNativeElement(content, itemView, "ShellFlyout");
 		_sidebarContent!.AddSubview(itemView);
+	}
+
+	void OnNativeSidebarItemRealized(MacOSSidebarItem sidebarItem, NSView nativeView)
+	{
+		if (_itemNavMap != null &&
+			_itemNavMap.TryGetValue(sidebarItem, out var navigation))
+		{
+			RegisterNativeElement(navigation.Item3, nativeView, "ShellFlyout");
+		}
+	}
+
+	void RegisterNativeElement(object owner, NSObject nativeElement, string role)
+	{
+		NativeElementDiagnosticsBridge.Register(owner, nativeElement, role);
+		_registeredNativeElements.Add(nativeElement);
+	}
+
+	void UnregisterNativeElements()
+	{
+		foreach (var nativeElement in _registeredNativeElements)
+			NativeElementDiagnosticsBridge.Unregister(nativeElement);
+		_registeredNativeElements.Clear();
 	}
 
 	internal void ShowCurrentPage()
@@ -582,21 +606,17 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			return;
 		}
 
-		if (_contentView == null || _shell == null || MauiContext == null)
+		var contentView = _contentView;
+		var shell = _shell;
+		var context = MauiContext;
+		if (contentView == null || shell == null || context == null)
 			return;
 
-		// Remove old page
-		if (_currentPageView != null)
-		{
-			_currentPageView.RemoveFromSuperview();
-			_currentPageView = null;
-			_currentPage = null;
-		}
-
+		var renderGeneration = ++_pageRenderGeneration;
 		Page? page = null;
 
 		// Check if there are pushed pages on the ShellSection navigation stack
-		var currentItem = _shell.CurrentItem;
+		var currentItem = shell.CurrentItem;
 		if (currentItem?.CurrentItem is ShellSection section)
 		{
 			var navStack = section.Navigation?.NavigationStack;
@@ -615,19 +635,42 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			page = controller.GetOrCreateContent();
 		}
 
+		// Lazy content and native lifecycle callbacks can render a newer destination.
+		if (!IsCurrentRender())
+			return;
+
 		if (page != null)
 		{
-			_currentPage = page;
 			try
 			{
-				var platformView = ((IView)page).ToMacOSPlatform(MauiContext);
-				platformView.Frame = _contentView.Bounds;
+				var platformView = ReferenceEquals(page.Handler?.MauiContext, context) &&
+					page.Handler?.PlatformView is NSView existingView && existingView.Handle != IntPtr.Zero
+					? existingView
+					: ((IView)page).ToMacOSPlatform(context);
+				if (!IsCurrentRender())
+					return;
+
+				platformView.SetLayoutFrame(contentView.Bounds);
 				platformView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
-				_contentView.AddSubview(platformView);
-				_currentPageView = platformView;
+				if (!IsCurrentRender())
+					return;
+
+				if (!ReferenceEquals(page, _currentPage) || !ReferenceEquals(platformView, _currentPageView) ||
+					!ReferenceEquals(platformView.Superview, contentView))
+				{
+					ClearCurrentPageView();
+					if (!IsCurrentRender())
+						return;
+
+					_currentPage = page;
+					_currentPageView = platformView;
+					contentView.AddSubview(platformView);
+					if (!IsCurrentRender())
+						return;
+				}
 
 				// Measure and arrange
-				var bounds = _contentView.Bounds;
+				var bounds = contentView.Bounds;
 				if (bounds.Width > 0 && bounds.Height > 0)
 				{
 					page.Measure((double)bounds.Width, (double)bounds.Height);
@@ -639,6 +682,13 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 				Console.Error.WriteLine($"[ShellHandler.ShowCurrentPage] Failed to create page view: {ex.Message}");
 			}
 		}
+		else
+		{
+			ClearCurrentPageView();
+		}
+
+		if (!IsCurrentRender())
+			return;
 
 		// Update sidebar selection
 		if (_useNativeSidebar)
@@ -647,7 +697,23 @@ public partial class ShellHandler : ViewHandler<Shell, NSView>
 			BuildCustomSidebar();
 
 		// Notify WindowHandler to refresh toolbar (back button, title, toolbar items)
+		_tabCoordinator?.SetPage(_currentPage);
+		UpdateTabs();
 		NotifyToolbarRefresh();
+
+		bool IsCurrentRender() =>
+			renderGeneration == _pageRenderGeneration &&
+			ReferenceEquals(shell, _shell) && ReferenceEquals(contentView, _contentView) &&
+			ReferenceEquals(context, MauiContext);
+	}
+
+	void ClearCurrentPageView()
+	{
+		var previousView = _currentPageView;
+		_currentPageView = null;
+		_currentPage = null;
+		if (previousView != null && previousView.Handle != IntPtr.Zero)
+			previousView.RemoveFromSuperview();
 	}
 
 	void NotifyToolbarRefresh()

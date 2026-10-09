@@ -11,6 +11,7 @@ using Microsoft.Maui.Dispatching;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
+[Collection("Menu UI tests")]
 public class MenuTests
 {
     [Fact]
@@ -126,6 +127,267 @@ public class MenuTests
     }
 
     [Fact]
+    public async Task InvokeMenu_DisabledMauiItem_DoesNotFallBackToNative()
+    {
+        using var harness = await MenuTestHarness.CreateAsync(() =>
+        {
+            var page = BuildMenuPage(null);
+            ((MenuFlyoutItem)page.MenuBarItems[1][0]).IsEnabled = false;
+            return page;
+        }, options => new NativeMenuService(options, success: true));
+
+        var result = await harness.Client.InvokeMenuAsync(path: "Account/Log Out");
+
+        Assert.False(result.GetProperty("success").GetBoolean());
+        Assert.Contains("disabled", result.GetProperty("error").GetString());
+        Assert.Equal(0, ((NativeMenuService)harness.Service).Invocations);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task InvokeMenu_DisabledAncestor_DoesNotExecute(bool disableBar)
+    {
+        var clicked = false;
+        using var harness = await MenuTestHarness.CreateAsync(() =>
+        {
+            var page = new ContentPage();
+            var bar = new MenuBarItem { Text = "File", IsEnabled = !disableBar };
+            var sub = new MenuFlyoutSubItem { Text = "Recent", IsEnabled = disableBar };
+            sub.Add(new MenuFlyoutItem { Text = "Clear", Command = new RelayCommand(() => clicked = true) });
+            bar.Add(sub);
+            page.MenuBarItems.Add(bar);
+            return page;
+        });
+
+        var menus = await harness.Client.GetMenusAsync();
+        var child = menus.GetProperty("menuBar").GetProperty("items")[0].GetProperty("items")[0].GetProperty("items")[0];
+        Assert.False(child.GetProperty("enabled").GetBoolean());
+        var result = await harness.Client.InvokeMenuAsync(path: "File/Recent/Clear");
+        Assert.False(result.GetProperty("success").GetBoolean());
+        Assert.Contains("disabled", result.GetProperty("error").GetString());
+        Assert.False(clicked);
+    }
+
+    [Fact]
+    public async Task InvokeMenu_NativeFailure_ReturnsConflict()
+    {
+        using var harness = await MenuTestHarness.CreateAsync(() => new ContentPage(),
+            options => new NativeMenuService(options, success: false));
+        using var http = new HttpClient();
+        using var content = new StringContent("""{"title":"Save","target":"native"}""", Encoding.UTF8, "application/json");
+
+        using var response = await http.PostAsync($"{harness.BaseUrl}/api/v1/ui/menus/invoke", content);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("Native action was not handled", json.RootElement.GetProperty("error").GetString());
+    }
+
+    [Theory]
+    [InlineData(null, HttpStatusCode.OK)]
+    [InlineData("dispatched", HttpStatusCode.Accepted)]
+    public async Task InvokeMenu_NativeStatus_DistinguishesCompletionFromDispatch(string? status, HttpStatusCode expected)
+    {
+        using var harness = await MenuTestHarness.CreateAsync(() => new ContentPage(),
+            options => new NativeMenuService(options, success: true, status));
+        using var http = new HttpClient();
+        using var content = new StringContent("""{"title":"Save","target":"native"}""", Encoding.UTF8, "application/json");
+
+        using var response = await http.PostAsync($"{harness.BaseUrl}/api/v1/ui/menus/invoke", content);
+
+        Assert.Equal(expected, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal(status, json.RootElement.GetProperty("status").GetString());
+        Assert.Equal(1, ((NativeMenuService)harness.Service).Invocations);
+    }
+
+    [Theory]
+    [InlineData("tabs")]
+    [InlineData("flyout")]
+    [InlineData("navigation")]
+    public async Task GetMenus_VisibleContainerPage_ListsAndInvokesCurrentMenu(string container)
+    {
+        var clicked = false;
+        using var harness = await MenuTestHarness.CreateAsync(() =>
+        {
+            var current = BuildMenuPage(() => clicked = true);
+            if (container == "navigation") return new NavigationPage(current);
+            if (container == "flyout") return new FlyoutPage { Flyout = new ContentPage { Title = "Menu" }, Detail = new NavigationPage(current) };
+            var previous = DispatcherProvider.Current;
+            DispatcherProvider.SetCurrent(new ImmediateDispatcherProvider());
+            try
+            {
+                var tabs = new TabbedPage();
+                tabs.Children.Add(new ContentPage { Title = "Other" });
+                tabs.Children.Add(current);
+                tabs.CurrentPage = current;
+                return tabs;
+            }
+            finally
+            {
+                DispatcherProvider.SetCurrent(previous);
+            }
+        });
+
+        var menus = await harness.Client.GetMenusAsync();
+        Assert.Equal(2, menus.GetProperty("menuBar").GetProperty("items").GetArrayLength());
+        var result = await harness.Client.InvokeMenuAsync(path: "Account/Log Out");
+        Assert.True(result.GetProperty("success").GetBoolean());
+        Assert.True(clicked);
+    }
+
+    [Fact]
+    public async Task InvokeMenu_WindowScope_OnlyExecutesSelectedWindow()
+    {
+        var firstClicked = false;
+        var secondClicked = false;
+        using var harness = await MenuTestHarness.CreateAsync(() => BuildMenuPage(() => firstClicked = true),
+            additionalPages: [BuildMenuPage(() => secondClicked = true)]);
+
+        var menus = await harness.Client.GetMenusAsync(window: 1);
+        Assert.StartsWith("maui:w1/", menus.GetProperty("menuBar").GetProperty("items")[0].GetProperty("id").GetString());
+        var result = await harness.Client.InvokeMenuAsync(path: "Account/Log Out", window: 1);
+        Assert.True(result.GetProperty("success").GetBoolean());
+        Assert.False(firstClicked);
+        Assert.True(secondClicked);
+    }
+
+    [Theory]
+    [InlineData("Save As/Export", "File/Save As%2FExport")]
+    [InlineData("Save\\Export", "File/Save%5CExport")]
+    [InlineData("100% Done", "File/100%25 Done")]
+    public async Task InvokeMenu_EscapedPath_RoundTripsListing(string title, string expectedPath)
+    {
+        var clicked = false;
+        using var harness = await MenuTestHarness.CreateAsync(() =>
+        {
+            var page = new ContentPage();
+            var bar = new MenuBarItem { Text = "File" };
+            bar.Add(new MenuFlyoutItem { Text = title, Command = new RelayCommand(() => clicked = true) });
+            page.MenuBarItems.Add(bar);
+            return page;
+        });
+
+        var menus = await harness.Client.GetMenusAsync();
+        var path = menus.GetProperty("menuBar").GetProperty("items")[0].GetProperty("items")[0].GetProperty("path").GetString();
+        Assert.Equal(expectedPath, path);
+        var result = await harness.Client.InvokeMenuAsync(path: path);
+        Assert.True(result.GetProperty("success").GetBoolean());
+        Assert.True(clicked);
+    }
+
+    [Fact]
+    public async Task InvokeMenu_SecondAccelerator_ExecutesCommand()
+    {
+        var clicked = false;
+        using var harness = await MenuTestHarness.CreateAsync(() =>
+        {
+            var page = BuildMenuPage(() => clicked = true);
+            ((MenuFlyoutItem)page.MenuBarItems[1][0]).KeyboardAccelerators.Add(new KeyboardAccelerator
+            {
+                Key = "q", Modifiers = KeyboardAcceleratorModifiers.Ctrl,
+            });
+            return page;
+        });
+
+        var result = await harness.Client.InvokeMenuAsync(key: "q", modifiers: "control");
+        Assert.True(result.GetProperty("success").GetBoolean());
+        Assert.True(clicked);
+    }
+
+    [Fact]
+    public async Task InvokeMenu_UnknownModifier_ReturnsValidationError()
+    {
+        using var harness = await MenuTestHarness.CreateAsync(() => BuildMenuPage(null));
+        var result = await harness.Client.InvokeMenuAsync(key: "l", modifiers: "cmd+shfit");
+        Assert.False(result.GetProperty("success").GetBoolean());
+        Assert.Equal("Unknown keyboard modifier", result.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task DispatchMenuAction_QueuedTimeout_CancelsLateInvocation()
+    {
+        Action? queued = null;
+        using var service = new MenuDispatchService(action => queued = action);
+        var invocations = 0;
+
+        var result = await service.InvokeAsync(() => invocations++);
+
+        Assert.False(result.Success);
+        Assert.Contains("before dispatch", result.Error);
+        Assert.NotNull(queued);
+        queued();
+        Assert.Equal(0, invocations);
+    }
+
+    [Fact]
+    public async Task DispatchMenuAction_StartedModalAction_ReportsDispatchWithoutRetry()
+    {
+        using var release = new ManualResetEventSlim();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var service = new MenuDispatchService(action => Task.Run(action));
+        var invocations = 0;
+        var pending = service.InvokeAsync(() =>
+        {
+            Interlocked.Increment(ref invocations);
+            started.SetResult();
+            release.Wait();
+            finished.SetResult();
+        });
+
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var result = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(result.Success);
+            Assert.Equal("dispatched", result.Status);
+            Assert.Equal(1, invocations);
+        }
+        finally
+        {
+            release.Set();
+        }
+        await finished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(1, invocations);
+    }
+
+    private sealed class MenuDispatchService : MauiDevFlowAgentService
+    {
+        public MenuDispatchService(Action<Action> dispatch)
+            => _dispatcher = new DelegateAgentDispatcher(() => true, dispatch);
+
+        public async Task<(bool Success, string? Error, string? Status)> InvokeAsync(Action action)
+        {
+            var result = await DispatchMenuActionAsync(() =>
+            {
+                action();
+                return new MenuInvokeResult { Success = true, Source = "native" };
+            }, "native");
+            return (result!.Success, result.Error, result.Status);
+        }
+    }
+
+    private sealed class NativeMenuService(AgentOptions options, bool success, string? status = null) : MauiDevFlowAgentService(options)
+    {
+        public int Invocations { get; private set; }
+        protected override bool IsNativeMenusSupported => true;
+        protected override Task<MenuInvokeResult?> InvokeNativeMenuAsync(MenuInvokeRequest request)
+        {
+            Invocations++;
+            return Task.FromResult<MenuInvokeResult?>(new MenuInvokeResult
+            {
+                Success = success, Source = "native", Title = request.Title,
+                Status = status,
+                Error = success ? null : "Native action was not handled",
+            });
+        }
+    }
+
+    [Fact]
     public async Task MenusEndpoints_UseV1Paths_ViaMockListener()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -138,9 +400,18 @@ public class MenuTests
             {
                 using var client = await listener.AcceptTcpClientAsync();
                 using var stream = client.GetStream();
-                var buffer = new byte[8192];
-                var read = await stream.ReadAsync(buffer);
-                var request = Encoding.UTF8.GetString(buffer, 0, read);
+                using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+                var request = await reader.ReadLineAsync() ?? throw new InvalidOperationException("Missing request line");
+                var contentLength = 0;
+                while (await reader.ReadLineAsync() is { Length: > 0 } header)
+                    if (header.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                        contentLength = int.Parse(header["Content-Length:".Length..].Trim());
+                if (contentLength > 0)
+                {
+                    var body = new char[contentLength];
+                    Assert.Equal(contentLength, await reader.ReadBlockAsync(body));
+                    request += "\r\n\r\n" + new string(body);
+                }
 
                 if (request.Contains("GET /api/v1/ui/menus", StringComparison.Ordinal))
                 {
@@ -171,7 +442,7 @@ public class MenuTests
             }
         });
 
-        using var agentClient = new AgentClient("localhost", port);
+        using var agentClient = new AgentClient("localhost", port) { AutoAcquireMutationLease = false };
 
         var menus = await agentClient.GetMenusAsync();
         Assert.True(menus.GetProperty("nativeSupported").GetBoolean());
@@ -221,23 +492,29 @@ public class MenuTests
 
     private sealed class MenuTestHarness : IDisposable
     {
-        private readonly DevFlowAgentService _service;
+        private readonly MauiDevFlowAgentService _service;
         public AgentClient Client { get; }
+        public MauiDevFlowAgentService Service => _service;
+        public string BaseUrl => $"http://localhost:{_service.Port}";
 
-        private MenuTestHarness(DevFlowAgentService service, AgentClient client)
+        private MenuTestHarness(MauiDevFlowAgentService service, AgentClient client)
         {
             _service = service;
             Client = client;
         }
 
-        public static async Task<MenuTestHarness> CreateAsync(Func<Page> pageFactory)
+        public static async Task<MenuTestHarness> CreateAsync(Func<Page> pageFactory,
+            Func<AgentOptions, MauiDevFlowAgentService>? serviceFactory = null, params Page[] additionalPages)
         {
             var app = new Application();
-            var service = new DevFlowAgentService(new AgentOptions { Port = GetFreePort() });
+            var options = new AgentOptions { Port = GetFreePort(), RequireMutationLease = false };
+            var service = serviceFactory?.Invoke(options) ?? new MauiDevFlowAgentService(options);
             var client = new AgentClient("localhost", service.Port);
 
             service.StartServerOnly(new ImmediateDispatcher());
             AddWindow(app, new Window(pageFactory()));
+            foreach (var page in additionalPages)
+                AddWindow(app, new Window(page));
             service.BindApp(app);
 
             for (var i = 0; i < 20; i++)
@@ -284,6 +561,11 @@ public class MenuTests
         public IDispatcherTimer CreateTimer() => new ImmediateDispatcherTimer();
     }
 
+    private sealed class ImmediateDispatcherProvider : IDispatcherProvider
+    {
+        public IDispatcher GetForCurrentThread() => new ImmediateDispatcher();
+    }
+
     private sealed class ImmediateDispatcherTimer : IDispatcherTimer
     {
         public bool IsRepeating { get; set; }
@@ -293,4 +575,7 @@ public class MenuTests
         public void Start() => IsRunning = true;
         public void Stop() => IsRunning = false;
     }
+
+    [CollectionDefinition("Menu UI tests", DisableParallelization = true)]
+    public class MenuUiTestCollection;
 }

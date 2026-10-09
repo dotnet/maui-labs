@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.EmbeddingArea"
+             x:DataType="local:EmbeddingPlaygroundViewModel">
+    <Border Style="{StaticResource ComposerPanel}">
+        <Grid RowDefinitions="Auto,*" RowSpacing="6">
+            <Label Text="{Binding ResultsHeading}" Style="{StaticResource SectionHeading}" />
+            <Grid Grid.Row="1">
+                <CollectionView ItemsSource="{Binding Documents}"
+                                ItemSizingStrategy="MeasureAllItems"
+                                AutomationId="ImportedDocuments">
+                    <CollectionView.Triggers>
+                        <DataTrigger TargetType="CollectionView"
+                                     Binding="{Binding ShowingSearchResults}" Value="True">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </CollectionView.Triggers>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="local:ImportedDocument">
+                            <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="{Binding Name}" FontAttributes="Bold"
+                                           LineBreakMode="TailTruncation" />
+                                    <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
+                                           FontSize="11" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                    <CollectionView.EmptyView>
+                        <Label Text="Import a Markdown or plain text document to begin."
+                               Style="{StaticResource MutedLabel}" Margin="12"
+                               HorizontalTextAlignment="Center"
+                               AutomationId="DocumentsEmptyLabel" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+                <CollectionView ItemsSource="{Binding Results}"
+                                IsVisible="{Binding ShowingSearchResults}"
+                                ItemSizingStrategy="MeasureAllItems"
+                                AutomationId="EmbeddingSearchResults">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="local:DocumentSearchHit">
+                            <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="{Binding Name}" FontAttributes="Bold"
+                                           LineBreakMode="TailTruncation" />
+                                    <Label Text="{Binding Snippet}" Style="{StaticResource MutedLabel}"
+                                           MaxLines="2" LineBreakMode="TailTruncation" />
+                                    <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
+                                           FontSize="11" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                    <CollectionView.EmptyView>
+                        <Label Text="No indexed documents match."
+                               Style="{StaticResource MutedLabel}" Margin="12"
+                               HorizontalTextAlignment="Center"
+                               AutomationId="EmbeddingResultsEmptyLabel" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+                <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
+                                   Color="{StaticResource Primary}"
+                                   HorizontalOptions="Center" VerticalOptions="Center"
+                                   AutomationId="EmbeddingLoading" />
+            </Grid>
+        </Grid>
+    </Border>
+</ContentView>

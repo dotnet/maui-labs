@@ -6,6 +6,8 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests;
 
 [Collection("AgentIntegration")]
 [Trait("Category", "Preferences")]
+// Requires the MAUI sample: Preferences is an Essentials API. Native runs filter this out.
+[Trait(TestFramework.Trait, TestFramework.Maui)]
 public class PreferencesTests : IntegrationTestBase
 {
     const string TestKeyPrefix = "integration_test_";

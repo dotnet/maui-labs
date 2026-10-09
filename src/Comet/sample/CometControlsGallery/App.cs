@@ -16,7 +16,7 @@ using Microsoft.Maui.Devices;
 using Microsoft.Maui.LifecycleEvents;
 using static Comet.CometControls;
 #if DEBUG
-using MauiDevFlow.Agent;
+using Microsoft.Maui.DevFlow.Agent;
 #endif
 #if __MACOS__
 using Microsoft.Maui.Platform.MacOS.Hosting;

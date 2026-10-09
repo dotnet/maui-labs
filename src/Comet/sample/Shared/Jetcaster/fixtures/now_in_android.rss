@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<rss version="2.0"
+  xmlns:atom="http://www.w3.org/2005/Atom"
+  xmlns:cc="http://web.resource.org/cc/"
+  xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+  xmlns:media="http://search.yahoo.com/mrss/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:podcast="https://podcastindex.org/namespace/1.0"
+  xmlns:googleplay="http://www.google.com/schemas/play-podcasts/1.0"
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+
+  <channel>
+    <atom:link href="https://rss.libsyn.com/shows/244409/destinations/1831685.xml" rel="self" type="application/rss+xml"/>
+    <title>Now in Android</title>
+    <pubDate>Fri, 19 Dec 2025 23:45:17 +0000</pubDate>
+    <lastBuildDate>Fri, 19 Dec 2025 23:45:17 +0000</lastBuildDate>
+    <generator>Libsyn RSSgen 1.0</generator>
+    <link>http://d.android.com</link>
+    <language>en</language>
+    <copyright><![CDATA[2024 © Android Developers]]></copyright>
+    <docs>http://d.android.com</docs>
+    <itunes:summary><![CDATA[This show gives listeners a quick run-down on things that the Android team has done recently that developers may want to check out. It covers library and platform releases, articles, videos, podcasts, samples, codelabs - whatever seems relevant and interesting for Android developers.
+
+Subscribe to Android Developers YouTube → https://goo.gle/AndroidDevs
+
+Android's a big platform and there are many things being released all the time; listen to this podcast to stay up to date on what those things are.]]></itunes:summary>
+    <image>
+      <url>https://static.libsyn.com/p/assets/1/4/f/9/14f959f911553fcc27a2322813b393ee/NIA000_PodcastThumbnail-20241010-vj0kfz2md4.png</url>
+      <title>Now in Android</title>
+      <link><![CDATA[http://d.android.com]]></link>
+    </image>
+    <itunes:author>Now in Android</itunes:author>
+		<itunes:category text="Technology" />
+<itunes:category text="Science" />
+    <itunes:image href="https://static.libsyn.com/p/assets/1/4/f/9/14f959f911553fcc27a2322813b393ee/NIA000_PodcastThumbnail-20241010-vj0kfz2md4.png" />
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:owner>
+      <itunes:name>Google Developer Studio</itunes:name>
+      <itunes:email>gdevs.podcast@gmail.com</itunes:email>
+    </itunes:owner>
+    <description><![CDATA[This show gives listeners a quick run-down on things that the Android team has done recently that developers may want to check out. It covers library and platform releases, articles, videos, podcasts, samples, codelabs - whatever seems relevant and interesting for Android developers.
+
+Subscribe to Android Developers YouTube → https://goo.gle/AndroidDevs
+
+Android's a big platform and there are many things being released all the time; listen to this podcast to stay up to date on what those things are.]]></description>
+    
+    <itunes:type>episodic</itunes:type>
+    
+
+    <itunes:keywords />
+
+    
+
+    
+    <podcast:locked owner="gdevs.podcast@gmail.com">no</podcast:locked>
+    
+    
+    
+    
+    
+    <item>
+      <title>123 – Android XR, Jetpack Navigation 3, and more!</title>
+      <itunes:title>123 – Android XR, Jetpack Navigation 3, and more!</itunes:title>
+      <pubDate>Fri, 19 Dec 2025 20:01:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[f3176379-5b36-456b-a287-0f1fbb8876e5]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/now-in-android-123-android-xr-jetpack-navigation-3-and-more]]></link>
+      <description><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Dan covers the latest releases from Android XR, the Android Studio Otter 2 feature drop with Gemini 3, the release of Android 16 QPR2, Jetpack Navigation 3, and more!<strong> </strong></p> <p dir="ltr">Chapters:<br /> 0:00 - Introduction<br /> 0:31 - Android XR<br /> 1:59 - Android Studio and AI<br /> 2:31 - Jetpack updates<br /> 3:05 - Performance<br /> 3:20 - Core OS</p> <p><strong> </strong></p> <p dir="ltr">Resources:<br /> Check out the blog for all the resources → <a href= "https://goo.gle/4qiDB0k">https://goo.gle/4qiDB0k</a> <br /> Android XR → <a href= "https://goo.gle/3Mwbaxv">https://goo.gle/3Mwbaxv</a><br /> Check out the latest spotlight weeks → <a href= "https://goo.gle/49djqu7">https://goo.gle/49djqu7</a><br /> Check out the latest blogs → <a href= "https://goo.gle/43fhsXP">https://goo.gle/43fhsXP</a><br /> Check out the latest YouTube videos → <a href= "https://goo.gle/4hPBUoe">https://goo.gle/4hPBUoe</a><br /> Recent Release Notes → <a href= "https://goo.gle/49AgSYA">https://goo.gle/49AgSYA</a> </p> <p><strong> </strong></p> <p dir="ltr"> </p> <p> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Dan covers the latest releases from Android XR, the Android Studio Otter 2 feature drop with Gemini 3, the release of Android 16 QPR2, Jetpack Navigation 3, and more! </p> <p dir="ltr">Chapters: 0:00 - Introduction 0:31 - Android XR 1:59 - Android Studio and AI 2:31 - Jetpack updates 3:05 - Performance 3:20 - Core OS</p> <p> </p> <p dir="ltr">Resources: Check out the blog for all the resources → <a href= "https://goo.gle/4qiDB0k">https://goo.gle/4qiDB0k</a> Android XR → <a href= "https://goo.gle/3Mwbaxv">https://goo.gle/3Mwbaxv</a> Check out the latest spotlight weeks → <a href= "https://goo.gle/49djqu7">https://goo.gle/49djqu7</a> Check out the latest blogs → <a href= "https://goo.gle/43fhsXP">https://goo.gle/43fhsXP</a> Check out the latest YouTube videos → <a href= "https://goo.gle/4hPBUoe">https://goo.gle/4hPBUoe</a> Recent Release Notes → <a href= "https://goo.gle/49AgSYA">https://goo.gle/49AgSYA</a> </p> <p> </p> <p dir="ltr"> </p> <p> </p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA123_final.mp3?dest-id=1831685" length="6790324" type="audio/mpeg" />
+      <itunes:duration>04:38</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>122 – Android Studio updates, Android 16 beta feature, and more!</title>
+      <itunes:title>122 – Android Studio updates, Android 16 beta feature, and more!</itunes:title>
+      <pubDate>Wed, 12 Nov 2025 19:37:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[8263039a-3b5f-40b1-b825-42406cdd7dbb]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/122-android-studio-narwhal-android-16-qpr2-beta-and-more]]></link>
+      <description><![CDATA[<p>Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Ash covers the latest releases from Android 16 QPR2 to Android Studio Narwhal. Discover The Android Show, Androidify, the Wear OS Spotlight Week, and more!</p> <p> </p> <p>Chapters:<br /> 0:00 - Introduction<br /> 0:23 - Android 16 QPR 2 and Beta<br /> 1:55 - Android Studio Narwhal<br /> 2:33 - The Android Show & Androidify<br /> 3:09 - Wear OS Spotlight Week<br /> 4:07 - Latest articles <br /> 7:07 - Latest videos<br /> 9:01 - AndroidX updates</p> <p> </p> <p>Resources:<br /> Android 16 QPR2 Beta 2 is Here → <a href= "https://goo.gle/4qQFOS2">https://goo.gle/4qQFOS2</a> <br /> Sign up for the ADI Early Access Program→ <a href= "https://goo.gle/4r0n42u">https://goo.gle/4r0n42u</a> <br /> Android Studio Narwhal 4 Feature Drop → <a href= "https://goo.gle/49CgVmz">https://goo.gle/49CgVmz</a> <br /> Fall episode of The Android Show → <a href= "https://goo.gle/3JjiDPm">https://goo.gle/3JjiDPm</a> <br /> Androidify → <a href= "https://goo.gle/4oPn6bo">https://goo.gle/4oPn6bo</a> <br /> Wear OS Spotlight Week → <a href= "https://goo.gle/3WHweTv">https://goo.gle/3WHweTv</a> <br /> Check out the latest blogs → <a href= "https://goo.gle/43fhsXP">https://goo.gle/43fhsXP</a>  <br />  Check out the latest YouTube videos → <a href= "https://goo.gle/4hPBUoe">https://goo.gle/4hPBUoe</a> <br /> Recent Release Notes → <a href= "https://goo.gle/49AgSYA">https://goo.gle/49AgSYA</a> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Ash covers the latest releases from Android 16 QPR2 to Android Studio Narwhal. Discover The Android Show, Androidify, the Wear OS Spotlight Week, and more!</p> <p> </p> <p>Chapters: 0:00 - Introduction 0:23 - Android 16 QPR 2 and Beta 1:55 - Android Studio Narwhal 2:33 - The Android Show & Androidify 3:09 - Wear OS Spotlight Week 4:07 - Latest articles 7:07 - Latest videos 9:01 - AndroidX updates</p> <p> </p> <p>Resources: Android 16 QPR2 Beta 2 is Here → <a href= "https://goo.gle/4qQFOS2">https://goo.gle/4qQFOS2</a> Sign up for the ADI Early Access Program→ <a href= "https://goo.gle/4r0n42u">https://goo.gle/4r0n42u</a> Android Studio Narwhal 4 Feature Drop → <a href= "https://goo.gle/49CgVmz">https://goo.gle/49CgVmz</a> Fall episode of The Android Show → <a href= "https://goo.gle/3JjiDPm">https://goo.gle/3JjiDPm</a> Androidify → <a href= "https://goo.gle/4oPn6bo">https://goo.gle/4oPn6bo</a> Wear OS Spotlight Week → <a href= "https://goo.gle/3WHweTv">https://goo.gle/3WHweTv</a> Check out the latest blogs → <a href= "https://goo.gle/43fhsXP">https://goo.gle/43fhsXP</a> Check out the latest YouTube videos → <a href= "https://goo.gle/4hPBUoe">https://goo.gle/4hPBUoe</a> Recent Release Notes → <a href= "https://goo.gle/49AgSYA">https://goo.gle/49AgSYA</a> </p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA122_final.mp3?dest-id=1831685" length="15543573" type="audio/mpeg" />
+      <itunes:duration>10:32</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>121 – Android Studio Narwhal 3, Android 16 QPR2 beta, and more!</title>
+      <itunes:title>121 – Android Studio Narwhal 3, Android 16 QPR2 beta, and more!</itunes:title>
+      <pubDate>Wed, 03 Sep 2025 21:13:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[7ea1988a-34aa-4ffb-b61c-58036b318c1e]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/121-android-studio-narwhal-3-android-16-qpr2-beta-and-more]]></link>
+      <description><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Dan covers Android 16 QPR2 beta 1, the Android Studio Narwhal feature drop, Jetpack Compose 1.9, and more!</p> <p><strong> </strong></p> <p dir="ltr">Chapters:<br /> 0:00 - Introduction<br /> 0:24 - Android 16 QPR2 beta<br /> 1:38 - Android Studio Updates<br /> 2:42 - Jetpack Compose August '25 released to stable<br /> 3:27 - Media3 1.8 Released<br /> 4:18 - Recently published Articles<br /> 4:55 - Recent published videos<br /> 5:26 - Android Developers Backstage<br /> 5:50 - AndroidX<br /> 6:45 - Recap<br /> <br /></p> <p dir="ltr">Resources:<br /> 📚 Android 16 QPR2 Beta 1 is here → <a href= "https://goo.gle/47qDGck">https://goo.gle/47qDGck</a><br /> 📚 What's new in the Jetpack Compose August '25 release → <a href= "https://goo.gle/4lTt60T">https://goo.gle/4lTt60T</a><br /> 📚 Media3 1.8.0 - What's new? → <a href= "https://goo.gle/427ftEb">https://goo.gle/427ftEb</a><br /> 📚 Android Studio Narwhal Feature Drop is stable - start using Agent Mode → <a href= "https://goo.gle/464WITg">https://goo.gle/464WITg</a><br /> <span data-rich-links= "{"fple-t":"Advanced shared elements with shape morphing | Jetpack Compose Tips","fple-u":"https://www.youtube.com/watch?v=0moEXBqNDZI","fple-mt":null,"type":"first-party-link"}"> Advanced shared elements with shape morphing | Jetpack Compose Tips</span> → <a href= "https://goo.gle/3I72rzT">https://goo.gle/3I72rzT</a><br /> <span data-rich-links= "{"fple-t":"Consume a Runtime-Enabled SDK","fple-u":"https://www.youtube.com/watch?v=8ocelXB1Qoc","fple-mt":null,"type":"first-party-link"}"> Consume a Runtime-Enabled SDK</span> → <a href= "https://goo.gle/3JIdr7o">https://goo.gle/3JIdr7o</a><br /> <span data-rich-links= "{"fple-t":"WearOS Material 3 shape morphing | Jetpack Compose Tips","fple-u":"https://www.youtube.com/watch?v=qEEo6AwgBjU","fple-mt":null,"type":"first-party-link"}"> WearOS Material 3 shape morphing | Jetpack Compose Tips</span> → <a href="https://goo.gle/42eZ6FJ">https://goo.gle/42eZ6FJ</a><br /> <span data-rich-links= "{"fple-t":"Autofill in Compose","fple-u":"https://www.youtube.com/watch?v=Tb6bGiha6xg","fple-mt":null,"type":"first-party-link"}"> Autofill in Compose</span> → <a href= "https://goo.gle/464SA5N">https://goo.gle/464SA5N</a></p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Dan covers Android 16 QPR2 beta 1, the Android Studio Narwhal feature drop, Jetpack Compose 1.9, and more!</p> <p> </p> <p dir="ltr">Chapters: 0:00 - Introduction 0:24 - Android 16 QPR2 beta 1:38 - Android Studio Updates 2:42 - Jetpack Compose August '25 released to stable 3:27 - Media3 1.8 Released 4:18 - Recently published Articles 4:55 - Recent published videos 5:26 - Android Developers Backstage 5:50 - AndroidX 6:45 - Recap </p> <p dir="ltr">Resources: 📚 Android 16 QPR2 Beta 1 is here → <a href= "https://goo.gle/47qDGck">https://goo.gle/47qDGck</a> 📚 What's new in the Jetpack Compose August '25 release → <a href= "https://goo.gle/4lTt60T">https://goo.gle/4lTt60T</a> 📚 Media3 1.8.0 - What's new? → <a href= "https://goo.gle/427ftEb">https://goo.gle/427ftEb</a> 📚 Android Studio Narwhal Feature Drop is stable - start using Agent Mode → <a href= "https://goo.gle/464WITg">https://goo.gle/464WITg</a> Advanced shared elements with shape morphing | Jetpack Compose Tips → <a href= "https://goo.gle/3I72rzT">https://goo.gle/3I72rzT</a> Consume a Runtime-Enabled SDK → <a href= "https://goo.gle/3JIdr7o">https://goo.gle/3JIdr7o</a> WearOS Material 3 shape morphing | Jetpack Compose Tips → <a href="https://goo.gle/42eZ6FJ">https://goo.gle/42eZ6FJ</a> Autofill in Compose → <a href= "https://goo.gle/464SA5N">https://goo.gle/464SA5N</a></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA121_final_1.mp3?dest-id=1831685" length="7110407" type="audio/mpeg" />
+      <itunes:duration>07:14</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>120 -  Android Canaries, Agentic AI, 16 KB page size requirements, and more!</title>
+      <itunes:title>Now in Android: 120 – Android Canaries, Agentic AI, 16 KB page size requirements, and more!</itunes:title>
+      <pubDate>Wed, 06 Aug 2025 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[f364aee6-2ac2-4609-849f-375629dd62d5]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/120-android-canaries-agentic-ai-16-kb-page-size-requirements-and-more]]></link>
+      <description><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Dan covers Android Canaries, Agentic AI, 16 KB Page Size requirements, and new subscription tools, </p> <p dir="ltr">Resources:<br /> Canary release channel → <a href= "https://goo.gle/4lMWgjh">https://goo.gle/4lMWgjh</a>  <br /> Agentic AI with Gemini in Android Studio → <a href= "https://goo.gle/3GUZzpi">https://goo.gle/3GUZzpi</a>    <br /> Prepare your Play app for devices with 16 KB page sizes → <a href= "https://goo.gle/4f7FI2A">https://goo.gle/4f7FI2A</a><br /> Google Play PolicyBytes - July 2025 policy updates → <a href= "https://goo.gle/45k3AMi">https://goo.gle/45k3AMi</a><br /> #WeArePlay → <a href= "https://youtu.be/gsFbhR0bDrM">https://youtu.be/gsFbhR0bDrM</a><br />  Google Play Google I/O 2025 → <a href= "https://goo.gle/4l8QNCa">https://goo.gle/4l8QNCa</a><br /> Android Developer Productivity at Google I/O '25 → <a href= "https://goo.gle/4lQ3R09">https://goo.gle/4lQ3R09</a><br /> AI on Android at Google I/O '25 → <a href= "https://goo.gle/4mnAX7N">https://goo.gle/4mnAX7N</a><br /> Building excellent and adaptive apps at Google I/O '25 → <a href= "https://goo.gle/3UBA8fz">https://goo.gle/3UBA8fz</a><br /> Live updates & widgets → <a href= "https://goo.gle/3ILBIJl">https://goo.gle/3ILBIJl</a><br /> Build a runtime enabled sdk → <a href= "https://goo.gle/3IRiXUK">https://goo.gle/3IRiXUK</a><br /> Delightful Compose Tips → <a href= "https://goo.gle/3HajT68">https://goo.gle/3HajT68</a><br /> Compose preview →<a href= "https://goo.gle/45rKS6u">https://goo.gle/45rKS6u</a> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Dan covers Android Canaries, Agentic AI, 16 KB Page Size requirements, and new subscription tools, </p> <p dir="ltr">Resources: Canary release channel → <a href= "https://goo.gle/4lMWgjh">https://goo.gle/4lMWgjh</a> Agentic AI with Gemini in Android Studio → <a href= "https://goo.gle/3GUZzpi">https://goo.gle/3GUZzpi</a> Prepare your Play app for devices with 16 KB page sizes → <a href= "https://goo.gle/4f7FI2A">https://goo.gle/4f7FI2A</a> Google Play PolicyBytes - July 2025 policy updates → <a href= "https://goo.gle/45k3AMi">https://goo.gle/45k3AMi</a> #WeArePlay → <a href= "https://youtu.be/gsFbhR0bDrM">https://youtu.be/gsFbhR0bDrM</a> Google Play Google I/O 2025 → <a href= "https://goo.gle/4l8QNCa">https://goo.gle/4l8QNCa</a> Android Developer Productivity at Google I/O '25 → <a href= "https://goo.gle/4lQ3R09">https://goo.gle/4lQ3R09</a> AI on Android at Google I/O '25 → <a href= "https://goo.gle/4mnAX7N">https://goo.gle/4mnAX7N</a> Building excellent and adaptive apps at Google I/O '25 → <a href= "https://goo.gle/3UBA8fz">https://goo.gle/3UBA8fz</a> Live updates & widgets → <a href= "https://goo.gle/3ILBIJl">https://goo.gle/3ILBIJl</a> Build a runtime enabled sdk → <a href= "https://goo.gle/3IRiXUK">https://goo.gle/3IRiXUK</a> Delightful Compose Tips → <a href= "https://goo.gle/3HajT68">https://goo.gle/3HajT68</a> Compose preview →<a href= "https://goo.gle/45rKS6u">https://goo.gle/45rKS6u</a> </p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA120_final.mp3?dest-id=1831685" length="7688926" type="audio/mpeg" />
+      <itunes:duration>07:47</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>119 - Android 16, testing, desktop experiences, AndroidX, and  more!</title>
+      <itunes:title>119 - Android 16, testing, desktop experiences, AndroidX, and  more!</itunes:title>
+      <pubDate>Wed, 09 Jul 2025 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[f9a042e8-7131-41d1-98f0-a147ee641914]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/119-android-16-testing-desktop-experiences-androidx-and-more]]></link>
+      <description><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Meghan shares exciting news like the release of Android 16! Discover developer previews for desktop windowing experiences, building adaptive apps, and more!</p> <p dir="ltr">Chapters and resources:</p> <p dir="ltr">0:00 - Introduction</p> <p dir="ltr">0:24 - Android 16 is here → <a href= "https://goo.gle/45JjAcx">https://goo.gle/45JjAcx</a>  </p> <p dir="ltr">1:27 - Desktop windowing on connected devices → <a href= "https://goo.gle/4niBGZ4">https://goo.gle/4niBGZ4</a>  </p> <p dir="ltr">2:01 - Building excellent, adaptive apps → <a href= "https://goo.gle/4ej8UTT">https://goo.gle/4ej8UTT</a>   </p> <p dir="ltr">2:43 - Testing → <a href= "https://goo.gle/3HQ6Hn5">https://goo.gle/3HQ6Hn5</a>  </p> <p><strong id= "docs-internal-guid-505a8f14-7fff-506d-bbc9-319aeedb217b">3:25 - <a href= "https://developer.android.com/jetpack/androidx/versions/all-channel"> AndroidX releases</a> → <a href= "https://goo.gle/409hfEb">https://goo.gle/409hfEb</a></strong></p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. Meghan shares exciting news like the release of Android 16! Discover developer previews for desktop windowing experiences, building adaptive apps, and more!</p> <p dir="ltr">Chapters and resources:</p> <p dir="ltr">0:00 - Introduction</p> <p dir="ltr">0:24 - Android 16 is here → <a href= "https://goo.gle/45JjAcx">https://goo.gle/45JjAcx</a> </p> <p dir="ltr">1:27 - Desktop windowing on connected devices → <a href= "https://goo.gle/4niBGZ4">https://goo.gle/4niBGZ4</a> </p> <p dir="ltr">2:01 - Building excellent, adaptive apps → <a href= "https://goo.gle/4ej8UTT">https://goo.gle/4ej8UTT</a> </p> <p dir="ltr">2:43 - Testing → <a href= "https://goo.gle/3HQ6Hn5">https://goo.gle/3HQ6Hn5</a> </p> <p>3:25 - <a href= "https://developer.android.com/jetpack/androidx/versions/all-channel"> AndroidX releases</a> → <a href= "https://goo.gle/409hfEb">https://goo.gle/409hfEb</a></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA119_final.mp3?dest-id=1831685" length="4606769" type="audio/mpeg" />
+      <itunes:duration>04:36</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>118 – What's new in Android development at Google I/O 2025 (part 2)</title>
+      <itunes:title>118 – What&#39;s new in Android development at Google I/O 2025 (part 2)</itunes:title>
+      <pubDate>Wed, 18 Jun 2025 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[840ee509-8fb1-40d9-86a3-ee242a796620]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/118-whats-new-in-android-development-at-google-io-2025-part-2]]></link>
+      <description><![CDATA[<p>Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, Dan Galpin covers part two of the biggest announcements from Google I/O 2025. From Jetpack Compose, Camera and Media, accessibility, Kotlin Multiplatform, Android development tools, Google Play, and more.<br /> <br /> Check out part 1 → https://goo.gle/4n7nty5</p> <p dir="ltr">Resources:</p> <p dir="ltr">What's New in Jetpack Compose → <a href= "https://goo.gle/45aiKVQ">https://goo.gle/45aiKVQ</a> </p> <p dir="ltr">Seamless video capture, editing and playback with CameraX and Media3 → <a href= "https://goo.gle/4mKGshE">https://goo.gle/4mKGshE</a> </p> <p dir="ltr">Building delightful Android camera and media experiences → <a href= "https://goo.gle/3Hw0Eni">https://goo.gle/3Hw0Eni</a> </p> <p dir="ltr">What's new in Android development tools → <a href= "https://goo.gle/3SIsBuE">https://goo.gle/3SIsBuE</a>  </p> <p dir="ltr">I/O 2025: What's new in Google Play → <a href= "https://goo.gle/3HwERvQ">https://goo.gle/3HwERvQ</a></p> <p>Kotlin Multiplatform: Have your code and eat it too → <a href= "https://goo.gle/43zeX3a">https://goo.gle/43zeX3a</a>  </p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, Dan Galpin covers part two of the biggest announcements from Google I/O 2025. From Jetpack Compose, Camera and Media, accessibility, Kotlin Multiplatform, Android development tools, Google Play, and more. Check out part 1 → https://goo.gle/4n7nty5</p> <p dir="ltr">Resources:</p> <p dir="ltr">What's New in Jetpack Compose → <a href= "https://goo.gle/45aiKVQ">https://goo.gle/45aiKVQ</a> </p> <p dir="ltr">Seamless video capture, editing and playback with CameraX and Media3 → <a href= "https://goo.gle/4mKGshE">https://goo.gle/4mKGshE</a> </p> <p dir="ltr">Building delightful Android camera and media experiences → <a href= "https://goo.gle/3Hw0Eni">https://goo.gle/3Hw0Eni</a> </p> <p dir="ltr">What's new in Android development tools → <a href= "https://goo.gle/3SIsBuE">https://goo.gle/3SIsBuE</a> </p> <p dir="ltr">I/O 2025: What's new in Google Play → <a href= "https://goo.gle/3HwERvQ">https://goo.gle/3HwERvQ</a></p> <p>Kotlin Multiplatform: Have your code and eat it too → <a href= "https://goo.gle/43zeX3a">https://goo.gle/43zeX3a</a> </p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA118_final.mp3?dest-id=1831685" length="5733119" type="audio/mpeg" />
+      <itunes:duration>05:47</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>Now in Android: 117 – What's new in Android development at Google I/O 2025 (part 1)</title>
+      <itunes:title>Now in Android: 117 – What&#39;s new in Android development at Google I/O 2025 (part 1)</itunes:title>
+      <pubDate>Wed, 04 Jun 2025 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[cc88e167-0c14-4781-886f-fbc9fee96081]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/now-in-android-117-whats-new-in-android-development-at-google-io-2025-part-1]]></link>
+      <description><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, Dan Galpin covers part one of the biggest announcements from Google I/O 2025. From Material Design's latest evolution, to building with on-device and cloud AI, to updates for wearables, automotive, XR, and more.</p> <p dir="ltr">Stay tuned for part 2, where Dan covers Android Jetpack, Jetpack Compose, and Android Studio.<br /> <br /></p> <p dir="ltr">Resources:</p> <p dir="ltr">Google I/O '25 Developer Keynote → <a href= "https://goo.gle/4keiQ3b">https://goo.gle/4keiQ3b</a> </p> <p dir="ltr">16 things to know for Android developers at Google I/O 2025 → <a href= "https://goo.gle/43Sx5Fe">https://goo.gle/43Sx5Fe</a> </p> <p dir="ltr">Start building with Material 3 Expressive → <a href= "https://goo.gle/4dCUvlj">https://goo.gle/4dCUvlj</a> </p> <p dir="ltr">What's new in Wear OS 6 → <a href= "https://goo.gle/3FvI6TF">https://goo.gle/3FvI6TF</a> </p> <p dir="ltr">New in-car app experiences → <a href= "https://goo.gle/3Zzh0li">https://goo.gle/3Zzh0li</a> </p> <p dir="ltr">Engage users on Google TV with excellent TV apps → <a href= "https://goo.gle/4mR5M5Q">https://goo.gle/4mR5M5Q</a> </p> <p dir="ltr">Build adaptive Android apps that shine across form factors → <a href= "https://goo.gle/4jqMOQA">https://goo.gle/4jqMOQA</a> </p> <p dir="ltr">On-device GenAI APIs as part of ML Kit help you easily build with Gemini Nano → </p> <p dir="ltr"><a href= "https://goo.gle/4dAUXQV">https://goo.gle/4dAUXQV</a> </p> <p dir="ltr">Updates to the Android XR SDK: Introducing Developer Preview 2 → <a href= "https://goo.gle/4dz28ck">https://goo.gle/4dz28ck</a> </p> <p> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, Dan Galpin covers part one of the biggest announcements from Google I/O 2025. From Material Design's latest evolution, to building with on-device and cloud AI, to updates for wearables, automotive, XR, and more.</p> <p dir="ltr">Stay tuned for part 2, where Dan covers Android Jetpack, Jetpack Compose, and Android Studio. </p> <p dir="ltr">Resources:</p> <p dir="ltr">Google I/O '25 Developer Keynote → <a href= "https://goo.gle/4keiQ3b">https://goo.gle/4keiQ3b</a> </p> <p dir="ltr">16 things to know for Android developers at Google I/O 2025 → <a href= "https://goo.gle/43Sx5Fe">https://goo.gle/43Sx5Fe</a> </p> <p dir="ltr">Start building with Material 3 Expressive → <a href= "https://goo.gle/4dCUvlj">https://goo.gle/4dCUvlj</a> </p> <p dir="ltr">What's new in Wear OS 6 → <a href= "https://goo.gle/3FvI6TF">https://goo.gle/3FvI6TF</a> </p> <p dir="ltr">New in-car app experiences → <a href= "https://goo.gle/3Zzh0li">https://goo.gle/3Zzh0li</a> </p> <p dir="ltr">Engage users on Google TV with excellent TV apps → <a href= "https://goo.gle/4mR5M5Q">https://goo.gle/4mR5M5Q</a> </p> <p dir="ltr">Build adaptive Android apps that shine across form factors → <a href= "https://goo.gle/4jqMOQA">https://goo.gle/4jqMOQA</a> </p> <p dir="ltr">On-device GenAI APIs as part of ML Kit help you easily build with Gemini Nano → </p> <p dir="ltr"><a href= "https://goo.gle/4dAUXQV">https://goo.gle/4dAUXQV</a> </p> <p dir="ltr">Updates to the Android XR SDK: Introducing Developer Preview 2 → <a href= "https://goo.gle/4dz28ck">https://goo.gle/4dz28ck</a> </p> <p> </p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA117_final.mp3?dest-id=1831685" length="6928665" type="audio/mpeg" />
+      <itunes:duration>07:02</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>116 - Google I/O, Gemini, and Jetpack Compose 1.8</title>
+      <itunes:title>116 - Google I/O, Gemini, and Jetpack Compose 1.8</itunes:title>
+      <pubDate>Thu, 08 May 2025 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[593c7004-9e25-4258-b00c-c5ea301e430e]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/116-google-io-gemini-and-jetpack-compose-18]]></link>
+      <description><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, we'll cover the Google I/O 2025 program lineup, the release of Jetpack Compose 1.8, Android 16 Beta 4, new Play Console insights, and updated Android Vitals metrics. </p> <p><strong> </strong></p> <p dir="ltr">Chapters:</p> <p dir="ltr">0:00 - Introduction</p> <p dir="ltr">0:22 - Google I/O 2025 agenda is live → <a href= "https://goo.gle/3GBntFH">https://goo.gle/3GBntFH</a> </p> <p dir="ltr">1:02 - Jetpack Compose 1.8 →  <a href= "https://goo.gle/44T96Xp">https://goo.gle/44T96Xp</a> </p> <p dir="ltr">1:37 - Android 16 Beta 4 → <a href= "https://goo.gle/42DhBo5">https://goo.gle/42DhBo5</a> </p> <p dir="ltr">2:31 - New Play Console insights → <a href= "https://goo.gle/3EOceZZ">https://goo.gle/3EOceZZ</a> </p> <p dir="ltr">3:11 - Android Vitals metrics → <a href= "https://goo.gle/44OMfMA">https://goo.gle/44OMfMA</a> </p> <p> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, we'll cover the Google I/O 2025 program lineup, the release of Jetpack Compose 1.8, Android 16 Beta 4, new Play Console insights, and updated Android Vitals metrics. </p> <p> </p> <p dir="ltr">Chapters:</p> <p dir="ltr">0:00 - Introduction</p> <p dir="ltr">0:22 - Google I/O 2025 agenda is live → <a href= "https://goo.gle/3GBntFH">https://goo.gle/3GBntFH</a> </p> <p dir="ltr">1:02 - Jetpack Compose 1.8 → <a href= "https://goo.gle/44T96Xp">https://goo.gle/44T96Xp</a> </p> <p dir="ltr">1:37 - Android 16 Beta 4 → <a href= "https://goo.gle/42DhBo5">https://goo.gle/42DhBo5</a> </p> <p dir="ltr">2:31 - New Play Console insights → <a href= "https://goo.gle/3EOceZZ">https://goo.gle/3EOceZZ</a> </p> <p dir="ltr">3:11 - Android Vitals metrics → <a href= "https://goo.gle/44OMfMA">https://goo.gle/44OMfMA</a> </p> <p> </p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA116_final.mp3?dest-id=1831685" length="3945764" type="audio/mpeg" />
+      <itunes:duration>03:58</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>115 - Gemini in Android Studio, Enhancing Safety and Security, and more!</title>
+      <itunes:title>115 - Gemini in Android Studio, Enhancing Safety and Security, and more!</itunes:title>
+      <pubDate>Fri, 25 Apr 2025 13:28:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[b7644085-bc00-42f2-9cf4-825703e38d33]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/115-gemini-in-android-studio-enhancing-safety-and-security-and-more]]></link>
+      <description><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, we'll cover Android 16 beta 3, Gemini in Android Studio for Business and Multimodal, Android XR, Media and Camera updates, and much more.</p> <p dir="ltr">Resources:<br /> Samsung's One UI 7 → <a href= "https://goo.gle/42Ubuvv">https://goo.gle/42Ubuvv</a><br /> Quality Tiers → <a href= "https://goo.gle/4cJDaqs">https://goo.gle/4cJDaqs</a><br /> Canonical Layouts → <a href= "https://goo.gle/3S0ElIo">https://goo.gle/3S0ElIo</a><br /> Figma Widget Design Kit → <a href= "http://goo.gle/4gfFs0w">http://goo.gle/4gfFs0w</a><br /> Jetpack Glance → <a href= "https://goo.gle/42IgJxd">https://goo.gle/42IgJxd</a><br /> Coding Widgets layout video → <a href= "https://goo.gle/3RYXhXV">https://goo.gle/3RYXhXV</a><br /> Codelab → <a href= "https://goo.gle/3Y70E2M">https://goo.gle/3Y70E2M</a></p> <p> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, we'll cover Android 16 beta 3, Gemini in Android Studio for Business and Multimodal, Android XR, Media and Camera updates, and much more.</p> <p dir="ltr">Resources: Samsung's One UI 7 → <a href= "https://goo.gle/42Ubuvv">https://goo.gle/42Ubuvv</a> Quality Tiers → <a href= "https://goo.gle/4cJDaqs">https://goo.gle/4cJDaqs</a> Canonical Layouts → <a href= "https://goo.gle/3S0ElIo">https://goo.gle/3S0ElIo</a> Figma Widget Design Kit → <a href= "http://goo.gle/4gfFs0w">http://goo.gle/4gfFs0w</a> Jetpack Glance → <a href= "https://goo.gle/42IgJxd">https://goo.gle/42IgJxd</a> Coding Widgets layout video → <a href= "https://goo.gle/3RYXhXV">https://goo.gle/3RYXhXV</a> Codelab → <a href= "https://goo.gle/3Y70E2M">https://goo.gle/3Y70E2M</a></p> <p> </p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA115_final.mp3?dest-id=1831685" length="10092578" type="audio/mpeg" />
+      <itunes:duration>10:18</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+<item>
+      <title>114 - Google I/O 2025, Android Studio at 10, Android 16 Betas, and more!</title>
+      <itunes:title>Now in Android: 114 - Google I/O 2025, Android Studio at 10, Android 16 Betas, and more!</itunes:title>
+      <pubDate>Fri, 21 Mar 2025 02:07:55 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[024a1648-a264-43c3-91d4-d4c74e387c54]]></guid>
+      <link><![CDATA[https://nowinandroid.libsyn.com/114-google-io-2025-android-studio-at-10-android-16-betas-and-more]]></link>
+      <description><![CDATA[<p>Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, we'll cover the return of Google I/O, Android Studio Turning 10, the Android 16 Betas, Imagen in Firebase, the latest in AndroidX, and more!</p> <p>For links to these items, check out Now in Android #114 on Medium → https://goo.gle/4hA69xv <br /> Catch the latest episode of #TheAndroidShow here → https://goo.gle/tas-mar25 </p> <p>Watch more Now in Android → https://goo.gle/now-in-android <br /> Subscribe to Android Developers → https://goo.gle/AndroidDevs  </p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Welcome to Now in Android, your ongoing guide to what's new and notable in the world of Android development. In this episode, we'll cover the return of Google I/O, Android Studio Turning 10, the Android 16 Betas, Imagen in Firebase, the latest in AndroidX, and more!</p> <p>For links to these items, check out Now in Android #114 on Medium → https://goo.gle/4hA69xv Catch the latest episode of #TheAndroidShow here → https://goo.gle/tas-mar25 </p> <p>Watch more Now in Android → https://goo.gle/now-in-android Subscribe to Android Developers → https://goo.gle/AndroidDevs </p>]]></content:encoded>
+      
+      
+      <enclosure url="https://traffic.libsyn.com/secure/nowinandroid/NIA114_final.mp3?dest-id=1831685" length="6348762" type="audio/mpeg" />
+      <itunes:duration>06:27</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    </item>
+    
+  </channel>
+</rss>

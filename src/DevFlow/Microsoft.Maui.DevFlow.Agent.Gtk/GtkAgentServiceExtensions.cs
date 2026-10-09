@@ -4,16 +4,19 @@ using Microsoft.Maui.Hosting;
 using Microsoft.Maui.LifecycleEvents;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Logging;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
+using System.Runtime.Versioning;
 
 namespace Microsoft.Maui.DevFlow.Agent.Gtk;
 
 /// <summary>
-/// Extension methods for registering Microsoft.Maui.DevFlow Agent in Maui.Gtk apps.
+/// Extension methods for registering Microsoft.Maui.DevFlow Agent in Microsoft.Maui.Platforms.Linux.Gtk4 apps.
 /// </summary>
+[SupportedOSPlatform("linux")]
 public static class GtkAgentServiceExtensions
 {
     /// <summary>
-    /// Adds the Microsoft.Maui.DevFlow Agent to a Maui.Gtk app builder.
+    /// Adds the Microsoft.Maui.DevFlow Agent to a Microsoft.Maui.Platforms.Linux.Gtk4 app builder.
     /// The agent will start automatically when the first GTK window is created.
     /// </summary>
     public static MauiAppBuilder AddMauiDevFlowAgent(this MauiAppBuilder builder, Action<AgentOptions>? configure = null)
@@ -58,13 +61,21 @@ public static class GtkAgentServiceExtensions
                 options.Port = metaPort.Value;
         }
 
-        var service = new GtkAgentService(options);
+        var nativeElementRegistry = new RegisteredNativeElementRegistry();
+        var nativeElementDiagnosticSubscriber =
+            new MauiNativeElementDiagnosticSubscriber(nativeElementRegistry);
+        var service = new GtkAgentService(
+            options,
+            nativeElementRegistry,
+            nativeElementDiagnosticSubscriber);
         if (brokerReg != null)
         {
             brokerReg.CurrentPort = options.Port;
             service.SetBrokerRegistration(brokerReg);
         }
+        builder.Services.AddSingleton(nativeElementRegistry);
         builder.Services.AddSingleton<DevFlowAgentService>(service);
+        builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 
         if (options.EnableFileLogging)
         {
@@ -95,7 +106,15 @@ public static class GtkAgentServiceExtensions
             });
         }
 
-        // Auto-start agent when the first GTK window is created
+        // GtkMauiApplication has assigned its Application and attached the handler
+        // before raising the window-created event on the GTK thread.
+        ConfigureStartup(builder, () => GtkMauiApplication.Current.StartDevFlowAgent());
+
+        return builder;
+    }
+
+    internal static void ConfigureStartup(MauiAppBuilder builder, Action start)
+    {
         bool started = false;
         builder.ConfigureLifecycleEvents(lifecycle =>
         {
@@ -104,50 +123,36 @@ public static class GtkAgentServiceExtensions
                 gtk.OnWindowCreated(_ =>
                 {
                     if (started) return;
+                    start();
                     started = true;
-
-                    Task.Run(async () =>
-                    {
-                        // Wait for Application.Current to be available
-                        Application? app = null;
-                        for (int i = 0; i < 50 && app == null; i++)
-                        {
-                            await Task.Delay(200);
-                            app = Application.Current;
-                        }
-                        if (app != null)
-                            app.StartDevFlowAgent();
-                    });
                 });
             });
         });
-
-        return builder;
     }
 
     /// <summary>
     /// Starts the Microsoft.Maui.DevFlow agent. Call this after the MAUI Application is available.
-    /// Typically called from GtkMauiApplication.OnActivate or after window creation.
+    /// Typically called after window creation. Normal builder registration starts it automatically.
     /// </summary>
     public static void StartDevFlowAgent(this Application app)
     {
-        var service = GetAgentService(app);
-        if (service != null)
-        {
-            service.Start(app, app.Dispatcher);
-        }
+        ArgumentNullException.ThrowIfNull(app);
+        var services = app.Handler?.MauiContext?.Services
+            ?? throw new InvalidOperationException("The MAUI application handler is not initialized. Start DevFlow after window creation.");
+        services.GetRequiredService<MauiDevFlowAgentService>().Start(app, app.Dispatcher);
     }
 
-    private static DevFlowAgentService? GetAgentService(Application app)
+    /// <summary>
+    /// Starts the registered agent from a GTK host, for example in GtkMauiApplication.OnStarted.
+    /// AddMauiDevFlowAgent normally starts the agent automatically; this is an explicit startup hook.
+    /// </summary>
+    public static void StartDevFlowAgent(this GtkMauiApplication platformApp)
     {
-        try
-        {
-            return app.Handler?.MauiContext?.Services.GetService<DevFlowAgentService>();
-        }
-        catch
-        {
-            return null;
-        }
+        ArgumentNullException.ThrowIfNull(platformApp);
+        if (platformApp.Application is not Application app)
+            throw new InvalidOperationException("The GTK host has no MAUI Controls application. Start DevFlow from OnStarted or after window creation.");
+
+        app.StartDevFlowAgent();
     }
 
     private static string? ReadAssemblyMetadata(string key)

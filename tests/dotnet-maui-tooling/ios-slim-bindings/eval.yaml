@@ -1,0 +1,20 @@
+scenarios:
+  - name: "Generate ApiDefinition.cs with Objective Sharpie"
+    prompt: |
+      I've built my iOS slim binding's Swift wrapper and the xcframework is
+      generated. Now I need to create the ApiDefinition.cs. I heard I should
+      use Objective Sharpie. How do I find the generated Swift header and run
+      Sharpie? What cleanup do I need to do on the output?
+    assertions:
+      - type: "output_matches"
+        pattern: "sharpie bind"
+      - type: "output_matches"
+        pattern: "(?i)Swift.*header|MyBinding-Swift\\.h"
+      - type: "output_matches"
+        pattern: "\\[Verify\\]|NullAllowed|\\[Async\\]"
+    rubric:
+      - "Shows how to locate the generated -Swift.h header file in the build output"
+      - "Provides the correct sharpie bind command with --sdk, --namespace, and --scope flags"
+      - "Lists required cleanup steps: remove [Verify] attributes after review, add [NullAllowed], add [Async]"
+      - "Mentions removing InitWithCoder constructors that are auto-generated but not needed"
+    timeout: 240

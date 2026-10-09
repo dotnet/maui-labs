@@ -48,7 +48,7 @@ Add to `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/McpServerHost.cs`:
 
 ### Step 3: Add the Corresponding AgentClient Method (if needed)
 
-If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui.DevFlow.Driver/AgentClient.cs`.
+If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui.DevFlow.Client/AgentClient.cs`.
 
 ## Naming Conventions
 
@@ -84,6 +84,7 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `InteractionTools.cs` | `maui_tap`, `maui_fill`, `maui_clear`, `maui_key`, `maui_gesture`, `maui_scroll` | User interactions |
 | `InvokeTools.cs` | `maui_list_actions`, `maui_invoke_action` | DevFlow Actions |
 | `JobTools.cs` | `maui_jobs_list`, `maui_jobs_run` | Background jobs |
+| `LayoutDiagnosticsTool.cs` | `maui_layout_diagnostics` | Layout diagnostics |
 | `LogsTool.cs` | `maui_logs` | Log retrieval |
 | `MenuTools.cs` | `maui_menu_list`, `maui_menu_invoke` | Application menu inspection & invocation |
 | `NavigationTools.cs` | `maui_navigate`, `maui_back`, `maui_focus`, `maui_resize` | Navigation & window |

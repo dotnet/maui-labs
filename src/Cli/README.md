@@ -15,7 +15,7 @@ A command-line tool for .NET MAUI development environment setup and device manag
 ### 1. Install the CLI tool
 
 ```bash
-dotnet tool install -g Microsoft.Maui.Cli
+dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```
 
 ### 2. Check your environment
@@ -28,7 +28,103 @@ maui doctor
 maui device list
 ```
 
-### 3. Manage a project's .NET MAUI version
+### 3. Bootstrap AI-powered development
+
+```bash
+# Preview recommended setup for VS Code, including destinations and scope
+maui ai init --env VsCode --dry-run
+
+# Install the recommended skills, agents, and MCP registration
+maui ai init --env VsCode --yes
+
+# Discover all supported asset kinds, then inspect this project's inventory
+maui ai list
+maui ai status
+
+# Refresh only existing managed assets; missing recommendations are NOT added
+maui ai update
+```
+
+AI assets are explicit: **skills**, **agents**, and **MCP registrations**. Adding a skill does not install an agent or configure MCP. Use `init` for recommended combined setup, or choose individual assets:
+
+```bash
+maui ai add skill maui-devflow-debug --env Claude --yes
+maui ai list agent
+maui ai add agent "Comet Squad" --env VsCode --yes
+maui ai add mcp maui-devflow --env VsCode --yes
+
+# Only these named assets; selecting a bundled skill does not install siblings
+maui ai init --skill maui-devflow-debug --mcp maui-devflow --env Claude --yes
+
+# Restrict inventory and updates to one kind and environment
+maui ai status skill --env Claude
+maui ai update skill --skill maui-devflow-debug --env Claude --yes
+```
+
+Recommendations are explicit, not every catalog entry: the three bundled DevFlow skills, DevFlow MCP registration, the `expert-reviewer` agent, and the available `maui-current-apis`, `maui-project-structure`, `maui-app-architecture`, `maui-ui-patterns`, `maui-unit-testing`, and `maui-accessibility` skills. Only client-compatible recommendations are selected. Other catalog assets, including Comet-specific guidance, remain available through explicit selectors/add commands; adding an entry to the catalog does not automatically add it to init.
+
+Human catalog output labels recommendations explicitly. Each command's `--help`
+includes examples; `[type]` means an optional positional kind, not a required
+option. Global `--json`, `--ci`, and `--dry-run` control CLI behavior, not
+installation scope.
+
+#### AI command scope and options
+
+Run from the project you want to configure. In Git repositories, the Git root is the project boundary; outside Git, the current directory is used. Detected nested skill/configuration locations are honored. Copilot agents live in project `.github/agents` and support VS Code and Copilot CLI, not Claude Code or OpenCode.
+
+| Command | Behavior and important options |
+|---------|--------------------------------|
+| `maui ai init` | Recommended combined setup. Repeatable `--skill`, `--agent`, and `--mcp` selectors instead install only their explicit union. Each bundled skill selector identifies one skill. |
+| `maui ai list [type]` | Available assets, default all kinds; optional singular `skill`, `agent`, or `mcp`. Catalog discovery may use the network. |
+| `maui ai status [type]` | Read-only installed/configured inventory, including unmanaged and tracked-but-missing assets. Not an MCP connectivity check. |
+| `maui ai update [type]` | Refresh existing managed assets only, using recorded origins. Missing or unmanaged assets are not installed/adopted, even with force. Supports exact type-specific selectors. |
+| `maui ai add skill <name>` | Install one skill through its owner (bundled DevFlow or repository). No implicit MCP or agent installation. |
+| `maui ai add agent <name>` | Install one Copilot agent definition. |
+| `maui ai add mcp <name>` | Merge a known server registration; currently `maui-devflow`. Does not install an executable, approve a client connection, or probe connectivity. |
+
+All commands support repeatable `--env Claude|VsCode|CopilotCli|OpenCode`. An explicit kind/name plus explicit environments must be compatible in **every** requested pairing: `add agent <name> --env Claude VsCode` fails before writing instead of silently targeting only VS Code. Without explicit assets, combined setup/catalog/inventory includes applicable kinds for the chosen environments. Shared physical destinations are deduplicated while retaining client associations.
+
+`init` and `add --env` can target a canonical environment before its marker directory exists. Without `--env`, the default is **all detected environments, not Copilot**. Setup explains the configuration markers or recorded installations that selected each client, together with destinations and scope. A marker is not proof that the client executable is installed or running. In particular, a user's `~/.copilot/` can select Copilot CLI even without a project Copilot marker.
+
+Interactive `init` offers a client selector when none are detected. It never invents a default client. With `--yes`, `--ci`, `--json`, `--dry-run`, or redirected input, missing targets instead produce actionable `--env` guidance without prompting. Read-only commands and update never create environment directories. Preview setup explicitly when configuring a project for the first time:
+
+```bash
+maui ai init --env Claude --dry-run
+maui ai init --env Claude --yes
+```
+
+`--yes` (alias `-y`) accepts confirmation prompts only. **`--force` authorizes replacement/adoption, not prompt acceptance**; combine it with `--yes` for unattended replacement. For bundled DevFlow skills, force can also replace a newer CLI's content with the running CLI's bundle. Global `--json` and `--ci` suppress prompts but never authorize overwriting conflicts. CI stops later mutations after a failure. Customized or conflicting unmanaged assets require force and otherwise produce a blocked result/nonzero exit. Harmless already-current actions can skip successfully.
+
+Global `--dry-run` never prompts or writes, including ownership/freshness state. It uses the same selection and conflict rules as execution and reports create/replace/adopt/skip actions, reasons, destinations, and project/user scope. Network access may still be required.
+
+JSON command results use a versioned envelope with `schemaVersion`, `command`, `dryRun`, aggregate `status`, and `results`. Each result identifies the asset kind/name, associated environments, destination and scope, ownership, observed state, planned action, outcome, and reason. A successful inventory command is not a claim that every row is current or managed. Inspect row states and reasons; blocked actions and application failures produce nonzero exits.
+
+The [automation contract](../../docs/Cli/ai-automation.md) documents the
+[JSON Schema](../../docs/Cli/ai-result.schema.json), reason codes, exit semantics,
+compatibility rules, and the parser/cancellation cases outside the envelope.
+
+MCP configuration uses `.mcp.json` for Claude Code, `.vscode/mcp.json` for VS Code, `opencode.json` (or existing `.jsonc`) for OpenCode, and **user-wide** `~/.copilot/mcp-config.json` for Copilot CLI. Only the known definition's launch fields are managed; other servers, credentials, environment settings, and user options are preserved even under force. Malformed shared configuration remains an error, not permission to replace the whole file. An exact unmanaged registration is not silently adopted; use `add mcp ... --force` to opt into management. MCP update refreshes the registration definition, not the server executable version.
+
+JSONC comments cannot be retained when a configuration is rewritten; the original is backed up to `<config>.bak`. This is a latest-only recovery file, not backup history: another comment-bearing rewrite replaces it. Copy it elsewhere before another rewrite if you need to retain that recovery point. Clients may require restart, project trust, or server approval before loading a registration. Inventory reports configuration and ownership, not connection health.
+
+The default catalog is `dotnet/maui-labs` on `main`. Source overrides use `--repo <owner/repo>` and `--branch <ref>`; managed assets retain their recorded origin for later updates unless explicitly overridden. Missing required provenance is reported rather than guessed. Bundled versions refer to the running CLI's content, not remote downloads.
+
+Each remote repository/ref is resolved once per plan to an immutable commit, so
+catalog discovery and downloaded content cannot mix revisions when a branch
+moves. Results report `origin.resolvedCommit` when a source is resolved, while
+`origin.branch` retains the tracking ref. To reproduce remote selection across
+separate preview/apply runs, pass the same full 40-character commit to `--branch`
+and use the same CLI version. A commit-pinned installation stays pinned on update
+unless its source is explicitly overridden; ordinary branches continue tracking
+new commits. See the automation contract for pipeline examples and limitations.
+
+Skills retain their existing owner metadata (`.skill-version` or DevFlow state). Agent/project MCP ownership uses `.maui/ai-assets.json` under the project root; user MCP ownership is separate under the user's `.maui`. Registries record identity, origin, and managed-content hashes, not raw credentials/configuration. These are mutable local installation records; consider excluding them from version control. Commands do not silently change `.gitignore`.
+
+**Breaking changes from earlier versions of this unmerged PR:** use `add skill <name>` instead of `add <name>`; `-y` now means yes, not force; adding skills no longer configures MCP; selectors no longer expand bundled groups or target another kind; list defaults to all asset kinds; update never installs missing recommendations; JSON output uses the typed result envelope instead of the earlier command-specific arrays/records. No hook/canvas commands or executable stubs are provided.
+
+Skill replacement stages downloads and restores the previous directory on ordinary write failures. It is not crash-atomic: interruption between directory renames can leave `<skill>.<id>.bak` alongside the skills directory. If the skill directory is missing, inspect that backup and rename it back before retrying. Concurrent installations into the same destination are not supported. Path/symlink checks are not handle-based isolation against concurrent filesystem changes; use trusted, locally controlled destinations. Repository-hosted Copilot agents are currently single-file assets; writes across multiple assets are not one transaction.
+
+### 4. Manage a project's .NET MAUI version
 
 ```bash
 # Show the effective MAUI version for the current project
@@ -50,7 +146,7 @@ maui project version set --latest-nightly --nuget-config
 maui project version use-workload
 ```
 
-### 4. Set up Android development
+### 5. Set up Android development
 
 ```bash
 # Full interactive Android setup (JDK + SDK + emulator)
@@ -68,7 +164,7 @@ maui android emulator create --name MyEmulator
 maui android emulator start --name MyEmulator
 ```
 
-### 5. Set up Apple development (macOS only)
+### 6. Set up Apple development (macOS only)
 
 ```bash
 # List installed Xcode versions
@@ -85,6 +181,18 @@ maui apple simulator stop "iPhone 16 Pro"
 maui apple simulator delete "iPhone 16 Pro"
 ```
 
+### 6. Open the MAUI DevFlow Inspector
+
+After adding the DevFlow agent to a running app:
+
+```bash
+maui devflow broker start
+```
+
+Then open `http://localhost:19223/inspector/`. See the
+[MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md) for app registration and browser,
+VS Code, GitHub Copilot desktop, and Copilot CLI setup.
+
 ## Commands
 
 | Command | Description |
@@ -96,6 +204,14 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui project version set` | Pin a project to a specific, latest stable, nightly, or custom-source MAUI version |
 | `maui project version use-workload` | Use the installed MAUI workload version instead of a pinned project version |
 | `maui version` | Display version information |
+| **AI** | |
+| `maui ai init` | Bootstrap MAUI/Copilot skills, bundled DevFlow skills, Copilot agents, and MCP configuration |
+| `maui ai list [type]` | List available skills, agents, and MCP registrations |
+| `maui ai status [type]` | Read-only installed/configured asset inventory |
+| `maui ai update [type]` | Refresh existing managed assets only |
+| `maui ai add skill <name>` | Install exactly one skill, without implicit MCP setup |
+| `maui ai add agent <name>` | Install one Copilot agent |
+| `maui ai add mcp <name>` | Configure one known MCP server registration |
 | **Android** | |
 | `maui android install` | Full interactive Android environment setup |
 | `maui android sdk list` | List available and installed Android SDK packages |
@@ -122,6 +238,7 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow init` | Install project-scoped DevFlow onboarding/debugging skills |
 | `maui devflow skills` | Manage bundled DevFlow skill installs and updates |
 | `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
+| `maui devflow ui diagnostics` | Detect clipping, overflow, text truncation, overlap, and occlusion |
 | `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |
 | `maui devflow logs` | Fetch and stream application logs |
@@ -136,12 +253,34 @@ maui apple simulator delete "iPhone 16 Pro"
 | `maui devflow mcp` | Start the MCP server for AI agent integration |
 | **Profiling** | |
 | `maui profile startup` | Collect a startup trace for a .NET MAUI app (.nettrace, speedscope, or MIBC output) |
+| `maui profile manual` | Launch a MAUI app normally, then attach and stop tracing on demand |
 | **Go** | |
 | `maui go create` | Create a new MAUI Go single-file project |
 | `maui go serve` | Start the dev server with hot reload |
 | `maui go upgrade` | Graduate a Go project to a full MAUI project |
 
 Run `maui <command> --help` for detailed options on any command.
+
+For screen recording, select the platform and target when starting:
+
+```bash
+maui devflow recording start --platform android --device <serial> --output capture.mp4
+# Or: --platform ios --device <simulator-UDID>
+maui devflow recording stop
+```
+
+An iOS simulator recording requires an explicit `--device`. Stopping uses the
+saved recording platform and Android serial; it does not require repeating
+`--platform` or `--device`, and those options do not override the saved target.
+The iOS driver stops its saved recording process. Without a saved recording,
+`stop` reports an error without creating a platform driver.
+
+Profiling commands wait up to two minutes for `dotnet-trace` to finish rundown and flush after a manual, timed, or event-driven stop. Use `--trace-stop-timeout` to adjust that finalization window independently of `--duration`.
+
+MIBC conversion uses the selected target framework and configuration's isolated build outputs, filtered to the app's runtime identifier (ABI). An explicit `RuntimeIdentifier` is honored; for multi-ABI builds, the selected device's runtime identifier chooses the references (iOS simulators without architecture metadata use the host architecture). RID-specific output paths are evaluated separately so SDK artifact layouts are supported. The evaluated build settings determine the assembly-processing stage: shrinking uses only `shrunk`, linking without shrinking uses only `linked`, and untrimmed builds use neither. Reference-only assemblies are excluded. Missing stage outputs or missing/ambiguous ABI information are reported as errors rather than falling back to another stage or ABI.
+
+For the shared Inspector UI and its host integrations, see the
+[MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md).
 
 DevFlow file commands can use local files directly:
 
@@ -185,6 +324,8 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 Most commands accept `--json` for structured output. Some commands may emit multiple JSON objects to stdout (JSONL / newline-delimited JSON) — for example, progress or status records before the final result. The final JSON object is the command result, whose shape is command-specific (see per-command `--help` and examples below). When a non-DevFlow command **fails** and the exception is handled by `HandleCommandException`, it emits the canonical error envelope described in the next section. This applies to both recognized `MauiToolException` errors (which produce specific error codes) and unexpected exceptions (which become `E1001`/`InternalError` via `ErrorResult.FromException`). Note: unrecognized parse errors (e.g. invalid flags) do not use this envelope, `OperationCanceledException` produces a status message with exit code 130 rather than the error envelope, and `maui devflow ...` uses a different JSON contract and writes structured errors to stderr rather than stdout.
 
 Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts. Parse the output as a stream of JSON objects rather than assuming a single top-level document.
+
+Successful `maui profile startup --json` and `maui profile start --json` runs emit a final result with `snake_case` project, framework, platform, device, diagnostic, and timestamp fields. `format` identifies the output format and `output_path` points to the primary artifact; `raw_trace_path` is included for speedscope and MIBC output and omitted for nettrace output.
 
 ### Error envelope <a name="error-envelope"></a>
 

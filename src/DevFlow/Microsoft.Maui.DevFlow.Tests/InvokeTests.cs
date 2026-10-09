@@ -39,6 +39,21 @@ public class InvokeTests
 	}
 
 	[Fact]
+	public async Task ListActions_DoesNotAdvertiseActionsContainingGenericParameters()
+	{
+		using var harness = await InvokeTestHarness.CreateAsync();
+
+		var actions = await harness.Client.ListActionsAsync();
+		var actionNames = actions.GetProperty("actions")
+			.EnumerateArray()
+			.Select(action => action.GetProperty("name").GetString())
+			.ToArray();
+
+		Assert.DoesNotContain("test-generic-method", actionNames);
+		Assert.DoesNotContain("test-generic-type", actionNames);
+	}
+
+	[Fact]
 	public async Task InvokeAction_CallsRegisteredAction_ReturnsResult()
 	{
 		using var harness = await InvokeTestHarness.CreateAsync();
@@ -333,10 +348,10 @@ public class InvokeTests
 
 	private sealed class InvokeTestHarness : IDisposable
 	{
-		private readonly DevFlowAgentService _service;
+		private readonly MauiDevFlowAgentService _service;
 		public AgentClient Client { get; }
 
-		private InvokeTestHarness(DevFlowAgentService service, AgentClient client)
+		private InvokeTestHarness(MauiDevFlowAgentService service, AgentClient client)
 		{
 			_service = service;
 			Client = client;
@@ -348,7 +363,7 @@ public class InvokeTests
 		public static async Task<InvokeTestHarness> CreateWithDispatcherAsync(IDispatcher dispatcher)
 		{
 			var app = new TestApplication();
-			var service = new DevFlowAgentService(new AgentOptions { Port = GetFreePort() });
+			var service = new MauiDevFlowAgentService(new AgentOptions { Port = GetFreePort() });
 			var client = new AgentClient("localhost", service.Port);
 
 			service.StartServerOnly(dispatcher);
@@ -496,6 +511,19 @@ public static class TestInvokeHelpers
 	public static string FormatNullable(
 		[System.ComponentModel.Description("Nullable value")] int? value)
 		=> value.HasValue ? value.Value.ToString() : "null";
+
+	[DevFlowAction("test-generic-method")]
+	public static void GenericMethod<T>()
+	{
+	}
+}
+
+public static class GenericTestInvokeHelpers<T>
+{
+	[DevFlowAction("test-generic-type")]
+	public static void GenericTypeMethod()
+	{
+	}
 }
 
 public enum Priority

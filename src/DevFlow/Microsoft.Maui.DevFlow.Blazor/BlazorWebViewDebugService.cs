@@ -11,6 +11,10 @@ namespace Microsoft.Maui.DevFlow.Blazor;
 /// </summary>
 public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
 {
+    private readonly object _webViewGate = new();
+    private readonly Dictionary<WKWebView, int> _webViewIndexes =
+        new(ReferenceEqualityComparer.Instance);
+
     public BlazorWebViewDebugService() { }
 
     public override void ConfigureHandler()
@@ -24,20 +28,66 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
             if (handler.PlatformView is WKWebView wkWebView)
             {
                 var automationId = (handler.VirtualView as VisualElement)?.AutomationId;
-                var idx = AddWebViewBridge(
-                    async (script) =>
+                await Task.Delay(100);
+                if (!ReferenceEquals(handler.PlatformView, wkWebView))
+                {
+                    Log($"[BlazorDevFlow] Skipping superseded WKWebView (automationId={automationId})");
+                    return;
+                }
+
+                var visualElement = handler.VirtualView as VisualElement;
+                EventHandler<HandlerChangingEventArgs>? handlerChanging = null;
+                var idx = -1;
+                void CleanupBridge()
+                {
+                    PostToMainThread(() =>
                     {
-                        var result = await wkWebView.EvaluateJavaScriptAsync(script);
-                        return result?.ToString();
-                    },
-                    () => wkWebView.Reload(),
-                    (url) =>
+                        if (visualElement is not null && handlerChanging is not null)
+                            visualElement.HandlerChanging -= handlerChanging;
+                        lock (_webViewGate)
+                            _webViewIndexes.Remove(wkWebView);
+                        Log($"[BlazorDevFlow] WKWebView bridge {idx} deactivated.");
+                    });
+                }
+
+                lock (_webViewGate)
+                {
+                    if (_webViewIndexes.TryGetValue(wkWebView, out idx))
                     {
-                        var request = new Foundation.NSUrlRequest(new Foundation.NSUrl(url));
-                        wkWebView.LoadRequest(request);
-                    },
-                    automationId);
+                        Log($"[BlazorDevFlow] WKWebView already captured as bridge {idx} (automationId={automationId})");
+                        return;
+                    }
+
+                    idx = AddWebViewBridge(
+                        async (script) =>
+                        {
+                            var result = await wkWebView.EvaluateJavaScriptAsync(script);
+                            return result?.ToString();
+                        },
+                        () => wkWebView.Reload(),
+                        (url) =>
+                        {
+                            var request = new Foundation.NSUrlRequest(new Foundation.NSUrl(url));
+                            wkWebView.LoadRequest(request);
+                        },
+                        automationId,
+                        CleanupBridge);
+                    _webViewIndexes.Add(wkWebView, idx);
+                }
                 Log($"[BlazorDevFlow] WKWebView captured as bridge {idx} (automationId={automationId})");
+
+                if (visualElement is not null)
+                {
+                    handlerChanging = (_, args) =>
+                    {
+                        if (!ReferenceEquals(args.OldHandler, handler))
+                            return;
+
+                        DeactivateWebViewBridge(idx);
+                    };
+                    visualElement.HandlerChanging += handlerChanging;
+                }
+
                 await InitializeBridgeAsync(idx);
             }
             else
@@ -64,6 +114,10 @@ namespace Microsoft.Maui.DevFlow.Blazor;
 /// </summary>
 public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
 {
+    private readonly object _webViewGate = new();
+    private readonly Dictionary<WKWebView, int> _webViewIndexes =
+        new(ReferenceEqualityComparer.Instance);
+
     public BlazorWebViewDebugService() { }
 
     protected override Task<T> RunOnMainThreadAsync<T>(Func<Task<T>> func)
@@ -144,20 +198,76 @@ public class BlazorWebViewDebugService : BlazorWebViewDebugServiceBase
             if (handler.PlatformView is WKWebView wkWebView)
             {
                 var automationId = (handler.VirtualView as VisualElement)?.AutomationId;
-                var idx = AddWebViewBridge(
-                    async (script) =>
+                await Task.Delay(100);
+                if (!ReferenceEquals(handler.PlatformView, wkWebView))
+                {
+                    Log($"[BlazorDevFlow] Skipping superseded WKWebView (automationId={automationId})");
+                    return;
+                }
+
+                var visualElement = handler.VirtualView as VisualElement;
+                EventHandler<HandlerChangingEventArgs>? handlerChanging = null;
+                Action<WKWebView>? platformViewDisconnected = null;
+                var idx = -1;
+                void CleanupBridge()
+                {
+                    PostToMainThread(() =>
                     {
-                        var result = await wkWebView.EvaluateJavaScriptAsync(script);
-                        return result?.ToString();
-                    },
-                    () => wkWebView.Reload(),
-                    (url) =>
+                        if (visualElement is not null && handlerChanging is not null)
+                            visualElement.HandlerChanging -= handlerChanging;
+                        if (platformViewDisconnected is not null)
+                            handler.PlatformViewDisconnected -= platformViewDisconnected;
+                        lock (_webViewGate)
+                            _webViewIndexes.Remove(wkWebView);
+                        Log($"[BlazorDevFlow] WKWebView bridge {idx} deactivated.");
+                    });
+                }
+
+                lock (_webViewGate)
+                {
+                    if (_webViewIndexes.TryGetValue(wkWebView, out idx))
                     {
-                        var request = new NSUrlRequest(new NSUrl(url));
-                        wkWebView.LoadRequest(request);
-                    },
-                    automationId);
+                        Log($"[BlazorDevFlow] WKWebView already captured as bridge {idx} (automationId={automationId})");
+                        return;
+                    }
+
+                    idx = AddWebViewBridge(
+                        async (script) =>
+                        {
+                            var result = await wkWebView.EvaluateJavaScriptAsync(script);
+                            return result?.ToString();
+                        },
+                        () => wkWebView.Reload(),
+                        (url) =>
+                        {
+                            var request = new NSUrlRequest(new NSUrl(url));
+                            wkWebView.LoadRequest(request);
+                        },
+                        automationId,
+                        CleanupBridge);
+                    _webViewIndexes.Add(wkWebView, idx);
+                }
                 Log($"[BlazorDevFlow] WKWebView captured as bridge {idx} (automationId={automationId})");
+
+                if (visualElement is not null)
+                {
+                    handlerChanging = (_, args) =>
+                    {
+                        if (!ReferenceEquals(args.OldHandler, handler))
+                            return;
+
+                        DeactivateWebViewBridge(idx);
+                    };
+                    visualElement.HandlerChanging += handlerChanging;
+                }
+
+                platformViewDisconnected = disconnectedView =>
+                {
+                    if (ReferenceEquals(disconnectedView, wkWebView))
+                        DeactivateWebViewBridge(idx);
+                };
+                handler.PlatformViewDisconnected += platformViewDisconnected;
+
                 await InitializeBridgeAsync(idx);
             }
             else

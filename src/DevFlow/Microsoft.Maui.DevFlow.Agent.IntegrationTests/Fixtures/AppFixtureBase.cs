@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
@@ -120,15 +121,14 @@ public abstract class AppFixtureBase : IAppFixture
     {
         CleanBuildOutputs(projectPath, targetFramework);
 
-        var dotnetPath = File.Exists("/usr/local/share/dotnet/dotnet")
-            ? "/usr/local/share/dotnet/dotnet"
-            : "dotnet";
-
-        var args = $"build \"{projectPath}\" -f {targetFramework} -c Debug --nologo -v q";
+        // Persistent MSBuild worker nodes inherit redirected output handles and keep them open
+        // after the build exits, which can leave ReadToEndAsync waiting forever. Integration
+        // fixtures build once, so node reuse provides no benefit here.
+        var args = $"build \"{projectPath}\" -f {targetFramework} -c Debug --nologo -v q -nodeReuse:false";
         if (!string.IsNullOrEmpty(extraArgs))
             args += $" {extraArgs}";
 
-        var psi = new ProcessStartInfo(dotnetPath, args)
+        var psi = new ProcessStartInfo(ResolveDotnetPath(), args)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -147,6 +147,32 @@ public abstract class AppFixtureBase : IAppFixture
             throw new InvalidOperationException(
                 $"dotnet build failed (exit code {process.ExitCode}).\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         }
+    }
+
+    /// <summary>
+    /// Finds the dotnet muxer to build the sample with. This has to be the same install that is
+    /// running the tests: side-by-side installs are common on developer machines, and only the one
+    /// selected by the repo's global.json has an SDK new enough to build the samples.
+    /// </summary>
+    private static string ResolveDotnetPath()
+    {
+        // The SDK sets this for any process it launches, including the test host.
+        var hostPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
+        if (!string.IsNullOrEmpty(hostPath) && File.Exists(hostPath))
+            return hostPath;
+
+        // Otherwise the process running us is usually the muxer itself.
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrEmpty(processPath) &&
+            Path.GetFileNameWithoutExtension(processPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            return processPath;
+        }
+
+        if (File.Exists("/usr/local/share/dotnet/dotnet"))
+            return "/usr/local/share/dotnet/dotnet";
+
+        return "dotnet";
     }
 
     protected static async Task WithBuildLockAsync(Func<Task> action, TimeSpan? timeout = null)
@@ -225,6 +251,43 @@ public abstract class AppFixtureBase : IAppFixture
         return path;
     }
 
+    /// <summary>
+    /// Resolves the sample project for the framework under test: the MAUI sample by default, or
+    /// the plain .NET head matching <paramref name="platform"/> when DEVFLOW_TEST_FRAMEWORK=native.
+    /// </summary>
+    protected static string GetSampleProjectPath(string platform)
+    {
+        if (!TestFramework.IsNative)
+        {
+            var projectName = platform switch
+            {
+                "macos" => "DevFlow.Sample.MacOS",
+                "gtk" => "DevFlow.Sample.Linux",
+                "wpf" => "DevFlow.Sample.WPF",
+                _ => "DevFlow.Sample",
+            };
+            var mauiPath = Path.Combine(
+                FindRepoRoot(), "samples", projectName, $"{projectName}.csproj");
+            if (!File.Exists(mauiPath))
+                throw new InvalidOperationException($"MAUI sample project not found at: {mauiPath}");
+
+            return mauiPath;
+        }
+
+        var head = TestFramework.NativeHeadFor(platform);
+        var path = Path.Combine(
+            FindRepoRoot(), "samples", "DevFlow.Sample.Native", head, $"{NativeSampleName(platform)}.csproj");
+
+        if (!File.Exists(path))
+            throw new InvalidOperationException($"Native sample project not found at: {path}");
+
+        return path;
+    }
+
+    /// <summary>Assembly/project name of the native sample head for a fixture platform.</summary>
+    protected static string NativeSampleName(string platform)
+        => $"DevFlow.Sample.Native.{TestFramework.NativeHeadFor(platform)}";
+
     protected static string GetSampleBuildOutputRoot()
     {
         var repoRoot = FindRepoRoot();
@@ -238,6 +301,87 @@ public abstract class AppFixtureBase : IAppFixture
 
         throw new InvalidOperationException(
             $"Could not locate DevFlow.Sample build output. Checked '{artifactsPath}' and '{projectBinPath}'.");
+    }
+
+    /// <summary>
+    /// Resolves the build output root for the framework under test. Mirrors
+    /// <see cref="GetSampleProjectPath(string)"/>.
+    /// </summary>
+    protected static string GetSampleBuildOutputRoot(string platform)
+    {
+        if (!TestFramework.IsNative)
+        {
+            var projectName = platform switch
+            {
+                "macos" => "DevFlow.Sample.MacOS",
+                "gtk" => "DevFlow.Sample.Linux",
+                "wpf" => "DevFlow.Sample.WPF",
+                _ => "DevFlow.Sample",
+            };
+            var mauiRepoRoot = FindRepoRoot();
+            var mauiArtifactsPath = Path.Combine(
+                mauiRepoRoot, "artifacts", "bin", projectName, "Debug");
+            if (Directory.Exists(mauiArtifactsPath))
+                return mauiArtifactsPath;
+
+            var mauiProjectBinPath = Path.Combine(
+                mauiRepoRoot, "samples", projectName, "bin", "Debug");
+            if (Directory.Exists(mauiProjectBinPath))
+                return mauiProjectBinPath;
+
+            throw new InvalidOperationException(
+                $"Could not locate {projectName} build output. " +
+                $"Checked '{mauiArtifactsPath}' and '{mauiProjectBinPath}'.");
+        }
+
+        var repoRoot = FindRepoRoot();
+        var name = NativeSampleName(platform);
+
+        var artifactsPath = Path.Combine(repoRoot, "artifacts", "bin", name, "Debug");
+        if (Directory.Exists(artifactsPath))
+            return artifactsPath;
+
+        var projectBinPath = Path.Combine(
+            repoRoot, "samples", "DevFlow.Sample.Native", TestFramework.NativeHeadFor(platform), "bin", "Debug");
+        if (Directory.Exists(projectBinPath))
+            return projectBinPath;
+
+        throw new InvalidOperationException(
+            $"Could not locate {name} build output. Checked '{artifactsPath}' and '{projectBinPath}'.");
+    }
+
+    /// <summary>
+    /// Picks the <c>.app</c> bundle built for this machine's architecture.
+    /// </summary>
+    /// <remarks>
+    /// A macOS or Mac Catalyst build emits one bundle per RuntimeIdentifier, and Release also
+    /// lipo's a universal one at the target-framework root. Choosing between them by enumeration
+    /// order or path length is only ever accidentally right, and choosing wrong launches the x64
+    /// slice under Rosetta on Apple Silicon — the app still runs, so nothing fails, it just is not
+    /// the architecture under test. Prefer the host RID, fall back to the universal bundle, and
+    /// refuse to launch a foreign-architecture one.
+    /// </remarks>
+    internal static string SelectHostArchitectureAppBundle(IReadOnlyList<string> bundles, string ridPrefix)
+    {
+        var hostArch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+        var hostRid = $"{ridPrefix}-{hostArch}";
+
+        static bool HasSegment(string path, Func<string, bool> predicate) =>
+            path.Split(Path.DirectorySeparatorChar).Any(predicate);
+
+        var hostBundle = bundles.FirstOrDefault(b => HasSegment(b, segment => segment == hostRid));
+        if (hostBundle is not null)
+            return hostBundle;
+
+        // The universal bundle is the one that does not sit under any RID directory.
+        var universal = bundles.FirstOrDefault(
+            b => !HasSegment(b, segment => segment.StartsWith($"{ridPrefix}-", StringComparison.Ordinal)));
+        if (universal is not null)
+            return universal;
+
+        throw new InvalidOperationException(
+            $"No .app bundle was built for {hostRid}. Found only: {string.Join(", ", bundles)}. " +
+            "Refusing to launch a foreign-architecture bundle, which would run under Rosetta.");
     }
 
     protected static int FindFreePort()

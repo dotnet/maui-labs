@@ -1,0 +1,17 @@
+"AboutApp" = "Over {0}";
+"HideApp" = "Verberg {0}";
+"HideOthers" = "Verberg andere";
+"ShowAll" = "Toon alles";
+"QuitApp" = "Stop {0}";
+"Edit" = "Wijzig";
+"Undo" = "Herstel";
+"Redo" = "Opnieuw";
+"Cut" = "Knip";
+"Copy" = "Kopieer";
+"Paste" = "Plak";
+"Delete" = "Verwijder";
+"SelectAll" = "Selecteer alles";
+"Window" = "Venster";
+"Minimize" = "Minimaliseer";
+"Zoom" = "Zoom";
+"EnterFullScreen" = "Schakel schermvullende weergave in";

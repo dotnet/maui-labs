@@ -220,6 +220,12 @@ namespace Comet
 			_bottomRight = bottomRight;
 		}
 
+		// Exposed so the backend bridge can read the per-corner radii back off a ClipShape.
+		public float TopLeft => _topLeft;
+		public float TopRight => _topRight;
+		public float BottomLeft => _bottomLeft;
+		public float BottomRight => _bottomRight;
+
 		public override PathF PathForBounds(Rect bounds)
 		{
 			var path = new PathF();

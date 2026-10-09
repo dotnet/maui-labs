@@ -14,6 +14,7 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 public class MacOSGraphicsView : NSView
 {
     readonly DirectRenderer _renderer;
+    CGSize _rendererSize;
 
     public MacOSGraphicsView()
     {
@@ -49,6 +50,11 @@ public class MacOSGraphicsView : NSView
         // Reset clip to full bounds — AppKit may clip to dirtyRect which
         // can be a partial region, causing drawables to be clipped.
         var bounds = Bounds;
+        if (_rendererSize != bounds.Size)
+        {
+            _rendererSize = bounds.Size;
+            _renderer.SizeChanged((float)bounds.Width, (float)bounds.Height);
+        }
         context.SaveState();
         context.ClipToRect(bounds);
 
@@ -61,7 +67,6 @@ public class MacOSGraphicsView : NSView
     public override void SetFrameSize(CGSize newSize)
     {
         base.SetFrameSize(newSize);
-        _renderer.SizeChanged((float)newSize.Width, (float)newSize.Height);
         NeedsDisplay = true;
     }
 

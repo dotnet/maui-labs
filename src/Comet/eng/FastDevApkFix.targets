@@ -1,0 +1,32 @@
+<Project>
+  <!--
+    Workaround for a .NET Android SDK incremental-build bug (observed in
+    Microsoft.Android.Sdk 36.99.0-preview.5.308): _BuildApkFastDevStaticInputs
+    omits @(_ApplicationSharedLibrary) (libxamarin-app.so), while the embed-path
+    _BuildApkEmbedInputs includes it. libxamarin-app.so carries the debug
+    typemaps, so when a referenced library (e.g. the vendored Compose facade or
+    Comet itself) is rebuilt, the .so is correctly relinked but _BuildApkFastDev
+    can skip as "up-to-date": the stale APK keeps the old typemaps while fast
+    deployment pushes the new assembly → "System.NotSupportedException: ... no
+    Java peer type found" at runtime. Adding the .so to the up-to-date check
+    makes the APK rebuild + reinstall, removing the need for clean rebuilds.
+
+    Imported by BOTH src/Comet/Directory.Build.targets and
+    sample/Directory.Build.targets (the sample-level file SHADOWS the parent, so
+    an Android app project under sample/ never sees the parent's targets).
+    Full analysis: src/Comet/docs/research/upstream-issue-fastdev-typemap-staleness.md
+
+    _PrepareApplicationSharedLibraryItems expands %(_BuildTargetAbis.Identity),
+    which is populated by _DefineBuildTargetAbis — without that dependency the
+    item (and thus the appended input) is EMPTY and the fix silently no-ops.
+  -->
+  <Target Name="_CometFixFastDevApkInputs"
+          BeforeTargets="_BuildApkFastDev"
+          DependsOnTargets="_DefineBuildTargetAbis;_PrepareApplicationSharedLibraryItems">
+    <PropertyGroup>
+      <_BuildApkFastDevStaticInputs>$(_BuildApkFastDevStaticInputs);@(_ApplicationSharedLibrary)</_BuildApkFastDevStaticInputs>
+    </PropertyGroup>
+    <Warning Condition=" '@(_ApplicationSharedLibrary)' == '' "
+             Text="_CometFixFastDevApkInputs: @(_ApplicationSharedLibrary) is empty — the fast-dev APK up-to-date check is NOT protected against stale typemaps (see docs/research/upstream-issue-fastdev-typemap-staleness.md)." />
+  </Target>
+</Project>

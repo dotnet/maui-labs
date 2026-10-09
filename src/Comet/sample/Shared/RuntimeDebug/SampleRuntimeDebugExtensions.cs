@@ -1,7 +1,7 @@
 #if DEBUG
 using System;
 using Comet;
-using MauiDevFlow.Agent;
+using Microsoft.Maui.DevFlow.Agent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui;

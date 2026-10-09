@@ -16,7 +16,7 @@ public sealed class AssertTool
 		[Description("AutomationId to resolve the element")] string? automationId = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 
 		var resolvedId = elementId;
 		if (resolvedId is null && automationId is not null)

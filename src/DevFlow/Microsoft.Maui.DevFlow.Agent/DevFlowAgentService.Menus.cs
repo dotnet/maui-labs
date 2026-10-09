@@ -22,8 +22,8 @@ public partial class PlatformAgentService
     protected override Task<object?> GetNativeMenusAsync()
         => DispatchAsync(() => BuildNativeMainMenu());
 
-    protected override Task<object?> InvokeNativeMenuAsync(MenuInvokeRequest request)
-        => DispatchAsync(() => InvokeNativeMenuItem(request));
+    protected override Task<MenuInvokeResult?> InvokeNativeMenuAsync(MenuInvokeRequest request)
+        => DispatchMenuActionAsync(() => InvokeNativeMenuItem(request), "appkit");
 
     private object? BuildNativeMainMenu()
     {
@@ -38,8 +38,9 @@ public partial class PlatformAgentService
         };
     }
 
-    private List<object> BuildNativeMenuItems(NSMenu menu, string idPrefix, string pathPrefix)
+    private List<object> BuildNativeMenuItems(NSMenu menu, string idPrefix, string pathPrefix, bool parentEnabled = true)
     {
+        menu.Update();
         var items = new List<object>();
         for (nint i = 0; i < menu.Count; i++)
         {
@@ -54,13 +55,13 @@ public partial class PlatformAgentService
             }
 
             var title = item.Title ?? string.Empty;
-            var path = CombineNativePath(pathPrefix, title);
+            var path = CombineMenuPath(pathPrefix, title);
             var node = new Dictionary<string, object?>
             {
                 ["id"] = id,
                 ["title"] = title,
                 ["path"] = path,
-                ["enabled"] = item.Enabled,
+                ["enabled"] = parentEnabled && item.Enabled,
                 ["hidden"] = item.Hidden,
                 ["separator"] = false,
                 ["state"] = NativeStateToString(item.State),
@@ -77,7 +78,7 @@ public partial class PlatformAgentService
             if (item.Submenu is NSMenu submenu)
             {
                 node["hasSubmenu"] = true;
-                node["items"] = BuildNativeMenuItems(submenu, $"{id}/", path);
+                node["items"] = BuildNativeMenuItems(submenu, $"{id}/", path, parentEnabled && item.Enabled && !item.Hidden);
             }
             else
             {
@@ -90,7 +91,7 @@ public partial class PlatformAgentService
         return items;
     }
 
-    private object? InvokeNativeMenuItem(MenuInvokeRequest request)
+    private MenuInvokeResult? InvokeNativeMenuItem(MenuInvokeRequest request)
     {
         var mainMenu = NSApplication.SharedApplication.MainMenu;
         if (mainMenu == null) return null;
@@ -98,66 +99,59 @@ public partial class PlatformAgentService
         return FindAndInvokeNative(mainMenu, "native:", string.Empty, request);
     }
 
-    private object? FindAndInvokeNative(NSMenu menu, string idPrefix, string pathPrefix, MenuInvokeRequest request)
+    private MenuInvokeResult? FindAndInvokeNative(NSMenu menu, string idPrefix, string pathPrefix, MenuInvokeRequest request, bool parentEnabled = true)
     {
+        menu.Update();
         for (nint i = 0; i < menu.Count; i++)
         {
             var item = menu.ItemAt(i);
             if (item == null || item.IsSeparatorItem) continue;
 
             var id = $"{idPrefix}{i}";
-            var path = CombineNativePath(pathPrefix, item.Title ?? string.Empty);
+            var path = CombineMenuPath(pathPrefix, item.Title ?? string.Empty);
 
-            if (NativeItemMatches(item, id, path, request))
+            var exactSelector = !string.IsNullOrWhiteSpace(request.Id) || !string.IsNullOrWhiteSpace(request.Path);
+            if ((exactSelector || (!item.Hidden && item.Submenu == null)) && NativeItemMatches(item, id, path, request))
             {
-                if (!item.Enabled)
-                    return new
+                if (item.Hidden)
+                    return new MenuInvokeResult { Source = "appkit", Error = $"Menu item '{path}' is hidden" };
+                if (!parentEnabled || !item.Enabled)
+                    return new MenuInvokeResult
                     {
-                        success = false,
-                        source = "appkit",
-                        title = item.Title,
-                        path,
-                        error = "disabled",
+                        Success = false,
+                        Source = "appkit",
+                        Title = item.Title,
+                        Path = path,
+                        Error = $"Menu item '{path}' is disabled",
                     };
 
-                var invoked = PerformNativeMenuItem(menu, item, i);
-                return new
+                if (item.Submenu != null || item.Action is not Selector action)
+                    return new MenuInvokeResult
+                    {
+                        Source = "appkit",
+                        Error = $"Menu item '{path}' has no invokable action",
+                    };
+
+                var invoked = NSApplication.SharedApplication.SendAction(action, item.Target, item);
+                return new MenuInvokeResult
                 {
-                    success = invoked,
-                    source = "appkit",
-                    title = item.Title,
-                    path,
-                    action = item.Action?.Name,
+                    Success = invoked,
+                    Source = "appkit",
+                    Title = item.Title,
+                    Path = path,
+                    Action = action.Name,
+                    Error = invoked ? null : $"Menu action '{path}' was not handled",
                 };
             }
 
             if (item.Submenu is NSMenu submenu)
             {
-                var nested = FindAndInvokeNative(submenu, $"{id}/", path, request);
+                var nested = FindAndInvokeNative(submenu, $"{id}/", path, request, parentEnabled && item.Enabled && !item.Hidden);
                 if (nested != null) return nested;
             }
         }
 
         return null;
-    }
-
-    private static bool PerformNativeMenuItem(NSMenu menu, NSMenuItem item, nint index)
-    {
-        try
-        {
-            menu.PerformActionForItem(index);
-            return true;
-        }
-        catch { }
-
-        try
-        {
-            if (item.Action is Selector action)
-                return NSApplication.SharedApplication.SendAction(action, item.Target, item);
-        }
-        catch { }
-
-        return false;
     }
 
     private static bool NativeItemMatches(NSMenuItem item, string id, string path, MenuInvokeRequest request)
@@ -177,7 +171,7 @@ public partial class PlatformAgentService
             if (string.IsNullOrEmpty(key) || !string.Equals(key, request.Key.Trim(), StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            var requested = ParseNativeModifierSet(request.Modifiers);
+            var requested = ParseModifierList(request.Modifiers);
             var actual = new HashSet<string>(NativeModifiersToList(item.KeyEquivalentModifierMask), StringComparer.OrdinalIgnoreCase);
             return requested.SetEquals(actual);
         }
@@ -214,21 +208,23 @@ public partial class PlatformAgentService
     protected override Task<object?> GetNativeMenusAsync()
         => DispatchAsync(() => BuildCatalystKeyCommands());
 
-    protected override Task<object?> InvokeNativeMenuAsync(MenuInvokeRequest request)
-        => DispatchAsync(() => InvokeCatalystKeyCommand(request));
+    protected override Task<MenuInvokeResult?> InvokeNativeMenuAsync(MenuInvokeRequest request)
+        => DispatchMenuActionAsync(() => InvokeCatalystKeyCommand(request), "uikit");
 
     private object? BuildCatalystKeyCommands()
     {
         var commands = CollectKeyCommands();
         var items = new List<object>();
         var index = 0;
-        foreach (var command in commands)
+        foreach (var (command, owner) in commands)
         {
             items.Add(new Dictionary<string, object?>
             {
                 ["id"] = $"native:{index}",
                 ["title"] = command.Title,
                 ["path"] = command.Title,
+                ["enabled"] = !command.Attributes.HasFlag(UIMenuElementAttributes.Disabled) &&
+                    command.Action is Selector action && owner.CanPerform(action, command),
                 ["separator"] = false,
                 ["hasSubmenu"] = false,
                 ["key"] = string.IsNullOrEmpty(command.Input) ? null : command.Input,
@@ -246,13 +242,13 @@ public partial class PlatformAgentService
         };
     }
 
-    private object? InvokeCatalystKeyCommand(MenuInvokeRequest request)
+    private MenuInvokeResult? InvokeCatalystKeyCommand(MenuInvokeRequest request)
     {
         var commands = CollectKeyCommands();
-        var requestedModifiers = ParseNativeModifierSet(request.Modifiers);
+        var requestedModifiers = ParseModifierList(request.Modifiers);
 
         var index = 0;
-        foreach (var command in commands)
+        foreach (var (command, owner) in commands)
         {
             var id = $"native:{index}";
             index++;
@@ -262,11 +258,7 @@ public partial class PlatformAgentService
                 matches = string.Equals(request.Id.Trim(), id, StringComparison.OrdinalIgnoreCase);
             else if (!string.IsNullOrWhiteSpace(request.Title) || !string.IsNullOrWhiteSpace(request.Path))
             {
-                var wanted = (request.Title ?? request.Path)!.Trim();
-                // On Catalyst the responder-chain key commands are flat (path == title), so a
-                // hierarchical path like "File/Save" is matched by its last segment.
-                if (string.IsNullOrWhiteSpace(request.Title) && wanted.Contains('/'))
-                    wanted = wanted[(wanted.LastIndexOf('/') + 1)..].Trim();
+                var wanted = (!string.IsNullOrWhiteSpace(request.Title) ? request.Title : request.Path)!.Trim();
                 matches = string.Equals(wanted, command.Title?.Trim(), StringComparison.OrdinalIgnoreCase);
             }
             else if (!string.IsNullOrWhiteSpace(request.Key))
@@ -278,63 +270,78 @@ public partial class PlatformAgentService
                 }
             }
 
-            if (!matches || command.Action == null) continue;
+            if (!matches) continue;
+            if (command.Action is not Selector action)
+                return new MenuInvokeResult { Source = "uikit", Error = $"Menu item '{command.Title}' has no invokable action" };
 
-            var invoked = UIApplication.SharedApplication.SendAction(command.Action, null, null, null);
-            return new
+            if (command.Attributes.HasFlag(UIMenuElementAttributes.Disabled) || !owner.CanPerform(action, command))
+                return new MenuInvokeResult { Source = "uikit", Error = $"Menu item '{command.Title}' is disabled" };
+
+            var invoked = UIApplication.SharedApplication.SendAction(action, owner, command, null);
+            return new MenuInvokeResult
             {
-                success = invoked,
-                source = "uikit",
-                title = command.Title,
-                action = command.Action.Name,
+                Success = invoked,
+                Source = "uikit",
+                Title = command.Title,
+                Path = command.Title,
+                Action = action.Name,
+                Error = invoked ? null : $"Menu action '{command.Title}' was not handled",
             };
         }
 
         return null;
     }
 
-    private static List<UIKeyCommand> CollectKeyCommands()
+    private static List<(UIKeyCommand Command, UIResponder Owner)> CollectKeyCommands()
     {
-        var collected = new List<UIKeyCommand>();
+        var collected = new List<(UIKeyCommand, UIResponder)>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         void Add(UIResponder? responder)
         {
-            try
+            if (responder?.KeyCommands is { } keyCommands)
             {
-                if (responder?.KeyCommands is { } keyCommands)
+                foreach (var command in keyCommands)
                 {
-                    foreach (var command in keyCommands)
-                    {
-                        var key = $"{command.Title}|{command.Input}|{(long)command.ModifierFlags}|{command.Action?.Name}";
-                        if (seen.Add(key)) collected.Add(command);
-                    }
+                    var key = $"{command.Title}|{command.Input}|{(long)command.ModifierFlags}|{command.Action?.Name}";
+                    if (seen.Add(key)) collected.Add((command, responder));
                 }
             }
-            catch { }
         }
 
-        try
+        foreach (var scene in UIApplication.SharedApplication.ConnectedScenes)
         {
-            Add(UIApplication.SharedApplication);
+            if (scene is not UIWindowScene windowScene ||
+                windowScene.ActivationState != UISceneActivationState.ForegroundActive)
+                continue;
 
-            foreach (var window in UIApplication.SharedApplication.Windows ?? Array.Empty<UIWindow>())
+            foreach (var window in windowScene.Windows.Where(window => window.IsKeyWindow))
             {
-                Add(window);
+                UIResponder? responder = FindFirstResponder(window);
                 var controller = window.RootViewController;
-                while (controller != null)
+                while (controller?.PresentedViewController is { } presented)
+                    controller = presented;
+                responder ??= (UIResponder?)controller ?? window;
+                var visited = new HashSet<UIResponder>();
+                while (responder != null && visited.Add(responder))
                 {
-                    Add(controller);
-                    foreach (var child in controller.ChildViewControllers ?? Array.Empty<UIViewController>())
-                        Add(child);
-                    if (controller.View != null) Add(controller.View);
-                    controller = controller.PresentedViewController;
+                    Add(responder);
+                    responder = responder.NextResponder;
                 }
             }
         }
-        catch { }
+        Add(UIApplication.SharedApplication);
 
         return collected;
+    }
+
+    private static UIResponder? FindFirstResponder(UIView view)
+    {
+        if (view.IsFirstResponder) return view;
+        foreach (var child in view.Subviews)
+            if (FindFirstResponder(child) is { } responder)
+                return responder;
+        return null;
     }
 
     private static List<string> CatalystModifiersToList(UIKeyModifierFlags flags)
@@ -349,30 +356,6 @@ public partial class PlatformAgentService
 #endif
 
 #if MACOS || MACCATALYST
-    private static HashSet<string> ParseNativeModifierSet(string? modifiers)
-    {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(modifiers)) return set;
-
-        foreach (var raw in modifiers.Split(new[] { ',', '+', ' ', '|' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var normalized = raw.ToLowerInvariant() switch
-            {
-                "cmd" or "command" or "meta" or "super" => "cmd",
-                "ctrl" or "control" => "ctrl",
-                "alt" or "option" or "opt" => "alt",
-                "shift" => "shift",
-                _ => null,
-            };
-            if (normalized != null) set.Add(normalized);
-        }
-
-        return set;
-    }
-
-    private static string CombineNativePath(string prefix, string title)
-        => string.IsNullOrEmpty(prefix) ? title : $"{prefix}/{title}";
-
     private static string NormalizeNativePath(string path)
         => path.Replace('\\', '/').Trim().Trim('/');
 #endif

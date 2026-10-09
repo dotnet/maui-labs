@@ -13,7 +13,7 @@ public sealed class PlatformTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetPlatformInfoAsync("app-info");
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to get app info." : result.ToString();
 	}
@@ -23,7 +23,7 @@ public sealed class PlatformTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetPlatformInfoAsync("device-info");
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to get device info." : result.ToString();
 	}
@@ -33,7 +33,7 @@ public sealed class PlatformTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetPlatformInfoAsync("device-display");
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to get display info." : result.ToString();
 	}
@@ -43,7 +43,7 @@ public sealed class PlatformTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetPlatformInfoAsync("battery");
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to get battery info." : result.ToString();
 	}
@@ -53,7 +53,7 @@ public sealed class PlatformTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetPlatformInfoAsync("connectivity");
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to get connectivity info." : result.ToString();
 	}
@@ -65,7 +65,7 @@ public sealed class PlatformTools
 		[Description("Timeout in seconds (default: 10)")] int? timeoutSeconds = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetGeolocationAsync(accuracy, timeoutSeconds);
 		return result.ValueKind == JsonValueKind.Undefined ? "Failed to get geolocation." : result.ToString();
 	}

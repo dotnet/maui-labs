@@ -1,0 +1,16 @@
+{
+  "name": "menu-localization",
+  "expectedCases": 5,
+  "expectedAssertions": 24,
+  "evidence": ["menus.jsonl", "assertions.txt"],
+  "fixedEvidence": ["window.png"],
+  "driver": "driver.py",
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/MenuBarManager.cs",
+    "commit": "e304dba5449b4cfe0b18c608c50d8b5fc498d59e",
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "menu-localization.english-defaults",
+    "message": "BASELINE_417: German application has English default menus."
+  }
+}

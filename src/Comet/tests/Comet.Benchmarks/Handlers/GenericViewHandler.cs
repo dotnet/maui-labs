@@ -47,8 +47,11 @@ namespace Comet.Benchmarks
 		public void UpdateValue(string property)
 		{
 			var val = CurrentView?.GetPropValue<object>(property);
-			if (val is Binding b)
-				ChangedProperties[property] = b.Value;
+			// PropertySubscription<T> replaced the old Binding type; unwrap via reflection
+			// since there is no non-generic value accessor.
+			var currentValueProp = val?.GetType().GetProperty("CurrentValue");
+			if (currentValueProp != null)
+				ChangedProperties[property] = currentValueProp.GetValue(val);
 			else
 				ChangedProperties[property] = val;
 		}

@@ -1,13 +1,14 @@
 #if ENABLE_OPENAI_CLIENT
 
 using Microsoft.Extensions.AI;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
 public class OpenAIChatClient : DelegatingChatClient
 {
 	public OpenAIChatClient()
-		: base(IPlatformApplication.Current!.Services.GetRequiredService<OpenAI.Chat.ChatClient>().AsIChatClient())
+		: base(IPlatformApplication.Current!.Services.GetRequiredService<IChatClient>())
 	{
 	}
 }
@@ -41,6 +42,9 @@ public class OpenAIChatClientResponseTests : ChatClientResponseTestsBase<OpenAIC
 {
 }
 public class OpenAIChatClientStreamingTests : ChatClientStreamingTestsBase<OpenAIChatClient>
+{
+}
+public class OpenAIChatClientUsageTests(ITestOutputHelper output) : ChatClientUsageTestsBase<OpenAIChatClient>(output)
 {
 }
 public class OpenAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<OpenAIChatClient>

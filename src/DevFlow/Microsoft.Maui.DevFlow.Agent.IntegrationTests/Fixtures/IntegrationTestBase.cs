@@ -44,46 +44,50 @@ public abstract class IntegrationTestBase
 
     protected async Task<JsonElement> PostJsonAsync(string path, object? body = null)
     {
-        using var response = await SendHttpWithTransportRetryAsync(async () =>
-        {
-            using var content = CreateJsonContent(body);
-            return await Http.PostAsync(path, content);
-        });
+        using var response = await SendMutationRawAsync(HttpMethod.Post, path, body);
         response.EnsureSuccessStatusCode();
         var responseBody = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
     }
 
     protected Task<HttpResponseMessage> PostRawAsync(string path, object? body = null)
-    {
-        return SendHttpWithTransportRetryAsync(async () =>
-        {
-            using var content = CreateJsonContent(body);
-            return await Http.PostAsync(path, content);
-        });
-    }
+        => SendMutationRawAsync(HttpMethod.Post, path, body);
 
     protected async Task<JsonElement> PutJsonAsync(string path, object? body = null)
     {
-        using var response = await SendHttpWithTransportRetryAsync(async () =>
-        {
-            using var content = CreateJsonContent(body);
-            return await Http.PutAsync(path, content);
-        });
+        using var response = await SendMutationRawAsync(HttpMethod.Put, path, body);
         response.EnsureSuccessStatusCode();
         var responseBody = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
     }
 
     protected Task<HttpResponseMessage> DeleteRawAsync(string path)
-        => SendHttpWithTransportRetryAsync(() => Http.DeleteAsync(path));
+        => SendMutationRawAsync(HttpMethod.Delete, path);
 
     protected async Task<JsonElement> DeleteJsonAsync(string path)
     {
-        using var response = await SendHttpWithTransportRetryAsync(() => Http.DeleteAsync(path));
+        using var response = await SendMutationRawAsync(HttpMethod.Delete, path);
         response.EnsureSuccessStatusCode();
         var responseBody = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
+    }
+
+    async Task<HttpResponseMessage> SendMutationRawAsync(HttpMethod method, string path, object? body = null)
+    {
+        var lease = await Client.ControlMutationLeaseAsync("claim");
+        if (!lease.YouHold)
+            throw new MutationLeaseException(lease);
+
+        return await SendHttpWithTransportRetryAsync(async () =>
+        {
+            using var request = new HttpRequestMessage(method, path);
+            request.Headers.TryAddWithoutValidation("X-DevFlow-Lease", Client.MutationLeaseId);
+            request.Headers.TryAddWithoutValidation("X-DevFlow-Holder", Client.MutationLeaseHolderKind);
+            if (!string.IsNullOrWhiteSpace(Client.MutationLeaseLabel))
+                request.Headers.TryAddWithoutValidation("X-DevFlow-Label", Client.MutationLeaseLabel);
+            request.Content = CreateJsonContent(body);
+            return await Http.SendAsync(request);
+        });
     }
 
     static StringContent? CreateJsonContent(object? body)
@@ -141,13 +145,31 @@ public abstract class IntegrationTestBase
         return results.Count > 0 ? results[0] : null;
     }
 
+    /// <summary>
+    /// The control type name a "button" reports on the framework and platform under test.
+    /// MAUI normalises every platform to <c>Button</c>; the native backends report the real
+    /// platform type, which differs per OS.
+    /// </summary>
+    protected string ButtonTypeName => TestFramework.IsNative
+        ? App.Platform switch
+        {
+            "android" => "Button",
+            "ios" or "maccatalyst" => "UIButton",
+            "macos" => "NSButton",
+            var other => throw new InvalidOperationException($"No native button type for '{other}'."),
+        }
+        : "Button";
+
     protected async Task NavigateToPageAsync(string route, string? expectedAutomationId = null, int timeoutMs = 5000)
     {
-        await Client.NavigateAsync(route);
+        // Routes are Shell navigation, which only the MAUI sample has. The native samples are a
+        // single screen carrying the same ids, so a route request degrades to "wait for the anchor".
+        if (!TestFramework.IsNative)
+            await Client.NavigateAsync(route);
 
         if (expectedAutomationId != null)
             await FindElementAsync(expectedAutomationId, timeoutMs);
-        else
+        else if (!TestFramework.IsNative)
             await Task.Delay(500);
     }
 

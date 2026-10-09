@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- CFBundleIdentifier / CFBundleDisplayName intentionally NOT set here: they come
+	     from the csproj (ApplicationId / ApplicationTitle) so -p:CometSample=… can build
+	     standalone per-sample apps with unique bundle ids. -->
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+<!-- App icon comes from the csproj <AppIcon> property (icon-set NAME) — each variant
+	     catalog holds an AppIcon.appiconset and only one catalog is included per build. -->
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>1</integer>
+		<integer>2</integer>
+	</array>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<!-- A launch storyboard tells iOS the app supports the full native screen size; without
+	     one iOS runs the app letterboxed at a legacy size (not edge-to-edge, and
+	     UIScreen.Bounds is wrong, which throws off the Yoga layout). .NET iOS strips the
+	     plist-only UILaunchScreen, so a compiled LaunchScreen.storyboard is used instead. -->
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>MinimumOSVersion</key>
+	<string>17.0</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fonts/Montserrat-Regular.ttf</string>
+		<string>Fonts/Montserrat-Medium.ttf</string>
+		<string>Fonts/Montserrat-SemiBold.ttf</string>
+		<string>Fonts/Karla-Regular.ttf</string>
+		<string>Fonts/Karla-Bold.ttf</string>
+		<string>Fonts/MaterialIcons-Regular.ttf</string>
+		<string>Fonts/RobotoFlex-Regular.ttf</string>
+	</array>
+</dict>
+</plist>

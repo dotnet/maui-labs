@@ -1,0 +1,25 @@
+<Project>
+  <ItemGroup>
+    <PartialAppManifest Include="$(MSBuildThisFileDirectory)Info.plist" Condition="'$(MenuTestEnglishOnly)' != 'true'" />
+    <PartialAppManifest Include="$(MSBuildThisFileDirectory)EnglishOnly.plist" Condition="'$(MenuTestEnglishOnly)' == 'true'" />
+    <BundleResource Include="$(MSBuildThisFileDirectory)Resources/en.lproj/*">
+      <LogicalName>en.lproj/%(Filename)%(Extension)</LogicalName>
+    </BundleResource>
+    <BundleResource Include="$(MSBuildThisFileDirectory)Resources/de.lproj/*" Condition="'$(MenuTestEnglishOnly)' != 'true'">
+      <LogicalName>de.lproj/%(Filename)%(Extension)</LogicalName>
+    </BundleResource>
+    <BundleResource Include="$(MSBuildThisFileDirectory)Resources/fr.lproj/*" Condition="'$(MenuTestEnglishOnly)' != 'true'">
+      <LogicalName>fr.lproj/%(Filename)%(Extension)</LogicalName>
+    </BundleResource>
+    <BundleResource Include="$(MSBuildThisFileDirectory)Resources/nl.lproj/*" Condition="'$(MenuTestEnglishOnly)' != 'true'">
+      <LogicalName>nl.lproj/%(Filename)%(Extension)</LogicalName>
+    </BundleResource>
+    <BundleResource Include="$(MSBuildThisFileDirectory)Overrides/MauiMenuBar.strings" Condition="'$(MenuTestOverrides)' == 'true'">
+      <LogicalName>$(MenuTestOverrideLanguage).lproj/MauiMenuBar.strings</LogicalName>
+    </BundleResource>
+  </ItemGroup>
+  <ItemGroup Condition="'$(RuntimeTestsUseProjectReferences)' == 'false'">
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS" VersionOverride="$(ResourceTestPackageVersion)" />
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS.Essentials" VersionOverride="$(ResourceTestPackageVersion)" />
+  </ItemGroup>
+</Project>

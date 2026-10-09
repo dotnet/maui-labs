@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- .NET-for-iOS binding for the CometSwiftUIShim xcframework (Swift @objc shim
+       over SwiftUI). Consumed by Comet's iOS/SwiftUI backend. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0-ios</TargetFramework>
+    <SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
+    <IsBindingProject>true</IsBindingProject>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <NoBindingEmbedding>false</NoBindingEmbedding>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ObjcBindingApiDefinition Include="ApiDefinition.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <NativeReference Include="..\Comet.SwiftUI.Shim\CometSwiftUIShim.xcframework">
+      <Kind>Framework</Kind>
+      <SmartLink>True</SmartLink>
+    </NativeReference>
+  </ItemGroup>
+
+</Project>

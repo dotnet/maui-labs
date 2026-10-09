@@ -11,8 +11,17 @@
       "features": ["css-selector", "type", "text", "accessibility-id"]
     },
     "ui.actions": {
-      "version": 1,
-      "features": ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties"]
+      "version": 2,
+      "features": ["tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "properties"],
+      "gestures": [
+        "tap",
+        "doubletap",
+        "longpress",
+        "swipe",
+        "pan",
+        "pinch",
+        "rotate"
+      ]
     },
     "ui.screenshot": {
       "version": 1,
@@ -20,6 +29,7 @@
     },
     "ui.menus": {
       "version": 1,
+      "supported": true,
       "features": ["list", "invoke"],
       "maui": true,
       "native": true

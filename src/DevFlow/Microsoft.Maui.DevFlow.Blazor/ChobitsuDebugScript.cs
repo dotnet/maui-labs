@@ -50,4 +50,9 @@ public static class ChobitsuDebugScript
     {
         return ScriptResources.Load("chobitsu-init.js");
     }
+
+    public static string GetLoadScript()
+    {
+        return ScriptResources.Load("load-chobitsu.js");
+    }
 }

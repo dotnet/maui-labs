@@ -92,11 +92,16 @@ internal class SidebarOutlineViewDelegate : NSOutlineViewDelegate
 {
 	readonly SidebarOutlineViewDataSource _dataSource;
 	readonly Action<MacOSSidebarItem> _onSelectionChanged;
+	readonly Action<MacOSSidebarItem, NSView>? _onItemRealized;
 
-	public SidebarOutlineViewDelegate(SidebarOutlineViewDataSource dataSource, Action<MacOSSidebarItem> onSelectionChanged)
+	public SidebarOutlineViewDelegate(
+		SidebarOutlineViewDataSource dataSource,
+		Action<MacOSSidebarItem> onSelectionChanged,
+		Action<MacOSSidebarItem, NSView>? onItemRealized = null)
 	{
 		_dataSource = dataSource;
 		_onSelectionChanged = onSelectionChanged;
+		_onItemRealized = onItemRealized;
 	}
 
 	public override bool IsGroupItem(NSOutlineView outlineView, NSObject item)
@@ -136,6 +141,7 @@ internal class SidebarOutlineViewDelegate : NSOutlineViewDelegate
 			cellView.ImageView.Hidden = image == null;
 		}
 
+		_onItemRealized?.Invoke(sidebarItem, cellView);
 		return cellView;
 	}
 
@@ -425,7 +431,7 @@ public partial class NativeSidebarFlyoutPageHandler : MacOSViewHandler<IFlyoutVi
 		if (bounds.Width <= 0 || bounds.Height <= 0)
 			return;
 
-		_currentDetailView.Frame = bounds;
+		_currentDetailView.SetLayoutFrame(bounds);
 
 		var detail = VirtualView?.Detail;
 		if (detail != null)
@@ -629,7 +635,7 @@ public partial class NativeSidebarFlyoutPageHandler : MacOSViewHandler<IFlyoutVi
 		_currentDetailView?.RemoveFromSuperview();
 		_currentDetailView = view;
 
-		view.Frame = _detailContainer.Bounds;
+		view.SetLayoutFrame(_detailContainer.Bounds);
 		view.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
 		_detailContainer.AddSubview(view);
 	}
@@ -639,7 +645,7 @@ public partial class NativeSidebarFlyoutPageHandler : MacOSViewHandler<IFlyoutVi
 		if (_detailContainer == null || _currentDetailView == null)
 			return;
 
-		_currentDetailView.Frame = _detailContainer.Bounds;
+		_currentDetailView.SetLayoutFrame(_detailContainer.Bounds);
 
 		var detail = VirtualView?.Detail;
 		if (detail != null)

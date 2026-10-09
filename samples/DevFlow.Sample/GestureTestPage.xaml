@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="DevFlow.Sample.GestureTestPage"
+             Title="Gesture Tests">
+    <ContentPage.BackgroundColor>
+        <AppThemeBinding Light="#F5F5F5" Dark="#1C1B1F" />
+    </ContentPage.BackgroundColor>
+
+    <ScrollView Padding="16">
+        <VerticalStackLayout Spacing="16">
+
+            <Label Text="Each target reports the gesture it received, so an automated pinch/pan/swipe can be verified by reading the status label back."
+                   FontSize="13"
+                   AutomationId="GestureIntroLabel">
+                <Label.TextColor>
+                    <AppThemeBinding Light="#49454F" Dark="#CAC4D0" />
+                </Label.TextColor>
+            </Label>
+
+            <!-- Pinch: PinchGestureRecognizer, accumulates e.Scale like a real pinch -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#E8DEF8" Dark="#4A4458" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Pinch target" FontAttributes="Bold" FontSize="16" />
+                    <Grid AutomationId="PinchTarget" HeightRequest="120">
+                        <Grid.GestureRecognizers>
+                            <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
+                        </Grid.GestureRecognizers>
+                        <BoxView x:Name="PinchBox"
+                                 Color="#6750A4"
+                                 CornerRadius="8"
+                                 WidthRequest="80" HeightRequest="80"
+                                 HorizontalOptions="Center" VerticalOptions="Center" />
+                    </Grid>
+                    <Label x:Name="PinchStatusLabel"
+                           Text="pinch: none"
+                           FontSize="14"
+                           AutomationId="PinchStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Pan: PanGestureRecognizer, reports cumulative totals -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#D0E4FF" Dark="#33455C" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Pan target" FontAttributes="Bold" FontSize="16" />
+                    <Grid AutomationId="PanTarget" HeightRequest="120">
+                        <Grid.GestureRecognizers>
+                            <PanGestureRecognizer PanUpdated="OnPanUpdated" />
+                        </Grid.GestureRecognizers>
+                        <BoxView Color="#0061A4"
+                                 CornerRadius="8"
+                                 WidthRequest="80" HeightRequest="80"
+                                 HorizontalOptions="Center" VerticalOptions="Center" />
+                    </Grid>
+                    <Label x:Name="PanStatusLabel"
+                           Text="pan: none"
+                           FontSize="14"
+                           AutomationId="PanStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Swipe: all four directions on one target -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#D8F2D8" Dark="#33503A" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Swipe target" FontAttributes="Bold" FontSize="16" />
+                    <Grid AutomationId="SwipeTarget" HeightRequest="100">
+                        <Grid.GestureRecognizers>
+                            <SwipeGestureRecognizer Direction="Up" Swiped="OnSwiped" />
+                            <SwipeGestureRecognizer Direction="Down" Swiped="OnSwiped" />
+                            <SwipeGestureRecognizer Direction="Left" Swiped="OnSwiped" />
+                            <SwipeGestureRecognizer Direction="Right" Swiped="OnSwiped" />
+                        </Grid.GestureRecognizers>
+                        <BoxView Color="#3C6E47"
+                                 CornerRadius="8"
+                                 HorizontalOptions="Fill" VerticalOptions="Fill" />
+                    </Grid>
+                    <Label x:Name="SwipeStatusLabel"
+                           Text="swipe: none"
+                           FontSize="14"
+                           AutomationId="SwipeStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Double tap: distinguishes itself from a single tap -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#FFE0C2" Dark="#5C4433" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Double-tap target" FontAttributes="Bold" FontSize="16" />
+                    <Grid AutomationId="DoubleTapTarget" HeightRequest="100">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer NumberOfTapsRequired="1" Tapped="OnSingleTapped" />
+                            <TapGestureRecognizer NumberOfTapsRequired="2" Tapped="OnDoubleTapped" />
+                        </Grid.GestureRecognizers>
+                        <BoxView Color="#8C5000"
+                                 CornerRadius="8"
+                                 HorizontalOptions="Fill" VerticalOptions="Fill" />
+                    </Grid>
+                    <Label x:Name="TapStatusLabel"
+                           Text="tap: none"
+                           FontSize="14"
+                           AutomationId="TapStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#E6E0E9" Dark="#49454F" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Long-press target" FontAttributes="Bold" FontSize="16" />
+                    <Button AutomationId="LongPressTarget"
+                            Text="Press and hold"
+                            Pressed="OnLongPressStarted"
+                            Released="OnLongPressEnded" />
+                    <Label x:Name="LongPressStatusLabel"
+                           Text="longpress: none"
+                           FontSize="14"
+                           AutomationId="LongPressStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- No managed recognizer at all: proves the native injection tier fires -->
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <Border.BackgroundColor>
+                    <AppThemeBinding Light="#FFD8E4" Dark="#5C3341" />
+                </Border.BackgroundColor>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Native target (no MAUI gesture recognizer)" FontAttributes="Bold" FontSize="16" />
+                    <Label Text="Gestures here have no recognizer to hit, so they fall through to native injection."
+                           FontSize="12" />
+                    <ScrollView AutomationId="NativeScrollTarget"
+                                HeightRequest="140"
+                                Orientation="Vertical">
+                        <VerticalStackLayout x:Name="NativeScrollContent" Spacing="4" />
+                    </ScrollView>
+                </VerticalStackLayout>
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

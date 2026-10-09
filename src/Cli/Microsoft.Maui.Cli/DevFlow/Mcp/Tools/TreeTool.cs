@@ -17,7 +17,7 @@ public sealed class TreeTool
 		[Description("Filter to a specific element type, e.g. 'Label', 'Button', 'Entry'")] string? filter = null,
 		[Description("Return only the subtree rooted at this element ID")] string? elementId = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var tree = await agent.GetTreeAsync(depth, window);
 		if (tree == null || tree.Count == 0)
 			return "No visual tree available. Is the agent connected and the app running?";

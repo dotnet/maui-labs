@@ -18,6 +18,7 @@
 
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="Extensions">
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="$(MicrosoftExtensionsConfigurationVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="$(MicrosoftExtensionsConfigurationVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsHostingVersion)" />
@@ -68,9 +69,6 @@
 
   <!-- Platform extensions (pinned) -->
   <ItemGroup Label="Platform">
-    <PackageVersion Include="Platform.Maui.Linux.Gtk4" Version="$(PlatformMauiLinuxGtk4Version)" />
-    <PackageVersion Include="Platform.Maui.Linux.Gtk4.BlazorWebView" Version="$(PlatformMauiLinuxGtk4BlazorWebViewVersion)" />
-    <PackageVersion Include="Platform.Maui.Linux.Gtk4.Essentials" Version="$(PlatformMauiLinuxGtk4EssentialsVersion)" />
     <PackageVersion Include="GirCore.GdkPixbuf-2.0" Version="0.7.0" />
   </ItemGroup>
 
@@ -94,8 +92,7 @@
     <PackageVersion Include="DeviceRunners.UITesting.Xunit" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.VisualRunners.Xunit" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
-    <PackageVersion Include="DeviceRunners.XHarness.Xunit" Version="$(DeviceRunnersVersion)" />
-    <PackageVersion Include="DeviceRunners.XHarness.Maui" Version="$(DeviceRunnersVersion)" />
+    <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
   </ItemGroup>
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are
@@ -109,6 +106,7 @@
     <PackageVersion Include="Microsoft.OpenApi" Version="$(MicrosoftOpenApiVersion)" />
     <PackageVersion Include="YamlDotNet" Version="$(YamlDotNetVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.2" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.52.0" />
   </ItemGroup>
 
   <!-- Source Link -->

@@ -13,7 +13,7 @@ At a glance:
 | [Cli](#cli) | `maui` global tool for environment diagnostics, device management, Apple/Android setup, app automation, and rapid prototyping. |
 | [Comet](#comet) | Experimental MVU UI framework for .NET MAUI with C# fluent UI, signals, and reactive state. |
 | [Go](#go) | Single-file Comet app server and companion app for rapid prototyping. |
-| [DevFlow](#devflow) | Runtime app automation, inspection, debugging, and MCP tooling for .NET MAUI apps. |
+| [DevFlow](#devflow) | Runtime app automation, inspection, debugging, and MCP tooling for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps. |
 | [AI Extensions](#ai-extensions) | Source-generated `Microsoft.Extensions.AI` tool bindings for MAUI and .NET apps. |
 | [macOS AppKit Backend](#macos-appkit-backend) | Native AppKit backend for running MAUI apps as macOS apps without Mac Catalyst. |
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
@@ -30,13 +30,14 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 - **Apple platform management** (`maui apple`) — Xcode, simulator, and runtime management (macOS)
 - **Device listing** (`maui device list`) across all connected platforms
 - **DevFlow app automation** (`maui devflow`) — visual tree inspection, element interaction, screenshots, WebView/CDP automation, network monitoring, profiling, storage access, real-time log/sensor streaming, and MCP server for AI agents
+- **AI-powered development bootstrap** (`maui ai init`) — install MAUI Copilot skills, DevFlow skills, Copilot agents, and MCP configuration for the current project
 - **MAUI Go** (`maui go`) — create, serve, and upgrade single-file Comet Go projects for rapid prototyping
 - **Version info** (`maui version`)
 - **Global options** — `--json` for CI pipelines, `--verbose`, `--dry-run`, `--ci`
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Cli` | CLI global tool (`maui`) |
+| [![NuGet: Microsoft.Maui.Cli](https://img.shields.io/nuget/v/Microsoft.Maui.Cli.svg?label=Microsoft.Maui.Cli)](https://www.nuget.org/packages/Microsoft.Maui.Cli/) | CLI global tool (`maui`) |
 
 ```bash
 # Microsoft.Maui.Cli is currently released as a pre-release, so make sure to use the --prerelease flag
@@ -64,9 +65,12 @@ Single-file Comet apps server + companion app for rapid prototyping (alpha; sist
 
 ### DevFlow
 
-A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI is integrated into the `maui` CLI as `maui devflow` — see [Cli](#cli) above.
+A comprehensive testing, automation, and debugging toolkit for .NET MAUI apps — and for plain .NET Android, iOS, Mac Catalyst and macOS apps with no MAUI reference at all. The DevFlow CLI is integrated into the `maui` CLI as `maui devflow` — see [Cli](#cli) above.
 
 - **In-app HTTP agent** for visual tree inspection, element interaction, and screenshots
+- **[MAUI DevFlow Inspector](docs/DevFlow/inspector.md)** in a browser, VS Code, the GitHub Copilot
+  desktop app, or Copilot CLI
+- **Works without MAUI** — the same agent, CLI, and MCP tools drive plain .NET apps via Android views, UIKit, and AppKit backends
 - **Blazor CDP bridge** for Chrome DevTools Protocol on Blazor WebViews
 - **MCP server** for AI agent integration (via `maui devflow mcp`)
 - **Platform drivers** for iOS, Android, Mac Catalyst, Windows, and Linux/GTK
@@ -77,13 +81,17 @@ A comprehensive MAUI testing, automation, and debugging toolkit. The DevFlow CLI
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.DevFlow.Agent` | In-app agent for MAUI automation |
-| `Microsoft.Maui.DevFlow.Agent.Core` | Platform-agnostic agent core |
-| `Microsoft.Maui.DevFlow.Agent.Gtk` | GTK/Linux agent |
-| `Microsoft.Maui.DevFlow.Blazor` | Blazor WebView CDP bridge |
-| `Microsoft.Maui.DevFlow.Blazor.Gtk` | WebKitGTK CDP bridge |
-| `Microsoft.Maui.DevFlow.Driver` | Platform driver library |
-| `Microsoft.Maui.DevFlow.Logging` | Buffered JSONL file logger |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.svg?label=Microsoft.Maui.DevFlow.Agent)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent/) | In-app agent for MAUI automation |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Abstractions](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Abstractions.svg?label=Microsoft.Maui.DevFlow.Agent.Abstractions)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Abstractions/) | Framework-neutral agent protocol and HTTP server |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Core](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Core.svg?label=Microsoft.Maui.DevFlow.Agent.Core)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Core/) | MAUI UI backend for the agent |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Native](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Native.svg?label=Microsoft.Maui.DevFlow.Agent.Native)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Native/) | In-app agent for plain .NET Android, iOS, Mac Catalyst, and macOS apps |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Native.Essentials](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Native.Essentials.svg?label=Microsoft.Maui.DevFlow.Agent.Native.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Native.Essentials/) | Optional device, storage, and sensor endpoints for native apps |
+| [![NuGet: Microsoft.Maui.DevFlow.Agent.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Agent.Gtk.svg?label=Microsoft.Maui.DevFlow.Agent.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Agent.Gtk/) | GTK/Linux agent |
+| [![NuGet: Microsoft.Maui.DevFlow.Blazor](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.svg?label=Microsoft.Maui.DevFlow.Blazor)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor/) | Blazor WebView CDP bridge |
+| [![NuGet: Microsoft.Maui.DevFlow.Blazor.Gtk](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Blazor.Gtk.svg?label=Microsoft.Maui.DevFlow.Blazor.Gtk)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Blazor.Gtk/) | WebKitGTK CDP bridge |
+| [![NuGet: Microsoft.Maui.DevFlow.Client](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Client.svg?label=Microsoft.Maui.DevFlow.Client)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Client/) | Portable (`netstandard2.0`) agent protocol client |
+| [![NuGet: Microsoft.Maui.DevFlow.Driver](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Driver.svg?label=Microsoft.Maui.DevFlow.Driver)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Driver/) | Platform driver library |
+| [![NuGet: Microsoft.Maui.DevFlow.Logging](https://img.shields.io/nuget/v/Microsoft.Maui.DevFlow.Logging.svg?label=Microsoft.Maui.DevFlow.Logging)](https://www.nuget.org/packages/Microsoft.Maui.DevFlow.Logging/) | Buffered JSONL file logger |
 
 ### AI Extensions
 
@@ -95,7 +103,7 @@ Source-generated AI tool discovery — annotate methods or property accessors wi
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.AI.Attributes` | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
+| [![NuGet: Microsoft.Maui.AI.Attributes](https://img.shields.io/nuget/v/Microsoft.Maui.AI.Attributes.svg?label=Microsoft.Maui.AI.Attributes)](https://www.nuget.org/packages/Microsoft.Maui.AI.Attributes/) | Source-generated AI tool contexts for `Microsoft.Extensions.AI` |
 
 ### macOS AppKit Backend
 
@@ -109,9 +117,9 @@ A native macOS AppKit backend for .NET MAUI — run MAUI apps as true AppKit app
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Platforms.MacOS` | Core AppKit backend — handlers, hosting, MapKit |
-| `Microsoft.Maui.Platforms.MacOS.Essentials` | Essentials APIs for macOS |
-| `Microsoft.Maui.Platforms.MacOS.BlazorWebView` | Blazor Hybrid via WKWebView |
+| [![NuGet: Microsoft.Maui.Platforms.MacOS](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.MacOS.svg?label=Microsoft.Maui.Platforms.MacOS)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.MacOS/) | Core AppKit backend — handlers, hosting, MapKit |
+| [![NuGet: Microsoft.Maui.Platforms.MacOS.Essentials](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.MacOS.Essentials.svg?label=Microsoft.Maui.Platforms.MacOS.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.MacOS.Essentials/) | Essentials APIs for macOS |
+| [![NuGet: Microsoft.Maui.Platforms.MacOS.BlazorWebView](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.MacOS.BlazorWebView.svg?label=Microsoft.Maui.Platforms.MacOS.BlazorWebView)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.MacOS.BlazorWebView/) | Blazor Hybrid via WKWebView |
 
 ### WPF Backend
 
@@ -124,8 +132,8 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Platforms.Windows.WPF` | Core WPF backend — handlers, hosting, Blazor WebView |
-| `Microsoft.Maui.Platforms.Windows.WPF.Essentials` | Essentials APIs for WPF |
+| [![NuGet: Microsoft.Maui.Platforms.Windows.WPF](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Windows.WPF.svg?label=Microsoft.Maui.Platforms.Windows.WPF)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Windows.WPF/) | Core WPF backend — handlers, hosting, Blazor WebView |
+| [![NuGet: Microsoft.Maui.Platforms.Windows.WPF.Essentials](https://img.shields.io/nuget/v/Microsoft.Maui.Platforms.Windows.WPF.Essentials.svg?label=Microsoft.Maui.Platforms.Windows.WPF.Essentials)](https://www.nuget.org/packages/Microsoft.Maui.Platforms.Windows.WPF.Essentials/) | Essentials APIs for WPF |
 
 ### Essentials.AI
 
@@ -138,7 +146,7 @@ On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractio
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Essentials.AI` | On-device AI APIs for MAUI |
+| [![NuGet: Microsoft.Maui.Essentials.AI](https://img.shields.io/nuget/v/Microsoft.Maui.Essentials.AI.svg?label=Microsoft.Maui.Essentials.AI)](https://www.nuget.org/packages/Microsoft.Maui.Essentials.AI/) | On-device AI APIs for MAUI |
 
 ### AppProjectReference
 
@@ -152,18 +160,40 @@ Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `
 
 | Package | Description |
 |---------|-------------|
-| `Microsoft.Maui.Build.AppProjectReference` | Build-time app project reference with artifact discovery |
+| [![NuGet: Microsoft.Maui.Build.AppProjectReference](https://img.shields.io/nuget/v/Microsoft.Maui.Build.AppProjectReference.svg?label=Microsoft.Maui.Build.AppProjectReference)](https://www.nuget.org/packages/Microsoft.Maui.Build.AppProjectReference/) | Build-time app project reference with artifact discovery |
 
 ## Agent Skills
 
-This repository is also a marketplace for distributable agent skills for .NET MAUI development. Skills are organized as plugins compatible with Copilot CLI, Claude Code, and VS Code.
+This repository is also a marketplace for distributable agent skills for .NET MAUI development. The recommended one-stop setup is `maui ai init`, which installs the relevant MAUI skills, bundled DevFlow skills, Copilot agent definitions, and MCP configuration for detected agent environments.
 
 | Plugin | Description |
 |--------|-------------|
 | [`dotnet-maui`](plugins/dotnet-maui/) | MAUI development: DevFlow automation, profiling, accessibility, platform bindings, diagnostics, session review |
 
 ```bash
-# Install via Copilot CLI
+# Preview recommended setup and exact scopes for VS Code
+maui ai init --env VsCode --dry-run
+
+# Bootstrap this project for AI-powered MAUI development
+maui ai init --env VsCode --yes
+
+# Discover skills, agents, and MCP registrations, then inspect local inventory
+maui ai list
+maui ai status
+
+# Refresh existing managed assets only; never add missing recommendations
+maui ai update
+
+# Or add exactly one typed asset, without implicit companion installations
+maui ai add skill maui-devflow-debug --env Claude --yes
+maui ai add mcp maui-devflow --env Claude --yes
+```
+
+`--yes`/`-y` accepts prompts; `--force` separately authorizes replacement. Copilot CLI MCP registration is user-wide; other supported MCP destinations are project-scoped. See the [CLI guide](src/Cli/README.md#ai-command-scope-and-options) for targeting, provenance, and safety semantics.
+
+Direct plugin installation remains available for agent runtimes that support plugin marketplaces:
+
+```bash
 /plugin marketplace add dotnet/maui-labs
 /plugin install dotnet-maui@dotnet-maui-labs
 ```
@@ -194,7 +224,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development se
 
 For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](docs/DevFlow/spec/README.md).
 
-For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md) and [`samples/AIExtensions.Sample.Garden`](samples/AIExtensions.Sample.Garden/README.md).
+For live app inspection and host setup, see the
+[MAUI DevFlow Inspector guide](docs/DevFlow/inspector.md).
+
+For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
+the [`IChatClient` playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for live
+requests, portable recording/replay, and archived-chat search, and the
+[`Garden` sample](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support
 

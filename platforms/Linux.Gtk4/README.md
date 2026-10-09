@@ -53,6 +53,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 ### Platform Features
 
 - **Native GTK4 rendering** — Every control maps to a real GTK4 widget, styled via GTK CSS.
+- **UI synchronization context** — Async UI event handlers resume on the GTK main thread after `await` (unless they explicitly opt out with `ConfigureAwait(false)`).
 - **Blazor Hybrid** — Host Blazor components inside a native GTK window via WebKitGTK.
 - **Gestures** — Tap, Pan, Swipe, Pinch, and Pointer gesture recognizers via GTK4 event controllers.
 - **Animations** — `TranslateTo`, `FadeTo`, `ScaleTo`, `RotateTo` via `GtkPlatformTicker` + `Gsk.Transform` at ~60fps.
@@ -61,7 +62,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **ControlTemplate** — Full ContentPresenter and TemplatedView support via `IContentView` handler mapping.
 - **Font icons** — Embedded font registration with fontconfig/Pango, FontImageSource rendering via Cairo. FontAwesome and custom icon fonts work out of the box.
 - **FormattedText** — Rich text via Pango markup: Span colors, fonts, sizes, bold/italic, underline/strikethrough, character spacing.
-- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows.
+- **Alerts & Dialogs** — `DisplayAlert`, `DisplayActionSheet`, `DisplayPromptAsync` via native GTK4 modal windows. Registration supports both the nested MAUI 10.0.41–10.0.60 subscription interface and the top-level 10.0.70+ interface; an unrecognized contract fails during registration instead of leaving dialog tasks pending.
 - **Modal Pages** — `PushModalAsync` presents pages as native GTK4 dialog windows by default, with attached properties for custom sizing, content-fit sizing, and inline (legacy) presentation via `GtkPage`.
 - **Brushes & Gradients** — SolidColorBrush, LinearGradientBrush, RadialGradientBrush via CSS gradients.
 - **MenuBar** — `MenuBarItem` / `MenuFlyoutItem` via `Gtk.PopoverMenuBar`, integrated into Window and NavigationPage handlers via `GtkMenuBarManager` (not a standalone handler).
@@ -69,6 +70,101 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 - **Theming** — Automatic light/dark theme detection via `GtkThemeManager`.
 - **Lifecycle Events** — `ConfigureLifecycleEvents().AddGtk()` hooks for `OnWindowCreated` and `OnMauiApplicationCreated`.
 - **Desktop integration** — App icons via hicolor icon theme, `.desktop` file generation, `MauiImage`/`MauiFont`/`MauiAsset` resource processing.
+
+### Window sizing
+
+Windows default to 1024 x 768 when the app does not specify a size. Set `Window.Width`
+and `Window.Height` to request another initial or runtime size, and `Window.MinimumWidth`
+and `Window.MinimumHeight` to impose application-specific lower bounds. GTK's native
+content minimums still apply; there is no backend-imposed 800 x 600 minimum.
+Root MAUI layouts reflow using their actual GTK allocation, including space reserved
+by native containers and window chrome.
+
+`Window.Width`/`Height` report the allocated client area (excluding a native titlebar),
+and `Window.SizeChanged` follows actual allocation changes, not just size requests.
+Pages, including `NavigationPage` and `Shell`, report their own native allocation;
+the current content page excludes navigation chrome. Their `SizeChanged` and
+`OnSizeAllocated` callbacks and top-level layout frames can be used for responsive UI.
+Vertical `CollectionView` templates reflow at their allocated row width.
+
+The existing native sizing host covers initial sizing, minimum sizes, nested
+layouts, scrolling, NavigationPage/Shell frames and events, independent windows,
+unchanged allocations, decorated client areas, handler reconnect, and collection
+cards. It runs in the normal GTK CI runtime matrix. To run the same checks on Linux:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=none \
+  dbus-run-session -- xvfb-run --auto-servernum \
+  dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --configuration Release --filter FullyQualifiedName~WindowSizingTests \
+  --logger "console;verbosity=detailed"
+```
+
+### Shell navigation regression checks
+
+Shell section navigation displays the top pushed page and restores the previous
+page when popped, including route navigation, `PushAsync`, and `PopToRootAsync`.
+Managed observer tests run with the normal GTK test project. The native regression
+test additionally checks the selected notebook child, its mapped state, and a
+positive GTK allocation in a real window. Run it on Linux with GTK and Xvfb:
+
+```bash
+MAUI_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo xvfb-run -a \
+  dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~ShellNavigationRuntimeTests \
+  --logger "console;verbosity=detailed"
+```
+
+The test uses its own GTK application and does not require a DevFlow broker.
+
+### Handler styling
+
+`ContentViewHandler` now hosts its content in `GtkLayoutPanel`, so child translation,
+scale, rotation, anchors, and MAUI-arranged offsets use the same native allocation
+path as layout children. `LayoutHandler` also preserves transforms across arrange
+passes. `ContentView.IsClippedToBounds` clips translated content to its viewport;
+clearing a separate `Clip` does not disable bounds clipping. ContentView and layout
+roots share an allocation-driven layout helper. For direct ScrollView content it
+uses the native viewport on non-scrolling axes and measures scrolling axes without
+a bound, preserving scroll extent while allowing the viewport to shrink.
+
+**Breaking change:** custom handlers compiled against the previous
+`Gtk.Box` platform-view type must be rebuilt and use `GtkLayoutPanel` child APIs
+(`AddChild` / `RemoveChild`, not `Append` / `Remove`).
+
+The native regression runs on Linux with GTK 4.12+ and an isolated display:
+
+```bash
+RUN_GTK_RUNTIME_TESTS=1 GDK_BACKEND=x11 GSK_RENDERER=cairo \
+  dbus-run-session -- xvfb-run -a dotnet test \
+  platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj \
+  --filter FullyQualifiedName~ContentViewTransformTests
+```
+
+The ordinary managed test run skips native tests unless explicitly enabled.
+Run each native test class in a separate process to keep GTK thread ownership isolated.
+`ContentViewClippingTests` checks rendered header and content pixels and writes PNG
+evidence when `GTK_TEST_ARTIFACTS` is set. `ContentViewRootLayoutTests` covers
+ContentView/Border nesting and all ScrollView orientations; `GtkRootLayoutDriverTests`
+checks root ownership, reparenting, callback disposal, and logged layout failures.
+
+GTK CSS font sizes use logical pixels (`px`), matching MAUI's device-independent
+font sizes. Handler CSS is composed per widget, selector, and mapper, so font,
+color, spacing, background, and border updates preserve one another. Custom
+handlers should pass a complete fragment to `UpdateCss` / `UpdateCssWithSelector`
+on every update, including null or empty CSS to remove that fragment's overrides.
+The optional `property` key defaults to the calling method's name; shared helpers
+must supply distinct keys for independently updated properties. For overlapping
+declarations of equal specificity, the most recently updated fragment wins.
+The original `ApplyCss` / `ApplyCssWithSelector` signatures remain available for
+compiled custom handlers and share a legacy fragment per widget and selector.
+
+### Transform point ownership
+
+`Graphene.Point.Alloc()` returns a point owned by a GirCore `SafeHandle`.
+Do not call its native `Free()` method after passing it to `Gsk.Transform.Translate`:
+the handle still owns the allocation and will free it again during finalization.
+This applies to layout-position points as well as anchor points.
 
 ### Essentials (21 of 36 services)
 
@@ -87,7 +183,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 | Layouts | 100% | All layout types including FlexLayout and AbsoluteLayout |
 | Basic Controls | 100% | All 14 standard controls |
 | Input Controls | 100% | Picker, DatePicker, TimePicker, SearchBar |
-| Collection Controls | 100% | Virtualized CollectionView, ListView, TableView, CarouselView, SwipeView |
+| Collection Controls | 100% | Virtualized CollectionView with logical parenting of realized template views, ListView, TableView, CarouselView, SwipeView |
 | Navigation & Routing | 100% | Push/pop, Shell routes, query parameters |
 | Alerts & Dialogs | 100% | All three dialog types + native modal dialog windows |
 | Gesture Recognizers | 100% | All 5 gesture types |
@@ -107,7 +203,7 @@ https://github.com/user-attachments/assets/70f2a910-94b3-437c-945a-6b71223c5cd3
 | Requirement | Version |
 |---|---|
 | .NET SDK | 10.0+ |
-| GTK 4 libraries | 4.x (system package) |
+| GTK 4 libraries | 4.12+ (system package) |
 | WebKitGTK *(Blazor only)* | 6.x (system package) |
 
 ### Install GTK4 & WebKitGTK (Debian / Ubuntu)
@@ -142,6 +238,12 @@ dotnet new maui-linux-gtk4 -n MyApp.Linux
 cd MyApp.Linux
 dotnet run
 ```
+
+The packaged template pins its GTK4 package references to the package version produced
+by the same build. Essentials is enabled by default: the generated `MauiProgram.cs`
+calls `AddLinuxGtk4Essentials()` to register Linux services and static API defaults,
+including `SemanticScreenReader`. Use `--essentials false` to omit both the package
+and registration, or `--blazor true` to include the BlazorWebView package.
 
 ### Option 2: Add to an existing project manually
 
@@ -190,6 +292,32 @@ public static class MauiProgram
     }
 }
 ```
+
+If you added the optional Essentials package, also import
+`Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting` and call
+`builder.AddLinuxGtk4Essentials()` before `builder.Build()`. Adding the package
+alone does not replace MAUI's portable Essentials implementations.
+
+When `Build()` returns, all registered static Essentials facades use the same
+instances as dependency injection, including application overrides registered
+before or after `AddLinuxGtk4Essentials()`. Call statics after `Build()`, not while
+configuring the builder. Unsupported desktop capabilities retain their existing
+stub behavior. Facades are process-wide: the most recently built app sets their
+instances, and callers must not use them after disposing that app.
+
+`FileSystem.AppDataDirectory` and `CacheDirectory` use `XDG_DATA_HOME` and
+`XDG_CACHE_HOME`, falling back to `~/.local/share` and `~/.cache`, respectively,
+with the application name appended. Both getters create the directory before
+returning it, preserve existing contents, and propagate filesystem errors.
+Paths are resolved on every access, including changes to the XDG variables.
+
+Run the registration and filesystem regressions on Linux:
+`dotnet test platforms/Linux.Gtk4/tests/Essentials.Tests/Linux.Gtk4.Essentials.Tests.csproj`.
+The filesystem tests cover XDG overrides and fallback paths with unique
+application identities and real file writes; only their owned directories are
+removed. These tests do not require a display.
+Set `ESSENTIALS_NATIVE_GTK=1` under a real display (or `xvfb-run`) to also run the
+GTK application activation/display regression; otherwise that test is explicitly skipped.
 
 ## XAML Support
 
@@ -281,6 +409,20 @@ When enabled, the sample project (`samples/Linux.Gtk4.Sample`) conditionally ref
 
 ## Building from Source
 
+From the repository root, run the template regression checks with PowerShell 7:
+
+```powershell
+pwsh -File eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps
+```
+
+This packs the templates with default and overridden package versions, generates
+the default app and all Essentials/Blazor option combinations in isolated template
+hives, and checks their references and registration. `-BuildApps` also packs the
+backend packages, restores/builds the default-version apps, and checks the
+`SemanticScreenReader` DI and static defaults without loading native GTK.
+Omit `-BuildApps` for template-only checks. GTK window rendering and speech output
+still require Linux runtime validation.
+
 ```bash
 git clone https://github.com/dotnet/maui-labs.git
 cd maui-labs/platforms/Linux.Gtk4
@@ -288,12 +430,88 @@ dotnet restore
 dotnet build
 ```
 
+### Managed regression tests
+
+The CSS composition and font CSS tests do not require GTK native libraries or a display.
+From `platforms/Linux.Gtk4`, run:
+
+```bash
+dotnet test tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
+```
+
+The `ci-linux-gtk4.yml` compatibility matrix runs `AlertManagerSubscriptionTests`
+in this existing project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
+through the shared build workflow's targeted test mode. These managed registration
+checks do not require GTK initialization and do not claim native UI coverage.
+
+### Native regression tests in the shared test host
+
+Native tests live alongside managed tests in `Linux.Gtk4.Tests`, use
+`[GtkRuntimeFact]` and the `GTK runtime` collection, and opt in with
+`RUN_GTK_RUNTIME_TESTS=1` on Linux. Normal portable test runs skip these cases;
+those skips are not native validation. Run each native class in a separate
+process because GTK initialization is thread-affine.
+
+The CollectionView tests require Linux, GTK 4.12 or newer, and a display. They exercise the real
+GTK list-item factory, including logical parenting, DevFlow tree discovery,
+source replacement, runtime item/group-header template replacement, group headers,
+and recursive handler disconnection of retired roots and nested template children.
+Cleanup is checked after source replacement, template rebuild, and handler teardown,
+including repeated cleanup without duplicate disconnection. Template changes do not
+require an ItemsSource change.
+
+The Picker regression checks item replacement, no selection, collection
+mutations, managed selection mapping, native selection notifications, and
+disconnect/reconnect behavior.
+
+The synchronization-context regression starts a real `GtkMauiApplication`,
+invokes an async MAUI button handler from the GTK main loop, and checks thread
+identity, context preservation across repeated awaits, native label updates,
+and restoration of the original context after shutdown.
+
+From the repository root on Linux, use the shared class runner (PowerShell 7,
+`dbus-run-session`, and `xvfb-run` are required):
+
+```bash
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransformTests
+```
+
+The runner creates a private DBus session and display, requires nonzero executed
+tests with no failures or skips in the TRX, and rejects missing/empty filtered
+classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
+evidence. CI's `runtime` matrix runs one existing native class per process; retain
+the union of native class entries when integrating other platform changes.
+
+The transform regression creates a real GTK window and repeatedly scales and
+rotates a button at origin, off-origin, translated, and translation-cancelled
+positions. Forced finalization detects native point double frees; coordinate
+assertions check that transforms still work.
+
+The native CI job runs each test class in a separate process to keep GTK
+initialization on one thread and uploads its TRX results.
+
 ### Run the sample app
 
 ```bash
 # Sample app (includes native controls, Blazor Hybrid, essentials, and more)
 dotnet run --project samples/Linux.Gtk4.Sample
 ```
+
+For a focused DevFlow check, set `MAUI_SAMPLE_COLLECTIONVIEW=1` when launching
+the sample with `-p:EnableMauiDevFlow=true`. Choose **CollectionView** in its
+example picker. Realized contact labels are discoverable by text and by their
+name as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the
+status to `Tapped: <name>`. Unrealized rows are not logical children until GTK
+realizes them.
+
+The native CI job also builds the DevFlow-enabled sample and runs
+`tests/devflow_collectionview_smoke.py` under dbus/Xvfb. It verifies the owned
+process identity before mutation and asserts both command outcomes, then uploads
+the application log, query/tap JSON, tree and screenshot as
+`gtk-collectionview-devflow-evidence`.
 
 ## Project Structure
 
