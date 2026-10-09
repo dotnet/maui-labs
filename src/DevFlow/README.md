@@ -215,8 +215,11 @@ single `ready` wire field. Select with HTTP/Client/MCP/Inspector `contextId` or 
 AutomationIds do not affect selection. Omission/null selects the active host;
 explicit blank/invalid values fail without dispatch. Query contextId takes
 precedence over typed body contextId; raw CDP selection is query-only.
-Upgrade all packages together and rebuild consumers. Blazor-only
-`includeBlazorElements` layout coverage remains unchanged for the next layer.
+Upgrade all packages together and rebuild consumers. Layout scope now uses only
+`includeWebViewElements` (default `true`); `includeBlazorElements` is removed from
+agent and portable Client DTOs. DOM nodes use `framework: webview` and
+`fullType: WebView.DOM.Element`; layout capability metadata uses `webview` and
+`webview-dom` instead of the Blazor-only names.
 `hostKind` is open descriptive hosting metadata, not native backend or dispatch.
 
 The asset-free Blazor adapter uses the ordinary .NET SDK and excludes the
@@ -697,6 +700,16 @@ is known, mapped source actions resolve project-relative XAML references to full
 local paths without requiring the file to be writable.
 Copilot context remains a redacted point-in-time snapshot,
 not mutation or source-write authority.
+
+DOM enrichment covers ready, active, visible registered standard WebView,
+HybridWebView and BlazorWebView hosts. Weak-owner mapping preserves native parent
+identity for unnamed and duplicate-AutomationId hosts; dead owners never redirect
+to another host. `Scope.IncludeWebViewElements = false` (JSON:
+`scope.includeWebViewElements`) skips DOM capture/findings while native diagnostics
+continue. Unregistered/unready visible hosts and failed probes remain opaque and
+incomplete. Cross-origin frames, the 500 DOM element limit per host and the scan
+deadline also produce incomplete coverage. Capability `webview.readyWebViewCount`
+counts ready registrations, not the active/visible hosts analyzed in a scan.
 
 Debug builds generate XAML source maps by default, so findings can include
 `sourceFile`, `sourceLine`, and `sourceColumn`. Source-content hashes are not

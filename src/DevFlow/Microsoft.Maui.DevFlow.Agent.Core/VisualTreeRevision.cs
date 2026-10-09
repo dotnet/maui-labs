@@ -14,7 +14,7 @@ internal static class VisualTreeRevision
         var builder = new StringBuilder();
         foreach (var element in elements)
         {
-            if (element.Framework.Equals("blazor", StringComparison.OrdinalIgnoreCase))
+            if (element.Framework.Equals("webview", StringComparison.OrdinalIgnoreCase))
                 continue;
             var bounds = element.WindowBounds ?? element.Bounds;
             if (bounds is null)
