@@ -1,6 +1,7 @@
 #if IOS || MACCATALYST
 using Microsoft.Extensions.AI;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
@@ -124,6 +125,30 @@ public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTest
 		Assert.Equal("apple-intelligence", metadata.DefaultModelId);
 		Assert.NotEmpty(updates);
 		Assert.All(updates, update => Assert.Equal(metadata.DefaultModelId, update.ModelId));
+	}
+}
+
+public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
+	: ChatClientUsageTestsBase<AppleIntelligenceChatClient>(output)
+{
+	protected override bool IsUsageAvailable
+	{
+		get
+		{
+#if IOS
+			return OperatingSystem.IsIOSVersionAtLeast(27);
+#elif MACCATALYST
+			return OperatingSystem.IsMacCatalystVersionAtLeast(27);
+#else
+			return false;
+#endif
+		}
+	}
+
+	protected override void AssertProviderUsage(UsageDetails usage)
+	{
+		Assert.NotNull(usage.CachedInputTokenCount);
+		Assert.NotNull(usage.ReasoningTokenCount);
 	}
 }
 

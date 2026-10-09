@@ -195,7 +195,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				{
 					try
 					{
-						handler.Complete();
+						handler.Complete(FromNativeUsage(finalResult?.Usage));
 					}
 					catch (Exception ex)
 					{
@@ -303,9 +303,25 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			.Select(FromNative)
 			.ToList();
 
-		// Create ChatResponse with all messages
-		return new ChatResponse(messages) { ModelId = DefaultModelId };
+		// Create ChatResponse with all messages and native usage when available.
+		return new ChatResponse(messages)
+		{
+			ModelId = DefaultModelId,
+			Usage = FromNativeUsage(response.Usage)
+		};
 	}
+
+	private static UsageDetails? FromNativeUsage(UsageDetailsNative? usage) =>
+		usage is null
+			? null
+			: new UsageDetails
+			{
+				InputTokenCount = usage.InputTokenCount,
+				OutputTokenCount = usage.OutputTokenCount,
+				TotalTokenCount = usage.TotalTokenCount,
+				CachedInputTokenCount = usage.CachedInputTokenCount,
+				ReasoningTokenCount = usage.ReasoningTokenCount
+			};
 
 	private static ChatMessage FromNative(ChatMessageNative nativeMessage)
 	{
