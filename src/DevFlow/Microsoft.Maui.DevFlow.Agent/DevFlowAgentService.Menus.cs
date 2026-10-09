@@ -224,6 +224,8 @@ public partial class PlatformAgentService
         var index = 0;
         foreach (var (command, owner) in commands)
         {
+            // Input is an NSString; the wire payload must contain a managed string.
+            string? input = command.Input;
             items.Add(new Dictionary<string, object?>
             {
                 ["id"] = $"native:{index}",
@@ -233,7 +235,7 @@ public partial class PlatformAgentService
                     command.Action is Selector action && owner.CanPerform(action, command),
                 ["separator"] = false,
                 ["hasSubmenu"] = false,
-                ["key"] = string.IsNullOrEmpty(command.Input) ? null : command.Input,
+                ["key"] = string.IsNullOrEmpty(input) ? null : input,
                 ["modifiers"] = CatalystModifiersToList(command.ModifierFlags),
                 ["action"] = command.Action?.Name,
             });
