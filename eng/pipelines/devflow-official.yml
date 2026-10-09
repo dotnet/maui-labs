@@ -129,6 +129,7 @@ extends:
                 -projects $(Build.SourcesDirectory)\src\DevFlow\DevFlow.slnf
                 $(_OfficialBuildArgs)
                 /p:PackDriverNuGet=true
+                /p:PackLinuxGtk4NuGet=false
               displayName: Build and Test DevFlow
 
           - job: Cli
@@ -198,6 +199,8 @@ extends:
           # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
           # Running on Windows is required so MicroBuild/ESRP can sign the DLLs —
           # signing does not execute on Linux agents.
+          # This job owns GTK4 packages; DevFlow builds them with packing disabled
+          # to avoid duplicate package and symbol entries in the merged manifest.
           - job: LinuxGtk4
             displayName: Linux GTK4 - Windows
             pool:
