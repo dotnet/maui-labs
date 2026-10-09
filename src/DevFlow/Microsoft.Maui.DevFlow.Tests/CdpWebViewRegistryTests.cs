@@ -37,4 +37,37 @@ public class CdpWebViewRegistryTests
         Assert.Equal("second", await service.CdpCommandHandler!("{}"));
         Assert.True(service.CdpReadyCheck!());
     }
+
+    [Fact]
+    public void RegisterCdpWebView_DifferentOwnersWithDuplicateAutomationId_KeepsBothContexts()
+    {
+        using var service = new DevFlowAgentService();
+        var firstOwner = new object();
+        var secondOwner = new object();
+
+        var first = service.RegisterCdpWebView(
+            _ => Task.FromResult("{}"), () => true, "duplicate", null, null, "webview", firstOwner);
+        var second = service.RegisterCdpWebView(
+            _ => Task.FromResult("{}"), () => true, "duplicate", null, null, "hybrid", secondOwner);
+
+        Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public async Task UnregisterCdpWebView_OldDelegate_DoesNotRemoveReplacement()
+    {
+        using var service = new DevFlowAgentService();
+        var owner = new object();
+        Func<string, Task<string>> oldHandler = _ => Task.FromResult("old");
+        Func<string, Task<string>> newHandler = _ => Task.FromResult("new");
+        var index = service.RegisterCdpWebView(oldHandler, () => true, null, null, null, "hybrid", owner);
+        var replacement = service.RegisterCdpWebView(newHandler, () => true, null, null, null, "hybrid", owner);
+
+        service.UnregisterCdpWebView(index, oldHandler);
+
+        Assert.Equal(index, replacement);
+        Assert.Equal("new", await service.CdpCommandHandler!("{}"));
+        service.UnregisterCdpWebView(index, newHandler);
+        Assert.Null(service.CdpCommandHandler);
+    }
 }

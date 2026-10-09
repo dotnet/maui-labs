@@ -26,6 +26,23 @@ Do not commit a generated JSON copy of the OpenAPI document. If a consumer needs
 
 The DevFlow unit tests parse `openapi.yaml` with OpenAPI tooling and validate YAML/JSON syntax plus `$ref` targets across this directory.
 
+## WebView hosts
+
+`/api/v1/webview/*` operates on registered standard WebView, HybridWebView and
+BlazorWebView hosts. Owner-aware contexts report stable `webview-<index>` IDs,
+`hostKind`, their current `elementId` correlation, readiness, and active state.
+Use the reported context ID for unambiguous selection; UI element IDs,
+AutomationIds and numeric indices remain aliases. Default resolution follows
+active hosts, not hidden retained pages. Hosts without AutomationIds are supported.
+
+`/api/v1/webview/screenshot` is native-first and is used by CLI/MCP. Browser-network
+capture is unsupported and `/api/v1/webview/network` returns the standard 501
+`webview.network` envelope. Native .NET HTTP requests still use
+`/api/v1/network/requests`.
+
+Layout requests can set `scope.includeWebViewElements` for generic DOM enrichment.
+If omitted, `includeBlazorElements` retains its legacy default/alias behavior.
+
 ## Extension discovery
 
 Agents can expose app-specific diagnostics or automation under `/api/v1/ext/{namespace}/...`. Extension namespaces use reverse-domain notation such as `com.example.diagnostics`.

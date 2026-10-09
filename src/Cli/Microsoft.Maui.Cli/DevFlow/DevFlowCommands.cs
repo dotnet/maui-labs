@@ -63,7 +63,7 @@ public class DevFlowCommands
     {
         var output = Program.Services.GetRequiredService<IDevFlowOutputWriter>();
         s_output = output;
-        var devflowCommand = new Command("devflow", "Automate MAUI apps via Agent API and Blazor WebViews via CDP");
+        var devflowCommand = new Command("devflow", "Automate MAUI apps via Agent API and registered WebViews via CDP");
         
         // Alias parent's --json so all existing handler bindings work
         var jsonOption = parentJsonOption;
@@ -92,7 +92,7 @@ public class DevFlowCommands
 
         // ===== WebView commands (Blazor WebView / CDP) =====
         
-        var cdpCommand = new Command("webview", "Blazor WebView automation via Chrome DevTools Protocol");
+        var cdpCommand = new Command("webview", "WebView, HybridWebView, and BlazorWebView automation via Chrome DevTools Protocol");
         cdpCommand.Aliases.Add("cdp");
 
         var webviewOption = new Option<string?>("--webview", "-w") { Description = "Target WebView by index, AutomationId, or element ID (default: first WebView)", DefaultValueFactory = _ => null };
@@ -2012,7 +2012,7 @@ public class DevFlowCommands
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 JSON.stringify((function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
+                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
                     if (!el) return null;
                     return {{
                         tagName: el.tagName.toLowerCase(),
@@ -2021,7 +2021,7 @@ public class DevFlowCommands
                         textContent: el.textContent?.trim().substring(0, 100) || null
                     }};
                 }})())
-            ");
+            ", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2033,7 +2033,7 @@ public class DevFlowCommands
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 JSON.stringify((function() {{
-                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)}, webview);
+                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)});
                     return Array.from(els).map((el, i) => ({{
                         index: i,
                         tagName: el.tagName.toLowerCase(),
@@ -2042,7 +2042,7 @@ public class DevFlowCommands
                         textContent: el.textContent?.trim().substring(0, 50) || null
                     }}));
                 }})(), null, 2)
-            ");
+            ", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2087,17 +2087,9 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Page.captureScreenshot", webview: webview);
-            if (result.HasValue &&
-                result.Value.TryGetProperty("result", out var resultProp) && 
-                resultProp.TryGetProperty("data", out var dataProp))
-            {
-                Console.WriteLine(dataProp.GetString());
-            }
-            else
-            {
-                Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
-            }
+            using var client = await CreateAgentClientAsync(host, port);
+            var bytes = await client.GetWebViewScreenshotAsync(webview);
+            Console.WriteLine(Convert.ToBase64String(bytes));
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2108,15 +2100,13 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return 'Error: Element not found';
-                    el.click();
-                    return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
-                }})()
-            ");
-            Console.WriteLine(result);
+            using var client = await CreateAgentClientAsync(host, port);
+            if (!await client.ClickWebViewAsync(selector, webview))
+            {
+                WriteError($"Failed to click WebView element '{selector}'.");
+                return;
+            }
+            Console.WriteLine($"Clicked: {selector}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2125,10 +2115,12 @@ public class DevFlowCommands
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Input.insertText", new JsonObject
+            using var client = await CreateAgentClientAsync(host, port);
+            if (!await client.InsertWebViewTextAsync(text, webview))
             {
-                ["text"] = text
-            }, webview);
+                WriteError("Failed to insert WebView text.");
+                return;
+            }
             Console.WriteLine($"Inserted: {text.Length} characters");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2138,24 +2130,13 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return 'Error: Element not found';
-                    
-                    const text = {CliJson.SerializeUntyped(text, indented: false)};
-                    if (el.isContentEditable) {{
-                        el.textContent = text;
-                    }} else {{
-                        el.value = text;
-                        el.focus();
-                    }}
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    return 'Filled: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' with ' + text.length + ' chars';
-                }})()
-            ");
-            Console.WriteLine(result);
+            using var client = await CreateAgentClientAsync(host, port);
+            if (!await client.FillWebViewAsync(selector, text, webview))
+            {
+                WriteError($"Failed to fill WebView element '{selector}'.");
+                return;
+            }
+            Console.WriteLine($"Filled: {selector} with {text.Length} chars");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2950,7 +2931,7 @@ public class DevFlowCommands
         new("webview DOM querySelector", "Find element by CSS selector", false),
         new("webview DOM querySelectorAll", "Find all elements by CSS selector", false),
         new("webview DOM getOuterHTML", "Get element outer HTML", false),
-        new("webview Input click", "Click element by CSS selector", true),
+        new("webview Input dispatchClickEvent", "Click element by CSS selector", true),
         new("webview Input insertText", "Insert text at cursor", true),
         new("webview Input fill", "Fill form field by CSS selector", true),
         new("webview Page navigate", "Navigate WebView to URL", true),

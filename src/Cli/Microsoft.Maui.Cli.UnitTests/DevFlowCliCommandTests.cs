@@ -939,4 +939,79 @@ public class DevFlowCliCommandTests
         Assert.Equal(0, result.ExitCode);
         Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/source");
     }
+
+    [Theory]
+    [InlineData("querySelector")]
+    [InlineData("querySelectorAll")]
+    public async Task WebViewDomQuery_ForwardsContextOutsideJavaScript(string command)
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow", "webview", "--webview", "HybridWebView", "DOM", command, "#target", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+        Assert.Contains("webview=HybridWebView", request.QueryString);
+        using var body = JsonDocument.Parse(request.Body!);
+        var expression = body.RootElement.GetProperty("params").GetProperty("expression").GetString()!;
+        Assert.Contains("document.querySelector", expression);
+        Assert.DoesNotContain(", webview", expression);
+    }
+
+    [Theory]
+    [InlineData("dispatchClickEvent", "click")]
+    [InlineData("fill", "fill")]
+    public async Task WebViewInput_UsesCanonicalActionAndTargetContext(string command, string endpoint)
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+        var arguments = new List<string>
+        {
+            "devflow", "webview", "--webview", "HybridWebView", "Input", command, "#target"
+        };
+        if (command == "fill")
+            arguments.Add("hello");
+        arguments.Add("--json");
+
+        var result = await cli.InvokeAsync(arguments.ToArray());
+
+        Assert.Equal(0, result.ExitCode);
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == $"/api/v1/webview/input/{endpoint}");
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal("HybridWebView", body.RootElement.GetProperty("contextId").GetString());
+        Assert.Equal("#target", body.RootElement.GetProperty("selector").GetString());
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+    }
+
+    [Fact]
+    public async Task WebViewScreenshot_UsesNativeFirstEndpoint()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync(
+            "devflow", "webview", "--webview", "PlainWebView", "Page", "captureScreenshot", "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(MockAgentResponses.ScreenshotPng, Convert.FromBase64String(result.StdOut.Trim()));
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
+        Assert.Contains("contextId=PlainWebView", request.QueryString);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+    }
+
+    [Fact]
+    public async Task WebViewRuntimeEvaluate_CdpError_ReturnsFailureExit()
+    {
+        await using var server = new MockAgentServer(
+            webViewEvaluateResponse: """{"error":{"message":"WebView not ready"}}""");
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync("devflow", "webview", "Runtime", "evaluate", "1+1", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("WebView not ready", result.StdErr + result.StdOut);
+    }
 }

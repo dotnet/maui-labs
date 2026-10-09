@@ -15,7 +15,25 @@
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for this WebView context."
+          "description": "Unique stable context identifier (webview-<index> for owner-aware registrations). Element IDs, AutomationIds and numeric indices remain selection aliases; ambiguous UI aliases resolve against active hosts."
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Registry index, unique for the registered attachment."
+        },
+        "automationId": {
+          "type": ["string", "null"],
+          "description": "Optional MAUI AutomationId. Owner correlation also supports hosts without one."
+        },
+        "hostKind": {
+          "type": ["string", "null"],
+          "enum": ["webview", "hybrid", "blazor", null],
+          "description": "Host adapter kind. Null for legacy registrations."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether the owning host is reachable on an active app page."
         },
         "elementId": {
           "type": [
@@ -25,7 +43,7 @@
           "description": "Identifier linking this WebView to its corresponding element in the native UI tree."
         },
         "url": {
-          "type": "string",
+          "type": ["string", "null"],
           "description": "Current URL loaded in the WebView."
         },
         "title": {
@@ -37,7 +55,11 @@
         },
         "ready": {
           "type": "boolean",
-          "description": "Whether the WebView is ready for interaction (page loaded and DOM available)."
+          "description": "Whether the registered attachment's CDP bridge is ready for interaction."
+        },
+        "isReady": {
+          "type": "boolean",
+          "description": "Compatibility alias of ready."
         }
       }
     },

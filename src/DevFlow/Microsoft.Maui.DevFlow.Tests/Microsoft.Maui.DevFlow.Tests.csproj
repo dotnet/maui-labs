@@ -19,6 +19,7 @@
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Logging\Microsoft.Maui.DevFlow.Logging.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.WebView\Microsoft.Maui.DevFlow.WebView.csproj" />
   </ItemGroup>
 
   <!--
@@ -75,6 +76,15 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- Exercise the actual Blazor registration and readiness adapter on the host without adding
+       Razor/platform dependencies. Native mapper branches are excluded for this net10.0 target. -->
+  <ItemGroup>
+    <Compile Include="..\Microsoft.Maui.DevFlow.Blazor\BlazorDevFlowExtensions.cs" Link="WebView\BlazorDevFlowExtensions.cs" />
+    <Compile Include="..\Microsoft.Maui.DevFlow.Blazor\BlazorWebViewDebugOptions.cs" Link="WebView\BlazorWebViewDebugOptions.cs" />
+    <Compile Include="..\Microsoft.Maui.DevFlow.Blazor\BlazorWebViewDebugServiceBase.cs" Link="WebView\BlazorWebViewDebugServiceBase.cs" />
+    <Compile Include="..\Microsoft.Maui.DevFlow.Blazor\BlazorWebViewDebugService.cs" Link="WebView\BlazorWebViewDebugService.cs" />
   </ItemGroup>
 
   <ItemGroup>

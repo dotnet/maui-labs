@@ -2833,7 +2833,7 @@ import { createElementTreeController } from './inspector-tree.js';
 
   async function renderWebView(j) {
     const wvs = extractWebviews(j && j.webviews);
-    if (!wvs.length) { dockEmpty((j && j.error) || 'No Blazor WebViews in this app.'); return; }
+    if (!wvs.length) { dockEmpty((j && j.error) || 'No registered WebViews in this app.'); return; }
     const frag = document.createDocumentFragment();
     const bar = elh('div', null, elh('span', { class: 'df-kv-key', text: 'WebView: ' }));
     const sel = elh('select', { class: 'df-dock-btn' });

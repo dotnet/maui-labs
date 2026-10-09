@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui.DevFlow.Agent;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Blazor;
+using Microsoft.Maui.DevFlow.WebView;
 
 namespace DevFlow.Sample;
 
@@ -113,6 +114,7 @@ public static class MauiProgram
 					Category = "diagnostics"
 				});
 		});
+		builder.AddMauiWebViewDevFlowTools();
 		builder.AddMauiBlazorDevFlowTools();
 #endif
 

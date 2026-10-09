@@ -255,18 +255,21 @@ public partial class MauiDevFlowAgentService
         DateTimeOffset deadline,
         CancellationToken cancellationToken)
     {
-        if (!request.Scope.IncludeBlazorElements)
+        if (!(request.Scope.IncludeWebViewElements ?? request.Scope.IncludeBlazorElements))
             return;
 
+        var activeWebViews = await GetActiveWebViewAutomationIdsAsync();
+        var webViews = GetCdpWebViewsSnapshot();
         var blazorHosts = capture.Nodes
-            .Where(node => node.Element.Type.Contains(
-                "BlazorWebView",
-                StringComparison.OrdinalIgnoreCase))
+            .Where(node => node.Element.Type.Contains("BlazorWebView", StringComparison.OrdinalIgnoreCase)
+                || node.Element.Type is "WebView" or "HybridWebView"
+                || webViews.Any(webView => webView.ElementId == node.Element.Id
+                    || webView.Owner is null && webView.AutomationId is not null
+                        && webView.AutomationId == node.Element.AutomationId))
             .ToList();
         if (blazorHosts.Count == 0)
             return;
 
-        var webViews = GetCdpWebViewsSnapshot();
         if (webViews.Length == 0)
         {
             MarkBlazorHostsUnavailable(
@@ -277,7 +280,10 @@ public partial class MauiDevFlowAgentService
         }
 
         var readyWebViews = webViews
-            .Where(webView => webView.IsReady)
+            .Where(webView => webView.IsReady && IsActiveCdpWebView(webView, activeWebViews) && blazorHosts.Any(host =>
+                host.Element.Id == webView.ElementId
+                || webView.Owner is null && webView.AutomationId is not null
+                    && host.Element.AutomationId == webView.AutomationId))
             .ToArray();
         if (readyWebViews.Length == 0)
         {

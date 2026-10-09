@@ -1160,10 +1160,12 @@ paths:
     get:
       operationId: getWebViewNetworkRequests
       tags: [webview]
-      summary: List network requests captured from WebViews
+      summary: Discover unsupported browser-network capture
       description: >
-        Convenience alias for `/api/v1/network/requests`. Returns captured HTTP
-        requests, optionally filtered by host, method, or status code.
+        Browser-network capture is not implemented. Returns the standard
+        not_supported envelope for webview.network. Native .NET HTTP traffic
+        remains available through `/api/v1/network/requests`; it is not browser
+        fetch/XHR traffic and is not advertised as a WebView feature.
       parameters:
         - name: limit
           in: query
@@ -1189,16 +1191,8 @@ paths:
             minimum: 100
             maximum: 599
       responses:
-        "200":
-          description: Array of network request summaries.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "./schemas/network.json#/$defs/NetworkRequestSummary"
-        "500":
-          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
 
   /api/v1/webview/console:
     get:
@@ -1238,7 +1232,9 @@ paths:
       tags: [webview]
       summary: Capture WebView screenshot
       description: >
-        Captures a screenshot of the WebView content.
+        Captures the registered native WebView host first, falling back to a
+        bridge screenshot when available. CLI and MCP use this endpoint rather
+        than requiring the JavaScript CDP implementation's Page.captureScreenshot.
       parameters:
         - name: contextId
           in: query
@@ -1250,10 +1246,6 @@ paths:
           description: Screenshot image.
           content:
             image/png:
-              schema:
-                type: string
-                format: binary
-            image/jpeg:
               schema:
                 type: string
                 format: binary

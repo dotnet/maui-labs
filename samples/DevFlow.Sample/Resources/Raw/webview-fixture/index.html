@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hybrid WebView fixture</title>
+    <script src="_framework/hybridwebview.js"></script>
+    <style>
+        body { font: 18px system-ui; margin: 24px; }
+        input, button { font: inherit; padding: 8px; margin: 4px; }
+        #fixture-overflow { width: 60px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    </style>
+</head>
+<body>
+    <h1>Generic WebView fixture</h1>
+    <p>Click count: <span id="fixture-count">0</span></p>
+    <input id="fixture-input" placeholder="Enter text">
+    <button id="fixture-button">Increment once</button>
+    <button id="fixture-log">Write console marker</button>
+    <p>Message from .NET: <span id="native-message">none</span></p>
+    <p id="fixture-overflow">Deliberately overflowing fixture text</p>
+    <a id="fixture-link" href="second.html">Navigate to second document</a>
+    <script>
+        let count = 0;
+        function send(action, value) {
+            if (window.HybridWebView) {
+                window.HybridWebView.SendRawMessage(JSON.stringify({ action, value }));
+            }
+        }
+        document.querySelector("#fixture-button").addEventListener("click", () => {
+            document.querySelector("#fixture-count").textContent = String(++count);
+            send("js-click", String(count));
+        });
+        document.querySelector("#fixture-log").addEventListener("click", () => {
+            console.log("devflow-generic-webview-console-marker");
+        });
+        window.addEventListener("HybridWebViewMessageReceived", event => {
+            const message = JSON.parse(event.detail.message);
+            document.querySelector("#native-message").textContent = message.value;
+            send("js-ack", message.value);
+        });
+        send("ready", document.title);
+    </script>
+</body>
+</html>

@@ -422,6 +422,10 @@ public class CdpWebViewInfo
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Url { get; set; }
 
+    [JsonPropertyName("hostKind")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? HostKind { get; set; }
+
     [JsonPropertyName("isReady")]
     public bool IsReady => ReadyCheck?.Invoke() ?? false;
 
@@ -430,4 +434,7 @@ public class CdpWebViewInfo
 
     [JsonIgnore]
     public Func<bool> ReadyCheck { get; set; } = () => false;
+
+    [JsonIgnore]
+    public WeakReference<object>? Owner { get; set; }
 }

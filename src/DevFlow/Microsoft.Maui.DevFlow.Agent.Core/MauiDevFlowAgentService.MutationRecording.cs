@@ -9,6 +9,8 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 /// </summary>
 public partial class MauiDevFlowAgentService
 {
+    protected override bool SupportsActiveCdpWebViewResolution => _app is not null;
+
     /// <inheritdoc />
     protected override async Task<HashSet<string>> GetActiveWebViewAutomationIdsAsync()
     {
@@ -20,7 +22,8 @@ public partial class MauiDevFlowAgentService
             return await DispatchAsync(() =>
             {
                 var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var window = _app.Windows.FirstOrDefault();
+                var registered = GetCdpWebViewsSnapshot();
+                _treeWalker.WalkTree(_app);
 
                 static Page? ActivePage(Page? page)
                 {
@@ -28,7 +31,7 @@ public partial class MauiDevFlowAgentService
                     {
                         page = page switch
                         {
-                            Shell => Shell.Current?.CurrentPage,
+                            Shell shell => shell.CurrentPage,
                             NavigationPage navigationPage => navigationPage.CurrentPage,
                             TabbedPage tabbedPage => tabbedPage.CurrentPage,
                             FlyoutPage flyoutPage => flyoutPage.Detail,
@@ -47,13 +50,10 @@ public partial class MauiDevFlowAgentService
                     return null;
                 }
 
-                var root = window?.Navigation?.ModalStack.LastOrDefault()
-                    ?? ActivePage(window?.Page);
-                if (root is not IVisualTreeElement rootElement)
-                    return ids;
-
-                static bool IsBlazorWebView(IVisualTreeElement element)
+                static bool IsWebViewHost(IVisualTreeElement element)
                 {
+                    if (element is WebView or HybridWebView)
+                        return true;
                     for (var type = element.GetType(); type is not null; type = type.BaseType)
                     {
                         if (type.FullName is
@@ -69,18 +69,48 @@ public partial class MauiDevFlowAgentService
 
                 void Visit(IVisualTreeElement element)
                 {
-                    if (element is VisualElement visualElement &&
-                        IsBlazorWebView(element) &&
-                        !string.IsNullOrWhiteSpace(visualElement.AutomationId))
+                    if (element is VisualElement { IsVisible: false })
+                        return;
+
+                    if (element is VisualElement visualElement)
                     {
-                        ids.Add(visualElement.AutomationId);
+                        var id = _treeWalker.GetIdForElement(element);
+                        foreach (var context in registered)
+                        {
+                            var ownsElement = context.Owner is { } ownerReference
+                                && ownerReference.TryGetTarget(out var owner)
+                                && ReferenceEquals(owner, element);
+                            var legacyMatch = context.Owner is null && IsWebViewHost(element)
+                                && (!string.IsNullOrWhiteSpace(context.ElementId) && context.ElementId == id
+                                    || !string.IsNullOrWhiteSpace(context.AutomationId)
+                                        && context.AutomationId == visualElement.AutomationId);
+                            if (!ownsElement && !legacyMatch)
+                                continue;
+
+                            if (ownsElement)
+                                ids.Add($"webview-{context.Index}");
+
+                            if (id is not null)
+                            {
+                                UpdateCdpWebView(context.Index, elementId: id);
+                                ids.Add(id);
+                            }
+                            if (context.Owner is null && !string.IsNullOrWhiteSpace(visualElement.AutomationId))
+                                ids.Add(visualElement.AutomationId);
+                        }
                     }
 
                     foreach (var child in element.GetVisualChildren())
                         Visit(child);
                 }
 
-                Visit(rootElement);
+                foreach (var window in _app.Windows)
+                {
+                    var root = window.Navigation?.ModalStack.LastOrDefault()
+                        ?? ActivePage(window.Page);
+                    if (root is IVisualTreeElement rootElement)
+                        Visit(rootElement);
+                }
                 return ids;
             });
         }
