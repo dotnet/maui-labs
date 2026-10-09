@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
       - '.github/workflows/_build.yml'
+      - 'src/DevFlow/**'
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
@@ -20,6 +21,7 @@ on:
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
       - '.github/workflows/_build.yml'
+      - 'src/DevFlow/**'
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/Shared/Essentials*/**'
       - 'eng/**'
@@ -120,56 +122,6 @@ jobs:
       run-tests: true
       pack: true
 
-  runtime:
-    name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [PickerSelectionTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests]
-        maui: ['']
-        include:
-          - test-class: WindowSizingTests
-            maui: '10.0.70'
-          - test-class: WindowSizingTests
-            maui: '10.0.110'
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-      - name: Install GTK and virtual display
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 xvfb dbus-daemon
-      - name: Run native regression tests
-        env:
-          RUN_GTK_RUNTIME_TESTS: '1'
-          GDK_BACKEND: x11
-          GSK_RENDERER: cairo
-          GTK_A11Y: none
-          GTK_TEST_ARTIFACTS: ${{ github.workspace }}/artifacts/TestResults/gtk-runtime/paint
-        run: >-
-          dbus-run-session -- xvfb-run --auto-servernum
-          dotnet test platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj
-          --configuration Release
-          ${{ matrix.maui && format('-p:MauiVersion={0}', matrix.maui) || '' }}
-          --filter FullyQualifiedName~${{ matrix.test-class }}
-          --logger "console;verbosity=detailed"
-          --logger "trx;LogFileName=${{ matrix.test-class }}.trx"
-          --results-directory artifacts/TestResults/gtk-runtime
-          --blame-hang-timeout 3m
-          -m:1 -nr:false
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: gtk-runtime-${{ matrix.test-class }}${{ matrix.maui && format('-maui-{0}', matrix.maui) || '' }}
-          path: artifacts/TestResults/gtk-runtime
-
   templates:
     name: Packed template regression checks
     runs-on: windows-latest
@@ -181,3 +133,66 @@ jobs:
       - name: Pack, generate, and build template variants
         shell: pwsh
         run: ./eng/smoke-tests/gtk-template-smoke-test.ps1 -BuildApps
+
+  runtime:
+    name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each class gets its own process: GTK initialization is thread-affine.
+        test-class: [CollectionViewHandlerTests, PickerSelectionTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests]
+        maui: ['']
+        include:
+          - test-class: WindowSizingTests
+            maui: '10.0.70'
+          - test-class: WindowSizingTests
+            maui: '10.0.110'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install GTK and isolated display
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-1 libwebkitgtk-6.0-4 xvfb dbus-x11
+      - name: Run native regression tests
+        shell: pwsh
+        env:
+          RUN_GTK_RUNTIME_TESTS: '1'
+          GDK_BACKEND: x11
+          GSK_RENDERER: cairo
+          GTK_A11Y: none
+          GTK_TEST_ARTIFACTS: ${{ github.workspace }}/artifacts/TestResults/gtk-runtime/paint
+        run: >-
+          ./platforms/Linux.Gtk4/tests/run-native-tests.ps1
+          -TestClass '${{ matrix.test-class }}'
+          ${{ matrix.maui && format('-MauiVersion {0}', matrix.maui) || '' }}
+      - name: Build DevFlow sample
+        if: matrix.test-class == 'CollectionViewHandlerTests'
+        run: >-
+          dotnet build platforms/Linux.Gtk4/samples/Linux.Gtk4.Sample/Linux.Gtk4.Sample.csproj
+          --configuration Debug -p:EnableMauiDevFlow=true -m:1 -nr:false
+      - name: Verify running sample through DevFlow
+        if: matrix.test-class == 'CollectionViewHandlerTests'
+        run: >-
+          dbus-run-session -- xvfb-run -a python3
+          platforms/Linux.Gtk4/tests/devflow_collectionview_smoke.py
+          --sample artifacts/bin/Linux.Gtk4.Sample/Debug/net10.0/Linux.Gtk4.Sample.dll
+          --output artifacts/TestResults/gtk-devflow
+      - name: Upload native runtime test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gtk-runtime-${{ matrix.test-class }}${{ matrix.maui && format('-maui-{0}', matrix.maui) || '' }}
+          path: artifacts/TestResults/gtk-runtime/
+          if-no-files-found: error
+      - name: Upload DevFlow runtime evidence
+        if: always() && matrix.test-class == 'CollectionViewHandlerTests'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gtk-collectionview-devflow-evidence
+          path: artifacts/TestResults/gtk-devflow/
+          if-no-files-found: error
