@@ -97,6 +97,10 @@
   </PropertyGroup>
   <PropertyGroup Label="Testing">
     <MicrosoftNETTestSdkVersion>18.3.0</MicrosoftNETTestSdkVersion>
+    <MicrosoftTestingPlatformVersion>2.3.2</MicrosoftTestingPlatformVersion>
+    <MSTestVersion>4.3.2</MSTestVersion>
+    <NUnitVersion>4.4.0</NUnitVersion>
+    <NUnit3TestAdapterVersion>6.2.0</NUnit3TestAdapterVersion>
     <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVisualstudioVersion>3.1.5</XunitRunnerVisualstudioVersion>
     <CoverletCollectorVersion>8.0.0</CoverletCollectorVersion>

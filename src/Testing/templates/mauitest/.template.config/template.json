@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Microsoft",
+  "classifications": ["MAUI", "Testing", "MTP", "Android", "iOS", "Mac Catalyst"],
+  "identity": "Microsoft.Maui.Testing.MauiTest",
+  "groupIdentity": "Microsoft.Maui.Testing",
+  "name": ".NET MAUI Device Test",
+  "shortName": "mauitest",
+  "description": "A single project for running MTP-based tests on Android, iOS, and Mac Catalyst.",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "MauiTest1",
+  "preferNameDirectory": true,
+  "defaultName": "MauiTest1",
+  "primaryOutputs": [
+    {
+      "path": "MauiTest1.csproj"
+    }
+  ],
+  "symbols": {
+    "applicationId": {
+      "type": "parameter",
+      "description": "The application identifier used by Android, iOS, and Mac Catalyst.",
+      "datatype": "string",
+      "defaultValue": "com.companyname.mauitest1",
+      "replaces": "com.companyname.mauitest1"
+    },
+    "androidMinSdk": {
+      "type": "parameter",
+      "description": "The minimum Android API level.",
+      "datatype": "string",
+      "defaultValue": "24.0",
+      "replaces": "ANDROID_MIN_SDK"
+    },
+    "iosMinVersion": {
+      "type": "parameter",
+      "description": "The minimum iOS version.",
+      "datatype": "string",
+      "defaultValue": "13.0",
+      "replaces": "IOS_MIN_VERSION"
+    },
+    "maccatalystMinVersion": {
+      "type": "parameter",
+      "description": "The minimum Mac Catalyst version.",
+      "datatype": "string",
+      "defaultValue": "17.0",
+      "replaces": "MACCATALYST_MIN_VERSION"
+    },
+    "skipRestore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Skip restoring the project on creation."
+    }
+  },
+  "postActions": [
+    {
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages required by this project.",
+      "manualInstructions": [
+        {
+          "text": "Run 'dotnet restore'"
+        }
+      ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "id": "restoreNugetPackages",
+      "continueOnError": true
+    },
+    {
+      "description": "Create or update 'global.json' for Microsoft.Testing.Platform.",
+      "manualInstructions": [
+        {
+          "text": "Set test.runner to Microsoft.Testing.Platform in the nearest global.json file."
+        }
+      ],
+      "actionId": "695A3659-EB40-4FF5-A6A6-C9C4E629FCB0",
+      "id": "configureMicrosoftTestingPlatform",
+      "args": {
+        "allowFileCreation": true,
+        "allowPathCreation": true,
+        "jsonFileName": "global.json",
+        "parentPropertyPath": "test",
+        "newJsonPropertyName": "runner",
+        "newJsonPropertyValue": "Microsoft.Testing.Platform",
+        "detectRepositoryRoot": true,
+        "includeAllDirectoriesInSearch": false,
+        "includeAllParentDirectoriesInSearch": true
+      },
+      "continueOnError": true
+    }
+  ]
+}
