@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>Microsoft.Maui.Labs.HotReload.SourceGen</AssemblyName>
+    <RootNamespace>Microsoft.Maui.Labs.HotReload.SourceGen</RootNamespace>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Use the same Roslyn version as Microsoft.Extensions.Options (4.4.0 / CLR 4.4.0.0).
+         The AnalyzerAssemblyLoader in every SDK version 4.x+ redirects Roslyn assembly references
+         to the host version at runtime, so 4.4.0.0 works with Roslyn 5.x SDKs too.
+         Using 5.x here would break on SDKs where the ALC doesn't redirect across major versions.
+         VersionOverride bypasses Central Package Management for this one reference. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.4.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+</Project>

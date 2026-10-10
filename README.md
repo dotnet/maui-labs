@@ -162,6 +162,14 @@ Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.Build.AppProjectReference](https://img.shields.io/nuget/v/Microsoft.Maui.Build.AppProjectReference.svg?label=Microsoft.Maui.Build.AppProjectReference)](https://www.nuget.org/packages/Microsoft.Maui.Build.AppProjectReference/) | Build-time app project reference with artifact discovery |
 
+### HotReload
+
+A `MetadataUpdateHandler` for .NET MAUI that delivers per-instance hot reload callbacks via the `IHotReloadable` interface, backed by a Roslyn source generator.
+
+| Package | Description |
+|---------|-------------|
+| `Microsoft.Maui.HotReload` | MetadataUpdateHandler for .NET MAUI hot reload with `IHotReloadable` callbacks |
+
 ## Agent Skills
 
 This repository is also a marketplace for distributable agent skills for .NET MAUI development. The recommended one-stop setup is `maui ai init`, which installs the relevant MAUI skills, bundled DevFlow skills, Copilot agent definitions, and MCP configuration for detected agent environments.
