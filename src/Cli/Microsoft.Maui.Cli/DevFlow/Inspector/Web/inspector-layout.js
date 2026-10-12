@@ -190,7 +190,7 @@ export function createLayoutPanel({ document, scan, show, openSource, hasSource 
   const content = node('div', { class: 'df-layout-content' });
   const filters = { outcome: 'all', severity: 'info', confidence: 'low', rule: '', includeSuppressed: false };
   let report = null, busy = false, error = '', stale = false, active = false, live = false;
-  let timer = null, generation = 0, pending = false, subview = 'findings', selected = null;
+  let timer = null, generation = 0, pending = null, subview = 'findings', selected = null;
   let selectedScope = false, profile = 'agent', revision = '', invalidation = 0, policyPath = null;
   const visible = () => active && !document.hidden;
   const rescan = button('Rescan', () => run(), 'df-layout-rescan');
@@ -244,7 +244,11 @@ export function createLayoutPanel({ document, scan, show, openSource, hasSource 
   liveInput.addEventListener('change', () => {
     live = liveInput.checked;
     if (live && visible()) schedule();
-    else { clearTimeout(timer); timer = null; }
+    else {
+      clearTimeout(timer);
+      timer = null;
+      if (pending === 'live') pending = null;
+    }
   });
   const countLabel = node('span', { id: 'diagnostics-summary', class: 'df-layout-count', role: 'status' });
   const spacer = node('span', { class: 'df-layout-spacer' });
@@ -264,12 +268,15 @@ export function createLayoutPanel({ document, scan, show, openSource, hasSource 
   }
   function schedule() {
     clearTimeout(timer);
-    timer = setTimeout(() => { timer = null; if (visible() && live) run(); }, 350);
+    timer = setTimeout(() => { timer = null; if (visible() && live) run(null, true); }, 350);
   }
-  async function run(recheck = null) {
+  async function run(recheck = null, automatic = false) {
     if (!visible()) return null;
-    if (busy) { pending = true; return null; }
-    pending = false;
+    if (busy) {
+      if (!automatic || !pending) pending = automatic ? 'live' : 'explicit';
+      return null;
+    }
+    pending = null;
     clearTimeout(timer);
     timer = null;
     const rootId = selectedScope ? selection() : defaultRoot();
@@ -318,9 +325,10 @@ export function createLayoutPanel({ document, scan, show, openSource, hasSource 
       if (epoch === generation) {
         busy = false;
         render();
-        const repeat = pending && visible();
-        pending = false;
-        if (repeat) run();
+        const queued = pending;
+        pending = null;
+        if (visible() && (queued === 'explicit' || (queued === 'live' && live)))
+          run(null, queued === 'live');
       }
     }
   }
@@ -440,7 +448,7 @@ export function createLayoutPanel({ document, scan, show, openSource, hasSource 
     content.append(list);
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { clearTimeout(timer); timer = null; pending = false; }
+    if (document.hidden) { clearTimeout(timer); timer = null; pending = null; }
     else if (active && live && (stale || !report)) schedule();
   });
   return {
@@ -459,7 +467,7 @@ export function createLayoutPanel({ document, scan, show, openSource, hasSource 
       root.classList.add('df-hidden');
       clearTimeout(timer);
       timer = null;
-      pending = false;
+      pending = null;
       filterMenu.open = false;
       show(null);
     },

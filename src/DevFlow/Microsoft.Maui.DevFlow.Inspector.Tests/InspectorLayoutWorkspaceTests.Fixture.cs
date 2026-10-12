@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow.Inspector;
 using Microsoft.Playwright;
 using Xunit.Abstractions;
@@ -89,16 +91,23 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
 
     // Mirrors main's InspectorDiagnosticsOptInTests agent: enough real HTTP tree/screenshot
     // responses to render the shell. Each browser test intercepts its scenario-specific APIs.
-    private sealed class ShellAgent : IAsyncDisposable
+    internal sealed class ShellAgent : IAsyncDisposable
     {
         private static readonly byte[] Png = Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
         private readonly HttpListener _listener = new();
         private readonly Task _loop;
+        private readonly string _appName;
+        private readonly bool _failNavigation;
+        private string? _heldLeaseId;
         public int Port { get; } = FreePort();
+        public string? HeldLeaseId => Volatile.Read(ref _heldLeaseId);
+        public ConcurrentQueue<(string Method, string Path, string Body)> Requests { get; } = new();
 
-        public ShellAgent()
+        public ShellAgent(string appName = "Layout fixture", bool failNavigation = false)
         {
+            _appName = appName;
+            _failNavigation = failNavigation;
             _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
             _listener.Start();
             _loop = ServeAsync();
@@ -113,6 +122,9 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
                 catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException) { break; }
                 using var response = context.Response;
                 var path = context.Request.Url!.AbsolutePath;
+                using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
+                var body = await reader.ReadToEndAsync();
+                Requests.Enqueue((context.Request.HttpMethod, path, body));
                 var screenshot = path == "/api/v1/ui/screenshot";
                 var payload = screenshot ? Png : Encoding.UTF8.GetBytes(path switch
                 {
@@ -122,8 +134,12 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
                            "bounds":{"x":0,"y":0,"width":320,"height":600},
                            "windowBounds":{"x":0,"y":0,"width":320,"height":600}}]}
                         """,
-                    "/api/v1/agent/lease" => """{"ok":true,"allowed":true,"youHold":true,"heldByOther":false}""",
-                    "/api/v1/agent/status" => """{"running":true,"app":{"name":"Layout fixture"},"device":{"platform":"test"}}""",
+                    "/api/v1/agent/lease" => LeaseResponse(body),
+                    "/api/v1/agent/status" => JsonSerializer.Serialize(new
+                    {
+                        running = true, app = new { name = _appName }, device = new { platform = "test" }
+                    }),
+                    "/api/v1/ui/actions/navigate" => JsonSerializer.Serialize(new { success = !_failNavigation }),
                     "/api/v1/agent/logs" => "[]",
                     _ => "{}"
                 });
@@ -131,6 +147,21 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
                 response.ContentLength64 = payload.Length;
                 await response.OutputStream.WriteAsync(payload);
             }
+        }
+
+        private string LeaseResponse(string body)
+        {
+            using var request = JsonDocument.Parse(body);
+            var action = request.RootElement.GetProperty("action").GetString();
+            var leaseId = request.RootElement.GetProperty("leaseId").GetString();
+            if (action == "claim")
+                Volatile.Write(ref _heldLeaseId, leaseId);
+            else if (action == "release" && HeldLeaseId == leaseId)
+                Volatile.Write(ref _heldLeaseId, null);
+            return JsonSerializer.Serialize(new
+            {
+                ok = true, allowed = true, youHold = HeldLeaseId == leaseId, heldByOther = false
+            });
         }
 
         public async ValueTask DisposeAsync()

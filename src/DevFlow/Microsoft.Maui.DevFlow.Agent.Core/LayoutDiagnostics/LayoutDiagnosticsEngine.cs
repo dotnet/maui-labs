@@ -7,6 +7,8 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 internal sealed class LayoutCaptureSnapshot
 {
     public List<LayoutNodeSnapshot> Nodes { get; } = [];
+    public List<LayoutNodeSnapshot> AncestorContext { get; } = [];
+    public IEnumerable<LayoutNodeSnapshot> AnalysisNodes => AncestorContext.Concat(Nodes);
     public List<LayoutWindowInfo> Windows { get; } = [];
     public List<string> Limitations { get; } = [];
     public List<string> IncompleteReasons { get; } = [];
@@ -29,7 +31,7 @@ internal sealed class LayoutCaptureSnapshot
     private string ComputeHash(bool includeBlazor, bool useElementBounds)
     {
         var builder = new StringBuilder();
-        foreach (var node in Nodes
+        foreach (var node in AnalysisNodes
             .Where(node => includeBlazor
                 || !node.Element.Framework.Equals("blazor", StringComparison.OrdinalIgnoreCase))
             .OrderBy(node => node.TreeOrder))
@@ -67,7 +69,7 @@ internal sealed class LayoutCaptureSnapshot
     private string ComputeDiagnosticsHash()
     {
         var builder = new StringBuilder();
-        foreach (var node in Nodes.OrderBy(node => node.TreeOrder))
+        foreach (var node in AnalysisNodes.OrderBy(node => node.TreeOrder))
         {
             builder.Append(node.Element.Id).Append('|')
                 .Append(node.Element.ParentId).Append('|')
@@ -505,7 +507,7 @@ internal static partial class LayoutDiagnosticsEngine
 
         var nodesById = new Dictionary<string, LayoutNodeSnapshot>(StringComparer.OrdinalIgnoreCase);
         var ambiguousIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var node in capture.Nodes)
+        foreach (var node in capture.AnalysisNodes)
         {
             if (!nodesById.TryAdd(node.Element.Id, node))
                 ambiguousIds.Add(node.Element.Id);
@@ -514,7 +516,7 @@ internal static partial class LayoutDiagnosticsEngine
         {
             // Shared resources can appear under multiple parents. Do not choose an arbitrary
             // owner, or evaluate descendants whose ancestry would then be ambiguous.
-            var children = capture.Nodes.ToLookup(node => node.Element.ParentId, StringComparer.OrdinalIgnoreCase);
+            var children = capture.AnalysisNodes.ToLookup(node => node.Element.ParentId, StringComparer.OrdinalIgnoreCase);
             var pending = new Queue<string>(ambiguousIds);
             while (pending.TryDequeue(out var id))
             {
@@ -553,7 +555,7 @@ internal static partial class LayoutDiagnosticsEngine
         if (ambiguousIds.Count > 0)
         {
             result.Coverage.Limitations.Add(
-                $"The visual tree contains duplicate element identities; {capture.Nodes.Count - nodesById.Count} entries with ambiguous identity or ancestry were not evaluated.");
+                $"The visual tree contains duplicate element identities; {capture.Nodes.Count(node => ambiguousIds.Contains(node.Element.Id))} entries with ambiguous identity or ancestry were not evaluated.");
         }
 
         result.Coverage.Overall = result.Coverage.Rules.Any(rule => rule.Support != "exact")

@@ -496,6 +496,11 @@ checks. Exclusions count as not applicable, not passes; platform coverage remain
 explicitly partial. A sizing/constraint change invalidates the diagnostics
 revision even when rendered bounds have not changed.
 
+Selected-subtree scans retain captured ancestor evidence for the selected root's
+parent-frame checks. Ancestors are analysis-only context: they are not counted,
+evaluated for findings or passes, or included in scoped overlap comparisons.
+Their sizing changes still invalidate stability and diagnostics revisions.
+
 A desired-size pass requires known measurements for both axes. A partly unknown
 measurement is not applicable rather than a whole-rule pass. Unstable snapshots
 skip these baseline checks and report global incompleteness once; they do not

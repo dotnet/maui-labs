@@ -18,12 +18,14 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.De
   --results-directory artifacts\TestResults\InspectorBrowser
 ```
 
-All **13** fixtures must execute and pass: the original eleven Layout workspace checks,
+All **15** fixtures must execute and pass: the original eleven Layout workspace checks,
 cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticInputsRevision`
-invalidation/Live rescanning with unchanged geometry.
+invalidation/Live rescanning with unchanged geometry, plus two queued Live cancellation checks.
+Disabling Live cancels queued automatic rescans while preserving an explicit refresh requested
+during an active scan; it does not abort the in-flight scan.
 
 `ci-devflow.yml` provisions Chromium in its dedicated `inspector-browser` Windows job and
-sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 13 passed results and fails
+sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 15 passed results and fails
 if any filtered test is skipped; adding another fixture requires updating the explicit count.
 `InspectorBrowserFact` skips these fixtures only in ordinary GitHub Actions/Azure Pipelines
 jobs without that opt-in, where Playwright browsers are not provisioned. Local execution
@@ -31,3 +33,32 @@ does not require the opt-in; a missing Chromium installation fails with Playwrig
 
 The remaining `LiveInspectorFact` tests still require a running broker/native app and
 `MAUI_INSPECTOR_LIVE_TESTS=1`; they are not included in the browser fixture job.
+
+## Native Layout QA journey
+
+`LayoutBaselineFindings_RespectOutcomeFilterAndHighlightParent` is specific to the
+DevFlow.Sample **MauiTodo Layout QA** app. General live-test opt-in does not enable it.
+After starting that QA app, explicitly select its agent port:
+
+```powershell
+$env:MAUI_INSPECTOR_LAYOUT_QA_TESTS = '1'
+$env:LAYOUT_QA_AGENT_PORT = '<actual QA agent port>'
+dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj `
+  --configuration Release --no-build --no-restore `
+  --filter "FullyQualifiedName~LayoutBaselineFindings_RespectOutcomeFilterAndHighlightParent"
+```
+
+The journey verifies the app identity before navigation or scanning, creates its own real
+InspectorServer targeting that same agent port, and deliberately ignores `INSPECTOR_URL`
+(which may target a different app). Preparation releases the direct client's mutation lease
+in `finally`, including navigation/scan/assertion failures. The browser journey requires
+Playwright Chromium; it is not synthetic native validation.
+
+The separate `LayoutQaSessionTests` verifies the opt-in, wrong-app rejection, real Inspector
+target isolation, and lease claim/release HTTP roundtrips using the existing loopback fixture
+agent, without Chromium or a native app:
+
+```powershell
+dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj `
+  --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LayoutQaSessionTests"
+```

@@ -64,6 +64,22 @@ public class LayoutBaselineRulesTests
         Assert.Equal(0, result.Summary.Passes);
         Assert.True(result.Summary.Incomplete > 0);
         Assert.Contains(result.Coverage.OpaqueSubtrees, element => element.Id == child.Element.Id);
+
+        var request = new LayoutInspectionRequest
+        {
+            Scope = new LayoutInspectionScope { RootElementId = child.Element.Id, IncludeDescendants = false },
+            Rules = [LayoutDiagnosticRules.ChildOutsideParent],
+            MinimumSeverity = "info",
+            IncludePasses = true
+        };
+        new VisualTreeWalker().ApplyLayoutScope(capture, request.Scope);
+        var scoped = LayoutDiagnosticsEngine.Analyze(capture, request, "test", true, null, Support());
+
+        Assert.Empty(scoped.Findings);
+        Assert.Equal(1, scoped.Snapshot.NodeCount);
+        Assert.Equal(0, scoped.Summary.Passes);
+        Assert.True(scoped.Summary.Incomplete > 0);
+        Assert.Contains(scoped.Coverage.OpaqueSubtrees, element => element.Id == child.Element.Id);
     }
 
     [Fact]
@@ -306,6 +322,23 @@ public class LayoutBaselineRulesTests
         Assert.Empty(result.Findings);
         Assert.Equal(0, result.Summary.Passes);
         Assert.Equal(2, result.Summary.NotApplicable);
+
+        var capture = new LayoutCaptureSnapshot();
+        capture.Nodes.AddRange([parent, child]);
+        var request = new LayoutInspectionRequest
+        {
+            Scope = new LayoutInspectionScope { RootElementId = child.Element.Id, IncludeDescendants = false },
+            Rules = [LayoutDiagnosticRules.ChildOutsideParent],
+            MinimumSeverity = "info",
+            IncludePasses = true
+        };
+        new VisualTreeWalker().ApplyLayoutScope(capture, request.Scope);
+        var scoped = LayoutDiagnosticsEngine.Analyze(capture, request, "test", true, null, Support());
+
+        Assert.Empty(scoped.Findings);
+        Assert.Equal(1, scoped.Snapshot.NodeCount);
+        Assert.Equal(0, scoped.Summary.Passes);
+        Assert.Equal(1, scoped.Summary.NotApplicable);
     }
 
     [Fact]

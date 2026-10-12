@@ -90,8 +90,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$trx = Get-Content artifacts\TestResults\InspectorBrowser\layout-browser.trx
           $results = @($trx.TestRun.Results.UnitTestResult)
-          if ($results.Count -ne 13 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
-            throw 'All 13 existing and regression browser tests must execute and pass; skips are not allowed.'
+          if ($results.Count -ne 15 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+            throw 'All 15 existing and regression browser tests must execute and pass; skips are not allowed.'
           }
 
       - name: Upload browser runtime evidence

@@ -657,6 +657,7 @@ public partial class VisualTreeWalker
         if (string.IsNullOrWhiteSpace(rootElementId))
             return;
 
+        capture.AncestorContext.Clear();
         var root = capture.Nodes.FirstOrDefault(node =>
             node.Element.Id.Equals(rootElementId, StringComparison.OrdinalIgnoreCase));
         if (root is null)
@@ -667,14 +668,8 @@ public partial class VisualTreeWalker
             return;
         }
 
-        if (!includeDescendants)
-        {
-            capture.Nodes.RemoveAll(node => !ReferenceEquals(node, root));
-            return;
-        }
-
         var included = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { root.Element.Id };
-        var changed = true;
+        var changed = includeDescendants;
         while (changed)
         {
             changed = false;
@@ -686,6 +681,25 @@ public partial class VisualTreeWalker
                 {
                     changed = true;
                 }
+            }
+        }
+
+        // Keep parent evidence for scoped-root checks, without evaluating or counting ancestors.
+        var nodesById = capture.Nodes.ToLookup(node => node.Element.Id, StringComparer.OrdinalIgnoreCase);
+        var ancestorIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Queue<string>();
+        if (root.Element.ParentId is { } rootParentId)
+            pending.Enqueue(rootParentId);
+        while (pending.TryDequeue(out var parentId))
+        {
+            if (!ancestorIds.Add(parentId))
+                continue;
+            foreach (var parent in nodesById[parentId])
+            {
+                if (!included.Contains(parent.Element.Id))
+                    capture.AncestorContext.Add(parent);
+                if (parent.Element.ParentId is { } ancestorId)
+                    pending.Enqueue(ancestorId);
             }
         }
         capture.Nodes.RemoveAll(node => !included.Contains(node.Element.Id));

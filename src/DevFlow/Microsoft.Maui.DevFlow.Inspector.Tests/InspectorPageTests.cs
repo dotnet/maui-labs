@@ -51,34 +51,35 @@ public partial class InspectorPageTests : IAsyncLifetime
         _playwright.Dispose();
     }
 
-    [LiveInspectorFact]
+    [LayoutQaFact]
     public async Task LayoutBaselineFindings_RespectOutcomeFilterAndHighlightParent()
     {
         var browserErrors = new List<string>();
         _page.Console += (_, message) => { if (message.Type == "error") browserErrors.Add(message.Text); };
         Assert.True(int.TryParse(Environment.GetEnvironmentVariable("LAYOUT_QA_AGENT_PORT"), out var port),
             "Set LAYOUT_QA_AGENT_PORT to the exact DevFlow.Sample layout QA agent.");
-        using var agent = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", port);
-        Assert.Equal("MauiTodo Layout QA", (await agent.GetStatusAsync())?.AppName);
-        Assert.True(await agent.NavigateAsync("//layoutdiagnostics"));
-        var scan = await agent.AnalyzeLayoutAsync(new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest
+        await using var qa = await LayoutQaSession.CreateAsync(port);
+        await qa.PrepareAsync(async agent =>
         {
-            MinimumSeverity = "info",
-            Stability = new Microsoft.Maui.DevFlow.Driver.LayoutStabilityOptions { TimeoutMs = 10000 },
-            Scope = new Microsoft.Maui.DevFlow.Driver.LayoutInspectionScope
+            Assert.True(await agent.NavigateAsync("//layoutdiagnostics"));
+            var scan = await agent.AnalyzeLayoutAsync(new Microsoft.Maui.DevFlow.Driver.LayoutInspectionRequest
             {
-                IncludeNativeElements = false,
-                IncludeBlazorElements = false
-            },
-            Occlusion = new Microsoft.Maui.DevFlow.Driver.LayoutOcclusionOptions { Mode = "none" }
+                MinimumSeverity = "info",
+                Stability = new Microsoft.Maui.DevFlow.Driver.LayoutStabilityOptions { TimeoutMs = 10000 },
+                Scope = new Microsoft.Maui.DevFlow.Driver.LayoutInspectionScope
+                {
+                    IncludeNativeElements = false,
+                    IncludeBlazorElements = false
+                },
+                Occlusion = new Microsoft.Maui.DevFlow.Driver.LayoutOcclusionOptions { Mode = "none" }
+            });
+            Assert.True(scan?.Snapshot.Stable);
+            Assert.Contains(scan!.Findings, finding =>
+                finding.RuleId == Microsoft.Maui.DevFlow.Driver.LayoutDiagnosticRules.ConstraintViolation
+                && finding.Element.AutomationId == "ConflictingLimitsBox");
         });
-        Assert.True(scan?.Snapshot.Stable);
-        Assert.Contains(scan!.Findings, finding =>
-            finding.RuleId == Microsoft.Maui.DevFlow.Driver.LayoutDiagnosticRules.ConstraintViolation
-            && finding.Element.AutomationId == "ConflictingLimitsBox");
-        await agent.ControlMutationLeaseAsync("release");
 
-        await _page.GotoAsync(BaseUrl);
+        await _page.GotoAsync(qa.InspectorUrl);
         await Expect(_page.Locator("#app-viewport")).ToBeVisibleAsync();
         var layoutToggle = _page.Locator("#df-toggle-diagnostics");
         if (!await layoutToggle.IsVisibleAsync())

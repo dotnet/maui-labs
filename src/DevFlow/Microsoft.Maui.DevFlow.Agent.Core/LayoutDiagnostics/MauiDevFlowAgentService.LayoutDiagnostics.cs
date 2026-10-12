@@ -372,7 +372,7 @@ public partial class MauiDevFlowAgentService
             cancellationToken);
         _treeWalker.ApplyLayoutScope(capture, request.Scope);
         ApplyLayoutCaptureLimits(capture);
-        capture.HasActiveAnimations = capture.Nodes.Any(node => node.HasActiveAnimation);
+        capture.HasActiveAnimations = capture.AnalysisNodes.Any(node => node.HasActiveAnimation);
         return (pendingNativeCapture, nativeCaptureUnavailable);
     }
 

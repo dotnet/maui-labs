@@ -7,6 +7,58 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 public partial class InspectorLayoutWorkspaceTests
 {
     [InspectorBrowserFact]
+    public Task LayoutWorkspace_DisablingLiveCancelsRefreshQueuedDuringScan()
+        => VerifyDisablingLiveDuringScanAsync(queueExplicitRefresh: false);
+
+    [InspectorBrowserFact]
+    public Task LayoutWorkspace_DisablingLivePreservesExplicitRefreshQueuedDuringScan()
+        => VerifyDisablingLiveDuringScanAsync(queueExplicitRefresh: true);
+
+    private async Task VerifyDisablingLiveDuringScanAsync(bool queueExplicitRefresh)
+    {
+        var scans = 0;
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await _page.RouteAsync("**/api/diagnostics/layout", async route =>
+        {
+            if (++scans == 1)
+            {
+                firstStarted.SetResult();
+                await release.Task;
+            }
+            await route.FulfillAsync(new() { ContentType = "application/json", Body = LayoutWorkspaceResponse() });
+        });
+        try
+        {
+            await PrepareLayoutWorkspaceAsync();
+            await OpenLayoutWorkspaceAsync();
+            await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(_page.Locator("#layout-rescan")).ToBeDisabledAsync();
+            await _page.Locator("#layout-live").CheckAsync();
+            if (queueExplicitRefresh)
+                await _page.Locator("#df-dock-refresh").ClickAsync();
+            // The Live debounce must expire while the first scan is still busy,
+            // after any explicit request so automatic work cannot replace its intent.
+            await _page.Clock.RunForAsync(500);
+            Assert.Equal(1, scans);
+            await _page.Locator("#layout-live").UncheckAsync();
+            await _page.RunAndWaitForResponseAsync(() =>
+            {
+                release.TrySetResult();
+                return Task.CompletedTask;
+            }, response => response.Url.EndsWith("/api/diagnostics/layout", StringComparison.Ordinal));
+            await Expect(_page.Locator("#layout-rescan")).ToBeEnabledAsync();
+            await AdvanceLayoutPollingAsync();
+            await Expect(_page.Locator("#layout-live")).Not.ToBeCheckedAsync();
+            Assert.Equal(queueExplicitRefresh ? 2 : 1, scans);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_ReturningFromLogsRetainsFreshDataContextWithoutRescanning()
     {
         var scans = 0;
