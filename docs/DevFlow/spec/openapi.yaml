@@ -149,6 +149,29 @@ paths:
           schema:
             type: integer
             minimum: 0
+        - name: window
+          in: query
+          description: Zero-based window index. All windows if omitted.
+          schema:
+            type: integer
+            minimum: 0
+        - name: native
+          in: query
+          description: Include native elements in the captured tree.
+          schema:
+            type: boolean
+            default: true
+        - name: envelope
+          in: query
+          description: >
+            Return an envelope with the tree revision and elements. MAUI agents also
+            return an opaque diagnosticInputsRevision that changes when observed sizing
+            or measurement inputs change, even without geometry changes. It is stable
+            across unchanged captures and does not require running layout diagnostics.
+            Older and native-only backends may omit this optional revision.
+          schema:
+            type: boolean
+            default: false
         - name: layer
           in: query
           description: Which tree layer to return.
@@ -173,13 +196,27 @@ paths:
           explode: false
       responses:
         "200":
-          description: Array of root elements (windows) with their children.
+          description: Array of root elements, or a revision envelope when envelope=true.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "./schemas/element-info.json"
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: "./schemas/element-info.json"
+                  - type: object
+                    required: [revision, elements]
+                    properties:
+                      revision:
+                        type: string
+                        description: Geometry and rendered-state revision.
+                      diagnosticInputsRevision:
+                        type: string
+                        description: Optional opaque revision of observed layout inputs.
+                      elements:
+                        type: array
+                        items:
+                          $ref: "./schemas/element-info.json"
         "409":
           $ref: "#/components/responses/CaptureConflict"
         "500":

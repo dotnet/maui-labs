@@ -526,10 +526,12 @@ Shared resources can appear under multiple parents in a MAUI tree. Ambiguous
 identities and their dependent subtrees are excluded with an explicit incomplete
 coverage limitation; they do not abort the scan or become guessed ownership.
 
-Opening **Layout** performs one scan. **Rescan** and **Recheck** are explicit;
+The first opening of **Layout** performs one scan. **Rescan** and **Recheck** are explicit;
 **Live** is opt-in and updates after observed layout changes while this dock is
 visible. Hiding or collapsing the dock stops scheduled live work. Screenshot
 polling no longer runs layout analysis on every refresh.
+Returning to a previously scanned Layout tab restores its report and Copilot
+attachment without another scan.
 The toolbar's Layout state follows the selected tab and dock visibility.
 Selecting Layout in a collapsed dock defers scanning until it is expanded;
 the toolbar button expands that workspace instead of closing the dock.
@@ -545,8 +547,12 @@ Changes mark the previous snapshot stale and remove its highlights. Navigation
 and reloads invalidate it even when the route and geometry are unchanged;
 repeated, unchanged connection snapshots do not count as navigation. A missing
 native event does not leave a visible workspace unchecked: lightweight frame
-polling compares the full tree revision and rendered state, including changes
-omitted from the overlay. This does not rescan diagnostics unless **Live** is enabled. A missing
+polling compares the full tree revision, rendered state and the MAUI agent's
+lightweight diagnostic-input revision. Sizing requests and invalidated measurements
+mark the report stale even when geometry is unchanged, without running analysis
+during ordinary frame polling. Older or native-only agents without this optional
+signal retain geometry/rendered-state detection. This does not rescan diagnostics
+unless **Live** is enabled. A missing
 finding is not described as resolved when coverage is incomplete. Details offer
 **Show in app**, **Open source** when mapped, bounded **Copy payload** and **Add
 to Copilot** context, and confirmation before the existing project-policy

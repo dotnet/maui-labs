@@ -11,6 +11,26 @@ namespace Microsoft.Maui.DevFlow.Client.Tests;
 public class ProtocolSerializationTests
 {
     [Fact]
+    public void ElementTreeSnapshot_DiagnosticInputsRevision_RoundTripsGeneratedMetadata()
+    {
+        var snapshot = new ElementTreeSnapshot
+        {
+            Revision = "geometry-1",
+            DiagnosticInputsRevision = "0:0:3",
+            Elements = [new ElementInfo { Id = "root", Type = "ContentPage" }]
+        };
+
+        var json = ProtocolJson.SerializeUntyped(snapshot);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal("0:0:3", document.RootElement.GetProperty("diagnosticInputsRevision").GetString());
+        var parsed = ProtocolJson.Deserialize<ElementTreeSnapshot>(json);
+        Assert.NotNull(parsed);
+        Assert.Equal(snapshot.Revision, parsed!.Revision);
+        Assert.Equal(snapshot.DiagnosticInputsRevision, parsed.DiagnosticInputsRevision);
+        Assert.Equal("root", Assert.Single(parsed.Elements).Id);
+    }
+
+    [Fact]
     public void ElementInfo_RoundTripsThroughProtocolPropertyNames()
     {
         var element = new ElementInfo

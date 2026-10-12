@@ -4,9 +4,105 @@ using Xunit;
 
 namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 
-public partial class InspectorPageTests
+public partial class InspectorLayoutWorkspaceTests
 {
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
+    public async Task LayoutWorkspace_ReturningFromLogsRetainsFreshDataContextWithoutRescanning()
+    {
+        var scans = 0;
+        await _page.RouteAsync("**/api/diagnostics/layout", route =>
+        {
+            scans++;
+            return route.FulfillAsync(new() { ContentType = "application/json", Body = LayoutWorkspaceResponse() });
+        });
+        await _page.RouteAsync("**/api/logs", route => route.FulfillAsync(new()
+        {
+            ContentType = "application/json", Body = """{"ok":true,"logs":[{"l":"Info","m":"fixture log"}]}"""
+        }));
+        await PrepareLayoutWorkspaceAsync();
+        await OpenLayoutWorkspaceAsync();
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Partial coverage");
+        await Expect(_page.Locator("#df-attach-data")).ToBeEnabledAsync();
+        await _page.Locator("#df-attach-data").ClickAsync();
+        var original = await _page.EvaluateAsync<string>("window.__copiedDevFlowData");
+        Assert.Contains("\"layout\"", original);
+        Assert.Contains("layout.child-outside-parent", original);
+
+        await _page.Locator("#df-tab-logs").ClickAsync();
+        await Expect(_page.Locator("#df-dock-body")).ToContainTextAsync("fixture log");
+        await Expect(_page.Locator("#df-attach-data")).ToBeEnabledAsync();
+        await _page.Locator("#df-attach-data").ClickAsync();
+        Assert.Contains("fixture log", await _page.EvaluateAsync<string>("window.__copiedDevFlowData"));
+
+        await _page.Locator("#df-tab-layout").ClickAsync();
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Partial coverage");
+        await Expect(_page.Locator("#df-attach-data")).ToBeEnabledAsync();
+        await _page.Locator("#df-attach-data").ClickAsync();
+        var restored = await _page.EvaluateAsync<string>("window.__copiedDevFlowData");
+        Assert.Contains("\"layout\"", restored);
+        Assert.Contains("layout.child-outside-parent", restored);
+        Assert.DoesNotContain("fixture log", restored);
+        await AdvanceLayoutPollingAsync();
+        Assert.Equal(1, scans);
+    }
+
+    [InspectorBrowserFact]
+    public async Task LayoutWorkspace_SizingRevisionInvalidatesUnchangedGeometryAndLiveSchedulesRescan()
+    {
+        var revision = "sizing-before";
+        var scans = 0;
+        var rescanStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRescan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await _page.RouteAsync("**/api/diagnostics/layout", async route =>
+        {
+            if (++scans == 3)
+            {
+                rescanStarted.SetResult();
+                await releaseRescan.Task;
+            }
+            await route.FulfillAsync(new() { ContentType = "application/json", Body = LayoutWorkspaceResponse() });
+        });
+        await PrepareLayoutWorkspaceAsync(treeRevision: () => "same-geometry",
+            diagnosticInputsRevision: () => revision);
+        await OpenLayoutWorkspaceAsync();
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Partial coverage");
+        var geometry = await _page.Locator("#app-viewport").InnerHTMLAsync();
+        revision = "sizing-after";
+        await AdvanceLayoutPollingAsync();
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Stale snapshot");
+        await Expect(_page.Locator("#df-attach-data")).ToBeDisabledAsync();
+        Assert.Equal(geometry, await _page.Locator("#app-viewport").InnerHTMLAsync());
+        Assert.Equal(1, scans);
+
+        await _page.Locator("#layout-live").CheckAsync();
+        await _page.RunAndWaitForResponseAsync(() => _page.Clock.RunForAsync(500),
+            response => response.Url.EndsWith("/api/diagnostics/layout", StringComparison.Ordinal));
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Partial coverage");
+        Assert.Equal(2, scans);
+
+        revision = "sizing-live-change";
+        // Deliver one frame without advancing through the Live debounce, so stale actions
+        // are checked before the replacement report can arrive.
+        await _page.Clock.RunForAsync(3100);
+        await _page.Clock.RunForAsync(500);
+        await rescanStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Stale snapshot");
+            await Expect(_page.Locator("#df-attach-data")).ToBeDisabledAsync();
+            Assert.Equal(3, scans);
+        }
+        finally
+        {
+            releaseRescan.TrySetResult();
+        }
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Partial coverage");
+        await Expect(_page.Locator("#df-attach-data")).ToBeEnabledAsync();
+        await AdvanceLayoutPollingAsync();
+        Assert.Equal(3, scans);
+    }
+
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_DefaultScopeIncludesFlyoutAndDetailPanes()
     {
         string? requestedRoot = null;
@@ -27,15 +123,15 @@ public partial class InspectorPageTests
         Assert.Equal("layout-root", requestedRoot);
     }
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public Task LayoutWorkspace_FullTreeRevisionInvalidatesUnchangedOverlaysWithPolling()
         => VerifyFullTreeRevisionInvalidatesAsync(eventsSupported: false);
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public Task LayoutWorkspace_FullTreeRevisionInvalidatesUnchangedOverlaysWithEventStream()
         => VerifyFullTreeRevisionInvalidatesAsync(eventsSupported: true);
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_RenderedStateInvalidatesUnchangedGeometryRevision()
     {
         var position = 0;
@@ -82,7 +178,7 @@ public partial class InspectorPageTests
         Assert.Equal(1, scans);
     }
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_ToolbarFollowsDockCloseCollapseAndTabChanges()
     {
         var scans = 0;
@@ -117,7 +213,7 @@ public partial class InspectorPageTests
         Assert.Equal(1, scans);
     }
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_SelectingCollapsedTabDefersItsFirstScanUntilExpanded()
     {
         var scans = 0;
@@ -145,7 +241,7 @@ public partial class InspectorPageTests
         Assert.Equal(1, scans);
     }
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_SameRouteNavigationInvalidatesButReconnectSeedsDoNot()
     {
         var initial = new TaskCompletionSource<IWebSocketRoute>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -197,7 +293,7 @@ public partial class InspectorPageTests
         }));
     }
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_ManualScansAndFiltersStayBoundedToTheVisibleRoot()
     {
         var requests = new List<string>();
@@ -239,13 +335,13 @@ public partial class InspectorPageTests
         await Expect(_page.GetByLabel("Selected subtree only", new() { Exact = true })).ToBeInViewportAsync();
     }
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_TransportErrorsAndSuppressionSuccessRemainVisible()
     {
         var scans = 0;
         var writes = 0;
         var suppressed = false;
-        var sourcePath = Path.Combine(Path.GetTempPath(), "layout-ui-fixture", "Page.xaml");
+        var sourcePath = Path.Combine(Directory.GetCurrentDirectory(), "layout-ui-fixture", "Page.xaml");
         await _page.RouteAsync("**/api/source", route => route.FulfillAsync(new()
         {
             ContentType = "application/json",
@@ -309,7 +405,7 @@ public partial class InspectorPageTests
         await Expect(_page.Locator("#df-status")).ToContainTextAsync("A user policy also suppresses this finding.");
     }
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_QueuedRefreshDoesNotSurviveDeactivation()
     {
         var scans = 0;
@@ -341,7 +437,7 @@ public partial class InspectorPageTests
         Assert.Equal(2, scans);
     }
 
-    [LiveInspectorFact]
+    [InspectorBrowserFact]
     public async Task LayoutWorkspace_StaleActionsAndLiveVisibilityRespectTheSnapshot()
     {
         var scans = 0;
@@ -405,7 +501,7 @@ public partial class InspectorPageTests
         Assert.Equal(beforeHidden + 2, scans);
     }
 
-    private static string LayoutWorkspacePolicyPath => Path.Combine(Path.GetTempPath(), "layout-ui-fixture", ".mauidevflow");
+    private static string LayoutWorkspacePolicyPath => Path.Combine(Directory.GetCurrentDirectory(), "layout-ui-fixture", ".mauidevflow");
 
     private static string LayoutWorkspaceResponse(bool suppressed = false, string message = "Child outside parent.") =>
         JsonSerializer.Serialize(new
@@ -433,7 +529,7 @@ public partial class InspectorPageTests
         });
 
     private async Task PrepareLayoutWorkspaceAsync(Func<int>? position = null, bool eventsSupported = false,
-        Func<string>? treeRevision = null, string? elements = null)
+        Func<string>? treeRevision = null, string? elements = null, Func<string>? diagnosticInputsRevision = null)
     {
         await _page.Clock.InstallAsync();
         await CaptureClipboardWritesAsync();
@@ -452,6 +548,7 @@ public partial class InspectorPageTests
             {
                 viewportWidth = 320, viewportHeight = 600,
                 treeRevision = treeRevision?.Invoke(),
+                diagnosticInputsRevision = diagnosticInputsRevision?.Invoke(),
                 elements = elements ?? $"""
                     <div class="devflow-element" data-id="layout-root" data-type="Window" data-automationId="LayoutRoot" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:0px;top:0px;width:320px;height:600px;"></div>
                     <div class="devflow-element" data-id="layout-target" data-parentId="layout-root" data-type="BoxView" data-automationId="LayoutTarget" data-hasSource="true" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:{position?.Invoke() ?? 0}px;top:20px;width:180px;height:40px;"></div>

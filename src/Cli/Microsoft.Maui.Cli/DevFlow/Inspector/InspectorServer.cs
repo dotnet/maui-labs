@@ -1112,6 +1112,7 @@ public sealed class InspectorServer : IDisposable
         {
             frameId = frame.Id,
             treeRevision = frame.TreeRevision,
+            diagnosticInputsRevision = frame.DiagnosticInputsRevision,
             screenshotUrl = $"screenshot.png?frame={Uri.EscapeDataString(frame.Id)}",
             elements = frame.ElementsHtml,
             viewportWidth = frame.Width,
@@ -1571,7 +1572,7 @@ public sealed class InspectorServer : IDisposable
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
     }
 
-    private async Task<(List<ElementInfo> Tree, string Revision)> GetTreeWithRetriesAsync()
+    private async Task<(List<ElementInfo> Tree, string Revision, string? DiagnosticInputsRevision)> GetTreeWithRetriesAsync()
     {
         const int maxAttempts = 3;
         for (var attempt = 0; attempt < maxAttempts; attempt++)
@@ -1581,12 +1582,12 @@ public sealed class InspectorServer : IDisposable
             var snapshot = await _client.GetTreeSnapshotAsync(includeNative: true);
             var tree = snapshot?.Elements ?? [];
             if (tree.Count > 0)
-                return (tree, snapshot?.Revision ?? string.Empty);
+                return (tree, snapshot?.Revision ?? string.Empty, snapshot?.DiagnosticInputsRevision);
             if (attempt + 1 < maxAttempts)
                 await Task.Delay(TimeSpan.FromMilliseconds(25 * (attempt + 1)));
         }
 
-        return ([], string.Empty);
+        return ([], string.Empty, null);
     }
 
     /// <summary>
@@ -1743,7 +1744,7 @@ public sealed class InspectorServer : IDisposable
                     generation = _cacheGeneration;
                 }
 
-                var (tree, treeRevision) = await GetTreeWithRetriesAsync();
+                var (tree, treeRevision, diagnosticInputsRevision) = await GetTreeWithRetriesAsync();
                 var rootPageId = FindRootPageId(tree);
                 // Detached native roots (dialogs, native overlays) live outside the page element, so
                 // a page-scoped capture would miss them — fall back to a full-screen capture.
@@ -1778,7 +1779,8 @@ public sealed class InspectorServer : IDisposable
                     captureEpoch,
                     registryGeneration,
                     windowId,
-                    treeRevision);
+                    treeRevision,
+                    diagnosticInputsRevision);
                 lock (_cacheLock)
                 {
                     if (generation != _cacheGeneration)
@@ -2209,7 +2211,8 @@ public sealed class InspectorServer : IDisposable
         long? CaptureEpoch,
         long? RegistryGeneration,
         int? WindowId,
-        string TreeRevision = "");
+        string TreeRevision = "",
+        string? DiagnosticInputsRevision = null);
 
     private async Task<(int, string, byte[])> HandleProxyBackAsync()
     {

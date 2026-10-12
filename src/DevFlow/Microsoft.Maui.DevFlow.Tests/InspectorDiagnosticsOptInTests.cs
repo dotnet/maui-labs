@@ -35,9 +35,27 @@ public class InspectorDiagnosticsOptInTests
         Assert.DoesNotContain("/api/v1/ui/diagnostics/layout", agent.Calls);
         using var json = JsonDocument.Parse(body);
         Assert.Equal("rev-1", json.RootElement.GetProperty("treeRevision").GetString());
+        Assert.Equal("inputs-1", json.RootElement.GetProperty("diagnosticInputsRevision").GetString());
         Assert.Equal(
             JsonValueKind.Null,
             json.RootElement.GetProperty("diagnostics").ValueKind);
+    }
+
+    [Fact]
+    public async Task State_SizingInputRevisionChangesWithoutGeometry_DoesNotAnalyzeLayout()
+    {
+        await using var agent = new DiagnosticsAgent();
+        await using var inspector = await StartAsync(agent.Port);
+        using var http = new HttpClient();
+        using var first = JsonDocument.Parse(await http.GetStringAsync($"{inspector.Url}/api/state"));
+        Assert.Equal("inputs-1", first.RootElement.GetProperty("diagnosticInputsRevision").GetString());
+        agent.DiagnosticInputsRevision = "inputs-2";
+        await Task.Delay(250); // Expire the existing 200ms coherent frame cache.
+        using var second = JsonDocument.Parse(await http.GetStringAsync($"{inspector.Url}/api/state"));
+        Assert.Equal(first.RootElement.GetProperty("treeRevision").GetString(),
+            second.RootElement.GetProperty("treeRevision").GetString());
+        Assert.Equal("inputs-2", second.RootElement.GetProperty("diagnosticInputsRevision").GetString());
+        Assert.Equal(0, agent.AnalyzeCalls);
     }
 
     [Theory]
@@ -270,6 +288,7 @@ public class InspectorDiagnosticsOptInTests
 
         public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
         public int AnalyzeCalls => Volatile.Read(ref _analyzeCalls);
+        public string DiagnosticInputsRevision { get; set; } = "inputs-1";
         public string LayoutResponse { get; init; } = """
             {"snapshot":{"treeRevision":"rev-1","windows":[]},
              "summary":{"violations":0,"observations":0,"incomplete":0,"passes":1,"notApplicable":0,"suppressed":0},
@@ -313,8 +332,8 @@ public class InspectorDiagnosticsOptInTests
                     else if (method == "GET" && path.StartsWith("/api/v1/ui/tree", StringComparison.Ordinal))
                     {
                         payload = Encoding.UTF8.GetBytes(
-                            """
-                            {"revision":"rev-1","elements":[
+                            $$$"""
+                            {"revision":"rev-1","diagnosticInputsRevision":"{{{DiagnosticInputsRevision}}}","elements":[
                               {"id":"root","type":"ContentPage","isVisible":true,"isEnabled":true,
                                "bounds":{"x":0,"y":0,"width":100,"height":100},
                                "windowBounds":{"x":0,"y":0,"width":100,"height":100}}]}

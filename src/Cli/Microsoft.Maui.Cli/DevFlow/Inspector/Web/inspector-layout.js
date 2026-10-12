@@ -450,6 +450,7 @@ export function createLayoutPanel({ document, scan, show, openSource, hasSource 
       root.classList.remove('df-hidden');
       host.replaceChildren(root);
       render();
+      if (report) changed(report, stale);
       if (!report && !busy) run();
       else if (live && stale) schedule();
     },

@@ -236,10 +236,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         latestRootOffsetX = rootOffsetX;
         latestRootOffsetY = rootOffsetY;
         const treeRevision = typeof state.treeRevision === 'string' ? state.treeRevision : '';
+        const diagnosticInputsRevision = typeof state.diagnosticInputsRevision === 'string'
+          ? state.diagnosticInputsRevision : null;
         const renderedState = [...viewport.querySelectorAll('.devflow-element')].map(element =>
           ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
             .map(attribute => element.getAttribute(attribute)));
-        layoutPanel?.frameChanged(JSON.stringify([treeRevision, renderedState]));
+        layoutPanel?.frameChanged(JSON.stringify([treeRevision, diagnosticInputsRevision, renderedState]));
         return state;
       } catch (err) {
         markConnected(false);
