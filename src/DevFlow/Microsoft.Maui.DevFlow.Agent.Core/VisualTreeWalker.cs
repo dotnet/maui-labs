@@ -2286,6 +2286,12 @@ public partial class VisualTreeWalker
         // Extract text from common controls (including Shell elements)
         info.Text = ExtractText(element);
 
+        if (element is InputView inputView)
+        {
+            info.FrameworkProperties ??= new Dictionary<string, string?>();
+            info.FrameworkProperties[nameof(InputView.IsReadOnly)] = inputView.IsReadOnly.ToString();
+        }
+
         // Extract value/state from stateful controls
         info.Value = element switch
         {

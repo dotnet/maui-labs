@@ -59,6 +59,8 @@ The existing legacy flow API is unchanged. No new shipping package is introduced
 `maui devflow mcp --profile test-agent` requires
 `DEVFLOW_PREVIEW_AGENT_AUTHORING=true`; the `agent-authoring` kill switch wins.
 The default remains `full` with its existing behavior.
+Its menu and mutation-lease tools remain available only in the full profile.
+Taking a full-profile mutation lease does not approve or enable a preview plan.
 
 This initial upstream profile exposes **only** `maui_test_author` (`begin`)
 and `maui_test_validate`. Both validate supplied JSON offline and return inert

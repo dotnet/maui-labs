@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DevFlow Inspector</title>
+  <title>MAUI DevFlow Inspector</title>
   <!-- Base tag ensures relative URLs resolve correctly even when the page is
        opened at /inspector/{id} without a trailing slash. Without this, the
        browser would resolve devflow.css as /inspector/devflow.css (treating
@@ -95,17 +95,19 @@
           <div class="df-connection-card">
             <svg class="df-connection-icon"><use href="#i-refresh"/></svg>
             <h2>App disconnected</h2>
-            <p>Showing the last captured frame. Waiting for DevFlow to reconnect…</p>
+            <p>Showing the last captured frame while DevFlow reconnects.</p>
             <button id="df-retry-connection" class="df-tool-btn" type="button"><svg class="df-ic"><use href="#i-refresh"/></svg><span>Retry now</span></button>
           </div>
         </div>
-        <div id="df-hit-candidates" class="df-hit-candidates df-hidden" role="listbox" aria-label="Elements at selected point"></div>
-        <div id="df-viewport-wrap" role="region" aria-label="Live app viewport">
-          <div id="df-stage">
-            <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" data-root-offset-x="{{ROOT_OFFSET_X}}" data-root-offset-y="{{ROOT_OFFSET_Y}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
-              {{SCREENSHOT}}
-              <div id="diagnostic-overlays" aria-hidden="true"></div>
-              {{ELEMENTS}}
+        <div id="df-preview-surface">
+          <div id="df-hit-candidates" class="df-hit-candidates df-hidden" role="listbox" aria-label="Elements at selected point"></div>
+          <div id="df-viewport-wrap" role="region" aria-label="Live app viewport">
+            <div id="df-stage">
+              <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" data-root-offset-x="{{ROOT_OFFSET_X}}" data-root-offset-y="{{ROOT_OFFSET_Y}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
+                {{SCREENSHOT}}
+                <div id="diagnostic-overlays" aria-hidden="true"></div>
+                {{ELEMENTS}}
+              </div>
             </div>
           </div>
         </div>

@@ -83,6 +83,60 @@ jobs:
             -c Release -r linux-x64 -o artifacts/devflow-aot/logging
           artifacts/devflow-aot/logging/LoggingAotSmoke
 
+  inspector-browser:
+    name: Inspector HTTP and Chromium fixture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/Microsoft.Maui.DevFlow.Inspector.Tests.csproj
+      DEVFLOW_INSPECTOR_BROWSER_FIXTURES: '1'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup pinned .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Build Inspector tests (no MAUI workloads or devices)
+        shell: pwsh
+        run: dotnet build $env:TEST_PROJECT -c Release
+
+      - name: Install test project's Chromium
+        shell: pwsh
+        run: |
+          $script = Get-ChildItem artifacts/bin/Microsoft.Maui.DevFlow.Inspector.Tests/Release -Recurse -Filter playwright.ps1 |
+            Select-Object -First 1
+          if (!$script) { throw 'Built Playwright install script was not found.' }
+          & $script.FullName install --with-deps chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # The real InspectorServer is bound to an isolated loopback mock agent.
+      # LiveInspectorFact tests still require a separately provisioned broker + native app.
+      - name: Run only self-contained browser fixtures
+        shell: pwsh
+        run: |
+          dotnet test $env:TEST_PROJECT -c Release --no-build --no-restore `
+            --filter "Category=BrowserFixture" `
+            --logger "trx;LogFileName=inspector-browser.trx" `
+            --results-directory artifacts/TestResults/inspector-browser
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml]$results = Get-Content artifacts/TestResults/inspector-browser/inspector-browser.trx -Raw
+          $counts = $results.TestRun.ResultSummary.Counters
+          if ($counts.total -ne '4' -or $counts.executed -ne '4' -or $counts.passed -ne '4' -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
+            throw 'All four Inspector browser fixtures must execute and pass with zero skips.'
+          }
+
+      - name: Upload browser test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: inspector-browser-results
+          path: artifacts/TestResults/inspector-browser
+          if-no-files-found: warn
+
   hosts:
     name: JavaScript hosts and VSIX
     runs-on: ubuntu-latest

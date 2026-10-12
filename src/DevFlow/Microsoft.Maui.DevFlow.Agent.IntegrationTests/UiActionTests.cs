@@ -91,6 +91,28 @@ public class UiActionTests : IntegrationTestBase
         await CleanupAddedTodoAsync("Integration Test Todo");
     }
 
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task Tap_ReadOnlyInput_InvokesGesture()
+    {
+        await NavigateToPageAsync("//gestures", "TapInput");
+        try
+        {
+            var before = (await FindElementAsync("InputTapStatusLabel")).Text;
+            var input = await FindElementAsync("TapInput");
+
+            Assert.True(await Client.TapAsync(input.Id));
+            await WaitForAsync(async () => (await FindElementAsync("InputTapStatusLabel")).Text != before);
+
+            Assert.StartsWith("input tap: ", (await FindElementAsync("InputTapStatusLabel")).Text);
+            Assert.Equal("Tap to select an item", (await FindElementAsync("TapInput")).Text);
+        }
+        finally
+        {
+            await NavigateToMainPageAsync();
+        }
+    }
+
     [Fact]
     public async Task Fill_AndTap_AddsTodo()
     {

@@ -3,12 +3,17 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.Playwright" />
     <PackageReference Include="xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
