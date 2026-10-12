@@ -6,6 +6,17 @@ namespace Microsoft.Maui.DevFlow.Tests;
 public class AgentClientCompatibilityTests
 {
     [Fact]
+    public void DriverFacade_ForwardsLayoutSizingEvidenceToPortableClient()
+    {
+        var driver = typeof(AndroidAppDriver).Assembly;
+        Assert.Contains(typeof(LayoutSizingEvidence), driver.GetForwardedTypes());
+        Assert.Same(
+            typeof(LayoutSizingEvidence),
+            driver.GetType(typeof(LayoutSizingEvidence).FullName!, throwOnError: true));
+        Assert.Equal("Microsoft.Maui.DevFlow.Client", typeof(LayoutSizingEvidence).Assembly.GetName().Name);
+    }
+
+    [Fact]
     public void CaptureAwareOverloads_PreserveOriginalPublicSignatures()
     {
         var type = typeof(AgentClient);

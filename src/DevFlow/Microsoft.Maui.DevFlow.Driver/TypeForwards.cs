@@ -50,6 +50,7 @@ using Microsoft.Maui.DevFlow.Driver;
 [assembly: TypeForwardedTo(typeof(LayoutRelatedElement))]
 [assembly: TypeForwardedTo(typeof(LayoutRuleCatalog))]
 [assembly: TypeForwardedTo(typeof(LayoutRuleSupportInfo))]
+[assembly: TypeForwardedTo(typeof(LayoutSizingEvidence))]
 [assembly: TypeForwardedTo(typeof(LayoutSnapshotInfo))]
 [assembly: TypeForwardedTo(typeof(LayoutStabilityOptions))]
 [assembly: TypeForwardedTo(typeof(LayoutSuppression))]

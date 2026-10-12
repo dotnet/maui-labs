@@ -511,7 +511,12 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 () => _treeWalker.WalkTree(_app, maxDepth, windowIndex),
                 hwnds => _treeWalker.WalkNativeTree(hwnds, maxDepth),
                 windowIndex)
-            : await DispatchAsync(() => _treeWalker.WalkTree(_app, maxDepth, windowIndex));
+            : await DispatchAsync(() =>
+            {
+                var result = _treeWalker.WalkTree(_app, maxDepth, windowIndex);
+                RefreshCaptureInvalidationHooks(windowIndex);
+                return result;
+            });
         StampCaptureMetadata(tree, capture);
         if (!CommitUiCapture(capture))
             return BuildCaptureChangedResponse(capture);
@@ -519,6 +524,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             ? HttpResponse.Json(new Dictionary<string, object?>
             {
                 ["revision"] = VisualTreeRevision.ComputeTree(tree),
+                ["diagnosticInputsRevision"] = FormattableString.Invariant(
+                    $"{capture.RegistryGeneration}:{capture.MutationGeneration}:{capture.ExternalMutationGeneration}"),
                 ["elements"] = tree
             })
             : HttpResponse.Json(tree);
@@ -918,6 +925,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 }
 
                 target.PropertyChanged -= OnCaptureInvalidationTargetPropertyChanged;
+                if (target is VisualElement visualElement)
+                    visualElement.MeasureInvalidated -= OnCaptureInvalidationTargetMeasureInvalidated;
                 if (target is Element element)
                 {
                     element.ChildAdded -= OnCaptureInvalidationTargetChildChanged;
@@ -940,6 +949,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     new CaptureInvalidationHookState { WindowId = entry.Value });
                 _captureInvalidationTargets.Add(new WeakReference<BindableObject>(entry.Key));
                 entry.Key.PropertyChanged += OnCaptureInvalidationTargetPropertyChanged;
+                if (entry.Key is VisualElement visualElement)
+                    visualElement.MeasureInvalidated += OnCaptureInvalidationTargetMeasureInvalidated;
                 if (entry.Key is Element element)
                 {
                     element.ChildAdded += OnCaptureInvalidationTargetChildChanged;
@@ -983,18 +994,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     private void OnCaptureInvalidationTargetPropertyChanged(
         object? sender,
         System.ComponentModel.PropertyChangedEventArgs args)
-    {
-        if (_disposed || sender is not BindableObject target)
-            return;
-
-        lock (_captureInvalidationHookGate)
-        {
-            if (_captureInvalidationHookStates.TryGetValue(target, out var state))
-                InvalidateUiCaptureForWindow(state.WindowId);
-        }
-    }
+        => InvalidateCaptureTarget(sender);
 
     private void OnCaptureInvalidationTargetChildChanged(object? sender, ElementEventArgs args)
+        => InvalidateCaptureTarget(sender);
+
+    private void OnCaptureInvalidationTargetMeasureInvalidated(object? sender, EventArgs args)
+        => InvalidateCaptureTarget(sender);
+
+    private void InvalidateCaptureTarget(object? sender)
     {
         if (_disposed || sender is not BindableObject target)
             return;
@@ -1016,6 +1024,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     continue;
 
                 target.PropertyChanged -= OnCaptureInvalidationTargetPropertyChanged;
+                if (target is VisualElement visualElement)
+                    visualElement.MeasureInvalidated -= OnCaptureInvalidationTargetMeasureInvalidated;
                 if (target is Element element)
                 {
                     element.ChildAdded -= OnCaptureInvalidationTargetChildChanged;
@@ -1804,6 +1814,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             foreach (var hit in allHits)
             {
                 if (hit is not IVisualTreeElement vte) continue;
+                if (hit is VisualElement hitView && !_treeWalker.IsPointVisibleToElement(hitView, x, y))
+                    continue;
 
                 // Skip elements under inactive ShellItem subtrees
                 if (activeShellItemIds != null && IsUnderInactiveShellItem(hit, activeShellItemIds))

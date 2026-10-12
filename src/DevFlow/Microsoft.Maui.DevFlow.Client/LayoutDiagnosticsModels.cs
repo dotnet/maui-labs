@@ -13,6 +13,9 @@ public static class LayoutDiagnosticRules
     public const string GeometricOverlap = "layout.geometric-overlap";
     public const string AccessibilityVisibilityMismatch = "layout.accessibility-visibility-mismatch";
     public const string VisibleZeroArea = "layout.visible-zero-area";
+    public const string ConstraintViolation = "layout.constraint-violation";
+    public const string DesiredSizeConstrained = "layout.desired-size-constrained";
+    public const string ChildOutsideParent = "layout.child-outside-parent";
 }
 
 public sealed class LayoutInspectionRequest
@@ -288,6 +291,9 @@ public sealed class LayoutInspectionSummary
 
     [JsonPropertyName("suppressed")]
     public int Suppressed { get; set; }
+
+    [JsonPropertyName("filtered")]
+    public int Filtered { get; set; }
 }
 
 public sealed class LayoutFinding
@@ -380,6 +386,18 @@ public sealed class LayoutRelatedElement
 
 public sealed class LayoutFindingEvidence
 {
+    [JsonPropertyName("sizing")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutSizingEvidence? Sizing { get; set; }
+
+    [JsonPropertyName("parentRegion")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutRegionInfo? ParentRegion { get; set; }
+
+    [JsonPropertyName("layoutOverflowInsetsPhysicalPixels")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LayoutOverflowInsets? LayoutOverflowInsetsPhysicalPixels { get; set; }
+
     [JsonPropertyName("fullRegion")]
     public LayoutRegionInfo? FullRegion { get; set; }
 
@@ -406,6 +424,40 @@ public sealed class LayoutFindingEvidence
 
     [JsonPropertyName("limitations")]
     public List<string> Limitations { get; set; } = [];
+}
+
+/// <summary>Captured MAUI layout sizes in logical units, excluding the element's margin.</summary>
+public sealed class LayoutSizingEvidence
+{
+    [JsonPropertyName("arrangedWidth")]
+    public double ArrangedWidth { get; set; }
+
+    [JsonPropertyName("arrangedHeight")]
+    public double ArrangedHeight { get; set; }
+
+    [JsonPropertyName("desiredWidth")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? DesiredWidth { get; set; }
+
+    [JsonPropertyName("desiredHeight")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? DesiredHeight { get; set; }
+
+    [JsonPropertyName("minimumWidth")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? MinimumWidth { get; set; }
+
+    [JsonPropertyName("minimumHeight")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? MinimumHeight { get; set; }
+
+    [JsonPropertyName("maximumWidth")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? MaximumWidth { get; set; }
+
+    [JsonPropertyName("maximumHeight")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? MaximumHeight { get; set; }
 }
 
 public sealed class LayoutRegionInfo
