@@ -40,29 +40,25 @@ public sealed class CdpTools
         }
     }
 
-    [McpServerTool(Name = "maui_cdp_screenshot"), Description("Capture a screenshot of a Blazor WebView via Chrome DevTools Protocol. Returns the image directly.")]
+    [McpServerTool(Name = "maui_cdp_screenshot"), Description("Capture a screenshot of a Blazor WebView using the agent's native-first screenshot path. Returns the PNG image directly.")]
     public static async Task<ContentBlock[]> CdpScreenshot(
         McpAgentSession session,
         [Description("WebView ID or index to target (optional if only one WebView)")] string? webviewId = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         using var agent = await session.GetAgentClientAsync(agentPort);
-        var json = await agent.SendCdpCommandAsync("Page.captureScreenshot", new JsonObject
+        try
         {
-            ["format"] = "png"
-        }, webviewId);
-
-        if (json.TryGetProperty("result", out var result) &&
-            result.TryGetProperty("data", out var data))
-        {
-            var pngBytes = Convert.FromBase64String(data.GetString()!);
+            var pngBytes = await agent.GetWebViewScreenshotAsync(webviewId);
             return [
                 new TextContentBlock { Text = $"WebView screenshot captured ({pngBytes.Length} bytes)" },
                 ImageContentBlock.FromBytes(pngBytes, "image/png")
             ];
         }
-
-        throw new McpException("Failed to capture WebView screenshot. Is a Blazor WebView active?");
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        {
+            throw new McpException(ex.Message);
+        }
     }
 
     [McpServerTool(Name = "maui_cdp_source"), Description("Get the HTML source of a Blazor WebView.")]

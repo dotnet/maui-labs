@@ -108,7 +108,7 @@ internal sealed class FakeAgent : IDisposable
                     return;
                 }
 
-                var bodyBytes = Encoding.UTF8.GetBytes(response.Body);
+                var bodyBytes = response.Bytes ?? Encoding.UTF8.GetBytes(response.Body);
                 var header = new StringBuilder()
                     .Append("HTTP/1.1 ").Append(response.StatusCode).Append(" ").Append(ReasonPhrase(response.StatusCode)).Append("\r\n")
                     .Append("Content-Type: ").Append(response.ContentType).Append("\r\n")
@@ -262,17 +262,20 @@ internal sealed class FakeAgent : IDisposable
 
     internal sealed class Response
     {
-        private Response(int statusCode, string body, string contentType, bool abort = false)
+        private Response(int statusCode, string body, string contentType, bool abort = false, byte[]? bytes = null)
         {
             StatusCode = statusCode;
             Body = body;
             ContentType = contentType;
             Abort = abort;
+            Bytes = bytes;
         }
 
         public int StatusCode { get; }
 
         public string Body { get; }
+
+        public byte[]? Bytes { get; }
 
         public string ContentType { get; }
 
@@ -285,6 +288,9 @@ internal sealed class FakeAgent : IDisposable
 
         public static Response Json(string body, int statusCode = 200)
             => new Response(statusCode, body, "application/json");
+
+        public static Response Png(byte[] bytes)
+            => new Response(200, string.Empty, "image/png", bytes: bytes);
 
         public static Response Reset()
             => new Response(0, string.Empty, string.Empty, abort: true);
