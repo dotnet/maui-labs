@@ -4,6 +4,8 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors;
 
 public sealed class LinuxMagnetometer : LinuxSensor, IMagnetometer
 {
+    // IIO reports magnetic field in Gauss after scaling; MAUI expects microteslas (1 G = 100 µT)
+    const double GaussToMicrotesla = 100.0;
     private const string XRawFile = "in_magn_x_raw";
     private const string YRawFile = "in_magn_y_raw";
     private const string ZRawFile = "in_magn_z_raw";
@@ -29,8 +31,11 @@ public sealed class LinuxMagnetometer : LinuxSensor, IMagnetometer
         if (double.IsNaN(x) || double.IsNaN(y) || double.IsNaN(z))
             return;
 
-        // Apply common scale (usually in Gauss or µT depending on the driver)
-        var data = new MagnetometerData(x * Scale, y * Scale, z * Scale);
+        // IIO reports magnetic field in Gauss after scaling; MAUI expects microteslas (1 G = 100 µT)
+        var data = new MagnetometerData(
+                x * Scale * GaussToMicrotesla,
+                y * Scale * GaussToMicrotesla,
+                z * Scale * GaussToMicrotesla);
         ReadingChanged?.Invoke(this, new MagnetometerChangedEventArgs(data));
     }
 
