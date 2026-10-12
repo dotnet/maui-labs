@@ -6,7 +6,7 @@ description: >-
   scene manifests/delegates but still use AppDelegate or application-level
   callbacks. Load BEFORE file discovery; file access is not a prerequisite.
   Existing scene files do not mean migration is finished. Also use for SDK 27
-  "UIScene lifecycle is required" startup failures, preserving warm/cold links
+  "UIScene lifecycle is required" or NoSceneLifecycleAdoption startup failures, preserving warm/cold links
   and quick actions during this upgrade, readiness/no-op audits, read-only
   .NET 9/.NET 11 compatibility or pinning questions, and Apple 27.0 packs with
   Xcode 27.1 mismatches. Compatibility audits do not authorize toolchain
@@ -80,6 +80,11 @@ checks) when no `maccatalyst` TFM is present, including conditional TFMs.
 
 ### 1. Inventory before modifying the project or toolchain
 
+For a startup crash, inspect its log first: `NoSceneLifecycleAdoption` or
+`___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke`
+points to missing scene adoption. Do not treat every post-splash crash as this
+fault. Planned migration does not require a crash log.
+
 Read the applicable repository instructions and current diff. Inspect a supplied
 project path relative to the current workspace unless it is explicitly absolute.
 Prefer direct file reads and workspace-scoped glob/grep tools for discovery,
@@ -109,6 +114,8 @@ Use the project's own SDK selection and, where available:
 
 ```sh
 dotnet --info
+dotnet workload --version
+dotnet workload --info
 dotnet workload list
 xcodebuild -version
 dotnet msbuild MyApp.csproj -p:TargetFramework=net10.0-ios -getProperty:MauiVersion,MauiWorkloadVersion,SupportedOSPlatformVersion,TargetPlatformVersion
@@ -145,6 +152,8 @@ fallback does not replace an older value supplied by an earlier import. Inspect
 the effective result when possible; XML presence alone is not proof of resolution.
 Reconcile any approved project `global.json` update with its CI setup steps;
 this is distinct from changing the developer machine's global tool selection.
+Check the active workload set, not just installed workload IDs; align SDK,
+workload set and CI Xcode using [toolchain.md](references/toolchain.md).
 If toolchain provisioning is outside the request, explicitly report the
 remaining SDK/workload/CI actions instead of claiming the project builds there.
 
@@ -171,14 +180,12 @@ support and forwarding APIs, including `MauiUISceneDelegate` in the installed
 `Microsoft.Maui.dll` as described in [compatibility.md](references/compatibility.md).
 As .NET 11 approaches GA, verify the actual GA SDK, workload and MAUI artifacts
 rather than assuming pre-release evidence applies unchanged. Do not apply the
-.NET 10 MAUI 10.0.110 pin to .NET 11. The documented
-**.NET 11 RC1 pairing requires Xcode 26.6**, not an arbitrary 26.x installation.
-RC1 has scene infrastructure but lacks the scene App Actions selector and
-Essentials URL/user-activity forwarding fixes. It is not the .NET 10 recipe.
-Keep that known RC1 pairing distinct from a fresh check for published RC2
-support; an unavailable publication lookup does not erase the tagged RC1 facts.
+.NET 10 MAUI 10.0.110 pin to .NET 11. Keep the tagged RC1 facts in
+[compatibility.md](references/compatibility.md) distinct from publication/
+support checks for later releases; source fixes alone are not release evidence.
 If Xcode does not match the installed Apple workload, stop before a
 build and propose a supported pairing; do not infer 27.1 support from 27.0.
+A supported Xcode downgrade may repair a build mismatch, not missing scene adoption.
 
 ### 3. Reconcile scenes on each Apple head
 
@@ -207,7 +214,10 @@ public class SceneDelegate : MauiUISceneDelegate
 Use the app's namespace and platform compilation conventions. Ensure precisely
 one Objective-C registration named `SceneDelegate` per target; platform folders
 are normally filtered by MAUI, but custom source inclusions need inspection.
-Keep `AppDelegate : MauiUIApplicationDelegate` and its startup responsibilities.
+Keep `AppDelegate : MauiUIApplicationDelegate`, its startup responsibilities and
+the existing entry point. Do not add duplicate window creation or manual
+framework forwarding; scene adoption does not require new network entitlements
+such as `com.apple.security.network.server`.
 
 Merge this key into the **root dictionary** of each applicable Info.plist:
 

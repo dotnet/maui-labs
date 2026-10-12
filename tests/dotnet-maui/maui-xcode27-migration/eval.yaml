@@ -766,6 +766,68 @@ scenarios:
       - "Does not claim absence of the fault alone proves correct lifecycle behavior or newer SDK build support"
     timeout: 240
 
+  - name: "Native scene-adoption trap is diagnosed before changing the toolchain"
+    prompt: |
+      Explain only, do not edit or build: our MAUI iOS app exits after splash.
+      The native crash report shows EXC_BREAKPOINT and
+      ___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke.
+      There is no SceneDelegate or UIApplicationSceneManifest. A colleague
+      suggests downgrading Xcode or deleting AppDelegate and the entry point.
+      What should we fix? Would the same fix apply to a separate crash report
+      showing an unrelated NullReferenceException in our view model?
+    assertions:
+      - type: output_matches
+        pattern: 'NoSceneLifecycleAdoption'
+      - type: output_matches
+        pattern: 'MauiUISceneDelegate'
+      - type: output_matches
+        pattern: 'UIApplicationSceneManifest'
+    rubric:
+      - "Identifies the native trap as missing scene adoption without using a downgrade as the lifecycle repair"
+      - "Keeps AppDelegate and the entry point, adding the MAUI scene delegate and matching manifest instead"
+      - "Does not apply the scene fix to the unrelated view-model exception without evidence"
+    timeout: 240
+
+  - name: "Active workload evidence and CI runner inventory are distinct"
+    prompt: |
+      Audit only: our MAUI iOS/Catalyst app builds locally but CI selects a
+      different Xcode. We only compared dotnet workload list and SDK major
+      versions. CI uses an unpinned workload restore on a macos-26 runner with
+      setup-xcode requesting Xcode 27. Can setup-xcode install the missing
+      Xcode? What evidence and pins should we reconcile? Does moving CI to
+      an arm64 host mean we should drop the app's maccatalyst-x64 target?
+    assertions:
+      - type: output_matches
+        pattern: 'dotnet workload --version'
+      - type: output_matches
+        pattern: 'dotnet workload --info'
+    rubric:
+      - "Distinguishes the active workload set and installed manifest/pack evidence from workload IDs and upgrade candidates"
+      - "Checks update mode and reconciles the SDK/workload/Xcode pairing with what CI actually restores"
+      - "Explains setup-xcode selects preinstalled Xcode and requires checking current runner inventories rather than assuming an OS label supplies Xcode 27"
+      - "Separates host architecture from RuntimeIdentifier and does not silently drop Intel app support"
+      - "Makes no audit-only installs, restores, global selection changes or workflow edits"
+    timeout: 240
+
+  - name: "Catalyst package validation preserves capabilities and release settings"
+    prompt: |
+      Propose only: our MAUI Catalyst head is moving to scenes using Catalyst
+      17.0 with Xcode 27. Debug compiled successfully. Is that enough?
+      What should we check in the packaged Info.plist and Release build?
+      Should scene adoption add com.apple.security.network.server or change
+      our existing linker, AOT and signing configuration?
+    assertions:
+      - type: output_matches
+        pattern: 'LSMinimumSystemVersion'
+      - type: output_matches
+        pattern: '14\.0'
+    rubric:
+      - "Checks the built scene manifest/configuration/delegate and packaged macOS minimum, mapping Catalyst 17.0 to macOS 14.0"
+      - "Preserves higher app minima and existing Release linker/AOT/signing settings rather than relaxing them for a passing build"
+      - "Does not add network.server or duplicate framework window creation/forwarding merely to adopt scenes"
+      - "Separates successful compilation from verified launch to the first MAUI window"
+    timeout: 240
+
   - name: "Android-only app does not need Apple migration"
     expect_activation: false
     setup:

@@ -12,6 +12,11 @@ plutil -p "<build-output>/<App>.app/Info.plist" | grep -A12 UIApplicationSceneMa
 
 Require the manifest, intended configuration name and registered delegate.
 If the excerpt is truncated, inspect the full `plutil -p` output.
+For Catalyst, also inspect the bundle's `LSMinimumSystemVersion`, not just the
+source deployment property: Catalyst 17.0 maps to macOS 14.0. Preserve higher
+app minima and resolve any mismatch before claiming the package is correct.
+Validate using the app's existing Release linker, AOT and signing settings;
+do not relax them merely to obtain a passing build.
 
 In the reported MauiDay/event-app run with .NET 11 Preview 6, adding the source
 manifest and even touching Info.plist did not refresh the incremental
@@ -43,6 +48,9 @@ xcrun simctl spawn <udid> log show --last 2m --predicate 'process == "<App>"'
 Look for `UIScene life cycle is now required`: a fault on this launch indicates
 the scene lifecycle has not taken effect; check the deployed bundle's manifest.
 Its absence alone is not proof: confirm startup and any custom scene callbacks.
+In native crash reports, `NoSceneLifecycleAdoption` or
+`___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke`
+is another diagnostic signal. An unrelated crash needs its own investigation.
 
 A newer simulator runtime may require `simctl` from another installed Xcode.
 If needed, select it for each simulator command only:

@@ -65,6 +65,9 @@ simulator tooling is a separate concern (see [validation.md](validation.md)).
 
 ## Sources
 
+- [Apple: UIKit scene lifecycle transition](https://developer.apple.com/documentation/uikit/transitioning-to-the-uikit-scene-based-life-cycle)
+- [Apple TN3187: scene lifecycle migration](https://developer.apple.com/documentation/technotes/tn3187-migrating-to-the-uikit-scene-based-life-cycle)
+- [Native NoSceneLifecycleAdoption crash report, dotnet/macios#26837](https://github.com/dotnet/macios/issues/26837)
 - [MAUI app lifecycle](https://learn.microsoft.com/dotnet/maui/fundamentals/app-lifecycle?view=net-maui-10.0)
 - [Supported platforms](https://learn.microsoft.com/dotnet/maui/supported-platforms?view=net-maui-10.0)
 - [MAUI scene changes, dotnet/maui#38601](https://github.com/dotnet/maui/pull/38601)
