@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using Microsoft.Maui.Devices.Sensors;
+using System.Globalization;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors;
 

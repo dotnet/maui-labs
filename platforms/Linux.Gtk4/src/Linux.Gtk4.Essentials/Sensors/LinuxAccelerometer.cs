@@ -1,5 +1,6 @@
-﻿using System.Numerics;
-
+﻿using GObject;
+using System.Numerics;
+using Microsoft.Maui.Devices.Sensors;
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors;
 
 public sealed class LinuxAccelerometer : LinuxSensor, IAccelerometer

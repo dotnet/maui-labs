@@ -1,4 +1,6 @@
-﻿namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors;
+﻿using Microsoft.Maui.Devices.Sensors;
+
+namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors;
 
 public sealed class LinuxMagnetometer : LinuxSensor, IMagnetometer
 {
