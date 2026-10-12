@@ -157,6 +157,14 @@ builder.AddMauiDevFlowAgent(options =>
 });
 ```
 
+### WebView action evaluation
+
+Typed WebView click, fill and DOM query actions serialize their results in the
+original CDP evaluation. Bridges that return object references despite
+`returnByValue` no longer cause the action to run again to recover its result.
+Structured results are preserved; missing or invalid serialized results fail
+without replaying the action. Raw CDP evaluation is unchanged.
+
 ### GTK/Linux apps
 
 Use `Microsoft.Maui.DevFlow.Agent.Gtk` instead of the standard agent package with

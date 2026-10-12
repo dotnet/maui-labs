@@ -1914,7 +1914,7 @@ public partial class DevFlowAgentService
     {
         var resultJson = await webView.CommandHandler(BuildCdpCommand(id, "Runtime.evaluate", new Dictionary<string, object?>
         {
-            ["expression"] = expression,
+            ["expression"] = $"JSON.stringify(({expression}))",
             ["returnByValue"] = true
         }));
 
@@ -1923,46 +1923,18 @@ public partial class DevFlowAgentService
         if (!string.IsNullOrWhiteSpace(error))
             throw new InvalidOperationException(error);
 
+        // Serialize in the original evaluation: replaying an expression to recover
+        // an object reference would repeat click/fill side effects.
         if (TryGetCdpValue(doc.RootElement, out var value))
-            return value.Clone();
-
-        // Some bridges (notably Android's Chobitsu-backed path) do not reliably honor
-        // returnByValue for arrays/objects and instead hand back an object reference.
-        // Fall back to JSON.stringify() so callers still get structured data.
-        var fallbackJson = await webView.CommandHandler(BuildCdpCommand(id + 1, "Runtime.evaluate", new Dictionary<string, object?>
         {
-            ["expression"] = $"JSON.stringify(({expression}))",
-            ["returnByValue"] = true
-        }));
-
-        using var fallbackDoc = JsonDocument.Parse(fallbackJson);
-        error = TryGetCdpError(fallbackDoc.RootElement);
-        if (!string.IsNullOrWhiteSpace(error))
-            throw new InvalidOperationException(error);
-
-        if (TryGetCdpValue(fallbackDoc.RootElement, out var fallbackValue))
-        {
-            if (fallbackValue.ValueKind == JsonValueKind.String)
+            if (value.ValueKind == JsonValueKind.String)
             {
-                var json = fallbackValue.GetString();
-                if (!string.IsNullOrWhiteSpace(json) && !string.Equals(json, "undefined", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        using var jsonDoc = JsonDocument.Parse(json);
-                        return jsonDoc.RootElement.Clone();
-                    }
-                    catch
-                    {
-                        return AgentJson.SerializeToElement(json);
-                    }
-                }
+                using var result = JsonDocument.Parse(value.GetString()!);
+                return result.RootElement.Clone();
             }
-
-            return fallbackValue.Clone();
+            return value.Clone();
         }
-
-        return null;
+        throw new InvalidOperationException("WebView evaluation did not return a serialized result.");
     }
 
     protected async Task<HttpResponse> HandleCdp(HttpRequest request)
