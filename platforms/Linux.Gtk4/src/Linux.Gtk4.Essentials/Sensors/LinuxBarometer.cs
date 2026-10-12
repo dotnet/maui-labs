@@ -22,10 +22,9 @@ public sealed class LinuxBarometer : LinuxSensor, IBarometer
         if (double.IsNaN(raw))
             return;
 
-        // Apply scale (hPa or kPa depending on the driver; MAUI expects the value as-is after scaling)
-        var pressure = raw * Scale;
-
-        var data = new BarometerData(pressure);
+        // IIO reports pressure in kPa after scaling; MAUI expects hPa
+        var pressureHpa = raw * Scale * 10.0;
+        var data = new BarometerData(pressureHpa);
         ReadingChanged?.Invoke(this, new BarometerChangedEventArgs(data));
     }
 
