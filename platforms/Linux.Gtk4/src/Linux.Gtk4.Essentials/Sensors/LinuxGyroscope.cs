@@ -22,9 +22,9 @@ public sealed class LinuxGyroscope : LinuxSensor, IGyroscope
         if (_xPath is null || _yPath is null || _zPath is null)
             return;
 
-        var x = ReadDoubleOrDefault(_xPath);
-        var y = ReadDoubleOrDefault(_yPath);
-        var z = ReadDoubleOrDefault(_zPath);
+        var x = ReadSampleOrNaN(_xPath);
+        var y = ReadSampleOrNaN(_yPath);
+        var z = ReadSampleOrNaN(_zPath);
 
         if (double.IsNaN(x) || double.IsNaN(y) || double.IsNaN(z))
             return;

@@ -29,7 +29,7 @@ public sealed class LinuxCompass : LinuxSensor, ICompass
         if (_headingPath is null)
             return;
 
-        var heading = ReadDoubleOrDefault(_headingPath);
+        var heading = ReadSampleOrNaN(_headingPath);
         if (double.IsNaN(heading))
             return;
 

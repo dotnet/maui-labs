@@ -38,9 +38,12 @@ public sealed class LinuxAccelerometer : LinuxSensor, IAccelerometer
         if (_xPath is null || _yPath is null || _zPath is null)
             return;
 
-        var rawX = ReadDoubleOrDefault(_xPath);
-        var rawY = ReadDoubleOrDefault(_yPath);
-        var rawZ = ReadDoubleOrDefault(_zPath);
+        var rawX = ReadSampleOrNaN(_xPath);
+        var rawY = ReadSampleOrNaN(_yPath);
+        var rawZ = ReadSampleOrNaN(_zPath);
+
+        if (double.IsNaN(rawX) || double.IsNaN(rawY) || double.IsNaN(rawZ))
+            return;
 
         // Convert raw → m/s² → G (MAUI convention)
         var x = ((rawX + _xOffset) * _xScale) / Gravity;

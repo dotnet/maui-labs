@@ -120,17 +120,7 @@ public abstract class LinuxSensor : IDisposable
     {
         try
         {
-            // Prefer a small buffer read to avoid allocating a full string on every sample
-            Span<byte> buffer = ReadBuffer;
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, buffer.Length, FileOptions.SequentialScan);
-
-            int bytesRead = fs.Read(buffer);
-            if (bytesRead == 0)
-                return fallback;
-
-            // sysfs values are typically ASCII and terminated by '\n'
-            var text = System.Text.Encoding.ASCII.GetString(buffer[..bytesRead]).Trim();
-
+            var text = File.ReadAllText(path).Trim();
             return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
                 ? value
                 : fallback;
@@ -138,6 +128,31 @@ public abstract class LinuxSensor : IDisposable
         catch
         {
             return fallback;
+        }
+    }
+
+    protected double ReadSampleOrNaN(string path)
+    {
+        try
+        {
+            Span<byte> buffer = ReadBuffer;
+            using var fs = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                buffer.Length, FileOptions.SequentialScan);
+
+            int bytesRead = fs.Read(buffer);
+            if (bytesRead == 0)
+                return double.NaN;
+
+            // sysfs is ASCII + trailing '\n'
+            var text = System.Text.Encoding.ASCII.GetString(buffer[..bytesRead]).Trim();
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+                ? value
+                : double.NaN;
+        }
+        catch
+        {
+            return double.NaN;
         }
     }
 
