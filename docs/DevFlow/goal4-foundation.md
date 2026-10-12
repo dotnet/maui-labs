@@ -95,6 +95,8 @@ switch. It reads at most 1 MiB, never contacts an app, and returns JSON.
 Exit 1 means disabled/invalid input; exit 2 means **not-qualified**, including
 when supplied numeric claims satisfy all metric gates. There is no qualifying
 exit 0 in this initial diagnostic-only increment.
+The command is listed as non-mutating by `maui devflow commands --json`;
+discovery does not enable it.
 
 The deterministic corpus is `tests/DevFlow/Goal4Foundation`. It checks the
 fork policy's 95% Wilson precision lower bound, 100-evaluation minima, zero
@@ -102,3 +104,4 @@ false heals across 300 no-repair cases, 90% classification, 99% selector and
 per-flow first-attempt stability, ECE <= 0.05 and host p95 <= 250ms.
 It does not certify provenance, reviews, privacy testing, first-attempt integrity,
 device overhead or platform execution. Caller-supplied claims are never attestation.
+Changes to this corpus trigger CLI validation on both pull requests and main pushes.

@@ -26,6 +26,7 @@ public class Goal4WorkflowTests
         Assert.Equal(new[]
         {
             "plugins/dotnet-maui-tooling/skills/**",
+            "tests/DevFlow/Goal4Foundation/**",
             "src/Cli/**",
             "src/DevFlow/Microsoft.Maui.DevFlow.Client/**",
             "src/DevFlow/Microsoft.Maui.DevFlow.Driver/**",

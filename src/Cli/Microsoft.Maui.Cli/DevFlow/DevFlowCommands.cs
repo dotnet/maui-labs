@@ -3032,6 +3032,7 @@ public class DevFlowCommands
         new("skills update", "Update DevFlow skills from the current CLI bundle", true),
         new("skills remove", "Remove an installed DevFlow skill", true),
         new("skills doctor", "Validate DevFlow skills and CLI drift", false),
+        new("qualification assess", "Opt-in offline metric diagnostics; never certifies a platform", false),
         new("mcp", "Start the MCP server", false),
         new("commands", "List all available commands", false),
         new("version", "Show CLI version", false),
