@@ -65,6 +65,12 @@ internal static class EvidenceCommands
             var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
             try
             {
+                if (EvidencePaths.ValidateExplicitOutputPath(ctx.GetValue(outputOption), overwrite: true) is { } error)
+                {
+                    output.WriteError(error, isJson, "InvocationError");
+                    onError();
+                    return;
+                }
                 string? workflow = null;
                 var workflowPath = ctx.GetValue(workflowOption);
                 if (!string.IsNullOrWhiteSpace(workflowPath))
@@ -146,6 +152,13 @@ internal static class EvidenceCommands
             var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
             try
             {
+                if (EvidencePaths.ValidateExplicitOutputPath(
+                    ctx.GetValue(outputOption), ctx.GetValue(overwriteOption)) is { } error)
+                {
+                    output.WriteError(error, isJson, "InvocationError");
+                    onError();
+                    return;
+                }
                 var workflowPath = ctx.GetValue(workflowOption);
                 string? workflow = null;
                 if (!string.IsNullOrWhiteSpace(workflowPath))
@@ -278,17 +291,29 @@ internal static class EvidenceCommands
         Description = "Element id to highlight in the bundle (metadata only; no text or values are captured)"
     };
 
-    private static Option<int> CreateLogLimitOption() => new("--log-limit")
-    {
-        Description = $"Maximum log entries to include (1-{EvidenceFormat.MaxLogLimit})",
-        DefaultValueFactory = _ => EvidenceFormat.DefaultLogLimit,
-    };
+    private static Option<int> CreateLogLimitOption() =>
+        CreateLimitOption("--log-limit", "log entries", EvidenceFormat.DefaultLogLimit,
+            EvidenceFormat.MaxLogLimit);
 
-    private static Option<int> CreateNetworkLimitOption() => new("--network-limit")
+    private static Option<int> CreateNetworkLimitOption() =>
+        CreateLimitOption("--network-limit", "network request summaries", EvidenceFormat.DefaultNetworkLimit,
+            EvidenceFormat.MaxNetworkLimit);
+
+    private static Option<int> CreateLimitOption(string name, string description, int defaultValue, int maximum)
     {
-        Description = $"Maximum network request summaries to include (1-{EvidenceFormat.MaxNetworkLimit})",
-        DefaultValueFactory = _ => EvidenceFormat.DefaultNetworkLimit,
-    };
+        var option = new Option<int>(name)
+        {
+            Description = $"Maximum {description} to include (1-{maximum})",
+            DefaultValueFactory = _ => defaultValue,
+        };
+        option.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<int>();
+            if (value < 1 || value > maximum)
+                result.AddError($"{name} must be between 1 and {maximum}.");
+        });
+        return option;
+    }
 
     internal static (string? Text, string? Error) ReadWorkflowFile(string path)
     {

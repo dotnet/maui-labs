@@ -28,6 +28,10 @@ public sealed class EvidenceTools
         CancellationToken cancellationToken = default,
         [Description("Optional Markdown reproduction file to preview exactly as it would be attached by capture (max 1 MiB; secrets and structured values are scrubbed)")] string? workflowFile = null)
     {
+        if (EvidenceCapture.ValidateLimits(logLimit, networkLimit) is { } limitError)
+            throw new McpException(limitError);
+        if (EvidencePaths.ValidateExplicitOutputPath(outputPath, overwrite: true) is { } outputError)
+            throw new McpException(outputError);
         string? workflow = null;
         if (!string.IsNullOrWhiteSpace(workflowFile))
         {
@@ -69,6 +73,10 @@ public sealed class EvidenceTools
         [Description("Maximum network request summaries to include (1-500, default 100)")] int? networkLimit = null,
         CancellationToken cancellationToken = default)
     {
+        if (EvidenceCapture.ValidateLimits(logLimit, networkLimit) is { } limitError)
+            throw new McpException(limitError);
+        if (EvidencePaths.ValidateExplicitOutputPath(outputPath, overwrite) is { } outputError)
+            throw new McpException(outputError);
         string? workflow = null;
         if (!string.IsNullOrWhiteSpace(workflowFile))
         {

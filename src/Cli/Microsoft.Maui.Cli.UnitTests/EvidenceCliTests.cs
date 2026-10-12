@@ -141,6 +141,78 @@ public class EvidenceCliTests : IDisposable
         Assert.Contains(".mauitrace", invalidOutput.StdErr, StringComparison.Ordinal);
         Assert.Equal(1, missingWorkflow.ExitCode);
         Assert.Contains("Workflow file not found", missingWorkflow.StdErr, StringComparison.Ordinal);
+        Assert.Empty(server.RecordedRequests);
+    }
+
+    [Theory]
+    [InlineData("preview", "--log-limit", 0)]
+    [InlineData("preview", "--log-limit", -1)]
+    [InlineData("preview", "--log-limit", 501)]
+    [InlineData("preview", "--network-limit", 0)]
+    [InlineData("preview", "--network-limit", -1)]
+    [InlineData("preview", "--network-limit", 501)]
+    [InlineData("capture", "--log-limit", 0)]
+    [InlineData("capture", "--log-limit", -1)]
+    [InlineData("capture", "--log-limit", 501)]
+    [InlineData("capture", "--network-limit", 0)]
+    [InlineData("capture", "--network-limit", -1)]
+    [InlineData("capture", "--network-limit", 501)]
+    public async Task InvalidLimits_FailBeforeAnyAppRead(string command, string option, int value)
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync("devflow", "evidence", command, option,
+            value.ToString(System.Globalization.CultureInfo.InvariantCulture), "--include-screenshot", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("between 1 and 500", result.StdErr, StringComparison.Ordinal);
+        Assert.Empty(server.RecordedRequests);
+    }
+
+    [Fact]
+    public async Task ExplicitOutputErrors_FailBeforeAnyAppRead()
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+        var existing = Path.Combine(_root, "existing.mauitrace");
+        File.WriteAllText(existing, "original");
+        var blockedDirectory = Path.Combine(_root, "blocked");
+        File.WriteAllText(blockedDirectory, "not a directory");
+
+        foreach (var path in new[] { existing, Path.Combine(blockedDirectory, "capture.mauitrace") })
+        {
+            var result = await cli.InvokeAsync("devflow", "evidence", "capture",
+                "--output", path, "--include-screenshot", "--json");
+            Assert.Equal(1, result.ExitCode);
+            Assert.Contains("existing", result.StdErr, StringComparison.OrdinalIgnoreCase);
+        }
+        var preview = await cli.InvokeAsync("devflow", "evidence", "preview",
+            "--output", Path.Combine(_root, "bundle.zip"), "--json");
+        Assert.Equal(1, preview.ExitCode);
+        Assert.Empty(server.RecordedRequests);
+        Assert.Equal("original", File.ReadAllText(existing));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(500)]
+    public async Task Preview_AcceptsLimitBoundsWithoutChangingThem(int limit)
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        var cli = new CliTestHarness(server.Port);
+        var value = limit.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        var result = await cli.InvokeAsync("devflow", "evidence", "preview",
+            "--log-limit", value, "--network-limit", value, "--json");
+
+        Assert.Equal(0, result.ExitCode);
+        var limits = result.ParseJsonOutput().GetProperty("limits");
+        Assert.Equal(limit, limits.GetProperty("logs").GetInt32());
+        Assert.Equal(limit, limits.GetProperty("network").GetInt32());
     }
 
     [Fact]

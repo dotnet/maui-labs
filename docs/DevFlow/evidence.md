@@ -119,8 +119,11 @@ show any on-screen information; that is why they are a separate explicit opt-in.
 Bundles are written atomically and read back through the validating reader before publication.
 Existing bundles and reports are never overwritten without `--overwrite`. Malformed options
 fail before app reads, and unavailable sections become explicit exclusions rather than empty
-successes. HTTP read timeouts exclude the affected section; canceling the capture still
-aborts it without publishing a partial bundle.
+successes. CLI and MCP reject log/network limits outside 1-500 rather than clamping them.
+Explicit invalid bundle paths and existing-file conflicts are rejected before connecting to
+the app. Directory destinations and omitted paths use an app-derived name after reading
+metadata; atomic publication still checks for conflicts. HTTP read timeouts exclude the
+affected section; canceling the capture still aborts it without publishing a partial bundle.
 
 Imported bundles are untrusted. The reader rejects unknown, nested, traversing, duplicate,
 oversized, or corrupt entries and mismatched manifest hashes. Typed sections have separate

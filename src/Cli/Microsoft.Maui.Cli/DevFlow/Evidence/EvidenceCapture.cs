@@ -25,12 +25,31 @@ internal static class EvidenceCapture
             InvalidOperationException or ArgumentException or NotSupportedException or JsonException or
             TimeoutException or LayoutDiagnosticsException;
 
+    internal static string? ValidateLimits(int? logLimit, int? networkLimit)
+    {
+        if (logLimit is < 1 or > EvidenceFormat.MaxLogLimit)
+            return $"Log limit must be between 1 and {EvidenceFormat.MaxLogLimit}.";
+        if (networkLimit is < 1 or > EvidenceFormat.MaxNetworkLimit)
+            return $"Network limit must be between 1 and {EvidenceFormat.MaxNetworkLimit}.";
+        return null;
+    }
+
+    private static void ValidateRequest(EvidenceRequest request)
+    {
+        if (ValidateLimits(request.LogLimit, request.NetworkLimit) is { } error)
+            throw new ArgumentException(error);
+    }
+
     /// <summary>Collects and projects evidence without writing anything.</summary>
     public static async Task<EvidencePlan> PreviewAsync(
         AgentClient client,
         EvidenceRequest request,
         CancellationToken ct = default)
     {
+        ValidateRequest(request);
+        if (request.Source != "inspector" &&
+            EvidencePaths.ValidateExplicitOutputPath(request.OutputPath, overwrite: true) is { } error)
+            throw new ArgumentException(error);
         await EnsureAgentReachableAsync(client, ct);
         var utcNow = request.UtcNow ?? DateTime.UtcNow;
         var projectRoot = request.ProjectRoot ?? EvidencePaths.FindProjectRoot(request.ProjectHint);
@@ -59,6 +78,9 @@ internal static class EvidenceCapture
         EvidenceRequest request,
         CancellationToken ct = default)
     {
+        ValidateRequest(request);
+        if (EvidencePaths.ValidateExplicitOutputPath(request.OutputPath, request.Overwrite) is { } error)
+            return new EvidenceCaptureResult { Ok = false, Error = error };
         await EnsureAgentReachableAsync(client, ct);
         var utcNow = request.UtcNow ?? DateTime.UtcNow;
         var projectRoot = request.ProjectRoot ?? EvidencePaths.FindProjectRoot(request.ProjectHint);
@@ -101,6 +123,7 @@ internal static class EvidenceCapture
         EvidenceRequest request,
         CancellationToken ct = default)
     {
+        ValidateRequest(request);
         await EnsureAgentReachableAsync(client, ct);
         var utcNow = request.UtcNow ?? DateTime.UtcNow;
         var projectRoot = request.ProjectRoot ?? EvidencePaths.FindProjectRoot(request.ProjectHint);

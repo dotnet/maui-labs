@@ -59,6 +59,65 @@ public class EvidenceMcpTests : IDisposable
         await Assert.ThrowsAnyAsync<HttpRequestException>(() => client.GetNetworkRequestsAsync(100, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData(0, null)]
+    [InlineData(-1, null)]
+    [InlineData(501, null)]
+    [InlineData(null, 0)]
+    [InlineData(null, -1)]
+    [InlineData(null, 501)]
+    public async Task InvalidLimits_AreToolErrorsBeforeAnyAppRead(int? logLimit, int? networkLimit)
+    {
+        await using var agent = new EvidenceAgentFixture();
+        var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1" };
+
+        var preview = await Assert.ThrowsAsync<McpException>(() => EvidenceTools.Preview(
+            session, agentPort: agent.Port, logLimit: logLimit, networkLimit: networkLimit));
+        var capture = await Assert.ThrowsAsync<McpException>(() => EvidenceTools.Capture(
+            session, agentPort: agent.Port, includeScreenshot: true,
+            logLimit: logLimit, networkLimit: networkLimit));
+
+        Assert.Contains("between 1 and 500", preview.Message, StringComparison.Ordinal);
+        Assert.Contains("between 1 and 500", capture.Message, StringComparison.Ordinal);
+        Assert.Empty(agent.Requests);
+    }
+
+    [Fact]
+    public async Task ExplicitOutputErrors_AreToolErrorsBeforeAnyAppRead()
+    {
+        await using var agent = new EvidenceAgentFixture();
+        var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1" };
+        var existing = Path.Combine(_root, "existing.mauitrace");
+        File.WriteAllText(existing, "original");
+        var invalid = Path.Combine(_root, "bundle.zip");
+
+        await Assert.ThrowsAsync<McpException>(() => EvidenceTools.Preview(
+            session, agentPort: agent.Port, outputPath: invalid));
+        foreach (var path in new[] { invalid, existing })
+        {
+            await Assert.ThrowsAsync<McpException>(() => EvidenceTools.Capture(
+                session, agentPort: agent.Port, outputPath: path, includeScreenshot: true));
+        }
+        Assert.Empty(agent.Requests);
+        Assert.Equal("original", File.ReadAllText(existing));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(500)]
+    public async Task Preview_AcceptsLimitBoundsWithoutChangingThem(int limit)
+    {
+        await using var agent = new EvidenceAgentFixture();
+        var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1" };
+
+        using var preview = JsonDocument.Parse(await EvidenceTools.Preview(
+            session, agentPort: agent.Port, logLimit: limit, networkLimit: limit));
+
+        var limits = preview.RootElement.GetProperty("limits");
+        Assert.Equal(limit, limits.GetProperty("logs").GetInt32());
+        Assert.Equal(limit, limits.GetProperty("network").GetInt32());
+    }
+
     [Fact]
     public async Task AgentFixture_DisposalWhileAcceptingConnectionsCompletesCleanly()
     {

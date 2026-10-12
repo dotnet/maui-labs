@@ -33,6 +33,69 @@ public class EvidenceCaptureTests : IDisposable
 
     public EvidenceCaptureTests() => Directory.CreateDirectory(_root);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CaptureAsync_ExplicitOutputErrorsFailBeforeAnyAppRead(bool existing)
+    {
+        await using var agent = new EvidenceAgentFixture();
+        using var client = new AgentClient("127.0.0.1", agent.Port);
+        var destination = Path.Combine(_root, existing ? "existing.mauitrace" : "invalid.zip");
+        if (existing)
+            File.WriteAllText(destination, "original");
+
+        var result = await EvidenceCapture.CaptureAsync(client, new EvidenceRequest
+        {
+            OutputPath = destination,
+            IncludeScreenshot = true,
+        });
+
+        Assert.False(result.Ok);
+        Assert.NotNull(result.Error);
+        Assert.Empty(agent.Requests);
+        if (existing)
+            Assert.Equal("original", File.ReadAllText(destination));
+        else
+            Assert.False(File.Exists(destination));
+    }
+
+    [Fact]
+    public async Task CaptureAsync_DirectoryDestinationUsesTheAppNameNotAPreflightPlaceholder()
+    {
+        await using var agent = new EvidenceAgentFixture();
+        using var client = new AgentClient("127.0.0.1", agent.Port);
+        var placeholder = Path.Combine(_root, EvidencePaths.BuildDefaultFileName(null, DateTime.UnixEpoch));
+        File.WriteAllText(placeholder, "original");
+        var now = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+        var result = await EvidenceCapture.CaptureAsync(client, new EvidenceRequest
+        {
+            OutputPath = _root,
+            UtcNow = now,
+        });
+
+        Assert.True(result.Ok, result.Error);
+        Assert.Equal(Path.Combine(_root, EvidencePaths.BuildDefaultFileName("Evidence Sample", now)), result.Path);
+        Assert.Equal("original", File.ReadAllText(placeholder));
+    }
+
+    [Theory]
+    [InlineData(0, 100)]
+    [InlineData(501, 100)]
+    [InlineData(200, 0)]
+    [InlineData(200, 501)]
+    public async Task CaptureEntryPoints_InvalidLimitsFailBeforeAnyAppRead(int logLimit, int networkLimit)
+    {
+        await using var agent = new EvidenceAgentFixture();
+        using var client = new AgentClient("127.0.0.1", agent.Port);
+        var request = new EvidenceRequest { LogLimit = logLimit, NetworkLimit = networkLimit };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => EvidenceCapture.PreviewAsync(client, request));
+        await Assert.ThrowsAsync<ArgumentException>(() => EvidenceCapture.CaptureAsync(client, request));
+        await Assert.ThrowsAsync<ArgumentException>(() => EvidenceCapture.CaptureToBytesAsync(client, request));
+        Assert.Empty(agent.Requests);
+    }
+
     public void Dispose()
     {
         try { if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true); }

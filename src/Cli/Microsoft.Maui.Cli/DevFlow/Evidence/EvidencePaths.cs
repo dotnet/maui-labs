@@ -119,9 +119,7 @@ internal static class EvidencePaths
             return new EvidencePathResult(null, "Output path is not a valid file path.");
         }
 
-        var endsWithSeparator = value.EndsWith('/') || value.EndsWith('\\') ||
-            value.EndsWith(Path.DirectorySeparatorChar) || value.EndsWith(Path.AltDirectorySeparatorChar);
-        if (Directory.Exists(full) || endsWithSeparator)
+        if (UsesDefaultFileName(value, full))
             full = Path.Combine(full, BuildDefaultFileName(appName, utcNow));
 
         var fileName = Path.GetFileName(full);
@@ -136,6 +134,33 @@ internal static class EvidencePaths
 
         return new EvidencePathResult(full, null);
     }
+
+    internal static string? ValidateExplicitOutputPath(string? requested, bool overwrite)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+            return null;
+
+        var destination = ValidateOutputPath(requested, null, null, DateTime.UnixEpoch);
+        if (!destination.Ok)
+            return destination.Error;
+
+        // Directory destinations need app metadata for the final name; do not check a placeholder for conflicts.
+        if (!UsesDefaultFileName(requested.Trim(), Path.GetFullPath(requested.Trim())) &&
+            !overwrite && File.Exists(destination.Path))
+            return $"File already exists: {destination.Path} (use --overwrite to replace)";
+
+        for (var directory = Path.GetDirectoryName(destination.Path); !string.IsNullOrEmpty(directory);
+             directory = Path.GetDirectoryName(directory))
+        {
+            if (File.Exists(directory))
+                return $"Output directory path is an existing file: {directory}.";
+        }
+        return null;
+    }
+
+    private static bool UsesDefaultFileName(string value, string full)
+        => Directory.Exists(full) || value.EndsWith('/') || value.EndsWith('\\') ||
+            value.EndsWith(Path.DirectorySeparatorChar) || value.EndsWith(Path.AltDirectorySeparatorChar);
 
     /// <summary>Validates a bundle path supplied for reading. The file must exist and be a regular file.</summary>
     public static EvidencePathResult ValidateInputPath(string? requested)
