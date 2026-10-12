@@ -37,6 +37,8 @@ public sealed class MockAgentServer : IAsyncDisposable
     private readonly string? _webViewEvaluateResponse;
     private readonly string? _webViewSourceResponse;
     private readonly int _webViewResponseStatusCode;
+    private readonly bool _invalidWebViewScreenshot;
+    private readonly bool _failWebViewScreenshot;
     private readonly object _mutationLeaseLock = new();
     private string? _mockMutationLeaseId;
     private string? _mockMutationHolderKind;
@@ -73,7 +75,9 @@ public sealed class MockAgentServer : IAsyncDisposable
         bool mutationLeaseTransactionBlocked = false,
         string? webViewEvaluateResponse = null,
         string? webViewSourceResponse = null,
-        int webViewResponseStatusCode = 200)
+        int webViewResponseStatusCode = 200,
+        bool invalidWebViewScreenshot = false,
+        bool failWebViewScreenshot = false)
     {
         _supportsCaptureEpoch = supportsCaptureEpoch;
         _failFirstHitTestCandidate = failFirstHitTestCandidate;
@@ -98,6 +102,8 @@ public sealed class MockAgentServer : IAsyncDisposable
         _webViewEvaluateResponse = webViewEvaluateResponse;
         _webViewSourceResponse = webViewSourceResponse;
         _webViewResponseStatusCode = webViewResponseStatusCode;
+        _invalidWebViewScreenshot = invalidWebViewScreenshot;
+        _failWebViewScreenshot = failWebViewScreenshot;
         if (mutationLeaseHeldByOther)
         {
             _mockMutationLeaseId = "other-lease";
@@ -602,7 +608,11 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/webview/dom", () => Results.Content("""{"root":{"tag":"html"}}""", "application/json"));
         app.MapGet("/api/v1/webview/dom/query", () => Results.Content("""{"matches":[{"tag":"div","id":"app"}]}""", "application/json"));
         app.MapGet("/api/v1/webview/console", () => Results.Content("""{"entries":[]}""", "application/json"));
-        app.MapGet("/api/v1/webview/screenshot", () => Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
+        app.MapGet("/api/v1/webview/screenshot", () => _failWebViewScreenshot
+            ? Results.Content("""{"success":false,"error":"Failed to capture WebView screenshot"}""", "application/json", statusCode: 400)
+            : _invalidWebViewScreenshot
+                ? Results.Content("""{"error":"Not a PNG"}""", "application/json")
+                : Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
 
         app.MapPost("/api/v1/webview/evaluate", async (HttpContext context) =>
         {

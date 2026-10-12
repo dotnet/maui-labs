@@ -88,14 +88,8 @@ internal sealed class WebViewOperations(AgentClient client)
 
     internal async Task<string?> PageCaptureScreenshotAsync(string? webview = null)
     {
-        var result = await client.SendCdpCommandAsync("Page.captureScreenshot", webviewId: webview);
-        if (result.TryGetProperty("result", out var resultProp) &&
-            resultProp.TryGetProperty("data", out var dataProp))
-        {
-            return dataProp.GetString();
-        }
-
-        return CliJson.PrettyPrint(result);
+        var bytes = await client.GetWebViewScreenshotAsync(webview);
+        return Convert.ToBase64String(bytes);
     }
 
     internal Task<string> InputDispatchClickAsync(string selector, string? webview = null) =>

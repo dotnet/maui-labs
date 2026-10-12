@@ -136,23 +136,47 @@ public class WebViewOperationsTests
         Assert.False(body.RootElement.TryGetProperty("params", out _));
     }
 
-    [Theory]
-    [InlineData("""{"result":{"data":"cG5n"}}""", "cG5n")]
-    [InlineData("""{"result":{"data":null}}""", null)]
-    [InlineData("""{"result":{}}""", "{\n  \"result\": {}\n}")]
-    public async Task PageCaptureScreenshotAsync_DecodesDataOrPreservesFallback(string response, string? expected)
+    [Fact]
+    public async Task PageCaptureScreenshotAsync_ReturnsNativePngAsBase64()
     {
-        await using var server = new MockAgentServer { WebViewEvaluateResponse = response };
+        await using var server = new MockAgentServer();
         await server.StartAsync();
         using var client = new AgentClient("localhost", server.Port);
 
         var actual = await new WebViewOperations(client).PageCaptureScreenshotAsync("1");
 
-        Assert.Equal(expected, actual?.Replace("\r\n", "\n"));
-        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+        Assert.Equal(MockAgentResponses.ScreenshotPng, Convert.FromBase64String(actual!));
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
+        Assert.Equal("GET", request.Method);
         Assert.Equal("?webview=1", request.QueryString);
-        using var body = JsonDocument.Parse(request.Body!);
-        Assert.Equal("Page.captureScreenshot", body.RootElement.GetProperty("method").GetString());
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+    }
+
+    [Fact]
+    public async Task PageCaptureScreenshotAsync_InvalidPng_ThrowsInsteadOfReturningFallback()
+    {
+        await using var server = new MockAgentServer(invalidWebViewScreenshot: true);
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new WebViewOperations(client).PageCaptureScreenshotAsync());
+
+        Assert.Contains("PNG", error.Message);
+    }
+
+    [Fact]
+    public async Task PageCaptureScreenshotAsync_HttpFailure_PreservesDetails()
+    {
+        await using var server = new MockAgentServer(failWebViewScreenshot: true);
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+
+        var error = await Assert.ThrowsAsync<HttpRequestException>(
+            () => new WebViewOperations(client).PageCaptureScreenshotAsync());
+
+        Assert.Contains("HTTP 400", error.Message);
+        Assert.Contains("Failed to capture WebView screenshot", error.Message);
     }
 
     [Theory]

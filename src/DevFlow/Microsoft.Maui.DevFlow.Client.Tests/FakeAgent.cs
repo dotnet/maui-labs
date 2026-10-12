@@ -99,7 +99,7 @@ internal sealed class FakeAgent : IDisposable
                     _requests.Add(request);
 
                 var response = _handler(request);
-                var bodyBytes = Encoding.UTF8.GetBytes(response.Body);
+                var bodyBytes = response.Bytes ?? Encoding.UTF8.GetBytes(response.Body);
                 var header = new StringBuilder()
                     .Append("HTTP/1.1 ").Append(response.StatusCode).Append(" ").Append(ReasonPhrase(response.StatusCode)).Append("\r\n")
                     .Append("Content-Type: ").Append(response.ContentType).Append("\r\n")
@@ -253,20 +253,25 @@ internal sealed class FakeAgent : IDisposable
 
     internal sealed class Response
     {
-        private Response(int statusCode, string body, string contentType)
+        private Response(int statusCode, string body, string contentType, byte[]? bytes = null)
         {
             StatusCode = statusCode;
             Body = body;
             ContentType = contentType;
+            Bytes = bytes;
         }
 
         public int StatusCode { get; }
 
         public string Body { get; }
 
+        public byte[]? Bytes { get; }
+
         public string ContentType { get; }
 
         public static Response Json(string body, int statusCode = 200)
             => new Response(statusCode, body, "application/json");
+        public static Response Png(byte[] bytes)
+            => new Response(200, string.Empty, "image/png", bytes: bytes);
     }
 }
