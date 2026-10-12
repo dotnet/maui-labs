@@ -52,6 +52,12 @@ Do not run `npm start`; the Copilot host launches `extension.mjs`.
 When several apps are connected, ask Copilot to list the agents and select the intended app or
 platform before making changes.
 
+An explicit choice remains selected even if that app disconnects during connection. The Canvas
+waits for the selected app instead of reconnecting to the previous app. Rapid choices use the
+latest request; stale shell synchronization cannot replace it.
+Replacement processes need a unique full project identity and non-empty matching session
+metadata. Legacy registrations without session metadata require explicit reselection.
+
 ## Avoid duplicate user extensions
 
 If `~/.copilot/extensions/maui-live-canvas` or
@@ -85,6 +91,7 @@ Copilot Canvas -> extension.mjs -> broker-hosted shared Inspector
 | File | Responsibility |
 |---|---|
 | `extension.mjs` | Canvas registration, loopback panel server, and agent-callable actions |
+| `target-controller.mjs` | Explicit target selection, serialized synchronization, and readiness |
 | `devflow.mjs` | Adapter over `@maui-devflow/client` |
 | `store.mjs` | Live state, selection, and action coordination |
 | `recorder.mjs`, `replay.mjs` | Workflow persistence and replay |

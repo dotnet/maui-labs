@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -115,7 +116,9 @@ public sealed class InspectorServer : IDisposable
         string? platform,
         string? project,
         string? sessionId,
-        string? policyStartPath = null)
+        string? policyStartPath = null,
+        int? processId = null,
+        XamlSourceWorkspace? sourceWorkspace = null)
     {
         _port = port;
         _agentHost = agentHost;
@@ -126,7 +129,11 @@ public sealed class InspectorServer : IDisposable
         _platform = platform;
         _project = string.IsNullOrWhiteSpace(project) ? null : project;
         _sessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
-        _sourcePropertyEditor = new XamlSourcePropertyEditor(project, sessionId);
+        _sourcePropertyEditor = new XamlSourcePropertyEditor(
+            project,
+            sessionId,
+            TryGetProcessExecutablePath(processId, platform, project, appName),
+            workspace: sourceWorkspace);
         _alertController = new InspectorAlertController(agentHost, agentPort, appName, platform);
         _client = new AgentClient(agentHost, agentPort)
         {
@@ -143,6 +150,52 @@ public sealed class InspectorServer : IDisposable
         _projectLayoutDiagnosticsPolicy = _policyStartPath is null
             ? new LayoutDiagnosticsPolicy()
             : LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(_policyStartPath);
+    }
+
+    private static string? TryGetProcessExecutablePath(
+        int? processId,
+        string? platform,
+        string? project,
+        string? appName)
+    {
+        if (processId is not > 0 || !IsHostLocalPlatform(platform))
+            return null;
+
+        try
+        {
+            using var process = Process.GetProcessById(processId.Value);
+            var executablePath = process.MainModule?.FileName;
+            return ExecutableMatchesAgent(executablePath, project, appName)
+                ? executablePath
+                : null;
+        }
+        catch (Exception ex) when (ex is
+            ArgumentException or
+            InvalidOperationException or
+            UnauthorizedAccessException or
+            System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
+    }
+
+    internal static bool IsHostLocalPlatform(string? platform)
+        => platform?.Trim().ToLowerInvariant() is
+            "windows" or "winui" or "wpf" or "macos" or "appkit" or "maccatalyst" or "gtk" or "linux";
+
+    internal static bool ExecutableMatchesAgent(
+        string? executablePath,
+        string? project,
+        string? appName)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath))
+            return false;
+
+        var executableName = Path.GetFileNameWithoutExtension(executablePath);
+        var projectName = Path.GetFileNameWithoutExtension(project);
+        return !string.IsNullOrWhiteSpace(executableName) &&
+            (string.Equals(executableName, projectName, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(executableName, appName, StringComparison.OrdinalIgnoreCase));
     }
 
     private void InvalidateScreenshotCache()
@@ -362,6 +415,23 @@ public sealed class InspectorServer : IDisposable
                 retryable = outcome.Retryable
             }));
     }
+
+    private static (int, string, byte[]) TapOutcomeResponse(
+        bool ok,
+        string? elementId,
+        string? reason,
+        int attemptedCandidates)
+        => (
+            200,
+            "application/json",
+            JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                ok,
+                elementId,
+                reason,
+                error = ok ? null : new { code = "tap-rejected", message = reason },
+                attemptedCandidates
+            }, CamelCase));
 
     private static (int, string, byte[]) UiReadOutcomeResponse(UiReadResult outcome)
     {
@@ -1055,6 +1125,10 @@ public sealed class InspectorServer : IDisposable
             .Append(BuildMeta("devflow-platform", _platform))
             .Append(BuildMeta("devflow-agent-port", _agentPort.ToString(System.Globalization.CultureInfo.InvariantCulture)))
             .ToString();
+        var title = string.IsNullOrWhiteSpace(_appName)
+            ? "MAUI DevFlow Inspector"
+            : $"MAUI DevFlow Inspector · {_appName}";
+        html = ReplaceDocumentTitle(html, title);
         html = html.Contains("</head>", StringComparison.Ordinal)
             ? html.Replace("</head>", tokenMeta + agentMeta + "</head>")
             : tokenMeta + agentMeta + html;
@@ -1065,6 +1139,26 @@ public sealed class InspectorServer : IDisposable
         => string.IsNullOrWhiteSpace(value)
             ? string.Empty
             : $"<meta name=\"{name}\" content=\"{WebUtility.HtmlEncode(value)}\">";
+
+    private static string ReplaceDocumentTitle(string html, string title)
+    {
+        var titleStart = html.IndexOf("<title", StringComparison.OrdinalIgnoreCase);
+        if (titleStart < 0)
+            return html;
+
+        var contentStart = html.IndexOf('>', titleStart);
+        if (contentStart < 0)
+            return html;
+
+        var titleEnd = html.IndexOf("</title>", contentStart + 1, StringComparison.OrdinalIgnoreCase);
+        if (titleEnd < 0)
+            return html;
+
+        return string.Concat(
+            html.AsSpan(0, contentStart + 1),
+            WebUtility.HtmlEncode(title),
+            html.AsSpan(titleEnd));
+    }
 
     /// <summary>
     /// Returns JSON state for AJAX polling: screenshot (as timestamped URL) + element divs HTML.
@@ -1953,6 +2047,45 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
+        var requestedElementId =
+            root.TryGetProperty("elementId", out var requestedElementProperty) &&
+            requestedElementProperty.ValueKind == JsonValueKind.String
+                ? requestedElementProperty.GetString()
+                : null;
+
+        // The rendered overlay is the user's explicit target. Do not fall through to a different
+        // geometric candidate when that exact target rejects the tap.
+        if (!string.IsNullOrEmpty(requestedElementId))
+        {
+            if (!TryGetActionCaptureMetadata(
+                root,
+                required: await RequiresCaptureEpochAsync(),
+                out var captureEpoch,
+                out var registryGeneration,
+                out var metadataError))
+            {
+                return CaptureMetadataError(metadataError!);
+            }
+
+            var outcome = await _client.TapResultAsync(
+                requestedElementId,
+                captureEpoch,
+                registryGeneration);
+            if (outcome.Success)
+                InvalidateScreenshotCache();
+            if (outcome.TransportFailure || outcome.Retryable ||
+                outcome.StatusCode is 408 or 409 or 429 ||
+                outcome.StatusCode >= 500)
+            {
+                return ActionOutcomeResponse(outcome);
+            }
+
+            return TapOutcomeResponse(
+                outcome.Success,
+                requestedElementId,
+                outcome.Success ? null : outcome.Reason ?? "The selected element did not accept the tap.",
+                attemptedCandidates: 1);
+        }
 
         // Coordinates are already translated into window space by devflow.js using the frame's
         // root offsets, so every browser tab acts against the exact frame it rendered.
@@ -1963,6 +2096,7 @@ public sealed class InspectorServer : IDisposable
 
             var attemptedIds = new HashSet<string>(StringComparer.Ordinal);
             var retryCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            var attemptedCandidates = 0;
             ActionResult? terminalOutcome = null;
             var hitOutcome = await _client.HitTestResultAsync(x, y);
             if (!hitOutcome.Success)
@@ -1979,6 +2113,7 @@ public sealed class InspectorServer : IDisposable
                     out var registryGeneration))
                     break;
 
+                attemptedCandidates++;
                 var outcome = await _client.TapResultAsync(
                     elementId!,
                     captureEpoch,
@@ -1986,7 +2121,11 @@ public sealed class InspectorServer : IDisposable
                 if (outcome.Success)
                 {
                     InvalidateScreenshotCache();
-                    return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+                    return TapOutcomeResponse(
+                        true,
+                        elementId,
+                        reason: null,
+                        attemptedCandidates: attemptedCandidates);
                 }
 
                 if (outcome.TransportFailure)
@@ -2022,32 +2161,13 @@ public sealed class InspectorServer : IDisposable
             }
             if (terminalOutcome.HasValue)
                 return ActionOutcomeResponse(terminalOutcome.Value);
-            return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false,\"reason\":\"No tappable element at coordinates\"}"));
-        }
-
-        // Support elementId-based tap
-        if (root.TryGetProperty("elementId", out var elIdProp))
-        {
-            var elementId = elIdProp.GetString();
-            if (!string.IsNullOrEmpty(elementId))
-            {
-                if (!TryGetActionCaptureMetadata(
-                    root,
-                    required: await RequiresCaptureEpochAsync(),
-                    out var captureEpoch,
-                    out var registryGeneration,
-                    out var metadataError))
-                {
-                    return CaptureMetadataError(metadataError!);
-                }
-
-                var outcome = await _client.TapResultAsync(
-                    elementId,
-                    captureEpoch,
-                    registryGeneration);
-                InvalidateScreenshotCache();
-                return ActionOutcomeResponse(outcome);
-            }
+            return TapOutcomeResponse(
+                false,
+                elementId: null,
+                reason: attemptedCandidates > 0
+                    ? "No active element at the coordinates accepted the tap."
+                    : "No tappable element was found at the coordinates.",
+                attemptedCandidates: attemptedCandidates);
         }
 
         return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"x/y or elementId required\"}"));
@@ -3045,13 +3165,15 @@ public sealed class InspectorServer : IDisposable
         var el = await _client.GetElementAsync(elementId);
         if (el?.SourceFile is null)
             return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false,\"error\":\"No source available for this element.\"}"));
-        var sourcePath = el.SourceFile;
-        if (!Path.IsPathFullyQualified(sourcePath) && _project is not null && Path.IsPathFullyQualified(_project))
+        var sourcePath = _sourcePropertyEditor.ResolveSourcePath(el.SourceFile, out var sourceError);
+        if (sourcePath is null)
         {
-            var resolved = _sourcePropertyEditor.ResolveSourcePath(sourcePath, out var error);
-            if (resolved is null)
-                return JsonResponse(200, new { ok = false, error });
-            sourcePath = resolved;
+            var errorPayload = JsonSerializer.Serialize(new
+            {
+                ok = false,
+                error = sourceError ?? "Could not resolve the full local source path."
+            });
+            return (200, "application/json", Encoding.UTF8.GetBytes(errorPayload));
         }
         var payload = JsonSerializer.Serialize(new
         {
