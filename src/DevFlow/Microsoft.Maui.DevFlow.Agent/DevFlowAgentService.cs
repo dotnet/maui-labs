@@ -696,10 +696,7 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             }
 #elif ANDROID
             if (platformView is global::Android.Views.View androidView && androidView.Clickable)
-            {
-                androidView.PerformClick();
-                return true;
-            }
+                return androidView.PerformClick();
 #elif MACOS
             if (platformView is NSButton button)
             {

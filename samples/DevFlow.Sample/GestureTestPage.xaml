@@ -18,6 +18,22 @@
                 </Label.TextColor>
             </Label>
 
+            <Border StrokeShape="RoundRectangle 8" Padding="16">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Read-only input tap target" FontAttributes="Bold" FontSize="16" />
+                    <Entry Text="Tap to select an item"
+                           IsReadOnly="True"
+                           AutomationId="TapInput">
+                        <Entry.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnInputTapped" />
+                        </Entry.GestureRecognizers>
+                    </Entry>
+                    <Label x:Name="InputTapStatusLabel"
+                           Text="input tap: 0"
+                           AutomationId="InputTapStatusLabel" />
+                </VerticalStackLayout>
+            </Border>
+
             <!-- Pinch: PinchGestureRecognizer, accumulates e.Scale like a real pinch -->
             <Border StrokeShape="RoundRectangle 8" Padding="16">
                 <Border.BackgroundColor>

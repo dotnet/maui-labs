@@ -26,6 +26,7 @@ public static class WpfAgentServiceExtensions
 
         var project = ReadAssemblyMetadata("Microsoft.Maui.DevFlowProject") ?? "unknown";
         var tfm = ReadAssemblyMetadata("Microsoft.Maui.DevFlowTfm") ?? "unknown";
+        var sessionId = ReadAssemblyMetadata("Microsoft.Maui.DevFlowSessionId");
 
         BrokerRegistration? brokerReg = null;
         bool hasCustomPort = options.Port != AgentOptions.DefaultPort;
@@ -33,7 +34,7 @@ public static class WpfAgentServiceExtensions
         {
             var platform = "WPF";
             var appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
-            brokerReg = new BrokerRegistration(project, tfm, platform, appName);
+            brokerReg = new BrokerRegistration(project, tfm, platform, appName, sessionId);
             if (hasCustomPort)
                 brokerReg.CurrentPort = options.Port;
             var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
@@ -64,6 +65,7 @@ public static class WpfAgentServiceExtensions
             options,
             nativeElementRegistry,
             nativeElementDiagnosticSubscriber);
+        service.SetSessionId(sessionId);
         if (brokerReg != null)
         {
             brokerReg.CurrentPort = options.Port;
