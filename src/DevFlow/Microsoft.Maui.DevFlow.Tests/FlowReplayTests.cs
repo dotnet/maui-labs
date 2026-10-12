@@ -47,6 +47,10 @@ public class FlowReplayTests
         Assert.Equal("hello", agentSrv.TextOf("entry"));            // fill actually applied
         Assert.True(report.Results[0].Asserts[0].Ok);              // exists passed
         Assert.True(report.Results[1].Asserts[0].Ok);              // propEquals passed
+        Assert.Equal("submit", report.Results[0].Asserts[0].AutomationId);
+        Assert.Equal("name", report.Results[1].Asserts[0].AutomationId);
+        Assert.Equal("Text", report.Results[1].Asserts[0].Name);
+        Assert.Equal("hello", report.Results[1].Asserts[0].Expected);
     }
 
     [Fact]
@@ -74,6 +78,7 @@ public class FlowReplayTests
         Assert.Equal(1, report.Failed);
         Assert.Contains("could not be resolved", report.Results[0].Error);
         Assert.True(report.Results[0].Asserts[0].Skipped);        // asserts not run after a failed drive
+        Assert.Equal("nope", report.Results[0].Asserts[0].AutomationId);
     }
 
     [Fact]
@@ -100,6 +105,7 @@ public class FlowReplayTests
         Assert.False(report.Ok);
         Assert.False(report.Results[0].Asserts[0].Ok);
         Assert.Equal("hello", report.Results[0].Asserts[0].Actual);   // observed actual is reported
+        Assert.Equal("name", report.Results[0].Asserts[0].AutomationId);
     }
 
     [Fact]

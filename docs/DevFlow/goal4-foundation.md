@@ -26,6 +26,16 @@ success are distinct; cleanup cannot rewrite the primary outcome. Evidence
 contains digests and bounded outcomes, not UI values, source paths or raw logs.
 Every result remains diagnostic-only and confers no repair or source authority.
 
+Hard assertion receipts must match their bound step/order, kind, AutomationId,
+property name and expected value. Replay reports now include the assertion's
+declared `AutomationId`; this identifies the requested selector, not an observed
+proof of live uniqueness. The trusted host still owns that check.
+Once replay completes, its UI outcome is preserved even if independent
+verification fails or is cancelled. `VerificationFailureCode` separately reports
+`oracle-not-independent`, `oracle-rejected`, `oracle-failed` or `oracle-cancelled`;
+`FailureCode` remains the replay result and `CleanupFailureCode` remains cleanup.
+Unknown completion is reserved for a replay whose completion is unknown.
+
 The initial scope excludes fill, property/environment changes, repeated items,
 destructive/non-replayable operations, selector fallback and automatic repair.
 Repeated items require a future composite AutomationId + collection scope +

@@ -6,7 +6,8 @@ internal enum PreviewFlowOutcome { Passed, Failed, UnknownCompletion }
 
 internal sealed record PreviewFlowEvidence(
     string PlanDigest, string FlowDigest, PreviewFlowOutcome Outcome,
-    bool IndependentlyVerified, bool CleanupComplete, string? FailureCode, string? CleanupFailureCode = null)
+    bool IndependentlyVerified, bool CleanupComplete, string? FailureCode, string? CleanupFailureCode = null,
+    string? VerificationFailureCode = null)
 {
     public string Qualification => "not-qualified";
     public bool DiagnosticOnly => true;
@@ -49,20 +50,20 @@ internal sealed class PreviewFlowRunner(IPreviewFlowHost host, bool enabled = fa
         {
             var expected = plan.CopyFlow();
             var report = await _host.ReplayAsync(plan.CopyFlow(), cancellationToken).ConfigureAwait(false);
-            var passed = report.Ok && report.Failed == 0 && report.Total == plan.CopyFlow().Steps.Count &&
+            var passed = report.Ok && report.Failed == 0 && report.Total == expected.Steps.Count &&
                 report.Passed == report.Total && report.Results.Count == report.Total &&
                 report.Results.Zip(expected.Steps).All(pair =>
                     pair.First.Ok && pair.First.Seq == pair.Second.Seq && pair.First.Action == pair.Second.Action &&
                     pair.First.Asserts.Count == (pair.Second.Asserts?.Count ?? 0) &&
                     pair.First.Asserts.Zip(pair.Second.Asserts ?? []).All(assertion =>
                         !assertion.Second.Verify || (assertion.First.Kind == assertion.Second.Kind &&
+                            assertion.First.AutomationId == assertion.Second.Selector?.AutomationId &&
+                            assertion.First.Name == assertion.Second.Name &&
+                            assertion.First.Expected == assertion.Second.Expected &&
                             assertion.First.Ok == true && !assertion.First.Skipped)));
-            var oracle = passed
-                ? await _host.VerifyBusinessOutcomeAsync(cancellationToken).ConfigureAwait(false)
-                : new PreviewOracleResult(false, false);
             evidence = new(plan.PlanDigest, plan.FlowDigest,
                 passed ? PreviewFlowOutcome.Passed : PreviewFlowOutcome.Failed,
-                passed && oracle.Independent && oracle.Succeeded, false, passed ? null : "flow-failed");
+                false, false, passed ? null : "flow-failed");
         }
         catch (OperationCanceledException)
         {
@@ -74,6 +75,28 @@ internal sealed class PreviewFlowRunner(IPreviewFlowHost host, bool enabled = fa
             // The host may have dispatched before its response failed. Never retry or emit raw data.
             evidence = new(plan.PlanDigest, plan.FlowDigest, PreviewFlowOutcome.UnknownCompletion,
                 false, false, "host-execution-failed");
+        }
+        if (evidence.Outcome == PreviewFlowOutcome.Passed)
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var oracle = await _host.VerifyBusinessOutcomeAsync(cancellationToken).ConfigureAwait(false);
+                evidence = evidence with
+                {
+                    IndependentlyVerified = oracle.Independent && oracle.Succeeded,
+                    VerificationFailureCode = !oracle.Independent ? "oracle-not-independent" :
+                        !oracle.Succeeded ? "oracle-rejected" : null
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                evidence = evidence with { VerificationFailureCode = "oracle-cancelled" };
+            }
+            catch (Exception)
+            {
+                evidence = evidence with { VerificationFailureCode = "oracle-failed" };
+            }
         }
         // Cleanup is a separate result, never a replacement for the immutable primary outcome.
         try
