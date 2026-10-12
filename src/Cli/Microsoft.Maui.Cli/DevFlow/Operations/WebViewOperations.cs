@@ -29,8 +29,7 @@ internal sealed class WebViewOperations(AgentClient client)
             }
             if (evalResult.TryGetProperty("exceptionDetails", out var exception))
             {
-                var text = exception.TryGetProperty("text", out var t) ? t.GetString() : "Unknown error";
-                return $"Error: {text}";
+                throw new InvalidOperationException(exception.GetRawText());
             }
         }
 
@@ -103,7 +102,7 @@ internal sealed class WebViewOperations(AgentClient client)
         EvaluateAsync($@"
                 (function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
-                    if (!el) return 'Error: Element not found';
+                    if (!el) throw new Error('Element not found');
                     el.click();
                     return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
                 }})()
@@ -119,7 +118,7 @@ internal sealed class WebViewOperations(AgentClient client)
         EvaluateAsync($@"
                 (function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
-                    if (!el) return 'Error: Element not found';
+                    if (!el) throw new Error('Element not found');
 
                     const text = {CliJson.SerializeUntyped(text, indented: false)};
                     if (el.isContentEditable) {{

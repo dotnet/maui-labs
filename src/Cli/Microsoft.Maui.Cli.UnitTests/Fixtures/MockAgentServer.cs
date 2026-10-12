@@ -34,6 +34,9 @@ public sealed class MockAgentServer : IAsyncDisposable
     private readonly int _capabilitiesErrorResponseCount;
     private readonly bool _supportMutationLease;
     private readonly bool _mutationLeaseTransactionBlocked;
+    private readonly string? _webViewEvaluateResponse;
+    private readonly string? _webViewSourceResponse;
+    private readonly int _webViewResponseStatusCode;
     private readonly object _mutationLeaseLock = new();
     private string? _mockMutationLeaseId;
     private string? _mockMutationHolderKind;
@@ -67,7 +70,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         int capabilitiesErrorResponseCount = 0,
         bool supportMutationLease = false,
         bool mutationLeaseHeldByOther = false,
-        bool mutationLeaseTransactionBlocked = false)
+        bool mutationLeaseTransactionBlocked = false,
+        string? webViewEvaluateResponse = null,
+        string? webViewSourceResponse = null,
+        int webViewResponseStatusCode = 200)
     {
         _supportsCaptureEpoch = supportsCaptureEpoch;
         _failFirstHitTestCandidate = failFirstHitTestCandidate;
@@ -89,6 +95,9 @@ public sealed class MockAgentServer : IAsyncDisposable
         _capabilitiesErrorResponseCount = capabilitiesErrorResponseCount;
         _supportMutationLease = supportMutationLease;
         _mutationLeaseTransactionBlocked = mutationLeaseTransactionBlocked;
+        _webViewEvaluateResponse = webViewEvaluateResponse;
+        _webViewSourceResponse = webViewSourceResponse;
+        _webViewResponseStatusCode = webViewResponseStatusCode;
         if (mutationLeaseHeldByOther)
         {
             _mockMutationLeaseId = "other-lease";
@@ -588,7 +597,8 @@ public sealed class MockAgentServer : IAsyncDisposable
     private void RegisterWebViewEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/webview/contexts", () => Results.Content(MockAgentResponses.WebViews, "application/json"));
-        app.MapGet("/api/v1/webview/source", () => Results.Content(MockAgentResponses.WebViewSource, "text/html"));
+        app.MapGet("/api/v1/webview/source", () => Results.Content(
+            _webViewSourceResponse ?? MockAgentResponses.WebViewSource, "text/html", statusCode: _webViewResponseStatusCode));
         app.MapGet("/api/v1/webview/dom", () => Results.Content("""{"root":{"tag":"html"}}""", "application/json"));
         app.MapGet("/api/v1/webview/dom/query", () => Results.Content("""{"matches":[{"tag":"div","id":"app"}]}""", "application/json"));
         app.MapGet("/api/v1/webview/network", () => Results.Content("""{"entries":[]}""", "application/json"));
@@ -599,8 +609,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         {
             using var reader = new StreamReader(context.Request.Body);
             var body = await reader.ReadToEndAsync();
-            var method = JsonDocument.Parse(body).RootElement.GetProperty("method").GetString() ?? string.Empty;
-            return Results.Content(WebViewEvaluateResponse ?? MockAgentResponses.WebViewEvaluate(method), "application/json");
+            using var document = JsonDocument.Parse(body);
+            var method = document.RootElement.GetProperty("method").GetString() ?? string.Empty;
+            return Results.Content(WebViewEvaluateResponse ?? _webViewEvaluateResponse ?? MockAgentResponses.WebViewEvaluate(method),
+                "application/json", statusCode: _webViewResponseStatusCode);
         });
     }
 

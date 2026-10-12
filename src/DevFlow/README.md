@@ -35,6 +35,23 @@ The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT te
 
 ## Quick Start
 
+### WebView failures
+
+WebView HTTP and CDP failures are reported as errors, not successful evaluation
+results. JavaScript exceptions include their description; when a bridge returns
+only a stack, the agent reads the original error object's `message` property
+without re-evaluating the failed expression. CLI evaluation exits nonzero on
+failure, and MCP evaluation/source tools report an error (including empty source).
+
+**Breaking behavior change:** `AgentClient.SendCdpCommandAsync` now throws on HTTP,
+CDP, JavaScript, invalid JSON/non-object responses, and explicit `success: false`.
+`NavigateWebViewAsync`, `ClickWebViewAsync`, `FillWebViewAsync`, and
+`InsertWebViewTextAsync` retain their `Task<bool>` signatures but throw on failure
+or a missing/non-true success flag instead of returning `false`. HTTP failures
+throw `HttpRequestException` with the response body; protocol/JavaScript failures
+throw `InvalidOperationException`, and invalid JSON throws `JsonException`.
+`GetCdpSourceAsync` includes the response body in HTTP exceptions.
+
 ### NativeAOT and trimming
 
 The agent's built-in HTTP requests/responses, broker registration and lease/recording

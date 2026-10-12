@@ -18,14 +18,14 @@ public sealed class CdpTools
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         using var agent = await session.GetAgentClientAsync(agentPort);
-        var content = await agent.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
-        {
-            ["expression"] = expression,
-            ["returnByValue"] = true
-        }, webviewId);
-
         try
         {
+            var content = await agent.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
+            {
+                ["expression"] = expression,
+                ["returnByValue"] = true
+            }, webviewId);
+
             if (content.TryGetProperty("result", out var result) &&
                 result.TryGetProperty("result", out var inner) &&
                 inner.TryGetProperty("value", out var value))
@@ -34,9 +34,9 @@ public sealed class CdpTools
             }
             return content.ToString();
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException)
         {
-            return content.ToString();
+            throw new McpException(ex.Message);
         }
     }
 
@@ -72,8 +72,17 @@ public sealed class CdpTools
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         using var agent = await session.GetAgentClientAsync(agentPort);
-        var source = await agent.GetCdpSourceAsync(webviewId);
-        return string.IsNullOrEmpty(source) ? "No WebView source available." : source;
+        try
+        {
+            var source = await agent.GetCdpSourceAsync(webviewId);
+            if (string.IsNullOrWhiteSpace(source))
+                throw new McpException("The selected WebView returned no HTML source.");
+            return source;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            throw new McpException(ex.Message);
+        }
     }
 
     [McpServerTool(Name = "maui_cdp_webviews"), Description("List all registered Blazor WebViews in the running app.")]
