@@ -20,7 +20,8 @@ export function agentIdentityKey(agent) {
   ];
   if (!parts.every(Boolean)) return null;
   const sessionId = normalizeIdentity(agent.sessionId);
-  if (sessionId) parts.push(sessionId);
+  if (!sessionId) return null;
+  parts.push(sessionId);
   return parts.join("\u0000");
 }
 

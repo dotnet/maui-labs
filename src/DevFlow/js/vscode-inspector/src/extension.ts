@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { createHash, randomBytes } from "crypto";
 import type { AgentRegistration } from "@maui-devflow/client";
+import { PanelContextStore } from "./panel-context";
+import { isInside, resolveLocalSourceFile } from "./source-path";
 import {
   createReconnectController,
   inspectorTitle,
@@ -59,27 +61,14 @@ interface BridgeResult {
   markdown?: string;
   steps?: number;
 }
-let currentSelection: SelectedElement | null = null;
-let currentDataSnapshot: DataSnapshot | null = null;
-let currentSelectionOwner: object | null = null;
-let currentDataSnapshotOwner: object | null = null;
+const panelContexts = new PanelContextStore<SelectedElement, DataSnapshot>();
 
 function updatePanelSelection(owner: object, selection: SelectedElement | null): void {
-  if (selection || currentSelectionOwner === owner || currentSelectionOwner === null) {
-    currentSelection = selection;
-    currentSelectionOwner = selection ? owner : null;
-  }
+  panelContexts.setSelection(owner, selection);
 }
 
 function clearPanelContext(owner: object): void {
-  if (currentSelectionOwner === owner) {
-    currentSelection = null;
-    currentSelectionOwner = null;
-  }
-  if (currentDataSnapshotOwner === owner) {
-    currentDataSnapshot = null;
-    currentDataSnapshotOwner = null;
-  }
+  panelContexts.clear(owner);
 }
 
 function registerSelectionTool(context: vscode.ExtensionContext): void {
@@ -95,6 +84,7 @@ function registerSelectionTool(context: vscode.ExtensionContext): void {
         invoke: async () => {
           const ToolResult = (vscode as any).LanguageModelToolResult;
           const TextPart = (vscode as any).LanguageModelTextPart;
+          const currentSelection = panelContexts.selection;
           const text = currentSelection
             ? "The user has this .NET MAUI element selected in the MAUI DevFlow Inspector:\n" +
               JSON.stringify(currentSelection, null, 2) +
@@ -119,6 +109,7 @@ function registerDataSnapshotTool(context: vscode.ExtensionContext): void {
         invoke: async () => {
           const ToolResult = (vscode as any).LanguageModelToolResult;
           const TextPart = (vscode as any).LanguageModelTextPart;
+          const currentDataSnapshot = panelContexts.snapshot;
           const text = currentDataSnapshot
             ? "The user attached this point-in-time, redacted .NET MAUI DevFlow Data snapshot. " +
               "Use followUpTools when deeper or fresher data is needed:\n" +
@@ -164,6 +155,11 @@ async function openInspector(): Promise<void> {
   let connectionSignature = "";
   const pickerCancellation = new vscode.CancellationTokenSource();
   const contextOwner = {};
+  panelContexts.add(contextOwner);
+  if (panel.active) panelContexts.activate(contextOwner);
+  panel.onDidChangeViewState(({ webviewPanel }) => {
+    if (!disposed && webviewPanel.active) panelContexts.activate(contextOwner);
+  });
 
   const showReconnect = (state: ReconnectState): void => {
     if (disposed) return;
@@ -263,7 +259,7 @@ async function openInspector(): Promise<void> {
     clearInterval(reconnectTimer);
     pickerCancellation.cancel();
     pickerCancellation.dispose();
-    clearPanelContext(contextOwner);
+    panelContexts.remove(contextOwner);
   });
   await reconnect.poll();
 }
@@ -330,8 +326,8 @@ async function handleBridgeMessage(
 
 async function sendToCopilot(payload: CopilotPayload | undefined, contextOwner: object): Promise<void> {
   const carriesElement = !!payload && Object.prototype.hasOwnProperty.call(payload, "element");
-  const el = carriesElement ? payload?.element : currentSelection;
-  if (carriesElement && el) updatePanelSelection(contextOwner, el);
+  const el = carriesElement ? payload?.element : panelContexts.getSelection(contextOwner);
+  if (carriesElement) updatePanelSelection(contextOwner, el ?? null);
 
   const bits: string[] = [];
   if (el) {
@@ -414,15 +410,15 @@ async function attachDataToCopilot(
     vscode.window.showWarningMessage(`DevFlow: ${error}`);
     return { ok: false, error };
   }
-  currentDataSnapshot = JSON.parse(serialized) as DataSnapshot;
-  currentDataSnapshotOwner = contextOwner;
-  const fallback = "MAUI DevFlow Data snapshot:\n" + JSON.stringify(currentDataSnapshot, null, 2);
+  const snapshotContext = JSON.parse(serialized) as DataSnapshot;
+  panelContexts.setSnapshot(contextOwner, snapshotContext);
+  const fallback = "MAUI DevFlow Data snapshot:\n" + JSON.stringify(snapshotContext, null, 2);
   return await attachToolContext(
     "maui-devflow_getDataSnapshot",
     "#mauiData ",
     fallback,
     "",
-    `Added ${currentDataSnapshot.title} to Copilot.`,
+    `Added ${snapshotContext.title} to Copilot.`,
     "Copied the Data context for Copilot.",
     "DevFlow: Copilot Chat unavailable — Data context copied to the clipboard.");
 }
@@ -521,6 +517,12 @@ async function openSource(
     return;
   }
 
+  try {
+    fsPath = await resolveLocalSourceFile(fsPath);
+  } catch (error) {
+    vscode.window.showWarningMessage(`DevFlow: could not resolve the local source file: ${String(error)}`);
+    return;
+  }
   const folders = vscode.workspace.workspaceFolders ?? [];
   const inside = folders.some((f) => isInside(f.uri.fsPath, fsPath));
   if (!inside) {
@@ -579,11 +581,6 @@ async function saveRecording(name: string | undefined, markdown: string | undefi
   } catch {
     vscode.window.showErrorMessage("DevFlow: could not save the recording.");
   }
-}
-
-function isInside(root: string, target: string): boolean {
-  const rel = path.relative(root, target);
-  return rel.length > 0 && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
 // `mauiDevflow.openLocation` placement: "beside"/"active" are explicit; "auto" (default) picks the

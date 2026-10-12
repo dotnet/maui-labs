@@ -47,6 +47,16 @@ test("Relative project identities cannot identify a replacement process across w
   }
 });
 
+test("Replacement identity requires non-empty matching session metadata", () => {
+  const selected = {
+    project: "C:/src/App.csproj", tfm: "net10.0", platform: "Windows", appName: "App",
+  };
+  for (const sessionId of [undefined, "", " "])
+    assert.equal(sameAgentIdentity({ ...selected, sessionId }, { ...selected, sessionId }), false);
+  assert.equal(sameAgentIdentity({ ...selected, sessionId: "a" }, selected), false);
+  assert.equal(sameAgentIdentity(selected, { ...selected, sessionId: "a" }), false);
+});
+
 test("Reconnect host distinguishes broker, app, and multiple-app states", () => {
   const broker = renderReconnectHost("broker", "nonce", "bridge");
   const app = renderReconnectHost("app", "nonce", "bridge");

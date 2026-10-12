@@ -8,5 +8,5 @@
     "sourceMap": false,
     "tsBuildInfoFile": "dist-test/.tsbuildinfo"
   },
-  "include": ["src/host-shells.ts"]
+  "include": ["src/host-shells.ts", "src/panel-context.ts", "src/source-path.ts"]
 }

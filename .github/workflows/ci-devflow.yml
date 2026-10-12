@@ -91,6 +91,7 @@ jobs:
       contents: read
     env:
       TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/Microsoft.Maui.DevFlow.Inspector.Tests.csproj
+      DEVFLOW_INSPECTOR_BROWSER_FIXTURES: '1'
     steps:
       - uses: actions/checkout@v6
 
@@ -121,6 +122,12 @@ jobs:
             --filter "Category=BrowserFixture" `
             --logger "trx;LogFileName=inspector-browser.trx" `
             --results-directory artifacts/TestResults/inspector-browser
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml]$results = Get-Content artifacts/TestResults/inspector-browser/inspector-browser.trx -Raw
+          $counts = $results.TestRun.ResultSummary.Counters
+          if ($counts.total -ne '4' -or $counts.executed -ne '4' -or $counts.passed -ne '4' -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
+            throw 'All four Inspector browser fixtures must execute and pass with zero skips.'
+          }
 
       - name: Upload browser test results
         if: always()

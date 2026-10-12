@@ -43,6 +43,20 @@ test("Canvas never substitutes an unrelated app for a pinned target", () => {
   assert.deepEqual(result, { agent: null, state: "target" });
 });
 
+test("Canvas requires a new choice for replacement processes without session metadata", () => {
+  for (const sessionId of [undefined, "", " "]) {
+    const selected = { ...todo, sessionId };
+    const replacement = { ...selected, id: "new-process", port: 9335 };
+    assert.equal(agentIdentityKey(selected), null);
+    assert.equal(resolveAgentTarget([selected], { targetId: selected.id }).agent.id, selected.id);
+    assert.deepEqual(resolveAgentTarget([replacement], {
+      targetId: selected.id,
+      targetIdentity: agentIdentityKey(selected),
+      preferredPort: selected.port,
+    }), { agent: null, state: "target" });
+  }
+});
+
 test("Canvas does not reconnect to an identical app from another session", () => {
   const otherWorktree = { ...todo, id: "other", sessionId: "worktree-b", port: 9445 };
 

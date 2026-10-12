@@ -99,8 +99,8 @@ Global `--dry-run` never prompts or writes, including ownership/freshness state.
 
 JSON command results use a versioned envelope with `schemaVersion`, `command`, `dryRun`, aggregate `status`, and `results`. Each result identifies the asset kind/name, associated environments, destination and scope, ownership, observed state, planned action, outcome, and reason. A successful inventory command is not a claim that every row is current or managed. Inspect row states and reasons; blocked actions and application failures produce nonzero exits.
 
-The [automation contract](../../docs/Cli/ai-automation.md) documents the
-[JSON Schema](../../docs/Cli/ai-result.schema.json), reason codes, exit semantics,
+The [automation contract](https://github.com/dotnet/maui-labs/blob/main/docs/Cli/ai-automation.md) documents the
+[JSON Schema](https://github.com/dotnet/maui-labs/blob/main/docs/Cli/ai-result.schema.json), reason codes, exit semantics,
 compatibility rules, and the parser/cancellation cases outside the envelope.
 
 MCP configuration uses `.mcp.json` for Claude Code, `.vscode/mcp.json` for VS Code, `opencode.json` (or existing `.jsonc`) for OpenCode, and **user-wide** `~/.copilot/mcp-config.json` for Copilot CLI. Only the known definition's launch fields are managed; other servers, credentials, environment settings, and user options are preserved even under force. Malformed shared configuration remains an error, not permission to replace the whole file. An exact unmanaged registration is not silently adopted; use `add mcp ... --force` to opt into management. MCP update refreshes the registration definition, not the server executable version.

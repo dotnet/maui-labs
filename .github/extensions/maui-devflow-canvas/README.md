@@ -55,6 +55,8 @@ platform before making changes.
 An explicit choice remains selected even if that app disconnects during connection. The Canvas
 waits for the selected app instead of reconnecting to the previous app. Rapid choices use the
 latest request; stale shell synchronization cannot replace it.
+Replacement processes need a unique full project identity and non-empty matching session
+metadata. Legacy registrations without session metadata require explicit reselection.
 
 ## Avoid duplicate user extensions
 

@@ -57,8 +57,7 @@ export function sameAgentIdentity(
 
   const leftSession = normalizeIdentity(left.sessionId);
   const rightSession = normalizeIdentity(right.sessionId);
-  return !leftSession && !rightSession ||
-    !!leftSession && !!rightSession && leftSession === rightSession;
+  return !!leftSession && !!rightSession && leftSession === rightSession;
 }
 
 interface ReconnectableAgent {

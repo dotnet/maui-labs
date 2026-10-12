@@ -218,15 +218,19 @@ test("selected app restart reconnects by identity but not to a different worktre
   assert.equal(f.st.store.device.whichPort(), replacement.port);
 });
 
-test("filename-only selected identity cannot synchronize a replacement on the reused port", async () => {
-  const f = fixture();
-  const relative = { ...chosen, project: "App.csproj" };
-  f.agents = [old, relative];
-  await f.controller.selectTargetAgent(f.st, { port: relative.port });
-  const replacement = { ...relative, id: "other-process" };
-  f.agents = [old, replacement];
-  assert.equal((await f.controller.resolveInspectorState(f.st)).state, "target");
-  assert.equal((await f.controller.syncTargetAgent(f.st, replacement.id)).ok, false);
+test("incomplete selected identity cannot synchronize a replacement on the reused port", async () => {
+  for (const selected of [
+    { ...chosen, project: "App.csproj" },
+    { ...chosen, sessionId: undefined },
+  ]) {
+    const f = fixture();
+    f.agents = [old, selected];
+    await f.controller.selectTargetAgent(f.st, { port: selected.port });
+    const replacement = { ...selected, id: "other-process" };
+    f.agents = [old, replacement];
+    assert.equal((await f.controller.resolveInspectorState(f.st)).state, "target");
+    assert.equal((await f.controller.syncTargetAgent(f.st, replacement.id)).ok, false);
+  }
 });
 
 test("unpinned initial discovery still connects the sole running app", async () => {

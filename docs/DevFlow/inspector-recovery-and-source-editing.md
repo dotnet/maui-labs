@@ -20,7 +20,12 @@ Neither host silently substitutes an unrelated app when the selected process exi
 Registrations with project-relative paths require an explicit app choice after a process restart:
 their default session IDs can be shared by different worktrees. The same registered process
 reconnects automatically; a replacement process can also reconnect automatically when a unique
-full project path, framework, platform, app name, and session identity match.
+full project path, framework, platform, app name, and non-empty session identity match.
+Legacy registrations without session metadata require an explicit choice after the process
+changes; they can still reconnect to the same registered process.
+
+VS Code keeps selection and Data context per Inspector panel. Activating another Inspector
+restores its own context, including an empty selection; background panels cannot overwrite it.
 
 The Canvas `shell.mjs` uses `renderShell` for the connected Inspector iframe and `renderDisconnected`
 for the reconnecting shell. Both states share the `--df-*` theme-token language with the VS Code
@@ -55,6 +60,10 @@ An invalid, missing, or unsupported source workspace is reported without stoppin
 Workspace-based source discovery stays unavailable rather than falling back to another working
 directory; ordinary runtime inspection and independently resolvable local source paths remain
 usable. Network, UNC, and Windows device paths are not supported for local XAML source access.
+
+VS Code resolves local source paths through parent symbolic links and junctions before deciding
+whether an outside-workspace confirmation is required. A linked file outside the workspace can
+still be opened after confirmation; its lexical path cannot bypass that prompt.
 
 Live property editing remains runtime-only until **Apply to XAML** is selected. The
 [source-editing restrictions](inspector-internals.md#apply-property-values-to-xaml) still apply:

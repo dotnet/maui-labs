@@ -19,11 +19,15 @@ From the repository root (PowerShell):
 ```powershell
 dotnet build src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests -c Release
 & artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net10.0\playwright.ps1 install chromium
+$env:DEVFLOW_INSPECTOR_BROWSER_FIXTURES = "1"
 dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests -c Release --no-build --filter "Category=BrowserFixture"
 ```
 
 The `inspector-browser` job in `ci-devflow.yml` installs Chromium with its Linux
-dependencies and runs only this category.
+dependencies, explicitly enables these fixtures, and runs only this category.
+Without `DEVFLOW_INSPECTOR_BROWSER_FIXTURES=1`, ordinary library builds skip this
+category with a provisioning explanation. When enabled, a missing browser is a
+test failure, not a skip.
 
 `InspectorPageTests` remain separately opt-in via `LiveInspectorFact` and
 `MAUI_INSPECTOR_LIVE_TESTS`. They require a provisioned broker and connected app.

@@ -156,7 +156,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         }
     }
 
-    [Fact]
+    [InspectorBrowserFixtureFact]
     public async Task RuntimeEdit_RefreshesRealStateWithoutLosingSelectionOrSourceDirtyState()
     {
         var initialTreeRequests = Volatile.Read(ref _treeRequests);
@@ -174,7 +174,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Empty(_pageErrors);
     }
 
-    [Fact]
+    [InspectorBrowserFixtureFact]
     public async Task SourceState_RequiresSuccessfulRuntimeEditBeforeEnablingPersistence()
     {
         await Expect(SourceButton).ToHaveAttributeAsync("data-state", "clean");
@@ -190,7 +190,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Empty(_pageErrors);
     }
 
-    [Fact]
+    [InspectorBrowserFixtureFact]
     public async Task RejectedRuntimeEdit_ShowsErrorAndDoesNotEnableSourcePersistence()
     {
         _rejectWrites = true;
@@ -205,7 +205,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Empty(_pageErrors);
     }
 
-    [Fact]
+    [InspectorBrowserFixtureFact]
     public async Task PropertyFilter_AndInvalidNumericEdit_DoNotWriteToAgent()
     {
         await Page.Locator("#df-prop-filter").FillAsync("opacity");
