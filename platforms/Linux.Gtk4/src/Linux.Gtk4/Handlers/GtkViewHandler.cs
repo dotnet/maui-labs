@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
@@ -13,7 +14,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 	where TVirtualView : class, IView
 	where TPlatformView : Gtk.Widget
 {
-	private Gtk.CssProvider? _currentCssProvider;
+	readonly GtkCssStyles _cssStyles = new();
+	readonly Dictionary<nint, (Gtk.StyleContext Context, Gtk.CssProvider Provider)> _cssProviders = new();
 
 	public static new IPropertyMapper<IView, GtkViewHandler<TVirtualView, TPlatformView>> ViewMapper =
 		new PropertyMapper<IView, GtkViewHandler<TVirtualView, TPlatformView>>(ViewHandler.ViewMapper)
@@ -65,25 +67,59 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 	Rect _lastArrangeRect;
 
 	Gtk.CssProvider? _transitionCssProvider;
+	Platform.GtkAllocationObserver? _pageAllocationObserver;
+	protected int LayoutGeneration { get; private set; }
+
+	protected void InvalidateNativeAllocation() => _pageAllocationObserver?.Invalidate();
+
+	public override void SetVirtualView(IView view)
+	{
+		var changed = ((IElementHandler)this).VirtualView != view;
+		if (changed)
+			LayoutGeneration++;
+		base.SetVirtualView(view);
+		if (changed)
+			_pageAllocationObserver?.Invalidate();
+	}
 
 	protected override void ConnectHandler(TPlatformView platformView)
 	{
 		base.ConnectHandler(platformView);
+		LayoutGeneration++;
 		SetupVisualStateTracking(platformView);
 		ApplyTransitionCss(platformView);
+		if (VirtualView is Microsoft.Maui.Controls.Page)
+		{
+			_pageAllocationObserver = new Platform.GtkAllocationObserver(platformView, (width, height) =>
+			{
+				var view = VirtualView;
+				var generation = LayoutGeneration;
+				if (view == null || platformView.GetParent() is Platform.GtkLayoutPanel)
+					return;
+				view.Measure(width, height);
+				if (LayoutGeneration == generation && VirtualView == view && PlatformView == platformView)
+					view.Arrange(new Rect(0, 0, width, height));
+			}, MauiContext?.Services.GetService(typeof(Microsoft.Extensions.Logging.ILoggerFactory)) is
+				Microsoft.Extensions.Logging.ILoggerFactory factory ? factory.CreateLogger(GetType().FullName!) : null);
+		}
 	}
 
 	protected override void DisconnectHandler(TPlatformView platformView)
 	{
+		LayoutGeneration++;
+		_pageAllocationObserver?.Dispose();
+		_pageAllocationObserver = null;
 		_zIndexMap.TryRemove(platformView.Handle.DangerousGetHandle(), out _);
 		CleanupContextFlyout(platformView);
 		CleanupVisualStateTracking(platformView);
 		RemoveTransitionCss(platformView);
-		if (_currentCssProvider != null)
+		foreach (var (context, provider) in _cssProviders.Values)
 		{
-			platformView.GetStyleContext().RemoveProvider(_currentCssProvider);
-			_currentCssProvider = null;
+			context.RemoveProvider(provider);
+			provider.Dispose();
 		}
+		_cssProviders.Clear();
+		_cssStyles.Clear();
 		base.DisconnectHandler(platformView);
 	}
 
@@ -237,7 +273,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 				layoutPanel.SetChildBounds(platformView, rect.X, rect.Y, (int)rect.Width, (int)rect.Height);
 			}
 		}
-		else
+		else if (VirtualView is not Microsoft.Maui.Controls.Page &&
+			VirtualView?.Parent is not Microsoft.Maui.Controls.ContentPage)
 		{
 			platformView.SetSizeRequest((int)rect.Width, (int)rect.Height);
 		}
@@ -271,7 +308,6 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 			var pt = Graphene.Point.Alloc();
 			pt.Init(tx, ty);
 			transform = transform.Translate(pt);
-			pt.Free();
 		}
 
 		// Move to anchor, apply rotation/scale, move back
@@ -348,16 +384,20 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		{
 			// Clear background-image too — GTK4 themes (e.g. Yaru) use
 			// background-image: image(white) on buttons, which overrides background-color.
-			handler.ApplyCss(handler.PlatformView,
+			handler.UpdateCss(handler.PlatformView,
 				$"background-color: {ToGtkColor(solidPaint.Color)}; background-image: none;");
 		}
 		else if (view.Background is LinearGradientPaint lgp)
 		{
-			handler.ApplyCss(handler.PlatformView, BuildLinearGradientCss(lgp));
+			handler.UpdateCss(handler.PlatformView, BuildLinearGradientCss(lgp));
 		}
 		else if (view.Background is RadialGradientPaint rgp)
 		{
-			handler.ApplyCss(handler.PlatformView, BuildRadialGradientCss(rgp));
+			handler.UpdateCss(handler.PlatformView, BuildRadialGradientCss(rgp));
+		}
+		else
+		{
+			handler.UpdateCss(handler.PlatformView, null);
 		}
 	}
 
@@ -445,32 +485,50 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		}
 	}
 
+	// Preserve the original protected signatures for compiled custom handlers.
 	protected void ApplyCss(Gtk.Widget? widget, string css)
-	{
-		if (widget == null)
-			return;
-
-		var ctx = widget.GetStyleContext();
-		if (_currentCssProvider != null)
-			ctx.RemoveProvider(_currentCssProvider);
-
-		_currentCssProvider = Gtk.CssProvider.New();
-		_currentCssProvider.LoadFromString($"* {{ {css} }}");
-		ctx.AddProvider(_currentCssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
-	}
+		=> UpdateCss(widget, css, nameof(ApplyCss));
 
 	protected void ApplyCssWithSelector(Gtk.Widget? widget, string selector, string css)
+		=> UpdateCssWithSelector(widget, selector, css, nameof(ApplyCss));
+
+	/// <summary>
+	/// Replaces a mapper's CSS fragment without changing other mappers' styles.
+	/// Null or empty CSS removes the fragment. Helpers shared by independent
+	/// mappers must pass an explicit property key.
+	/// </summary>
+	protected void UpdateCss(Gtk.Widget? widget, string? css, [CallerMemberName] string property = "")
+		=> UpdateCssWithSelector(widget, "*", css, property);
+
+	protected void UpdateCssWithSelector(Gtk.Widget? widget, string selector, string? css,
+		[CallerMemberName] string property = "")
 	{
 		if (widget == null)
 			return;
 
-		var ctx = widget.GetStyleContext();
-		if (_currentCssProvider != null)
-			ctx.RemoveProvider(_currentCssProvider);
+		var key = widget.Handle.DangerousGetHandle();
+		var stylesheet = _cssStyles.Update(key, selector, property, css);
+		if (stylesheet.Length == 0)
+		{
+			if (_cssProviders.Remove(key, out var old))
+			{
+				old.Context.RemoveProvider(old.Provider);
+				old.Provider.Dispose();
+			}
+			return;
+		}
 
-		_currentCssProvider = Gtk.CssProvider.New();
-		_currentCssProvider.LoadFromString($"{selector} {{ {css} }}");
-		ctx.AddProvider(_currentCssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
+		if (!_cssProviders.TryGetValue(key, out var style))
+		{
+			style = (widget.GetStyleContext(), Gtk.CssProvider.New());
+			style.Provider.LoadFromString(stylesheet);
+			style.Context.AddProvider(style.Provider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
+			_cssProviders.Add(key, style);
+		}
+		else
+		{
+			style.Provider.LoadFromString(stylesheet);
+		}
 	}
 
 	protected string BuildFontCss(Microsoft.Maui.Font font)
@@ -492,7 +550,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var shadow = view.Shadow;
 		if (shadow == null || shadow.Paint is not SolidPaint paint || paint.Color == null)
 		{
-			handler.ApplyCss(widget, "box-shadow: none;");
+			handler.UpdateCss(widget, null);
 			return;
 		}
 
@@ -500,7 +558,7 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		var ox = shadow.Offset.X;
 		var oy = shadow.Offset.Y;
 		var radius = shadow.Radius;
-		handler.ApplyCss(widget, $"box-shadow: {ox:F0}px {oy:F0}px {radius:F0}px {color};");
+		handler.UpdateCss(widget, $"box-shadow: {ox:F0}px {oy:F0}px {radius:F0}px {color};");
 	}
 
 	static void MapInputTransparent(GtkViewHandler<TVirtualView, TPlatformView> handler, IView view)
@@ -517,8 +575,8 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		if (clip == null)
 		{
 			widget.SetOverflow(Gtk.Overflow.Visible);
-			// Don't reset border-radius — it overrides native theme styling
-			// (e.g. GTK4 Switch pill shape). Overflow.Visible is sufficient.
+			// Remove only the clip's radius, preserving control and theme styling.
+			handler.UpdateCss(widget, null);
 			return;
 		}
 
@@ -528,17 +586,17 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		if (view is Microsoft.Maui.Controls.VisualElement ve && ve.Clip is Microsoft.Maui.Controls.Shapes.RoundRectangleGeometry rrg)
 		{
 			var cr = rrg.CornerRadius;
-			handler.ApplyCss(widget,
+			handler.UpdateCss(widget,
 				$"border-radius: {(int)cr.TopLeft}px {(int)cr.TopRight}px {(int)cr.BottomRight}px {(int)cr.BottomLeft}px;");
 		}
 		else if (view is Microsoft.Maui.Controls.VisualElement ve2 && ve2.Clip is Microsoft.Maui.Controls.Shapes.EllipseGeometry)
 		{
-			handler.ApplyCss(widget, "border-radius: 50%;");
+			handler.UpdateCss(widget, "border-radius: 50%;");
 		}
 		else
 		{
 			// For other geometry types, use overflow:hidden which clips to widget bounds
-			handler.ApplyCss(widget, "border-radius: 0;");
+			handler.UpdateCss(widget, "border-radius: 0;");
 		}
 	}
 

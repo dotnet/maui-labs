@@ -96,14 +96,14 @@ public class EditorHandler : GtkViewHandler<IEditor, Gtk.TextView>
 
 	public static void MapTextColor(EditorHandler handler, IEditor editor)
 	{
-		if (editor.TextColor != null)
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(editor.TextColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			editor.TextColor != null ? $"color: {ToGtkColor(editor.TextColor)};" : null);
 	}
 
 	public static void MapFont(EditorHandler handler, IEditor editor)
 	{
 		var css = handler.BuildFontCss(editor.Font);
-		if (!string.IsNullOrEmpty(css)) handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapPlaceholder(EditorHandler handler, IEditor editor)
@@ -118,7 +118,7 @@ public class EditorHandler : GtkViewHandler<IEditor, Gtk.TextView>
 
 	public static void MapCharacterSpacing(EditorHandler handler, IEditor editor)
 	{
-		handler.ApplyCss(handler.PlatformView, $"letter-spacing: {editor.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {editor.CharacterSpacing}px;");
 	}
 
 	public static void MapCursorPosition(EditorHandler handler, IEditor editor)

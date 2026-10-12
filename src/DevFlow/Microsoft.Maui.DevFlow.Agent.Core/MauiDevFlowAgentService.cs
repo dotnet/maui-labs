@@ -34,6 +34,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 {
     static MauiDevFlowAgentService()
     {
+        AgentJson.RegisterContext(MauiAgentJsonContext.Default);
         FrameworkValueFormatter = FormatMauiPropertyValue;
         Profiling.RuntimeProfilerCollector.DisplayRefreshRateProvider =
             static () => DeviceDisplay.Current.MainDisplayInfo.RefreshRate;
@@ -73,15 +74,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             var window = GetWindow(ParseWindowIndex(request));
             var width = window?.Width ?? 0;
             var height = window?.Height ?? 0;
-            return HttpResponse.Json(new
+            return HttpResponse.Json(new Dictionary<string, object?>
             {
-                width,
-                height,
-                density = GetWindowDisplayDensity(window),
-                orientation = width >= height ? "Landscape" : "Portrait",
-                rotation = "Rotation0",
-                refreshRate = 0d,
-                source = "window",
+                ["width"] = width,
+                ["height"] = height,
+                ["density"] = GetWindowDisplayDensity(window),
+                ["orientation"] = width >= height ? "Landscape" : "Portrait",
+                ["rotation"] = "Rotation0",
+                ["refreshRate"] = 0d,
+                ["source"] = "window",
             });
         })!;
 
@@ -125,19 +126,28 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// <inheritdoc />
     protected override void PopulateCapabilities(Dictionary<string, object> capabilities)
     {
+        capabilities["ui.menus"] = new Dictionary<string, object?>
+        {
+            ["version"] = 1,
+            ["supported"] = IsMenusSupported,
+            ["features"] = new[] { "list", "invoke" },
+            ["maui"] = true,
+            ["native"] = IsNativeMenusSupported,
+            ["reason"] = (string?)null,
+        };
         capabilities["ui.tree"] = Capability(2, supported: true,
             ["css-selector", "type", "text", "accessibility-id", "native-owner", "capture-epoch", "registry-generation", "window-id"],
             reason: null);
         capabilities["ui.hit-test"] = Capability(2, supported: true,
             ["native-first", "capture-epoch", "window-logical-coordinates"],
             reason: null);
-        capabilities["ui.actions"] = new
+        capabilities["ui.actions"] = new Dictionary<string, object?>
         {
-            version = 2,
-            supported = true,
-            features = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "property-descriptors", "stale-capture-rejection" },
-            gestures = SupportedGestures,
-            reason = (string?)null
+            ["version"] = 2,
+            ["supported"] = true,
+            ["features"] = new[] { "tap", "fill", "clear", "focus", "scroll", "navigate", "resize", "back", "key", "gesture", "batch", "capture-bound-batch", "properties", "property-descriptors", "stale-capture-rejection" },
+            ["gestures"] = SupportedGestures,
+            ["reason"] = (string?)null
         };
         capabilities["ui.screenshot"] = Capability(2, supported: true,
             SupportsNativeElementScreenshots
@@ -247,10 +257,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             // has not been associated with one yet.
         }
         Console.WriteLine("[Microsoft.Maui.DevFlow.Agent] Application bound to running agent");
-        PublishUiEvent("lifecycle", new
+        PublishUiEvent("lifecycle", new Dictionary<string, object?>
         {
-            state = "started",
-            timestamp = DateTimeOffset.UtcNow.ToString("O")
+            ["state"] = "started",
+            ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
         });
     }
 
@@ -506,10 +516,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         if (!CommitUiCapture(capture))
             return BuildCaptureChangedResponse(capture);
         return envelope
-            ? HttpResponse.Json(new
+            ? HttpResponse.Json(new Dictionary<string, object?>
             {
-                revision = VisualTreeRevision.ComputeTree(tree),
-                elements = tree
+                ["revision"] = VisualTreeRevision.ComputeTree(tree),
+                ["elements"] = tree
             })
             : HttpResponse.Json(tree);
     }
@@ -1533,36 +1543,34 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             "The UI snapshot is stale. Capture the tree or hit-test again before acting.",
             statusCode: 409,
             reason: "stale-capture-epoch",
-            details: new
+            details: new Dictionary<string, object?>
             {
-                requestedEpoch,
-                requestedRegistryGeneration,
-                currentEpoch = latest.Epoch,
-                currentRegistryGeneration,
-                currentMutationGeneration = Volatile.Read(ref _uiMutationGeneration),
-                currentExternalMutationGeneration =
-                    GetExternalMutationGeneration(latest.WindowId),
-                currentWindowId = latest.WindowId
-            });
+                ["requestedEpoch"] = requestedEpoch,
+                ["requestedRegistryGeneration"] = requestedRegistryGeneration,
+                ["currentEpoch"] = latest.Epoch,
+                ["currentRegistryGeneration"] = currentRegistryGeneration,
+                ["currentMutationGeneration"] = Volatile.Read(ref _uiMutationGeneration),
+                ["currentExternalMutationGeneration"] = GetExternalMutationGeneration(latest.WindowId),
+                ["currentWindowId"] = latest.WindowId
+            }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
 
     private HttpResponse BuildCaptureChangedResponse(UiCaptureContext capture)
         => HttpResponse.Error(
             "The UI changed while it was being captured. Retry the tree, query, or hit-test request.",
             statusCode: 409,
             reason: "capture-changed-during-read",
-            details: new
+            details: new Dictionary<string, object?>
             {
-                captureEpoch = capture.Epoch,
-                capturedRegistryGeneration = capture.RegistryGeneration,
-                currentRegistryGeneration = _nativeElementRegistry?.Generation ?? 0,
-                capturedMutationGeneration = capture.MutationGeneration,
-                currentMutationGeneration = Volatile.Read(ref _uiMutationGeneration),
-                capturedExternalMutationGeneration = capture.ExternalMutationGeneration,
-                currentExternalMutationGeneration =
-                    GetExternalMutationGeneration(capture.WindowId),
-                mutationInProgress = Volatile.Read(ref _uiMutationInProgress) != 0,
-                windowId = capture.WindowId
-            });
+                ["captureEpoch"] = capture.Epoch,
+                ["capturedRegistryGeneration"] = capture.RegistryGeneration,
+                ["currentRegistryGeneration"] = _nativeElementRegistry?.Generation ?? 0,
+                ["capturedMutationGeneration"] = capture.MutationGeneration,
+                ["currentMutationGeneration"] = Volatile.Read(ref _uiMutationGeneration),
+                ["capturedExternalMutationGeneration"] = capture.ExternalMutationGeneration,
+                ["currentExternalMutationGeneration"] = GetExternalMutationGeneration(capture.WindowId),
+                ["mutationInProgress"] = Volatile.Read(ref _uiMutationInProgress) != 0,
+                ["windowId"] = capture.WindowId
+            }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
 
     private static long? ParseLongQueryParameter(HttpRequest request, string name)
         => request.QueryParams.TryGetValue(name, out var value)
@@ -1580,7 +1588,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 "Another UI mutation is still running. Retry after it completes.",
                 statusCode: 409,
                 reason: "ui-mutation-busy",
-                details: new { retryable = true });
+                details: new Dictionary<string, object?> { ["retryable"] = true });
         }
 
         lock (_captureStateGate)
@@ -1675,7 +1683,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     "Native hit testing is busy. Retry after the current native probe completes.",
                     statusCode: 409,
                     reason: "native-probe-busy",
-                    details: new { retryable = true });
+                    details: new Dictionary<string, object?> { ["retryable"] = true });
             }
             var nativeHitWinner = await Task.WhenAny(
                 nativeHitTask,
@@ -1686,7 +1694,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     "Native hit testing timed out. Retry after the current native probe completes.",
                     statusCode: 409,
                     reason: "native-probe-busy",
-                    details: new { retryable = true });
+                    details: new Dictionary<string, object?> { ["retryable"] = true });
             }
             nativeHits = await nativeHitTask.ConfigureAwait(false);
             StampCaptureMetadata(nativeHits, capture);
@@ -1835,14 +1843,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 elements.Add(info);
             }
 
-            return (object?)new
+            return (object?)new Dictionary<string, object?>
             {
-                x,
-                y,
-                window = windowIndex,
-                captureEpoch = capture.Epoch,
-                registryGeneration = capture.RegistryGeneration,
-                elements
+                ["x"] = x,
+                ["y"] = y,
+                ["window"] = windowIndex,
+                ["captureEpoch"] = capture.Epoch,
+                ["registryGeneration"] = capture.RegistryGeneration,
+                ["elements"] = elements
             };
         });
 
@@ -1956,12 +1964,12 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 $"Capture epoch {capture.Epoch} belongs to window {capture.WindowId}, not window {requestedWindowIndex.Value}.",
                 statusCode: 409,
                 reason: "capture-window-mismatch",
-                details: new
+                details: new Dictionary<string, object?>
                 {
-                    captureEpoch = capture.Epoch,
-                    captureWindowId = capture.WindowId,
-                    requestedWindowId = requestedWindowIndex.Value
-                });
+                    ["captureEpoch"] = capture.Epoch,
+                    ["captureWindowId"] = capture.WindowId,
+                    ["requestedWindowId"] = requestedWindowIndex.Value
+                }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
         }
 
         HttpResponse CompleteScreenshot(byte[] data)
@@ -2307,7 +2315,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var value = await DispatchAsync(() => ReadFormattedPropertyValue(id, propName));
 
         return value != null
-            ? HttpResponse.Json(new { id, property = propName, value })
+            ? HttpResponse.Json(new Dictionary<string, object?> { ["id"] = id, ["property"] = propName, ["value"] = value })
             : HttpResponse.NotFound($"Property '{propName}' not found on element '{id}'");
     }
 
@@ -2326,9 +2334,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             var descriptors = new List<object>();
             foreach (var name in GetInspectablePropertyNames(element))
             {
-                var property = element.GetType().GetProperty(
-                    name,
-                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                var property = MauiAgentInspection.GetProperty(element, name);
                 if (property is null || property.GetIndexParameters().Length != 0)
                     continue;
 
@@ -2343,22 +2349,22 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 var isSensitive = element is Entry { IsPassword: true }
                     && property.Name.Equals(nameof(Entry.Text), StringComparison.OrdinalIgnoreCase);
                 var constraints = GetPropertyConstraints(property.Name);
-                descriptors.Add(new
+                descriptors.Add(new Dictionary<string, object?>
                 {
-                    name = property.Name,
-                    kind,
-                    value = isSensitive
+                    ["name"] = property.Name,
+                    ["kind"] = kind,
+                    ["value"] = isSensitive
                         ? SensitiveValueRedactor.RedactedValue
                         : FormatMauiPropertyValue(rawValue),
-                    writable = property.SetMethod?.IsPublic == true,
-                    choices = propertyType.IsEnum ? Enum.GetNames(propertyType) : null,
-                    min = constraints.Min,
-                    max = constraints.Max,
-                    step = constraints.Step
+                    ["writable"] = property.SetMethod?.IsPublic == true,
+                    ["choices"] = propertyType.IsEnum ? Enum.GetNames(propertyType) : null,
+                    ["min"] = constraints.Min,
+                    ["max"] = constraints.Max,
+                    ["step"] = constraints.Step
                 });
             }
 
-            return new { id, type = element.GetType().Name, properties = descriptors };
+            return new Dictionary<string, object?> { ["id"] = id, ["type"] = element.GetType().Name, ["properties"] = descriptors };
         });
 
         return result is not null
@@ -2440,9 +2446,22 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         foreach (var part in propertyName.Split('.'))
         {
             if (current is null) return null;
-            var property = current.GetType().GetProperty(
-                part,
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (current is IElement mauiElement
+                && part.Equals(nameof(IElement.Handler), StringComparison.OrdinalIgnoreCase))
+            {
+                current = mauiElement.Handler;
+                continue;
+            }
+            if (current is IElementHandler handler
+                && part.Equals(nameof(IElementHandler.PlatformView), StringComparison.OrdinalIgnoreCase))
+            {
+                current = handler.PlatformView;
+                // Native password controls expose sensitive values through getters and formatting.
+                if (current is not null && handler.VirtualView is Entry { IsPassword: true })
+                    return SensitiveValueRedactor.RedactedValue;
+                continue;
+            }
+            var property = MauiAgentInspection.GetProperty(current, part);
             if (property is null) return null;
             current = property.GetValue(current);
         }
@@ -2524,12 +2543,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         while (type != null)
         {
-            var bpField = type.GetField(fieldName,
-                BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
-
-            bpField ??= Array.Find(
-                type.GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly),
-                f => f.Name.Equals(fieldName, StringComparison.OrdinalIgnoreCase));
+            var bpField = MauiAgentInspection.GetBindableField(type, fieldName);
 
             if (bpField?.GetValue(null) is BindableProperty candidate &&
                 candidate.PropertyName.Equals(property.Name, StringComparison.OrdinalIgnoreCase))
@@ -2576,7 +2590,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             CaptureMutationTarget(request, el);
 
             var type = el.GetType();
-            var prop = type.GetProperty(propName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
+            var prop = MauiAgentInspection.GetProperty(el, propName);
             if (prop == null || !prop.CanWrite)
                 return $"Property '{propName}' not found or read-only";
 
@@ -2608,22 +2622,22 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             id,
-            new { property = propName });
+            new Dictionary<string, object?> { ["property"] = propName });
 
         if (result == "ok")
         {
-            PublishUiEvent("treeChange", new
+            PublishUiEvent("treeChange", new Dictionary<string, object?>
             {
-                changeType = "modified",
-                elementId = id,
-                elementType = "property",
-                parentId = (string?)null,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
+                ["changeType"] = "modified",
+                ["elementId"] = id,
+                ["elementType"] = "property",
+                ["parentId"] = (string?)null,
+                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
             });
         }
 
         return result == "ok"
-            ? HttpResponse.Json(new { id, property = propName, value = body.Value })
+            ? HttpResponse.Json(new Dictionary<string, object?> { ["id"] = id, ["property"] = propName, ["value"] = body.Value })
             : HttpResponse.Error(result);
     }
 
@@ -3081,17 +3095,17 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 nativeResult == "ok",
                 nativeResult == "ok" ? null : nativeResult,
                 body.ElementId,
-                new { textLength = body.Text.Length });
+                new Dictionary<string, object?> { ["textLength"] = body.Text.Length });
 
             if (nativeResult == "ok")
             {
-                PublishUiEvent("treeChange", new
+                PublishUiEvent("treeChange", new Dictionary<string, object?>
                 {
-                    changeType = "modified",
-                    elementId = body.ElementId,
-                    elementType = "input",
-                    parentId = (string?)null,
-                    timestamp = DateTimeOffset.UtcNow.ToString("O")
+                    ["changeType"] = "modified",
+                    ["elementId"] = body.ElementId,
+                    ["elementType"] = "input",
+                    ["parentId"] = (string?)null,
+                    ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
                 });
             }
 
@@ -3132,17 +3146,17 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             body.ElementId,
-            new { textLength = body.Text.Length });
+            new Dictionary<string, object?> { ["textLength"] = body.Text.Length });
 
         if (result == "ok")
         {
-            PublishUiEvent("treeChange", new
+            PublishUiEvent("treeChange", new Dictionary<string, object?>
             {
-                changeType = "modified",
-                elementId = body.ElementId,
-                elementType = "input",
-                parentId = (string?)null,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
+                ["changeType"] = "modified",
+                ["elementId"] = body.ElementId,
+                ["elementType"] = "input",
+                ["parentId"] = (string?)null,
+                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
             });
         }
 
@@ -3188,13 +3202,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
             if (nativeSuccess)
             {
-                PublishUiEvent("treeChange", new
+                PublishUiEvent("treeChange", new Dictionary<string, object?>
                 {
-                    changeType = "modified",
-                    elementId = body.ElementId,
-                    elementType = "input",
-                    parentId = (string?)null,
-                    timestamp = DateTimeOffset.UtcNow.ToString("O")
+                    ["changeType"] = "modified",
+                    ["elementId"] = body.ElementId,
+                    ["elementType"] = "input",
+                    ["parentId"] = (string?)null,
+                    ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
                 });
             }
 
@@ -3234,13 +3248,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         if (success)
         {
-            PublishUiEvent("treeChange", new
+            PublishUiEvent("treeChange", new Dictionary<string, object?>
             {
-                changeType = "modified",
-                elementId = body.ElementId,
-                elementType = "input",
-                parentId = (string?)null,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
+                ["changeType"] = "modified",
+                ["elementId"] = body.ElementId,
+                ["elementType"] = "input",
+                ["parentId"] = (string?)null,
+                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
             });
         }
 
@@ -3323,7 +3337,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             TsUtc = DateTime.UtcNow,
             Type = "navigation.start",
             Name = body.Route,
-            PayloadJson = JsonSerializer.Serialize(new { route = body.Route })
+            PayloadJson = AgentJson.Serialize(new Dictionary<string, object?> { ["route"] = body.Route })
         });
 
         var result = await DispatchAsync(async () =>
@@ -3348,7 +3362,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             TsUtc = DateTime.UtcNow,
             Type = "navigation.end",
             Name = body.Route,
-            PayloadJson = JsonSerializer.Serialize(new { route = body.Route, success = result == "ok", error = result == "ok" ? null : result })
+            PayloadJson = AgentJson.Serialize(new Dictionary<string, object?> { ["route"] = body.Route, ["success"] = result == "ok", ["error"] = result == "ok" ? null : result })
         });
 
         PublishUiOperationSpan(
@@ -3357,25 +3371,25 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             elementPath: body.Route,
-            tags: new { route = body.Route });
+            tags: new Dictionary<string, object?> { ["route"] = body.Route });
 
         if (result == "ok")
         {
-            PublishUiEvent("navigation", new
+            PublishUiEvent("navigation", new Dictionary<string, object?>
             {
-                from = fromRoute,
-                to = body.Route,
-                route = body.Route,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
+                ["from"] = fromRoute,
+                ["to"] = body.Route,
+                ["route"] = body.Route,
+                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
             });
         }
         else
         {
-            PublishUiEvent("error", new
+            PublishUiEvent("error", new Dictionary<string, object?>
             {
-                message = result ?? "Navigation failed",
-                stackTrace = (string?)null,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
+                ["message"] = result ?? "Navigation failed",
+                ["stackTrace"] = (string?)null,
+                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
             });
         }
 
@@ -3415,10 +3429,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             startedAtUtc,
             result == "ok",
             result == "ok" ? null : result,
-            tags: new { width = body.Width, height = body.Height, windowIndex });
+            tags: new Dictionary<string, object?> { ["width"] = body.Width, ["height"] = body.Height, ["windowIndex"] = windowIndex });
 
         return result == "ok"
-            ? HttpResponse.Json(new { success = true, width = body.Width, height = body.Height })
+            ? HttpResponse.Json(new Dictionary<string, object?> { ["success"] = true, ["width"] = body.Width, ["height"] = body.Height })
             : HttpResponse.Error(result);
     }
 
@@ -3575,10 +3589,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             body.ElementId,
-            new { key = keyValue, text = body.Text });
+            new Dictionary<string, object?> { ["key"] = keyValue, ["text"] = body.Text });
 
         return result == "ok"
-            ? HttpResponse.Json(new { success = true, key = keyValue, text = body.Text, elementId = body.ElementId })
+            ? HttpResponse.Json(new Dictionary<string, object?> { ["success"] = true, ["key"] = keyValue, ["text"] = body.Text, ["elementId"] = body.ElementId })
             : HttpResponse.Error(result ?? "Key action failed");
     }
 
@@ -3627,7 +3641,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = JsonSerializer.Serialize(new ActionRequest
+                                Body = AgentJson.Serialize(new ActionRequest
                                 {
                                     ElementId = action.ElementId
                                 })
@@ -3638,7 +3652,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = JsonSerializer.Serialize(new FillRequest
+                                Body = AgentJson.Serialize(new FillRequest
                                 {
                                     ElementId = action.ElementId,
                                     Text = action.Text ?? string.Empty
@@ -3650,7 +3664,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = JsonSerializer.Serialize(new ActionRequest
+                                Body = AgentJson.Serialize(new ActionRequest
                                 {
                                     ElementId = action.ElementId
                                 })
@@ -3661,7 +3675,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = JsonSerializer.Serialize(new ActionRequest
+                                Body = AgentJson.Serialize(new ActionRequest
                                 {
                                     ElementId = action.ElementId
                                 })
@@ -3671,18 +3685,18 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             response = await HandleNavigate(new HttpRequest
                             {
                                 Method = "POST",
-                                Body = JsonSerializer.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
+                                Body = AgentJson.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
                             });
                             break;
                         case "resize":
-                            response = await HandleResize(new HttpRequest { Method = "POST", Body = JsonSerializer.Serialize(new ResizeRequest(action.Width, action.Height)) });
+                            response = await HandleResize(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new ResizeRequest(action.Width, action.Height)) });
                             break;
                         case "scroll":
                             response = await HandleScroll(new HttpRequest
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = JsonSerializer.Serialize(new ScrollRequest
+                                Body = AgentJson.Serialize(new ScrollRequest
                                 {
                                     ElementId = action.ElementId,
                                     DeltaX = action.DeltaX ?? 0,
@@ -3702,7 +3716,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = JsonSerializer.Serialize(new KeyActionRequest
+                                Body = AgentJson.Serialize(new KeyActionRequest
                                 {
                                     ElementId = action.ElementId,
                                     Key = action.Key,
@@ -3715,7 +3729,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = JsonSerializer.Serialize(new GestureActionRequest
+                                Body = AgentJson.Serialize(new GestureActionRequest
                                 {
                                     ElementId = action.ElementId,
                                     Type = action.Type ?? action.Action,
@@ -3743,7 +3757,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                                     ["id"] = action.ElementId ?? string.Empty,
                                     ["name"] = action.Property ?? string.Empty
                                 },
-                                Body = JsonSerializer.Serialize(new SetPropertyRequest
+                                Body = AgentJson.Serialize(new SetPropertyRequest
                                 {
                                     Value = action.Value ?? string.Empty
                                 })
@@ -3758,7 +3772,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                                 {
                                     ["name"] = action.Name ?? string.Empty
                                 },
-                                Body = JsonSerializer.Serialize(new InvokeActionRequest { Args = action.Args })
+                                Body = AgentJson.Serialize(new InvokeActionRequest { Args = action.Args })
                             });
                             break;
                         default:
@@ -3769,22 +3783,22 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
                 var succeeded = response.StatusCode < 400;
                 allSucceeded &= succeeded;
-                results.Add(new
+                results.Add(new Dictionary<string, object?>
                 {
-                    action = actionName,
-                    success = succeeded,
-                    statusCode = response.StatusCode,
-                    response = response.Body
+                    ["action"] = actionName,
+                    ["success"] = succeeded,
+                    ["statusCode"] = response.StatusCode,
+                    ["response"] = response.Body
                 });
 
                 if (!succeeded && !body.ContinueOnError)
                     break;
             }
 
-            return HttpResponse.Json(new
+            return HttpResponse.Json(new Dictionary<string, object?>
             {
-                success = allSucceeded,
-                results
+                ["success"] = allSucceeded,
+                ["results"] = results
             });
         }
         finally
@@ -3837,7 +3851,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 nativeResult == "ok",
                 nativeResult == "ok" ? null : nativeResult,
                 body.ElementId,
-                new { body.DeltaX, body.DeltaY, body.Animated });
+                new Dictionary<string, object?> { ["DeltaX"] = body.DeltaX, ["DeltaY"] = body.DeltaY, ["Animated"] = body.Animated });
 
             return nativeResult == "ok" ? HttpResponse.Ok("Scrolled") : HttpResponse.Error(nativeResult);
         }
@@ -3996,7 +4010,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             result == "ok",
             result == "ok" ? null : result,
             body.ElementId,
-            new { body.DeltaX, body.DeltaY, body.Animated });
+            new Dictionary<string, object?> { ["DeltaX"] = body.DeltaX, ["DeltaY"] = body.DeltaY, ["Animated"] = body.Animated });
 
         return result == "ok" ? HttpResponse.Ok("Scrolled") : HttpResponse.Error(result ?? "Scroll failed");
     }
@@ -4196,7 +4210,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     TsUtc = DateTime.UtcNow,
                     Type = "profiler.hook.error",
                     Name = "ui-hook-scan",
-                    PayloadJson = JsonSerializer.Serialize(new { error = ex.GetBaseException().Message })
+                    PayloadJson = AgentJson.Serialize(new Dictionary<string, object?> { ["error"] = ex.GetBaseException().Message })
                 });
             }
             finally
@@ -4454,21 +4468,21 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         => TrackUiInteraction("ui.input.search.submit", sender as Element);
 
     private void OnCheckBoxCheckedChanged(object? sender, CheckedChangedEventArgs args)
-        => TrackUiInteraction("ui.input.checkbox.toggle", sender as Element, new { value = args.Value });
+        => TrackUiInteraction("ui.input.checkbox.toggle", sender as Element, new Dictionary<string, object?> { ["value"] = args.Value });
 
     private void OnSwitchToggled(object? sender, ToggledEventArgs args)
-        => TrackUiInteraction("ui.input.switch.toggle", sender as Element, new { value = args.Value });
+        => TrackUiInteraction("ui.input.switch.toggle", sender as Element, new Dictionary<string, object?> { ["value"] = args.Value });
 
     private void OnPickerSelectedIndexChanged(object? sender, EventArgs args)
     {
         var picker = sender as Picker;
-        TrackUiInteraction("ui.input.picker.select", picker, new { selectedIndex = picker?.SelectedIndex });
+        TrackUiInteraction("ui.input.picker.select", picker, new Dictionary<string, object?> { ["selectedIndex"] = picker?.SelectedIndex });
     }
 
     private void OnCollectionViewSelectionChanged(object? sender, SelectionChangedEventArgs args)
     {
         var selectionCount = args.CurrentSelection?.Count ?? 0;
-        TrackUiInteraction("ui.input.collection.select", sender as Element, new { selectionCount });
+        TrackUiInteraction("ui.input.collection.select", sender as Element, new Dictionary<string, object?> { ["selectionCount"] = selectionCount });
     }
 
     private void OnCollectionViewScrolled(object? sender, ItemsViewScrolledEventArgs args)
@@ -4532,14 +4546,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 TsUtc = now,
                 Type = "ui.scroll.start",
                 Name = sourceName,
-                PayloadJson = JsonSerializer.Serialize(new
+                PayloadJson = AgentJson.Serialize(new Dictionary<string, object?>
                 {
-                    source = sourceName,
-                    elementPath,
-                    offsetX,
-                    offsetY,
-                    firstVisibleIndex,
-                    lastVisibleIndex
+                    ["source"] = sourceName,
+                    ["elementPath"] = elementPath,
+                    ["offsetX"] = offsetX,
+                    ["offsetY"] = offsetY,
+                    ["firstVisibleIndex"] = firstVisibleIndex,
+                    ["lastVisibleIndex"] = lastVisibleIndex
                 })
             });
         }
@@ -4591,14 +4605,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             TsUtc = endTsUtc,
             Type = "ui.scroll.end",
             Name = sourceName,
-            PayloadJson = JsonSerializer.Serialize(new
+            PayloadJson = AgentJson.Serialize(new Dictionary<string, object?>
             {
-                source = sourceName,
-                elementPath,
-                deltaX,
-                deltaY,
-                visibleShift,
-                events = state.EventCount
+                ["source"] = sourceName,
+                ["elementPath"] = elementPath,
+                ["deltaX"] = deltaX,
+                ["deltaY"] = deltaY,
+                ["visibleShift"] = visibleShift,
+                ["events"] = state.EventCount
             })
         });
 
@@ -4614,21 +4628,21 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             ThreadId = Environment.CurrentManagedThreadId,
             Screen = Shell.Current?.CurrentState?.Location?.ToString(),
             ElementPath = elementPath,
-            TagsJson = JsonSerializer.Serialize(new
+            TagsJson = AgentJson.Serialize(new Dictionary<string, object?>
             {
-                source = sourceName,
-                events = state.EventCount,
-                startOffsetX = state.StartOffsetX,
-                startOffsetY = state.StartOffsetY,
-                endOffsetX = state.LastOffsetX,
-                endOffsetY = state.LastOffsetY,
-                deltaX,
-                deltaY,
-                startFirstVisibleIndex = state.StartFirstVisibleIndex,
-                startLastVisibleIndex = state.StartLastVisibleIndex,
-                endFirstVisibleIndex = state.LastFirstVisibleIndex,
-                endLastVisibleIndex = state.LastLastVisibleIndex,
-                visibleShift
+                ["source"] = sourceName,
+                ["events"] = state.EventCount,
+                ["startOffsetX"] = state.StartOffsetX,
+                ["startOffsetY"] = state.StartOffsetY,
+                ["endOffsetX"] = state.LastOffsetX,
+                ["endOffsetY"] = state.LastOffsetY,
+                ["deltaX"] = deltaX,
+                ["deltaY"] = deltaY,
+                ["startFirstVisibleIndex"] = state.StartFirstVisibleIndex,
+                ["startLastVisibleIndex"] = state.StartLastVisibleIndex,
+                ["endFirstVisibleIndex"] = state.LastFirstVisibleIndex,
+                ["endLastVisibleIndex"] = state.LastLastVisibleIndex,
+                ["visibleShift"] = visibleShift
             })
         });
     }
@@ -4670,21 +4684,21 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             true,
             null,
             BuildElementPath(element),
-            new
+            new Dictionary<string, object?>
             {
-                role = state.Role,
-                viewType = element.GetType().Name,
-                width = element.Width,
-                height = element.Height,
-                sizeChangedCount = state.SizeChangedCount,
-                measureInvalidatedCount = state.MeasureInvalidatedCount
+                ["role"] = state.Role,
+                ["viewType"] = element.GetType().Name,
+                ["width"] = element.Width,
+                ["height"] = element.Height,
+                ["sizeChangedCount"] = state.SizeChangedCount,
+                ["measureInvalidatedCount"] = state.MeasureInvalidatedCount
             });
     }
 
     private void OnTapGestureTapped(object? sender, TappedEventArgs args)
     {
         var parameter = args.Parameter?.ToString();
-        TrackUiInteraction("ui.input.tap-gesture", sender as Element, new { parameter });
+        TrackUiInteraction("ui.input.tap-gesture", sender as Element, new Dictionary<string, object?> { ["parameter"] = parameter });
     }
 
     private void OnPageAppearing(object? sender, EventArgs args)
@@ -4701,7 +4715,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         state.SizeChangedCount = 0;
         state.MeasureInvalidatedCount = 0;
 
-        TrackUiInteraction("ui.page.appearing", page, new { route, page = page.GetType().Name });
+        TrackUiInteraction("ui.page.appearing", page, new Dictionary<string, object?> { ["route"] = route, ["page"] = page.GetType().Name });
         TryPublishNavigationToAppearing(page, route);
     }
 
@@ -4711,7 +4725,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return;
 
         var route = Shell.Current?.CurrentState?.Location?.ToString();
-        TrackUiInteraction("ui.page.disappearing", page, new { route, page = page.GetType().Name });
+        TrackUiInteraction("ui.page.disappearing", page, new Dictionary<string, object?> { ["route"] = route, ["page"] = page.GetType().Name });
     }
 
     private void OnPageMeasureInvalidated(object? sender, EventArgs args)
@@ -4744,14 +4758,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             true,
             null,
             BuildElementPath(page),
-            new
+            new Dictionary<string, object?>
             {
-                route,
-                page = page.GetType().Name,
-                width = page.Width,
-                height = page.Height,
-                sizeChangedCount = state.SizeChangedCount,
-                measureInvalidatedCount = state.MeasureInvalidatedCount
+                ["route"] = route,
+                ["page"] = page.GetType().Name,
+                ["width"] = page.Width,
+                ["height"] = page.Height,
+                ["sizeChangedCount"] = state.SizeChangedCount,
+                ["measureInvalidatedCount"] = state.MeasureInvalidatedCount
             });
 
         TryPublishNavigationToFirstLayout(page, route);
@@ -4776,7 +4790,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             TsUtc = startedAtUtc,
             Type = "navigation.start",
             Name = targetRoute,
-            PayloadJson = JsonSerializer.Serialize(new { route = targetRoute })
+            PayloadJson = AgentJson.Serialize(new Dictionary<string, object?> { ["route"] = targetRoute })
         });
     }
 
@@ -4803,15 +4817,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             TsUtc = endedAtUtc,
             Type = "navigation.end",
             Name = route,
-            PayloadJson = JsonSerializer.Serialize(new { route, source, page = currentPage })
+            PayloadJson = AgentJson.Serialize(new Dictionary<string, object?> { ["route"] = route, ["source"] = source, ["page"] = currentPage })
         });
         RememberUserAction("navigation.route", route, endedAtUtc);
-        PublishUiEvent("navigation", new
+        PublishUiEvent("navigation", new Dictionary<string, object?>
         {
-            from = (string?)null,
-            to = route,
-            route,
-            timestamp = endedAtUtc.ToString("O")
+            ["from"] = (string?)null,
+            ["to"] = route,
+            ["route"] = route,
+            ["timestamp"] = endedAtUtc.ToString("O")
         });
 
         PublishUiOperationSpan(
@@ -4820,7 +4834,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             true,
             null,
             route,
-            new { route, source, page = currentPage });
+            new Dictionary<string, object?> { ["route"] = route, ["source"] = source, ["page"] = currentPage });
     }
 
     private void TryPublishNavigationToAppearing(Page page, string? route)
@@ -4842,11 +4856,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             true,
             null,
             BuildElementPath(page),
-            new
+            new Dictionary<string, object?>
             {
-                targetRoute = navigationRoute,
-                currentRoute = route,
-                page = page.GetType().Name
+                ["targetRoute"] = navigationRoute,
+                ["currentRoute"] = route,
+                ["page"] = page.GetType().Name
             });
     }
 
@@ -4871,11 +4885,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             true,
             null,
             BuildElementPath(page),
-            new
+            new Dictionary<string, object?>
             {
-                targetRoute = navigationRoute,
-                currentRoute = route,
-                page = page.GetType().Name
+                ["targetRoute"] = navigationRoute,
+                ["currentRoute"] = route,
+                ["page"] = page.GetType().Name
             });
     }
 
@@ -4886,11 +4900,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         var startedAtUtc = DateTime.UtcNow;
         var elementPath = BuildElementPath(element);
-        var markerPayload = JsonSerializer.Serialize(new
+        var markerPayload = AgentJson.Serialize(new Dictionary<string, object?>
         {
-            name,
-            elementPath,
-            tags
+            ["name"] = name,
+            ["elementPath"] = elementPath,
+            ["tags"] = tags
         });
 
         Publish(new ProfilerMarker
@@ -4976,21 +4990,21 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return await DispatchAsync(() =>
             {
                 var theme = BuildThemeInfoPayload(Application.Current ?? _app);
-                return HttpResponse.Json(new
+                return HttpResponse.Json(new Dictionary<string, object?>
                 {
-                    name = TryGetAppInfoString(() => AppInfo.Current.Name)
+                    ["name"] = TryGetAppInfoString(() => AppInfo.Current.Name)
                         ?? _app?.GetType().Assembly.GetName().Name
                         ?? "unknown",
-                    packageName = TryGetAppInfoString(() => AppInfo.Current.PackageName) ?? "unknown",
-                    version = TryGetAppInfoString(() => AppInfo.Current.VersionString) ?? "unknown",
-                    buildNumber = TryGetAppInfoString(() => AppInfo.Current.BuildString) ?? "unknown",
-                    theme = theme.Theme,
-                    requestedTheme = TryGetAppInfoString(() => AppInfo.Current.RequestedTheme.ToString())
+                    ["packageName"] = TryGetAppInfoString(() => AppInfo.Current.PackageName) ?? "unknown",
+                    ["version"] = TryGetAppInfoString(() => AppInfo.Current.VersionString) ?? "unknown",
+                    ["buildNumber"] = TryGetAppInfoString(() => AppInfo.Current.BuildString) ?? "unknown",
+                    ["theme"] = theme.Theme,
+                    ["requestedTheme"] = TryGetAppInfoString(() => AppInfo.Current.RequestedTheme.ToString())
                         ?? theme.RequestedTheme,
-                    requestedThemeValue = theme.RequestedTheme,
-                    userAppTheme = theme.UserAppTheme,
-                    effectiveTheme = theme.EffectiveTheme,
-                    requestedLayoutDirection = TryGetAppInfoString(
+                    ["requestedThemeValue"] = theme.RequestedTheme,
+                    ["userAppTheme"] = theme.UserAppTheme,
+                    ["effectiveTheme"] = theme.EffectiveTheme,
+                    ["requestedLayoutDirection"] = TryGetAppInfoString(
                         () => AppInfo.Current.RequestedLayoutDirection.ToString()) ?? "Unknown",
                 });
             });
@@ -5029,7 +5043,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return HttpResponse.Error(
                 $"Theme '{body.Theme}' is not supported. Use light, dark, or system.",
                 reason: "invalid-argument",
-                details: new { supportedThemes = SupportedThemeNames });
+                details: new Dictionary<string, object?> { ["supportedThemes"] = SupportedThemeNames });
         }
 
         try
@@ -5044,14 +5058,14 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 return BuildThemeInfoPayload(app);
             });
 
-            PublishUiEvent("themeChange", new
+            PublishUiEvent("themeChange", new Dictionary<string, object?>
             {
-                theme = theme.Theme,
-                requestedTheme = theme.RequestedTheme,
-                userAppTheme = theme.UserAppTheme,
-                effectiveTheme = theme.EffectiveTheme,
-                source = theme.Source,
-                timestamp = DateTimeOffset.UtcNow.ToString("O")
+                ["theme"] = theme.Theme,
+                ["requestedTheme"] = theme.RequestedTheme,
+                ["userAppTheme"] = theme.UserAppTheme,
+                ["effectiveTheme"] = theme.EffectiveTheme,
+                ["source"] = theme.Source,
+                ["timestamp"] = DateTimeOffset.UtcNow.ToString("O")
             });
 
             return HttpResponse.Json(theme);
@@ -5150,8 +5164,18 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     // Implementations live in the shared EssentialsAgentSupport so the optional
     // add-on for plain .NET apps can reuse them verbatim.
 
+    /// <summary>
+    /// Returns keys in the native preference store, or null when enumeration is unavailable.
+    /// A successful native result is authoritative; otherwise listing falls back to tracked keys.
+    /// </summary>
+    protected virtual IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName) => null;
+
+    protected static IReadOnlyCollection<string> ReadPreferenceFileKeys(
+        string path, string? sharedName = null, bool nestedStore = false)
+        => EssentialsAgentSupport.ReadPreferenceFileKeys(path, sharedName, nestedStore);
+
     protected override Task<HttpResponse> HandlePreferencesList(HttpRequest request)
-        => _essentials.HandlePreferencesList(request);
+        => _essentials.HandlePreferencesList(request, EnumerateNativePreferenceKeys);
 
     protected override Task<HttpResponse> HandlePreferencesGet(HttpRequest request)
         => _essentials.HandlePreferencesGet(request);

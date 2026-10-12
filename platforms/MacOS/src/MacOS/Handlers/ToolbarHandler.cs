@@ -1826,7 +1826,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             else
             {
                 // Place the MAUI view directly — handle interactions via MAUI gestures
-                platformView.Frame = new CoreGraphics.CGRect(0, 0, desiredWidth, desiredHeight);
+                platformView.SetLayoutFrame(new CoreGraphics.CGRect(0, 0, desiredWidth, desiredHeight));
                 itemView = platformView;
             }
 

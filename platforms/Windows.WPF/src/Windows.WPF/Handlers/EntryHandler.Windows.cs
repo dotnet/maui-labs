@@ -182,13 +182,9 @@ namespace Microsoft.Maui.Handlers.WPF
 			if (handler._passwordBox != null)
 				handler._passwordBox.FontStyle = style;
 
-			if (!string.IsNullOrEmpty(font.Family))
-			{
-				var family = new FontFamily(font.Family);
-				handler.PlatformView.FontFamily = family;
-				if (handler._passwordBox != null)
-					handler._passwordBox.FontFamily = family;
-			}
+			Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager.ApplyFontFamily(handler.PlatformView, font, handler.MauiContext);
+			if (handler._passwordBox != null)
+				Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager.ApplyFontFamily(handler._passwordBox, font, handler.MauiContext);
 		}
 
 		public static void MapPlaceholder(EntryHandler handler, IEntry entry)
@@ -220,6 +216,7 @@ namespace Microsoft.Maui.Handlers.WPF
 					handler._passwordBox = new WPasswordBox();
 					handler._passwordBox.PasswordChanged += handler.OnPasswordChanged;
 					handler._passwordBox.KeyUp += handler.OnKeyUp;
+					MapFont(handler, entry);
 				}
 
 				handler._passwordBox.Password = entry.Text ?? string.Empty;

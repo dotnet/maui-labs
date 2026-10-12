@@ -6,6 +6,8 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 	public class WPFVersionTracking : IVersionTracking
 	{
 		readonly IPreferences _preferences;
+		readonly object _trackingLock = new();
+		bool _tracked;
 
 		const string VersionKey = "vt_current_version";
 		const string BuildKey = "vt_current_build";
@@ -18,7 +20,10 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 		public WPFVersionTracking(Storage.IPreferences preferences)
 		{
 			_preferences = preferences;
+		}
 
+		void TrackCore()
+		{
 			var currentVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "1.0.0";
 			var currentBuild = currentVersion;
 
@@ -50,25 +55,44 @@ namespace Microsoft.Maui.Platforms.Windows.WPF.Essentials
 			}
 		}
 
-		public bool IsFirstLaunchEver => _preferences.Get(IsFirstLaunchKey, "true", SharedName) == "true";
+		IPreferences TrackedPreferences
+		{
+			get
+			{
+				Track();
+				return _preferences;
+			}
+		}
+
+		public bool IsFirstLaunchEver => TrackedPreferences.Get(IsFirstLaunchKey, "true", SharedName) == "true";
 		public bool IsFirstLaunchForCurrentVersion =>
-			_preferences.Get(PrevVersionKey, "", SharedName) != CurrentVersion || IsFirstLaunchEver;
+			TrackedPreferences.Get(PrevVersionKey, "", SharedName) != CurrentVersion || IsFirstLaunchEver;
 		public bool IsFirstLaunchForCurrentBuild => IsFirstLaunchForCurrentVersion;
 
-		public string CurrentVersion => _preferences.Get(VersionKey, "1.0.0", SharedName);
-		public string CurrentBuild => _preferences.Get(BuildKey, "1.0.0", SharedName);
-		public string PreviousVersion => _preferences.Get(PrevVersionKey, "", SharedName);
+		public string CurrentVersion => TrackedPreferences.Get(VersionKey, "1.0.0", SharedName);
+		public string CurrentBuild => TrackedPreferences.Get(BuildKey, "1.0.0", SharedName);
+		public string PreviousVersion => TrackedPreferences.Get(PrevVersionKey, "", SharedName);
 		public string PreviousBuild => PreviousVersion;
-		public string FirstInstalledVersion => _preferences.Get(FirstVersionKey, "", SharedName);
+		public string FirstInstalledVersion => TrackedPreferences.Get(FirstVersionKey, "", SharedName);
 		public string FirstInstalledBuild => FirstInstalledVersion;
 
 		public IReadOnlyList<string> VersionHistory =>
-			_preferences.Get(VersionHistoryKey, "", SharedName).Split('|', StringSplitOptions.RemoveEmptyEntries);
+			TrackedPreferences.Get(VersionHistoryKey, "", SharedName).Split('|', StringSplitOptions.RemoveEmptyEntries);
 		public IReadOnlyList<string> BuildHistory => VersionHistory;
 
 		public bool IsFirstLaunchForVersion(string version) => CurrentVersion == version && IsFirstLaunchForCurrentVersion;
 		public bool IsFirstLaunchForBuild(string build) => IsFirstLaunchForVersion(build);
 
-		public void Track() { }
+		public void Track()
+		{
+			lock (_trackingLock)
+			{
+				if (_tracked)
+					return;
+
+				TrackCore();
+				_tracked = true;
+			}
+		}
 	}
 }

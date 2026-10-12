@@ -8,4 +8,5 @@ internal sealed record ProfileTransportConfiguration(
 	string DiagnosticAddress,
 	string DiagnosticListenMode,
 	string DsrouterKind,
-	bool RequiresManualExitControlPortRouting);
+	bool RequiresManualExitControlPortRouting,
+	bool RequiresExplicitDsrouter = false);

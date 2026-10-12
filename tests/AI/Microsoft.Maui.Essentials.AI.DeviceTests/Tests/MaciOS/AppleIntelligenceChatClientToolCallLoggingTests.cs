@@ -1,4 +1,5 @@
 #if IOS || MACCATALYST
+using System.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -7,6 +8,56 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
 public class AppleIntelligenceChatClientToolCallLoggingTests
 {
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolCallbacks_InheritChatTraceAndSpanAcrossAwaits(bool streaming)
+	{
+		const string sourceName = "AppleToolCorrelationTests";
+		Activity? chatSpan = null;
+		using var listener = new ActivityListener
+		{
+			ShouldListenTo = source => source.Name == sourceName,
+			Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+			ActivityStopped = activity => chatSpan = activity,
+		};
+		ActivitySource.AddActivityListener(listener);
+		var logCollector = new DeviceTestLogCollector(LogLevel.Debug);
+		using var client = new AppleIntelligenceChatClient(logCollector).AsBuilder()
+			.UseOpenTelemetry(sourceName: sourceName, configure: telemetry => telemetry.EnableSensitiveData = false)
+			.Build();
+		Activity? beforeAwait = null;
+		Activity? afterAwait = null;
+		var weatherTool = AIFunctionFactory.Create(async (string location) =>
+		{
+			beforeAwait = Activity.Current;
+			await Task.Yield();
+			afterAwait = Activity.Current;
+			return $"Clear skies in {location}";
+		}, name: "GetWeather", description: "Gets the weather for a location");
+		var options = new ChatOptions { Tools = [weatherTool] };
+		ChatMessage[] messages = [new(ChatRole.User, "Use GetWeather to get the weather in Seattle.")];
+		if (streaming)
+		{
+			await foreach (var _ in client.GetStreamingResponseAsync(messages, options)) { }
+		}
+		else
+		{
+			await client.GetResponseAsync(messages, options);
+		}
+
+		Assert.NotNull(chatSpan);
+		Assert.Same(chatSpan, beforeAwait);
+		Assert.Same(chatSpan, afterAwait);
+		Assert.NotEmpty(logCollector.Entries);
+		Assert.All(logCollector.Entries, entry =>
+		{
+			Assert.Equal(chatSpan.TraceId, entry.TraceId);
+			Assert.Equal(chatSpan.SpanId, entry.SpanId);
+		});
+	}
+
 	// ====================================================================
 	// Single tool, Debug level
 	// Expected: exactly 2 entries
@@ -349,7 +400,8 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		{
 			if (IsEnabled(logLevel))
 			{
-				var entry = new DeviceTestLogEntry(logLevel, formatter(state, exception));
+				var activity = Activity.Current;
+				var entry = new DeviceTestLogEntry(logLevel, formatter(state, exception), activity?.TraceId, activity?.SpanId);
 				lock (_lock)
 				{
 					Entries.Add(entry);
@@ -358,7 +410,7 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		}
 	}
 
-	private record DeviceTestLogEntry(LogLevel Level, string Message);
+	private record DeviceTestLogEntry(LogLevel Level, string Message, ActivityTraceId? TraceId, ActivitySpanId? SpanId);
 }
 
 #endif

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.ChatLogsView"
+             x:Name="LogsView"
+             x:DataType="local:DiagnosticsViewModel">
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8" Padding="12">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Label Text="AI diagnostics" FontSize="20" FontAttributes="Bold" VerticalOptions="Center" />
+            <ImageButton Grid.Column="1" Source="trash.png" Style="{StaticResource AttachmentButton}"
+                         Command="{Binding ClearCommand}"
+                         AutomationId="{Binding AutomationPrefix, Source={x:Reference LogsView}, x:DataType=local:ChatLogsView, StringFormat='Clear{0}LogsButton'}"
+                         ToolTipProperties.Text="Clear local AI diagnostics"
+                         SemanticProperties.Description="Clear local AI diagnostics" />
+        </Grid>
+        <Label Grid.Row="1" Text="Local logs and completed spans, grouped by trace. No prompt capture."
+               Style="{StaticResource MutedLabel}" FontSize="12" />
+        <CollectionView Grid.Row="2" ItemsSource="{Binding Groups}"
+                        IsGrouped="True" SelectionMode="None"
+                        AutomationId="{Binding AutomationPrefix, Source={x:Reference LogsView}, x:DataType=local:ChatLogsView, StringFormat='{0}LogEntries'}">
+            <CollectionView.GroupHeaderTemplate>
+                <DataTemplate x:DataType="local:ChatDiagnosticGroup">
+                    <Label Text="{Binding Title}" AutomationId="{Binding AutomationId}"
+                           Style="{StaticResource SectionHeading}" Margin="0,8,0,8" />
+                </DataTemplate>
+            </CollectionView.GroupHeaderTemplate>
+            <CollectionView.EmptyView>
+                <Label Text="Run a live AI operation to see built-in diagnostics."
+                       AutomationId="{Binding AutomationPrefix, Source={x:Reference LogsView}, x:DataType=local:ChatLogsView, StringFormat='{0}LogsEmpty'}"
+                       Margin="12"
+                       Style="{StaticResource MutedLabel}" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="local:ChatDiagnosticEntry">
+                    <Border Style="{StaticResource PlaygroundPanel}" Padding="10" Margin="0,0,0,8">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="{Binding Heading}" FontSize="11" Style="{StaticResource MutedLabel}" />
+                            <Label Text="{Binding Message}" FontSize="12" />
+                            <Label Text="{Binding Details}" FontSize="11" Style="{StaticResource MutedLabel}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentView>

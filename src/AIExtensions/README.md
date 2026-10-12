@@ -17,11 +17,16 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 | [`AIExtensions.Sample.Hello`](../../samples/AIExtensions.Sample.Hello/) | Minimal end-to-end usage |
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
 | [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI chat app with navigation, cart, approval flow |
+| [`AIExtensions.Sample.ChatPlayground`](../../samples/AIExtensions.Sample.ChatPlayground/) | Azure/Apple `IChatClient` requests, images and tools, automatic recording, and offline replay with portable tests |
 
 ## CI
 
 - GitHub Actions: `ci-ai.yml`
-- Solution filter: `AIExtensions.slnf`
+- Solution filter: `AIExtensions.slnf` includes the MAUI playground. The portable
+  `AIExtensions.Packages.slnf` includes the recording/replay tests and is used by
+  the Windows official packaging job and package/test CI job. A separate macOS
+  CI job builds the MAUI sample with the required workloads and native Apple
+  dependencies.
 
 ## Requirements
 

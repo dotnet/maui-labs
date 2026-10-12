@@ -175,7 +175,7 @@ public sealed class GtkBlazorWebView : IDisposable
 			return;
 		}
 
-		string uri = request.GetUri();
+		string uri = UriHelpers.RemoveQueryAndFragment(request.GetUri());
 		bool allowFallbackOnHostPage = !System.IO.Path.HasExtension(uri);
 
 		if (_webViewManager.TryGetResponseContentInternal(

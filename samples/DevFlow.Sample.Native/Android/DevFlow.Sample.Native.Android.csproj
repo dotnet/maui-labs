@@ -27,4 +27,12 @@
     <Compile Include="..\Shared\**\*.cs" LinkBase="Shared" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(DevFlowSampleEssentials)' == 'true'">
+    <DefineConstants>$(DefineConstants);DEVFLOW_SAMPLE_ESSENTIALS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(DevFlowSampleEssentials)' == 'true'">
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Native.Essentials\Microsoft.Maui.DevFlow.Agent.Native.Essentials.csproj" />
+    <Compile Include="..\..\DevFlow.Sample\PreferenceDiagnostics.cs" Link="Shared\PreferenceDiagnostics.cs" />
+  </ItemGroup>
+
 </Project>

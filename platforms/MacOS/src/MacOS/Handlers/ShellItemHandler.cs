@@ -29,6 +29,8 @@ public partial class ShellItemHandler : ElementHandler<ShellItem, NSView>
 
 	static void MapCurrentItem(ShellItemHandler handler, ShellItem item)
 	{
-		// ShellHandler listens for Shell.CurrentItem changes and handles page switching
+		if (item.Parent is Shell shell && shell.CurrentItem == item &&
+			shell.Handler is ShellHandler shellHandler)
+			shellHandler.QueueSelectionUpdate(item);
 	}
 }

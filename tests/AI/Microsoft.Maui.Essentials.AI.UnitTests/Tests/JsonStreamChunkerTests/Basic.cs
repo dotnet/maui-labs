@@ -120,5 +120,22 @@ public partial class JsonStreamChunkerTests
 			Assert.True(doc.RootElement.GetProperty("active").GetBoolean());
 			Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("data").ValueKind);
 		}
+
+		[Theory]
+		[InlineData("""{"answer":"","found":false}""", """{"found":false,"answer":""}""")]
+		[InlineData("""{"code":"","passengers":2}""", """{"passengers":2,"code":"FEN-913"}""")]
+		[InlineData("""{"answer":"p","missing":null}""", """{"missing":null,"answer":"present"}""")]
+		[InlineData("""{"result":{"code":""},"found":true}""", """{"found":true,"result":{"code":"FEN-913"}}""")]
+		[InlineData("""{"results":[],"count":1}""", """{"count":1,"results":["FEN-913"]}""")]
+		public void Process_FirstSnapshotGrowablePrecedesPrimitive_PreservesFinalJson(string first, string final)
+		{
+			var chunker = new JsonStreamChunker();
+
+			var text = chunker.Process(first) + chunker.Process(final) + chunker.Flush();
+
+			using var expected = JsonDocument.Parse(final);
+			using var actual = JsonDocument.Parse(text);
+			Assert.True(JsonElementsAreEqual(expected.RootElement, actual.RootElement), text);
+		}
 	}
 }

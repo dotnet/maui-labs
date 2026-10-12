@@ -60,10 +60,8 @@ public class ButtonHandler : GtkViewHandler<IButton, Gtk.Button>
 
 	public static void MapTextColor(ButtonHandler handler, IButton button)
 	{
-		if (button is ITextStyle textStyle && textStyle.TextColor != null)
-		{
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(textStyle.TextColor)};");
-		}
+		handler.UpdateCss(handler.PlatformView,
+			button is ITextStyle { TextColor: not null } textStyle ? $"color: {ToGtkColor(textStyle.TextColor)};" : null);
 	}
 
 	public static void MapFont(ButtonHandler handler, IButton button)
@@ -72,40 +70,39 @@ public class ButtonHandler : GtkViewHandler<IButton, Gtk.Button>
 			return;
 
 		var css = handler.BuildFontCss(textStyle.Font);
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapPadding(ButtonHandler handler, IButton button)
 	{
 		var p = button.Padding;
-		handler.ApplyCss(handler.PlatformView,
+		handler.UpdateCss(handler.PlatformView,
 			$"padding: {(int)p.Top}px {(int)p.Right}px {(int)p.Bottom}px {(int)p.Left}px;");
 	}
 
 	public static void MapCharacterSpacing(ButtonHandler handler, IButton button)
 	{
 		if (button is ITextStyle textStyle)
-			handler.ApplyCss(handler.PlatformView, $"letter-spacing: {textStyle.CharacterSpacing}px;");
+			handler.UpdateCss(handler.PlatformView, $"letter-spacing: {textStyle.CharacterSpacing}px;");
 	}
 
 	public static void MapCornerRadius(ButtonHandler handler, IButton button)
 	{
-		if (button is IButtonStroke stroke && stroke.CornerRadius >= 0)
-			handler.ApplyCss(handler.PlatformView, $"border-radius: {stroke.CornerRadius}px;");
+		handler.UpdateCss(handler.PlatformView,
+			button is IButtonStroke stroke && stroke.CornerRadius >= 0 ? $"border-radius: {stroke.CornerRadius}px;" : null);
 	}
 
 	public static void MapStrokeColor(ButtonHandler handler, IButton button)
 	{
-		if (button is IButtonStroke stroke && stroke.StrokeColor != null)
-			handler.ApplyCss(handler.PlatformView, $"border-color: {ToGtkColor(stroke.StrokeColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			button is IButtonStroke { StrokeColor: not null } stroke ? $"border-color: {ToGtkColor(stroke.StrokeColor)};" : null);
 	}
 
 	public static void MapStrokeThickness(ButtonHandler handler, IButton button)
 	{
-		if (button is IButtonStroke stroke && stroke.StrokeThickness >= 0)
-			handler.ApplyCss(handler.PlatformView,
-				$"border-width: {stroke.StrokeThickness}px; border-style: solid;");
+		handler.UpdateCss(handler.PlatformView,
+			button is IButtonStroke stroke && stroke.StrokeThickness >= 0
+				? $"border-width: {stroke.StrokeThickness}px; border-style: solid;" : null);
 	}
 
 	public static void MapImageSource(ButtonHandler handler, IButton button)
