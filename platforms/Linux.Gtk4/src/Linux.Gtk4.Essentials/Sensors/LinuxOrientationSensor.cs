@@ -46,8 +46,8 @@ public sealed class LinuxOrientationSensor : LinuxSensor, IOrientationSensor
             return;
         }
 
-        // MAUI OrientationSensorData constructor is (W, X, Y, Z)
-        var data = new OrientationSensorData(w * Scale, x * Scale, y * Scale, z * Scale);
+        // Correct – preserve IIO order (x y z w) which matches OrientationSensorData(x, y, z, w)
+        var data = new OrientationSensorData(x * Scale, y * Scale, z * Scale, w * Scale);
         ReadingChanged?.Invoke(this, new OrientationSensorChangedEventArgs(data));
     }
 
