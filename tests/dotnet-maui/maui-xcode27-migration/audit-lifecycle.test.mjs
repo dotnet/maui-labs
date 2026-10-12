@@ -238,6 +238,85 @@ test('no findings is explicitly not a compatibility certification', t => {
   assert.match(report.limitations, /not C# semantic analysis or migration certification/);
 });
 
+test('a standard iOS-only app gets simple-migration and missing scene configuration guidance', t => {
+  const app = fixture(t);
+  app.write('MyApp.csproj', `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
+    <TargetFrameworks>net11.0-android;net11.0-ios</TargetFrameworks>
+    <UseMaui>true</UseMaui>
+  </PropertyGroup></Project>`);
+  app.write('MauiProgram.cs', `class MauiProgram {
+    public static MauiApp CreateMauiApp() => MauiApp.CreateBuilder().UseMauiApp<App>().Build();
+  }`);
+  app.write('Platforms/iOS/AppDelegate.cs', `class AppDelegate : MauiUIApplicationDelegate {
+    protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+  }`);
+  app.write('Platforms/iOS/Info.plist', '<plist><dict><!-- <key>UIApplicationSceneManifest</key> --></dict></plist>');
+  const result = spawnSync(process.execPath, [script, app.root], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /No lifecycle code found: simple migration/);
+  assert.match(result.stdout, /iOS: SceneDelegate.cs not found/);
+  assert.match(result.stdout, /UIApplicationSceneManifest not found/);
+  assert.doesNotMatch(result.stdout, /MacCatalyst/);
+  app.write('Platforms/iOS/SceneDelegate.cs', '[Register("SceneDelegate")] class SceneDelegate : MauiUISceneDelegate {}');
+  app.write('Platforms/iOS/Info.plist', '<plist><dict><key>UIApplicationSceneManifest</key><dict/></dict></plist>');
+  const migrated = spawnSync(process.execPath, [script, app.root], { encoding: 'utf8' });
+  assert.equal(migrated.status, 0, migrated.stderr);
+  assert.match(migrated.stdout, /No lifecycle code found: simple migration/);
+  assert.match(migrated.stdout, /iOS: SceneDelegate.cs present/);
+  assert.match(migrated.stdout, /UIApplicationSceneManifest present \(source only\)/);
+  assert.doesNotMatch(migrated.stdout, /MacCatalyst/);
+});
+
+test('the audit reports source scene configuration for both discovered Apple heads', t => {
+  const app = fixture(t);
+  for (const platform of ['iOS', 'MacCatalyst']) {
+    app.write(`Platforms/${platform}/SceneDelegate.cs`, 'class SceneDelegate : MauiUISceneDelegate {}');
+    app.write(`Platforms/${platform}/Info.plist`, '<plist><dict><key>UIApplicationSceneManifest</key><dict/></dict></plist>');
+  }
+  const report = auditDirectory(app.root);
+  assert.equal(report.lifecycle.status, 'simple-migration-candidate');
+  assert.equal(report.appleHeads.length, 2);
+  for (const head of report.appleHeads) {
+    assert.deepEqual(head.sceneDelegateFiles, [`Platforms/${head.platform}/SceneDelegate.cs`]);
+    assert.deepEqual(head.manifests, [{ file: `Platforms/${head.platform}/Info.plist`, sceneManifestPresent: true }]);
+  }
+  assert.equal(report.status, 'no-patterns-found');
+});
+
+for (const source of [
+  'builder.ConfigureLifecycleEvents(events => events.AddiOS(ios => ios.OnActivated(app => Log())));',
+  'class AppDelegate : MauiUIApplicationDelegate { public override bool FinishedLaunching() => true; }',
+  'class AppDelegate : MauiUIApplicationDelegate { public override void OnActivated(UIApplication app) {} }',
+  'class Startup : Microsoft.Maui.MauiUIApplicationDelegate { public override bool FinishedLaunching() => true; }',
+  'class SceneDelegate : MauiUISceneDelegate { public override void OnActivated(UIScene scene) {} }',
+  'void Handle() { OpenUrl(url); ContinueUserActivity(activity); PerformActionForShortcutItem(item); }',
+]) {
+  test(`custom lifecycle code prevents simple-migration guidance: ${source}`, t => {
+    const app = fixture(t);
+    app.write('Custom.cs', source);
+    const report = auditDirectory(app.root);
+    assert.equal(report.lifecycle.status, 'review-required');
+    assert.deepEqual(report.lifecycle.files, ['Custom.cs']);
+  });
+}
+
+test('commented callbacks do not prevent the simple migration candidate', t => {
+  const app = fixture(t);
+  app.write('App.cs', '// ConfigureLifecycleEvents(events); override void OnActivated() {}\nclass App {}');
+  assert.equal(auditDirectory(app.root).lifecycle.status, 'simple-migration-candidate');
+});
+
+test('invalid plist encoding makes the source configuration scan incomplete', t => {
+  const app = fixture(t);
+  app.write('App.cs', 'class App {}');
+  app.write('Platforms/iOS/Info.plist', Buffer.from([0xff, 0xff, 0xff]));
+  const report = auditDirectory(app.root);
+  assert.equal(report.status, 'incomplete');
+  assert.equal(report.lifecycle.status, 'incomplete');
+  assert.doesNotMatch(report.lifecycle.message, /No lifecycle code found/);
+  assert.ok(report.errors.some(error => error.file === 'Platforms/iOS/Info.plist'));
+});
+
 test('reads UTF-16 source without changing its encoding', t => {
   const app = fixture(t);
   const bytes = Buffer.from('\ufeffclass AppDelegate { void Run() { Window.Root.Title = url; } }', 'utf16le');

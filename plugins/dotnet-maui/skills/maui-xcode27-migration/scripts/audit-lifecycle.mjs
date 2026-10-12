@@ -114,6 +114,7 @@ export function auditDirectory(directory) {
   const root = resolve(directory);
   const report = { root, status: '', filesScanned: 0, excludedDirectories: [], findings: [], errors: [], limitations };
   const sources = [];
+  const appleHeads = new Map();
   function walk(path) {
     const name = relative(root, path).replaceAll('\\', '/') || '.';
     try {
@@ -125,14 +126,30 @@ export function auditDirectory(directory) {
           if (excluded.has(child.toLowerCase())) report.excludedDirectories.push(`${name}/${child}`);
           else walk(join(path, child));
         }
-      } else if (entry.isFile() && extname(path).toLowerCase() === '.cs') {
+      } else if (entry.isFile()) {
+        const platform = /(?:^|\/)Platforms\/(iOS|MacCatalyst)\//.exec(name)?.[1];
+        if (platform && !appleHeads.has(platform))
+          appleHeads.set(platform, { platform, sceneDelegateFiles: [], manifests: [] });
+        const isSource = extname(path).toLowerCase() === '.cs';
+        const isManifest = platform && name.endsWith('/Info.plist');
+        if (!isSource && !isManifest) return;
         const bytes = readFileSync(path);
         const encoding = bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le'
           : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : 'utf-8';
         const source = new TextDecoder(encoding, { fatal: true }).decode(bytes);
-        sources.push({ file: name, source, code: codeOnly(source) });
-        report.findings.push(...auditSource(source, name));
-        report.filesScanned++;
+        if (isSource) {
+          sources.push({ file: name, source, code: codeOnly(source) });
+          report.findings.push(...auditSource(source, name));
+          report.filesScanned++;
+          if (platform && name.endsWith('/SceneDelegate.cs'))
+            appleHeads.get(platform).sceneDelegateFiles.push(name);
+        } else {
+          appleHeads.get(platform).manifests.push({
+            file: name,
+            sceneManifestPresent: /<key>\s*UIApplicationSceneManifest\s*<\/key>/
+              .test(source.replace(/<!--[\s\S]*?-->/g, '')),
+          });
+        }
       }
     } catch (error) {
       report.errors.push({ file: name, message: error.message });
@@ -161,7 +178,20 @@ export function auditDirectory(directory) {
       }
     }
   }
+  const lifecycleFiles = sources.filter(({ code }) =>
+    /\b(?:ConfigureLifecycleEvents|OpenUrl|ContinueUserActivity|OnActivated|OnResignActivation|DidEnterBackground|WillEnterForeground|WillConnect|\w*ShortcutItem\w*|Scene\w+)\s*\(/.test(code)
+    || (/\bclass\s+\w*AppDelegate\b|\bclass\s+\w+\s*:\s*(?:[\w.]*\.)?(?:MauiUIApplicationDelegate|UIApplicationDelegate|MauiUISceneDelegate|UIWindowSceneDelegate)\b/.test(code)
+      && /\boverride\s+(?:[\w.<>,?[\]]+\s+)+(?!CreateMauiApp\b)\w+\s*\(/.test(code)))
+    .map(({ file }) => file);
   if (report.filesScanned === 0) report.errors.push({ file: '.', message: 'No C# source files scanned.' });
+  report.lifecycle = {
+    status: report.errors.length ? 'incomplete' : lifecycleFiles.length ? 'review-required' : 'simple-migration-candidate',
+    message: report.errors.length ? 'Scan incomplete: cannot determine whether a simple migration applies.'
+      : lifecycleFiles.length ? 'Lifecycle code found: inspect custom behavior.'
+      : 'No lifecycle code found: simple migration (subject to the scan limitations).',
+    files: lifecycleFiles,
+  };
+  report.appleHeads = [...appleHeads.values()];
   report.status = report.errors.length ? 'incomplete' : report.findings.length ? 'review-required' : 'no-patterns-found';
   return report;
 }
@@ -176,6 +206,13 @@ function main(argumentsList) {
   if (argumentsList.includes('--json')) console.log(JSON.stringify(report, null, 2));
   else {
     console.log(`${report.status}: scanned ${report.filesScanned} C# files under ${report.root}`);
+    console.log(report.lifecycle.message);
+    for (const head of report.appleHeads) {
+      console.log(`${head.platform}: SceneDelegate.cs ${head.sceneDelegateFiles.length ? 'present' : 'not found'}`);
+      if (!head.manifests.length) console.log(`${head.platform}: Info.plist not found`);
+      for (const manifest of head.manifests)
+        console.log(`${manifest.file}: UIApplicationSceneManifest ${manifest.sceneManifestPresent ? 'present' : 'not found'} (source only)`);
+    }
     for (const finding of report.findings)
       console.log(`${finding.file}:${finding.line} ${finding.rule}: ${finding.message}`);
     for (const error of report.errors) console.error(`${error.file}: ${error.message}`);

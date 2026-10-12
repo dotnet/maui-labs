@@ -488,6 +488,54 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.Equal(2, invocationCount);
     }
 
+    [Theory]
+    [InlineData("Entry", true)]
+    [InlineData("Entry", false)]
+    [InlineData("Editor", true)]
+    [InlineData("Editor", false)]
+    [InlineData("SearchBar", true)]
+    [InlineData("SearchBar", false)]
+    public async Task Tap_InputViewWithGesture_InvokesGestureInsteadOfFocusing(string type, bool useCommand)
+    {
+        InputView input = type switch
+        {
+            "Entry" => new Entry(),
+            "Editor" => new Editor(),
+            "SearchBar" => new SearchBar(),
+            _ => throw new ArgumentOutOfRangeException(nameof(type))
+        };
+        input.AutomationId = "TapInput";
+        input.IsReadOnly = true;
+        var invocationCount = 0;
+        var gesture = new TapGestureRecognizer();
+        if (useCommand)
+            gesture.Command = new Command(() => invocationCount++);
+        else
+            gesture.Tapped += (_, _) => invocationCount++;
+        input.GestureRecognizers.Add(gesture);
+
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var app = new Application();
+        var window = new Window(new ContentPage { Content = input });
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var captured = Assert.Single(
+            Flatten(await client.GetTreeAsync()),
+            element => element.AutomationId == "TapInput");
+        Assert.Equal(bool.TrueString, captured.FrameworkProperties![nameof(InputView.IsReadOnly)]);
+        var result = await client.TapResultAsync(captured.Id, captured.CaptureEpoch, captured.RegistryGeneration);
+
+        Assert.True(result.Success, $"Tap failed: {result.Error}; reason={result.Reason}");
+        Assert.Equal(1, invocationCount);
+    }
+
     [Fact]
     public async Task CaptureEpoch_ExpiresAfterExternalElementPropertyChange()
     {
