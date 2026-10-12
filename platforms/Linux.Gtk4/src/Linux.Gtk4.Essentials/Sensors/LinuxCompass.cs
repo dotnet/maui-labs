@@ -12,8 +12,6 @@ public sealed class LinuxCompass : LinuxSensor, ICompass
         "in_rot_from_north_true_tilt_comp_raw"
     };
 
-    private const string ScaleFile = "in_rot_scale";
-
     private string? _headingPath;
 
     public event EventHandler<CompassChangedEventArgs>? ReadingChanged;
@@ -48,7 +46,11 @@ public sealed class LinuxCompass : LinuxSensor, ICompass
             if (File.Exists(path))
             {
                 _headingPath = path;
-                Scale = ReadDoubleOrDefault(Path.Combine(dir, ScaleFile), 1.0);
+
+                // IIO uses channel-specific scale: e.g. in_rot_from_north_magnetic_tilt_comp_scale
+                var scaleAttr = attr.Replace("_raw", "_scale", StringComparison.Ordinal);
+                Scale = ReadDoubleOrDefault(Path.Combine(dir, scaleAttr), 1.0);
+
                 return dir;
             }
         }
