@@ -149,6 +149,14 @@ jobs:
           --projects $(pwd)/${{ inputs.project-path }}
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
 
+      - name: Test workflow attachments with JSON reflection disabled
+        if: inputs.project-name == 'cli'
+        run: >
+          dotnet test src/Cli/Microsoft.Maui.Cli.UnitTests/Microsoft.Maui.Cli.UnitTests.csproj
+          -c Release --no-restore
+          -p:JsonSerializerIsReflectionEnabledByDefault=false
+          --filter "FullyQualifiedName~FlowMarkdownTests|FullyQualifiedName~EvidenceCaptureTests.BuildAsync_RedactsStructuredFlowValuesBeforeAttachingWorkflow"
+
       - name: NativeAOT publish smoke test (macOS)
         if: matrix.os == 'macos-latest' && inputs.project-name == 'cli'
         shell: bash

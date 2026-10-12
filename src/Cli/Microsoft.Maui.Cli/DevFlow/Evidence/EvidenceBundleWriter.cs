@@ -138,8 +138,29 @@ internal static class EvidenceBundleWriter
         if (!EvidenceFormat.AllowedEntries.Contains(name, StringComparer.Ordinal))
             throw new InvalidOperationException($"Refusing to write unknown evidence entry '{name}'.");
 
-        var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+        var entry = archive.CreateEntry(name, ChooseCompression(content, cancellationToken));
         using var stream = entry.Open();
+        WriteContent(stream, content, cancellationToken);
+    }
+
+    private static CompressionLevel ChooseCompression(byte[] content, CancellationToken cancellationToken)
+    {
+        if (content.LongLength / EvidenceFormat.MaxCompressionRatio < EvidenceFormat.RatioCheckMinCompressedBytes)
+            return CompressionLevel.Optimal;
+
+        // Probe large entries so our own output obeys the imported-bundle compression guard.
+        using var compressed = new MemoryStream();
+        using (var deflate = new DeflateStream(compressed, CompressionLevel.Optimal, leaveOpen: true))
+            WriteContent(deflate, content, cancellationToken);
+
+        return compressed.Length >= EvidenceFormat.RatioCheckMinCompressedBytes &&
+            content.LongLength / compressed.Length > EvidenceFormat.MaxCompressionRatio
+            ? CompressionLevel.NoCompression
+            : CompressionLevel.Optimal;
+    }
+
+    private static void WriteContent(Stream stream, byte[] content, CancellationToken cancellationToken)
+    {
         const int chunkSize = 81_920;
         for (var offset = 0; offset < content.Length; offset += chunkSize)
         {

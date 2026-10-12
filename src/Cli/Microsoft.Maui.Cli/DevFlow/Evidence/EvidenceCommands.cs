@@ -96,7 +96,7 @@ internal static class EvidenceCommands
                 if (isJson) output.WriteRawJson(EvidenceJson.Serialize(plan, indented: true));
                 else Console.WriteLine(FormatPlan(plan));
             }
-            catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex))
+            catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct))
             {
                 output.WriteError(ex.Message, isJson, suggestions: ["Run 'maui devflow agent status' to confirm the selected app is connected"]);
                 onError();
@@ -186,7 +186,7 @@ internal static class EvidenceCommands
                 if (isJson) output.WriteRawJson(EvidenceJson.Serialize(result, indented: true));
                 else Console.WriteLine(FormatCapture(result));
             }
-            catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex))
+            catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct))
             {
                 output.WriteError(ex.Message, isJson, suggestions: ["Run 'maui devflow agent status' to confirm the selected app is connected"]);
                 onError();
@@ -251,7 +251,7 @@ internal static class EvidenceCommands
                 if (isJson) output.WriteRawJson(EvidenceJson.Serialize(result, indented: true));
                 else Console.WriteLine(FormatView(result));
             }
-            catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex))
+            catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct))
             {
                 output.WriteError(ex.Message, isJson);
                 onError();

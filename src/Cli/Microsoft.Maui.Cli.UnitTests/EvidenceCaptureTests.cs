@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow.Evidence;
 using Microsoft.Maui.Cli.DevFlow.Flows;
+using Microsoft.Maui.Cli.UnitTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
 using Xunit;
 
@@ -769,6 +770,87 @@ public class EvidenceCaptureTests : IDisposable
             EvidenceBuilder.BuildAsync(
                 new FakeEvidenceSource { CancelOnTree = true },
                 Options()));
+    }
+
+    [Theory]
+    [InlineData("/api/v1/logs", EvidenceFormat.LogsEntry, EvidenceFormat.NetworkEntry)]
+    [InlineData("/api/v1/network/requests", EvidenceFormat.NetworkEntry, EvidenceFormat.LogsEntry)]
+    public async Task BuildAsync_HttpTimeoutExcludesOnlyTheUnavailableSection(
+        string stalledPath, string excludedEntry, string retainedEntry)
+    {
+        await using var agent = new EvidenceAgentFixture(stalledPath: stalledPath);
+        using var client = new AgentClient("127.0.0.1", agent.Port);
+        var http = (HttpClient)typeof(AgentClient)
+            .GetField("_http", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(client)!;
+        http.Timeout = TimeSpan.FromSeconds(1);
+
+        var bundle = await EvidenceBuilder.BuildAsync(new AgentEvidenceDataSource(client), Options());
+        using var stream = new MemoryStream(EvidenceBundleWriter.ToBytes(bundle));
+        var read = EvidenceBundleReader.Read(stream);
+
+        Assert.True(read.Ok, read.Error);
+        Assert.NotNull(read.Tree);
+        Assert.Contains(bundle.Manifest.Excluded, entry => entry.Name == excludedEntry &&
+            entry.Reason.Contains("timeout", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(bundle.Entries, entry => entry.Name == excludedEntry);
+        Assert.Contains(bundle.Entries, entry => entry.Name == retainedEntry);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/logs")]
+    [InlineData("/api/v1/network/requests")]
+    public async Task BuildAsync_CallerCancellationDuringHttpReadAbortsCapture(string stalledPath)
+    {
+        await using var agent = new EvidenceAgentFixture(stalledPath: stalledPath);
+        using var client = new AgentClient("127.0.0.1", agent.Port);
+        using var cancellation = new CancellationTokenSource();
+        var capture = EvidenceBuilder.BuildAsync(
+            new AgentEvidenceDataSource(client), Options(), cancellation.Token);
+        await agent.StalledRequest.WaitAsync(TimeSpan.FromSeconds(10));
+
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => capture);
+    }
+
+    [Fact]
+    public void IsExpectedFailure_DoesNotTreatCallerCancellationAsATimeout()
+    {
+        var timeout = new TaskCanceledException("HTTP timeout", new TimeoutException());
+        Assert.True(EvidenceCapture.IsExpectedFailure(timeout));
+        Assert.False(EvidenceCapture.IsExpectedFailure(new TaskCanceledException()));
+        Assert.False(EvidenceCapture.IsExpectedFailure(new OperationCanceledException()));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.False(EvidenceCapture.IsExpectedFailure(timeout, cancellation.Token));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BundleWriter_HighlyCompressibleWorkflowAtTheSizeLimitRoundTrips(bool writeToDisk)
+    {
+        var workflow = new string('w', (int)EvidenceFormat.MaxWorkflowBytes);
+        var bundle = await EvidenceBuilder.BuildAsync(
+            new FakeEvidenceSource(), Options() with { WorkflowMarkdown = workflow });
+        EvidenceReadResult read;
+        if (writeToDisk)
+        {
+            var destination = Path.Combine(_root, "compressible.mauitrace");
+            var written = EvidenceBundleWriter.Write(bundle, destination, overwrite: false);
+            Assert.True(written.Ok, written.Error);
+            read = EvidenceBundleReader.Read(destination);
+        }
+        else
+        {
+            using var stream = new MemoryStream(EvidenceBundleWriter.ToBytes(bundle));
+            read = EvidenceBundleReader.Read(stream);
+        }
+
+        Assert.True(read.Ok, read.Error);
+        Assert.Empty(read.Warnings);
+        Assert.Equal(workflow, read.Workflow);
+        Assert.Equal(EvidenceFormat.MaxWorkflowBytes, bundle.Manifest.Counts.WorkflowBytes);
     }
 
     [Fact]

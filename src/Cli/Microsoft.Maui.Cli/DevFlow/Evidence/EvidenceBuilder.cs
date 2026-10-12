@@ -79,7 +79,7 @@ internal static class EvidenceBuilder
         // ── environment ──────────────────────────────────────────────────────────────────────
         AgentStatus? status = null;
         try { status = await source.GetStatusAsync(ct); }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex)) { warnings.Add($"Agent status unavailable: {Describe(ex)}"); }
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct)) { warnings.Add($"Agent status unavailable: {Describe(ex)}"); }
         if (status is null)
             warnings.Add("Agent status was unavailable; this capture is incomplete.");
 
@@ -103,23 +103,23 @@ internal static class EvidenceBuilder
 
         var capabilities = new List<string>();
         try { capabilities = ProjectCapabilities(await source.GetCapabilitiesAsync(ct)); }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex)) { warnings.Add($"Agent capabilities unavailable: {Describe(ex)}"); }
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct)) { warnings.Add($"Agent capabilities unavailable: {Describe(ex)}"); }
 
         EvidenceDeviceInfo? device = null;
         try { device = ProjectDevice(await source.GetPlatformInfoAsync("device-info", ct)); }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex)) { warnings.Add($"Device info unavailable: {Describe(ex)}"); }
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct)) { warnings.Add($"Device info unavailable: {Describe(ex)}"); }
 
         EvidenceDisplayInfo? display = null;
         try { display = ProjectDisplay(await source.GetPlatformInfoAsync("device-display", ct)); }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex)) { warnings.Add($"Display info unavailable: {Describe(ex)}"); }
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct)) { warnings.Add($"Display info unavailable: {Describe(ex)}"); }
 
         EvidenceThemeInfo? theme = null;
         try { theme = ProjectTheme(await source.GetPlatformInfoAsync("app-info", ct)); }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex)) { warnings.Add($"Theme unavailable: {Describe(ex)}"); }
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct)) { warnings.Add($"Theme unavailable: {Describe(ex)}"); }
 
         EvidenceConnectivityInfo? connectivity = null;
         try { connectivity = ProjectConnectivity(await source.GetPlatformInfoAsync("connectivity", ct)); }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex)) { warnings.Add($"Connectivity unavailable: {Describe(ex)}"); }
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct)) { warnings.Add($"Connectivity unavailable: {Describe(ex)}"); }
 
         var viewport = status?.Device is { } metrics ? new EvidenceViewportInfo
         {
@@ -159,7 +159,7 @@ internal static class EvidenceBuilder
                 "Element structure: type, automation id, bounds, state, and source location (no text or property values)",
                 projected.Count, EvidenceJson.SerializeToUtf8(projected));
         }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex))
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct))
         {
             exclusions.Add(new EvidenceExclusion(EvidenceFormat.TreeEntry, $"Visual tree unavailable: {Describe(ex)}"));
         }
@@ -190,7 +190,7 @@ internal static class EvidenceBuilder
                     projected.FindingCount, EvidenceJson.SerializeToUtf8(projected));
             }
         }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex))
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct))
         {
             exclusions.Add(new EvidenceExclusion(EvidenceFormat.LayoutEntry, $"Layout diagnostics unavailable: {Describe(ex)}"));
         }
@@ -205,7 +205,7 @@ internal static class EvidenceBuilder
                 $"Most recent {projected.Count} log entries (secrets and absolute paths scrubbed, messages truncated)",
                 projected.Count, EvidenceJson.SerializeToUtf8(projected));
         }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex))
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct))
         {
             exclusions.Add(new EvidenceExclusion(EvidenceFormat.LogsEntry, $"Logs unavailable: {Describe(ex)}"));
         }
@@ -220,7 +220,7 @@ internal static class EvidenceBuilder
                 "HTTP request summaries: method, host, path, status, timing, sizes (no headers, bodies, or query values)",
                 projected.Count, EvidenceJson.SerializeToUtf8(projected));
         }
-        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex))
+        catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct))
         {
             exclusions.Add(new EvidenceExclusion(EvidenceFormat.NetworkEntry, $"Network capture unavailable: {Describe(ex)}"));
         }
@@ -301,7 +301,7 @@ internal static class EvidenceBuilder
                     warnings.Add("This bundle contains a screenshot, which may show on-screen data.");
                 }
             }
-            catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex))
+            catch (Exception ex) when (EvidenceCapture.IsExpectedFailure(ex, ct))
             {
                 screenshot.OmittedReason = $"Screenshot unavailable: {Describe(ex)}";
                 exclusions.Add(new EvidenceExclusion(EvidenceFormat.ScreenshotEntry, screenshot.OmittedReason));

@@ -119,7 +119,8 @@ show any on-screen information; that is why they are a separate explicit opt-in.
 Bundles are written atomically and read back through the validating reader before publication.
 Existing bundles and reports are never overwritten without `--overwrite`. Malformed options
 fail before app reads, and unavailable sections become explicit exclusions rather than empty
-successes.
+successes. HTTP read timeouts exclude the affected section; canceling the capture still
+aborts it without publishing a partial bundle.
 
 Imported bundles are untrusted. The reader rejects unknown, nested, traversing, duplicate,
 oversized, or corrupt entries and mismatched manifest hashes. Typed sections have separate
@@ -142,7 +143,8 @@ node --test .\src\DevFlow\js\test\inspector-evidence.test.mjs
 Isolated browser checks use the real Inspector and a loopback fixture. They cover light/dark
 hosts, narrow/short viewports, 200% text, keyboard containment, fresh attachment consent,
 and a real `.mauitrace` download. They are opt-in because normal test runs do not provision
-Chromium. Install Chromium with the test project's generated `playwright.ps1 install chromium`
+Chromium, but run automatically in the **Evidence browser consent and downloads** CI job.
+Install Chromium with the test project's generated `playwright.ps1 install chromium`
 if it is not already available, then run:
 
 ```powershell
@@ -151,3 +153,10 @@ dotnet test .\src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.
 ```
 
 Set `EVIDENCE_TEST_ARTIFACTS` to a local directory to retain the browser screenshots.
+
+The CLI CI also exercises structured workflow parsing, serialization, and evidence redaction
+with JSON reflection disabled, matching the NativeAOT serialization constraint:
+
+```powershell
+dotnet test .\src\Cli\Microsoft.Maui.Cli.UnitTests\Microsoft.Maui.Cli.UnitTests.csproj -p:JsonSerializerIsReflectionEnabledByDefault=false --filter "FullyQualifiedName~FlowMarkdownTests|FullyQualifiedName~EvidenceCaptureTests.BuildAsync_RedactsStructuredFlowValuesBeforeAttachingWorkflow"
+```

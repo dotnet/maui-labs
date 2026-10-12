@@ -72,6 +72,44 @@ jobs:
           npm test
           npm run selftest:recorder
 
+  evidence-browser:
+    name: Evidence browser consent and downloads
+    runs-on: windows-latest
+    env:
+      DEVFLOW_EVIDENCE_BROWSER_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Build isolated Inspector browser tests
+        run: dotnet build src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/Microsoft.Maui.DevFlow.Inspector.Tests.csproj -c Release
+
+      - name: Install Chromium
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net10.0\playwright.ps1 install chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run evidence browser tests
+        run: >
+          dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/Microsoft.Maui.DevFlow.Inspector.Tests.csproj
+          -c Release --no-build
+          --filter FullyQualifiedName~EvidenceInspectorPageTests
+          --logger "trx;LogFileName=evidence-browser.trx"
+          --results-directory artifacts/TestResults/evidence-browser
+
+      - name: Upload browser test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-evidence-browser
+          path: artifacts/TestResults/evidence-browser/*.trx
+
   # The native samples are the executable proof that a plain .NET app can host the agent, so they
   # are built even though samples are otherwise out of the product solution filter. They need a Mac:
   # .NET for macOS and iOS app heads cannot be bundled on Windows.

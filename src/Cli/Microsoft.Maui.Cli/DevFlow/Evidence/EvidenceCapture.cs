@@ -18,8 +18,10 @@ internal static class EvidenceCapture
             ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
             ?? "unknown";
 
-    internal static bool IsExpectedFailure(Exception exception)
-        => exception is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or
+    internal static bool IsExpectedFailure(Exception exception, CancellationToken cancellationToken = default)
+        => (exception is OperationCanceledException { InnerException: TimeoutException } &&
+            !cancellationToken.IsCancellationRequested) ||
+            exception is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or
             InvalidOperationException or ArgumentException or NotSupportedException or JsonException or
             TimeoutException or LayoutDiagnosticsException;
 

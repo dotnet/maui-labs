@@ -14,11 +14,14 @@ internal sealed class EvidenceAgentFixture : IAsyncDisposable
     private readonly ConcurrentQueue<string> _requests = [];
     private readonly Task _loop;
     private readonly bool _networkUnavailable;
+    private readonly string? _stalledPath;
+    private readonly TaskCompletionSource _stalledRequest = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _screenshotRequests;
 
-    internal EvidenceAgentFixture(bool networkUnavailable = false)
+    internal EvidenceAgentFixture(bool networkUnavailable = false, string? stalledPath = null)
     {
         _networkUnavailable = networkUnavailable;
+        _stalledPath = stalledPath;
         _listener.Start();
         _loop = ListenAsync();
     }
@@ -26,6 +29,7 @@ internal sealed class EvidenceAgentFixture : IAsyncDisposable
     internal int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
     internal int ScreenshotRequests => Volatile.Read(ref _screenshotRequests);
     internal string[] Requests => _requests.ToArray();
+    internal Task StalledRequest => _stalledRequest.Task;
 
     private async Task ListenAsync()
     {
@@ -51,6 +55,12 @@ internal sealed class EvidenceAgentFixture : IAsyncDisposable
                 var target = await ReadRequestAsync(stream, ct);
                 var path = target.Split('?')[0];
                 _requests.Enqueue(path);
+                if (path == _stalledPath)
+                {
+                    _stalledRequest.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                    return;
+                }
                 if (path == "/api/v1/network/requests" && _networkUnavailable)
                 {
                     await WriteAsync(stream, 503, "application/json",
