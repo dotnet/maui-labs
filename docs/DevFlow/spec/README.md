@@ -45,9 +45,11 @@ WebView endpoints also accept `contextId`; query values override the JSON body's
 JSON object. `/webview/screenshot` returns PNG, trying the registered native
 element before the CDP screenshot fallback.
 
-`/api/v1/webview/network` is an existing HTTP 200 alias of
-`/api/v1/network/requests`: it reads the native .NET HTTP capture store, not browser
-fetch/XHR traffic. It does not associate requests with a WebView context.
+Browser fetch/XHR capture is explicitly unsupported: `/api/v1/webview/network`
+returns the standard 501 `webview.network` envelope instead of its former HTTP 200
+alias of the native capture store. Native .NET traffic remains available at
+`/api/v1/network/requests`; the WebView capability no longer advertises network
+capture.
 
 ## Streaming payloads
 
