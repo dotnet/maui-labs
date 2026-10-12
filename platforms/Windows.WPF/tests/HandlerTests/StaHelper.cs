@@ -26,7 +26,7 @@ public static class StaHelper
 		});
 		thread.SetApartmentState(ApartmentState.STA);
 		thread.Start();
-		thread.Join(TimeSpan.FromSeconds(10));
+		Assert.True(thread.Join(TimeSpan.FromSeconds(30)), "The WPF STA test did not finish within 30 seconds.");
 		if (exception != null)
 			throw new AggregateException("STA thread failed", exception);
 	}

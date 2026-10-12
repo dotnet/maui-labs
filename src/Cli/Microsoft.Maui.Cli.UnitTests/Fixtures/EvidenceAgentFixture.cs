@@ -43,6 +43,7 @@ internal sealed class EvidenceAgentFixture : IAsyncDisposable
         }
         catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
         catch (SocketException) when (_cts.IsCancellationRequested) { }
+        catch (ObjectDisposedException) when (_cts.IsCancellationRequested) { }
     }
 
     private async Task HandleAsync(TcpClient client, CancellationToken ct)

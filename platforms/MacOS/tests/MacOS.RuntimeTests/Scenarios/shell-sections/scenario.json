@@ -1,0 +1,27 @@
+{
+  "name": "shell-sections",
+  "expectedCases": 1,
+  "expectedAssertions": 59,
+  "evidence": ["assertions.txt", "route-state.txt", "initial.png", "route-two.png"],
+  "fixedEvidence": ["content-three.png", "dynamic-content-two.png", "replacement-target.png"],
+  "baseline": {
+    "overlays": [
+      {
+        "source": "platforms/MacOS/src/MacOS/Handlers/ShellHandler.cs",
+        "commit": "23ea45e98b84bfbf9dd00f4859fd4cf30d44120d"
+      },
+      {
+        "source": "platforms/MacOS/src/MacOS/Handlers/ShellItemHandler.cs",
+        "commit": "23ea45e98b84bfbf9dd00f4859fd4cf30d44120d"
+      },
+      {
+        "source": "platforms/MacOS/src/MacOS/Handlers/ShellSectionHandler.cs",
+        "commit": "23ea45e98b84bfbf9dd00f4859fd4cf30d44120d"
+      }
+    ],
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "shell-sections.lazy-route",
+    "message": "REGRESSION: route changed to two but lazy target was not created and previous page remains displayed"
+  }
+}

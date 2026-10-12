@@ -4,6 +4,9 @@ Microsoft.Maui.DevFlow includes a **broker daemon** that coordinates port assign
 discovery across multiple running apps. It eliminates port collisions when debugging
 several MAUI apps (or the same app on different platforms) simultaneously.
 
+For browser, VS Code, GitHub Copilot desktop, and Copilot CLI setup, see the
+[MAUI DevFlow Inspector guide](inspector.md).
+
 ## Overview
 
 The broker is a lightweight background process that:
@@ -11,7 +14,7 @@ The broker is a lightweight background process that:
 - **Assigns unique ports** to each MAUI agent from a shared pool (10223–10899)
 - **Tracks running agents** so the CLI can discover them without manual `--agent-port` flags
 - **Detects disconnections instantly** via persistent WebSocket connections
-- **Starts and stops automatically** — you rarely need to manage it directly
+- **Starts on demand and stops automatically** — you rarely need to manage it directly
 
 ```
                     ┌──────────────────────────────────┐
@@ -137,13 +140,17 @@ This means:
 
 ### Automatic Start
 
-The broker starts transparently — you don't need to launch it manually. Both the CLI
-and the agent call `EnsureBrokerRunningAsync()` which:
+Broker-dependent CLI commands such as `maui devflow list` and `maui devflow wait` call
+`EnsureBrokerRunningAsync()`:
 
 1. **Read state file** (`~/.mauidevflow/broker.json`) for the broker's port hint
 2. **TCP connect** to `localhost:{port}` (500ms timeout, <1ms if refused)
 3. If alive → use it
 4. If not → clean up stale PID, fork a new broker process, poll until ready (5s timeout)
+
+The app does not spawn the broker. Its agent retries registration until a CLI command, Copilot
+Canvas, or an explicit `maui devflow broker start` makes the broker available. The VS Code host
+also expects the broker to be running.
 
 The state file looks like:
 ```json
@@ -348,8 +355,8 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
   Run `maui devflow list` to see actual port assignments.
 - **Agent crashed after registration?** The broker may show the agent briefly
   before detecting the disconnect. Wait a moment and check again.
-- **Android?** `maui devflow list`, `maui devflow wait`, auto-resolved agent commands,
-  and `maui devflow diagnose` check/repair ADB forwarding when possible. Manually, use
+- **Android?** `maui devflow list`, `maui devflow wait`, and auto-resolved agent commands repair ADB
+  forwarding when possible; `maui devflow diagnose` reports the state without changing it. Manually, use
   `adb reverse tcp:19223 tcp:19223` for broker registration and
   `adb forward tcp:{port} tcp:{port}` for the CLI-to-agent HTTP path.
 
@@ -357,5 +364,5 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
 
 - Check `~/.mauidevflow/broker.log` for error messages.
 - The broker auto-exits after 5 minutes of idle time (no agents, no CLI requests).
-  This is normal behavior — it will restart automatically on the next CLI command
-  or app launch.
+  This is normal behavior — it will restart on the next broker-dependent CLI command or when the
+  Copilot Canvas host bootstraps it.

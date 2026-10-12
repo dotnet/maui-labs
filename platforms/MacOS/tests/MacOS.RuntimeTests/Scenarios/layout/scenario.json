@@ -1,0 +1,17 @@
+{
+  "name": "layout",
+  "expectedCases": 6,
+  "expectedAssertions": 28,
+  "evidence": ["after-add.json", "after-add.png", "assertions.txt"],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/LayoutHandler.cs",
+    "replace": {
+      "old": "public LayoutHandler() : base(Mapper, CommandMapper)",
+      "new": "public LayoutHandler() : base(Mapper)"
+    },
+    "exitCode": 1,
+    "outcome": "failed",
+    "failureId": "layout.native-child-count",
+    "message": "Expected 2 native children, got 1"
+  }
+}

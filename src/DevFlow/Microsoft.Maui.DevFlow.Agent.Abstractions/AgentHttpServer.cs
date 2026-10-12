@@ -184,8 +184,16 @@ public class AgentHttpServer : IDisposable
                     requestCts);
                 try
                 {
-                    var response = await RouteRequestAsync(request, requestCts.Token)
-                        .ConfigureAwait(false);
+                    HttpResponse response;
+                    try
+                    {
+                        response = await RouteRequestAsync(request, requestCts.Token).ConfigureAwait(false);
+                    }
+                    catch (NotSupportedException ex) when (AgentJson.IsUnsupportedJson(ex))
+                    {
+                        response = HttpResponse.Error(ex.Message, 500, AgentJson.IsMissingMetadata(ex)
+                            ? "json-metadata-missing" : "json-serialization-unsupported");
+                    }
                     if (!requestCts.IsCancellationRequested)
                     {
                         await WriteResponseAsync(
@@ -380,7 +388,8 @@ public class AgentHttpServer : IDisposable
                 if (routeParts[i].StartsWith('{') && routeParts[i].EndsWith('}'))
                 {
                     var paramName = routeParts[i][1..^1];
-                    request.RouteParams[paramName] = requestParts[i];
+                    // Decode captures only after splitting: an encoded slash is data, not a route separator.
+                    request.RouteParams[paramName] = Uri.UnescapeDataString(requestParts[i]);
                     continue;
                 }
                 if (!routeParts[i].Equals(requestParts[i], StringComparison.OrdinalIgnoreCase))
@@ -428,7 +437,7 @@ public class AgentHttpServer : IDisposable
                 "The app is still applying another mutation. Retry shortly.",
                 statusCode: 503,
                 reason: "ui-mutation-busy",
-                details: new { retryable = true });
+                details: new Dictionary<string, object?> { ["retryable"] = true });
             busy.Headers["Retry-After"] = "1";
             return busy;
         }
@@ -458,13 +467,13 @@ public class AgentHttpServer : IDisposable
                     "Another DevFlow session is driving this app. Take control before mutating it.",
                     statusCode: 409,
                     reason: "lease",
-                    details: new
+                    details: new Dictionary<string, object?>
                     {
-                        status.HolderKind,
-                        status.Label,
-                        status.ExpiresInMs,
-                        status.Authority
-                    });
+                        ["HolderKind"] = status.HolderKind,
+                        ["Label"] = status.Label,
+                        ["ExpiresInMs"] = status.ExpiresInMs,
+                        ["Authority"] = status.Authority
+                    }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
             }
         }
 
@@ -703,11 +712,17 @@ public class HttpRequest
     private static readonly JsonSerializerOptions _readOptions = new() { PropertyNameCaseInsensitive = true };
 
     public T? BodyAs<T>() where T : class
-        => Body != null ? JsonSerializer.Deserialize<T>(Body, _readOptions) : null;
+        => Body != null ? AgentJson.Deserialize<T>(Body, _readOptions) : null;
 }
 
 public class HttpResponse
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions ErrorJsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     public int StatusCode { get; set; } = 200;
     public string StatusText { get; set; } = "OK";
     public string ContentType { get; set; } = "application/json";
@@ -717,14 +732,14 @@ public class HttpResponse
 
     public static HttpResponse Json(object data) => new()
     {
-        Body = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true })
+        Body = AgentJson.Serialize(data, JsonOptions)
     };
 
     public static HttpResponse Json(object data, int statusCode) => new()
     {
         StatusCode = statusCode,
         StatusText = StatusTextFor(statusCode),
-        Body = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true })
+        Body = AgentJson.Serialize(data, JsonOptions)
     };
 
     public static HttpResponse Png(byte[] data) => new()
@@ -751,7 +766,7 @@ public class HttpResponse
 
     public static HttpResponse Ok(string? message = null) => new()
     {
-        Body = JsonSerializer.Serialize(new { success = true, message })
+        Body = AgentJson.Serialize(new Dictionary<string, object?> { ["success"] = true, ["message"] = message })
     };
 
     public static HttpResponse Error(string message, int statusCode = 400, string? reason = null, object? details = null)
@@ -772,10 +787,7 @@ public class HttpResponse
         {
             StatusCode = statusCode,
             StatusText = StatusTextFor(statusCode),
-            Body = JsonSerializer.Serialize(body, new JsonSerializerOptions
-            {
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            })
+            Body = AgentJson.Serialize(body, ErrorJsonOptions)
         };
     }
 

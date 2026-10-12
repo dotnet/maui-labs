@@ -1,6 +1,7 @@
 #if IOS || MACCATALYST
 using Microsoft.Extensions.AI;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
@@ -82,10 +83,73 @@ public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBas
 
 public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsBase<AppleIntelligenceChatClient>
 {
+	[Theory]
+	[InlineData(null)]
+	[InlineData("caller-supplied-model")]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_ModelIdMatchesMetadata_NotRequestedModel(string? requestedModelId)
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var metadata = client.GetService<ChatClientMetadata>();
+
+		var response = await client.GetResponseAsync(
+			[new ChatMessage(ChatRole.User, "Say hello")],
+			new ChatOptions { ModelId = requestedModelId });
+
+		Assert.NotNull(metadata);
+		Assert.Equal("apple-intelligence", metadata.DefaultModelId);
+		Assert.Equal(metadata.DefaultModelId, response.ModelId);
+	}
 }
 
 public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTestsBase<AppleIntelligenceChatClient>
 {
+	[Theory]
+	[InlineData(null)]
+	[InlineData("caller-supplied-model")]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_ModelIdMatchesMetadata_NotRequestedModel(string? requestedModelId)
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var metadata = client.GetService<ChatClientMetadata>();
+		var updates = new List<ChatResponseUpdate>();
+
+		await foreach (var update in client.GetStreamingResponseAsync(
+			[new ChatMessage(ChatRole.User, "Say hello")],
+			new ChatOptions { ModelId = requestedModelId }))
+		{
+			updates.Add(update);
+		}
+
+		Assert.NotNull(metadata);
+		Assert.Equal("apple-intelligence", metadata.DefaultModelId);
+		Assert.NotEmpty(updates);
+		Assert.All(updates, update => Assert.Equal(metadata.DefaultModelId, update.ModelId));
+	}
+}
+
+public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
+	: ChatClientUsageTestsBase<AppleIntelligenceChatClient>(output)
+{
+	protected override bool IsUsageAvailable
+	{
+		get
+		{
+#if IOS
+			return OperatingSystem.IsIOSVersionAtLeast(27);
+#elif MACCATALYST
+			return OperatingSystem.IsMacCatalystVersionAtLeast(27);
+#else
+			return false;
+#endif
+		}
+	}
+
+	protected override void AssertProviderUsage(UsageDetails usage)
+	{
+		Assert.NotNull(usage.CachedInputTokenCount);
+		Assert.NotNull(usage.ReasoningTokenCount);
+	}
 }
 
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>

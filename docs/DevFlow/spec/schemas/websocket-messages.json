@@ -6,7 +6,7 @@
   "$defs": {
     "WebSocketMessage": {
       "type": "object",
-      "description": "Base envelope for all WebSocket messages.",
+      "description": "Common server-event fields. Payload placement is channel-specific; client commands need not include timestamp.",
       "required": [
         "type",
         "timestamp"
@@ -22,14 +22,47 @@
         },
         "data": {
           "description": "Message payload. Structure varies by message type."
+        },
+        "entries": {
+          "type": "array",
+          "description": "Top-level replay entries on the network and log channels."
+        },
+        "entry": {
+          "description": "Top-level request, detail, or log entry on the network and log channels."
+        },
+        "error": {
+          "type": "string",
+          "description": "Top-level stream error."
+        }
+      }
+    },
+    "StreamError": {
+      "type": "object",
+      "description": "Error notification used by network, sensor, and profiler streams.",
+      "required": [
+        "type",
+        "timestamp",
+        "error"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "error"
+        },
+        "timestamp": {
+          "$ref": "common.json#/$defs/Timestamp"
+        },
+        "error": {
+          "type": "string"
         }
       }
     },
     "SubscribeMessage": {
       "type": "object",
-      "description": "Client-sent message to subscribe to a streaming channel with an optional filter.",
+      "description": "Client-sent UI event subscription. Timestamp is optional; subscriptions are not a generic command on the other channels.",
       "required": [
-        "type"
+        "type",
+        "data"
       ],
       "properties": {
         "type": {
@@ -37,13 +70,23 @@
           "const": "subscribe",
           "description": "Message type, always 'subscribe'."
         },
-        "filter": {
-          "type": [
-            "object",
-            "null"
+        "timestamp": {
+          "$ref": "common.json#/$defs/Timestamp"
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "events"
           ],
-          "additionalProperties": true,
-          "description": "Channel-specific filter criteria. Structure varies by channel type."
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "UI event names, or all to subscribe to every event."
+            }
+          }
         }
       }
     },
@@ -100,6 +143,34 @@
               "description": "The network request summary."
             }
           }
+        },
+        {
+          "type": "object",
+          "description": "Response to a get_details command with a top-level id.",
+          "required": [
+            "type",
+            "timestamp",
+            "entry"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "details"
+            },
+            "timestamp": {
+              "$ref": "common.json#/$defs/Timestamp"
+            },
+            "entry": {
+              "oneOf": [
+                { "$ref": "network.json#/$defs/NetworkRequestDetail" },
+                { "type": "null" }
+              ],
+              "description": "Full entry, or null when the request ID is unknown."
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/StreamError"
         }
       ]
     },
@@ -168,7 +239,9 @@
           "required": [
             "type",
             "timestamp",
-            "sensor"
+            "sensor",
+            "sensorName",
+            "throttleMs"
           ],
           "properties": {
             "type": {
@@ -183,6 +256,14 @@
             "sensor": {
               "$ref": "device.json#/$defs/SensorInfo",
               "description": "Information about the subscribed sensor."
+            },
+            "sensorName": {
+              "type": "string",
+              "description": "Name of the subscribed sensor."
+            },
+            "throttleMs": {
+              "type": "integer",
+              "description": "Active throttle interval in milliseconds."
             }
           }
         },
@@ -192,6 +273,8 @@
           "required": [
             "type",
             "timestamp",
+            "sensor",
+            "data",
             "reading"
           ],
           "properties": {
@@ -204,16 +287,27 @@
               "$ref": "common.json#/$defs/Timestamp",
               "description": "UTC timestamp of the event."
             },
+            "sensor": {
+              "type": "string"
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Sensor-specific values, also repeated in reading.values."
+            },
             "reading": {
               "$ref": "device.json#/$defs/SensorReading",
               "description": "The sensor reading data."
             }
           }
+        },
+        {
+          "$ref": "#/$defs/StreamError"
         }
       ]
     },
     "ProfilerEvent": {
-      "description": "Profiler streaming event. Supports batch samples, individual markers, and spans.",
+      "description": "Profiler streaming event. Samples, markers, and spans are sent together in batch events, followed by stopped or error notifications.",
       "oneOf": [
         {
           "type": "object",
@@ -226,7 +320,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "samples",
+              "const": "batch",
               "description": "Event type for a batch of profiler samples."
             },
             "timestamp": {
@@ -241,7 +335,7 @@
         },
         {
           "type": "object",
-          "description": "Individual profiler marker event.",
+          "description": "Notification that the profiling session ended.",
           "required": [
             "type",
             "timestamp",
@@ -250,42 +344,28 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "marker",
-              "description": "Event type for a profiler marker."
+              "const": "stopped",
+              "description": "Event type for an ended session."
             },
             "timestamp": {
               "$ref": "common.json#/$defs/Timestamp",
               "description": "UTC timestamp of the event."
             },
             "data": {
-              "$ref": "profiler.json#/$defs/ProfilerMarker",
-              "description": "The profiler marker data."
+              "type": "object",
+              "required": [
+                "sessionId"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
         {
-          "type": "object",
-          "description": "Individual profiler span event.",
-          "required": [
-            "type",
-            "timestamp",
-            "data"
-          ],
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "span",
-              "description": "Event type for a profiler span."
-            },
-            "timestamp": {
-              "$ref": "common.json#/$defs/Timestamp",
-              "description": "UTC timestamp of the event."
-            },
-            "data": {
-              "$ref": "profiler.json#/$defs/ProfilerSpan",
-              "description": "The profiler span data."
-            }
-          }
+          "$ref": "#/$defs/StreamError"
         }
       ]
     },

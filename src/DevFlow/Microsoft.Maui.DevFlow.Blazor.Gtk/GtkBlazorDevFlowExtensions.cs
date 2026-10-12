@@ -1,157 +1,55 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.Hosting;
+using Microsoft.Maui.LifecycleEvents;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
+using System.Runtime.Versioning;
 
 namespace Microsoft.Maui.DevFlow.Blazor.Gtk;
 
 /// <summary>
-/// Extension methods for registering Microsoft.Maui.DevFlow Blazor debug tools in Maui.Gtk apps.
+/// Extension methods for registering DevFlow Blazor debug tools in Microsoft.Maui.Platforms.Linux.Gtk4 apps.
 /// </summary>
+[SupportedOSPlatform("linux")]
 public static class GtkBlazorDevFlowExtensions
 {
     /// <summary>
-    /// Adds Microsoft.Maui.DevFlow Blazor WebView debugging tools for WebKitGTK.
-    /// Enables Chrome DevTools Protocol (CDP) access to BlazorWebView content on Linux.
-    /// Automatically wires to the Agent and captures the WebView when a BlazorWebView is rendered.
+    /// Adds WebKitGTK CDP debugging. Wires the registered agent and starts WebView discovery
+    /// after the first GTK window is created, regardless of how long app startup takes.
     /// </summary>
     public static MauiAppBuilder AddMauiBlazorDevFlowTools(this MauiAppBuilder builder, bool enableLogging = false)
     {
-        var service = new GtkBlazorWebViewDebugService();
-        if (enableLogging)
-            service.LogCallback = msg => System.Diagnostics.Debug.WriteLine(msg);
-
-        builder.Services.AddSingleton(service);
-
-        // Auto-wire to agent and capture WebView after app starts
-        Task.Run(async () =>
+        builder.Services.AddSingleton(_ =>
         {
-            // Wait for app to initialize
-            await Task.Delay(2000);
-            service.WireBlazorCdpToAgent();
-            service.StartWebViewDiscovery();
+            var service = new GtkBlazorWebViewDebugService();
+            if (enableLogging)
+                service.LogCallback = msg => System.Diagnostics.Debug.WriteLine(msg);
+            return service;
         });
-
+        ConfigureStartup(builder, () => GtkMauiApplication.Current.Services);
         return builder;
     }
 
+    internal static void ConfigureStartup(MauiAppBuilder builder, Func<IServiceProvider> getServices)
+    {
+        builder.ConfigureLifecycleEvents(lifecycle => lifecycle.AddGtk(gtk =>
+            gtk.OnWindowCreated(_ =>
+            {
+                var services = getServices();
+                var service = services.GetRequiredService<GtkBlazorWebViewDebugService>();
+                service.WireToAgent(services.GetRequiredService<DevFlowAgentService>());
+                service.StartWebViewDiscovery();
+            })));
+    }
+
     /// <summary>
-    /// Wires the Blazor CDP service to the Agent's /api/cdp endpoint via reflection.
-    /// Called automatically by AddMauiBlazorDevFlowTools after app initialization.
+    /// Explicitly wires CDP after GTK startup. Repeated calls are safe; normal builder
+    /// registration already wires CDP and starts discovery on the first window.
     /// </summary>
     public static void WireBlazorCdpToAgent(this GtkBlazorWebViewDebugService blazorService)
     {
-        try
-        {
-            var app = Microsoft.Maui.Controls.Application.Current;
-            if (app == null)
-            {
-                Console.WriteLine("[Microsoft.Maui.DevFlow.Blazor.Gtk] Application.Current is null, cannot wire CDP");
-                return;
-            }
-
-            var services = app.Handler?.MauiContext?.Services;
-            if (services == null)
-            {
-                Console.WriteLine("[Microsoft.Maui.DevFlow.Blazor.Gtk] No service provider available");
-                return;
-            }
-
-            // Find DevFlowAgentService by scanning loaded assemblies
-            Type? agentType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                agentType = asm.GetType("Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService");
-                if (agentType != null) break;
-            }
-
-            if (agentType == null)
-            {
-                Console.WriteLine("[Microsoft.Maui.DevFlow.Blazor.Gtk] Agent service type not found");
-                return;
-            }
-
-            var agentService = services.GetService(agentType);
-            if (agentService == null)
-            {
-                Console.WriteLine("[Microsoft.Maui.DevFlow.Blazor.Gtk] Agent service not registered");
-                return;
-            }
-
-            // Wire CdpCommandHandler and CdpReadyCheck — use RegisterCdpWebView if available
-            var registerMethod = agentType.GetMethod("RegisterCdpWebView");
-
-            if (registerMethod != null)
-            {
-                // Register existing bridges
-                foreach (var bridge in blazorService.Bridges)
-                {
-                    var bridgeRef = bridge;
-                    registerMethod.Invoke(agentService, new object?[]
-                    {
-                        new Func<string, Task<string>>(bridgeRef.SendCdpCommandAsync),
-                        new Func<bool>(() => bridgeRef.IsReady),
-                        bridgeRef.AutomationId,
-                        bridgeRef.ElementId,
-                        null // url
-                    });
-                }
-
-                // Watch for new bridges
-                var registeredCount = blazorService.Bridges.Count;
-                _ = Task.Run(async () =>
-                {
-                    for (int i = 0; i < 600; i++)
-                    {
-                        await Task.Delay(1000);
-                        while (registeredCount < blazorService.Bridges.Count)
-                        {
-                            var bridge = blazorService.Bridges[registeredCount];
-                            try
-                            {
-                                registerMethod.Invoke(agentService, new object?[]
-                                {
-                                    new Func<string, Task<string>>(bridge.SendCdpCommandAsync),
-                                    new Func<bool>(() => bridge.IsReady),
-                                    bridge.AutomationId,
-                                    bridge.ElementId,
-                                    null
-                                });
-                                Console.WriteLine($"[Microsoft.Maui.DevFlow.Blazor.Gtk] Registered CDP WebView bridge {registeredCount}");
-                            }
-                            catch { }
-                            registeredCount++;
-                        }
-                    }
-                });
-            }
-            else
-            {
-                // Fallback: legacy single-delegate wiring
-                var handlerProp = agentType.GetProperty("CdpCommandHandler");
-                var readyProp = agentType.GetProperty("CdpReadyCheck");
-
-                if (handlerProp != null)
-                    handlerProp.SetValue(agentService, new Func<string, Task<string>>(blazorService.SendCdpCommandAsync));
-
-                if (readyProp != null)
-                    readyProp.SetValue(agentService, new Func<bool>(() => blazorService.IsReady));
-            }
-
-            // Wire WebViewLogCallback
-            var writeLogMethod = agentType.GetMethod("WriteWebViewLog");
-            if (writeLogMethod != null)
-            {
-                blazorService.WebViewLogCallback = (level, message, exception) =>
-                {
-                    try { writeLogMethod.Invoke(agentService, new object?[] { level, "WebView.Console", message, exception }); }
-                    catch { }
-                };
-            }
-
-            Console.WriteLine("[Microsoft.Maui.DevFlow.Blazor.Gtk] CDP wired to Agent");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Microsoft.Maui.DevFlow.Blazor.Gtk] Wire failed: {ex.Message}");
-        }
+        ArgumentNullException.ThrowIfNull(blazorService);
+        blazorService.WireToAgent(
+            GtkMauiApplication.Current.Services.GetRequiredService<DevFlowAgentService>());
     }
 }

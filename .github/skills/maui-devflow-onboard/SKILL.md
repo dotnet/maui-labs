@@ -70,7 +70,7 @@ If verification fails after integration, switch to `maui-devflow-debug` for conn
 
 Blazor WebView indicators include a `Microsoft.AspNetCore.Components.WebView.Maui` package reference or `AddMauiBlazorWebView()` in `MauiProgram.cs`.
 
-GTK indicators include package references such as `Maui.Gtk`, `Platform.Maui.Linux.Gtk4`, `GirCore.Gtk-4.0`, or `Platform.Maui.Linux.Gtk4.BlazorWebView`.
+GTK indicators include `Microsoft.Maui.Platforms.Linux.Gtk4` or `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView`. Migrate superseded `Platform.Maui.Linux.Gtk4*` references before adding the current GTK DevFlow packages; do not mix the two backends.
 
 ## Central Package Management
 
@@ -114,7 +114,7 @@ builder.AddMauiBlazorDevFlowTools();
 #endif
 ```
 
-For GTK, use the `.Gtk` namespaces and packages. GTK apps also need to start the agent after app activation, for example `app.StartDevFlowAgent()` in the platform app activation flow.
+For GTK, use the `.Gtk` namespaces and packages. `AddMauiDevFlowAgent()` starts automatically when `GtkMauiApplication` creates its first window. An explicit `this.StartDevFlowAgent()` hook is also available inside a `GtkMauiApplication.OnStarted()` override; builder registration is still required.
 
 For Mac Catalyst, ensure the Debug entitlements allow the in-app HTTP server:
 
@@ -128,7 +128,7 @@ For Mac Catalyst, ensure the Debug entitlements allow the in-app HTTP server:
 - `MauiProgram.cs` registers DevFlow only in Debug builds.
 - The app project references the package flavor that matches the target platform.
 - Blazor DevFlow tools are added only when the app uses Blazor WebView.
-- GTK apps start the DevFlow agent after app activation.
+- GTK apps use the current backend and start the DevFlow agent automatically after the first window is created.
 - Mac Catalyst Debug entitlements include `com.apple.security.network.server`.
 - `dotnet build` succeeds.
 - A running app appears in `maui devflow list`.

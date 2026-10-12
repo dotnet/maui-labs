@@ -13,7 +13,7 @@ MAUI indicators:
 
 - `<UseMaui>true</UseMaui>`;
 - platform TFMs such as `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst`, or `net10.0-windows10.0.19041.0`;
-- GTK package references such as `Maui.Gtk`, `Platform.Maui.Linux.Gtk4`, or `GirCore.Gtk-4.0`.
+- GTK package references such as `Microsoft.Maui.Platforms.Linux.Gtk4` or `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView`. Superseded `Platform.Maui.Linux.Gtk4*` references must be migrated, not mixed with the current backend.
 
 Blazor WebView indicators:
 

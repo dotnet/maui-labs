@@ -105,16 +105,9 @@ builder.AddMauiBlazorDevFlowTools(); // Blazor Hybrid only
 #endif
 ```
 
-After the MAUI app is activated (e.g., in `OnActivate` or after `Application.Current` is available):
-
-```csharp
-#if DEBUG
-app.StartDevFlowAgent();
-// For Blazor, wire CDP to agent:
-var blazorService = app.Handler?.MauiContext?.Services.GetService<GtkBlazorWebViewDebugService>();
-blazorService?.WireBlazorCdpToAgent();
-#endif
-```
+With `Microsoft.Maui.Platforms.Linux.Gtk4`, builder registration starts the agent automatically
+after the first window is created. For an explicit host hook, call `this.StartDevFlowAgent()`
+from `GtkMauiApplication.OnStarted()`. See [linux.md](linux.md).
 
 **Agent options:**
 - `Port` — HTTP port for the agent REST API (default: 9223). Also configurable via `.mauidevflow` or `-p:MauiDevFlowPort=XXXX`.
@@ -300,7 +293,7 @@ For an AI agent setting up MauiDevFlow in a new project:
 5. [ ] Chobitsu auto-injected via JS initializer (Blazor Hybrid — no manual step needed)
 6. [ ] Mac Catalyst entitlements include `network.server` (Mac Catalyst only)
 7. [ ] `adb reverse tcp:19223` for broker + `adb forward tcp:<port>` for agent (Android only)
-8. [ ] Linux/GTK: `app.StartDevFlowAgent()` called after app activation
+8. [ ] Linux/GTK: current `Microsoft.Maui.Platforms.Linux.Gtk4` backend and GTK agent registered
 9. [ ] macOS (AppKit): `UseMauiAppMacOS()`, `AddMacOSEssentials()`, `MacOSBlazorWebView` — see [macos.md](macos.md)
 10. [ ] Verify with `maui devflow list` and `maui devflow ui status`
 

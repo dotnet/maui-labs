@@ -811,7 +811,7 @@ public class AgentClient : IDisposable
     /// </summary>
     public async Task<ElementInfo?> GetElementAsync(string id)
     {
-        return await GetAsync<ElementInfo>($"{UiApi}/elements/{id}");
+        return await GetAsync<ElementInfo>($"{UiApi}/elements/{Uri.EscapeDataString(id)}");
     }
 
     /// <summary>
@@ -1543,7 +1543,7 @@ public class AgentClient : IDisposable
     /// </remarks>
     public async Task<string?> GetPropertyAsync(string elementId, string propertyName)
     {
-        var (result, statusCode) = await GetJsonWithStatusAsync($"{UiApi}/elements/{elementId}/properties/{propertyName}");
+        var (result, statusCode) = await GetJsonWithStatusAsync($"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}");
 
         if (result.ValueKind == JsonValueKind.Undefined)
         {
@@ -1584,7 +1584,7 @@ public class AgentClient : IDisposable
 
     /// <summary>Get curated editable property descriptors and current values for an element.</summary>
     public Task<JsonElement> GetPropertyDescriptorsAsync(string elementId)
-        => GetJsonAsync($"{UiApi}/elements/{elementId}/properties");
+        => GetJsonAsync($"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties");
 
     /// <summary>
     /// Set a property value on an element.
@@ -1614,7 +1614,7 @@ public class AgentClient : IDisposable
                 };
                 AddCaptureMetadata(payload, captureEpoch, registryGeneration);
                 using var content = ProtocolJson.CreateJsonContent(payload);
-                return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{elementId}/properties/{propertyName}", content);
+                return await _http.PutAsync($"{_baseUrl}{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}", content);
             });
             return response.IsSuccessStatusCode;
         }
@@ -1634,7 +1634,7 @@ public class AgentClient : IDisposable
         };
         AddCaptureMetadata(payload, captureEpoch, registryGeneration);
         return PutActionResultAsync(
-            $"{UiApi}/elements/{elementId}/properties/{propertyName}",
+            $"{UiApi}/elements/{Uri.EscapeDataString(elementId)}/properties/{Uri.EscapeDataString(propertyName)}",
             payload);
     }
 
@@ -2619,6 +2619,50 @@ public class AgentClient : IDisposable
         catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
     }
 
+    // ── Menus ──
+
+    /// <summary>Lists MAUI menu definitions and supported native application menus.</summary>
+    public async Task<JsonElement> GetMenusAsync(int? window = null)
+    {
+        var path = window.HasValue ? $"{UiApi}/menus?window={window.Value}" : $"{UiApi}/menus";
+        return await GetJsonAsync(path);
+    }
+
+    /// <summary>
+    /// Invokes an application menu item by id, slash-joined title path, title, or key and modifiers.
+    /// The target selects the menu layer: auto (default), maui, or native.
+    /// </summary>
+    public async Task<JsonElement> InvokeMenuAsync(
+        string? id = null,
+        string? path = null,
+        string? title = null,
+        string? key = null,
+        string? modifiers = null,
+        string? target = null,
+        int? window = null)
+    {
+        var payload = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(id)) payload["id"] = id;
+        if (!string.IsNullOrWhiteSpace(path)) payload["path"] = path;
+        if (!string.IsNullOrWhiteSpace(title)) payload["title"] = title;
+        if (!string.IsNullOrWhiteSpace(key)) payload["key"] = key;
+        if (!string.IsNullOrWhiteSpace(modifiers)) payload["modifiers"] = modifiers;
+        if (!string.IsNullOrWhiteSpace(target)) payload["target"] = target;
+        if (window.HasValue) payload["window"] = window.Value;
+
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+            {
+                using var content = ProtocolJson.CreateJsonContent(payload);
+                return await _http.PostAsync($"{_baseUrl}{UiApi}/menus/invoke", content);
+            });
+            var responseBody = await response.Content.ReadAsStringAsync();
+            return string.IsNullOrWhiteSpace(responseBody) ? default : ProtocolJson.ParseElement(responseBody);
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return default; }
+    }
+
     // ── Files ──
 
     public async Task<JsonElement> ListStorageRootsAsync()
@@ -2988,6 +3032,8 @@ public class AgentCapabilities
     public bool Profiler { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("jobs")]
     public bool Jobs { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("menus")]
+    public bool Menus { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("theme")]
     public bool Theme { get; set; }
 }

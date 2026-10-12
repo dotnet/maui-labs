@@ -229,12 +229,14 @@ the standard error envelope:
 ### Pre-grant permissions (prevents dialogs from appearing)
 
 **Prefer the `maui` CLI** — `maui apple simulator privacy` now wraps `simctl privacy`
-(the `bundle-id` is optional, so you can grant for all apps), and `maui devflow ui permission`
-drives it for the agent-detected simulator:
+(the `bundle-id` is optional, so you can grant for all apps). For
+`maui devflow ui permission`, pass `--udid` to target the intended simulator.
+Without it, the command selects the first booted simulator, not the simulator
+associated with the connected agent.
 ```bash
 maui apple simulator privacy grant <UDID> location --bundle-id com.company.appid
 maui apple simulator privacy grant <UDID> photos          # all apps (no bundle id)
-maui devflow ui permission grant location --bundle-id com.company.appid
+maui devflow ui permission grant location --udid <UDID> --bundle-id com.company.appid
 ```
 
 Raw `xcrun simctl` fallback (only if the `maui` CLI is unavailable):

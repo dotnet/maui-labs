@@ -60,6 +60,16 @@ public class EvidenceMcpTests : IDisposable
     }
 
     [Fact]
+    public async Task AgentFixture_DisposalWhileAcceptingConnectionsCompletesCleanly()
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var agent = new EvidenceAgentFixture();
+            await agent.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task NetworkRead_CancellationPreventsTheRequest()
     {
         await using var agent = new EvidenceAgentFixture();

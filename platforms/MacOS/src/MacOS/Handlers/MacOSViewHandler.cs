@@ -1,5 +1,6 @@
 using CoreGraphics;
 using CoreAnimation;
+using System.Runtime.CompilerServices;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using AppKit;
@@ -8,6 +9,12 @@ using Microsoft.Maui.Platforms.MacOS.Platform;
 
 namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 
+// ViewMapper is shared across all closed generic handler types.
+internal interface IMacOSViewTransformHandler
+{
+    void UpdateGeometry(NSView platformView, IView view);
+}
+
 /// <summary>
 /// Base view handler for macOS that provides PlatformArrange and GetDesiredSize implementations.
 /// The net10.0 (platform-agnostic) ViewHandler has no-op PlatformArrange and returns Size.Zero from
@@ -15,10 +22,16 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 /// This base class bridges MAUI's layout system to AppKit by setting NSView Frame in
 /// PlatformArrange and using IntrinsicContentSize/FittingSize/SizeThatFits in GetDesiredSize.
 /// </summary>
-public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandler<TVirtualView, TPlatformView>
+public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandler<TVirtualView, TPlatformView>, IMacOSViewTransformHandler
     where TVirtualView : class, IView
     where TPlatformView : NSView
 {
+    CGRect _untransformedFrame;
+    CGRect? _lastTransformedFrame;
+
+    void IMacOSViewTransformHandler.UpdateGeometry(NSView platformView, IView view)
+        => UpdateGeometry(platformView, view);
+
     static MacOSViewHandler()
     {
         try
@@ -33,8 +46,8 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
                 mapper[nameof(IView.FlowDirection)] = MapFlowDirection;
                 mapper[nameof(IView.AutomationId)] = MapAutomationId;
                 mapper[nameof(IView.Clip)] = MapClip;
-                mapper[nameof(IView.TranslationX)] = MapTransform;
-                mapper[nameof(IView.TranslationY)] = MapTransform;
+                mapper[nameof(IView.TranslationX)] = MapTranslation;
+                mapper[nameof(IView.TranslationY)] = MapTranslation;
                 mapper[nameof(IView.Rotation)] = MapTransform;
                 mapper[nameof(IView.RotationX)] = MapTransform;
                 mapper[nameof(IView.RotationY)] = MapTransform;
@@ -71,7 +84,9 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
     protected override void ConnectHandler(TPlatformView platformView)
     {
+        _lastTransformedFrame = null;
         base.ConnectHandler(platformView);
+        MacOSViewGeometry.Register(platformView, this);
         SetupGestures(platformView);
 
         if (VirtualView is Microsoft.Maui.Controls.View mauiView)
@@ -83,6 +98,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
 
     protected override void DisconnectHandler(TPlatformView platformView)
     {
+        MacOSViewGeometry.Unregister(platformView, this);
         if (VirtualView is Microsoft.Maui.Controls.View mauiView)
         {
             ((System.Collections.Specialized.INotifyCollectionChanged)mauiView.GestureRecognizers)
@@ -351,13 +367,17 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (platformView.Layer == null)
             return;
 
+        var externalFrame = HasExternalFrame(platformView);
+        if (!externalFrame && handler is IMacOSViewTransformHandler macOSHandler)
+            macOSHandler.UpdateGeometry(platformView, view);
+
         // Adjust position when changing anchorPoint to prevent frame from shifting.
         // AppKit flipped views default anchorPoint to (0,0), not (0.5,0.5) like iOS.
         var newAnchor = new CGPoint(view.AnchorX, view.AnchorY);
         var oldAnchor = platformView.Layer.AnchorPoint;
         if (oldAnchor != newAnchor)
         {
-            var bounds = platformView.Layer.Bounds;
+            var bounds = externalFrame ? platformView.Layer.Bounds : platformView.Frame;
             platformView.Layer.Position = new CGPoint(
                 platformView.Layer.Position.X + (newAnchor.X - oldAnchor.X) * bounds.Width,
                 platformView.Layer.Position.Y + (newAnchor.Y - oldAnchor.Y) * bounds.Height);
@@ -378,10 +398,18 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (view.RotationY != 0)
             transform = transform.Rotate((nfloat)(view.RotationY * Math.PI / 180.0), 0, 1, 0);
 
-        if (view.TranslationX != 0 || view.TranslationY != 0)
-            transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
+        if (externalFrame)
+        {
+            if (view.TranslationX != 0 || view.TranslationY != 0)
+                transform = transform.Translate((nfloat)view.TranslationX, (nfloat)view.TranslationY, 0);
+        }
+        if (!platformView.Layer.Transform.Equals(transform))
+            platformView.Layer.Transform = transform;
+    }
 
-        platformView.Layer.Transform = transform;
+    public static void MapTranslation(IViewHandler handler, IView view)
+    {
+        MapTransform(handler, view);
     }
 
     public static void MapInputTransparent(IViewHandler handler, IView view)
@@ -481,18 +509,62 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         if (platformView == null)
             return;
 
-        // Modal pages have their frame managed externally — don't override
-        if (platformView is MacOSContainerView container && container.ExternalFrameManagement)
+        // Auto Layout and modal owners must retain their resolved native frames.
+        if (HasExternalFrame(platformView))
             return;
 
-        // Guard against NaN values which crash CALayer
-        var x = Sanitize(rect.X);
-        var y = Sanitize(rect.Y);
-        var width = Sanitize(rect.Width);
-        var height = Sanitize(rect.Height);
+        SetFrame(platformView, VirtualView, rect);
+    }
 
-        // NSView uses Frame for positioning (with IsFlipped=true for top-left origin)
-        platformView.Frame = new CGRect(x, y, width, height);
+    void SetFrame(NSView platformView, IView view, Rect rect)
+    {
+        UpdateGeometry(platformView, view, new CGRect(
+            Sanitize(rect.X), Sanitize(rect.Y),
+            Math.Max(0, Sanitize(rect.Width)), Math.Max(0, Sanitize(rect.Height))));
+        MapTransform(this, view);
+    }
+
+    static bool HasExternalFrame(NSView view) =>
+        !view.TranslatesAutoresizingMaskIntoConstraints ||
+        view is MacOSContainerView { ExternalFrameManagement: true };
+
+    void UpdateGeometry(NSView platformView, IView view, CGRect? arrangedFrame = null)
+    {
+        if (arrangedFrame is { } arranged)
+            _untransformedFrame = arranged;
+        else if (_lastTransformedFrame is null)
+            _untransformedFrame = platformView.Frame;
+
+        var frame = _untransformedFrame;
+        var scaleX = view.Scale * view.ScaleX;
+        var scaleY = view.Scale * view.ScaleY;
+        // Retain layer-only behavior for collapsed/mirrored transforms.
+        var nativeScaleX = double.IsFinite(scaleX) && scaleX > 0 ? scaleX : 1;
+        var nativeScaleY = double.IsFinite(scaleY) && scaleY > 0 ? scaleY : 1;
+        var transformed = new CGRect(
+            Sanitize(frame.X + view.TranslationX + view.AnchorX * frame.Width * (1 - nativeScaleX)),
+            Sanitize(frame.Y + view.TranslationY + view.AnchorY * frame.Height * (1 - nativeScaleY)),
+            Math.Max(0, Sanitize(frame.Width * nativeScaleX)),
+            Math.Max(0, Sanitize(frame.Height * nativeScaleY)));
+        var bounds = new CGRect(platformView.Bounds.X, platformView.Bounds.Y, frame.Width, frame.Height);
+        if (platformView.Frame != transformed || platformView.Bounds != bounds)
+        {
+            // AppKit must know the scale to make newly visible descendants drawable.
+            var autoresizes = platformView.AutoresizesSubviews;
+            platformView.AutoresizesSubviews = false;
+            try
+            {
+                if (platformView.Layer is { } layer)
+                    layer.Transform = CATransform3D.Identity;
+                platformView.Frame = transformed;
+                platformView.Bounds = bounds;
+            }
+            finally
+            {
+                platformView.AutoresizesSubviews = autoresizes;
+            }
+        }
+        _lastTransformedFrame = platformView.Frame;
     }
 
     public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
