@@ -132,26 +132,32 @@ public class WebViewErrorTests
     }
 
     [Fact]
-    public async Task Evaluate_Success_PreservesOriginalExpressionAndValue()
+    public async Task RawCdp_Success_PreservesOriginalExpressionAndValue()
     {
         using var service = new TestService();
-        var webView = new CdpWebViewInfo
+        service.RegisterCdpWebView(command =>
         {
-            CommandHandler = command =>
-            {
-                using var document = JsonDocument.Parse(command);
-                Assert.Equal("1+1", document.RootElement.GetProperty("params").GetProperty("expression").GetString());
-                return Task.FromResult("""{"result":{"result":{"value":2}}}""");
-            }
-        };
+            using var document = JsonDocument.Parse(command);
+            Assert.Equal("1+1", document.RootElement.GetProperty("params").GetProperty("expression").GetString());
+            return Task.FromResult("""{"result":{"result":{"value":2}}}""");
+        }, () => true);
 
-        Assert.Equal(2, (await service.EvaluateAsync(webView, "1+1"))!.Value.GetInt32());
+        var response = await service.RawCdpAsync(new HttpRequest
+        {
+            Body = """{"method":"Runtime.evaluate","params":{"expression":"1+1"}}"""
+        });
+
+        Assert.Equal(200, response.StatusCode);
+        using var body = JsonDocument.Parse(Assert.IsType<string>(response.Body));
+        Assert.Equal(2, body.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetInt32());
     }
 
     private sealed class TestService : DevFlowAgentService
     {
         public Task<JsonElement?> EvaluateAsync(CdpWebViewInfo webView, string expression)
             => EvaluateWebViewExpressionAsync(webView, expression);
+
+        public Task<HttpResponse> RawCdpAsync(HttpRequest request) => HandleCdp(request);
 
         public Task<HttpResponse> ActionAsync(string action)
         {
