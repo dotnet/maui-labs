@@ -75,6 +75,11 @@ static class SpectreHelpBuilder
 				(s.Name, s.Description ?? string.Empty)));
 			console.WriteLine();
 		}
+		if (command is DetailedHelpCommand { HelpDetails.Length: > 0 } detailed)
+		{
+			console.MarkupLine(Markup.Escape(detailed.HelpDetails));
+			console.WriteLine();
+		}
 	}
 
 	/// <summary>

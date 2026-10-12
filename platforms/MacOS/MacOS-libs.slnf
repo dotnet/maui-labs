@@ -5,7 +5,8 @@
       "src\\MacOS\\MacOS.csproj",
       "src\\MacOS.Essentials\\MacOS.Essentials.csproj",
       "src\\MacOS.BlazorWebView\\MacOS.BlazorWebView.csproj",
-      "templates\\MacOS.Templates.csproj"
+      "templates\\MacOS.Templates.csproj",
+      "tests\\MacOS.Tests\\MacOS.Tests.csproj"
     ]
   }
 }

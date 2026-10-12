@@ -9,6 +9,8 @@ class App : Application
 {
 	protected override Window CreateWindow(IActivationState? activationState)
 	{
+		if (Environment.GetEnvironmentVariable("MAUI_SAMPLE_COLLECTIONVIEW") == "1")
+			return new Window(new CollectionViewPage());
 		return new Window(new MainShell());
 	}
 }

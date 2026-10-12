@@ -7,14 +7,11 @@ info:
     Real-time streaming channels for the DevFlow Agent Protocol.
     These complement the HTTP API defined in openapi.yaml.
 
-    All messages (both directions) use a standard envelope:
-    ```json
-    {
-      "type": "string (event/command type)",
-      "timestamp": "ISO 8601 datetime",
-      "data": { ... }
-    }
-    ```
+    Server events include type and timestamp, but payload placement is
+    channel-specific: network and logs use top-level entries/entry; profiler
+    and UI events use data; sensors include sensor, data, and a compatibility
+    reading object. Stream errors use a top-level error string.
+    Client commands do not require a timestamp.
 
 servers:
   agent:
@@ -38,7 +35,8 @@ channels:
     description: |
       Real-time stream of captured HTTP requests. On connect the server replays
       recent requests, then streams new requests as they are captured. Clients
-      may request full details for a specific request or clear the buffer.
+      may request full details for a specific request. Clearing the buffer
+      requires the mutation-lease-protected HTTP endpoint.
     servers:
       - $ref: '#/servers/agent'
     messages:
@@ -51,7 +49,7 @@ channels:
         payload:
           type: object
           description: Replay of recent network request entries.
-          required: [type, timestamp, data]
+          required: [type, timestamp, entries]
           properties:
             type:
               type: string
@@ -60,15 +58,11 @@ channels:
             timestamp:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [entries]
-              properties:
-                entries:
-                  type: array
-                  items:
-                    $ref: './schemas/network.json#/$defs/NetworkRequestSummary'
-                  description: Array of recent network request summaries.
+            entries:
+              type: array
+              items:
+                $ref: './schemas/network.json#/$defs/NetworkRequestSummary'
+              description: Array of recent network request summaries.
 
       networkRequest:
         name: networkRequest
@@ -78,7 +72,7 @@ channels:
         payload:
           type: object
           description: Live network request event.
-          required: [type, timestamp, data]
+          required: [type, timestamp, entry]
           properties:
             type:
               type: string
@@ -87,13 +81,9 @@ channels:
             timestamp:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [entry]
-              properties:
-                entry:
-                  $ref: './schemas/network.json#/$defs/NetworkRequestSummary'
-                  description: The captured network request summary.
+            entry:
+              $ref: './schemas/network.json#/$defs/NetworkRequestSummary'
+              description: The captured network request summary.
 
       networkDetails:
         name: networkDetails
@@ -103,7 +93,7 @@ channels:
         payload:
           type: object
           description: Response containing full request/response details.
-          required: [type, timestamp, data]
+          required: [type, timestamp, entry]
           properties:
             type:
               type: string
@@ -112,13 +102,19 @@ channels:
             timestamp:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [entry]
-              properties:
-                entry:
-                  $ref: './schemas/network.json#/$defs/NetworkRequestDetail'
-                  description: Full details of the network request.
+            entry:
+              oneOf:
+                - $ref: './schemas/network.json#/$defs/NetworkRequestDetail'
+                - type: 'null'
+              description: Full details of the network request, or null if no entry matches.
+
+      networkError:
+        name: networkError
+        title: Network Command Error
+        summary: A WebSocket clear command was rejected; use the HTTP endpoint instead.
+        contentType: application/json
+        payload:
+          $ref: './schemas/websocket-messages.json#/$defs/StreamError'
 
       # ── client → server ──
       networkGetDetails:
@@ -129,48 +125,36 @@ channels:
         payload:
           type: object
           description: Command to retrieve full details for a network request.
-          required: [type, timestamp, data]
+          required: [type, id]
           properties:
             type:
               type: string
               const: get_details
               description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [id]
-              properties:
-                id:
-                  type: string
-                  description: Unique identifier of the network request to retrieve.
+            id:
+              type: string
+              description: Unique identifier of the network request to retrieve.
 
   # ── Log Stream ───────────────────────────────────────────────────────────
   logs:
     address: /ws/v1/logs
     description: |
-      Real-time application log streaming. Supports filtering by source and
-      minimum severity level via query-string parameters. Replays recent
-      entries on connect.
+      Real-time application log streaming. Supports filtering by source
+      via query-string parameters. No severity filter is implemented.
+      Replays recent entries on connect when replay is greater than zero.
     servers:
       - $ref: '#/servers/agent'
     bindings:
       ws:
         query:
           type: object
-          description: Connection query-string parameters for log filtering.
+          description: Connection query-string parameters for source filtering and replay.
           properties:
             source:
               type: string
-              enum: [native, webview, framework, all]
-              default: all
-              description: Filter logs by source.
-            level:
-              type: string
-              enum: [trace, debug, info, warning, error, critical]
-              default: info
-              description: Minimum log severity level to stream.
+              description: >
+                Case-insensitive producer source filter. Omit to include every
+                source; the literal all is not a special value.
             replay:
               type: integer
               default: 100
@@ -185,7 +169,7 @@ channels:
         payload:
           type: object
           description: Replay of recent log entries.
-          required: [type, timestamp, data]
+          required: [type, timestamp, entries]
           properties:
             type:
               type: string
@@ -194,15 +178,11 @@ channels:
             timestamp:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [entries]
-              properties:
-                entries:
-                  type: array
-                  items:
-                    $ref: './schemas/logs.json#/$defs/LogEntry'
-                  description: Array of recent log entries.
+            entries:
+              type: array
+              items:
+                $ref: './schemas/logs.json#/$defs/LogEntry'
+              description: Array of recent compact log entries.
 
       logEntry:
         name: logEntry
@@ -212,7 +192,7 @@ channels:
         payload:
           type: object
           description: Live log entry event.
-          required: [type, timestamp, data]
+          required: [type, timestamp, entry]
           properties:
             type:
               type: string
@@ -221,13 +201,9 @@ channels:
             timestamp:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [entry]
-              properties:
-                entry:
-                  $ref: './schemas/logs.json#/$defs/LogEntry'
-                  description: The log entry.
+            entry:
+              $ref: './schemas/logs.json#/$defs/LogEntry'
+              description: The compact log entry.
 
   # ── Sensor Readings Stream ──────────────────────────────────────────────
   sensors:
@@ -296,7 +272,7 @@ channels:
         payload:
           type: object
           description: Live sensor reading event.
-          required: [type, timestamp, data]
+          required: [type, timestamp, sensor, data, reading]
           properties:
             type:
               type: string
@@ -305,62 +281,24 @@ channels:
             timestamp:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
+            sensor:
+              type: string
+              description: Sensor name.
             data:
+              type: object
+              additionalProperties: true
+              description: Sensor-specific values, also repeated in reading.values.
+            reading:
               $ref: './schemas/device.json#/$defs/SensorReading'
-              description: Sensor reading data (shape varies by sensor type).
+              description: Compatibility reading containing sensor, timestamp, and values.
 
       sensorError:
         name: sensorError
         title: Sensor Error
-        summary: Error occurred while reading sensor data.
+        summary: Missing sensor parameter or sensor not started through HTTP.
         contentType: application/json
         payload:
-          type: object
-          description: Sensor error notification.
-          required: [type, timestamp, data]
-          properties:
-            type:
-              type: string
-              const: error
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [sensor, message]
-              properties:
-                sensor:
-                  type: string
-                  description: Name of the sensor that encountered an error.
-                message:
-                  type: string
-                  description: Human-readable error message.
-
-      sensorStopped:
-        name: sensorStopped
-        title: Sensor Stopped
-        summary: Sensor data streaming has stopped.
-        contentType: application/json
-        payload:
-          type: object
-          description: Sensor stopped notification.
-          required: [type, timestamp, data]
-          properties:
-            type:
-              type: string
-              const: stopped
-              description: Message type identifier.
-            timestamp:
-              $ref: './schemas/common.json#/$defs/Timestamp'
-              description: UTC timestamp when this message was produced.
-            data:
-              type: object
-              required: [sensor]
-              properties:
-                sensor:
-                  type: string
-                  description: Name of the sensor that was stopped.
+          $ref: './schemas/websocket-messages.json#/$defs/StreamError'
 
   # ── Profiler Data Stream ────────────────────────────────────────────────
   profiler:
@@ -380,7 +318,13 @@ channels:
           properties:
             sessionId:
               type: string
-              description: Profiler session ID (required).
+              description: Profiler session ID (required), or current for the active session.
+            limit:
+              type: integer
+              default: 500
+              minimum: 1
+              maximum: 5000
+              description: Per-batch item limit, clamped to 1..5000 by the server.
             sampleCursor:
               type: integer
               default: 0
@@ -444,6 +388,14 @@ channels:
                 sessionId:
                   type: string
                   description: Identifier of the stopped profiler session.
+
+      profilerError:
+        name: profilerError
+        title: Profiler Stream Error
+        summary: Missing sessionId or a requested session that does not match the active session.
+        contentType: application/json
+        payload:
+          $ref: './schemas/websocket-messages.json#/$defs/StreamError'
 
   # ── UI Lifecycle Events Stream ──────────────────────────────────────────
   uiEvents:
@@ -645,7 +597,7 @@ channels:
         payload:
           type: object
           description: Command to subscribe to UI event types.
-          required: [type, timestamp, data]
+          required: [type, data]
           properties:
             type:
               type: string
@@ -675,7 +627,7 @@ channels:
         payload:
           type: object
           description: Command to unsubscribe from UI event types.
-          required: [type, timestamp, data]
+          required: [type, data]
           properties:
             type:
               type: string
@@ -714,6 +666,7 @@ operations:
       - $ref: '#/channels/network/messages/networkReplay'
       - $ref: '#/channels/network/messages/networkRequest'
       - $ref: '#/channels/network/messages/networkDetails'
+      - $ref: '#/channels/network/messages/networkError'
 
   receiveNetworkCommands:
     action: receive
@@ -747,12 +700,12 @@ operations:
     summary: Server streams sensor data to the client.
     description: |
       Sends subscription confirmation, live sensor readings, error
-      notifications, and stop events for device sensors.
+      notifications for missing or inactive sensors. The current handler does
+      not emit a stopped notification when an HTTP request stops the sensor.
     messages:
       - $ref: '#/channels/sensors/messages/sensorSubscribed'
       - $ref: '#/channels/sensors/messages/sensorReading'
       - $ref: '#/channels/sensors/messages/sensorError'
-      - $ref: '#/channels/sensors/messages/sensorStopped'
 
   # ── Profiler ─────────────────────────────────────────────────────────────
   sendProfilerEvents:
@@ -766,6 +719,7 @@ operations:
     messages:
       - $ref: '#/channels/profiler/messages/profilerBatch'
       - $ref: '#/channels/profiler/messages/profilerStopped'
+      - $ref: '#/channels/profiler/messages/profilerError'
 
   # ── UI Events ────────────────────────────────────────────────────────────
   sendUIEvents:

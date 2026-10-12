@@ -19,8 +19,11 @@ import { Recorder } from "./recorder.mjs";
 import { replayTest } from "./replay.mjs";
 import { renderShell, renderDisconnected } from "./shell.mjs";
 import { readJsonBody } from "./http.mjs";
-import { agentIdentityKey, resolveAgentTarget } from "./targeting.mjs";
+import { createTargetController } from "./target-controller.mjs";
 import { readBrokerState } from "@maui-devflow/client";
+
+const { selectTargetAgent, syncTargetAgent, resolveInspectorState } =
+  createTargetController({ readBrokerState, fetchBrokerAgents });
 
 // Device targeting is optional — the CLI auto-discovers the agent via the broker. Override
 // via env if you run multiple emulators/apps at once.
@@ -352,130 +355,6 @@ async function fetchBrokerAgents(port) {
     return null;
   } finally {
     clearTimeout(timer);
-  }
-}
-
-function rememberTarget(st, agent) {
-  st.targetAgentId = agent?.id || null;
-  st.targetIdentity = agentIdentityKey(agent);
-  st.targetPort = Number.isFinite(agent?.port) ? agent.port : st.targetPort;
-}
-
-function queueTargetMutation(st, operation) {
-  const run = st.targetMutation.then(operation, operation);
-  st.targetMutation = run.then(() => undefined, () => undefined);
-  return run;
-}
-
-async function alignStoreTarget(st, agent) {
-  const resolved = st.store?.device?.resolvedAgent?.();
-  const pinnedPort = Number(st.store?.device?.opts?.agentPort);
-  if (resolved?.id === agent.id &&
-      st.store?.device?.whichPort?.() === agent.port &&
-      pinnedPort === agent.port)
-    return true;
-
-  const snap = await st.store.selectAgent({ port: agent.port, platform: agent.platform });
-  const aligned = st.store?.device?.resolvedAgent?.();
-  const alignedPort = st.store?.device?.whichPort?.();
-  return snap?.connected === true &&
-    alignedPort === agent.port &&
-    (!aligned?.id || aligned.id === agent.id);
-}
-
-async function liveBrokerAgents() {
-  const state = readBrokerState();
-  if (!state?.port) return null;
-  return fetchBrokerAgents(state.port);
-}
-
-async function selectTargetAgent(st, { platform, port } = {}) {
-  return queueTargetMutation(st, async () => {
-    const requestedPort = port == null ? null : Number(port);
-    const agents = await liveBrokerAgents();
-    const requested = Array.isArray(agents)
-      ? agents.find((agent) => Number.isFinite(requestedPort) && agent.port === requestedPort)
-      : null;
-    const snap = await st.store.selectAgent({ platform, port });
-    const resolved = st.store.device.resolvedAgent?.();
-    const selected = requested || resolved;
-    if (snap?.connected === true) {
-      if (selected?.id) {
-        rememberTarget(st, selected);
-      } else {
-        st.targetAgentId = null;
-        st.targetIdentity = null;
-        const connectedPort = st.store.device.whichPort?.();
-        st.targetPort = Number.isFinite(connectedPort) ? connectedPort : requestedPort;
-      }
-    }
-    return snap;
-  });
-}
-
-async function syncTargetAgent(st, agentId) {
-  return queueTargetMutation(st, async () => {
-    const agents = await liveBrokerAgents();
-    const requested = Array.isArray(agents)
-      ? agents.find((agent) => agent.id === agentId)
-      : null;
-    if (!requested)
-      return { ok: false, error: "The selected DevFlow agent is no longer running." };
-
-    const requestedIdentity = agentIdentityKey(requested);
-    if (st.targetIdentity && requestedIdentity !== st.targetIdentity)
-      return { ok: false, error: "The Inspector target changed and must be selected explicitly." };
-    if (st.targetAgentId && !st.targetIdentity && requested.id !== st.targetAgentId)
-      return { ok: false, error: "The Inspector target changed and must be selected explicitly." };
-
-    if (!await alignStoreTarget(st, requested))
-      return { ok: false, error: "The selected DevFlow agent could not be connected." };
-
-    rememberTarget(st, requested);
-    return { ok: true, agentId: requested.id, port: requested.port };
-  });
-}
-
-// Resolve the live broker and agent in one pass so the host can distinguish a stale broker file
-// from a reachable broker with no app without issuing duplicate /api/agents requests. This probe
-// is deliberately read-only; the authenticated shell aligns LiveStore through syncTarget.
-async function resolveInspectorState(st) {
-  const snapshot = st.store.snapshot();
-  let appName = snapshot.connected ? snapshot.info?.appName || null : null;
-  try {
-    const state = readBrokerState();
-    if (!state?.port)
-      return { ready: false, state: "broker", appName, inspectorUrl: null, agentId: null };
-
-    const agents = await fetchBrokerAgents(state.port);
-    if (agents === null)
-      return { ready: false, state: "broker", appName, inspectorUrl: null, agentId: null };
-
-    const resolved = st.store?.device?.resolvedAgent?.();
-    const port = st.targetPort ?? st.store?.device?.whichPort?.();
-    const target = resolveAgentTarget(agents, {
-      targetId: st.targetAgentId || resolved?.id || null,
-      targetIdentity: st.targetIdentity || agentIdentityKey(resolved),
-      preferredPort: port,
-    });
-    const match = target.agent;
-    if (!match?.id)
-      return { ready: false, state: target.state, appName, inspectorUrl: null, agentId: null };
-
-    appName = match.appName || appName;
-    // The broker's HttpListener is bound to `localhost`, so the iframe host MUST be localhost
-    // (a 127.0.0.1 Host header is rejected as "Invalid Hostname"). frame-ancestors covers both.
-    const base = `http://localhost:${state.port}/inspector/${encodeURIComponent(match.id)}/`;
-    const inspectorUrl = state.embedToken
-      ? `${base}?embed=${encodeURIComponent(state.embedToken)}`
-      : base;
-    const generation = createHash("sha256")
-      .update(`${state.port}|${state.startedAt || ""}|${state.embedToken || ""}`)
-      .digest("hex")
-      .slice(0, 16);
-    return { ready: true, state: "ready", appName, inspectorUrl, agentId: match.id, generation };
-  } catch {
-    return { ready: false, state: "broker", appName, inspectorUrl: null, agentId: null };
   }
 }
 

@@ -6,16 +6,17 @@
     <IsShipping>true</IsShipping>
 
     <PackageId>Microsoft.Maui.DevFlow.Agent.Gtk</PackageId>
-    <Description>GTK/Linux agent for Microsoft.Maui.DevFlow. Provides visual tree inspection, element interactions, and screenshots for Maui.Gtk apps.</Description>
+    <Description>GTK/Linux agent for Microsoft.Maui.DevFlow. Provides visual tree inspection, element interactions, and screenshots for Microsoft.Maui.Platforms.Linux.Gtk4 apps.</Description>
     <PackageTags>maui;automation;testing;agent;gtk;linux</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent.Gtk.Tests" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+    <ProjectReference Include="..\..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\Linux.Gtk4.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Platform.Maui.Linux.Gtk4" />
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 

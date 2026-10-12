@@ -36,8 +36,11 @@ public class EssentialsNativeDevFlowAgentService : NativeDevFlowAgentService
     /// <inheritdoc />
     protected override bool IsSensorsSupported => true;
 
+    protected virtual IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+        => NativePreferenceKeys.Enumerate(sharedName);
+
     protected override Task<HttpResponse> HandlePreferencesList(HttpRequest request)
-        => _essentials.HandlePreferencesList(request);
+        => _essentials.HandlePreferencesList(request, EnumerateNativePreferenceKeys);
 
     protected override Task<HttpResponse> HandlePreferencesGet(HttpRequest request)
         => _essentials.HandlePreferencesGet(request);

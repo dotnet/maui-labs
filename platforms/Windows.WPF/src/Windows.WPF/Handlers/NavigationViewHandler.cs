@@ -28,6 +28,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		readonly System.Windows.Controls.ContentControl _contentArea;
 
 		public Action? OnBackButtonClicked { get; set; }
+		internal IMauiContext? MauiContext { get; set; }
 
 		public NavigationContainerView()
 		{
@@ -131,6 +132,25 @@ namespace Microsoft.Maui.Handlers.WPF
 					Padding = new WThickness(8, 2, 8, 2),
 					IsEnabled = item.IsEnabled,
 				};
+				if (item.IconImageSource is IFontImageSource fontSource)
+				{
+					if (MauiContext != null)
+					{
+						var bitmap = FontImageSourceHelper.RenderGlyph(fontSource, MauiContext);
+						if (bitmap != null)
+						{
+							btn.Content = new System.Windows.Controls.Image
+							{
+								Source = bitmap,
+								Stretch = System.Windows.Media.Stretch.Uniform,
+							};
+						}
+					}
+					else
+						System.Diagnostics.Trace.TraceWarning("Cannot render a toolbar font icon without a MAUI context; displaying its text instead.");
+					btn.ToolTip = item.Text;
+					System.Windows.Automation.AutomationProperties.SetName(btn, item.Text ?? string.Empty);
+				}
 				btn.Click += (s, e) =>
 				{
 					if (item.IsEnabled)
@@ -164,6 +184,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		protected override NavigationContainerView CreatePlatformView()
 		{
 			var container = new NavigationContainerView();
+			container.MauiContext = MauiContext;
 			container.OnBackButtonClicked = OnBackButtonClicked;
 			return container;
 		}
@@ -171,6 +192,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		protected override void ConnectHandler(NavigationContainerView platformView)
 		{
 			base.ConnectHandler(platformView);
+			platformView.MauiContext = MauiContext;
 		}
 
 		void OnBackButtonClicked()

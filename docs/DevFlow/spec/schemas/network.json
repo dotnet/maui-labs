@@ -123,9 +123,12 @@
                 "null"
               ],
               "additionalProperties": {
-                "type": "string"
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               },
-              "description": "Request headers as key-value pairs."
+              "description": "Request headers mapped to arrays of header values."
             },
             "responseHeaders": {
               "type": [
@@ -133,9 +136,12 @@
                 "null"
               ],
               "additionalProperties": {
-                "type": "string"
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               },
-              "description": "Response headers as key-value pairs."
+              "description": "Response headers mapped to arrays of header values."
             },
             "requestBody": {
               "type": [

@@ -167,7 +167,7 @@ public class FlyoutContainerView : MacOSContainerView, INSSplitViewDelegate
         _currentFlyoutView = view;
 
         var bounds = _flyoutContainer.Bounds;
-        view.Frame = bounds;
+        view.SetLayoutFrame(bounds);
         view.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
         _flyoutContainer.AddSubview(view);
 
@@ -182,7 +182,7 @@ public class FlyoutContainerView : MacOSContainerView, INSSplitViewDelegate
         _currentDetailView = view;
 
         var bounds = _detailContainer.Bounds;
-        view.Frame = bounds;
+        view.SetLayoutFrame(bounds);
         view.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
         _detailContainer.AddSubview(view);
 
@@ -219,7 +219,7 @@ public class FlyoutContainerView : MacOSContainerView, INSSplitViewDelegate
         if (bounds.Width <= 0 || bounds.Height <= 0)
             return;
 
-        _currentDetailView.Frame = bounds;
+        _currentDetailView.SetLayoutFrame(bounds);
         OnDetailLayout?.Invoke(bounds);
     }
 
@@ -232,7 +232,7 @@ public class FlyoutContainerView : MacOSContainerView, INSSplitViewDelegate
         if (bounds.Width <= 0 || bounds.Height <= 0)
             return;
 
-        _currentFlyoutView.Frame = bounds;
+        _currentFlyoutView.SetLayoutFrame(bounds);
         OnFlyoutLayout?.Invoke(bounds);
     }
 
@@ -248,13 +248,13 @@ public class FlyoutContainerView : MacOSContainerView, INSSplitViewDelegate
 
         if (_currentFlyoutView != null)
         {
-            _currentFlyoutView.Frame = _flyoutContainer.Bounds;
+            _currentFlyoutView.SetLayoutFrame(_flyoutContainer.Bounds);
             OnFlyoutLayout?.Invoke(_flyoutContainer.Bounds);
         }
 
         if (_currentDetailView != null)
         {
-            _currentDetailView.Frame = _detailContainer.Bounds;
+            _currentDetailView.SetLayoutFrame(_detailContainer.Bounds);
             OnDetailLayout?.Invoke(_detailContainer.Bounds);
         }
     }

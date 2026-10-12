@@ -10,7 +10,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 | Product | Package / Tool | Description |
 |---------|---------------|-------------|
-| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`), `Microsoft.Maui.ProfilingHelper` | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, `maui project version` for project version management, `maui port check` for TCP port diagnostics, and the `maui devflow` automation surface. `Microsoft.Maui.ProfilingHelper` is a lightweight helper library injected by the CLI to drive the startup profiling exit-control handshake; it can also be referenced directly to mark startup completion via `MauiProfilingMarker.Complete()`. |
+| **Cli** | `Microsoft.Maui.Cli` (global tool: `maui`), `Microsoft.Maui.ProfilingHelper` | Unified MAUI command-line tool: environment diagnostics (`maui doctor`), Android SDK/JDK/emulator management, Apple platform management, device listing, `maui ai` for AI-assisted development and agent skill marketplace management, `maui go` for rapid prototyping, `maui profile startup` for performance tracing, `maui project version` for project version management, `maui port check` for TCP port diagnostics, and the `maui devflow` automation surface. `Microsoft.Maui.ProfilingHelper` is a lightweight helper library injected by the CLI to drive the startup profiling exit-control handshake; it can also be referenced directly to mark startup completion via `MauiProfilingMarker.Complete()`. |
 | **DevFlow** | `Microsoft.Maui.DevFlow.*` packages plus the unified `maui devflow` CLI surface | Runtime MAUI automation toolkit. In-app agent with HTTP API, visual tree inspection, CDP bridge for Blazor WebViews, MCP server for AI agents, cross-platform driver library. |
 | **Comet** | `Comet`, `Comet.SourceGenerator`, `Comet.Layout.Yoga` | Experimental MVU UI framework for .NET MAUI — C# fluent UI, signals/reactive state, Yoga layout. |
 | **Go** | `Microsoft.Maui.Go.Server` + Comet Go companion app | Single-file Comet apps server and companion app for rapid prototyping (alpha; sister to Comet). |
@@ -431,7 +431,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 71 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 73 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
@@ -472,6 +472,8 @@ DevFlow exposes 71 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_list_actions` | List all registered DevFlow Actions |
 | `maui_list_agents` | List connected MAUI DevFlow agents (running apps) |
 | `maui_logs` | Retrieve app logs (ILogger + WebView console) |
+| `maui_menu_invoke` | Invoke an application menu item (MAUI or native macOS/Catalyst menu) |
+| `maui_menu_list` | Inspect the application menu bar (MAUI MenuBarItems + native menu) |
 | `maui_navigate` | Shell navigation to a route |
 | `maui_network` | List captured HTTP requests |
 | `maui_network_clear` | Clear captured request buffer |

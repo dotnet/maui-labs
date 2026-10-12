@@ -38,6 +38,21 @@ public class WpfAgentService : MauiDevFlowAgentService
     protected override string IdiomName => "Desktop";
     protected override bool SupportsNativeElementScreenshots => true;
 
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+        // Guard against path traversal: sharedName becomes part of a file name.
+        if (!string.IsNullOrEmpty(sharedName) &&
+            (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+            throw new ArgumentException("sharedName must not contain path separators or '..'.", nameof(sharedName));
+
+        // Mirror WPFPreferences' on-disk layout:
+        // LocalApplicationData / {FriendlyName} / preferences / {shared|default}.json
+        var prefsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            AppDomain.CurrentDomain.FriendlyName, "preferences");
+        return ReadPreferenceFileKeys(Path.Combine(prefsDir, (sharedName ?? "default") + ".json"));
+    }
+
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
         try

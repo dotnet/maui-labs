@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'platforms/Linux.Gtk4/**'
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
       - '.github/extensions/maui-devflow-canvas/**'
       - '.github/workflows/ci-devflow.yml'
@@ -21,6 +22,7 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'platforms/Linux.Gtk4/**'
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
       - '.github/extensions/maui-devflow-canvas/**'
       - '.github/workflows/ci-devflow.yml'
@@ -33,6 +35,15 @@ on:
       - 'NuGet.config'
 
 jobs:
+  gtk-publication-guard:
+    name: GTK publication closure guard
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reject incomplete GTK publication sets
+        shell: pwsh
+        run: ./eng/scripts/Test-GtkPackageClosure.Tests.ps1
+
   build:
     uses: ./.github/workflows/_build.yml
     with:
@@ -41,6 +52,83 @@ jobs:
       run-tests: true
       pack: true
       os: '["windows-latest"]'
+
+  native-aot-smoke:
+    name: Reflection-disabled Native AOT smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Native AOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish and run agent smoke with headless MAUI backend
+        run: |
+          dotnet publish src/DevFlow/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+            -c Release -r linux-x64 -p:AotSmoke=true -p:IncludeMauiBackend=true \
+            -p:TrimmerSingleWarn=false -o artifacts/devflow-aot/agent
+          artifacts/devflow-aot/agent/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+            artifacts/devflow-aot/evidence
+
+      - name: Publish and run logging smoke
+        run: |
+          dotnet publish src/DevFlow/tools/LoggingAotSmoke/LoggingAotSmoke.csproj \
+            -c Release -r linux-x64 -o artifacts/devflow-aot/logging
+          artifacts/devflow-aot/logging/LoggingAotSmoke
+
+  inspector-browser:
+    name: Inspector HTTP and Chromium fixture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/Microsoft.Maui.DevFlow.Inspector.Tests.csproj
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup pinned .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Build Inspector tests (no MAUI workloads or devices)
+        shell: pwsh
+        run: dotnet build $env:TEST_PROJECT -c Release
+
+      - name: Install test project's Chromium
+        shell: pwsh
+        run: |
+          $script = Get-ChildItem artifacts/bin/Microsoft.Maui.DevFlow.Inspector.Tests/Release -Recurse -Filter playwright.ps1 |
+            Select-Object -First 1
+          if (!$script) { throw 'Built Playwright install script was not found.' }
+          & $script.FullName install --with-deps chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # The real InspectorServer is bound to an isolated loopback mock agent.
+      # LiveInspectorFact tests still require a separately provisioned broker + native app.
+      - name: Run only self-contained browser fixtures
+        shell: pwsh
+        run: |
+          dotnet test $env:TEST_PROJECT -c Release --no-build --no-restore `
+            --filter "Category=BrowserFixture" `
+            --logger "trx;LogFileName=inspector-browser.trx" `
+            --results-directory artifacts/TestResults/inspector-browser
+
+      - name: Upload browser test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: inspector-browser-results
+          path: artifacts/TestResults/inspector-browser
+          if-no-files-found: warn
 
   hosts:
     name: JavaScript hosts and VSIX

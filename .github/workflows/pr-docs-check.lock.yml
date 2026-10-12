@@ -26,7 +26,11 @@
 # needed on dotnet/docs-maui. If updates are needed, it opens an issue on
 # docs-maui with a detailed description of the changes needed.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"def757235e626c394b63a2fafc136ce290a0f429046a65b1a2825d3fb154cc7f","compiler_version":"v0.53.5"}
+# Resolved workflow manifest:
+#   Imports:
+#     - shared/docs-output-body-limit.md
+#
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"e68772473ba3d66dd8b0a88bd5c144eefee60edff85edba50e1262e130a746ca","compiler_version":"v0.53.5"}
 
 name: "PR Documentation Check"
 "on":
@@ -204,6 +208,9 @@ jobs:
           GH_AW_PROMPT_EOF
           cat << 'GH_AW_PROMPT_EOF'
           </system>
+          GH_AW_PROMPT_EOF
+          cat << 'GH_AW_PROMPT_EOF'
+          {{#runtime-import .github/workflows/shared/docs-output-body-limit.md}}
           GH_AW_PROMPT_EOF
           cat << 'GH_AW_PROMPT_EOF'
           {{#runtime-import .github/workflows/pr-docs-check.md}}
@@ -1105,6 +1112,83 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs/
           find "/tmp/gh-aw/safeoutputs/" -type f -print
           echo "GH_AW_AGENT_OUTPUT=/tmp/gh-aw/safeoutputs/agent_output.json" >> "$GITHUB_ENV"
+      - name: Enforce documentation issue AI disclosure
+        id: enforce_ai_disclosure
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
+        with:
+          script: |
+            const fs = require("node:fs");
+            const disclosure = "AI disclosure: A generative AI model, accessed through GitHub Copilot, determined that documentation changes may be needed and drafted this issue. Please verify the recommendation and content before acting.";
+            const notice = `made with AI\n\n${disclosure}`;
+            const outputPath = process.env.GH_AW_AGENT_OUTPUT;
+            const output = JSON.parse(fs.readFileSync(outputPath, "utf8"));
+            if (!Array.isArray(output.items)) {
+              throw new Error("Expected safe-output items before enforcing AI disclosure.");
+            }
+            for (const item of output.items) {
+              if (item.type === "update_issue") {
+                throw new Error("Issue updates are not supported by PR Documentation Check.");
+              }
+              if (item.type !== "create_issue") continue;
+              if (typeof item.body !== "string") {
+                throw new Error("Expected a documentation issue body before enforcing AI disclosure.");
+              }
+              // Put the notice outside model-authored Markdown, even if it was quoted or hidden.
+              const body = item.body.replaceAll(notice, "").replaceAll(disclosure, "")
+                .replace(/^made with AI[ \t]*\r?$/gm, "").trim();
+              item.body = `${notice}\n\n${body}`;
+              if (item.body.length > 60000) {
+                throw new Error("Documentation issue body exceeds the 60,000 UTF-16 code unit budget including AI disclosure. Shorten the body and retry.");
+              }
+            }
+            fs.writeFileSync(outputPath, JSON.stringify(output), "utf8");
+      - name: Guard final documentation output body sizes
+        id: guard_output_body_sizes
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |-
+            const fs = require("node:fs");
+            const entrypoint = "/opt/gh-aw/actions/safe_output_handler_manager.cjs";
+            const original = "/opt/gh-aw/actions/docs_original_handler_manager.cjs";
+            if (fs.existsSync(original)) {
+              throw new Error("Documentation output body guard was already installed.");
+            }
+            fs.renameSync(entrypoint, original);
+            // gh-aw v0.53.5 has no final-body hook; retain its dispatcher and guard its API client.
+            fs.writeFileSync(entrypoint, `
+            const handler = require("./docs_original_handler_manager.cjs");
+            module.exports = {
+              ...handler,
+              async main(...args) {
+                const restorations = [];
+                for (const resource of ["issues", "pulls"]) {
+                  for (const operation of ["create", "update"]) {
+                    const client = github.rest[resource];
+                    const send = client[operation];
+                    client[operation] = async function (params) {
+                      // UTF-16 length is conservative for non-BMP text; never truncate disclosure or provenance.
+                      if (typeof params.body === "string" && params.body.length > 65536) {
+                        const message = "Documentation output " + resource + "." + operation
+                          + " body exceeds GitHub's 65,536-character limit after disclosure and generated content ("
+                          + params.body.length + " UTF-16 code units). Shorten the generated body and retry.";
+                        core.setFailed(message);
+                        throw new Error(message);
+                      }
+                      return send.call(this, params);
+                    };
+                    restorations.push(() => { client[operation] = send; });
+                  }
+                }
+                try {
+                  return await handler.main(...args);
+                } finally {
+                  for (const restore of restorations) restore();
+                }
+              }
+            };
+            `, "utf8");
       - name: Process Safe Outputs
         id: process_safe_outputs
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8

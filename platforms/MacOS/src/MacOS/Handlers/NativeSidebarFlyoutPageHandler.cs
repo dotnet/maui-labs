@@ -431,7 +431,7 @@ public partial class NativeSidebarFlyoutPageHandler : MacOSViewHandler<IFlyoutVi
 		if (bounds.Width <= 0 || bounds.Height <= 0)
 			return;
 
-		_currentDetailView.Frame = bounds;
+		_currentDetailView.SetLayoutFrame(bounds);
 
 		var detail = VirtualView?.Detail;
 		if (detail != null)
@@ -635,7 +635,7 @@ public partial class NativeSidebarFlyoutPageHandler : MacOSViewHandler<IFlyoutVi
 		_currentDetailView?.RemoveFromSuperview();
 		_currentDetailView = view;
 
-		view.Frame = _detailContainer.Bounds;
+		view.SetLayoutFrame(_detailContainer.Bounds);
 		view.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
 		_detailContainer.AddSubview(view);
 	}
@@ -645,7 +645,7 @@ public partial class NativeSidebarFlyoutPageHandler : MacOSViewHandler<IFlyoutVi
 		if (_detailContainer == null || _currentDetailView == null)
 			return;
 
-		_currentDetailView.Frame = _detailContainer.Bounds;
+		_currentDetailView.SetLayoutFrame(_detailContainer.Bounds);
 
 		var detail = VirtualView?.Detail;
 		if (detail != null)

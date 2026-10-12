@@ -1,18 +1,26 @@
 {
-  "contexts": [
+  "webviews": [
     {
-      "id": "webview_0",
+      "id": "MainBlazorWebView",
+      "index": 0,
+      "automationId": "MainBlazorWebView",
       "elementId": "blazor_main",
       "url": "https://app/_content/index.html",
-      "title": "Dashboard",
-      "ready": true
+      "title": null,
+      "ready": true,
+      "isReady": true,
+      "active": true
     },
     {
-      "id": "webview_1",
+      "id": "help_webview",
+      "index": 1,
+      "automationId": null,
       "elementId": "help_webview",
-      "url": "https://docs.example.com/help",
-      "title": "Help Center",
-      "ready": true
+      "url": null,
+      "title": null,
+      "ready": false,
+      "isReady": false,
+      "active": false
     }
   ]
 }

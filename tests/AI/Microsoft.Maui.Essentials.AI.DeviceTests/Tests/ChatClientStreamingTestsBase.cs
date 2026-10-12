@@ -13,6 +13,31 @@ public abstract class ChatClientStreamingTestsBase<T>
 {
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_EveryUpdateIncludesSameModelId()
+	{
+		using var client = new T();
+		var updates = new List<ChatResponseUpdate>();
+		await foreach (var update in client.GetStreamingResponseAsync(
+			[new ChatMessage(ChatRole.User, "Say hello in one sentence.")]))
+		{
+			updates.Add(update);
+		}
+
+		Assert.NotEmpty(updates);
+		var observedUpdates = string.Join(", ", updates.Select((update, index) =>
+			$"{index}: model='{update.ModelId ?? "(null)"}', contents={update.Contents.Count}"));
+		for (var index = 0; index < updates.Count; index++)
+		{
+			var update = updates[index];
+			Assert.False(string.IsNullOrWhiteSpace(update.ModelId),
+				$"Update {index} must identify the model, including metadata-only updates. Observed: {observedUpdates}");
+			Assert.Equal(updates[0].ModelId, update.ModelId);
+		}
+		Assert.Equal(updates[0].ModelId, updates.ToChatResponse().ModelId);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_ReturnsStreamingUpdates()
 	{
 		var client = new T();
