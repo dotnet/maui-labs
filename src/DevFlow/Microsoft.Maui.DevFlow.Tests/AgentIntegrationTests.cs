@@ -24,6 +24,124 @@ public class AgentHttpServerTests : IDisposable
         listener.Stop();
     }
 
+    [Theory]
+    [InlineData("Alice%20Johnson", "Alice Johnson")]
+    [InlineData("Jos%C3%A9%20%E6%9D%8E", "Jos\u00e9 \u674e")]
+    [InlineData("Alice+Johnson", "Alice+Johnson")]
+    [InlineData("Alice%2BJohnson", "Alice+Johnson")]
+    [InlineData("100%25", "100%")]
+    [InlineData("Alice%2520Johnson", "Alice%20Johnson")]
+    [InlineData("parent%2Fchild", "parent/child")]
+    [InlineData("parent%2fchild", "parent/child")]
+    [InlineData("parent%252Fchild", "parent%2Fchild")]
+    [InlineData("name%3Fpart%23fragment", "name?part#fragment")]
+    [InlineData("plain-id", "plain-id")]
+    [InlineData("bad%", "bad%")]
+    [InlineData("bad%2", "bad%2")]
+    [InlineData("bad%GG", "bad%GG")]
+    public async Task Routing_CapturedSegment_IsPercentDecodedExactlyOnce(string encodedId, string expectedId)
+    {
+        using var server = new AgentHttpServer(_port);
+        server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", request =>
+            Task.FromResult(HttpResponse.Json(new
+            {
+                id = request.RouteParams["id"],
+                name = request.RouteParams["name"],
+                path = request.Path
+            })));
+        server.Start();
+        try
+        {
+            var path = $"/api/v1/ui/elements/{encodedId}/properties/BindingContext%2EName";
+            var (status, body) = await SendRawRouteRequestAsync(path);
+            Assert.Equal(200, status);
+            using var document = JsonDocument.Parse(body);
+            Assert.Equal(expectedId, document.RootElement.GetProperty("id").GetString());
+            Assert.Equal("BindingContext.Name", document.RootElement.GetProperty("name").GetString());
+            Assert.Equal(path, document.RootElement.GetProperty("path").GetString());
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData("/routes/fixed", 200, "exact")]
+    [InlineData("/ROUTES/other/", 200, "other")]
+    [InlineData("/rout%65s/other", 404, null)]
+    [InlineData("/routes/parent/child", 404, null)]
+    public async Task Routing_StaticMatchingAndSegmentBoundaries_AreUnchanged(
+        string path, int expectedStatus, string? expectedId)
+    {
+        using var server = new AgentHttpServer(_port);
+        server.MapGet("/routes/{id}", request =>
+            Task.FromResult(HttpResponse.Json(request.RouteParams["id"])));
+        server.MapGet("/routes/fixed", _ => Task.FromResult(HttpResponse.Json("exact")));
+        server.Start();
+        try
+        {
+            var (status, body) = await SendRawRouteRequestAsync(path);
+            Assert.Equal(expectedStatus, status);
+            if (expectedId != null)
+                Assert.Equal(expectedId, JsonSerializer.Deserialize<string>(body));
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Routing_FailedPatternClearsParameters_AndQueryDecodingIsUnchanged()
+    {
+        using var server = new AgentHttpServer(_port);
+        server.MapGet("/routes/{discarded}/wrong", _ => Task.FromResult(HttpResponse.Error("Wrong route")));
+        server.MapGet("/routes/{id}/right", request =>
+            Task.FromResult(HttpResponse.Json(new
+            {
+                route = request.RouteParams,
+                query = request.QueryParams
+            })));
+        server.Start();
+        try
+        {
+            var (status, body) = await SendRawRouteRequestAsync(
+                "/routes/Alice%20Johnson/right?na%6De=Alice%20Johnson&plus=one+two&encodedPlus=one%2Btwo&percent=%2520");
+            Assert.Equal(200, status);
+            using var document = JsonDocument.Parse(body);
+            var route = document.RootElement.GetProperty("route");
+            Assert.Single(route.EnumerateObject());
+            Assert.Equal("Alice Johnson", route.GetProperty("id").GetString());
+            var query = document.RootElement.GetProperty("query");
+            Assert.Equal("Alice Johnson", query.GetProperty("name").GetString());
+            Assert.Equal("one+two", query.GetProperty("plus").GetString());
+            Assert.Equal("one+two", query.GetProperty("encodedPlus").GetString());
+            Assert.Equal("%20", query.GetProperty("percent").GetString());
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
+    }
+
+    private async Task<(int Status, string Body)> SendRawRouteRequestAsync(string path)
+    {
+        // A raw request target prevents System.Uri/HttpClient from normalizing the test input.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, _port, timeout.Token);
+        using var stream = client.GetStream();
+        var request = $"GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(request), timeout.Token);
+        using var response = new MemoryStream();
+        await stream.CopyToAsync(response, timeout.Token);
+        var raw = Encoding.UTF8.GetString(response.ToArray());
+        var bodyStart = raw.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+        Assert.True(bodyStart >= 0, $"Incomplete HTTP response: {raw}");
+        return (int.Parse(raw.Split(' ')[1]), raw[(bodyStart + 4)..]);
+    }
+
     [Fact]
     public async Task Start_ListensOnPort()
     {

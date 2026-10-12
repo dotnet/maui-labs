@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
+    <Compile Include="..\Shared.Essentials\NativePreferenceKeys.cs" Link="Essentials\NativePreferenceKeys.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">

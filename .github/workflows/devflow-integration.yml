@@ -44,6 +44,10 @@ on:
         description: Android API level
         default: "35"
         type: string
+      android-preferences-only:
+        description: Run only Android preference regressions, enabling Essentials in the native sample
+        default: false
+        type: boolean
       ios-runtime:
         description: iOS runtime version filter (e.g. 17.5). Leave blank for newest available.
         default: ""
@@ -144,7 +148,8 @@ jobs:
       DEVFLOW_TEST_PLATFORM: android
       DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
       # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
-      TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
+      TEST_FILTER: ${{ inputs.android-preferences-only && '--filter Category=Preferences' || (matrix.framework == 'native' && '--filter framework!=maui' || '') }}
+      DevFlowSampleEssentials: ${{ inputs.android-preferences-only && matrix.framework == 'native' && 'true' || 'false' }}
       DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api || '35' }}
       DEVFLOW_TEST_ANDROID_AVD: devflow-tests-api${{ inputs.android-api || '35' }}
     steps:

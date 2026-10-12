@@ -10,6 +10,39 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class FileStorageRootTests
 {
+    [Theory]
+    [InlineData("Alice Johnson.txt")]
+    [InlineData("literal%20name.txt")]
+    [InlineData("literal%2Fname.txt")]
+    [InlineData("literal+name.txt")]
+    public async Task FileEndpoints_EncodedNames_AreDecodedExactlyOnce(string fileName)
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            using var service = CreateService(("appData", root));
+            using var client = new AgentClient("localhost", service.ServicePort);
+            service.StartServerOnly(new ImmediateDispatcher());
+            var path = $"nested/{fileName}";
+            var content = Convert.ToBase64String(Encoding.UTF8.GetBytes("route decoding"));
+
+            var upload = await WaitForJsonAsync(() => client.UploadFileAsync(path, content));
+            Assert.True(upload.GetProperty("success").GetBoolean());
+            Assert.Equal(path, upload.GetProperty("path").GetString());
+            Assert.True(File.Exists(Path.Combine(root, "nested", fileName)));
+
+            var download = await client.DownloadFileAsync(path);
+            Assert.Equal(path, download.GetProperty("path").GetString());
+            Assert.Equal(content, download.GetProperty("contentBase64").GetString());
+            Assert.True(await client.DeleteFileAsync(path));
+            Assert.False(File.Exists(Path.Combine(root, "nested", fileName)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task StorageRoots_ReturnsContributedRootsWithoutPhysicalPath()
     {

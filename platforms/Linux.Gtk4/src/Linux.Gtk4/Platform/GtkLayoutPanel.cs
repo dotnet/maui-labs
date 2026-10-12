@@ -150,6 +150,17 @@ public class GtkLayoutPanel : Gtk.Fixed
 	{
 		child.SetParent(this);
 		_childBounds[child] = Rect.Zero;
+		if (IsExternallyManaged)
+			MarkExternallyManaged(child);
+	}
+
+	internal static void MarkExternallyManaged(Gtk.Widget widget)
+	{
+		if (widget is GtkLayoutPanel panel)
+			panel.IsExternallyManaged = true;
+
+		for (var child = widget.GetFirstChild(); child != null; child = child.GetNextSibling())
+			MarkExternallyManaged(child);
 	}
 
 	/// <summary>

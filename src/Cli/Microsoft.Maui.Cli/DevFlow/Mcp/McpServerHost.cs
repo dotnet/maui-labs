@@ -88,6 +88,7 @@ public static class McpServerHost
 			.WithTools<ThemeTools>()
 			.WithTools<SensorTools>()
 			.WithTools<JobTools>()
+			.WithTools<MenuTools>()
 			.WithTools<FileTools>()
 			.WithTools<BatchTools>()
 			.WithTools<InvokeTools>()

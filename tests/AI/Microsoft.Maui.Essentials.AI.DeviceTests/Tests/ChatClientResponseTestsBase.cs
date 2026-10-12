@@ -13,6 +13,18 @@ public abstract class ChatClientResponseTestsBase<T>
 {
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_IncludesModelId()
+	{
+		using var client = new T();
+		var response = await client.GetResponseAsync(
+			[new ChatMessage(ChatRole.User, "Say hello in one sentence.")]);
+
+		Assert.False(string.IsNullOrWhiteSpace(response.ModelId),
+			"A successful response must identify the model that produced it.");
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_ReturnsNonNullResponse()
 	{
 		var client = new T();

@@ -1,4 +1,5 @@
 using Microsoft.Maui.DevFlow.Driver;
+using System.Globalization;
 using Xamarin.Android.Tools;
 
 namespace Microsoft.Maui.DevFlow.Tests;
@@ -36,6 +37,73 @@ public class AndroidAppDriverAdbTests
             () => driver.PressKeyAsync("HOME; rm /sdcard/victim"));
 
         Assert.Equal("key", exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData(-1, 0, "x")]
+    [InlineData(0, -1, "y")]
+    public async Task TapCoordinateAsync_NegativeCoordinates_ThrowsBeforeDeviceDiscovery(
+        int x, int y, string parameter)
+    {
+        using var driver = new AndroidAppDriver(_ =>
+            throw new InvalidOperationException("Device discovery must not run for invalid coordinates."));
+
+        var exception = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => driver.TapCoordinateAsync(x, y));
+
+        Assert.Equal(parameter, exception.ParamName);
+    }
+
+    [Fact]
+    public void BuildCoordinateTapArguments_UsesInvariantSeparateArguments()
+    {
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            Assert.Equal(
+                ["shell", "input", "tap", "1234", "5678"],
+                AndroidAppDriver.BuildCoordinateTapArguments(1234, 5678));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Fact]
+    public void BuildCoordinateTapArguments_AllowsScreenOrigin()
+    {
+        Assert.Equal(
+            ["shell", "input", "tap", "0", "0"],
+            AndroidAppDriver.BuildCoordinateTapArguments(0, 0));
+    }
+
+    [Fact]
+    public async Task TapCoordinateAsync_UnsafeSerial_ThrowsBeforeLaunchingAdb()
+    {
+        using var driver = new AndroidAppDriver { Serial = "emulator-5554; unwanted" };
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
+            () => driver.TapCoordinateAsync(10, 20));
+
+        Assert.Equal("Serial", exception.ParamName);
+    }
+
+    [Fact]
+    public async Task TapCoordinateAsync_MultipleDevices_RequiresSelection()
+    {
+        var runner = new RecordingAdbRunner(
+        [
+            new AdbDeviceInfo { Serial = "emulator-5554", Status = AdbDeviceStatus.Online },
+            new AdbDeviceInfo { Serial = "emulator-5556", Status = AdbDeviceStatus.Online },
+        ]);
+        using var driver = new TestAndroidAppDriver(_ => runner);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => driver.TapCoordinateAsync(10, 20));
+
+        Assert.Contains("More than one Android device", exception.Message);
     }
 
     [Fact]
@@ -111,6 +179,22 @@ public class AndroidAppDriverAdbTests
 
         Assert.Equal("ANDROID_SERIAL", exception.ParamName);
         Assert.Empty(adbRunner.ReversePortCalls);
+    }
+
+    [Fact]
+    public async Task EnsureRecordingProcessStartedAsync_ImmediateNonzeroExit_ReportsFailure()
+    {
+        using var error = new StringWriter(CultureInfo.InvariantCulture);
+        error.Write("device offline");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            AndroidAppDriver.EnsureRecordingProcessStartedAsync(
+                Task.FromResult(1),
+                error,
+                "adb screenrecord"));
+
+        Assert.Contains("code 1", exception.Message);
+        Assert.Contains("device offline", exception.Message);
     }
 
     private sealed class TestAndroidAppDriver(

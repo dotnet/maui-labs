@@ -27,8 +27,11 @@ namespace Microsoft.Maui.Handlers.WPF
 			_ = VirtualView ?? throw new InvalidOperationException($"{nameof(VirtualView)} should have been set by base class.");
 			_ = MauiContext ?? throw new InvalidOperationException($"{nameof(MauiContext)} should have been set by base class.");
 
-			PlatformView.CrossPlatformMeasure = VirtualView.CrossPlatformMeasure;
-			PlatformView.CrossPlatformArrange = VirtualView.CrossPlatformArrange;
+			// Layout subclasses can reimplement these methods (FlexLayout hides Measure).
+			var layout = (ICrossPlatformLayout)VirtualView;
+			PlatformView.VirtualView = VirtualView;
+			PlatformView.CrossPlatformMeasure = layout.CrossPlatformMeasure;
+			PlatformView.CrossPlatformArrange = layout.CrossPlatformArrange;
 
 			PlatformView.Children.Clear();
 
@@ -120,10 +123,12 @@ namespace Microsoft.Maui.Handlers.WPF
 				throw new InvalidOperationException($"{nameof(VirtualView)} must be set to create a LayoutViewGroup");
 			}
 
+			var layout = (ICrossPlatformLayout)VirtualView;
 			var view = new LayoutPanel
 			{
-				CrossPlatformMeasure = VirtualView.CrossPlatformMeasure,
-				CrossPlatformArrange = VirtualView.CrossPlatformArrange,
+				VirtualView = VirtualView,
+				CrossPlatformMeasure = layout.CrossPlatformMeasure,
+				CrossPlatformArrange = layout.CrossPlatformArrange,
 			};
 
 			return view;
@@ -133,6 +138,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		{
 			// If we're being disconnected from the xplat element, then we should no longer be managing its children
 			platformView.Children.Clear();
+			platformView.VirtualView = null;
 			base.DisconnectHandler(platformView);
 		}
 

@@ -12,11 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent.Gtk.Tests" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Platform.Maui.Linux.Gtk4.BlazorWebView" />
+    <ProjectReference Include="..\..\..\platforms\Linux.Gtk4\src\Linux.Gtk4.BlazorWebView\Linux.Gtk4.BlazorWebView.csproj" />
   </ItemGroup>
 
   <!-- Embed JS scripts as resources -->

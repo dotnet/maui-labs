@@ -253,12 +253,31 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui devflow mcp` | Start the MCP server for AI agent integration |
 | **Profiling** | |
 | `maui profile startup` | Collect a startup trace for a .NET MAUI app (.nettrace, speedscope, or MIBC output) |
+| `maui profile manual` | Launch a MAUI app normally, then attach and stop tracing on demand |
 | **Go** | |
 | `maui go create` | Create a new MAUI Go single-file project |
 | `maui go serve` | Start the dev server with hot reload |
 | `maui go upgrade` | Graduate a Go project to a full MAUI project |
 
 Run `maui <command> --help` for detailed options on any command.
+
+For screen recording, select the platform and target when starting:
+
+```bash
+maui devflow recording start --platform android --device <serial> --output capture.mp4
+# Or: --platform ios --device <simulator-UDID>
+maui devflow recording stop
+```
+
+An iOS simulator recording requires an explicit `--device`. Stopping uses the
+saved recording platform and Android serial; it does not require repeating
+`--platform` or `--device`, and those options do not override the saved target.
+The iOS driver stops its saved recording process. Without a saved recording,
+`stop` reports an error without creating a platform driver.
+
+Profiling commands wait up to two minutes for `dotnet-trace` to finish rundown and flush after a manual, timed, or event-driven stop. Use `--trace-stop-timeout` to adjust that finalization window independently of `--duration`.
+
+MIBC conversion uses the selected target framework and configuration's isolated build outputs, filtered to the app's runtime identifier (ABI). An explicit `RuntimeIdentifier` is honored; for multi-ABI builds, the selected device's runtime identifier chooses the references (iOS simulators without architecture metadata use the host architecture). RID-specific output paths are evaluated separately so SDK artifact layouts are supported. The evaluated build settings determine the assembly-processing stage: shrinking uses only `shrunk`, linking without shrinking uses only `linked`, and untrimmed builds use neither. Reference-only assemblies are excluded. Missing stage outputs or missing/ambiguous ABI information are reported as errors rather than falling back to another stage or ABI.
 
 For the shared Inspector UI and its host integrations, see the
 [MAUI DevFlow Inspector guide](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/inspector.md).
@@ -305,6 +324,8 @@ maui doctor --json | jq '.checks[] | select(.status == "failed")'
 Most commands accept `--json` for structured output. Some commands may emit multiple JSON objects to stdout (JSONL / newline-delimited JSON) — for example, progress or status records before the final result. The final JSON object is the command result, whose shape is command-specific (see per-command `--help` and examples below). When a non-DevFlow command **fails** and the exception is handled by `HandleCommandException`, it emits the canonical error envelope described in the next section. This applies to both recognized `MauiToolException` errors (which produce specific error codes) and unexpected exceptions (which become `E1001`/`InternalError` via `ErrorResult.FromException`). Note: unrecognized parse errors (e.g. invalid flags) do not use this envelope, `OperationCanceledException` produces a status message with exit code 130 rather than the error envelope, and `maui devflow ...` uses a different JSON contract and writes structured errors to stderr rather than stdout.
 
 Use `--ci` together with `--json` for non-interactive, fail-fast runs in automation contexts. Parse the output as a stream of JSON objects rather than assuming a single top-level document.
+
+Successful `maui profile startup --json` and `maui profile start --json` runs emit a final result with `snake_case` project, framework, platform, device, diagnostic, and timestamp fields. `format` identifies the output format and `output_path` points to the primary artifact; `raw_trace_path` is included for speedscope and MIBC output and omitted for nettrace output.
 
 ### Error envelope <a name="error-envelope"></a>
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
@@ -9,6 +10,11 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 
 public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHandler
 {
+	uint _rootLayoutTickId;
+	int _rootWidth = -1;
+	int _rootHeight = -1;
+	ScrollOrientation? _rootScrollOrientation;
+
 	object ILayoutHandler.PlatformView => base.PlatformView!;
 
 	public static IPropertyMapper<ILayout, LayoutHandler> Mapper =
@@ -44,7 +50,14 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	public override void SetVirtualView(IView view)
 	{
+		if (((IElementHandler)this).VirtualView == view)
+			return;
+		if (((IElementHandler)this).PlatformView != null)
+			Clear();
 		base.SetVirtualView(view);
+		var platformView = PlatformView ?? throw new InvalidOperationException("PlatformView not set.");
+		platformView.CrossPlatformLayout = view as ICrossPlatformLayout;
+		_rootWidth = _rootHeight = -1;
 
 		// MAUI doesn't automatically call Add for pre-existing children.
 		// We must add them manually when the handler is first connected.
@@ -53,21 +66,6 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 		{
 			Add(layout[i]);
 		}
-
-		// Trigger initial layout after GTK has allocated sizes
-		GLib.Functions.IdleAdd(0, () =>
-		{
-			if (VirtualView == null || PlatformView == null) return false;
-			if (PlatformView.IsExternallyManaged) return false;
-
-			var (w, h) = GetConstrainedSize(PlatformView);
-			if (w > 1 && h > 1)
-			{
-				PlatformView.CrossPlatformMeasure(w, h);
-				PlatformView.CrossPlatformArrange(new Rect(0, 0, w, h));
-			}
-			return false;
-		});
 	}
 
 	protected override void ConnectHandler(GtkLayoutPanel platformView)
@@ -77,98 +75,101 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 		if (VirtualView is ICrossPlatformLayout layout)
 			platformView.CrossPlatformLayout = layout;
 
-		// Only the outermost layout installs a resize handler.
-		// Nested layouts are driven by their parent's arrange pass.
-		GLib.Functions.IdleAdd(0, () =>
+		platformView.OnNotify += OnPlatformNotify;
+		platformView.OnMap += OnPlatformMap;
+		StartRootLayoutTick(platformView);
+	}
+
+	void OnPlatformNotify(GObject.Object sender, GObject.Object.NotifySignalArgs args)
+	{
+		if (args.Pspec.GetName() == "parent")
+			StartRootLayoutTick(PlatformView);
+	}
+
+	void OnPlatformMap(Gtk.Widget sender, EventArgs args) => StartRootLayoutTick(PlatformView);
+
+	void StartRootLayoutTick(GtkLayoutPanel platformView)
+	{
+		if (_rootLayoutTickId != 0)
+			return;
+
+		_rootWidth = _rootHeight = -1;
+		_rootLayoutTickId = platformView.AddTickCallback((widget, clock) =>
 		{
-			if (HasAncestorLayoutPanel(platformView))
-				return false; // nested — parent drives layout
-
-			if (platformView.IsExternallyManaged)
-				return false; // template-driven — CollectionView manages layout
-
-			// Find the window and listen for size changes
-			Gtk.Widget? cur = platformView;
-			while (cur != null && cur is not Gtk.Window) cur = cur.GetParent();
-			if (cur is not Gtk.Window window) return false;
-
-			// Capture the initial window size from allocation (actual rendered
-			// size), not default size. On Wayland, the compositor may constrain
-			// the window smaller than the default. Content-driven size changes
-			// (from SetSizeRequest) can push the window to grow, so only
-			// user-initiated resizes should update the constraint.
-			int constraintW = window.GetAllocatedWidth();
-			int constraintH = window.GetAllocatedHeight();
-			if (constraintW < 1 || constraintH < 1)
+			if (VirtualView == null)
 			{
-				window.GetDefaultSize(out constraintW, out constraintH);
+				_rootLayoutTickId = 0;
+				return false;
 			}
-			if (constraintW < 1) constraintW = 800;
-			if (constraintH < 1) constraintH = 600;
-
-			void DoLayout()
+			if (platformView.IsExternallyManaged || HasAncestorLayoutPanel(platformView))
 			{
-				if (VirtualView == null) return;
-				var (dw, dh) = GetConstrainedSize(platformView, constraintW, constraintH);
-				if (dw < 1 || dh < 1) return;
-
-				// Invalidate cached measurements so MAUI re-measures the
-				// entire tree with the new constraints, not just the root.
-				(VirtualView as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
-
-				platformView.CrossPlatformMeasure(dw, dh);
-				platformView.CrossPlatformArrange(new Rect(0, 0, dw, dh));
+				_rootLayoutTickId = 0;
+				return false;
 			}
 
-			// Initial layout
-			DoLayout();
-
-			// Re-layout on window resize via property notification
-			window.OnNotify += (sender, args) =>
+			// A default-size notification precedes allocation and misses compositor
+			// and container resizes. Use this panel's actual space, excluding native chrome.
+			var width = platformView.GetAllocatedWidth();
+			var height = platformView.GetAllocatedHeight();
+			ScrollOrientation? scrollOrientation = null;
+			if (VirtualView.Parent is IScrollView scrollView && platformView.GetParent() is Gtk.Viewport viewport)
 			{
-				if (args.Pspec.GetName() is "default-width" or "default-height")
-				{
-					// Update constraint from actual allocated size
-					var aw = window.GetAllocatedWidth();
-					var ah = window.GetAllocatedHeight();
-					if (aw > 0) constraintW = aw;
-					if (ah > 0) constraintH = ah;
-					DoLayout();
-				}
-			};
-
-			// Re-layout when ancestor Paned divider is moved
-			Gtk.Widget? ancestor = platformView.GetParent();
-			while (ancestor != null && ancestor is not Gtk.Window)
-			{
-				if (ancestor is Gtk.Paned paned)
-				{
-					paned.OnNotify += (sender, args) =>
-					{
-						if (args.Pspec.GetName() == "position")
-						{
-							DoLayout();
-						}
-					};
-					break;
-				}
-				ancestor = ancestor.GetParent();
+				// The viewport can keep its child at the previous natural extent.
+				// Reflow the non-scrolling axis against the viewport, not that stale extent.
+				width = viewport.GetAllocatedWidth();
+				height = viewport.GetAllocatedHeight();
+				scrollOrientation = scrollView.Orientation;
 			}
-
-			// Also re-layout when content changes
-			platformView.AddTickCallback((widget, clock) =>
-			{
-				if (VirtualView == null) return false;
-				if (platformView.LayoutDirty)
-				{
-					platformView.LayoutDirty = false;
-					DoLayout();
-				}
+			if (width <= 0 || height <= 0 ||
+				(width == _rootWidth && height == _rootHeight &&
+					scrollOrientation == _rootScrollOrientation && !platformView.LayoutDirty))
 				return true;
-			});
 
-			return false;
+			try
+			{
+				var view = VirtualView;
+				var generation = LayoutGeneration;
+				_rootWidth = width;
+				_rootHeight = height;
+				_rootScrollOrientation = scrollOrientation;
+				platformView.LayoutDirty = false;
+				(view as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
+				if (LayoutGeneration != generation || VirtualView != view || PlatformView != platformView)
+					return true;
+				var scrollsHorizontally = scrollOrientation is ScrollOrientation.Horizontal or ScrollOrientation.Both;
+				var scrollsVertically = scrollOrientation is ScrollOrientation.Vertical or ScrollOrientation.Both;
+				var measured = view.Measure(
+					scrollsHorizontally ? double.PositiveInfinity : width,
+					scrollsVertically ? double.PositiveInfinity : height);
+				if (LayoutGeneration != generation || VirtualView != view || PlatformView != platformView)
+					return true;
+				view.Arrange(new Rect(0, 0,
+					scrollsHorizontally ? Math.Max(width, measured.Width) : width,
+					scrollsVertically ? Math.Max(height, measured.Height) : height));
+			}
+			catch (Exception ex)
+			{
+				var logger = MauiContext?.Services.GetService(typeof(ILogger<LayoutHandler>)) as ILogger<LayoutHandler>;
+				if (logger != null)
+					logger.LogError(ex, "GTK root layout failed at {Width}x{Height}", width, height);
+				else
+					Console.Error.WriteLine($"[Microsoft.Maui.Platforms.Linux.Gtk4] Root layout failed: {ex}");
+			}
+			return true;
 		});
+	}
+
+	protected override void DisconnectHandler(GtkLayoutPanel platformView)
+	{
+		platformView.OnNotify -= OnPlatformNotify;
+		platformView.OnMap -= OnPlatformMap;
+		if (_rootLayoutTickId != 0)
+			platformView.RemoveTickCallback(_rootLayoutTickId);
+		_rootLayoutTickId = 0;
+		_rootWidth = _rootHeight = -1;
+		_rootScrollOrientation = null;
+		platformView.CrossPlatformLayout = null;
+		base.DisconnectHandler(platformView);
 	}
 
 	/// <summary>
@@ -187,62 +188,6 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 		return false;
 	}
 
-	private static (int width, int height) GetConstrainedSize(Gtk.Widget widget)
-	{
-		// Find window to get initial size
-		Gtk.Widget? cur = widget;
-		while (cur != null && cur is not Gtk.Window) cur = cur.GetParent();
-		if (cur is not Gtk.Window window)
-			return (800, 600);
-
-		window.GetDefaultSize(out var ww, out var wh);
-		if (ww < 1) ww = window.GetAllocatedWidth();
-		if (wh < 1) wh = window.GetAllocatedHeight();
-		if (ww < 1 || wh < 1) return (800, 600);
-
-		return GetConstrainedSize(widget, ww, wh);
-	}
-
-	private static (int width, int height) GetConstrainedSize(Gtk.Widget widget, int windowWidth, int windowHeight)
-	{
-		Gtk.Paned? paned = null;
-		bool isStartChild = false;
-
-		var current = widget.GetParent();
-		while (current != null)
-		{
-			if (current is Gtk.Paned p && paned == null)
-			{
-				paned = p;
-				var startChild = p.GetStartChild();
-				var w = widget;
-				while (w != null && w != p)
-				{
-					if (w == startChild)
-					{
-						isStartChild = true;
-						break;
-					}
-					w = w.GetParent();
-				}
-			}
-			if (current is Gtk.Window)
-				break;
-			current = current.GetParent();
-		}
-
-		if (paned != null)
-		{
-			var pos = paned.GetPosition();
-			if (isStartChild)
-				return (pos, windowHeight);
-			else
-				return (windowWidth - pos, windowHeight);
-		}
-
-		return (windowWidth, windowHeight);
-	}
-
 	public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
 	{
 		return PlatformView.CrossPlatformMeasure(widthConstraint, heightConstraint);
@@ -250,10 +195,8 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	public override void PlatformArrange(Rect rect)
 	{
-		if (PlatformView.GetParent() is Platform.GtkLayoutPanel lp)
-		{
-			lp.SetChildBounds(PlatformView, rect.X, rect.Y, (int)rect.Width, (int)rect.Height);
-		}
+		if (PlatformView.GetParent() is Platform.GtkLayoutPanel)
+			base.PlatformArrange(rect);
 
 		// Arrange children relative to the panel (origin at 0,0)
 		PlatformView.CrossPlatformArrange(new Rect(0, 0, rect.Width, rect.Height));
@@ -328,9 +271,9 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 
 	public static void MapBackground(LayoutHandler handler, ILayout layout)
 	{
-		if (layout.Background is Microsoft.Maui.Graphics.SolidPaint solidPaint && solidPaint.Color != null)
-			handler.ApplyCss(handler.PlatformView,
-				$"background-color: {ToGtkColor(solidPaint.Color)}; background-image: none;");
+		handler.UpdateCss(handler.PlatformView,
+			layout.Background is Microsoft.Maui.Graphics.SolidPaint { Color: not null } solidPaint
+				? $"background-color: {ToGtkColor(solidPaint.Color)}; background-image: none;" : null);
 	}
 
 	public static void MapClipsToBounds(LayoutHandler handler, ILayout layout)

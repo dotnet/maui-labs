@@ -31,11 +31,11 @@ public class AlertsPage : ContentPage
 			resultLabel.Text = "Result: Simple alert dismissed";
 		};
 
-		// Confirm alert (Accept / Cancel)
-		var confirmAlertBtn = new Button { Text = "Confirm Alert (Yes / No)", AutomationId = "WpfConfirmAlertBtn" };
+		// Custom labels make platform fallback button captions visible.
+		var confirmAlertBtn = new Button { Text = "Confirm Alert (Remove / Keep)", AutomationId = "WpfConfirmAlertBtn" };
 		confirmAlertBtn.Clicked += async (s, e) =>
 		{
-			bool answer = await ConnectedPage.DisplayAlertAsync("Confirm", "Do you want to proceed?", "Yes", "No");
+			bool answer = await ConnectedPage.DisplayAlertAsync("Confirm", "Do you want to remove this item?", "Remove", "Keep");
 			resultLabel.Text = $"Result: Confirmed = {answer}";
 		};
 
