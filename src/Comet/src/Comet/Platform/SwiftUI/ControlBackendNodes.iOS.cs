@@ -67,10 +67,40 @@ namespace Comet
 			=> new SwiftUINode("zstack");
 	}
 
+	public partial class ContentView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("zstack");
+	}
+
+	public partial class FlexLayout
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("zstack");
+	}
+
+	public partial class Grid
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("grid");
+	}
+
 	public partial class TextField
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new SwiftUINode("textfield");
+	}
+
+	public partial class TextEditor
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("texteditor");
+	}
+
+	public partial class RefreshView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("refresh");
 	}
 
 	public partial class Toggle
@@ -113,6 +143,24 @@ namespace Comet
 	{
 		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
 			=> new SwiftUIScrollNode(this, context);
+	}
+
+	public partial class Spacer
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUINode("spacer");
+	}
+
+	public partial class DatePicker
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUIDatePickerNode(this, context);
+	}
+
+	public partial class TabView
+	{
+		protected internal override ICometBackendNode CreateBackendNode(BackendContext context)
+			=> new SwiftUITabViewNode(this, context);
 	}
 
 	public partial class NavigationView

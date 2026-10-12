@@ -23,10 +23,11 @@ namespace Comet.Platform.Compose
 	/// <see cref="_childVersion"/>, which container renders read so a child
 	/// insert/remove/move recomposes the container.
 	/// </remarks>
-	abstract class ComposeNode : ComposableNode, ICometBackendNode
+	abstract class ComposeNode : ComposableNode, ICometBackendNode, IBackendMeasureCache
 	{
 		protected readonly List<ComposeNode> Children = new();
 		readonly MutableState<int> _childVersion = new(0);
+		readonly BackendMeasureCache _measureCache = new();
 		ICometEventSink? _sink;
 		readonly MutableState<bool> _hasTap = new(false);
 
@@ -47,6 +48,7 @@ namespace Comet.Platform.Compose
 		Microsoft.Maui.Graphics.Color? _background;
 		Microsoft.Maui.Thickness _padding;
 		CornerRadii _corners;
+		bool _clipCircle;
 		float _elevation;
 		float _borderWidth;
 		Microsoft.Maui.Graphics.Color? _borderColor;
@@ -58,12 +60,16 @@ namespace Comet.Platform.Compose
 		// JumpToBottom FAB) doesn't intercept touches. Driven by a reactive property push.
 		float _opacity = 1f;
 		bool _isVisible = true;
+		string _automationId = string.Empty;
 		readonly MutableState<int> _styleVersion = new(0);
 
 		// Yoga-driven layout (when the engine runs): parent-relative frame in Dp + a version
 		// state so a re-arrange recomposes. Until arranged, Compose lays the node out natively.
 		float _fx, _fy, _fw, _fh;
 		bool _hasFrame;
+		float _lastLoggedInvalidWidth = float.NaN;
+		float _lastLoggedInvalidHeight = float.NaN;
+		float _lastLoggedInvalidDensity = float.NaN;
 		float _contentTopInset;
 		readonly MutableState<int> _frameVersion = new(0);
 
@@ -121,11 +127,12 @@ namespace Comet.Platform.Compose
 
 		/// <summary>True when a non-zero corner radius was set (so a subclass can apply
 		/// <see cref="CornerShape"/> to a composable that takes an explicit shape, e.g. a Button).</summary>
-		protected bool HasRoundedCorners => !_corners.IsZero;
+		protected bool HasRoundedCorners => _clipCircle || !_corners.IsZero;
 
 		/// <summary>The top-left corner radius in Dp (avatars/clips use a uniform radius). Lets a
 		/// subclass clip a hosted native View to the same outline Compose would (e.g. ImageView).</summary>
 		protected float CornerRadiusDp => (float)_corners.TopLeft;
+		protected bool IsCircularClip => _clipCircle;
 
 		/// <summary>The Comet padding (Dp). The Yoga engine doesn't inset leaf content, so a leaf
 		/// that needs interior padding (e.g. a borderless text field) applies this itself.</summary>
@@ -173,6 +180,7 @@ namespace Comet.Platform.Compose
 
 		public void ApplyProperty(PropertyId id, in PropertyValue value)
 		{
+			_measureCache.ApplyProperty(id, in value);
 			if (id == PropertyIds.HasTapGesture)
 				_hasTap.Value = value.AsBool;
 			else if (id == PropertyIds.HasLongPressGesture)
@@ -188,6 +196,15 @@ namespace Comet.Platform.Compose
 			{
 				_isVisible = value.AsBool;
 				_styleVersion.Value++;
+			}
+			else if (id == PropertyIds.AutomationId)
+			{
+				var automationId = value.AsString ?? string.Empty;
+				if (_automationId != automationId)
+				{
+					_automationId = automationId;
+					_styleVersion.Value++;
+				}
 			}
 			else if (id == PropertyIds.GradientBackground)
 			{
@@ -213,8 +230,21 @@ namespace Comet.Platform.Compose
 			}
 			else if (id == PropertyIds.CornerRadius)
 			{
-				_corners = value.AsObject is CornerRadii c ? c : default;
-				_styleVersion.Value++;
+				var corners = value.AsObject is CornerRadii c ? c : default;
+				if (_corners != corners)
+				{
+					_corners = corners;
+					_styleVersion.Value++;
+				}
+			}
+			else if (id == PropertyIds.ClipShape)
+			{
+				var clipCircle = value.AsBool;
+				if (_clipCircle != clipCircle)
+				{
+					_clipCircle = clipCircle;
+					_styleVersion.Value++;
+				}
 			}
 			else if (id == PropertyIds.Shadow)
 			{
@@ -227,6 +257,11 @@ namespace Comet.Platform.Compose
 				{
 					_borderWidth = (float)b.Width;
 					_borderColor = b.Color;
+				}
+				else
+				{
+					_borderWidth = 0;
+					_borderColor = null;
 				}
 				_styleVersion.Value++;
 			}
@@ -262,9 +297,32 @@ namespace Comet.Platform.Compose
 			// first so background/clickable cover the arranged frame. A reactive translation shifts the
 			// render position without a parent reflow (the photo parallax).
 			if (_hasFrame)
+			{
 				m = Modifier.Companion
-					.AbsoluteOffset(new Dp(_fx + _translationX), new Dp(_fy + _translationY))
-					.Size(new Dp(_fw), new Dp(_fh));
+					.AbsoluteOffset(new Dp(_fx + _translationX), new Dp(_fy + _translationY));
+
+				var frame = ComposeConstraintSanitizer.Sanitize(_fw, _fh, Density);
+				if (frame.WasSanitized &&
+					(_lastLoggedInvalidWidth != _fw ||
+					 _lastLoggedInvalidHeight != _fh ||
+					 _lastLoggedInvalidDensity != Density))
+				{
+					_lastLoggedInvalidWidth = _fw;
+					_lastLoggedInvalidHeight = _fh;
+					_lastLoggedInvalidDensity = Density;
+					global::Android.Util.Log.Warn(
+						"CometFrame",
+						$"Sanitized Compose frame {_fw}x{_fh}dp at density {Density}; " +
+						$"automationId='{_automationId}', applied={frame.Width?.ToString() ?? "auto"}x{frame.Height?.ToString() ?? "auto"}dp.");
+				}
+
+				if (frame.Width is { } width && frame.Height is { } height)
+					m = m.Size(new Dp(width), new Dp(height));
+				else if (frame.Width is { } onlyWidth)
+					m = m.Width(new Dp(onlyWidth));
+				else if (frame.Height is { } onlyHeight)
+					m = m.Height(new Dp(onlyHeight));
+			}
 			else if (_translationX != 0f || _translationY != 0f)
 				m = Modifier.Companion.AbsoluteOffset(new Dp(_translationX), new Dp(_translationY));
 
@@ -281,7 +339,7 @@ namespace Comet.Platform.Compose
 
 			// Card surface / chat bubble: raise (shadow) then round the corners, so the shadow
 			// follows the rounded outline and the background/content below are clipped to it.
-			bool rounded = !_corners.IsZero;
+			bool rounded = _clipCircle || !_corners.IsZero;
 			if (_elevation > 0)
 				m = (m ?? Modifier.Companion).Shadow(new Dp(_elevation), rounded ? CornerShape() : null);
 
@@ -323,6 +381,11 @@ namespace Comet.Platform.Compose
 				m = (m is null ? Modifier.Companion : m)
 					.Padding((float)p.Left, (float)p.Top, (float)p.Right, (float)p.Bottom);
 
+			if (BuildAutomationModifier() is { } automation)
+			{
+				m = m is null ? automation : m.Then(automation);
+			}
+
 			// Skip the clickable when faded out / invisible so a hidden overlay doesn't eat taps.
 			// With a long-press present, use combinedClickable (the gold's combinedClickable
 			// onClick/onLongClick — Reply row selection); otherwise the plain clickable.
@@ -355,9 +418,23 @@ namespace Comet.Platform.Compose
 			return m;
 		}
 
+		/// <summary>Builds only the automation semantics for native widgets hosted outside
+		/// this node's Yoga box, such as modal DatePicker content.</summary>
+		protected Modifier? BuildAutomationModifier()
+		{
+			_ = _styleVersion.Value;
+			return _automationId.Length == 0
+				? null
+				: Modifier.Companion
+					.TestTag(_automationId)
+					.Semantics(scope => scope.TestTagsAsResourceId(true));
+		}
+
 		// The clip/shadow outline. Uniform corners use the single-radius factory; otherwise
 		// per-corner (LTR: TopLeft→topStart, TopRight→topEnd, BottomRight→bottomEnd, BottomLeft→bottomStart).
-		protected AndroidX.Compose.Shape CornerShape() => _corners.IsUniform
+		protected AndroidX.Compose.Shape CornerShape() => _clipCircle
+			? AndroidX.Compose.Shape.Circle()
+			: _corners.IsUniform
 			? AndroidX.Compose.Shape.RoundedCorners(new Dp((float)_corners.TopLeft))
 			: AndroidX.Compose.Shape.RoundedCorners(
 				new Dp((float)_corners.TopLeft), new Dp((float)_corners.TopRight),
@@ -368,18 +445,21 @@ namespace Comet.Platform.Compose
 
 		public void InsertChild(int index, ICometBackendNode child)
 		{
+			InvalidateMeasureCache();
 			Children.Insert(index, (ComposeNode)child);
 			_childVersion.Value++;
 		}
 
 		public void RemoveChildAt(int index)
 		{
+			InvalidateMeasureCache();
 			Children.RemoveAt(index);
 			_childVersion.Value++;
 		}
 
 		public void MoveChild(int fromIndex, int toIndex)
 		{
+			InvalidateMeasureCache();
 			var node = Children[fromIndex];
 			Children.RemoveAt(fromIndex);
 			Children.Insert(toIndex, node);
@@ -390,12 +470,20 @@ namespace Comet.Platform.Compose
 		// Container nodes defer to Yoga and need no intrinsic size.
 		public virtual Size Measure(double widthConstraint, double heightConstraint) => Size.Zero;
 
+		Size IBackendMeasureCache.MeasureCached(double widthConstraint, double heightConstraint)
+			=> this is IBackendManagesOwnContent
+				? Measure(widthConstraint, heightConstraint)
+				: _measureCache.GetOrMeasure(widthConstraint, heightConstraint, Measure);
+
+		public void InvalidateMeasureCache() => _measureCache.Clear();
+
 		// First text baseline (Dp from the top), for baseline-aligned rows; null = no text baseline.
 		public virtual double? MeasureBaseline(double width, double height) => null;
 
 		// baselineHeight content inset (Dp): the engine grew the box by this and we pad the top to match.
 		public void SetContentTopInset(double dp)
 		{
+			InvalidateMeasureCache();
 			_contentTopInset = (float)dp;
 			_frameVersion.Value++;
 		}

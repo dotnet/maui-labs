@@ -25,6 +25,39 @@ namespace AndroidX.Compose;
 // (a static field lookup, not a method invocation).
 internal static partial class ComposeBridges
 {
+    static IntPtr s_snapPositionCenter;
+
+    internal static unsafe IntPtr SnapPositionCenter()
+    {
+        if (s_snapPositionCenter == IntPtr.Zero)
+        {
+            var cls = JNIEnv.FindClass(
+                "androidx/compose/foundation/gestures/snapping/SnapPosition$Center");
+            var field = JNIEnv.GetStaticFieldID(
+                cls,
+                "INSTANCE",
+                "Landroidx/compose/foundation/gestures/snapping/SnapPosition$Center;");
+            var local = JNIEnv.GetStaticObjectField(cls, field);
+            s_snapPositionCenter = JNIEnv.NewGlobalRef(local);
+            JNIEnv.DeleteLocalRef(local);
+        }
+
+        return JNIEnv.NewLocalRef(s_snapPositionCenter);
+    }
+
+    [ComposeBridge(
+        Class = "androidx/compose/foundation/gestures/snapping/LazyListSnapLayoutInfoProviderKt",
+        JvmName = "rememberSnapFlingBehavior",
+        Signature = "(Landroidx/compose/foundation/lazy/LazyListState;" +
+                    "Landroidx/compose/foundation/gestures/snapping/SnapPosition;" +
+                    "Landroidx/compose/runtime/Composer;II)" +
+                    "Landroidx/compose/foundation/gestures/FlingBehavior;",
+        Defaults = typeof(RememberSnapFlingBehaviorDefault))]
+    internal static partial IntPtr RememberSnapFlingBehavior(
+        IntPtr lazyListState,
+        IntPtr snapPosition,
+        IComposer composer);
+
     // Convert a managed Modifier wrapper (from `Modifier.Build()`) to a
     // raw JNI handle, or IntPtr.Zero when null. Each bridge that takes
     // a modifier param uses this + KeepAlive's the wrapper across the
@@ -4278,4 +4311,3 @@ internal static partial class ComposeBridges
         bool       enabled,
         IComposer  composer);
 }
-

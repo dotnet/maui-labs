@@ -1,0 +1,16 @@
+<Project>
+  <Import Project="..\Directory.Build.props" />
+
+  <!-- Restore and generated files must be isolated before the SDK imports
+       Microsoft.Common.props. These settings apply only to this app. -->
+  <PropertyGroup Condition="'$(BaristaComparison)' == 'timing' or '$(BaristaComparison)' == 'diagnostic'">
+    <BaseIntermediateOutputPath>obj/barista-comparison-$(BaristaComparison)/</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin/barista-comparison-$(BaristaComparison)/</BaseOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
+    <EnableProbeAot Condition="'$(EnableProbeAot)' == ''">true</EnableProbeAot>
+    <EnableProbeRuntimeDiagnostics Condition="'$(EnableProbeRuntimeDiagnostics)' == '' and '$(BaristaComparison)' == 'timing'">false</EnableProbeRuntimeDiagnostics>
+    <EnableProbeRuntimeDiagnostics Condition="'$(EnableProbeRuntimeDiagnostics)' == '' and '$(BaristaComparison)' == 'diagnostic'">true</EnableProbeRuntimeDiagnostics>
+    <AndroidPackageFormat Condition="'$(AndroidPackageFormat)' == ''">apk</AndroidPackageFormat>
+    <AndroidPackageFormats Condition="'$(AndroidPackageFormats)' == ''">apk</AndroidPackageFormats>
+  </PropertyGroup>
+</Project>

@@ -9,6 +9,11 @@ namespace Comet.Reactive;
 
 public static class ReactiveScheduler
 {
+	sealed class ReactiveCycleException : InvalidOperationException
+	{
+		public ReactiveCycleException(string message) : base(message) { }
+	}
+
 	static volatile bool _flushScheduled;
 	static volatile bool _flushing;
 	static readonly HashSet<Effect> _dirtyEffects = new();
@@ -110,6 +115,14 @@ public static class ReactiveScheduler
 					scheduled = true;
 				}
 			}
+			catch (ReactiveCycleException)
+			{
+				lock (_lock)
+				{
+					_flushScheduled = false;
+				}
+				throw;
+			}
 			catch
 			{
 				scheduled = false;
@@ -122,6 +135,14 @@ public static class ReactiveScheduler
 			{
 				ThreadHelper.RunOnMainThread(FlushEntry);
 				scheduled = true;
+			}
+			catch (ReactiveCycleException)
+			{
+				lock (_lock)
+				{
+					_flushScheduled = false;
+				}
+				throw;
 			}
 			catch
 			{
@@ -219,17 +240,12 @@ public static class ReactiveScheduler
 						$"[Comet.Reactive] ReactiveScheduler exceeded {MaxFlushDepth} AfterFlush passes. " +
 						"This indicates AfterFlush work that re-dirties the graph every pass " +
 						"(e.g. a layout handler rebuilding views unconditionally). Breaking the cycle.");
+					ClearPendingWork();
 #if DEBUG
-					throw new InvalidOperationException(
+					throw new ReactiveCycleException(
 						$"Reactive AfterFlush cycle detected: exceeded {MaxFlushDepth} passes. " +
 						"Check AfterFlush handlers that write signals/environment on every pass.");
 #else
-					lock (_lock)
-					{
-						_flushScheduled = false;
-						_dirtyEffects.Clear();
-						_dirtyViews.Clear();
-					}
 					return;
 #endif
 				}
@@ -252,18 +268,13 @@ public static class ReactiveScheduler
 				"This indicates a cycle in the reactive graph (effects writing signals that " +
 				"trigger other effects in a loop). Breaking the cycle. UI may show stale data " +
 				"until the next user interaction triggers a fresh flush.");
+			ClearPendingWork();
 
 #if DEBUG
-			throw new InvalidOperationException(
+			throw new ReactiveCycleException(
 				$"Reactive graph cycle detected: exceeded {MaxFlushDepth} flush iterations. " +
 				"Check for effects that write signals consumed by other effects in a loop.");
 #endif
-
-			lock (_lock)
-			{
-				_dirtyEffects.Clear();
-				_dirtyViews.Clear();
-			}
 			return;
 		}
 
@@ -303,6 +314,16 @@ public static class ReactiveScheduler
 
 		if (hasMore)
 			Flush(depth + 1);
+	}
+
+	static void ClearPendingWork()
+	{
+		lock (_lock)
+		{
+			_flushScheduled = false;
+			_dirtyEffects.Clear();
+			_dirtyViews.Clear();
+		}
 	}
 
 	public static void FlushSync()
