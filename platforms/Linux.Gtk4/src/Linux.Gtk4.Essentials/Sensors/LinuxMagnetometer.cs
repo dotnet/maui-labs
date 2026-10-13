@@ -1,4 +1,5 @@
 ﻿using Microsoft.Maui.Devices.Sensors;
+using System.Globalization;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors;
 
@@ -9,11 +10,14 @@ public sealed class LinuxMagnetometer : LinuxSensor, IMagnetometer
     private const string XRawFile = "in_magn_x_raw";
     private const string YRawFile = "in_magn_y_raw";
     private const string ZRawFile = "in_magn_z_raw";
-    private const string ScaleFile = "in_magn_scale";
-
+    
     private string? _xPath;
     private string? _yPath;
     private string? _zPath;
+
+    double _scaleX = 1.0;
+    double _scaleY = 1.0;
+    double _scaleZ = 1.0;
 
     public event EventHandler<MagnetometerChangedEventArgs>? ReadingChanged;
 
@@ -33,9 +37,9 @@ public sealed class LinuxMagnetometer : LinuxSensor, IMagnetometer
 
         // IIO reports magnetic field in Gauss after scaling; MAUI expects microteslas (1 G = 100 µT)
         var data = new MagnetometerData(
-                x * Scale * GaussToMicrotesla,
-                y * Scale * GaussToMicrotesla,
-                z * Scale * GaussToMicrotesla);
+                x * _scaleX * GaussToMicrotesla,
+                y * _scaleY * GaussToMicrotesla,
+                z * _scaleZ * GaussToMicrotesla);
         ReadingChanged?.Invoke(this, new MagnetometerChangedEventArgs(data));
     }
 
@@ -51,8 +55,35 @@ public sealed class LinuxMagnetometer : LinuxSensor, IMagnetometer
         _xPath = xPath;
         _yPath = yPath;
         _zPath = zPath;
-        Scale = ReadDoubleOrDefault(Path.Combine(dir, ScaleFile), 1.0);
+
+        // Prefer per-axis, fall back to common
+        _scaleX = ReadScale(dir, "in_magn_x_scale")
+               ?? ReadScale(dir, "in_magn_scale")
+               ?? 1.0;
+
+        _scaleY = ReadScale(dir, "in_magn_y_scale")
+               ?? ReadScale(dir, "in_magn_scale")
+               ?? 1.0;
+
+        _scaleZ = ReadScale(dir, "in_magn_z_scale")
+               ?? ReadScale(dir, "in_magn_scale")
+               ?? 1.0;
 
         return dir;
+    }
+
+    static double? ReadScale(string devicePath, string attribute)
+    {
+        var path = Path.Combine(devicePath, attribute);
+        if (!File.Exists(path))
+            return null;
+
+        if (double.TryParse(File.ReadAllText(path).Trim(),
+                            NumberStyles.Float,
+                            CultureInfo.InvariantCulture,
+                            out var value))
+            return value;
+
+        return null;
     }
 }
