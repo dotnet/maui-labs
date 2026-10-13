@@ -36,7 +36,7 @@ public sealed class NativeDialogTools
         await targetLock.WaitAsync();
         try
         {
-            return await DetectForTargetAsync(target);
+            return await DetectForTargetAsync(session, target);
         }
         finally
         {
@@ -44,7 +44,7 @@ public sealed class NativeDialogTools
         }
     }
 
-    private static async Task<string> DetectForTargetAsync(DialogTarget target)
+    private static async Task<string> DetectForTargetAsync(McpAgentSession session, DialogTarget target)
     {
         if (target.Kind == DialogPlatformKind.MacOS && !OperatingSystem.IsMacOS())
             return SerializeManualAction("macOS native dialog automation requires running maui on macOS.");
@@ -104,6 +104,7 @@ public sealed class NativeDialogTools
                 target.TargetIdentity,
                 dialog);
             var lease = new DialogLease(
+                session,
                 platformPromptId,
                 target,
                 fingerprint,
@@ -159,7 +160,8 @@ public sealed class NativeDialogTools
         }
 
         PurgeExpiredDialogLeases();
-        if (!DialogLeases.TryGetValue(promptId, out var candidateLease))
+        if (!DialogLeases.TryGetValue(promptId, out var candidateLease)
+            || !ReferenceEquals(candidateLease.Owner, session))
             return SerializeExpiredPrompt();
 
         var targetLock = TargetLocks.GetOrAdd(
@@ -173,6 +175,9 @@ public sealed class NativeDialogTools
 
             using (lease)
             {
+                if (lease.ExpiresAt <= DateTimeOffset.UtcNow)
+                    return SerializeExpiredPrompt();
+
                 RemoveTargetDialogLeases(lease.Target.TargetIdentity);
 
                 using var agent = await session.GetAgentClientAsync(agentPort);
@@ -199,7 +204,18 @@ public sealed class NativeDialogTools
                     }
                 }
 
+                var mutationLease = await agent.ControlMutationLeaseAsync("claim");
+                if (!mutationLease.YouHold)
+                {
+                    return SerializeResponseManualAction(
+                        "Another DevFlow client controls this app. Wait for it to release control, then detect the prompt again.",
+                        "mutation-lease-held-by-other");
+                }
+
                 AlertActionResult action;
+                if (lease.ExpiresAt <= DateTimeOffset.UtcNow)
+                    return SerializeExpiredPrompt();
+
                 if (lease.Target.Kind == DialogPlatformKind.MacOS)
                 {
                     using var driver = CreateMacDriver(lease.Target);
@@ -243,7 +259,10 @@ public sealed class NativeDialogTools
                         });
                     }
 
-                    action = await PressDialogButtonAsync(lease.Target, currentDialog, buttonLabel);
+                    if (lease.ExpiresAt <= DateTimeOffset.UtcNow)
+                        return SerializeExpiredPrompt();
+
+                    action = await PressDialogButtonAsync(lease.Target, currentDialog, buttonLabel, agent);
                 }
 
                 var result = new JsonObject
@@ -275,6 +294,15 @@ public sealed class NativeDialogTools
     {
         var platform = status.Platform ?? string.Empty;
         var identity = CreateTargetIdentity(agent.BaseUrl, status);
+        if (!new Uri(agent.BaseUrl).IsLoopback
+            && !platform.Contains("linux", StringComparison.OrdinalIgnoreCase))
+        {
+            return DialogTarget.Unsupported(
+                platform,
+                identity,
+                "Host native-dialog automation requires a local agent; a remote process or device cannot be safely targeted.");
+        }
+
         if (platform.Contains("mac", StringComparison.OrdinalIgnoreCase))
         {
             var processId = status.App?.ProcessId ?? ProcessNameResolver.FindUniqueProcessId(status.AppName);
@@ -389,7 +417,8 @@ public sealed class NativeDialogTools
     private static async Task<AlertActionResult> PressDialogButtonAsync(
         DialogTarget target,
         AlertInfo dialog,
-        string buttonLabel)
+        string buttonLabel,
+        AgentClient agent)
     {
         switch (target.Kind)
         {
@@ -412,12 +441,13 @@ public sealed class NativeDialogTools
                     return await driver.PressAlertButtonSafelyAsync(dialog, buttonLabel);
             case DialogPlatformKind.Windows:
                 using (var driver = new WindowsAppDriver { ProcessId = target.ProcessId })
-                    return await driver.PressAlertButtonSafelyAsync(buttonLabel);
+                    return await driver.PressAlertButtonSafelyAsync(dialog, buttonLabel);
             case DialogPlatformKind.Linux:
                 using (var driver = new LinuxAppDriver { ProcessId = target.ProcessId, AppName = target.AppName })
                 {
                     var endpoint = new Uri(target.AgentBaseUrl);
                     await driver.ConnectAsync(endpoint.Host, endpoint.Port);
+                    using var mutationLease = driver.UseMutationLease(agent);
                     return await driver.PressAlertButtonSafelyAsync(dialog, buttonLabel);
                 }
             default:
@@ -556,12 +586,14 @@ public sealed class NativeDialogTools
     }
 
     private sealed class DialogLease(
+        McpAgentSession owner,
         string? platformPromptId,
         DialogTarget target,
         string fingerprint,
         DateTimeOffset expiresAt,
         Action? cleanup) : IDisposable
     {
+        public McpAgentSession Owner { get; } = owner;
         public string? PlatformPromptId { get; } = platformPromptId;
         public DialogTarget Target { get; } = target;
         public string Fingerprint { get; } = fingerprint;

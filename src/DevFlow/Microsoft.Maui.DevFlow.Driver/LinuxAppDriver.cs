@@ -97,6 +97,12 @@ public class LinuxAppDriver : AppDriverBase, IAlertDriver
             reviewedDialog);
     }
 
+    internal IDisposable UseMutationLease(AgentClient source)
+        => EnsureClient().UseMutationLease(
+            source.MutationLeaseId,
+            source.MutationLeaseHolderKind,
+            source.MutationLeaseLabel);
+
     /// <summary>
     /// Convenience: detect and dismiss an alert if present.
     /// </summary>

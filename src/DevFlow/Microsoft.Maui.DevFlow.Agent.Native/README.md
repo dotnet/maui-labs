@@ -83,6 +83,11 @@ Supported everywhere: visual tree, query and CSS selectors, hit-testing, tap, fi
 key, gesture, scroll, batch, property get/set, screenshots (page, element, full screen), logs,
 network capture, profiling, DevFlow actions, and extensions.
 
+AppKit full-window screenshots include native chrome and attached sheets without activating
+the app. ScreenCaptureKit is awaited rather than blocking the UI thread; macOS 14.0–14.1 uses
+the shared parent/sheet CoreGraphics composite when a sheet is attached. Capture does not
+automatically request screen-recording permission.
+
 Endpoints with no meaning outside MAUI return `501` with
 `{ "error": "not_supported", "capability": …, "reason": … }` instead of failing opaquely, and
 `/api/v1/agent/capabilities` reports them as `supported: false` before you call them:

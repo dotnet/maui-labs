@@ -19,6 +19,8 @@ internal sealed class AXElement : IDisposable
     /// </summary>
     internal nint Handle => _handle;
 
+    internal bool IsSameElement(AXElement other) => CFEqual(_handle, other._handle);
+
     private AXElement(nint handle)
     {
         _handle = handle;

@@ -116,7 +116,11 @@ public class McpAgentSession
 	async Task TryEnsureAndroidForwardingAsync(int[] agentPorts, bool ensureBrokerReverse)
 	{
 		if (!AndroidDevFlowPortForwarder.IsAdbLikelyAvailable())
+		{
+			foreach (var agentPort in agentPorts)
+				_androidSerialByAgentPort.TryRemove(agentPort, out _);
 			return;
+		}
 
 		try
 		{
@@ -147,6 +151,8 @@ public class McpAgentSession
 		}
 		catch (Exception ex)
 		{
+			foreach (var agentPort in agentPorts)
+				_androidSerialByAgentPort.TryRemove(agentPort, out _);
 			Console.Error.WriteLine($"[DevFlow Android forwarding] {ex.Message}");
 		}
 	}

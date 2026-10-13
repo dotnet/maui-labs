@@ -128,6 +128,7 @@ internal static class NativeDialogSafety
 }
 
 /// <summary>Platform alert detection and dismissal used by CLI and Inspector hosts.</summary>
+/// <remarks>macOS requires an explicit button label; omitting it throws rather than choosing a permission response.</remarks>
 public interface IAlertDriver : IDisposable
 {
     Task<AlertInfo?> DetectAlertAsync();
