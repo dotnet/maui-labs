@@ -10,7 +10,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Native token usage** — standard `ChatResponse.Usage` and streaming `UsageContent` on Apple OS 27+, without estimated counts
 - **Telemetry** — compatible with M.E.AI's built-in `UseOpenTelemetry` spans, token metrics, and streaming timings
-- **Tool calling** — function-calling support for on-device models; `ChatToolMode.RequireAny` requires an actual tool call on Apple OS 27+
+- **Tool calling** — function-calling support for on-device models, including `ChatToolMode.RequireAny` on Apple OS 27+
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 
 ### Platform Support
@@ -36,16 +36,6 @@ builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 var client = serviceProvider.GetRequiredService<IChatClient>();
 var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
 ```
-
-## Tool Calling
-
-On iOS, Mac Catalyst, and macOS 27+, `AppleIntelligenceChatClient` supports
-`ChatToolMode.RequireAny` with at least one `AIFunction`. Each request requires
-an actual native tool invocation, then allows the model to produce its final
-answer rather than requiring tool calls indefinitely. The policy resets for
-each request, including streaming requests. On OS 26, RequireAny throws
-`NotSupportedException` before generation rather than silently falling back
-to Auto. Auto is unchanged; None continues to remove tools from the request.
 
 ## Packages
 

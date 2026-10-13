@@ -145,16 +145,19 @@ var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
 
-### Required tool calling
+### Tool calling
 
-On iOS, Mac Catalyst, and macOS 27+, set `ToolMode = ChatToolMode.RequireAny`
-and supply at least one `AIFunction` to require a native tool invocation before
-the model's final answer. After a tool call, the model may finish its answer
-instead of being forced to keep calling tools. This policy resets for every
-request and applies to both `GetResponseAsync` and `GetStreamingResponseAsync`.
-Missing tools throw `ArgumentException` before generation. On OS 26, RequireAny
-throws `NotSupportedException`; it does not fall back to Auto. Auto retains
-its existing behavior, and None still removes tools from the request.
+Supply `AIFunction` tools through `ChatOptions.Tools` and select a `ChatOptions.ToolMode`:
+
+| Mode | Behavior |
+|------|----------|
+| `ChatToolMode.Auto` | The model chooses whether to call a tool. |
+| `ChatToolMode.None` | No tools are available to the model. |
+| `ChatToolMode.RequireAny` | At least one tool call is required before the final answer. |
+
+RequireAny requires iOS, Mac Catalyst, or macOS 27+ and at least one supplied
+`AIFunction`. On OS 26 it throws `NotSupportedException`; missing tools on OS 27+
+throw `ArgumentException`.
 
 ### Tool diagnostics
 
