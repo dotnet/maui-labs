@@ -88,8 +88,9 @@ function isDescendantOf(id, ancestorId, parent) {
 // (inactive pages + their Shell wrappers) so the canvas reflects only what's displayed.
 //
 // Active-page detection, most reliable first:
-//   1. the selected Tab/FlyoutItem (state.selected) whose id encodes the target page type,
-//   2. otherwise the uniquely most-populated page (real content laid out in the viewport).
+//   1. the agent-selected Shell current page (also works with a hidden tab bar),
+//   2. the selected Tab/FlyoutItem (state.selected) whose id encodes the target page type,
+//   3. otherwise the uniquely most-populated page (real content laid out in the viewport).
 // If it's genuinely ambiguous we suppress NOTHING (fail safe → show everything, never hide
 // the page the user is actually looking at).
 function inactivePageIds(roots, window) {
@@ -164,11 +165,15 @@ function inactivePageIds(roots, window) {
   // Pick the active page.
   let active = null;
   let confident = false;
+  const selectedPages = pages.filter((page) => page.state?.selected === true || page.isSelected === true);
   const tabbed = pages
     .map((p) => ({ p, len: tabMatchLen(p), s: scoreById.get(p.id) || 0 }))
     .filter((x) => x.len > 0)
     .sort((a, b) => b.len - a.len || b.s - a.s);
-  if (tabbed.length && tabbed[0].s > 0) {
+  if (selectedPages.length === 1) {
+    active = selectedPages[0];
+    confident = true;
+  } else if (tabbed.length && tabbed[0].s > 0) {
     active = tabbed[0].p;
     confident = true; // the selected Tab/FlyoutItem authoritatively names the on-screen page
   } else {
@@ -179,8 +184,8 @@ function inactivePageIds(roots, window) {
   }
   if (!active) return new Set();
 
-  // Drop every OTHER page plus that page's exclusive Shell wrapper chain so no empty container
-  // box is left behind. When we only GUESSED the active page (geometry fallback), keep the
+  // Preserve navigation ancestors/descendants and disjoint flyout/detail panes: they are not
+  // competing pages. When we only GUESSED the active page (geometry fallback), keep the
   // safety net: never hide a page MORE populated than our guess. When the selected Tab told us
   // authoritatively (confident), drop the others unconditionally — a just-left page can still
   // have MORE retained/laid-out content than the freshly-navigated one until MAUI tears it down.
@@ -188,6 +193,14 @@ function inactivePageIds(roots, window) {
   const drop = new Set();
   for (const p of pages) {
     if (p.id === active.id) continue;
+    if (isDescendantOf(p.id, active.id, parent) || isDescendantOf(active.id, p.id, parent)) continue;
+    const pageBounds = abs.get(p.id);
+    const activeBounds = abs.get(active.id);
+    if (pageBounds?.width > 0 && pageBounds?.height > 0 && activeBounds?.width > 0 && activeBounds?.height > 0
+        && (pageBounds.x + pageBounds.width <= activeBounds.x
+          || activeBounds.x + activeBounds.width <= pageBounds.x
+          || pageBounds.y + pageBounds.height <= activeBounds.y
+          || activeBounds.y + activeBounds.height <= pageBounds.y)) continue;
     if (!confident && (scoreById.get(p.id) || 0) > activeScore) continue; // safety only when guessing
     drop.add(p.id);
     let cur = parent.get(p.id);

@@ -137,5 +137,6 @@ internal static class LayoutDiagnosticsDeltaBuilder
             && first.Incomplete == second.Incomplete
             && first.Passes == second.Passes
             && first.NotApplicable == second.NotApplicable
+            && first.Filtered == second.Filtered
             && first.Suppressed == second.Suppressed;
 }

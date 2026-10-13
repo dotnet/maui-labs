@@ -898,6 +898,80 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.Equal(1, secondInvocations);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TreeSnapshot_SizingOnlyChanges_AdvanceDiagnosticInputsWithoutChangingGeometry(bool includeNative)
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var label = new MeasureInvalidatingLabel
+        {
+            AutomationId = "SizingTarget",
+            Text = "Unchanged",
+            Frame = new Microsoft.Maui.Graphics.Rect(0, 0, 100, 40)
+        };
+        var app = new Application();
+        typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [new Window(new ContentPage { Content = label })]);
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+
+        var initial = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        var unchanged = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        Assert.NotNull(initial);
+        Assert.NotNull(unchanged);
+        Assert.NotEmpty(initial.DiagnosticInputsRevision!);
+        Assert.Equal(initial.DiagnosticInputsRevision, unchanged.DiagnosticInputsRevision);
+        Assert.NotEqual(initial.Elements[0].CaptureEpoch, unchanged.Elements[0].CaptureEpoch);
+
+        label.MinimumWidthRequest = 120;
+        var constrained = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        Assert.NotNull(constrained);
+        Assert.Equal(initial.Revision, constrained.Revision);
+        Assert.NotEqual(initial.DiagnosticInputsRevision, constrained.DiagnosticInputsRevision);
+
+        label.InvalidateContentMeasurement();
+        var invalidated = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        Assert.NotNull(invalidated);
+        Assert.Equal(constrained.Revision, invalidated.Revision);
+        Assert.NotEqual(constrained.DiagnosticInputsRevision, invalidated.DiagnosticInputsRevision);
+        var settled = await client.GetTreeSnapshotAsync(includeNative: includeNative);
+        Assert.NotNull(settled);
+        Assert.Equal(invalidated.DiagnosticInputsRevision, settled.DiagnosticInputsRevision);
+    }
+
+    [Fact]
+    public async Task TreeSnapshot_DiagnosticInputsRevision_IsWindowScoped()
+    {
+        var port = GetFreePort();
+        using var service = new MauiDevFlowAgentService(new AgentOptions { Port = port });
+        using var client = new AgentClient("localhost", port);
+        var first = new Label { AutomationId = "FirstSizingTarget" };
+        var second = new Label { AutomationId = "SecondSizingTarget" };
+        var app = new Application();
+        var addWindow = typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = first })]);
+        addWindow.Invoke(app, [new Window(new ContentPage { Content = second })]);
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        await client.GetTreeSnapshotAsync();
+        var before = await client.GetTreeSnapshotAsync(window: 0);
+        Assert.NotNull(before);
+
+        second.MaximumWidthRequest = 50;
+        var after = await client.GetTreeSnapshotAsync(window: 0);
+        Assert.NotNull(after);
+        Assert.Equal(before.DiagnosticInputsRevision, after.DiagnosticInputsRevision);
+        first.MinimumWidthRequest = 100;
+        var changed = await client.GetTreeSnapshotAsync(window: 0);
+        Assert.NotNull(changed);
+        Assert.NotEqual(after.DiagnosticInputsRevision, changed.DiagnosticInputsRevision);
+    }
+
     [Fact]
     public async Task HitTest_WithoutWindow_DefaultsToWindowZero()
     {
@@ -1727,6 +1801,11 @@ public class DevFlowAgentServiceLifecycleTests
                 IsInsideMainThreadFallback = wasInsideMainThreadFallback;
             }
         }
+    }
+
+    private sealed class MeasureInvalidatingLabel : Label
+    {
+        public void InvalidateContentMeasurement() => InvalidateMeasure();
     }
 
     private sealed class ImmediateDispatcher : IDispatcher

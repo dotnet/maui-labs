@@ -7,6 +7,8 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 internal sealed class LayoutCaptureSnapshot
 {
     public List<LayoutNodeSnapshot> Nodes { get; } = [];
+    public List<LayoutNodeSnapshot> AncestorContext { get; } = [];
+    public IEnumerable<LayoutNodeSnapshot> AnalysisNodes => AncestorContext.Concat(Nodes);
     public List<LayoutWindowInfo> Windows { get; } = [];
     public List<string> Limitations { get; } = [];
     public List<string> IncompleteReasons { get; } = [];
@@ -29,7 +31,7 @@ internal sealed class LayoutCaptureSnapshot
     private string ComputeHash(bool includeBlazor, bool useElementBounds)
     {
         var builder = new StringBuilder();
-        foreach (var node in Nodes
+        foreach (var node in AnalysisNodes
             .Where(node => includeBlazor
                 || !node.Element.Framework.Equals("blazor", StringComparison.OrdinalIgnoreCase))
             .OrderBy(node => node.TreeOrder))
@@ -57,6 +59,7 @@ internal sealed class LayoutCaptureSnapshot
                 .Append(bounds.Y.ToString("R", CultureInfo.InvariantCulture)).Append(',')
                 .Append(bounds.Width.ToString("R", CultureInfo.InvariantCulture)).Append(',')
                 .Append(bounds.Height.ToString("R", CultureInfo.InvariantCulture)).Append(';');
+            AppendLayoutInputs(builder, node);
         }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))
@@ -66,7 +69,7 @@ internal sealed class LayoutCaptureSnapshot
     private string ComputeDiagnosticsHash()
     {
         var builder = new StringBuilder();
-        foreach (var node in Nodes.OrderBy(node => node.TreeOrder))
+        foreach (var node in AnalysisNodes.OrderBy(node => node.TreeOrder))
         {
             builder.Append(node.Element.Id).Append('|')
                 .Append(node.Element.ParentId).Append('|')
@@ -74,6 +77,7 @@ internal sealed class LayoutCaptureSnapshot
             AppendRegion(builder, node.FullRegion);
             AppendRegion(builder, node.VisibleRegion);
             AppendRegion(builder, node.ContentRegion);
+            AppendLayoutInputs(builder, node);
             builder.Append(node.ZIndex).Append('|')
             .Append(node.IsRendered).Append('|')
             .Append(node.IsInteractive).Append('|')
@@ -145,6 +149,33 @@ internal sealed class LayoutCaptureSnapshot
             builder.Append(number.ToString("R", CultureInfo.InvariantCulture));
         builder.Append('|');
     }
+
+    private static void AppendLayoutInputs(StringBuilder builder, LayoutNodeSnapshot node)
+    {
+        if (node.Sizing is { } sizing)
+        {
+            AppendNullableDouble(builder, sizing.ArrangedWidth);
+            AppendNullableDouble(builder, sizing.ArrangedHeight);
+            AppendNullableDouble(builder, sizing.DesiredWidth);
+            AppendNullableDouble(builder, sizing.DesiredHeight);
+            AppendNullableDouble(builder, sizing.MinimumWidth);
+            AppendNullableDouble(builder, sizing.MinimumHeight);
+            AppendNullableDouble(builder, sizing.MaximumWidth);
+            AppendNullableDouble(builder, sizing.MaximumHeight);
+        }
+        else
+        {
+            builder.Append("no-sizing|");
+        }
+        AppendNullableDouble(builder, node.ParentRelativeBounds?.X);
+        AppendNullableDouble(builder, node.ParentRelativeBounds?.Y);
+        AppendNullableDouble(builder, node.ParentRelativeBounds?.Width);
+        AppendNullableDouble(builder, node.ParentRelativeBounds?.Height);
+        builder.Append(node.IsLayoutContainer).Append('|')
+            .Append(node.HasVisualTransform).Append('|')
+            .Append(node.HasTransformedAncestor).Append('|')
+            .Append(node.HasNegativeMargin).Append('|');
+    }
 }
 
 internal sealed class LayoutNodeSnapshot
@@ -177,6 +208,12 @@ internal sealed class LayoutNodeSnapshot
     public double? InteractionBlockedLowerBound { get; set; }
     public double? InteractionBlockedUpperBound { get; set; }
     public int InteractionSampleCount { get; set; }
+    public LayoutSizingEvidence? Sizing { get; set; }
+    public LayoutRectInfo? ParentRelativeBounds { get; set; }
+    public bool IsLayoutContainer { get; set; }
+    public bool HasVisualTransform { get; set; }
+    public bool HasTransformedAncestor { get; set; }
+    public bool HasNegativeMargin { get; set; }
 }
 
 internal static class LayoutRegionMath
@@ -429,7 +466,7 @@ internal static class LayoutRegionMath
     }
 }
 
-internal static class LayoutDiagnosticsEngine
+internal static partial class LayoutDiagnosticsEngine
 {
     private static readonly string[] s_nodeScopedRules =
     [
@@ -439,7 +476,10 @@ internal static class LayoutDiagnosticsEngine
         LayoutDiagnosticRules.TextNotFullyRendered,
         LayoutDiagnosticRules.InteractionOccluded,
         LayoutDiagnosticRules.AccessibilityVisibilityMismatch,
-        LayoutDiagnosticRules.VisibleZeroArea
+        LayoutDiagnosticRules.VisibleZeroArea,
+        LayoutDiagnosticRules.ConstraintViolation,
+        LayoutDiagnosticRules.DesiredSizeConstrained,
+        LayoutDiagnosticRules.ChildOutsideParent
     ];
 
     private static readonly Dictionary<string, int> s_severityRanks = new(StringComparer.OrdinalIgnoreCase)
@@ -465,6 +505,30 @@ internal static class LayoutDiagnosticsEngine
         // be reported as a pass.
         request = CanonicalizeRequestedRules(request);
 
+        var nodesById = new Dictionary<string, LayoutNodeSnapshot>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in capture.AnalysisNodes)
+        {
+            if (!nodesById.TryAdd(node.Element.Id, node))
+                ambiguousIds.Add(node.Element.Id);
+        }
+        if (ambiguousIds.Count > 0)
+        {
+            // Shared resources can appear under multiple parents. Do not choose an arbitrary
+            // owner, or evaluate descendants whose ancestry would then be ambiguous.
+            var children = capture.AnalysisNodes.ToLookup(node => node.Element.ParentId, StringComparer.OrdinalIgnoreCase);
+            var pending = new Queue<string>(ambiguousIds);
+            while (pending.TryDequeue(out var id))
+            {
+                nodesById.Remove(id);
+                foreach (var child in children[id])
+                {
+                    if (ambiguousIds.Add(child.Element.Id))
+                        pending.Enqueue(child.Element.Id);
+                }
+            }
+        }
+
         var result = new LayoutInspectionResult
         {
             Snapshot = new LayoutSnapshotInfo
@@ -481,12 +545,18 @@ internal static class LayoutDiagnosticsEngine
             {
                 Rules = ruleSupport.Select(CloneSupport).ToList(),
                 OpaqueSubtrees = capture.Nodes
-                    .Where(node => node.IsCoverageOpaque || !node.GeometryAvailable)
+                    .Where(node => ambiguousIds.Contains(node.Element.Id)
+                        || node.IsCoverageOpaque || !node.GeometryAvailable)
                     .Select(ToReference)
                     .ToList(),
                 Limitations = capture.Limitations.Distinct(StringComparer.Ordinal).ToList()
             }
         };
+        if (ambiguousIds.Count > 0)
+        {
+            result.Coverage.Limitations.Add(
+                $"The visual tree contains duplicate element identities; {capture.Nodes.Count(node => ambiguousIds.Contains(node.Element.Id))} entries with ambiguous identity or ancestry were not evaluated.");
+        }
 
         result.Coverage.Overall = result.Coverage.Rules.Any(rule => rule.Support != "exact")
             || result.Coverage.OpaqueSubtrees.Count > 0
@@ -509,8 +579,6 @@ internal static class LayoutDiagnosticsEngine
             supportByRule.TryGetValue(rule, out var support)
             && support.Support.Equals("unsupported", StringComparison.OrdinalIgnoreCase));
         var unsupportedRequestedCount = notApplicableCount;
-        var nodesById = capture.Nodes.ToDictionary(node => node.Element.Id, StringComparer.OrdinalIgnoreCase);
-
         if (!stable)
         {
             result.Coverage.Limitations.Add(
@@ -520,7 +588,7 @@ internal static class LayoutDiagnosticsEngine
 
         foreach (var node in capture.Nodes)
         {
-            if (!node.GeometryAvailable)
+            if (ambiguousIds.Contains(node.Element.Id) || !node.GeometryAvailable)
             {
                 notApplicableCount += s_nodeScopedRules.Count(enabledRules.Contains);
                 continue;
@@ -529,7 +597,10 @@ internal static class LayoutDiagnosticsEngine
             var detectedRules = AnalyzeNode(result, request, enabledRules, node, nodesById);
             foreach (var rule in s_nodeScopedRules.Where(enabledRules.Contains))
             {
-                if (!IsNodeRuleApplicable(rule, node, request))
+                if (!stable && IsBaselineRule(rule))
+                    continue;
+
+                if (!IsNodeRuleApplicable(rule, node, request, nodesById))
                 {
                     notApplicableCount++;
                     continue;
@@ -545,7 +616,7 @@ internal static class LayoutDiagnosticsEngine
         }
 
         var geometryNodes = capture.Nodes
-            .Where(node => node.GeometryAvailable)
+            .Where(node => node.GeometryAvailable && !ambiguousIds.Contains(node.Element.Id))
             .ToList();
         var overlapDetectedRules = AnalyzeOverlaps(
             result,
@@ -590,7 +661,7 @@ internal static class LayoutDiagnosticsEngine
             .ThenBy(finding => finding.Id, StringComparer.Ordinal)
             .ToList();
 
-        result.Summary = Summarize(result.Findings, passCount, notApplicableCount);
+        result.Summary = Summarize(result.Findings, passCount, notApplicableCount, result.Summary.Filtered);
         if (!stable)
             result.Summary.Incomplete++;
         result.Summary.Incomplete += capture.IncompleteReasons
@@ -882,6 +953,8 @@ internal static class LayoutDiagnosticsEngine
             });
         }
 
+        if (result.Snapshot.Stable)
+            AnalyzeBaselineRules(result, request, enabledRules, node, nodesById, detectedRules);
         return detectedRules;
     }
 
@@ -1094,7 +1167,8 @@ internal static class LayoutDiagnosticsEngine
     private static bool IsNodeRuleApplicable(
         string rule,
         LayoutNodeSnapshot node,
-        LayoutInspectionRequest request)
+        LayoutInspectionRequest request,
+        IReadOnlyDictionary<string, LayoutNodeSnapshot> nodesById)
         => rule switch
         {
             LayoutDiagnosticRules.ElementClipped
@@ -1115,6 +1189,12 @@ internal static class LayoutDiagnosticsEngine
                     || request.Occlusion.Mode.Equals("all", StringComparison.OrdinalIgnoreCase)),
             LayoutDiagnosticRules.AccessibilityVisibilityMismatch =>
                 node.AccessibilityVisible.HasValue,
+            LayoutDiagnosticRules.ConstraintViolation =>
+                CanCheckConstraints(node),
+            LayoutDiagnosticRules.DesiredSizeConstrained =>
+                CanCheckDesiredSize(node),
+            LayoutDiagnosticRules.ChildOutsideParent =>
+                TryGetLayoutParent(node, nodesById, out _),
             _ => false
         };
 
@@ -1169,6 +1249,7 @@ internal static class LayoutDiagnosticsEngine
             && finding.Outcome != "incomplete"
             && SeverityRank(finding.Severity) < SeverityRank(request.MinimumSeverity))
         {
+            result.Summary.Filtered++;
             return;
         }
 
@@ -1397,12 +1478,14 @@ internal static class LayoutDiagnosticsEngine
     internal static LayoutInspectionSummary Summarize(
         IEnumerable<LayoutFinding> findings,
         int passCount = 0,
-        int notApplicableCount = 0)
+        int notApplicableCount = 0,
+        int filteredCount = 0)
     {
         var summary = new LayoutInspectionSummary
         {
             Passes = passCount,
-            NotApplicable = notApplicableCount
+            NotApplicable = notApplicableCount,
+            Filtered = filteredCount
         };
         foreach (var finding in findings)
         {
