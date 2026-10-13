@@ -467,7 +467,6 @@ jobs:
       DEVFLOW_TEST_PLATFORM: gtk
       DEVFLOW_TEST_FRAMEWORK: maui
       GDK_BACKEND: x11
-      DEVFLOW_TEST_GTK_DIAGNOSTICS_DIR: ${{ runner.temp }}/devflow-gtk-crashes
     steps:
       - uses: actions/checkout@v6
 
@@ -490,6 +489,9 @@ jobs:
           xvfb
           xauth
           dbus-x11
+
+      - name: Configure GTK crash diagnostics
+        run: echo "DEVFLOW_TEST_GTK_DIAGNOSTICS_DIR=$RUNNER_TEMP/devflow-gtk-crashes" >> "$GITHUB_ENV"
 
       - name: Run DevFlow integration tests (GTK)
         run: >
