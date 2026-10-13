@@ -10,6 +10,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			[nameof(IEntry.Placeholder)] = MapPlaceholder,
 			[nameof(IEntry.PlaceholderColor)] = MapPlaceholderColor,
 			[nameof(IEntry.IsPassword)] = MapIsPassword,
+			[nameof(IView.IsEnabled)] = MapIsEnabled,
 			[nameof(IEntry.IsReadOnly)] = MapIsReadOnly,
 			[nameof(IEntry.MaxLength)] = MapMaxLength,
 			[nameof(ITextAlignment.HorizontalTextAlignment)] = MapHorizontalTextAlignment,

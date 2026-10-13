@@ -264,8 +264,6 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
 
     internal void Log(string message)
     {
-        System.Diagnostics.Debug.WriteLine(message);
-        Console.WriteLine(message);
         LogCallback?.Invoke(message);
     }
 

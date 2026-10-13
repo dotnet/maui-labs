@@ -58,6 +58,194 @@ public class GtkWebViewSnapshotRuntimeTests
         }
     }
 
+    [GtkSnapshotFact]
+    public void Bridge_DelayedDocumentAndReplacement_ReinitializesFromNativeLoadSignals()
+    {
+        global::Gtk.Module.Initialize();
+        global::Gtk.Functions.Init();
+        GtkBlazorWebView.InitializeWebKit();
+        using var window = global::Gtk.Window.New();
+        using var view = new WebKit.WebView();
+        using var service = new GtkBlazorWebViewDebugService();
+        var previousContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new GtkRuntimeSynchronizationContext());
+        try
+        {
+            window.SetDefaultSize(320, 240);
+            window.SetChild(view);
+            window.Present();
+            var bridge = new GtkBlazorWebViewDebugService.GtkWebViewBridge(service, view, "delayed");
+            service.AddBridge(bridge);
+            var initialize = bridge.InitializeAsync();
+            PumpUntil(() => initialize.IsCompleted);
+            initialize.GetAwaiter().GetResult();
+            Assert.False(bridge.IsReady);
+
+            view.LoadHtml("<html><title>Late document</title><body>Late host page</body></html>", null);
+            PumpUntil(() => bridge.IsReady);
+            AssertDocumentTitle(bridge, "Late document");
+
+            view.LoadHtml("<html><title>Replacement document</title><body>New host page</body></html>", null);
+            PumpUntil(() => !bridge.IsReady);
+            PumpUntil(() => bridge.IsReady);
+            AssertDocumentTitle(bridge, "Replacement document");
+
+            service.RemoveBridge(bridge);
+            Assert.False(bridge.IsReady);
+        }
+        finally
+        {
+            service.Dispose();
+            window.SetChild(null);
+            window.Destroy();
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+    }
+
+    [GtkSnapshotFact]
+    public void NativeSnapshot_CanceledDuringViewTeardown_CompletesWithoutAnImage()
+    {
+        global::Gtk.Module.Initialize();
+        global::Gtk.Functions.Init();
+        GtkBlazorWebView.InitializeWebKit();
+        using var window = global::Gtk.Window.New();
+        using var view = new WebKit.WebView();
+        using var cancellation = new CancellationTokenSource();
+        window.SetDefaultSize(320, 240);
+        window.SetChild(view);
+        try
+        {
+            view.LoadHtml("<html><body>Cancel native capture</body></html>", null);
+            window.Present();
+            PumpUntil(() => !view.IsLoading && view.GetMapped() && view.GetWidth() > 0 && view.GetHeight() > 0);
+
+            var capture = WebKitSnapshot.CaptureAsync(view, cancellation.Token);
+            cancellation.Cancel();
+            window.SetChild(null);
+            view.Dispose();
+            PumpUntil(() => capture.IsCompleted);
+
+            Assert.ThrowsAny<OperationCanceledException>(() => capture.GetAwaiter().GetResult());
+            Assert.False(capture.IsCompletedSuccessfully);
+        }
+        finally
+        {
+            window.SetChild(null);
+            window.Destroy();
+        }
+    }
+
+    [GtkSnapshotFact]
+    public void Bridge_CommandDuringSlowFullNavigation_DoesNotInitializeTheProvisionalDocument()
+    {
+        global::Gtk.Module.Initialize();
+        global::Gtk.Functions.Init();
+        GtkBlazorWebView.InitializeWebKit();
+        using var window = global::Gtk.Window.New();
+        using var view = new WebKit.WebView();
+        using var service = new GtkBlazorWebViewDebugService();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        server.Start();
+        var response = ServeSlowDocumentAsync(server, requested, release, cancellation.Token);
+        var previousContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new GtkRuntimeSynchronizationContext());
+        try
+        {
+            window.SetDefaultSize(320, 240);
+            window.SetChild(view);
+            window.Present();
+            var bridge = new GtkBlazorWebViewDebugService.GtkWebViewBridge(service, view, "slow");
+            service.AddBridge(bridge);
+            view.LoadHtml("<html><title>Original document</title><body>Original</body></html>", null);
+            PumpUntil(() => bridge.IsReady);
+
+            var port = ((System.Net.IPEndPoint)server.LocalEndpoint).Port;
+            var navigation = bridge.SendCdpCommandAsync(
+                $$$"""{"id":92,"method":"Page.navigate","params":{"url":"http://127.0.0.1:{{{port}}}/"}}""");
+            PumpUntil(() => requested.Task.IsCompleted && navigation.IsCompleted);
+            using var acknowledgement = System.Text.Json.JsonDocument.Parse(navigation.GetAwaiter().GetResult());
+            Assert.True(acknowledgement.RootElement.TryGetProperty("result", out _));
+            Assert.False(bridge.IsReady);
+
+            release.TrySetResult();
+            PumpUntil(() => response.IsCompleted && bridge.IsReady);
+            response.GetAwaiter().GetResult();
+            AssertDocumentTitle(bridge, "Slow replacement");
+        }
+        finally
+        {
+            release.TrySetResult();
+            cancellation.Cancel();
+            server.Stop();
+            try
+            {
+                response.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+            }
+            finally
+            {
+                service.Dispose();
+                window.SetChild(null);
+                window.Destroy();
+                SynchronizationContext.SetSynchronizationContext(previousContext);
+            }
+        }
+    }
+
+    static async Task ServeSlowDocumentAsync(
+        System.Net.Sockets.TcpListener server, TaskCompletionSource requested,
+        TaskCompletionSource release, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = await server.AcceptTcpClientAsync(cancellationToken);
+            using var stream = client.GetStream();
+            using var reader = new StreamReader(stream, leaveOpen: true);
+            while (true)
+            {
+                var line = await reader.ReadLineAsync(cancellationToken)
+                    ?? throw new IOException("The navigation request closed before its headers completed.");
+                if (line.Length == 0)
+                    break;
+            }
+            requested.TrySetResult();
+            await release.Task.WaitAsync(cancellationToken);
+            var body = System.Text.Encoding.UTF8.GetBytes(
+                "<html><title>Slow replacement</title><body>Loaded after command initialization</body></html>");
+            var header = System.Text.Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(header, cancellationToken);
+            await stream.WriteAsync(body, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (System.Net.Sockets.SocketException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    static void AssertDocumentTitle(GtkBlazorWebViewDebugService.GtkWebViewBridge bridge, string expected)
+    {
+        var evaluation = bridge.SendCdpCommandAsync(
+            """{"id":91,"method":"Runtime.evaluate","params":{"expression":"document.title","returnByValue":true}}""");
+        PumpUntil(() => evaluation.IsCompleted);
+        using var response = System.Text.Json.JsonDocument.Parse(evaluation.GetAwaiter().GetResult());
+        Assert.Equal(expected, response.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetString());
+    }
+
+    sealed class GtkRuntimeSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback, object? state)
+            => GLib.Functions.IdleAdd(0, () =>
+            {
+                callback(state);
+                return false;
+            });
+    }
+
     [DllImport("libgtk-4.so.1", EntryPoint = "gdk_texture_download", CallingConvention = CallingConvention.Cdecl)]
     static extern void DownloadTexture(nint texture, [Out] byte[] pixels, nuint stride);
 

@@ -134,15 +134,16 @@ public class GtkBlazorWebViewDebugService : IDisposable
         private readonly object _lifetimeSync = new();
         private readonly CancellationTokenSource _lifetimeCts = new();
         private readonly CancellationToken _lifetimeToken;
+        private readonly SemaphoreSlim _initializationGate = new(1, 1);
         private readonly Func<string, Task<string?>>? _evaluateJavaScript;
         private readonly Func<CancellationToken, Task<byte[]>>? _captureScreenshot;
         private global::WebKit.WebView? _webView;
         private bool _isInitialized;
-        private bool _injecting;
         private bool _chobitsuLoaded;
         private CancellationTokenSource? _drainCts;
         private bool _disposed;
         private int _cdpIdCounter;
+        private int _documentRevision;
 
         public string? AutomationId { get; }
         public string? ElementId { get; set; }
@@ -160,20 +161,58 @@ public class GtkBlazorWebViewDebugService : IDisposable
             _evaluateJavaScript = evaluateJavaScript;
             _captureScreenshot = captureScreenshot;
             _lifetimeToken = _lifetimeCts.Token;
+            if (_webView != null)
+                _webView.OnLoadChanged += OnLoadChanged;
         }
 
         internal async Task InitializeAsync()
         {
-            _isInitialized = true;
-            _owner.Log($"[BlazorDevFlow.Gtk] Bridge WebView captured (automationId={AutomationId}), waiting for page load...");
             try
             {
-                await Task.Delay(2000, _lifetimeToken);
-                _owner.Log("[BlazorDevFlow.Gtk] Injecting debug script...");
-                await InjectDebugScriptAsync();
+                await _initializationGate.WaitAsync(_lifetimeToken);
+                try
+                {
+                    if (_disposed)
+                        return;
+                    _isInitialized = true;
+                    var documentRevision = Volatile.Read(ref _documentRevision);
+                    if (_webView != null && await DispatchOnUiAsync(() =>
+                        _webView.IsLoading || string.IsNullOrEmpty(_webView.GetUri())))
+                        return;
+                    if (documentRevision != Volatile.Read(ref _documentRevision))
+                        return;
+                    _owner.Log("[BlazorDevFlow.Gtk] Injecting debug script into the loaded document...");
+                    await InjectDebugScriptAsync(documentRevision);
+                }
+                finally
+                {
+                    _initializationGate.Release();
+                }
             }
             catch (OperationCanceledException) when (_lifetimeToken.IsCancellationRequested)
             {
+            }
+            catch (Exception ex)
+            {
+                _chobitsuLoaded = false;
+                _owner.Log($"[BlazorDevFlow.Gtk] Bridge initialization failed: {ex}");
+            }
+        }
+
+        private void OnLoadChanged(global::WebKit.WebView sender, global::WebKit.WebView.LoadChangedSignalArgs args)
+        {
+            if (_disposed)
+                return;
+            if (args.LoadEvent == global::WebKit.LoadEvent.Started)
+            {
+                Interlocked.Increment(ref _documentRevision);
+                _chobitsuLoaded = false;
+                lock (_lifetimeSync)
+                    _drainCts?.Cancel();
+            }
+            else if (args.LoadEvent == global::WebKit.LoadEvent.Finished)
+            {
+                _ = InitializeAsync();
             }
         }
 
@@ -202,11 +241,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
             }
         }
 
-        private async Task InjectDebugScriptAsync()
+        private async Task InjectDebugScriptAsync(int documentRevision)
         {
-            if (_injecting) return;
-            _injecting = true;
-
             try
             {
                 if (_disposed || (_webView == null && _evaluateJavaScript == null))
@@ -282,12 +318,14 @@ public class GtkBlazorWebViewDebugService : IDisposable
 
                 var result = await EvaluateJavaScriptAsync(script);
                 _owner.Log($"[BlazorDevFlow.Gtk] Script injection result: {result ?? "null"}");
+                if (documentRevision != Volatile.Read(ref _documentRevision) || _disposed)
+                    return;
                 _chobitsuLoaded = true;
 
                 var consoleScript = ScriptResources.Load("console-intercept.js");
                 await EvaluateJavaScriptAsync(consoleScript);
-
-                StartLogDrain();
+                if (documentRevision == Volatile.Read(ref _documentRevision) && !_disposed)
+                    StartLogDrain();
             }
             catch (OperationCanceledException) when (_lifetimeToken.IsCancellationRequested)
             {
@@ -295,10 +333,6 @@ public class GtkBlazorWebViewDebugService : IDisposable
             catch (Exception ex)
             {
                 _owner.Log($"[BlazorDevFlow.Gtk] Failed to inject script: {ex.Message}");
-            }
-            finally
-            {
-                _injecting = false;
             }
         }
 
@@ -393,7 +427,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
         {
             await DispatchOnUiAsync(() => _webView?.Reload());
             await Task.Delay(1500);
-            await InjectDebugScriptAsync();
+            await InitializeAsync();
             return $"{{\"id\":{id},\"result\":{{}}}}";
         }
 
@@ -417,7 +451,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
                     ? await _captureScreenshot(_lifetimeToken).WaitAsync(_lifetimeToken)
                     : await DispatchOnUiAsync<byte[]>(async () => await WebKitSnapshot.CaptureAsync(
                         _webView ?? throw new InvalidOperationException("The WebView was detached before capture."),
-                        _lifetimeToken));
+                        _lifetimeToken)).WaitAsync(_lifetimeToken);
                 _lifetimeToken.ThrowIfCancellationRequested();
                 if (png is not { Length: > 0 })
                     throw new InvalidOperationException("WebKit returned no screenshot PNG data.");
@@ -447,7 +481,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
             else
                 await EvaluateJavaScriptAsync(Microsoft.Maui.DevFlow.Blazor.WebViewNavigation.CreateRelativeNavigationScript(url));
             await Task.Delay(1500);
-            await InjectDebugScriptAsync();
+            await InitializeAsync();
             return $"{{\"id\":{id},\"result\":{{\"frameId\":\"main\"}}}}";
         }
 
@@ -510,6 +544,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
             {
                 if (_disposed) return;
                 _disposed = true;
+                if (_webView != null)
+                    _webView.OnLoadChanged -= OnLoadChanged;
                 _lifetimeCts.Cancel();
                 _lifetimeCts.Dispose();
                 _drainCts?.Cancel();
@@ -605,8 +641,6 @@ public class GtkBlazorWebViewDebugService : IDisposable
 
     private void Log(string message)
     {
-        System.Diagnostics.Debug.WriteLine(message);
-        Console.WriteLine(message);
         LogCallback?.Invoke(message);
     }
 
@@ -638,8 +672,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
         if (dispatcher == null || !dispatcher.IsDispatchRequired)
             return Task.FromResult(func());
 
-        var tcs = new TaskCompletionSource<T?>();
-        dispatcher.Dispatch(() =>
+        var tcs = new TaskCompletionSource<T?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dispatcher.Dispatch(() =>
         {
             try
             {
@@ -649,7 +683,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
             {
                 tcs.TrySetException(ex);
             }
-        });
+        }))
+            tcs.TrySetException(new InvalidOperationException("Unable to dispatch GTK WebView inspection."));
         return tcs.Task;
     }
 
@@ -659,8 +694,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
         if (dispatcher == null || !dispatcher.IsDispatchRequired)
             return func();
 
-        var tcs = new TaskCompletionSource<T?>();
-        dispatcher.Dispatch(async () =>
+        var tcs = new TaskCompletionSource<T?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dispatcher.Dispatch(async () =>
         {
             try
             {
@@ -670,7 +705,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
             {
                 tcs.TrySetException(ex);
             }
-        });
+        }))
+            tcs.TrySetException(new InvalidOperationException("Unable to dispatch GTK WebView evaluation."));
         return tcs.Task;
     }
 
@@ -683,8 +719,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
             return Task.CompletedTask;
         }
 
-        var tcs = new TaskCompletionSource();
-        dispatcher.Dispatch(() =>
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dispatcher.Dispatch(() =>
         {
             try
             {
@@ -695,7 +731,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
             {
                 tcs.TrySetException(ex);
             }
-        });
+        }))
+            tcs.TrySetException(new InvalidOperationException("Unable to dispatch GTK WebView action."));
         return tcs.Task;
     }
 

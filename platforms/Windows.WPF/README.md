@@ -38,10 +38,14 @@ should find a MAUI `Label`, and tapping the button should navigate to Settings.
 ### Entry focus and native scrolling
 
 `Entry.Focus()` completes MAUI's focus request with the native WPF result, including
-password entries. Native focus changes update `Entry.IsFocused` and its
+password entries. `IsEnabled` updates both the text and password controls, including
+when switching password mode; disabled entries reject focus. Native focus changes
+update `Entry.IsFocused` and its
 `Focused`/`Unfocused` events. DevFlow delta scrolling resolves the target's own
 ScrollViewer, then an internal descendant (such as CollectionView's list template),
-then an ancestor, on the UI dispatcher.
+then an ancestor, on the UI dispatcher. CollectionView's vertical list uses
+device-independent pixel scroll offsets, not item counts, with `CanContentScroll`
+and `VirtualizingStackPanel` virtualization retained.
 
 Run the focused native regressions on Windows:
 
@@ -50,8 +54,9 @@ dotnet test platforms\Windows.WPF\tests\HandlerTests\HandlerTests.csproj -p:UseM
 ```
 
 The focus cases activate a native window and require exclusive foreground access.
-Scroll cases assert actual offsets, including from a background caller, without
-activating their window. Unsupported targets must still return false.
+Scroll cases assert actual offsets and rendered movement of variable-height rows,
+including from a background caller, without activating their window or disabling
+virtualization. Unsupported targets must still return false.
 
 ### Dynamic Shell items
 

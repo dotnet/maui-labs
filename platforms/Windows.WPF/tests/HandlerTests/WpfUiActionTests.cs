@@ -83,6 +83,97 @@ public class WpfUiActionTests
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
+	public void Focus_EntryEnabledState_FollowsPasswordControlAndTransitions(bool initiallyEnabled)
+	{
+		Run(context =>
+		{
+			var entry = new Entry { IsPassword = true, IsEnabled = initiallyEnabled };
+			var handler = new EntryHandler();
+			handler.SetMauiContext(context);
+			handler.SetVirtualView(entry);
+			var other = new TextBox();
+			var panel = new StackPanel();
+			panel.Children.Add(handler.PlatformView);
+			panel.Children.Add(other);
+			handler.UpdateValue(nameof(IEntry.IsPassword));
+			var passwordBox = panel.Children.OfType<PasswordBox>().Single();
+			Assert.Equal(initiallyEnabled, handler.PlatformView.IsEnabled);
+			Assert.Equal(initiallyEnabled, passwordBox.IsEnabled);
+			var window = CreateWindow(panel, activate: true);
+			try
+			{
+				window.Show();
+				Assert.True(window.Activate(), "Native keyboard-focus tests require foreground access.");
+				Layout(window);
+				Assert.True(other.Focus());
+				if (initiallyEnabled)
+				{
+					Assert.True(entry.Focus());
+					Assert.Same(passwordBox, WKeyboard.FocusedElement);
+					Assert.True(entry.IsFocused);
+					Assert.True(other.Focus());
+					entry.IsEnabled = false;
+				}
+
+				AssertDisabledFocus(passwordBox);
+				entry.IsPassword = false;
+				Layout(window);
+				AssertDisabledFocus(handler.PlatformView);
+				entry.IsPassword = true;
+				Layout(window);
+				Assert.Same(passwordBox, panel.Children.OfType<PasswordBox>().Single());
+				AssertDisabledFocus(passwordBox);
+
+				entry.IsEnabled = true;
+				Layout(window);
+				Assert.True(handler.PlatformView.IsEnabled);
+				Assert.True(passwordBox.IsEnabled);
+				Assert.True(entry.Focus());
+				Assert.Same(passwordBox, WKeyboard.FocusedElement);
+				Assert.True(passwordBox.IsKeyboardFocused);
+				Assert.True(entry.IsFocused);
+				Assert.True(other.Focus());
+				Assert.False(entry.IsFocused);
+
+				entry.IsPassword = false;
+				Layout(window);
+				Assert.True(entry.Focus());
+				Assert.Same(handler.PlatformView, WKeyboard.FocusedElement);
+				Assert.True(handler.PlatformView.IsKeyboardFocused);
+				Assert.True(entry.IsFocused);
+				Assert.True(other.Focus());
+				entry.IsEnabled = false;
+				AssertDisabledFocus(handler.PlatformView);
+				entry.IsPassword = true;
+				Layout(window);
+				AssertDisabledFocus(passwordBox);
+
+				void AssertDisabledFocus(UIElement target)
+				{
+					Assert.False(handler.PlatformView.IsEnabled);
+					Assert.False(passwordBox.IsEnabled);
+					var request = new FocusRequest();
+					handler.Invoke(nameof(IView.Focus), request);
+					Assert.False(request.Result);
+					Assert.False(entry.Focus());
+					Assert.Same(other, WKeyboard.FocusedElement);
+					Assert.False(target.IsFocused);
+					Assert.False(target.IsKeyboardFocused);
+					Assert.False(entry.IsFocused);
+				}
+			}
+			finally
+			{
+				window.Content = null;
+				window.Close();
+				((IElementHandler)handler).DisconnectHandler();
+			}
+		});
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
 	public void Focus_EntryWithoutAvailableNativeFocus_CompletesWithFalse(bool disabled)
 	{
 		Run(context =>
@@ -123,11 +214,13 @@ public class WpfUiActionTests
 		{
 			var collection = new CollectionView
 			{
-				ItemsSource = Enumerable.Range(0, 200).Select(index => $"Item {index}").ToArray(),
+				ItemsSource = Enumerable.Range(0, 200)
+					.Select(index => new { Text = $"Item {index}", Height = 24d + index % 3 * 12d }).ToArray(),
 				ItemTemplate = new DataTemplate(() =>
 				{
-					var label = new Label { HeightRequest = 24 };
-					label.SetBinding(Label.TextProperty, ".");
+					var label = new Label();
+					label.SetBinding(Label.TextProperty, "Text");
+					label.SetBinding(Label.HeightRequestProperty, "Height");
 					return label;
 				}),
 			};
@@ -138,7 +231,6 @@ public class WpfUiActionTests
 			root.Height = 200;
 			root.Width = 300;
 			var list = Assert.IsType<MauiCollectionListBox>(root.Children[0]);
-			ScrollViewer.SetCanContentScroll(list, false);
 			var panel = new StackPanel();
 			panel.Children.Add(root);
 			panel.Children.Add(new System.Windows.Controls.Border { Height = 1000 });
@@ -150,11 +242,24 @@ public class WpfUiActionTests
 				window.Show();
 				Layout(window);
 				var inner = Assert.Single(Descendants(root).OfType<ScrollViewer>());
+				Assert.True(ScrollViewer.GetCanContentScroll(list));
+				Assert.True(inner.CanContentScroll);
+				Assert.Equal(ScrollUnit.Pixel, VirtualizingPanel.GetScrollUnit(list));
+				Assert.True(VirtualizingPanel.GetIsVirtualizing(list));
+				Assert.Single(Descendants(list).OfType<VirtualizingStackPanel>());
+				Assert.True(Descendants(list).OfType<ListBoxItem>()
+					.Select(row => row.ActualHeight).Distinct().Count() > 1);
+				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(list.Items.Count - 1));
 				Assert.True(inner.ScrollableHeight > 200);
 				Assert.True(outer.ScrollableHeight > 0);
 				inner.ScrollToVerticalOffset(200);
 				Layout(window);
 				Assert.Equal(200d, inner.VerticalOffset);
+				var anchor = Descendants(list).OfType<ListBoxItem>()
+					.Where(row => row.TranslatePoint(new System.Windows.Point(), inner).Y >= 0)
+					.OrderBy(row => row.TranslatePoint(new System.Windows.Point(), inner).Y).First();
+				var anchorIndex = list.ItemContainerGenerator.IndexFromContainer(anchor);
+				var originalTop = RowTop();
 
 				var scroll = backgroundThread
 					? Task.Run(() => service.ScrollAsync(collection, 0, 100))
@@ -162,12 +267,20 @@ public class WpfUiActionTests
 				Assert.True(CompleteOnDispatcher(scroll));
 				Layout(window);
 				Assert.Equal(100d, inner.VerticalOffset);
+				Assert.Equal(100d, RowTop() - originalTop);
+				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(list.Items.Count - 1));
 				Assert.Equal(0d, outer.VerticalOffset);
 
 				Assert.True(CompleteOnDispatcher(service.ScrollAsync(collection, 0, -100)));
 				Layout(window);
 				Assert.Equal(200d, inner.VerticalOffset);
+				Assert.Equal(originalTop, RowTop());
+				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(list.Items.Count - 1));
 				Assert.Equal(0d, outer.VerticalOffset);
+
+				double RowTop() => Assert.IsAssignableFrom<ListBoxItem>(
+					list.ItemContainerGenerator.ContainerFromIndex(anchorIndex))
+					.TranslatePoint(new System.Windows.Point(), inner).Y;
 			}
 			finally
 			{
@@ -249,7 +362,6 @@ public class WpfUiActionTests
 			handler.SetVirtualView(grid);
 			var collectionRoot = Assert.IsType<WGrid>(collection.Handler!.PlatformView);
 			var list = Assert.IsType<MauiCollectionListBox>(collectionRoot.Children[0]);
-			ScrollViewer.SetCanContentScroll(list, false);
 			var window = CreateWindow(handler.PlatformView);
 			using var service = new ScrollAgent(context.Services.GetRequiredService<IDispatcher>());
 			try
@@ -258,6 +370,7 @@ public class WpfUiActionTests
 				Layout(window);
 				Assert.Same(grid, button.Parent);
 				Assert.Same(grid, collection.Parent);
+				Assert.True(ScrollViewer.GetCanContentScroll(list));
 				var sibling = Assert.Single(Descendants(collectionRoot).OfType<ScrollViewer>());
 				Assert.True(sibling.ScrollableHeight > 200);
 				sibling.ScrollToVerticalOffset(200);

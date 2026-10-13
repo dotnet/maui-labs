@@ -142,10 +142,28 @@ namespace Microsoft.Maui.Handlers.WPF
 				return;
 
 			UIElement? platformView = entry.IsPassword ? handler._passwordBox : handler.PlatformView;
-			var focused = platformView != null && (platformView.Dispatcher.CheckAccess()
+			var focused = entry.IsEnabled && platformView != null && (platformView.Dispatcher.CheckAccess()
 				? platformView.Focus()
 				: platformView.Dispatcher.Invoke(() => platformView.Focus()));
 			request.TrySetResult(focused);
+		}
+
+		public static void MapIsEnabled(EntryHandler handler, IEntry entry)
+		{
+			var platformView = handler.PlatformView;
+			var passwordBox = handler._passwordBox;
+			var enabled = entry.IsEnabled;
+			void Update()
+			{
+				platformView.IsEnabled = enabled;
+				if (passwordBox != null)
+					passwordBox.IsEnabled = enabled;
+			}
+
+			if (platformView.Dispatcher.CheckAccess())
+				Update();
+			else
+				platformView.Dispatcher.BeginInvoke(Update);
 		}
 
 		public static void MapText(EntryHandler handler, IEntry entry)
@@ -254,6 +272,7 @@ namespace Microsoft.Maui.Handlers.WPF
 				if (handler._passwordBox != null)
 					handler._passwordBox.Visibility = System.Windows.Visibility.Collapsed;
 			}
+			MapIsEnabled(handler, entry);
 		}
 
 		public static void MapIsReadOnly(EntryHandler handler, IEntry entry)

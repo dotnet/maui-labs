@@ -54,6 +54,8 @@ namespace Microsoft.Maui.Handlers.WPF
 			};
 			ScrollViewer.SetVerticalScrollBarVisibility(_listBox, System.Windows.Controls.ScrollBarVisibility.Auto);
 			ScrollViewer.SetHorizontalScrollBarVisibility(_listBox, System.Windows.Controls.ScrollBarVisibility.Disabled);
+			// Use device-independent pixel offsets without disabling item virtualization.
+			VirtualizingPanel.SetScrollUnit(_listBox, ScrollUnit.Pixel);
 
 			_listBox.SelectionChanged += OnSelectionChanged;
 

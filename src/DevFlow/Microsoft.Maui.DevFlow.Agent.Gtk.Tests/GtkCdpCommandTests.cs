@@ -3,8 +3,43 @@ using Microsoft.Maui.DevFlow.Blazor.Gtk;
 
 namespace Microsoft.Maui.DevFlow.Agent.Gtk.Tests;
 
+[Collection("GTK diagnostic output")]
 public class GtkCdpCommandTests
 {
+    [Fact]
+    public async Task Initialize_Diagnostics_UseOnlyTheExplicitCallback()
+    {
+        var stdout = Console.Out;
+        var stderr = Console.Error;
+        using var capturedOutput = new StringWriter();
+        using var capturedError = new StringWriter();
+        var diagnostics = new List<string>();
+        try
+        {
+            Console.SetOut(capturedOutput);
+            Console.SetError(capturedError);
+            using var service = new GtkBlazorWebViewDebugService();
+            var bridge = new GtkBlazorWebViewDebugService.GtkWebViewBridge(
+                service, null!, "quiet", script =>
+                    Task.FromResult<string?>(script.Contains("typeof chobitsu") ? "loaded" : "{}"));
+            service.AddBridge(bridge);
+            await bridge.InitializeAsync();
+            Assert.Empty(diagnostics);
+
+            service.LogCallback = diagnostics.Add;
+            await bridge.InitializeAsync();
+
+            Assert.NotEmpty(diagnostics);
+            Assert.Equal("", capturedOutput.ToString());
+            Assert.Equal("", capturedError.ToString());
+        }
+        finally
+        {
+            Console.SetOut(stdout);
+            Console.SetError(stderr);
+        }
+    }
+
     [Fact]
     public void EnsureCommandId_MissingId_AssignsUniqueIdsAndPreservesPayload()
     {
@@ -18,6 +53,9 @@ public class GtkCdpCommandTests
         Assert.Equal("Runtime.evaluate", first.RootElement.GetProperty("method").GetString());
         Assert.Equal("1 + 1", first.RootElement.GetProperty("params").GetProperty("expression").GetString());
     }
+
+    [CollectionDefinition("GTK diagnostic output", DisableParallelization = true)]
+    public sealed class GtkDiagnosticOutputCollection;
 
     [Fact]
     public void EnsureCommandId_ExplicitId_PreservesCallerId()
