@@ -35,6 +35,32 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
         return WaitForUiSettledAsync(Http, timeoutMs);
     }
 
+    internal static async Task<JsonElement> ReadCaptureAsync(HttpClient http, string path, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        string? lastConflict = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            using var response = await http.GetAsync(path);
+            var body = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                using var document = JsonDocument.Parse(body);
+                return document.RootElement.Clone();
+            }
+            if (response.StatusCode != System.Net.HttpStatusCode.Conflict)
+                throw new HttpRequestException($"Capture read failed: {(int)response.StatusCode} {body}");
+            using var conflict = JsonDocument.Parse(body);
+            if (!conflict.RootElement.TryGetProperty("reason", out var reason)
+                || reason.ValueKind != JsonValueKind.String
+                || reason.GetString() != "capture-changed-during-read")
+                throw new HttpRequestException($"Capture read failed: {(int)response.StatusCode} {body}");
+            lastConflict = body;
+            await Task.Delay(100);
+        }
+        throw new TimeoutException($"Capture '{path}' did not stabilize within {timeoutMs}ms. Last conflict: {lastConflict}");
+    }
+
     internal static async Task WaitForUiSettledAsync(HttpClient http, int timeoutMs)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);

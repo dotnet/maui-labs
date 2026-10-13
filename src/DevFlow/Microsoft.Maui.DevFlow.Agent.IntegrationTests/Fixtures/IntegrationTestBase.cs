@@ -33,10 +33,7 @@ public abstract class IntegrationTestBase
 
     protected async Task<JsonElement> GetJsonAsync(string path)
     {
-        using var response = await SendHttpWithTransportRetryAsync(() => Http.GetAsync(path));
-        response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<JsonElement>(body, JsonOptions);
+        return await SendHttpWithTransportRetryAsync(() => AppFixture.ReadCaptureAsync(Http, path));
     }
 
     protected Task<HttpResponseMessage> GetRawAsync(string path)

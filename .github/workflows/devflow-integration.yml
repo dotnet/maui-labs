@@ -217,11 +217,19 @@ jobs:
           script: >
             export DEVFLOW_TEST_ANDROID_SERIAL="$(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ { print $1; exit }')";
             echo "Using Android emulator serial: ${DEVFLOW_TEST_ANDROID_SERIAL:-<none found>}";
+            TEST_EXIT=0;
             dotnet test $TEST_PROJECT -c Debug
             --logger "trx;LogFileName=devflow-integration-android-${{ matrix.framework }}.trx"
             --logger "console;verbosity=normal"
             --results-directory ./artifacts/TestResults/devflow-integration/android
-            $TEST_FILTER
+            $TEST_FILTER || TEST_EXIT=$?;
+            if [ "$TEST_EXIT" -ne 0 ] && [ -n "$DEVFLOW_TEST_ANDROID_SERIAL" ]; then
+            mkdir -p ./artifacts/TestResults/devflow-integration/android/diagnostics;
+            adb -s "$DEVFLOW_TEST_ANDROID_SERIAL" logcat -d -v threadtime
+            > ./artifacts/TestResults/devflow-integration/android/diagnostics/android-test-failure.logcat.txt
+            || echo "Android failure log collection failed.";
+            fi;
+            exit "$TEST_EXIT"
 
       - name: Upload test results
         if: always()

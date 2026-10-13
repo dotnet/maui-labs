@@ -36,6 +36,13 @@ overflow is intentional on every backend, rather than depending on a Grid's
 platform-specific desired-size clamping. Its correction must update the actual
 arranged geometry as well as the fixture's state label.
 
+Fixture settling waits for two consecutive stable captures instead of a fixed
+delay. Read-only inspection polls only the documented
+`capture-changed-during-read` conflict; other failures remain fatal and these waits
+do not replay mutations. A scroll to the current offset completes without requesting a
+native scroll, because WinUI does not emit a completion event for an unchanged
+`ChangeView`.
+
 ## Packages
 
 | Package | Description |

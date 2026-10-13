@@ -60,6 +60,60 @@ public class UiReadinessTests
         Assert.Equal(1, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task ReadCapture_ChangingCapture_PollsOnlyTheRead()
+    {
+        using var handler = new CaptureHandler(
+            (HttpStatusCode.Conflict, """{"reason":"capture-changed-during-read"}"""),
+            (HttpStatusCode.OK, Capture("stable", "1")));
+        using var http = CreateClient(handler);
+
+        var capture = await AppFixture.ReadCaptureAsync(http, "/api/v1/ui/tree?envelope=true&native=false");
+
+        Assert.Equal("stable", capture.GetProperty("revision").GetString());
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task ReadCapture_UnexpectedConflict_FailsWithoutRetry()
+    {
+        using var handler = new CaptureHandler(
+            (HttpStatusCode.Conflict, """{"reason":"unexpected-conflict"}"""));
+        using var http = CreateClient(handler);
+
+        var failure = await Assert.ThrowsAsync<HttpRequestException>(
+            () => AppFixture.ReadCaptureAsync(http, "/api/v1/ui/tree?envelope=true&native=false"));
+
+        Assert.Contains("unexpected-conflict", failure.Message);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task ReadCapture_NonJsonHttpFailure_PreservesStatusAndBodyWithoutRetry()
+    {
+        using var handler = new CaptureHandler((HttpStatusCode.BadGateway, "Agent connection closed"));
+        using var http = CreateClient(handler);
+
+        var failure = await Assert.ThrowsAsync<HttpRequestException>(
+            () => AppFixture.ReadCaptureAsync(http, "/api/v1/ui/tree?envelope=true&native=false"));
+
+        Assert.Contains("502 Agent connection closed", failure.Message);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task ReadCapture_PersistentChangingCapture_TimesOut()
+    {
+        using var handler = new CaptureHandler(
+            (HttpStatusCode.Conflict, """{"reason":"capture-changed-during-read"}"""));
+        using var http = CreateClient(handler);
+
+        await Assert.ThrowsAsync<TimeoutException>(
+            () => AppFixture.ReadCaptureAsync(http, "/api/v1/ui/tree?envelope=true&native=false", 50));
+
+        Assert.Equal(1, handler.RequestCount);
+    }
+
     static string Capture(string revision, string inputs)
         => $$"""{"revision":"{{revision}}","diagnosticInputsRevision":"{{inputs}}"}""";
 
