@@ -4,12 +4,14 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors;
 
 public sealed class LinuxCompass : LinuxSensor, ICompass
 {
-    // Preferred order: tilt-compensated magnetic → plain magnetic → tilt-compensated true north
+    // Preferred order: tilt-compensated magnetic → plain magnetic.
+    // True-north channels (e.g. in_rot_from_north_true_*) are intentionally excluded:
+    // MAUI's HeadingMagneticNorth is relative to magnetic north, and converting
+    // from true north would require a magnetic declination model.
     private static readonly string[] HeadingCandidates =
     {
         "in_rot_from_north_magnetic_tilt_comp_raw",
-        "in_rot_from_north_magnetic_raw",
-        "in_rot_from_north_true_tilt_comp_raw"
+        "in_rot_from_north_magnetic_raw"
     };
 
     private string? _headingPath;
