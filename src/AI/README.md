@@ -7,24 +7,12 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 ## Features
 
 - **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
+- **Generation options** — standard sampling and output-token controls on Apple OS 26+; see [usage](Microsoft.Maui.Essentials.AI/README.md#sampling-options-on-apple-26).
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Native token usage** — standard `ChatResponse.Usage` and streaming `UsageContent` on Apple OS 27+, without estimated counts
 - **Telemetry** — compatible with M.E.AI's built-in `UseOpenTelemetry` spans, token metrics, and streaming timings
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
-
-### Apple sampling options
-
-On OS 26+, standard `ChatOptions.TopP`, `TopK`, `Temperature`, `Seed`, and
-`MaxOutputTokens` map to Foundation Models generation options. With no sampling
-hints the default remains greedy. `Temperature` or `Seed` alone enables
-unrestricted random sampling so those hints are not ignored. `TopP` must be
-finite and in `[0, 1]`, temperature finite and nonnegative, and `TopK` and
-`MaxOutputTokens` positive.
-Supplying both `TopK` and `TopP` throws `ArgumentException` before native
-generation. This intentional caller behavior change is specific to the Apple
-adapter, which selects one Foundation Models sampling mode (previously TopP
-was ignored), not a restriction on all `IChatClient` providers.
 
 ### Platform Support
 
@@ -81,14 +69,6 @@ repo's target-framework list; it does not install or select Xcode. When
 building the normal Apple 26.x reference packs with Xcode 27, the native
 CI job passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode
 version check.
-
-### Shared sampling tests
-
-The device-test `ChatClientOptionsTestsBase<T>` runs the same individual
-sampling cases against `AppleIntelligenceChatClient` and the existing opt-in
-OpenAI Responses client in both response paths. These cases check option
-acceptance and nonempty output; Apple-specific native DTO mapping, range
-validation, and combined-filter rejection are tested separately.
 
 ## Architecture
 

@@ -86,9 +86,7 @@ filter nor `Temperature`/`Seed`, the default stays greedy. Temperature or seed
 alone enables unrestricted random sampling. `TopP` must be finite in `[0, 1]`,
 temperature finite and nonnegative, and `TopK`/`MaxOutputTokens` positive.
 Setting **both** `TopK` and `TopP` throws `ArgumentException` before native
-generation. This is an intentional Apple-adapter behavior change from
-previously ignoring TopP: the adapter selects one Foundation Models sampling
-mode. Other `IChatClient` providers may support combining the two filters.
+generation: the Apple adapter selects one Foundation Models sampling mode.
 
 ### Token usage
 
@@ -173,7 +171,6 @@ async tool code inherit any active chat trace/span, including one created by
 
 - .NET 10
 - MAUI workload (`dotnet workload install maui`)
-- Building the native library from source requires Xcode 27; the chat runtime baseline remains OS 26
 - Apple Intelligence requires iOS 26+, macOS 26+, or Mac Catalyst 26+
 - Image input additionally requires iOS, macOS, or Mac Catalyst 27+ with a ready vision model
 
