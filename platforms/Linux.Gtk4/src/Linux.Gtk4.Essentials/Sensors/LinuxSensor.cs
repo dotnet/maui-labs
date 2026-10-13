@@ -116,22 +116,12 @@ public abstract class LinuxSensor : IDisposable
     /// <summary>
     /// Reads a double value from a sysfs file, returning <paramref name="fallback"/> on any error.
     /// </summary>
-    protected double ReadDoubleOrDefault(string path, double fallback = 0.0)
+    protected double ReadDoubleOrDefault(string path, double fallback = double.NaN)
     {
-        try
-        {
-            var text = File.ReadAllText(path).Trim();
-            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-                ? value
-                : fallback;
-        }
-        catch
-        {
-            return fallback;
-        }
+        return TryReadValue(path) ?? fallback;
     }
 
-    protected double ReadSampleOrNaN(string path)
+    protected double? TryReadValue(string path)
     {
         try
         {
@@ -142,17 +132,17 @@ public abstract class LinuxSensor : IDisposable
 
             int bytesRead = fs.Read(buffer);
             if (bytesRead == 0)
-                return double.NaN;
+                return null;
 
             // sysfs is ASCII + trailing '\n'
             var text = System.Text.Encoding.ASCII.GetString(buffer[..bytesRead]).Trim();
             return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
                 ? value
-                : double.NaN;
+                : null;
         }
         catch
         {
-            return double.NaN;
+            return null;
         }
     }
 

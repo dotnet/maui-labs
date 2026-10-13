@@ -28,9 +28,9 @@ public sealed class LinuxMagnetometer : LinuxSensor, IMagnetometer
         if (_xPath is null || _yPath is null || _zPath is null)
             return;
 
-        var x = ReadSampleOrNaN(_xPath);
-        var y = ReadSampleOrNaN(_yPath);
-        var z = ReadSampleOrNaN(_zPath);
+        var x = ReadDoubleOrDefault(_xPath);
+        var y = ReadDoubleOrDefault(_yPath);
+        var z = ReadDoubleOrDefault(_zPath);
 
         if (double.IsNaN(x) || double.IsNaN(y) || double.IsNaN(z))
             return;
@@ -57,33 +57,18 @@ public sealed class LinuxMagnetometer : LinuxSensor, IMagnetometer
         _zPath = zPath;
 
         // Prefer per-axis, fall back to common
-        _scaleX = ReadScale(dir, "in_magn_x_scale")
-               ?? ReadScale(dir, "in_magn_scale")
+        _scaleX = TryReadValue(Path.Combine(dir, "in_magn_x_scale"))
+               ?? TryReadValue(Path.Combine(dir, "in_magn_scale"))
                ?? 1.0;
 
-        _scaleY = ReadScale(dir, "in_magn_y_scale")
-               ?? ReadScale(dir, "in_magn_scale")
+        _scaleY = TryReadValue(Path.Combine(dir, "in_magn_y_scale"))
+               ?? TryReadValue(Path.Combine(dir, "in_magn_scale"))
                ?? 1.0;
 
-        _scaleZ = ReadScale(dir, "in_magn_z_scale")
-               ?? ReadScale(dir, "in_magn_scale")
+        _scaleZ = TryReadValue(Path.Combine(dir, "in_magn_z_scale"))
+               ?? TryReadValue(Path.Combine(dir, "in_magn_scale"))
                ?? 1.0;
 
         return dir;
-    }
-
-    static double? ReadScale(string devicePath, string attribute)
-    {
-        var path = Path.Combine(devicePath, attribute);
-        if (!File.Exists(path))
-            return null;
-
-        if (double.TryParse(File.ReadAllText(path).Trim(),
-                            NumberStyles.Float,
-                            CultureInfo.InvariantCulture,
-                            out var value))
-            return value;
-
-        return null;
     }
 }

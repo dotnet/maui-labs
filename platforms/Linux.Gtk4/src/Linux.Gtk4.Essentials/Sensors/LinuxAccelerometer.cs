@@ -37,9 +37,9 @@ public sealed class LinuxAccelerometer : LinuxSensor, IAccelerometer
         if (_xPath is null || _yPath is null || _zPath is null)
             return;
 
-        var rawX = ReadSampleOrNaN(_xPath);
-        var rawY = ReadSampleOrNaN(_yPath);
-        var rawZ = ReadSampleOrNaN(_zPath);
+        var rawX = ReadDoubleOrDefault(_xPath);
+        var rawY = ReadDoubleOrDefault(_yPath);
+        var rawZ = ReadDoubleOrDefault(_zPath);
 
         if (double.IsNaN(rawX) || double.IsNaN(rawY) || double.IsNaN(rawZ))
             return;

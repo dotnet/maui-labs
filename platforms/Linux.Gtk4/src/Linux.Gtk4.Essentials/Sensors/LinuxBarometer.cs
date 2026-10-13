@@ -18,7 +18,7 @@ public sealed class LinuxBarometer : LinuxSensor, IBarometer
         if (_pressureRawPath is null)
             return;
 
-        var raw = ReadSampleOrNaN(_pressureRawPath);
+        var raw = ReadDoubleOrDefault(_pressureRawPath);
         if (double.IsNaN(raw))
             return;
 
