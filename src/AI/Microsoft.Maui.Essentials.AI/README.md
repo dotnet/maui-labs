@@ -138,27 +138,17 @@ metrics. On OS 26, request timing and model metadata remain available without
 token usage. Provider-specific response IDs and finish reasons are emitted
 only when the provider supplies them.
 
-### Native message IDs
+### Message IDs
 
-Response `ChatMessage.MessageId` values are genuine native transcript entry IDs
-on Apple OS 26+. Streaming text `ChatResponseUpdate.MessageId` values are
-available on OS 27+ and stay stable through cumulative snapshots and final JSON
-flushes. Content comes from each entry's own segments, not `Snapshot.content`
-paired with the last response ID. Unchanged entries are not replayed, and final
-collected entries reconcile missing content.
+Use `ChatMessage.MessageId` and `ChatResponseUpdate.MessageId` to correlate
+native responses with their streaming chunks. Response message IDs are available
+on Apple OS 26+; streaming text message IDs require OS 27+. IDs are `null` when
+unavailable and on tool callbacks, whose call IDs identify tool invocations
+rather than messages.
 
-Text and JSON state is retained per known ID across tools and identity switches,
-preserving text whitespace and JSON value growth. Known JSON documents close only on
-successful completion so entries can keep growing; tool callbacks remain
-immediate. Standard aggregation may keep multiple fragments for a resumed ID;
-concatenate their text by ID to reconstruct content rather than assuming global
-message order. Append-only updates cannot retract shrinking/non-prefix
-replacement snapshots; arbitrary replacement is not supported.
-
-OS 26 streaming IDs remain null because snapshots lack transcript entries.
-Tool callback message IDs also stay null: their call IDs are not message IDs.
-History preserves IDs where a managed message represents one native entry,
-without copying a single ID to multiple entries for mixed assistant content.
+An aggregated `ChatResponse` can contain multiple message fragments with the
+same ID; concatenate their text by ID to reconstruct that message. Streaming
+output is append-only and cannot retract previously emitted text.
 
 ### Embeddings for semantic search
 
