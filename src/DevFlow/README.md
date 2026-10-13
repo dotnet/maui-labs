@@ -5,6 +5,28 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 
 > ⚠️ **Experimental** — APIs may change between releases. Not covered by the Microsoft Support Policy.
 
+## Integration CI
+
+`devflow-integration.yml` runs automatically on DevFlow-relevant PR opens, updates,
+reopens and edits, including drafts, without an opt-in label. Every automatic run
+exercises MAUI and plain .NET samples on Android, iOS, Mac Catalyst and AppKit, plus
+MAUI Windows, GTK and WPF. Manual dispatch still supports focused platform/framework
+selection. The ordinary `ci-devflow.yml` host, browser, JavaScript and AOT tests
+remain enabled alongside these device tests.
+
+Path filters cover DevFlow, its CLI implementation and executable entry point,
+sample apps, custom-backend startup/native-inspection seams, and their Essentials
+and Blazor libraries. They do not trigger the integration matrix for unrelated
+platform handlers, platform samples or documentation. Shared MSBuild properties,
+targets, Arcade infrastructure, SDK and package/feed configuration are unavoidable
+inputs: changing them can alter any tested app's compilation, restore or startup.
+
+MAUI recognizer tests require the MAUI gesture page and are excluded from plain
+.NET runs via the `framework=maui` trait. Native runs retain native actions,
+properties, hit-test envelopes, rejection, storage and protocol coverage.
+An uploaded TRX or green fixture-selection test is not evidence that a device
+test executed; inspect individual results and fixture failures.
+
 ## Packages
 
 | Package | Description |

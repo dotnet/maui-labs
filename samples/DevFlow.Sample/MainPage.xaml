@@ -18,7 +18,7 @@
         <!-- Header -->
         <VerticalStackLayout Grid.Row="0" Spacing="4" Padding="0,8,0,16">
             <Grid ColumnDefinitions="*,Auto">
-                <Label Text="📝 My Tod"
+                <Label Text="📝 My Todos"
                        FontSize="28"
                        FontAttributes="Bold"
                        AutomationId="HeaderLabel">

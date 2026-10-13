@@ -28,6 +28,47 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
     public Task InitializeAsync() => _inner.InitializeAsync();
     public Task DisposeAsync() => _inner.DisposeAsync();
 
+    public Task WaitForUiSettledAsync(int timeoutMs = 10000)
+    {
+        if (TestFramework.IsNative)
+            return Task.CompletedTask;
+        return WaitForUiSettledAsync(Http, timeoutMs);
+    }
+
+    internal static async Task WaitForUiSettledAsync(HttpClient http, int timeoutMs)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        string? previousRevision = null;
+        string? lastFailure = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            using var response = await http.GetAsync("/api/v1/ui/tree?envelope=true&native=false");
+            var body = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+            if (response.IsSuccessStatusCode)
+            {
+                var revision = $"{root.GetProperty("revision").GetString()}:{root.GetProperty("diagnosticInputsRevision").GetString()}";
+                if (revision == previousRevision)
+                    return;
+                previousRevision = revision;
+            }
+            else
+            {
+                if (response.StatusCode != System.Net.HttpStatusCode.Conflict
+                    || !root.TryGetProperty("reason", out var reason)
+                    || reason.GetString() != "capture-changed-during-read")
+                {
+                    throw new InvalidOperationException($"UI readiness failed: {(int)response.StatusCode} {body}");
+                }
+                lastFailure = body;
+                previousRevision = null;
+            }
+            await Task.Delay(100);
+        }
+        throw new TimeoutException($"UI did not settle within {timeoutMs}ms. Last revision: {previousRevision}. Last conflict: {lastFailure}");
+    }
+
     /// <summary>
     /// Navigates to the //blazor Shell route (if not already there), waits for the
     /// BlazorWebView element to appear, and probes the CDP bridge with Runtime.evaluate
@@ -45,6 +86,7 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
             {
                 _blazorReady = false;
                 await Client.NavigateAsync("//blazor");
+                await WaitForUiSettledAsync();
                 await WaitForAutomationIdAsync("BlazorWebView", timeoutMs: 15000);
             }
 
@@ -85,6 +127,7 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
             await Client.NavigateAsync("//native");
             await Task.Delay(500);
             await Client.NavigateAsync("//blazor");
+            await WaitForUiSettledAsync();
             await WaitForAutomationIdAsync("BlazorWebView", timeoutMs: 15000);
 
             var recoveryTimeoutMs = Platform switch

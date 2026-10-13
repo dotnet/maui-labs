@@ -3,9 +3,8 @@ name: DevFlow Integration Tests
 # Status: experimental.
 # The DevFlow integration suite builds the sample app, boots a simulator/emulator,
 # installs and launches it, then runs real HTTP round-trips against the agent.
-# A full platform run takes ~20-30 min. To save CI minutes we keep this off the
-# default PR pipeline — it runs on demand via workflow_dispatch or when a PR is
-# labeled `integration-tests`. Additional PR updates can be re-run manually.
+# Runs automatically for DevFlow-relevant PR changes, including draft PRs.
+# workflow_dispatch retains platform/framework selection for focused investigations.
 #
 # Entry points per platform fixture:
 #   Android   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/AndroidEmulatorFixture.cs
@@ -53,19 +52,46 @@ on:
         default: ""
         type: string
   pull_request:
-    types: [labeled]
+    types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - 'src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj'
+      - 'src/Cli/Microsoft.Maui.Cli/Program.cs'
+      - 'src/Cli/Version.props'
       - 'samples/DevFlow.Sample/**'
       - 'samples/DevFlow.Sample.Linux/**'
       - 'samples/DevFlow.Sample.MacOS/**'
       - 'samples/DevFlow.Sample.Native/**'
       - 'samples/DevFlow.Sample.WPF/**'
-      - 'platforms/Linux.Gtk4/**'
-      - 'platforms/MacOS/**'
-      - 'platforms/Windows.WPF/**'
+      # Custom-backend startup, native inspection seams and directly used libraries.
+      # Unrelated handlers, platform samples and packaging docs have their own CI.
+      - 'platforms/*/Directory.Build.*'
+      - 'platforms/*/Version.props'
+      - 'platforms/*/src/*/*.csproj'
+      - 'platforms/*/src/*/build*/**'
+      - 'platforms/*/src/*/Hosting/**'
+      - 'platforms/*/src/*/Platform/*MauiApplication.cs'
+      - 'platforms/*/src/*/Platform/NativeElementDiagnosticsBridge.cs'
+      - 'platforms/*/src/*/Handlers/ShellHandler.cs'
+      - 'platforms/MacOS/src/MacOS/Handlers/ToolbarHandler.cs'
+      - 'platforms/MacOS/src/MacOS/Platform/*Native*.cs'
+      - 'platforms/MacOS/src/MacOS/Platform/MacOSToolbarItem.cs'
+      - 'platforms/MacOS/src/MacOS/Platform/ToolbarItemInvocationOutcome.cs'
+      - 'platforms/Windows.WPF/src/Windows.WPF/Handlers/WindowHandler.cs'
+      - 'platforms/*/src/*.Essentials/**'
+      - 'platforms/*/src/*.BlazorWebView/**'
       - '.github/workflows/devflow-integration.yml'
+      # These inputs change compilation/restore for every sample and agent.
+      - 'eng/*.props'
+      - 'eng/*.targets'
+      - 'eng/common/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
 
 concurrency:
   group: devflow-integration-${{ github.ref }}
@@ -79,9 +105,7 @@ env:
 
 jobs:
   # Decide which platforms to run based on the trigger.
-  # For pull_request runs we require the `integration-tests` label.
   plan:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.label.name == 'integration-tests')
     runs-on: ubuntu-latest
     outputs:
       run-android: ${{ steps.decide.outputs.android }}
@@ -101,7 +125,6 @@ jobs:
           EVENT: ${{ github.event_name }}
           PLATFORMS: ${{ inputs.platforms }}
           FRAMEWORK: ${{ inputs.framework }}
-          LABELED: ${{ github.event_name == 'pull_request' && github.event.label.name == 'integration-tests' || 'false' }}
         run: |
           set -e
           should_run() {
@@ -109,15 +132,12 @@ jobs:
             if [[ "$EVENT" == "workflow_dispatch" ]]; then
               [[ "$PLATFORMS" == "all" || "$PLATFORMS" == "$p" ]] && echo true || echo false
             elif [[ "$EVENT" == "pull_request" ]]; then
-              [[ "$LABELED" == "true" ]] && echo true || echo false
+              echo true
             else
               echo false
             fi
           }
-          # `framework` is a workflow_dispatch-only input, so it is empty for label-triggered PR
-          # runs. Those default to `both`: the label is an explicit opt-in to the expensive suite,
-          # and the native axis is the newer, less-proven one — defaulting it to `maui` there meant
-          # the plain .NET heads were never exercised automatically at all.
+          # PRs exercise both frameworks; manual runs retain their selected framework.
           DEFAULT_FRAMEWORK=maui
           [[ "$EVENT" == "pull_request" ]] && DEFAULT_FRAMEWORK=both
           {

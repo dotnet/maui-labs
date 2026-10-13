@@ -343,14 +343,30 @@ public class UiActionTests : IntegrationTestBase
         using var response = await PostRawAsync("/api/v1/ui/actions/gesture", new { type = "wiggle" });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("Supported types", body);
+        if (TestFramework.IsNative)
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(body);
+            Assert.Contains("not supported", document.RootElement.GetProperty("error").GetString());
+        }
+        else
+            Assert.Contains("Supported types", body);
     }
 
     [Fact]
     public async Task Capabilities_AdvertisesSupportedGestures()
     {
         var caps = await GetJsonAsync("/api/v1/agent/capabilities");
-        var gestures = caps.GetProperty("capabilities").GetProperty("ui.actions").GetProperty("gestures")
+        var actions = caps.GetProperty("capabilities").GetProperty("ui.actions");
+        Assert.True(actions.GetProperty("supported").GetBoolean());
+        if (TestFramework.IsNative)
+        {
+            Assert.Equal(1, actions.GetProperty("version").GetInt32());
+            var features = actions.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()).ToArray();
+            Assert.Contains("gesture", features);
+            Assert.Contains("tap", features);
+            return;
+        }
+        var gestures = actions.GetProperty("gestures")
             .EnumerateArray().Select(g => g.GetString()).ToArray();
 
         Assert.Contains("pinch", gestures);
@@ -365,6 +381,7 @@ public class UiActionTests : IntegrationTestBase
     private Task NavigateToGesturePageAsync() => NavigateToPageAsync("//gestures", "PinchTarget");
 
     [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     public async Task Pinch_FiresPinchGestureRecognizer()
     {
         await NavigateToGesturePageAsync();
@@ -382,6 +399,7 @@ public class UiActionTests : IntegrationTestBase
     }
 
     [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     public async Task Pinch_ZoomOut_ReportsScaleBelowOne()
     {
         await NavigateToGesturePageAsync();
@@ -397,6 +415,7 @@ public class UiActionTests : IntegrationTestBase
     }
 
     [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     public async Task Pan_FiresPanGestureRecognizerWithCumulativeTotals()
     {
         await NavigateToGesturePageAsync();
@@ -413,6 +432,7 @@ public class UiActionTests : IntegrationTestBase
     }
 
     [Theory]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     [InlineData("up")]
     [InlineData("down")]
     [InlineData("left")]
@@ -433,6 +453,7 @@ public class UiActionTests : IntegrationTestBase
     }
 
     [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     public async Task DoubleTap_FiresTwoTapRecognizerNotTheSingleTapOne()
     {
         await NavigateToGesturePageAsync();
@@ -454,15 +475,24 @@ public class UiActionTests : IntegrationTestBase
         await NavigateToPageAsync("//interactions", "TestButton");
         var target = await FindElementAsync("TestButton");
 
-        var result = await Client.GestureDetailedAsync(
-            "tap",
-            target.Id,
-            captureEpoch: target.CaptureEpoch,
-            registryGeneration: target.RegistryGeneration);
+        if (TestFramework.IsNative)
+        {
+            var result = await PostJsonAsync("/api/v1/ui/actions/gesture", new { type = "tap", elementId = target.Id });
+            Assert.True(result.GetProperty("success").GetBoolean());
+            Assert.Equal("Gesture performed", result.GetProperty("message").GetString());
+        }
+        else
+        {
+            var result = await Client.GestureDetailedAsync(
+                "tap",
+                target.Id,
+                captureEpoch: target.CaptureEpoch,
+                registryGeneration: target.RegistryGeneration);
 
-        Assert.True(result.Success, result.Error);
-        Assert.Equal("tap", result.Type);
-        Assert.Equal("action", result.HandledBy);
+            Assert.True(result.Success, result.Error);
+            Assert.Equal("tap", result.Type);
+            Assert.Equal("action", result.HandledBy);
+        }
 
         await SettleAsync();
         var status = await FindElementAsync("StatusLabel");
@@ -476,7 +506,7 @@ public class UiActionTests : IntegrationTestBase
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("tap requires elementId", body);
+        Assert.Contains(TestFramework.IsNative ? "elementId is required to tap" : "tap requires elementId", body);
     }
 
     [Trait(TestFramework.Trait, TestFramework.Maui)]
@@ -507,6 +537,7 @@ public class UiActionTests : IntegrationTestBase
     }
 
     [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     public async Task Pinch_OnElementWithoutRecognizer_ReportsWhichTierRan()
     {
         await NavigateToGesturePageAsync();
@@ -530,6 +561,7 @@ public class UiActionTests : IntegrationTestBase
     }
 
     [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
     public async Task Pan_OnElementWithoutRecognizer_FallsThroughToNative()
     {
         await NavigateToGesturePageAsync();
