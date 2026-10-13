@@ -43,6 +43,8 @@ public sealed class MockAgentServer : IAsyncDisposable
     private int _screenshotCount;
     private int _keyCount;
     private WebApplication? _app;
+    public Func<string>? JobsListResponse { get; set; }
+    public Func<string>? JobRunResponse { get; set; }
 
     public MockAgentServer(
         bool supportsCaptureEpoch = true,
@@ -497,8 +499,12 @@ public sealed class MockAgentServer : IAsyncDisposable
             Results.Content(MockAgentResponses.GestureSuccess, "application/json"));
     }
 
-    private static void RegisterDeviceEndpoints(WebApplication app)
+    private void RegisterDeviceEndpoints(WebApplication app)
     {
+        app.MapGet("/api/v1/device/jobs", () => Results.Content(
+            JobsListResponse?.Invoke() ?? """{"platform":"Test","supported":false,"jobs":[]}""", "application/json"));
+        app.MapPost("/api/v1/device/jobs/{identifier}/run", () => Results.Content(
+            JobRunResponse?.Invoke() ?? """{"success":false,"error":"Jobs run is unsupported."}""", "application/json"));
         app.MapGet("/api/v1/device/info", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/app", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/app/theme", () => Results.Content(MockAgentResponses.ThemeInfo, "application/json"));

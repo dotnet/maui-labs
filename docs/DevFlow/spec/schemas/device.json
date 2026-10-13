@@ -419,6 +419,20 @@
           },
           "description": "Background jobs reported by the platform."
         },
+        "scheduledJobs": {
+          "type": "array",
+          "description": "Android JobScheduler mappings read in-process from each WorkManager job's EXTRA_WORK_SPEC_ID. The host CLI uses these exact identities when forcing work via adb.",
+          "items": {
+            "type": "object",
+            "required": ["workSpecId", "jobId", "namespace"],
+            "properties": {
+              "workSpecId": { "type": "string", "format": "uuid" },
+              "jobId": { "type": "string" },
+              "namespace": { "type": ["string", "null"] }
+            },
+            "additionalProperties": false
+          }
+        },
         "error": {
           "type": "string",
           "description": "Platform-specific error message if listing failed."
@@ -450,7 +464,7 @@
       "properties": {
         "success": {
           "type": "boolean",
-          "description": "Whether the job trigger request was submitted successfully."
+          "description": "Whether the launch request was accepted. On iOS this does not verify handler execution or completion; Android host CLI separately verifies the exact WorkSpec reaches SUCCEEDED."
         },
         "supported": {
           "type": "boolean",
@@ -471,6 +485,18 @@
         "message": {
           "type": "string",
           "description": "Human-readable success message."
+        },
+        "launchRequested": {
+          "type": "boolean",
+          "description": "The debug BGTask launch selector was invoked. This is not evidence that the handler ran."
+        },
+        "executionVerified": {
+          "type": "boolean",
+          "description": "False for iOS launch acknowledgments; verify the handler's own recorded execution."
+        },
+        "completionVerified": {
+          "type": "boolean",
+          "description": "False for iOS launch acknowledgments; verify the handler's own recorded result."
         },
         "error": {
           "type": "string",

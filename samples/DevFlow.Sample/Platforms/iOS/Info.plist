@@ -38,5 +38,15 @@
     <string>This app needs contacts access for testing dialog handling.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>This app needs microphone access for testing dialog handling.</string>
+    <!-- BGTaskScheduler refuses to register or submit an identifier that is not listed here. -->
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>com.companyname.mauitodo.sync</string>
+    </array>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
 </dict>
 </plist>
