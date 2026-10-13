@@ -5,6 +5,42 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 
 > ⚠️ **Experimental** — APIs may change between releases. Not covered by the Microsoft Support Policy.
 
+## Integration CI
+
+Both DevFlow workflows cover relevant PRs targeting main or stacked feature
+branches. `devflow-integration.yml` runs automatically on PR opens, updates,
+reopens and edits, including drafts, without an opt-in label. Every automatic run
+executes all existing MAUI integration cases on Android, iOS, Mac Catalyst and
+Windows. Manual dispatch retains all platform/framework choices, including
+GTK, WPF, AppKit and plain .NET samples. Their full backend/native repair layer
+is not included in this core foundation; manual runs can still expose existing
+failures. The ordinary `ci-devflow.yml` host, browser, JavaScript, AOT and native
+sample-build jobs remain enabled alongside these device tests.
+
+Path filters cover DevFlow, its CLI implementation and executable entry point,
+sample apps, the complete GTK, AppKit and WPF backend trees, and their shared
+platform sources. Backend changes can affect the agent's build or rendered UI, so both DevFlow workflows prefer
+extra runs over a fragile file allowlist. Shared build infrastructure, SDK and
+package/feed configuration are included because they can alter any tested app's
+compilation, restore or startup.
+
+An uploaded TRX or green fixture-selection test is not evidence that a device
+test executed; inspect individual results and fixture failures.
+Fixture timeouts retain partial process output. Android startup failures collect
+logcat, and iOS startup timeouts collect device/bundle-scoped simulator logs.
+
+The baseline sizing fixture uses explicit absolute child bounds so parent
+overflow is intentional across the core platforms, rather than depending on a Grid's
+platform-specific desired-size clamping. Its correction must update the actual
+arranged geometry as well as the fixture's state label.
+
+Fixture settling waits for two consecutive stable captures instead of a fixed
+delay. Read-only inspection polls only the documented
+`capture-changed-during-read` conflict; other failures remain fatal and these waits
+do not replay mutations. A scroll to the current offset completes without requesting a
+native scroll, because WinUI does not emit a completion event for an unchanged
+`ChangeView`.
+
 ## Packages
 
 | Package | Description |
@@ -672,7 +708,11 @@ for Linux-only releases.
 
 ### Real app integration tests
 
-The simulator/emulator-driven suite is kept separate from the fast PR test pass and is intended to be run explicitly. Set `DEVFLOW_TEST_PLATFORM` to one of: `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`, `windows`. Defaults to `maccatalyst` on macOS, `windows` on Windows.
+The simulator/emulator-driven suite is separate from the fast host tests and runs
+automatically in integration CI as described above. For local runs, set
+`DEVFLOW_TEST_PLATFORM` to `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`,
+`windows`, `macos`, `gtk`, or `wpf`. It defaults to `maccatalyst` on macOS and
+`windows` on Windows.
 
 ```bash
 # Mac Catalyst
@@ -689,6 +729,16 @@ DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Age
 ```
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.
+
+CI sets `DEVFLOW_TEST_IOS_ISOLATED=true`: the fixture creates a fresh iPhone from
+the installed runtime's supported device types, then shuts down and deletes only
+that owned simulator, including after startup failure. `DEVFLOW_TEST_IOS_VERSION`
+still selects the runtime; isolation does not downgrade it or retry boots. Set
+the same flag locally to avoid deploying into an existing simulator. Without
+the flag, the existing booted-device selection behavior is unchanged.
+The iOS CI job uses the current macOS 26 host with the workload-compatible
+Xcode 26.3 and defaults to iOS 26.2, preserving the prior runtime coverage.
+Manual dispatch can select a different installed runtime via `ios-runtime`.
 
 #### Running the suite against a plain .NET app
 

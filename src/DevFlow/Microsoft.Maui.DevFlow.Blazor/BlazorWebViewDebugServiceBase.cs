@@ -666,32 +666,13 @@ public abstract class BlazorWebViewDebugServiceBase : IDisposable
             var json = System.Text.Json.JsonDocument.Parse(cdpJson);
             var url = json.RootElement.GetProperty("params").GetProperty("url").GetString() ?? "";
 
-            if (Uri.TryCreate(url, UriKind.Absolute, out _))
+            if (WebViewNavigation.IsAbsoluteUrl(url))
             {
                 await _owner.RunOnMainThreadAsync(() => { _navigate(url); });
             }
             else
             {
-                var escapedUrl = EscapeJsString(url);
-                var script = $@"(function() {{
-                    const target = '{escapedUrl}';
-                    try {{
-                        if (window.Blazor && typeof window.Blazor.navigateTo === 'function') {{
-                            window.Blazor.navigateTo(target);
-                            return 'blazor';
-                        }}
-                    }} catch {{}}
-
-                    try {{
-                        history.pushState({{}}, '', target);
-                        window.dispatchEvent(new PopStateEvent('popstate'));
-                        return 'history';
-                    }} catch {{}}
-
-                    location.href = target;
-                    return 'location';
-                }})()";
-
+                var script = WebViewNavigation.CreateRelativeNavigationScript(url);
                 await _owner.RunOnMainThreadAsync(async () => { await _evalJs(script); });
             }
 

@@ -3,9 +3,8 @@ name: DevFlow Integration Tests
 # Status: experimental.
 # The DevFlow integration suite builds the sample app, boots a simulator/emulator,
 # installs and launches it, then runs real HTTP round-trips against the agent.
-# A full platform run takes ~20-30 min. To save CI minutes we keep this off the
-# default PR pipeline — it runs on demand via workflow_dispatch or when a PR is
-# labeled `integration-tests`. Additional PR updates can be re-run manually.
+# Runs core MAUI platforms automatically for DevFlow-relevant PR changes, including drafts.
+# workflow_dispatch retains platform/framework selection for focused investigations.
 #
 # Entry points per platform fixture:
 #   Android   -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/AndroidEmulatorFixture.cs
@@ -49,23 +48,35 @@ on:
         default: false
         type: boolean
       ios-runtime:
-        description: iOS runtime version filter (e.g. 17.5). Leave blank for newest available.
+        description: iOS runtime version filter (e.g. 26.2). Leave blank for the CI-pinned 26.2 runtime.
         default: ""
         type: string
   pull_request:
-    types: [labeled]
-    branches: [main]
+    types: [opened, synchronize, reopened, edited]
     paths:
       - 'src/DevFlow/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - 'src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj'
+      - 'src/Cli/Microsoft.Maui.Cli/Program.cs'
+      - 'src/Cli/Version.props'
       - 'samples/DevFlow.Sample/**'
       - 'samples/DevFlow.Sample.Linux/**'
       - 'samples/DevFlow.Sample.MacOS/**'
       - 'samples/DevFlow.Sample.Native/**'
       - 'samples/DevFlow.Sample.WPF/**'
+      # Backend dependencies: prefer extra runs over missing a relevant change.
       - 'platforms/Linux.Gtk4/**'
       - 'platforms/MacOS/**'
       - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/**'
       - '.github/workflows/devflow-integration.yml'
+      # These inputs change compilation/restore for every sample and agent.
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
 
 concurrency:
   group: devflow-integration-${{ github.ref }}
@@ -79,9 +90,7 @@ env:
 
 jobs:
   # Decide which platforms to run based on the trigger.
-  # For pull_request runs we require the `integration-tests` label.
   plan:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.label.name == 'integration-tests')
     runs-on: ubuntu-latest
     outputs:
       run-android: ${{ steps.decide.outputs.android }}
@@ -101,7 +110,6 @@ jobs:
           EVENT: ${{ github.event_name }}
           PLATFORMS: ${{ inputs.platforms }}
           FRAMEWORK: ${{ inputs.framework }}
-          LABELED: ${{ github.event_name == 'pull_request' && github.event.label.name == 'integration-tests' || 'false' }}
         run: |
           set -e
           should_run() {
@@ -109,17 +117,17 @@ jobs:
             if [[ "$EVENT" == "workflow_dispatch" ]]; then
               [[ "$PLATFORMS" == "all" || "$PLATFORMS" == "$p" ]] && echo true || echo false
             elif [[ "$EVENT" == "pull_request" ]]; then
-              [[ "$LABELED" == "true" ]] && echo true || echo false
+              case "$p" in
+                android|ios|maccatalyst|windows) echo true ;;
+                *) echo false ;;
+              esac
             else
               echo false
             fi
           }
-          # `framework` is a workflow_dispatch-only input, so it is empty for label-triggered PR
-          # runs. Those default to `both`: the label is an explicit opt-in to the expensive suite,
-          # and the native axis is the newer, less-proven one — defaulting it to `maui` there meant
-          # the plain .NET heads were never exercised automatically at all.
-          DEFAULT_FRAMEWORK=maui
-          [[ "$EVENT" == "pull_request" ]] && DEFAULT_FRAMEWORK=both
+          # PRs exercise core MAUI; manual runs retain every platform/framework choice.
+          SELECTED_FRAMEWORK=maui
+          [[ "$EVENT" == "workflow_dispatch" ]] && SELECTED_FRAMEWORK="${FRAMEWORK:-maui}"
           {
             echo "android=$(should_run android)"
             echo "ios=$(should_run ios)"
@@ -128,7 +136,7 @@ jobs:
             echo "gtk=$(should_run gtk)"
             echo "windows=$(should_run windows)"
             echo "wpf=$(should_run wpf)"
-            case "${FRAMEWORK:-$DEFAULT_FRAMEWORK}" in
+            case "$SELECTED_FRAMEWORK" in
               native) echo 'frameworks=["native"]' ;;
               both)   echo 'frameworks=["maui","native"]' ;;
               *)      echo 'frameworks=["maui"]' ;;
@@ -211,11 +219,19 @@ jobs:
           script: >
             export DEVFLOW_TEST_ANDROID_SERIAL="$(adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ { print $1; exit }')";
             echo "Using Android emulator serial: ${DEVFLOW_TEST_ANDROID_SERIAL:-<none found>}";
+            TEST_EXIT=0;
             dotnet test $TEST_PROJECT -c Debug
             --logger "trx;LogFileName=devflow-integration-android-${{ matrix.framework }}.trx"
             --logger "console;verbosity=normal"
             --results-directory ./artifacts/TestResults/devflow-integration/android
-            $TEST_FILTER
+            $TEST_FILTER || TEST_EXIT=$?;
+            if [ "$TEST_EXIT" -ne 0 ] && [ -n "$DEVFLOW_TEST_ANDROID_SERIAL" ]; then
+            mkdir -p ./artifacts/TestResults/devflow-integration/android/diagnostics;
+            adb -s "$DEVFLOW_TEST_ANDROID_SERIAL" logcat -d -v threadtime
+            > ./artifacts/TestResults/devflow-integration/android/diagnostics/android-test-failure.logcat.txt
+            || echo "Android failure log collection failed.";
+            fi;
+            exit "$TEST_EXIT"
 
       - name: Upload test results
         if: always()
@@ -232,14 +248,18 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    runs-on: macos-15
+    # Use the current host OS; macOS 15's CoreSimulator intermittently stalls
+    # before boot or the first FrontBoard launch, even with a fresh device.
+    runs-on: macos-26
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: ios
       DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      DEVFLOW_TEST_IOS_ISOLATED: 'true'
       # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
       TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
-      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime }}
+      # Preserve the 26.2 runtime used with the pinned workload/Xcode on macOS 15.
+      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '26.2' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -544,13 +564,17 @@ jobs:
           $app = $null
           try {
             dotnet build $cliProject -c Debug -f net10.0 --nologo -v minimal
+            if ($LASTEXITCODE -ne 0) { throw 'CLI build failed.' }
             dotnet build $sampleProject -c Debug -f net10.0-windows10.0.19041.0 --nologo -v minimal
+            if ($LASTEXITCODE -ne 0) { throw 'Sample build failed.' }
             dotnet build $inspectorTests -c Debug --nologo -v minimal
+            if ($LASTEXITCODE -ne 0) { throw 'Inspector test build failed.' }
 
             $cli = Get-ChildItem 'artifacts\bin\Microsoft.Maui.Cli\Debug\net10.0\maui.dll' |
               Select-Object -First 1 -ExpandProperty FullName
             dotnet $cli devflow broker stop 2>$null
             dotnet $cli devflow broker start
+            if ($LASTEXITCODE -ne 0) { throw 'Broker startup failed.' }
 
             $exe = Get-ChildItem 'artifacts\bin\DevFlow.Sample\Debug' -Filter 'DevFlow.Sample.exe' -Recurse |
               Select-Object -First 1 -ExpandProperty FullName
@@ -574,6 +598,7 @@ jobs:
             $playwright = Get-ChildItem 'artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Debug\net10.0\playwright.ps1' |
               Select-Object -First 1 -ExpandProperty FullName
             & $playwright install chromium
+            if ($LASTEXITCODE -ne 0) { throw 'Playwright browser installation failed.' }
 
             $env:MAUI_INSPECTOR_LIVE_TESTS = '1'
             $env:INSPECTOR_URL = 'http://localhost:19223/inspector/default/'
@@ -581,6 +606,7 @@ jobs:
               --logger 'trx;LogFileName=devflow-inspector-windows.trx' `
               --logger 'console;verbosity=normal' `
               --results-directory '.\artifacts\TestResults\devflow-integration\windows'
+            if ($LASTEXITCODE -ne 0) { throw 'Live inspector tests failed.' }
           }
           finally {
             if ($app -and -not $app.HasExited) {

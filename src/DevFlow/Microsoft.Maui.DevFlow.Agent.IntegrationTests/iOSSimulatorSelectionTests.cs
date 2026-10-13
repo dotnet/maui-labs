@@ -181,6 +181,83 @@ public class iOSSimulatorSelectionTests
         => Assert.Equal(expected, iOSSimulatorFixture.IsIPhoneDeviceType(deviceTypeIdentifier, name));
 
     [Fact]
+    public void ParseIsolatedIPhoneCandidates_UsesAvailableRuntimeHardwareWithoutExistingDevices()
+    {
+        var json = """
+            {"runtimes":[
+              {"identifier":"com.apple.CoreSimulator.SimRuntime.iOS-26-2","isAvailable":true,
+               "supportedDeviceTypes":[
+                 {"identifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro","name":"iPhone 17 Pro"},
+                 {"identifier":"com.apple.CoreSimulator.SimDeviceType.iPad-Pro","name":"iPad Pro"}]},
+              {"identifier":"com.apple.CoreSimulator.SimRuntime.iOS-18-6","isAvailable":true,
+               "supportedDeviceTypes":[
+                 {"identifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro","name":"iPhone 16 Pro"}]},
+              {"identifier":"com.apple.CoreSimulator.SimRuntime.iOS-27-0","isAvailable":false}
+            ]}
+            """;
+
+        var template = Assert.Single(iOSSimulatorFixture.ParseIsolatedIPhoneCandidates(json, "26.2"));
+
+        Assert.Equal("com.apple.CoreSimulator.SimRuntime.iOS-26-2", template.RuntimeIdentifier);
+        Assert.Equal("com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro", template.DeviceTypeIdentifier);
+        Assert.Empty(template.Udid);
+    }
+
+    [Fact]
+    public void ParseIsolatedIPhoneCandidates_NoMatchingRuntime_DoesNotFallBackToAnotherVersion()
+    {
+        var json = """
+            {"runtimes":[
+              {"identifier":"com.apple.CoreSimulator.SimRuntime.iOS-18-6","isAvailable":true,
+               "supportedDeviceTypes":[
+                 {"identifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro","name":"iPhone 16 Pro"}]}
+            ]}
+            """;
+
+        Assert.Empty(iOSSimulatorFixture.ParseIsolatedIPhoneCandidates(json, "26.2"));
+    }
+
+    [Fact]
+    public void ParseIPhoneCandidates_PreservesExactRuntimeIdentifierForAnIsolatedDevice()
+    {
+        const string runtime = "com.apple.CoreSimulator.SimRuntime.iOS-26-2";
+        var json = BuildSimctlJson((runtime,
+        [
+            ("Renamed phone", "A", "Booted", "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro", true)
+        ]));
+
+        var candidate = Assert.Single(iOSSimulatorFixture.ParseIPhoneCandidates(json, "26.2"));
+
+        Assert.Equal(runtime, candidate.RuntimeIdentifier);
+    }
+
+    [Fact]
+    public void CreateIsolatedSimulatorArguments_UsesHardwareAndRuntime_NotAnExistingDevice()
+    {
+        var template = new SimulatorDeviceCandidate("existing-device", "Renamed phone", "26.2", "Booted",
+            "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+            "com.apple.CoreSimulator.SimRuntime.iOS-26-2");
+
+        var arguments = iOSSimulatorFixture.CreateIsolatedSimulatorArguments(template);
+
+        Assert.Equal($"simctl create DevFlowIntegration-{Environment.ProcessId} " +
+            "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro com.apple.CoreSimulator.SimRuntime.iOS-26-2", arguments);
+        Assert.DoesNotContain(template.Udid, arguments);
+        Assert.DoesNotContain(template.Name, arguments);
+    }
+
+    [Theory]
+    [InlineData(null, "com.apple.CoreSimulator.SimRuntime.iOS-26-2")]
+    [InlineData("com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro", null)]
+    public void CreateIsolatedSimulatorArguments_MissingIdentifiers_FailsExplicitly(string? deviceType, string? runtime)
+    {
+        var template = new SimulatorDeviceCandidate("existing-device", "iPhone 17 Pro", "26.2", "Shutdown",
+            deviceType, runtime);
+
+        Assert.Throws<InvalidOperationException>(() => iOSSimulatorFixture.CreateIsolatedSimulatorArguments(template));
+    }
+
+    [Fact]
     public void SelectBestDevice_PrefersHighestIPhoneModelNumber()
     {
         var candidates = new List<SimulatorDeviceCandidate>

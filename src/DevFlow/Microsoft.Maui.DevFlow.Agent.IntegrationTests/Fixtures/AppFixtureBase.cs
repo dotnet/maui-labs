@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
@@ -119,6 +120,8 @@ public abstract class AppFixtureBase : IAppFixture
 
     protected static async Task BuildSampleAsync(string projectPath, string targetFramework, string? extraArgs = null)
     {
+        var timer = Stopwatch.StartNew();
+        Console.WriteLine($"[DevFlow integration] Building {Path.GetFileName(projectPath)} ({targetFramework}).");
         CleanBuildOutputs(projectPath, targetFramework);
 
         // Persistent MSBuild worker nodes inherit redirected output handles and keep them open
@@ -147,6 +150,7 @@ public abstract class AppFixtureBase : IAppFixture
             throw new InvalidOperationException(
                 $"dotnet build failed (exit code {process.ExitCode}).\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         }
+        Console.WriteLine($"[DevFlow integration] Sample build completed in {timer.Elapsed.TotalSeconds:F1}s.");
     }
 
     /// <summary>
@@ -416,8 +420,10 @@ public abstract class AppFixtureBase : IAppFixture
             ?? throw new InvalidOperationException($"Failed to start: {fileName} {arguments}");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cts.Token);
-        var stderrTask = process.StandardError.ReadToEndAsync(cts.Token);
+        var stdout = new StringBuilder();
+        var stderr = new StringBuilder();
+        var stdoutTask = CaptureOutputAsync(process.StandardOutput, stdout, cts.Token);
+        var stderrTask = CaptureOutputAsync(process.StandardError, stderr, cts.Token);
 
         try
         {
@@ -425,20 +431,31 @@ public abstract class AppFixtureBase : IAppFixture
         }
         catch (OperationCanceledException ex)
         {
+            var exited = process.HasExited;
             try
             {
-                if (!process.HasExited)
+                if (!exited)
                     process.Kill(entireProcessTree: true);
             }
-            catch
+            catch (Exception cleanupError) when (cleanupError is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
+                Console.WriteLine($"Failed to terminate timed-out process {process.Id}: {cleanupError.Message}");
             }
 
             throw new TimeoutException(
-                $"Process timed out after {timeoutSeconds}s: {fileName} {arguments}", ex);
+                $"Process timed out after {timeoutSeconds}s: {fileName} {arguments}. " +
+                $"Exited before timeout: {exited}.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}", ex);
         }
 
-        return (stdoutTask.Result, stderrTask.Result, process.ExitCode);
+        return (stdout.ToString(), stderr.ToString(), process.ExitCode);
+
+        static async Task CaptureOutputAsync(StreamReader reader, StringBuilder output, CancellationToken cancellationToken)
+        {
+            var buffer = new char[4096];
+            int count;
+            while ((count = await reader.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
+                output.Append(buffer, 0, count);
+        }
     }
 
     protected static async Task<string> RunProcessCheckedAsync(

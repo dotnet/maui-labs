@@ -44,15 +44,15 @@
                 </Grid>
 
                 <Label Text="Child outside its direct layout parent" FontSize="12" />
-                <Grid WidthRequest="120" HeightRequest="40"
+                <AbsoluteLayout WidthRequest="120" HeightRequest="40"
                       BackgroundColor="#E3F2FD"
                       AutomationId="BaselineOverflowParent">
                     <BoxView x:Name="BaselineOverflowChild"
                              WidthRequest="180" HeightRequest="24"
-                             HorizontalOptions="Start" VerticalOptions="Center"
+                             AbsoluteLayout.LayoutBounds="0,8,180,24"
                              Color="#1565C0"
                              AutomationId="BaselineOverflowChild" />
-                </Grid>
+                </AbsoluteLayout>
 
                 <Label Text="Valid margin and scroll content (not sizing problems)" FontSize="12" />
                 <Grid WidthRequest="120" HeightRequest="60">

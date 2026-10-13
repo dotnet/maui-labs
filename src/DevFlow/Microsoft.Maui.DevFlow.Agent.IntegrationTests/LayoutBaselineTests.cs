@@ -16,10 +16,9 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
         {
             await NavigateToPageAsync("//layoutdiagnostics", "BaselineFixtures");
             if ((await FindElementAsync("BaselineFixtureState")).Text != "Problem examples")
-                Assert.True(await Client.TapAsync((await FindElementAsync("ToggleBaselineFixtures")).Id));
+                await ToggleFixturesAsync("Problem examples");
 
             var root = await FindElementAsync("BaselineFixtures");
-            var toggle = await FindElementAsync("ToggleBaselineFixtures");
             var problems = await ScanAsync(root.Id);
             Assert.Equal("1.0", problems.SchemaVersion);
             Assert.Equal("1.1", problems.RuleSetVersion);
@@ -49,7 +48,7 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
                     or LayoutDiagnosticRules.DesiredSizeConstrained
                     or LayoutDiagnosticRules.ChildOutsideParent);
 
-            Assert.True(await Client.TapAsync(toggle.Id));
+            await ToggleFixturesAsync("Valid layout");
             var corrected = await ScanAsync(root.Id);
 
             Assert.True(corrected.Snapshot.Stable, corrected.Snapshot.StabilityReason);
@@ -67,11 +66,21 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
             if ((await Client.GetStatusAsync())?.Route == "//layoutdiagnostics"
                 && (await TryFindElementAsync("BaselineFixtureState"))?.Text == "Valid layout")
             {
-                await Client.TapAsync((await FindElementAsync("ToggleBaselineFixtures")).Id);
+                await ToggleFixturesAsync("Problem examples");
             }
             await Client.NavigateAsync(originalRoute);
             await Client.ControlMutationLeaseAsync("release");
         }
+    }
+
+    private async Task ToggleFixturesAsync(string expectedState)
+    {
+        var toggle = await FindElementAsync("ToggleBaselineFixtures");
+        Assert.True(await Client.ScrollAsync(toggle.Id, animated: false));
+        await App.WaitForUiSettledAsync();
+        Assert.True(await Client.TapAsync(toggle.Id));
+        await App.WaitForUiSettledAsync();
+        Assert.Equal(expectedState, (await FindElementAsync("BaselineFixtureState")).Text);
     }
 
     private async Task<LayoutInspectionResult> ScanAsync(

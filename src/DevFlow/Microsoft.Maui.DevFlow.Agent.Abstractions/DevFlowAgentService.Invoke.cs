@@ -28,7 +28,7 @@ static class DevFlowActionHotReloadHandler
 // Invoke / reflection endpoints
 public partial class DevFlowAgentService
 {
-	private static volatile Lazy<InvokeActionEntry[]> s_cachedActions = new(ScanActions, LazyThreadSafetyMode.ExecutionAndPublication);
+	private static volatile Lazy<InvokeActionEntry[]> s_cachedActions = new(new Func<InvokeActionEntry[]>(ScanActions), LazyThreadSafetyMode.ExecutionAndPublication);
 
 	#region Action Discovery
 
@@ -41,7 +41,9 @@ public partial class DevFlowAgentService
 	/// </summary>
 	internal static void InvalidateActionCache()
 	{
-		s_cachedActions = new Lazy<InvokeActionEntry[]>(ScanActions, LazyThreadSafetyMode.ExecutionAndPublication);
+		// Avoid the compiler's shared method-group cache: resolving it inside Mono's
+		// AssemblyLoad hook can recursively load its other delegate field types.
+		s_cachedActions = new Lazy<InvokeActionEntry[]>(new Func<InvokeActionEntry[]>(ScanActions), LazyThreadSafetyMode.ExecutionAndPublication);
 	}
 
 	private void OnAssemblyLoaded(object? sender, AssemblyLoadEventArgs args)

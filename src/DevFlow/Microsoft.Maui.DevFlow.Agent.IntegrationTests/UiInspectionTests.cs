@@ -140,6 +140,8 @@ public class UiInspectionTests : IntegrationTestBase
     public async Task LayoutDiagnostics_DetectsClippingWithoutFlaggingIntentionalOverlap()
     {
         await NavigateToPageAsync("//layoutdiagnostics", "ClippedButton");
+        Assert.True(await Client.ScrollAsync((await FindElementAsync("ClipHost")).Id));
+        await SettleAsync();
 
         var result = await Client.AnalyzeLayoutAsync(new LayoutInspectionRequest
         {
@@ -153,6 +155,7 @@ public class UiInspectionTests : IntegrationTestBase
         });
 
         Assert.NotNull(result);
+        Assert.True(result!.Snapshot.Stable, result.Snapshot.StabilityReason);
         var clippedFinding = Assert.Single(result!.Findings, finding =>
             finding.RuleId == LayoutDiagnosticRules.ElementClipped
             && finding.Element.AutomationId == "ClippedButton");
@@ -172,16 +175,19 @@ public class UiInspectionTests : IntegrationTestBase
     public async Task LayoutDiagnostics_ExhaustiveProfileReportsIntentionalGeometricOverlap()
     {
         await NavigateToPageAsync("//layoutdiagnostics", "IntentionalBadge");
+        Assert.True(await Client.ScrollAsync((await FindElementAsync("IntentionalOverlapHost")).Id));
+        await SettleAsync();
 
         var result = await Client.AnalyzeLayoutAsync(new LayoutInspectionRequest
         {
             Profile = "exhaustive",
             MinimumSeverity = "info",
             Rules = [LayoutDiagnosticRules.GeometricOverlap],
-            Stability = new LayoutStabilityOptions { Mode = "immediate" }
+            Stability = new LayoutStabilityOptions { Mode = "wait", TimeoutMs = 3000 }
         });
 
         Assert.NotNull(result);
+        Assert.True(result!.Snapshot.Stable, result.Snapshot.StabilityReason);
         Assert.Contains(result!.Findings, finding =>
             finding.RuleId == LayoutDiagnosticRules.GeometricOverlap
             && (finding.Element.AutomationId is "IntentionalCard" or "IntentionalBadge"
@@ -256,10 +262,11 @@ public class UiInspectionTests : IntegrationTestBase
     {
         await NavigateToMainPageAsync();
         var addButton = await FindElementAsync("AddButton");
-        Assert.NotNull(addButton.Bounds);
+        var bounds = addButton.WindowBounds ?? addButton.Bounds;
+        Assert.NotNull(bounds);
 
-        var centerX = addButton.Bounds!.X + (addButton.Bounds.Width / 2);
-        var centerY = addButton.Bounds.Y + (addButton.Bounds.Height / 2);
+        var centerX = bounds!.X + (bounds.Width / 2);
+        var centerY = bounds.Y + (bounds.Height / 2);
 
         var elementId = await Client.HitTestAsync(centerX, centerY);
 
@@ -278,10 +285,11 @@ public class UiInspectionTests : IntegrationTestBase
     {
         await NavigateToMainPageAsync();
         var addButton = await FindElementAsync("AddButton");
-        Assert.NotNull(addButton.Bounds);
+        var bounds = addButton.WindowBounds ?? addButton.Bounds;
+        Assert.NotNull(bounds);
 
-        var centerX = addButton.Bounds!.X + (addButton.Bounds.Width / 2);
-        var centerY = addButton.Bounds.Y + (addButton.Bounds.Height / 2);
+        var centerX = bounds!.X + (bounds.Width / 2);
+        var centerY = bounds.Y + (bounds.Height / 2);
 
         var json = await GetJsonAsync(
             $"/api/v1/ui/hit-test?x={centerX.ToString(CultureInfo.InvariantCulture)}&y={centerY.ToString(CultureInfo.InvariantCulture)}");

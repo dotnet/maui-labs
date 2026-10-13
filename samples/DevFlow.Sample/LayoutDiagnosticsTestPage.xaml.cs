@@ -15,6 +15,7 @@ public partial class LayoutDiagnosticsTestPage : ContentPage
         ConflictingLimitsBox.MinimumWidthRequest = _showProblems ? 160 : 40;
         ConstrainedDesiredProbe.ShowProblem = _showProblems;
         BaselineOverflowChild.WidthRequest = _showProblems ? 180 : 80;
+        AbsoluteLayout.SetLayoutBounds(BaselineOverflowChild, new Rect(0, 8, _showProblems ? 180 : 80, 24));
         BaselineStateLabel.Text = _showProblems ? "Problem examples" : "Valid layout";
         ToggleBaselineButton.Text = _showProblems ? "Use valid layout" : "Restore problem examples";
     }

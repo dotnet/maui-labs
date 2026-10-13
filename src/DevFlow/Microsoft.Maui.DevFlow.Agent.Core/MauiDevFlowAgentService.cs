@@ -3934,9 +3934,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     var scrollView = FindAncestor<ScrollView>(ve);
                     if (scrollView != null)
                     {
-                        await ScrollWithTimeoutAsync(
-                            () => scrollView.ScrollToAsync(ve, (ScrollToPosition)position, body.Animated),
-                            () => scrollView.ScrollToAsync(ve, (ScrollToPosition)position, false));
+                        var target = scrollView.GetScrollPositionForElement(ve, (ScrollToPosition)position);
+                        await ScrollViewToAsync(scrollView, target.X, target.Y, body.Animated);
                         return "ok";
                     }
 
@@ -3945,9 +3944,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     {
                         var newX = Math.Max(0, sv.ScrollX + body.DeltaX);
                         var newY = Math.Max(0, sv.ScrollY + body.DeltaY);
-                        await ScrollWithTimeoutAsync(
-                            () => sv.ScrollToAsync(newX, newY, body.Animated),
-                            () => sv.ScrollToAsync(newX, newY, false));
+                        await ScrollViewToAsync(sv, newX, newY, body.Animated);
                         return "ok";
                     }
 
@@ -4001,9 +3998,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 var newY = targetScroll.ScrollY + body.DeltaY;
                 var x = Math.Max(0, newX);
                 var y = Math.Max(0, newY);
-                await ScrollWithTimeoutAsync(
-                    () => targetScroll.ScrollToAsync(x, y, body.Animated),
-                    () => targetScroll.ScrollToAsync(x, y, false));
+                await ScrollViewToAsync(targetScroll, x, y, body.Animated);
                 return "ok";
             }
 
@@ -4149,6 +4144,17 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         return null;
     }
 
+    internal static Task ScrollViewToAsync(ScrollView scrollView, double x, double y, bool animated)
+    {
+        // WinUI's unchanged ChangeView raises no ViewChanged, leaving MAUI's completion task pending.
+        if (scrollView.ScrollX == x && scrollView.ScrollY == y)
+            return Task.CompletedTask;
+
+        return ScrollWithTimeoutAsync(
+            () => scrollView.ScrollToAsync(x, y, animated),
+            () => scrollView.ScrollToAsync(x, y, false));
+    }
+
     /// <summary>
     /// Animated ScrollToAsync can deadlock on iOS when dispatched.
     /// Fall back to non-animated scroll if the animated version doesn't complete in time.
@@ -4161,6 +4167,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         if (completed == scrollTask)
         {
             cts.Cancel();
+            await scrollTask;
             return;
         }
         // Animated scroll timed out — fall back to non-animated

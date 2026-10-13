@@ -7,6 +7,9 @@ on:
     paths:
       - 'src/DevFlow/**'
       - 'platforms/Linux.Gtk4/**'
+      - 'platforms/MacOS/**'
+      - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/**'
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
       - '.github/extensions/maui-devflow-canvas/**'
       - '.github/workflows/ci-devflow.yml'
@@ -19,10 +22,12 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
       - 'src/DevFlow/**'
       - 'platforms/Linux.Gtk4/**'
+      - 'platforms/MacOS/**'
+      - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/**'
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
       - '.github/extensions/maui-devflow-canvas/**'
       - '.github/workflows/ci-devflow.yml'

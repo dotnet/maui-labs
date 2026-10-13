@@ -1245,9 +1245,18 @@ public partial class InspectorPageTests : IAsyncLifetime
     [LiveInspectorFact]
     public async Task HoverDistinguishesInteractiveAndNonInteractiveElementsInAllModes()
     {
+        // Polling and WebSocket refreshes would replace the synthetic hover probes.
+        await _page.AddInitScriptAsync("window.setInterval = () => 0;");
+        await _page.RouteAsync("**/api/eventSupport", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = """{"supported":false}""",
+        }));
         await _page.GotoAsync(BaseUrl);
         var viewport = _page.Locator("#app-viewport");
         await Expect(viewport).ToBeVisibleAsync();
+        await Expect(_page.Locator(".devflow-element[data-id='HeaderLabel']")).ToBeAttachedAsync();
         await viewport.EvaluateAsync("""
             viewport => {
                 for (const existing of viewport.querySelectorAll('.devflow-element'))
