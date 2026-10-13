@@ -254,7 +254,9 @@ public class WpfUiActionTests
 				Assert.True(outer.ScrollableHeight > 0);
 				inner.ScrollToVerticalOffset(200);
 				Layout(window);
-				Assert.Equal(200d, inner.VerticalOffset);
+				// Variable-height virtualization revises estimated offsets; rendered rows measure the scroll distance.
+				var originalOffset = inner.VerticalOffset;
+				Assert.True(originalOffset > 100d);
 				var anchor = Descendants(list).OfType<ListBoxItem>()
 					.Where(row => row.TranslatePoint(new System.Windows.Point(), inner).Y >= 0)
 					.OrderBy(row => row.TranslatePoint(new System.Windows.Point(), inner).Y).First();
@@ -266,14 +268,15 @@ public class WpfUiActionTests
 					: service.ScrollAsync(collection, 0, 100);
 				Assert.True(CompleteOnDispatcher(scroll));
 				Layout(window);
-				Assert.Equal(100d, inner.VerticalOffset);
+				var scrolledOffset = inner.VerticalOffset;
+				Assert.True(scrolledOffset < originalOffset);
 				Assert.Equal(100d, RowTop() - originalTop);
 				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(list.Items.Count - 1));
 				Assert.Equal(0d, outer.VerticalOffset);
 
 				Assert.True(CompleteOnDispatcher(service.ScrollAsync(collection, 0, -100)));
 				Layout(window);
-				Assert.Equal(200d, inner.VerticalOffset);
+				Assert.True(inner.VerticalOffset > scrolledOffset);
 				Assert.Equal(originalTop, RowTop());
 				Assert.Null(list.ItemContainerGenerator.ContainerFromIndex(list.Items.Count - 1));
 				Assert.Equal(0d, outer.VerticalOffset);

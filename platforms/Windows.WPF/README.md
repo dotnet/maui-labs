@@ -46,6 +46,9 @@ ScrollViewer, then an internal descendant (such as CollectionView's list templat
 then an ancestor, on the UI dispatcher. CollectionView's vertical list uses
 device-independent pixel scroll offsets, not item counts, with `CanContentScroll`
 and `VirtualizingStackPanel` virtualization retained.
+For variable-height rows, WPF revises estimated extents and offsets as items are
+realized. Rendered row displacement, rather than a fixed absolute offset, measures
+delta scrolling.
 
 Run the focused native regressions on Windows:
 
