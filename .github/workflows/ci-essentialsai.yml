@@ -29,6 +29,19 @@ on:
       - 'NuGet.config'
 
 jobs:
+  native-projection-tests:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run native transcript projection regressions
+        run: |
+          mkdir -p artifacts/bin/AppleProjectionTests
+          xcrun --sdk macosx swiftc -parse-as-library -target arm64-apple-macos26.0 \
+            src/AI/AppleNative/EssentialsAI/TranscriptResponseProjection.swift \
+            tests/AI/AppleNative/TranscriptResponseProjectionTests.swift \
+            -o artifacts/bin/AppleProjectionTests/tests
+          artifacts/bin/AppleProjectionTests/tests
+
   # Step 1: Build on Xcode 27 — compiles Swift xcframeworks, produces .resources.zip,
   # and uploads them as native-apple-essentialsai artifact via _build.yml.
   build-macos:

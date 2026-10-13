@@ -13,6 +13,25 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 
+### Native message identity
+
+`ChatMessage.MessageId` uses genuine native transcript entry IDs on Apple OS
+26+. Streaming text exposes each response entry's own ID and segments on OS
+27+, rather than pairing `Snapshot.content` with the last response ID.
+Unchanged entries are suppressed, and final collected entries reconcile missing
+content. Text/JSON cumulative state is retained per ID across tools and identity
+switches, preserving text whitespace and JSON value growth. Known JSON documents close only on
+successful stream completion; tool callbacks remain immediate and keep null
+message IDs (call IDs are not substituted).
+
+OS 26 streaming IDs remain null because snapshots lack transcript entries.
+History preserves an ID where one managed message corresponds to one native
+entry, without duplicating it when a mixed assistant message splits. Standard
+aggregation can retain separate fragments when an ID resumes after other
+messages/roles; concatenate text by ID to reconstruct its content, not global
+message order. Append-only updates cannot retract a shrinking or non-prefix
+replacement snapshot; this change covers cumulative growth, not arbitrary edits.
+
 ### Platform Support
 
 | Platform | Chat (IChatClient) | Image input | Embeddings (IEmbeddingGenerator) |
@@ -68,6 +87,29 @@ repo's target-framework list; it does not install or select Xcode. When
 building the normal Apple 26.x reference packs with Xcode 27, the native
 CI job passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode
 version check.
+
+### Native projection regression tests
+
+The persistent Swift regressions exercise real transcript entries, structured
+segments, whitespace, replay suppression, older-entry growth, and final
+collection. On macOS 27 they also drive SDK-controlled streams (including two
+actual tool invocations and three response entries) without loading the system
+model. These reproduce the scalar/last-ID mismatch separately from the device
+test's same-request `SystemLanguageModel.default` oracle; the system model is
+not assumed to emit multiple nonempty response entries.
+
+Run with Xcode 27, retaining a macOS 26 deployment target:
+
+```bash
+mkdir -p artifacts/bin/AppleProjectionTests
+xcrun --sdk macosx swiftc -parse-as-library -target arm64-apple-macos26.0 \
+  src/AI/AppleNative/EssentialsAI/TranscriptResponseProjection.swift \
+  tests/AI/AppleNative/TranscriptResponseProjectionTests.swift \
+  -o artifacts/bin/AppleProjectionTests/tests
+artifacts/bin/AppleProjectionTests/tests
+```
+
+The EssentialsAI workflow runs these alongside the library and managed tests.
 
 ## Architecture
 

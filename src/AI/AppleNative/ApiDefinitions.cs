@@ -130,6 +130,9 @@ interface ChatClientNative
 [Internal]
 interface ChatMessageNative
 {
+	[NullAllowed, Export("messageId", ArgumentSemantic.Copy)]
+	string MessageId { get; set; }
+
 	// @property (nonatomic) enum ChatRoleNative role;
 	[Export("role", ArgumentSemantic.Assign)]
 	ChatRoleNative Role { get; set; }
@@ -345,6 +348,9 @@ interface ImageContentNative
 [Internal]
 interface ResponseUpdateNative
 {
+	[NullAllowed, Export("messageId")]
+	string MessageId { get; }
+
 	// @property (nonatomic, readonly) enum ResponseUpdateTypeNative updateType;
 	[Export("updateType")]
 	ResponseUpdateTypeNative UpdateType { get; }

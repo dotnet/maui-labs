@@ -12,6 +12,7 @@ public enum ResponseUpdateTypeNative: Int, Sendable {
 public final class ResponseUpdateNative: NSObject, Sendable {
     @objc public let updateType: ResponseUpdateTypeNative
     @objc public let text: String?
+    @objc public let messageId: String?
     @objc public let toolCallId: String?
     @objc public let toolCallName: String?
     @objc public let toolCallArguments: String?
@@ -20,6 +21,7 @@ public final class ResponseUpdateNative: NSObject, Sendable {
     @objc public init(
         updateType: ResponseUpdateTypeNative = .content,
         text: String? = nil,
+        messageId: String? = nil,
         toolCallId: String? = nil,
         toolCallName: String? = nil,
         toolCallArguments: String? = nil,
@@ -27,6 +29,7 @@ public final class ResponseUpdateNative: NSObject, Sendable {
     ) {
         self.updateType = updateType
         self.text = text
+        self.messageId = messageId
         self.toolCallId = toolCallId
         self.toolCallName = toolCallName
         self.toolCallArguments = toolCallArguments

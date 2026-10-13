@@ -13,4 +13,5 @@ public enum ChatRoleNative: Int {
 public class ChatMessageNative: NSObject {
     @objc public var role: ChatRoleNative = .user
     @objc public var contents: [AIContentNative] = []
+    @objc public var messageId: String?
 }
