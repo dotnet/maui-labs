@@ -93,11 +93,19 @@ public class WpfUiActionTests
 			handler.SetVirtualView(entry);
 			try
 			{
+				// A detached, focusable TextBox can still acquire logical focus.
+				if (!disabled)
+					handler.PlatformView.Focusable = false;
+				Assert.Equal(!disabled, handler.PlatformView.IsEnabled);
+				Assert.Equal(disabled, handler.PlatformView.Focusable);
+
 				var request = new FocusRequest();
 				handler.Invoke(nameof(IView.Focus), request);
 				Assert.False(request.Result);
 				Assert.False(entry.IsFocused);
+				Assert.False(handler.PlatformView.IsFocused);
 				Assert.False(handler.PlatformView.IsKeyboardFocused);
+				Assert.False(handler.PlatformView.IsKeyboardFocusWithin);
 			}
 			finally
 			{

@@ -237,17 +237,35 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
     Task InstallAppAsync(string appBundlePath) =>
         RunProcessCheckedAsync("xcrun", $"simctl install {_simulatorUdid} \"{appBundlePath}\"", timeoutSeconds: 180);
 
-    Task LaunchAppAsync()
+    async Task LaunchAppAsync()
     {
         var envVars = new Dictionary<string, string>
         {
             ["SIMCTL_CHILD_DEVFLOW_TEST_PORT"] = AgentPort.ToString()
         };
 
-        return RunProcessCheckedAsync("xcrun",
-            $"simctl launch {_simulatorUdid} {_appBundleId}",
-            envVars: envVars,
-            timeoutSeconds: 90);
+        try
+        {
+            await RunProcessCheckedAsync("xcrun",
+                $"simctl launch {_simulatorUdid} {_appBundleId}",
+                envVars: envVars,
+                timeoutSeconds: 90);
+        }
+        catch (TimeoutException)
+        {
+            try
+            {
+                var (stdout, stderr, exitCode) = await RunProcessAsync("xcrun",
+                    $"simctl spawn {_simulatorUdid} log show --last 3m --style compact --predicate \"eventMessage CONTAINS '{_appBundleId}'\"",
+                    timeoutSeconds: 15);
+                Console.Error.WriteLine($"[iOSFixture] Launch diagnostics (exit {exitCode}):\n{stdout}\n{stderr}");
+            }
+            catch (TimeoutException ex)
+            {
+                Console.Error.WriteLine($"[iOSFixture] Simulator log collection also timed out: {ex.Message}");
+            }
+            throw;
+        }
     }
 }
 

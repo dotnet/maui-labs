@@ -467,6 +467,7 @@ jobs:
       DEVFLOW_TEST_PLATFORM: gtk
       DEVFLOW_TEST_FRAMEWORK: maui
       GDK_BACKEND: x11
+      DEVFLOW_TEST_GTK_DIAGNOSTICS_DIR: ${{ runner.temp }}/devflow-gtk-crashes
     steps:
       - uses: actions/checkout@v6
 
@@ -500,6 +501,38 @@ jobs:
           --logger "trx;LogFileName=devflow-integration-gtk-maui.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/gtk
+
+      - name: Report GTK crash backtraces
+        if: failure()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          directory = Path(os.environ["DEVFLOW_TEST_GTK_DIAGNOSTICS_DIR"])
+          destination = Path("artifacts/TestResults/devflow-integration/gtk/diagnostics")
+          reports = sorted(directory.glob("*.crashreport.json"))
+          if not reports:
+              print("No GTK runtime crash report was produced.")
+          for report in reports:
+              payload = json.loads(report.read_text())["payload"]
+              lines = [f"Crash report: {report.name}"]
+              for thread in payload["threads"]:
+                  lines.append(f"Thread {thread.get('native_thread_id')} crashed={thread.get('crashed')}")
+                  for frame in thread["stack_frames"]:
+                      lines.append(json.dumps({
+                          key: frame[key] for key in (
+                              "method_name", "native_module", "native_symbol",
+                              "native_address", "is_managed"
+                          ) if key in frame
+                      }))
+              text = "\n".join(lines)
+              print(text)
+              destination.mkdir(parents=True, exist_ok=True)
+              (destination / (report.name + ".stacks.txt")).write_text(text)
+          PY
 
       - name: Upload test results
         if: always()

@@ -15,8 +15,8 @@ selection. The ordinary `ci-devflow.yml` host, browser, JavaScript and AOT tests
 remain enabled alongside these device tests.
 
 Path filters cover DevFlow, its CLI implementation and executable entry point,
-sample apps, the complete GTK, AppKit and WPF backend trees, and their shared platform sources. Backend changes
-can affect the agent's build or rendered UI, so both DevFlow workflows prefer
+sample apps, the complete GTK, AppKit and WPF backend trees, and their shared
+platform sources. Backend changes can affect the agent's build or rendered UI, so both DevFlow workflows prefer
 extra runs over a fragile file allowlist. Shared build infrastructure, SDK and
 package/feed configuration are included because they can alter any tested app's
 compilation, restore or startup.
@@ -26,6 +26,10 @@ MAUI recognizer tests require the MAUI gesture page and are excluded from plain
 properties, hit-test envelopes, rejection, storage and protocol coverage.
 An uploaded TRX or green fixture-selection test is not evidence that a device
 test executed; inspect individual results and fixture failures.
+Fixture timeouts retain partial process output. Android startup failures collect
+logcat, and iOS launch timeouts collect bundle-scoped simulator logs. GTK crashes
+attach only native/managed stack frames; raw memory dumps stay in the runner's
+temporary directory and are not uploaded.
 
 ## Packages
 
