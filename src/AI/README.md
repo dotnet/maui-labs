@@ -72,14 +72,6 @@ version check.
 
 ## Architecture
 
-Core Image and pixel-buffer image prompts and history use direct native
-Foundation Models attachments without rendering or encoding input. Portable
-returned history renders and encodes PNG; that output conversion is not
-zero-copy. Model-free ownership/history conversion tests are separate from
-live image recognition, and native model recall of earlier images is not
-guaranteed. See the [image-input guide](../../docs/ai/apple-foundation-models-image-input.md)
-for lifetime rules, the known native recall limitation, and focused tests.
-
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
