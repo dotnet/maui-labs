@@ -11,6 +11,8 @@ public class AppleIntelligenceChatClientCancellationTests : ChatClientCancellati
 
 public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<AppleIntelligenceChatClient>
 {
+	protected override bool SupportsRequireAny => OperatingSystem.IsIOSVersionAtLeast(27) ||
+		OperatingSystem.IsMacCatalystVersionAtLeast(27) || OperatingSystem.IsMacOSVersionAtLeast(27);
 }
 
 public class AppleIntelligenceChatClientGetServiceTests : ChatClientGetServiceTestsBase<AppleIntelligenceChatClient>
