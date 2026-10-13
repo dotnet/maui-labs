@@ -9,6 +9,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Native token usage** — standard `ChatResponse.Usage` and streaming `UsageContent` on Apple OS 27+, without estimated counts
+- **Native image inputs** — `CGImage`, `CIImage`, `CVPixelBuffer`, and platform images through existing M.E.AI `RawRepresentation`, with retained storage and preserved orientation on OS 27+
 - **Telemetry** — compatible with M.E.AI's built-in `UseOpenTelemetry` spans, token metrics, and streaming timings
 - **Tool calling** — function-calling support for on-device models
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
@@ -70,6 +71,14 @@ CI job passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode
 version check.
 
 ## Architecture
+
+Core Image and pixel-buffer image prompts and history use direct native
+Foundation Models attachments without rendering or encoding input. Portable
+returned history renders and encodes PNG; that output conversion is not
+zero-copy. Model-free ownership/history conversion tests are separate from
+live image recognition, and native model recall of earlier images is not
+guaranteed. See the [image-input guide](../../docs/ai/apple-foundation-models-image-input.md)
+for lifetime rules, the known native recall limitation, and focused tests.
 
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow

@@ -247,7 +247,7 @@ public class ChatClientNative: NSObject {
         let otherMessages = Array(messages.dropLast())
 
         let model = SystemLanguageModel.default
-        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+        if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *),
            messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) }),
            !model.capabilities.contains(.vision) {
             throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later and a vision-capable Apple Intelligence model. The current model does not report vision support.")
@@ -310,7 +310,7 @@ public class ChatClientNative: NSObject {
         _ response: LanguageModelSession.Response<Content>
     ) -> UsageDetailsNative? where Content: Generable {
 #if compiler(>=6.4)
-        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+        if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *) {
             let usage = response.usage
             return UsageDetailsNative(
                 inputTokenCount: usage.input.totalTokenCount,
@@ -403,7 +403,7 @@ public class ChatClientNative: NSObject {
                 return Prompt { textContent.text }
 
             case let imageContent as ImageContentNative:
-                if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *) {
                     let attachment = try imageContent.toAttachment()
                     return Prompt { attachment }
                 } else {
@@ -591,7 +591,7 @@ public class ChatClientNative: NSObject {
             // Image attachment segments are available on 27.0+. Match inside the availability
             // guard so the case references compile against the 26.x deployment target. Other
             // segment kinds (custom, future) are not represented as content.
-            if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+            if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *),
                case .attachment(let attachmentSegment) = segment,
                case .image(let image) = attachmentSegment.content {
                 return ImageContentNative(

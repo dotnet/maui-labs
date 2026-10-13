@@ -72,7 +72,12 @@ var message = new ChatMessage(ChatRole.User,
 var response = await _chat.GetResponseAsync([message]);
 ```
 
-On Apple, a `CGImage` (or `UIImage` on iOS/Mac Catalyst, `NSImage` on macOS) can be passed through without re-decoding by setting `RawRepresentation` on the `DataContent`; retain valid encoded bytes for recording and cross-platform consumers. Local `file://` `UriContent` is supported, while remote image URLs are rejected rather than fetched silently. Image prompting requires runtime OS 27 and a vision-capable, ready Apple Intelligence model; on 26 the client remains text-only and an image request throws an explicit error. Image *generation* is not provided by this Apple chat client.
+On Apple, `CGImage`, `CoreImage.CIImage`, and `CoreVideo.CVPixelBuffer` (or `UIImage` on iOS/Mac Catalyst, `NSImage` on macOS) can be passed without encoding or re-decoding by setting `RawRepresentation` on `DataContent` or image `UriContent`; retain valid encoded bytes for recording and cross-platform consumers. CI-backed `UIImage` preserves its orientation and mirroring. The native bridge strongly retains Core Image sources and pixel-buffer storage during generation, without holding CPU pixel locks. Keep sources valid until submission and do not mutate pixel-buffer storage during inference. Portable returned history is rendered and encoded as PNG, not zero-copy. Local `file://` `UriContent` is supported, while remote image URLs without a supported native representation are rejected rather than fetched silently. Image prompting requires runtime OS 27 and a vision-capable, ready Apple Intelligence model; on 26 the client remains text-only and an image request throws an explicit error. Image *generation* is not provided by this Apple chat client.
+
+Image history preserves native attachments, but model recall can be unreliable.
+A macOS 27.0.1 system-model solid-color follow-up returned "Black" even in a
+native session after correctly identifying the current image; this was also
+observed with the existing `CGImage` path.
 
 ### Token usage
 
