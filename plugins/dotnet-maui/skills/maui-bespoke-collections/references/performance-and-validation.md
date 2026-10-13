@@ -52,6 +52,18 @@ Record revision, SDK/native packages, OS/device, viewport/density/cadence, Relea
 AOT/trimming/diagnostics, seeded content/images, load latency/errors, cache bounds,
 and exact interactions. Separate cold/warm caches and diagnostics-heavy passes.
 
+Before counter reset/steady-state capture, pass the
+[populated-workload gate](benchmark-harness.md): correct app/screen/native host,
+finite viewport, expected filtered count, actual visible loaded keys, settled
+layout and stable isolated data. Repeat it for every variant and after traversal.
+Background auth/sync/feature gates cannot be allowed to replace seeded content.
+Timeout, empty/unintended content or dataset drift invalidates the run.
+
+Use a deterministic offline repository or explicitly isolated controlled transport,
+not untracked hooks in production startup. A small optional harness selects
+variants explicitly, captures independent native/tree/cache/request/subscription
+counters and an equivalent traversal, and records cleanup/restoration.
+
 Increase logical count at fixed viewport (for example 1k/10k/100k metadata rows)
 without loading all images. Native/MAUI counts must stay within declared viewport/
 cache/type budgets. Candidate work must match documented geometry complexity.
@@ -64,6 +76,12 @@ record tolerance/definitions, and never report those goals as achieved results.
 After warm-up, repeated equivalent traversal should not create compatible trees
 on every bind or retain ever-growing resources. Inspect native memory too:
 4000x4000 four-byte pixels need about 64 MB before textures/copies.
+
+For each metric, state producer/definition, units, sample count, cadence, reset
+scope, cold/warm state and diagnostic overhead. Callback/native histograms,
+captured traces, analyzed FrameTimeline/presentation data and physical results
+are different evidence. Repeat matched A/B runs when a small difference may be
+noise; don't make a universal claim from one emulator pass.
 
 ## Tests and completion
 
@@ -78,6 +96,10 @@ establish physical-device GPU/input performance.
 
 Use existing AppKit/GTK native runtime hosts when working in maui-labs. Report
 unavailable platforms explicitly; do not silently skip and claim all passed.
+Verify cleanup manifest/restored production settings and a production-configuration
+build after temporary instrumentation. Save narrow diagnostics rather than repeatedly
+dumping full trees/logs. Retained-template smoke and first-platform runtime tests
+remain separate from the existing typed-native photo example.
 
 Return a per-target status:
 

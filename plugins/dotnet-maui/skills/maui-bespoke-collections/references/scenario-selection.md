@@ -14,6 +14,10 @@ Read this first, then one recipe and only the requested platform references.
 | Native API missing from a resolved binding | Verify the gap, then use binding guidance |
 
 Do not turn this skill into an automatic migration or library dependency.
+For ordinary reorder, check actual stock CollectionView CanReorderItems and
+version/backend/source/group limits first; the generic drag recognizer and built-in
+reorder path are different mechanisms. Do not invent a missing property to justify
+rewriting a working list.
 
 ## Distinguish the geometry
 
@@ -66,6 +70,9 @@ claiming one is faster.
 For each requested target, separately record native host/layout availability,
 binding compilation, backend integration, native behavior, lifecycle and
 performance evidence. A source-inspected API is not a certified implementation.
+Add current priority, available host/device and minimum acceptable evidence.
+Mark excluded/deferred/blocked targets explicitly and reconcile user redirections
+before more handlers. Preserve deferred-target behavior instead of inventing parity.
 
 Keep the viewport finite. Prefer a native layout inside a native collection
 engine before writing scroll physics and realization. GTK general masonry/wrap
@@ -73,3 +80,5 @@ and WPF custom panels are substantive implementations, not eager-layout fallback
 
 **Output:** one brief, one selected recipe, scoped handlers/loading/registration,
 and a truthful target/evidence table. No universal collection framework.
+Use [mobile checkpoints](mobile-vertical-slice.md) for baseline, small compile,
+populated content, reuse and bounded retry/discovery before expanding work.

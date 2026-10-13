@@ -76,7 +76,8 @@ Example state shell:
 ### Collection interactions
 
 Keep the scrolling CollectionView and use focused public controls/commands.
-DragGestureRecognizer transfers data; it does not reorder ItemsSource for you.
+Inspect built-in CollectionView CanReorderItems/CanMixGroups and handler/source
+limits first; a generic DragGestureRecognizer alone does not reorder ItemsSource.
 SwipeView reveals/invokes actions; removing the intended model key is app logic.
 RefreshView can wrap the finite collection directly; IsRefreshing=true can already
 invoke Command, so avoid duplicate dispatch and use separate operation ownership.

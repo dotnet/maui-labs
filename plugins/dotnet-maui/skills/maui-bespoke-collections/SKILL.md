@@ -28,14 +28,17 @@ control, registrations, loading bridge, and tests.
 
 ## Read selectively
 
-Start with [scenario selection](references/scenario-selection.md), then load only
-the relevant rows below. Do not load every recipe and platform by default.
+Start with [scenario selection](references/scenario-selection.md).
+For implementation, follow the [one-platform fast path](references/mobile-vertical-slice.md):
+baseline -> small compile -> populated item -> reuse -> paging -> next target.
+Load additional references when their checkpoint is reached, not all up front.
 
 | Need | Reference |
 |---|---|
 | Indexed data, keys, snapshots, binding choices | [Source/update contract](references/source-and-update-contracts.md) |
 | Variable sizes, viewport lookup, anchors, chrome | [Geometry](references/geometry-and-anchoring.md) |
 | Renderer and handler ownership, stale callbacks | [Reuse/lifecycle](references/reuse-and-handler-lifecycle.md) |
+| Retained MAUI text, margins, units and measure/arrange | [Hosting](references/retained-content-hosting.md) |
 | HTTP, SQLite, offline-first, load states | [Paging/data](references/paging-http-database.md) |
 | Interaction identity, mutation/persistence, alternatives | [Interaction contracts](references/interaction-contracts.md) |
 | Drag/drop, reorder and transfer | [Drag/reorder](references/drag-drop-and-reordering.md) |
@@ -43,6 +46,7 @@ the relevant rows below. Do not load every recipe and platform by default.
 | Pull/button refresh and load races | [Refresh](references/refresh-and-reconciliation.md) |
 | Item/selection/empty-space actions | [Context menus](references/context-menus-and-actions.md) |
 | Budgets, profiling, tests, completion evidence | [Validation](references/performance-and-validation.md) |
+| Isolated populated comparison, metrics and cleanup | [Benchmark harness](references/benchmark-harness.md) |
 | iOS or Mac Catalyst | [UIKit](references/platform-uikit.md) |
 | Android | [RecyclerView](references/platform-android.md) |
 | Windows MAUI / WinUI | [WinUI](references/platform-winui.md) |
@@ -75,6 +79,9 @@ Choose one primary recipe:
 
 Inspect app TFMs, resolved packages, deployment minima, backend registration,
 controls, repository, renderer, and tests.
+Record requested/prioritized/deferred targets and verify an unchanged runnable
+baseline. After failed probes, change hypothesis/use a smaller probe; classify
+environment blockers instead of looping or changing pins.
 
 Record: layout/placement/axis; requested targets; fixed/metadata/self-sized content;
 source volume/count/seek; identity/updates; grouping/chrome/nesting;
@@ -155,6 +162,8 @@ all-item geometry, and oversized images. Tune pools/prefetch only with evidence.
 Run focused source/geometry tests, every requested target build, native behavior/
 lifecycle checks, and agreed Release performance fixtures. DevFlow inspection
 helps verify types/layout/input; it does not establish presented-frame rate.
+Before each measured variant verify intended host, filtered count, visible loaded
+keys, settled layout and isolated dataset. Empty/wrong/drifting content is invalid.
 
 Use inspected project/target/filter values, never unset or guessed ones:
 
@@ -172,6 +181,7 @@ dotnet test "$TEST_PROJECT" -c Release --filter "$TEST_FILTER"
 - Interaction/menu intents preserve intended keys and validate source/mutation revision.
 - Bind resets item-specific state, even without a reuse callback.
 - Delayed work validates item key + binding generation + source epoch.
+- Compatible known heights survive transient loading; newer user scrolling supersedes anchor restoration.
 - Disappear/detach is not always recycle; visibility and binding ownership differ.
 - Retain compatible template handlers through rebind; drain owned resources on teardown.
 - Observe mutable child groups or publish immutable section snapshots.
@@ -185,19 +195,11 @@ dotnet test "$TEST_PROJECT" -c Release --filter "$TEST_FILTER"
 
 | Trap | Correct interpretation |
 |---|---|
-| UIKit registration created in each provider call | Create once per reusable type |
-| C# UIImage preparation | Initiate bounded async preparation on the owning dispatcher; retain the slot through native completion |
-| Android `HasFixedSize` | RecyclerView's own size is independent of adapter contents, not uniform row heights |
-| Android shared pools / `ConcatAdapter` | Compatible holders and deliberate global view-type/stable-ID policy |
-| Android offset changed after `RequestLayout` | Wait for settled native frames and visible keys, not the offset field alone |
-| Google Flexbox | Archived; eager `FlexboxLayout` is not virtualized `FlexboxLayoutManager` |
-| Material carousel | Masking/keylines are not true 3D coverflow |
-| WinUI general `FlowLayout` | Research found 2.0-experimental, not stable 1.8 `LinedFlowLayout` |
-| Repeater paging interfaces | `ISupportIncrementalLoading`/`IItemsRangeInfo` are not honored by ItemsRepeater |
-| AppKit transforms | No UIKit `Transform3D` on the inspected layout-attributes binding |
-| GTK sections | List headers since 4.12; grid header source marked 4.26, not baseline availability |
-| GTK `FlowBox` / WPF `WrapPanel` | Eager layouts, not large-data virtualization |
-| Microsoft.Data.Sqlite async API | Executes synchronously; keep queries off the UI path |
+| UIKit preparation/reuse | Registrations live outside providers; verify image API affinity and hold bounded async work through completion |
+| Android size/pools/layout | HasFixedSize describes host size; pool types/IDs must be compatible; offset fields do not prove layout |
+| Eager or look-alike layouts | FlowBox/WrapPanel/FlexboxLayout are not virtualizers; carousel masking is not 3D coverflow |
+| Platform/version borrowing | Verify WinUI experimental layouts, GTK section versions and UIKit/AppKit differences in platform references |
+| Source/loading assumptions | Repeater ignores automatic loading interfaces; SQLite async-named work is synchronous |
 
 Refresh version-sensitive findings against the consuming SDK and linked sources.
 

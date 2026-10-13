@@ -15,6 +15,10 @@ Choose data/anchor policy: same-query refresh can retain useful content while
 fetching; query change may deliberately clear/reset. Preserve or reset keyed
 selection, expanded groups, anchor and follow-tail according to that policy.
 Do not turn every refresh into whole-source empty/reload unless required.
+For same-key transient payload loading, keep compatible known height metadata
+instead of generic estimates. [Anchor restoration](geometry-and-anchoring.md)
+requires settled layout and an unchanged user-scroll intent revision, not just
+the continued existence of the same record.
 
 ```text
 acquire refresh owner -> cancel incompatible paging/cursors -> fetch/reconcile

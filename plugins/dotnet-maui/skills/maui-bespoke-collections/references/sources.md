@@ -21,6 +21,37 @@ slice, not every platform or generated recipe. Physical performance remains
 unqualified. In a checkout inspect the actual sample/evidence files; they are
 not bundled with an individually installed skill.
 
+## Retained-content hosting and field maintenance
+
+### H1
+MAUI 10.0.41 at `d15964ef4f0a6d0740b655ba7c6be9b96be8b187`:
+[TemplatedItemViewHolder](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Handlers/Items/Android/TemplatedItemViewHolder.cs)
+and [ItemContentView](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Handlers/Items/Android/ItemContentView.cs):
+compatible content reuse, binding/logical ownership, constrained measure and
+native arrangement. These include internal helpers, not public custom-handler
+base classes or a ready-to-copy universal wrapper.
+
+### H2
+[LayoutExtensions](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Core/src/Layouts/LayoutExtensions.cs)
+and [LayoutViewGroup](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Core/src/Platform/Android/LayoutViewGroup.cs):
+public IView desired-size/frame margin accounting versus native backing layout
+padding/measure, logical/pixel conversion and arrange. Internal handler helpers
+may perform a legitimate final exact text pass; that is not permission for a
+second incompatible estimated-height authority.
+
+### H3
+[Items2 TemplatedCell2](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Handlers/Items2/iOS/TemplatedCell2.cs)
+and [GeneralWrapperView](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Core/src/Platform/iOS/GeneralWrapperView.cs):
+constrained point-space width/variable height, cached constraints, distinct
+supplementary sizing and matching deferred arrange. Wrapper/internal methods
+are source evidence, not public APIs or newly compiled retained-text examples.
+
+User-supplied 2026-10-13 field feedback informed the operational checkpoints,
+fixture-validity, loading-height and cleanup recommendations. Its executing
+distribution revision/provenance was unknown, and reported environment/agent
+failures were not independently diagnosed or attributed as architectural defects.
+No private application paths/code, raw transcripts or runtime data were incorporated.
+
 ## MAUI
 
 ### M1
@@ -214,6 +245,9 @@ swipe deletion, pull refresh or item context menus.
 ### I1
 [MAUI drag/drop](https://learn.microsoft.com/en-us/dotnet/maui/fundamentals/gestures/drag-and-drop?view=net-maui-10.0):
 recognizers/packages/platform args transfer data; not automatic CollectionView reorder.
+Stock CollectionView has [ReorderableItemsView inheritance](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Items/CollectionView.cs)
+and [CanReorderItems/CanMixGroups/ReorderCompleted](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Items/ReorderableItemsView.cs)
+in MAUI 10.0.41; inspect handler/source limits before replacing it.
 ### I2
 [MAUI SwipeView](https://learn.microsoft.com/en-us/dotnet/maui/user-interface/controls/swipeview?view=net-maui-10.0):
 Reveal/Execute, directional actions and Windows touch-only swipe. Separate .NET 11

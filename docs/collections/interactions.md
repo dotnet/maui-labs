@@ -127,6 +127,17 @@ See [data/source research](shared-design.md) and
 
 ## 3. Drag/drop and reordering
 
+### Check stock support before replacing it
+
+MAUI 10.0.41 CollectionView derives from ReorderableItemsView and exposes
+CanReorderItems, CanMixGroups and ReorderCompleted. Generic drag/drop recognizers
+do not provide automatic source reorder, but the built-in reorder path does
+mutate compatible sources. Inspect actual source/backend support: Android/UIKit
+paths work with IList data, while the inspected Windows handler gates on
+ungrouped notifying sources. Property presence does not certify custom backends.
+Keep a working stock control when its contract fits, and persist accepted order
+without replaying the same move. [I1](interactions-sources.md#i1)
+
 ### One collection: reorder data, not pooled views
 
 For manual ordering, work from stable selected keys in a declared order:
@@ -516,6 +527,7 @@ visual state without announcing successful deletion or transfer.
 The authored skill evaluations catch routing, APIs and these failure modes.
 They are not executed model results or proof that a generated native implementation
 meets the matrix. The existing masonry example remains explicitly narrower.
-The bespoke skill now has 52 authored scenarios (20 interaction additions); the
-stock-control skill has eight focused interaction scenarios. Both remain
+The bespoke skill has 64 authored scenarios (20 interaction additions and
+12 field-feedback regressions); the stock-control skill has eight focused
+interaction scenarios. Both remain
 individually distributable without installing companion skills.

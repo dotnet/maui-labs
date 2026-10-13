@@ -1053,3 +1053,263 @@ scenarios:
       - "Provides equivalent Move up/down/to-group or select-then-place through the same keyed command"
       - "Retains keyboard/screen-reader and focus behavior without declaring native legal/performance certification"
     timeout: 120
+
+  - name: "Invalidate a comparison when startup sync replaces seeded data"
+    prompt: |
+      Compare two MAUI native collection renderers with 1,200 seeded mixed rows.
+      Normal startup authentication/sync may clear the database, and navigation
+      completes asynchronously. One run has a good frame histogram but an empty
+      list. Define the fixture and gates before resetting measured counters.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)offline|isolated|isolation'
+      - type: output_matches
+        pattern: '(?i)filtered|presented.*count|expected.*count'
+      - type: output_matches
+        pattern: '(?i)visible.*key|loaded.*content|item.*identit'
+      - type: output_matches
+        pattern: '(?i)invalid|discard|reject'
+    rubric:
+      - "Isolates fixture data from normal auth/sync/feature-gate writers without changing production behavior globally"
+      - "Requires intended host/viewport, expected filtered count, loaded visible keys and settled layout before each measured variant"
+      - "Invalidates the empty/unintended/drifting run instead of calling it a faster renderer"
+    timeout: 120
+
+  - name: "Prove mobile signatures in a small compile target first"
+    prompt: |
+      Implement a retained-MAUI variable-text collection for Android and iOS.
+      Android is the priority available target. Our last attempt guessed native
+      View versus MAUI View and recycle/cell constructor signatures, then rebuilt
+      the full app repeatedly. Explain the next smallest executable sequence and
+      what any existing typed-native photo example can actually prove.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)small.*(?:compile|spike|target)|compile.*spike'
+      - type: output_matches
+        pattern: '(?i)alias|fully.?qualified|native.*(?:type|name)'
+      - type: output_matches
+        pattern: '(?i)registration|ConnectHandler|DisconnectHandler'
+      - type: output_matches
+        pattern: '(?i)retained|typed.?native|not.*certif'
+    rubric:
+      - "Compiles exact constructors/callbacks/imports/aliases against the consuming SDK before full-app signature discovery"
+      - "Proves one loaded Android runtime/reuse slice before implementing the second requested backend"
+      - "Includes context/logical ownership, registration and disconnect behavior without claiming a typed-photo example certifies retained text"
+    timeout: 120
+
+  - name: "Measure Android retained wrapping with one height authority"
+    prompt: |
+      A retained MAUI card has wrapped text, padding and root margins. Our Android
+      reusable row measures it with finite width/infinite height, then measures
+      the native child again at an old loading-placeholder exact height. A global
+      header clips at another density/font scale. Define a correct hosting sequence.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)constrain.*width|finite.*width|width.*Exact|cross.?axis'
+      - type: output_matches
+        pattern: '(?i)Unspecified|unbounded.*height|unconstrained.*height'
+      - type: output_matches
+        pattern: '(?i)margin|padding'
+      - type: output_matches
+        pattern: '(?i)density|pixel|logical'
+      - type: output_matches
+        pattern: '(?i)visible|clipp|header|font'
+    rubric:
+      - "Defines logical/pixel and outer-margin ownership for the chosen public/native measurement bridge"
+      - "Uses constrained width and variable-height measurement rather than a contradictory stale exact height"
+      - "Allows legitimate final bookkeeping at an accepted size instead of forbidding every second framework pass"
+      - "Validates fully visible multiline header/rows/footer at varied density/font/width, not compile or counters alone"
+    timeout: 120
+
+  - name: "Keep UIKit retained text in points with matching measurement"
+    prompt: |
+      Our UIKit cell hosts a reusable MAUI text card with outer margin. It
+      multiplies collection width by UIScreen scale, adds margin after IView.Measure,
+      uses the first row's height for a global header, and arranges after rotation
+      without a matching measure. Explain the correct width/height/arrange contract.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)point'
+      - type: output_matches
+        pattern: '(?i)margin|double.?count'
+      - type: output_matches
+        pattern: '(?i)constrain|self.?siz|unbounded|variable.?height'
+      - type: output_matches
+        pattern: '(?i)header|supplementary'
+    rubric:
+      - "Keeps layout in point space and distinguishes display scale for image pixels"
+      - "Avoids double-counting root margin on a public IView measurement path"
+      - "Measures variable/supplementary content independently and arranges using accepted matching constraints"
+      - "Requires visible text/rotation/font tests rather than claiming universal wrapper correctness"
+    timeout: 120
+
+  - name: "Preserve compatible known heights during same-key reload"
+    prompt: |
+      Returning from a history-item editor refreshes the same query. IDs remain,
+      but payloads clear briefly and every known row height becomes a generic
+      loading estimate. The selected record stays selected while the viewport
+      jumps. Define height metadata and editor-return regression behavior.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)preserv|retain|reserve'
+      - type: output_matches
+        pattern: '(?i)compatible|same.?key|prior.*height|known.*height'
+      - type: output_matches
+        pattern: '(?i)width|font|template|revision'
+      - type: output_matches
+        pattern: '(?i)relative.*offset|offset.*relative|tolerance'
+    rubric:
+      - "Keeps bounded compatible measured heights independent of transient payload availability"
+      - "Invalidates deliberately for real content/revision/width/font/template changes"
+      - "Checks keyed relative position after settled layout for editor save/cancel/return and payload eviction, not selection identity alone"
+    timeout: 120
+
+  - name: "Do not restore an old anchor over a newer user scroll"
+    prompt: |
+      A custom collection captures an anchor for same-source refresh and waits for
+      self-sizing completion. During that wait the user scrolls elsewhere. The
+      delayed callback finds the original key and restores its old offset anyway.
+      What ownership and geometry assertions should prevent this?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)user.*scroll|scroll.*intent'
+      - type: output_matches
+        pattern: '(?i)revision|generation|supersed|newer'
+      - type: output_matches
+        pattern: '(?i)settled|measurement|layout'
+      - type: output_matches
+        pattern: '(?i)neighbou?r|fallback|deleted'
+    rubric:
+      - "Captures/checks user-scroll intent revision independently of source epoch"
+      - "Rejects a superseded restoration even if the original anchor key still exists"
+      - "Restores only accepted settled geometry with declared constraints/tolerance and deleted-key fallback"
+    timeout: 120
+
+  - name: "Bound native preflight instead of rewriting around deployment failures"
+    prompt: |
+      Before migrating a MAUI collection, the unchanged app builds but lacks
+      deployable runtime assets. Multiple devices are running and an old CLI
+      discovers a different registered agent. No correct native viewport is yet
+      reachable. Should we start handlers or upgrade the production SDK to proceed?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)baseline|unchanged'
+      - type: output_matches
+        pattern: '(?i)packag|runtime.*asset|deploy|sign'
+      - type: output_matches
+        pattern: '(?i)identity|intended.*app|platform|window'
+      - type: output_matches
+        pattern: '(?i)bounded|hypothes|blocker|stop'
+    rubric:
+      - "Builds/runs the unchanged baseline and verifies actual app/platform/window/host plus usable automation, not registration alone"
+      - "Separates SDK/packaging/protocol/deployment failures from renderer defects"
+      - "Uses a bounded changed-hypothesis/smaller-probe handoff without unrequested pin/production changes or endless full builds"
+    timeout: 120
+
+  - name: "Follow one-platform checkpoints rather than load all references"
+    prompt: |
+      Use this skill for a simple variable-height native MAUI list. Android is
+      immediately available; iOS is requested later. Describe what to read and
+      implement first. A small compile probe fails once; how does the next
+      investigation avoid restarting the same full build and broad file scan?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)brief|scenario|priority'
+      - type: output_matches
+        pattern: '(?i)checkpoint|one.*platform|first.*(?:slice|runtime|item)'
+      - type: output_matches
+        pattern: '(?i)relevant.*reference|selectiv|only.*(?:recipe|platform)'
+      - type: output_matches
+        pattern: '(?i)changed.*hypothes|smaller.*probe|failure.*class'
+    rubric:
+      - "Reads only scenario/chosen recipe/platform/essential contracts and introduces new material at the needed checkpoint"
+      - "Proves populated content and reuse on the priority target before paging/second backend work"
+      - "Uses changed hypotheses and smaller probes after failure instead of repeated identical builds/scans"
+    timeout: 120
+
+  - name: "Reconcile a platform ledger after user priority changes"
+    prompt: |
+      A native collection migration targets Android, iOS and a desktop backend.
+      The user now prioritizes Android, explicitly defers an adjacent frontend,
+      and no desktop runtime is available. What implementation/evidence ledger
+      and deferred-target policy should guide the rest of the work?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)ledger|table|requested|priority'
+      - type: output_matches
+        pattern: '(?i)deferred|excluded|blocked'
+      - type: output_matches
+        pattern: '(?i)preserv|existing.*behavior'
+      - type: output_matches
+        pattern: '(?i)compiled|deployed|lifecycle|performance'
+    rubric:
+      - "Updates requested/prioritized/deferred scope and available-device/minimum-evidence states to the latest user direction"
+      - "Preserves deferred/excluded behavior rather than silently migrating, stubbing or expanding that frontend"
+      - "Separates implemented/compiled/deployed/behavior/lifecycle/performance states without dropping requested targets or inventing desktop parity"
+    timeout: 120
+
+  - name: "Use a repeatable optional harness and cleanup contract"
+    prompt: |
+      Compare native MAUI renderer variants, then change same-source refresh and
+      repeat. Last time we repeatedly patched production startup to seed data and
+      switch variants, dumped huge trees, and left background hooks enabled.
+      Define a minimal repeatable verification and cleanup approach.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)deterministic|offline|isolated'
+      - type: output_matches
+        pattern: '(?i)variant|equivalent.*traversal|scripted'
+      - type: output_matches
+        pattern: '(?i)native.*(?:container|creat)|MAUI.*(?:tree|handler)'
+      - type: output_matches
+        pattern: '(?i)pending|subscription|cache'
+      - type: output_matches
+        pattern: '(?i)cleanup|restor|production.*build'
+    rubric:
+      - "Keeps a small isolated fixture/explicit variant entry rather than recurrent untracked production hooks"
+      - "Reuses readiness, mixed content, equivalent traversal and independent native/tree/payload/request/subscription counters"
+      - "Records scoped cleanup/restoration and verifies the intended production build/startup afterward"
+      - "Uses narrow keyed/property diagnostics rather than repeated full-tree/raw-log context"
+    timeout: 120
+
+  - name: "Distinguish frame histograms, captures and analyzed presentation"
+    prompt: |
+      One emulator A/B run shows a small difference in callback frame histograms.
+      A native trace was captured but not analyzed, hardware cadence varies,
+      and sample counts/reset boundaries were not recorded. Can we publish p95
+      presented-frame gains and broad renderer certification?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)producer|definition|sample.*count|reset.*scope'
+      - type: output_matches
+        pattern: '(?i)histogram|callback'
+      - type: output_matches
+        pattern: '(?i)analyz|analys|presentation|FrameTimeline'
+      - type: output_matches
+        pattern: '(?i)repeat|noise|spread|warm|cold'
+    rubric:
+      - "Does not equate callback/histogram observations or an unanalyzed capture with presented-frame percentiles"
+      - "Defines metric source, samples, units, cadence, reset interval and diagnostic/cache state"
+      - "Repeats matched A/B conditions when differences may be noise and limits claims to actual device/workload evidence"
+    timeout: 120
+
+  - name: "Use explicitly supplied local skill without guessing registry provenance"
+    prompt: |
+      A project supplies a complete local maui-bespoke-collections directory, but
+      the host registered skill list has not refreshed and loading by name fails.
+      The copy has no origin/version metadata. What safe discovery/direct-use
+      path avoids broad ecosystem searches, companion installation or guessed provenance?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)local|supplied'
+      - type: output_matches
+        pattern: '(?i)frontmatter|SKILL\\.md|relative.*reference'
+      - type: output_matches
+        pattern: '(?i)registry|register|reload|source.*guidance'
+      - type: output_matches
+        pattern: '(?i)unknown|metadata|provenance'
+    rubric:
+      - "Checks the supplied local frontmatter/reference tree before unrelated-location or ecosystem discovery"
+      - "Uses supported registration/reload or permitted direct source guidance without claiming registry activation or bypassing host restrictions"
+      - "Keeps provenance unknown without metadata and does not auto-install companions or inspect unrelated application code"
+    timeout: 120

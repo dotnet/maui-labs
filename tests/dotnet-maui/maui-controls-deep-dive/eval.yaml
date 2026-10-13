@@ -1,8 +1,8 @@
 scenarios:
-  - name: "Add reorder intent without inventing a stock CollectionView flag"
+  - name: "Use actual stock CollectionView reorder with versioned handler limits"
     prompt: |
       My stock .NET 10 MAUI CollectionView scrolls correctly. I want local
-      drag reordering in a small manual-order list. Can I set CanReorderItems
+      drag reordering in a small manual-order list on MAUI 10.0.41. Can I set CanReorderItems
       or attach DragGestureRecognizer and rely on automatic ItemsSource moves?
       Explain the smallest command/data approach, not a new handler framework.
     assertions:
@@ -10,11 +10,16 @@ scenarios:
         value: CollectionView
       - type: output_matches
         pattern: '(?i)key|neighbou?r|source.*move|ItemsSource'
-      - type: output_not_matches
-        pattern: '<CollectionView[^>]*CanReorderItems\s*='
+      - type: output_contains
+        value: CanReorderItems
+      - type: output_matches
+        pattern: 'ReorderCompleted|ReorderableItemsView|CanMixGroups'
+      - type: output_matches
+        pattern: '(?i)IList|notifying|observable|ungrouped|handler.*limit'
     rubric:
-      - "Keeps the working stock control and does not invent a portable CanReorderItems property"
-      - "Explains that drag/drop recognizers transfer data and the app must apply accepted source ordering"
+      - "Recognizes actual CollectionView/ReorderableItemsView reorder properties instead of declaring them missing"
+      - "Keeps the stock control when supported, checks source/group/backend limits and distinguishes generic transfer recognizers"
+      - "Does not replay the native source move on ReorderCompleted; durable repository ordering is a separate operation"
       - "Uses stable intended keys, UI-dispatcher mutation and non-drag alternatives"
     timeout: 120
 

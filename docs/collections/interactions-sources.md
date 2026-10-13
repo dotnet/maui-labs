@@ -16,6 +16,12 @@ not guarantees supplied by a gesture API.
 DragGestureRecognizer/DropGestureRecognizer, data packages and platform args.
 Describes data transfer, not automatic CollectionView reordering or durable
 repository mutation.
+Stock CollectionView itself does expose built-in reordering in inspected
+MAUI 10.0.41:
+[inheritance](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Items/CollectionView.cs),
+[properties/event](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Items/ReorderableItemsView.cs),
+[Windows source/group gate](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Handlers/Items/ReorderableItemsViewHandler.Windows.cs).
+Generic recognizers and built-in reorder must not be conflated.
 
 ### I2
 [SwipeView](https://learn.microsoft.com/en-us/dotnet/maui/user-interface/controls/swipeview?view=net-maui-10.0).

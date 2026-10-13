@@ -30,6 +30,12 @@ The skill must exist in the selected public catalog revision before these
 commands can discover it. Older published CLI versions may not expose the
 `ai` commands; verify `maui ai --help` and the skill listing first.
 
+For an explicitly supplied project-local skill absent from the host registry,
+check its frontmatter and relative references before external discovery. Reload/
+register through the host's supported mechanism; permitted direct source reading
+is not proof of registry activation. Preserve installed origin/revision metadata
+for feedback; don't infer provenance or install unrelated companions automatically.
+
 Alternatively, install the complete plugin in an agent that supports marketplaces:
 
 ```bash

@@ -5,7 +5,7 @@
 
 **Status:** phase 1 skill foundation implemented from the 2026-10-12 research.
 The [entry skill](../../plugins/dotnet-maui/skills/maui-bespoke-collections/SKILL.md),
-24 focused references, and [52 authored evaluation
+27 focused references, and [64 authored evaluation
 scenarios](../../tests/dotnet-maui/maui-bespoke-collections/eval.yaml) are present.
 The 2026-10-13 [interaction research](interactions.md) adds source-backed drag/
 reorder, deletion/swipe, refresh/reconciliation and item-action contracts.
@@ -19,6 +19,13 @@ and diagnostic traces. Its
 [evidence record](../../samples/BespokeCollections/EVIDENCE.md) keeps physical
 frame/memory qualification pending. LLM evaluation and recipe-wide certification
 are not claimed; phases 3-6 remain future work.
+Field-feedback maintenance adds a checkpointed mobile fast path, source-backed
+retained-content measure/arrange procedure and benchmark-validity/harness contract.
+The existing compiled photo example remains typed native; a maintained compiled
+retained-MAUI text fixture is not being claimed by these reference additions.
+Twelve synthetic feedback regressions cover populated fixture validity, small
+compile/measurement bridges, loading heights and scroll ownership, bounded
+preflight, progressive checkpoints, priority/discovery and metric/cleanup contracts.
 
 ## 1. Product of the skill
 
@@ -129,6 +136,8 @@ references/
   scenario-selection.md
   source-and-update-contracts.md
   geometry-and-anchoring.md
+  mobile-vertical-slice.md
+  retained-content-hosting.md
   reuse-and-handler-lifecycle.md
   interaction-contracts.md
   drag-drop-and-reordering.md
@@ -137,6 +146,7 @@ references/
   context-menus-and-actions.md
   paging-http-database.md
   performance-and-validation.md
+  benchmark-harness.md
   platform-uikit.md
   platform-android.md
   platform-winui.md

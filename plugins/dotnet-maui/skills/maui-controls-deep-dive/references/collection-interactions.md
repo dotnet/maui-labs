@@ -29,9 +29,19 @@ Keep selection/focus/anchor by key and choose a surviving neighbour after deleti
 
 ## Drag/drop and reorder
 
-DragGestureRecognizer/DropGestureRecognizer and DataPackage transfer data; there
-is no portable CollectionView CanReorderItems property. DropCompleted is not
-proof of a successful durable Move. Specify reorder versus copy/import/transfer.
+In inspected MAUI 10.0.41, CollectionView derives from ReorderableItemsView and
+exposes CanReorderItems, CanMixGroups and ReorderCompleted. Check built-in reorder
+first for a working stock list. Android/UIKit implementations mutate compatible
+IList sources; the inspected Windows handler requires ungrouped notifying data.
+Do not assume custom-backend parity from property availability.
+
+The built-in source change is not a durable repository commit. Observe/reconcile
+the accepted order once rather than performing the same move again from
+ReorderCompleted. Test groups/source compatibility and persist actual keys/order.
+
+DragGestureRecognizer/DropGestureRecognizer and DataPackage separately transfer
+data; they do not by themselves reorder ItemsSource. DropCompleted is not proof
+of a successful durable Move. Specify reorder versus copy/import/transfer.
 
 For resident mutable data, translate drop context into intended keys and a
 before/after neighbour, validate manual order/group boundaries and apply the
@@ -121,6 +131,10 @@ These authored checks do not mean all native implementations have been exercised
   [SwipeItem](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/SwipeView/SwipeItem.cs),
   [Windows menu](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Core/src/Handlers/MenuFlyoutHandler/MenuFlyoutHandler.Windows.cs),
   [UIKit menu](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Core/src/Handlers/MenuFlyoutHandler/MenuFlyoutHandler.iOS.cs).
+- [CollectionView inheritance](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Items/CollectionView.cs),
+  [ReorderableItemsView](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Items/ReorderableItemsView.cs),
+  [Windows reorder gate](https://github.com/dotnet/maui/blob/d15964ef4f0a6d0740b655ba7c6be9b96be8b187/src/Controls/src/Core/Handlers/Items/ReorderableItemsViewHandler.Windows.cs):
+  actual versioned property/source support, not an invented missing API.
 - [Single-pointer non-drag alternatives](https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html):
   web accessibility guidance informing native design, not a native compliance claim.
 

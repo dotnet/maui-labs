@@ -152,6 +152,27 @@ Record a manifest containing:
 - page size, latency/error simulation, concurrency and cache budgets;
 - cold/warm state and exact interaction sequence.
 
+### Populated-workload validity is a gate
+
+Before steady-state counter reset/capture, verify the intended app, platform,
+window/screen and native host/layout; finite viewport; expected filtered/presented
+count; actual loaded visible keys/content; settled native frames/update/transition;
+and the accepted stable dataset revision. Repeat before each variant/repeat and
+after the workload. Timeout, empty/unintended content or drift is an invalid run,
+not evidence of speed.
+
+Use a deterministic offline repository or explicitly isolated controlled transport
+for renderer comparisons. Normal startup auth/sync/observers/feature gates must
+not silently clear or replace seeded records. Keep production behavior unchanged
+outside a scoped fixture. Startup timing can capture before readiness, but must
+still reach and verify its expected first useful viewport.
+
+See the [optional harness contract](../../plugins/dotnet-maui/skills/maui-bespoke-collections/references/benchmark-harness.md)
+for run/variant selection, independent native/tree/cache/request/subscription
+counters, matched repeated A/B traversal, metric sample/cadence definitions,
+narrow diagnostics and cleanup/production-build verification. Callback histograms,
+captured traces and analyzed native presentation evidence are not interchangeable.
+
 Use the same seeded data/reference images and gestures across implementations.
 Do not benchmark a no-image Android control against an image-heavy iOS control.
 Compare each target to a native reference on that same target.

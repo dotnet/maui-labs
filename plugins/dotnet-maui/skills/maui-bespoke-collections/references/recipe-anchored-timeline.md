@@ -27,6 +27,24 @@ Cache heights by key/revision/width/font/template. A timestamp needs a unique ke
 tie-breaker. Group boundaries crossing pages retain one header and final footer
 only when completeness is known.
 
+## Same-source refresh and editor return
+
+Before opening/returning from an editor or refreshing the same source, capture
+anchor key/relative offset, fallback neighbours, constraints and user-scroll
+revision. If same-key payloads temporarily clear/reload, reserve compatible prior
+measured heights rather than replacing every row with a loading estimate.
+Keep bounded height metadata independent of payload retention.
+
+When accepted content arrives, invalidate only real content/revision/width/font/
+template changes and restore after settled native measurement/update. A new user
+scroll supersedes the saved restoration; deleted anchors use surviving neighbours.
+Changing constraints can reflow legitimately, so use the declared alignment policy.
+
+Test editor save/cancel/return, payload eviction, same-key refresh and a newer
+scroll during delayed layout. Assert key and relative position within a stated
+logical/pixel tolerance, not identity alone. This is a required generated-control
+regression, not a feature certified by the metadata photo-masonry example.
+
 Choose native sections or typed flat rows deliberately. Header/unread/loading/
 error rows are not data counts/selection. Observe mutable group children or publish
 new section snapshots. Collapse must not load all hidden messages.

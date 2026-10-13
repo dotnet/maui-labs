@@ -3,6 +3,9 @@
 First read [interaction contracts](interaction-contracts.md). Separate reorder,
 cross-collection transfer and external import; a drag gesture is not automatic
 collection mutation. [Sources I1, I6-I7, I11-I12, I15, I18-I19, I21, I23](sources.md#i1)
+MAUI 10.0.41 stock CollectionView exposes CanReorderItems/CanMixGroups and
+ReorderCompleted. Check its handler/source limits before choosing a custom path;
+generic transfer recognizers alone do not provide that built-in mutation.
 
 ## Ordering and targets
 

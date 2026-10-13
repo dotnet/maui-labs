@@ -46,6 +46,10 @@ ownership/resources/semantics. Measure/arrange under native cell constraints.
 Detach old ownership without destroying a tree deliberately retained for reuse.
 On replacement/eviction/disconnect, unsubscribe and disconnect its handlers.
 Do not recreate the entire tree to solve every state-reset problem.
+Use the [worked hosting sequence](retained-content-hosting.md) for constrained
+width/variable height, units, root margins/padding and matching arrangement.
+First compile the chosen public bridge/aliases/callbacks in a small target;
+then prove one populated runtime/reuse slice before additional backends.
 
 ## Handler checklist
 
