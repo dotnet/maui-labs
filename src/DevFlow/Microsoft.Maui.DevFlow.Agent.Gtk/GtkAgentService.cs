@@ -243,18 +243,15 @@ public class GtkAgentService : MauiDevFlowAgentService
             var width = paintable.GetIntrinsicWidth();
             var height = paintable.GetIntrinsicHeight();
 
-            if (width <= 0 || height <= 0)
-                return null;
+            if (width <= 0 || height <= 0) return null;
 
             var snapshot = global::Gtk.Snapshot.New();
             paintable.Snapshot(snapshot, width, height);
             var node = snapshot.ToNode();
-            if (node == null)
-                return null;
+            if (node == null) return null;
 
             var renderer = widget.GetNative()?.GetRenderer();
-            if (renderer == null)
-                return null;
+            if (renderer == null) return null;
 
             var texture = renderer.RenderTexture(node, null);
             if (texture == null) return null;

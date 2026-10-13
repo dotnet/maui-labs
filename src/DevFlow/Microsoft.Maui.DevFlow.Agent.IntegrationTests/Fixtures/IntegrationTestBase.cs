@@ -164,13 +164,10 @@ public abstract class IntegrationTestBase
         if (!TestFramework.IsNative)
         {
             Assert.True(await Client.NavigateAsync(route), $"Navigation to '{route}' failed.");
-            await App.WaitForUiSettledAsync();
         }
 
         if (expectedAutomationId != null)
             await FindElementAsync(expectedAutomationId, timeoutMs);
-        else if (!TestFramework.IsNative)
-            await Task.Delay(500);
     }
 
     protected Task NavigateToMainPageAsync() => NavigateToPageAsync("//native", "AddButton");

@@ -362,8 +362,7 @@ public class WebViewTests : IntegrationTestBase
 
         Assert.True(response.IsSuccessStatusCode,
             $"WebView navigate failed with status {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
-        await WaitForWebViewPathAsync(contextId, "/counter");
-        await App.WaitForUiSettledAsync();
+        await AssertWebViewPathAsync(contextId, "/counter");
         contextId = await GetActiveContextIdAsync();
 
         var backResponse = await PostWithBridgeRetryAsync("/api/v1/webview/navigate", new
@@ -373,27 +372,22 @@ public class WebViewTests : IntegrationTestBase
         });
         Assert.True(backResponse.IsSuccessStatusCode,
             $"WebView navigate back failed with status {(int)backResponse.StatusCode}: {await backResponse.Content.ReadAsStringAsync()}");
-        await WaitForWebViewPathAsync(contextId, "/");
+        await AssertWebViewPathAsync(contextId, "/");
         App.InvalidateBlazorReady();
     }
 
-    async Task WaitForWebViewPathAsync(string contextId, string expectedPath)
+    async Task AssertWebViewPathAsync(string contextId, string expectedPath)
     {
-        await WaitForAsync(async () =>
-        {
-            var result = await Client.SendCdpCommandAsync(
-                "Runtime.evaluate",
-                new JsonObject
-                {
-                    ["expression"] = "document.readyState === 'complete' ? location.pathname : ''",
-                    ["returnByValue"] = true
-                },
-                contextId);
-            return result.TryGetProperty("result", out var response)
-                && response.TryGetProperty("result", out var remoteObject)
-                && remoteObject.TryGetProperty("value", out var value)
-                && value.GetString() == expectedPath;
-        }, timeoutMs: 15000);
+        var result = await Client.SendCdpCommandAsync(
+            "Runtime.evaluate",
+            new JsonObject
+            {
+                ["expression"] = "location.pathname",
+                ["returnByValue"] = true
+            },
+            contextId);
+        Assert.Equal(expectedPath,
+            result.GetProperty("result").GetProperty("result").GetProperty("value").GetString());
     }
 
     [Fact]
@@ -475,7 +469,6 @@ public class WebViewTests : IntegrationTestBase
     {
         await EnsureOnBlazorPageAsync();
         await AssertCdpResponsiveAsync();
-        await App.WaitForUiSettledAsync();
         var contextId = await GetActiveContextIdAsync();
 
         var response = await GetWithBridgeRetryAsync($"/api/v1/webview/screenshot?contextId={Uri.EscapeDataString(contextId)}");

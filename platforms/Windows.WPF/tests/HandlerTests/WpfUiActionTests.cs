@@ -7,7 +7,6 @@ using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Hosting.WPF;
 using Microsoft.Maui.DevFlow.Agent.WPF;
-using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Handlers.WPF;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.Windows.WPF;
@@ -205,10 +204,8 @@ public class WpfUiActionTests
 		});
 	}
 
-	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public void Scroll_CollectionView_UsesInternalViewerBeforeAncestorAndDispatches(bool backgroundThread)
+	[Fact]
+	public void Scroll_CollectionView_UsesInternalViewerBeforeAncestorAndPreservesVirtualization()
 	{
 		Run(context =>
 		{
@@ -236,7 +233,7 @@ public class WpfUiActionTests
 			panel.Children.Add(new System.Windows.Controls.Border { Height = 1000 });
 			var outer = new ScrollViewer { Content = panel };
 			var window = CreateWindow(outer);
-			using var service = new ScrollAgent(context.Services.GetRequiredService<IDispatcher>());
+			using var service = new ScrollAgent();
 			try
 			{
 				window.Show();
@@ -263,10 +260,7 @@ public class WpfUiActionTests
 				var anchorIndex = list.ItemContainerGenerator.IndexFromContainer(anchor);
 				var originalTop = RowTop();
 
-				var scroll = backgroundThread
-					? Task.Run(() => service.ScrollAsync(collection, 0, 100))
-					: service.ScrollAsync(collection, 0, 100);
-				Assert.True(CompleteOnDispatcher(scroll));
+				Assert.True(CompleteOnDispatcher(service.ScrollAsync(collection, 0, 100)));
 				Layout(window);
 				var scrolledOffset = inner.VerticalOffset;
 				Assert.True(scrolledOffset < originalOffset);
@@ -311,7 +305,7 @@ public class WpfUiActionTests
 			handler.SetMauiContext(context);
 			handler.SetVirtualView(scrollView);
 			var window = CreateWindow(handler.PlatformView);
-			using var service = new ScrollAgent(context.Services.GetRequiredService<IDispatcher>());
+			using var service = new ScrollAgent();
 			try
 			{
 				window.Show();
@@ -366,7 +360,7 @@ public class WpfUiActionTests
 			var collectionRoot = Assert.IsType<WGrid>(collection.Handler!.PlatformView);
 			var list = Assert.IsType<MauiCollectionListBox>(collectionRoot.Children[0]);
 			var window = CreateWindow(handler.PlatformView);
-			using var service = new ScrollAgent(context.Services.GetRequiredService<IDispatcher>());
+			using var service = new ScrollAgent();
 			try
 			{
 				window.Show();
@@ -407,7 +401,7 @@ public class WpfUiActionTests
 			var handler = new LabelHandler();
 			handler.SetMauiContext(context);
 			handler.SetVirtualView(label);
-			using var service = new ScrollAgent(context.Services.GetRequiredService<IDispatcher>());
+			using var service = new ScrollAgent();
 			try
 			{
 				Assert.False(CompleteOnDispatcher(service.ScrollAsync(label, 0, 100)));
@@ -464,12 +458,9 @@ public class WpfUiActionTests
 		}
 	}
 
-	sealed class ScrollAgent(IDispatcher dispatcher) : WpfAgentService
+	sealed class ScrollAgent : WpfAgentService
 	{
 		public Task<bool> ScrollAsync(VisualElement element, double x, double y)
-		{
-			_dispatcher = ToAgentDispatcher(dispatcher);
-			return TryNativeScroll(element, x, y);
-		}
+			=> TryNativeScroll(element, x, y);
 	}
 }

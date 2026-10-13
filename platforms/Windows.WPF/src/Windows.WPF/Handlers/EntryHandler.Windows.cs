@@ -142,28 +142,15 @@ namespace Microsoft.Maui.Handlers.WPF
 				return;
 
 			UIElement? platformView = entry.IsPassword ? handler._passwordBox : handler.PlatformView;
-			var focused = entry.IsEnabled && platformView != null && (platformView.Dispatcher.CheckAccess()
-				? platformView.Focus()
-				: platformView.Dispatcher.Invoke(() => platformView.Focus()));
+			var focused = entry.IsEnabled && platformView != null && platformView.Focus();
 			request.TrySetResult(focused);
 		}
 
 		public static void MapIsEnabled(EntryHandler handler, IEntry entry)
 		{
-			var platformView = handler.PlatformView;
-			var passwordBox = handler._passwordBox;
-			var enabled = entry.IsEnabled;
-			void Update()
-			{
-				platformView.IsEnabled = enabled;
-				if (passwordBox != null)
-					passwordBox.IsEnabled = enabled;
-			}
-
-			if (platformView.Dispatcher.CheckAccess())
-				Update();
-			else
-				platformView.Dispatcher.BeginInvoke(Update);
+			handler.PlatformView.IsEnabled = entry.IsEnabled;
+			if (handler._passwordBox != null)
+				handler._passwordBox.IsEnabled = entry.IsEnabled;
 		}
 
 		public static void MapText(EntryHandler handler, IEntry entry)

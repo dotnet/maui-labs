@@ -94,9 +94,7 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
     {
         var toggle = await FindElementAsync("ToggleBaselineFixtures");
         Assert.True(await Client.ScrollAsync(toggle.Id, animated: false));
-        await App.WaitForUiSettledAsync();
         Assert.True(await Client.TapAsync(toggle.Id));
-        await App.WaitForUiSettledAsync();
         Assert.Equal(expectedState, (await FindElementAsync("BaselineFixtureState")).Text);
     }
 

@@ -71,17 +71,9 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
                     if (handler.PlatformView is not NSView platformView)
                         return;
 
-                    void Invalidate()
-                    {
-                        platformView.InvalidateIntrinsicContentSize();
-                        for (var ancestor = platformView; ancestor != null; ancestor = ancestor.Superview)
-                            ancestor.NeedsLayout = true;
-                    }
-
-                    if (Foundation.NSThread.IsMain)
-                        Invalidate();
-                    else
-                        platformView.BeginInvokeOnMainThread(Invalidate);
+                    platformView.InvalidateIntrinsicContentSize();
+                    for (var ancestor = platformView; ancestor != null; ancestor = ancestor.Superview)
+                        ancestor.NeedsLayout = true;
                 };
             }
         }

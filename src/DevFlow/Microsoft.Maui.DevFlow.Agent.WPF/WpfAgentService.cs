@@ -80,32 +80,27 @@ public class WpfAgentService : MauiDevFlowAgentService
     }
 
     protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
-        => DispatchAsync(() =>
     {
-        try
+        var target = element;
+        while (target != null)
         {
-            var target = element;
-            while (target != null)
+            if (target.Handler?.PlatformView is DependencyObject d)
             {
-                if (target.Handler?.PlatformView is DependencyObject d)
+                var scroll = ReferenceEquals(target, element) ? FindDescendant<ScrollViewer>(d) : null;
+                scroll ??= FindAncestor<ScrollViewer>(d);
+                if (scroll != null)
                 {
-                    var scroll = ReferenceEquals(target, element) ? FindDescendant<ScrollViewer>(d) : null;
-                    scroll ??= FindAncestor<ScrollViewer>(d);
-                    if (scroll != null)
-                    {
-                        if (deltaX != 0)
-                            scroll.ScrollToHorizontalOffset(Math.Max(0, scroll.HorizontalOffset + deltaX));
-                        if (deltaY != 0)
-                            scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset - deltaY));
-                        return true;
-                    }
+                    if (deltaX != 0)
+                        scroll.ScrollToHorizontalOffset(Math.Max(0, scroll.HorizontalOffset + deltaX));
+                    if (deltaY != 0)
+                        scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset - deltaY));
+                    return Task.FromResult(true);
                 }
-                target = target.Parent as VisualElement;
             }
+            target = target.Parent as VisualElement;
         }
-        catch { }
-        return false;
-    });
+        return Task.FromResult(false);
+    }
 
     protected override bool TryNativeTap(VisualElement ve)
     {
