@@ -17,6 +17,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 {
 	Gtk.ListView? _listView;
+	Gtk.SignalListItemFactory? _factory;
 	Gtk.StringList? _model;
 	Gtk.SelectionModel? _selectionModel;
 	Gtk.Label? _emptyLabel;
@@ -89,21 +90,17 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 			_listView.SetFactory(null);
 			ClearRealizedViews();
 		}
+		DisconnectFactory();
 		ClearTemplateAllocations();
 
 		var hasTemplate = VirtualView is CollectionView cv &&
 			(cv.ItemTemplate != null || cv.GroupHeaderTemplate != null);
-		Gtk.ListItemFactory factory;
-
-		if (hasTemplate)
-			factory = BuildTemplateFactory();
-		else
-			factory = BuildStringFactory();
+		_factory = hasTemplate ? BuildTemplateFactory() : BuildStringFactory();
 
 		if (_selectionModel == null)
 			_selectionModel = Gtk.NoSelection.New(_model);
 
-		var newListView = Gtk.ListView.New(_selectionModel, factory);
+		var newListView = Gtk.ListView.New(_selectionModel, _factory);
 		if (!hasTemplate)
 			newListView.AddCssClass("navigation-sidebar");
 		newListView.SetVexpand(true);
@@ -118,34 +115,38 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	Gtk.SignalListItemFactory BuildStringFactory()
 	{
 		var factory = Gtk.SignalListItemFactory.New();
-		factory.OnSetup += (_, args) =>
-		{
-			var listItem = (Gtk.ListItem)args.Object;
-			var label = CreateItemLabel(string.Empty);
-
-			// Add a one-time CSS provider for group header styling via CSS class
-			var cssProvider = Gtk.CssProvider.New();
-			cssProvider.LoadFromString("label.group-header { font-weight: bold; font-size: 13px; }");
-			label.GetStyleContext().AddProvider(cssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-			listItem.SetChild(label);
-		};
-		factory.OnBind += (_, args) =>
-		{
-			var listItem = (Gtk.ListItem)args.Object;
-			var label = (Gtk.Label)listItem.GetChild()!;
-			var item = (Gtk.StringObject)listItem.GetItem()!;
-			var idx = (int)listItem.GetPosition();
-
-			label.SetText(item.GetString());
-
-			// Toggle group header style via CSS class (avoids accumulating providers)
-			if (_groupHeaderIndices.Contains(idx))
-				label.AddCssClass("group-header");
-			else
-				label.RemoveCssClass("group-header");
-		};
+		factory.OnSetup += OnStringSetup;
+		factory.OnBind += OnStringBind;
 		return factory;
+	}
+
+	void OnStringSetup(Gtk.SignalListItemFactory sender, Gtk.SignalListItemFactory.SetupSignalArgs args)
+	{
+		var listItem = (Gtk.ListItem)args.Object;
+		var label = CreateItemLabel(string.Empty);
+
+		// Add a one-time CSS provider for group header styling via CSS class
+		var cssProvider = Gtk.CssProvider.New();
+		cssProvider.LoadFromString("label.group-header { font-weight: bold; font-size: 13px; }");
+		label.GetStyleContext().AddProvider(cssProvider, Gtk.Constants.STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+		listItem.SetChild(label);
+	}
+
+	void OnStringBind(Gtk.SignalListItemFactory sender, Gtk.SignalListItemFactory.BindSignalArgs args)
+	{
+		var listItem = (Gtk.ListItem)args.Object;
+		var label = (Gtk.Label)listItem.GetChild()!;
+		var item = (Gtk.StringObject)listItem.GetItem()!;
+		var idx = (int)listItem.GetPosition();
+
+		label.SetText(item.GetString());
+
+		// Toggle group header style via CSS class (avoids accumulating providers)
+		if (_groupHeaderIndices.Contains(idx))
+			label.AddCssClass("group-header");
+		else
+			label.RemoveCssClass("group-header");
 	}
 
 	static Gtk.Label CreateItemLabel(string text)
@@ -163,66 +164,81 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 	Gtk.SignalListItemFactory BuildTemplateFactory()
 	{
 		var factory = Gtk.SignalListItemFactory.New();
-		factory.OnSetup += (_, args) =>
-		{
-			// Child is set in OnBind — can't pre-create a fixed container
-			// because each template may produce different widget types.
-		};
-		factory.OnBind += (_, args) =>
-		{
-			var listItem = (Gtk.ListItem)args.Object;
-			RemoveRealizedView(listItem);
-
-			var idx = (int)listItem.GetPosition();
-			if (idx < 0 || idx >= _items.Count) return;
-			var dataItem = _items[idx];
-
-			if (VirtualView is not CollectionView collectionView)
-				return;
-
-			// Check if this is a group header
-			if (_groupHeaderIndices.Contains(idx))
-			{
-				var headerWidget = BuildGroupHeader(collectionView, dataItem, listItem);
-				headerWidget.SetSizeRequest(-1, 36);
-				listItem.SetChild(headerWidget);
-				return;
-			}
-
-			if (collectionView.ItemTemplate == null)
-			{
-				listItem.SetChild(CreateItemLabel(dataItem?.ToString() ?? string.Empty));
-				return;
-			}
-
-			try
-			{
-				var (nativeWidget, measuredHeight) = InflateTemplate(collectionView, dataItem, listItem);
-				if (nativeWidget != null)
-					listItem.SetChild(nativeWidget);
-			}
-			catch (Exception ex)
-			{
-				RemoveRealizedView(listItem);
-				var fallback = Gtk.Label.New(dataItem?.ToString() ?? "(error)");
-				fallback.SetHalign(Gtk.Align.Start);
-				fallback.SetMarginStart(12);
-				listItem.SetChild(fallback);
-				Console.WriteLine($"[CollectionView] ItemTemplate error: {ex.Message}");
-			}
-		};
-		factory.OnUnbind += (_, args) =>
-		{
-			var listItem = (Gtk.ListItem)args.Object;
-			if (listItem.GetChild() is { } child && _templateAllocations.Remove(child, out var observer))
-				observer.Dispose();
-			RemoveRealizedView(listItem);
-		};
-		factory.OnTeardown += (_, args) =>
-		{
-			RemoveRealizedView((Gtk.ListItem)args.Object);
-		};
+		factory.OnBind += OnTemplateBind;
+		factory.OnUnbind += OnTemplateUnbind;
+		factory.OnTeardown += OnTemplateTeardown;
 		return factory;
+	}
+
+	void OnTemplateBind(Gtk.SignalListItemFactory sender, Gtk.SignalListItemFactory.BindSignalArgs args)
+	{
+		var listItem = (Gtk.ListItem)args.Object;
+		RemoveRealizedView(listItem);
+
+		var idx = (int)listItem.GetPosition();
+		if (idx < 0 || idx >= _items.Count) return;
+		var dataItem = _items[idx];
+
+		if (VirtualView is not CollectionView collectionView)
+			return;
+
+		// Check if this is a group header
+		if (_groupHeaderIndices.Contains(idx))
+		{
+			var headerWidget = BuildGroupHeader(collectionView, dataItem, listItem);
+			headerWidget.SetSizeRequest(-1, 36);
+			listItem.SetChild(headerWidget);
+			return;
+		}
+
+		if (collectionView.ItemTemplate == null)
+		{
+			listItem.SetChild(CreateItemLabel(dataItem?.ToString() ?? string.Empty));
+			return;
+		}
+
+		try
+		{
+			var (nativeWidget, measuredHeight) = InflateTemplate(collectionView, dataItem, listItem);
+			if (nativeWidget != null)
+				listItem.SetChild(nativeWidget);
+		}
+		catch (Exception ex)
+		{
+			RemoveRealizedView(listItem);
+			var fallback = Gtk.Label.New(dataItem?.ToString() ?? "(error)");
+			fallback.SetHalign(Gtk.Align.Start);
+			fallback.SetMarginStart(12);
+			listItem.SetChild(fallback);
+			Console.WriteLine($"[CollectionView] ItemTemplate error: {ex.Message}");
+		}
+	}
+
+	void OnTemplateUnbind(Gtk.SignalListItemFactory sender, Gtk.SignalListItemFactory.UnbindSignalArgs args)
+	{
+		var listItem = (Gtk.ListItem)args.Object;
+		if (listItem.GetChild() is { } child && _templateAllocations.Remove(child, out var observer))
+			observer.Dispose();
+		RemoveRealizedView(listItem);
+	}
+
+	void OnTemplateTeardown(Gtk.SignalListItemFactory sender, Gtk.SignalListItemFactory.TeardownSignalArgs args)
+	{
+		RemoveRealizedView((Gtk.ListItem)args.Object);
+	}
+
+	void DisconnectFactory()
+	{
+		if (_factory == null)
+			return;
+		// SetFactory(null) must run first so GTK can still unbind realized rows.
+		// Only then disconnect the closures before releasing our factory owner.
+		_factory.OnSetup -= OnStringSetup;
+		_factory.OnBind -= OnStringBind;
+		_factory.OnBind -= OnTemplateBind;
+		_factory.OnUnbind -= OnTemplateUnbind;
+		_factory.OnTeardown -= OnTemplateTeardown;
+		_factory = null;
 	}
 
 	void RemoveRealizedView(Gtk.ListItem listItem)
@@ -401,6 +417,7 @@ public class CollectionViewHandler : GtkViewHandler<IView, Gtk.ScrolledWindow>
 		_listView?.SetModel(null);
 		_listView?.SetFactory(null);
 		ClearRealizedViews();
+		DisconnectFactory();
 		ClearTemplateAllocations();
 
 		base.DisconnectHandler(platformView);

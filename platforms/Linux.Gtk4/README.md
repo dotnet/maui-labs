@@ -458,7 +458,14 @@ source replacement, runtime item/group-header template replacement, group header
 and recursive handler disconnection of retired roots and nested template children.
 Cleanup is checked after source replacement, template rebuild, and handler teardown,
 including repeated cleanup without duplicate disconnection. Template changes do not
-require an ItemsSource change.
+require an ItemsSource change. Native signal queries also check that replaced
+list-item factories and detached visual-state controllers have no remaining
+handler-owned signal registrations. Factory unbind/teardown callbacks remain
+connected until GTK has retired its realized rows.
+
+The Blazor WebView lifetime regression additionally requires WebKitGTK 6.0.
+It checks that disposing the wrapper disconnects its detailed script-message
+signal from the user-content manager and that repeated disposal is harmless.
 
 The Picker regression checks item replacement, no selection, collection
 mutations, managed selection mapping, native selection notifications, and
@@ -474,6 +481,7 @@ From the repository root on Linux, use the shared class runner (PowerShell 7,
 
 ```bash
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkBlazorWebViewLifetimeTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransformTests

@@ -143,9 +143,30 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 
 	void CleanupVisualStateTracking(Gtk.Widget widget)
 	{
-		if (_vsmMotion != null) { widget.RemoveController(_vsmMotion); _vsmMotion = null; }
-		if (_vsmClick != null) { widget.RemoveController(_vsmClick); _vsmClick = null; }
-		if (_vsmFocus != null) { widget.RemoveController(_vsmFocus); _vsmFocus = null; }
+		// Removing a controller releases GTK's reference, not its managed signal
+		// closures. Disconnect while the controller is still owned by the handler.
+		if (_vsmMotion != null)
+		{
+			_vsmMotion.OnEnter -= OnPointerEnter;
+			_vsmMotion.OnLeave -= OnPointerLeave;
+			widget.RemoveController(_vsmMotion);
+			_vsmMotion = null;
+		}
+		if (_vsmClick != null)
+		{
+			_vsmClick.OnPressed -= OnPressed;
+			_vsmClick.OnReleased -= OnReleased;
+			widget.RemoveController(_vsmClick);
+			_vsmClick = null;
+		}
+		if (_vsmFocus != null)
+		{
+			_vsmFocus.OnEnter -= OnFocusIn;
+			_vsmFocus.OnLeave -= OnFocusOut;
+			widget.RemoveController(_vsmFocus);
+			_vsmFocus = null;
+		}
+		_isPointerOver = false;
 	}
 
 	void OnPointerEnter(Gtk.EventControllerMotion sender, Gtk.EventControllerMotion.EnterSignalArgs args)

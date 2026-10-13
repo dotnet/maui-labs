@@ -715,7 +715,11 @@ for Linux-only releases.
 
 ### Real app integration tests
 
-The simulator/emulator-driven suite is kept separate from the fast PR test pass and is intended to be run explicitly. Set `DEVFLOW_TEST_PLATFORM` to one of: `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`, `windows`. Defaults to `maccatalyst` on macOS, `windows` on Windows.
+The simulator/emulator-driven suite is separate from the fast host tests and runs
+automatically in integration CI as described above. For local runs, set
+`DEVFLOW_TEST_PLATFORM` to `maccatalyst` (or `mac`/`catalyst`), `ios`, `android`,
+`windows`, `macos`, `gtk`, or `wpf`. It defaults to `maccatalyst` on macOS and
+`windows` on Windows.
 
 ```bash
 # Mac Catalyst
@@ -732,6 +736,13 @@ DEVFLOW_TEST_PLATFORM=windows dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Age
 ```
 
 For local reliability, prefer running one platform suite at a time from a given repo worktree. Android fixture selection can be pinned with `DEVFLOW_TEST_ANDROID_AVD` and `DEVFLOW_TEST_ANDROID_SERIAL` when you want the harness to use a known emulator instance.
+
+CI sets `DEVFLOW_TEST_IOS_ISOLATED=true`: the fixture creates a fresh iPhone from
+the installed runtime's supported device types, then shuts down and deletes only
+that owned simulator, including after startup failure. `DEVFLOW_TEST_IOS_VERSION`
+still selects the runtime; isolation does not downgrade it or retry boots. Set
+the same flag locally to avoid deploying into an existing simulator. Without
+the flag, the existing booted-device selection behavior is unchanged.
 
 #### Running the suite against a plain .NET app
 
@@ -753,8 +764,8 @@ DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=maccatalyst \
   dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter "framework!=maui"
 ```
 
-`native` is supported for `android`, `ios` and `maccatalyst`. There is no plain-.NET Windows head,
-and the AppKit head under `samples/DevFlow.Sample.Native/MacOS` does not yet have a driving fixture.
+`native` is supported for `android`, `ios`, `maccatalyst`, and `macos`. There are no
+plain-.NET Windows, GTK, or WPF integration heads.
 
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
 

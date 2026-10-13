@@ -251,6 +251,7 @@ jobs:
     env:
       DEVFLOW_TEST_PLATFORM: ios
       DEVFLOW_TEST_FRAMEWORK: ${{ matrix.framework }}
+      DEVFLOW_TEST_IOS_ISOLATED: 'true'
       # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
       TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
       DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime }}
