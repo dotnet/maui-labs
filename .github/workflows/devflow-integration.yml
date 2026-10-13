@@ -48,7 +48,7 @@ on:
         default: false
         type: boolean
       ios-runtime:
-        description: iOS runtime version filter (e.g. 17.5). Leave blank for newest available.
+        description: iOS runtime version filter (e.g. 26.2). Leave blank for the CI-pinned 26.2 runtime.
         default: ""
         type: string
   pull_request:
