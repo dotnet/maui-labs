@@ -284,16 +284,7 @@ public class ChatClientNative: NSObject {
         }()
 
         // Map options into GenerationOptions
-        let genOptions = GenerationOptions(
-            samplingMode: {
-                if let topK = options?.topK?.intValue {
-                    return .random(top: topK, seed: options?.seed?.uint64Value)
-                }
-                return .greedy
-            }(),
-            temperature: options?.temperature?.doubleValue,
-            maximumResponseTokens: options?.maxOutputTokens?.intValue
-        )
+        let genOptions = try (options ?? ChatOptionsNative()).toGenerationOptions()
 
         let session = LanguageModelSession(model: model, tools: tools, transcript: transcript)
 
@@ -629,6 +620,7 @@ public class ChatClientNative: NSObject {
     private func formatOptionsDetailed(_ options: ChatOptionsNative) -> String {
         var parts: [String] = []
         if let topK = options.topK { parts.append("topK=\(topK)") }
+        if let topP = options.topP { parts.append("topP=\(topP)") }
         if let temp = options.temperature { parts.append("temperature=\(temp)") }
         if let maxTokens = options.maxOutputTokens { parts.append("maxOutputTokens=\(maxTokens)") }
         if let seed = options.seed { parts.append("seed=\(seed)") }

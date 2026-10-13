@@ -411,10 +411,19 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		{
 			throw new ArgumentOutOfRangeException(nameof(options), "The MaxOutputTokens option must be greater than zero.");
 		}
+		if (options.TopK is not null && options.TopP is not null)
+			throw new ArgumentException("The Apple Intelligence adapter supports either TopK or TopP, not both.", nameof(options));
+		if (options.TopK is <= 0)
+			throw new ArgumentOutOfRangeException(nameof(options), "The TopK option must be greater than zero.");
+		if (options.TopP is { } topP && (!double.IsFinite(topP) || topP is < 0 or > 1))
+			throw new ArgumentOutOfRangeException(nameof(options), "The TopP option must be finite and between zero and one.");
+		if (options.Temperature is { } temperature && (!double.IsFinite(temperature) || temperature < 0))
+			throw new ArgumentOutOfRangeException(nameof(options), "The Temperature option must be finite and nonnegative.");
 
 		return new ChatOptionsNative
 		{
 			TopK = ToNative(options.TopK),
+			TopP = ToNative(options.TopP),
 			Seed = ToNative(options.Seed),
 			Temperature = ToNative(options.Temperature),
 			MaxOutputTokens = ToNative(options.MaxOutputTokens),
