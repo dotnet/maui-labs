@@ -458,18 +458,14 @@ source replacement, runtime item/group-header template replacement, group header
 and recursive handler disconnection of retired roots and nested template children.
 Cleanup is checked after source replacement, template rebuild, and handler teardown,
 including repeated cleanup without duplicate disconnection. Template changes do not
-require an ItemsSource change. Native signal queries also check that replaced
-list-item factories and detached visual-state controllers have no remaining
-handler-owned signal registrations. Factory unbind/teardown callbacks remain
-connected until GTK has retired its realized rows.
+require an ItemsSource change. The suite also covers signal cleanup during factory
+and visual-state controller replacement.
 
-The Blazor WebView lifetime regression additionally requires WebKitGTK 6.0.
-It checks that disposing the wrapper disconnects its detailed script-message
-signal from the user-content manager and that repeated disposal is harmless.
+`GtkBlazorWebViewLifetimeTests` requires WebKitGTK 6.0 and covers script-message
+handler cleanup on disposal.
 
-The ContentView root-layout regression also changes child bounds and a custom
-desired-size probe without resizing the window. It verifies measure invalidation
-reaches the root layout driver and does not cause repeated layout on idle frames.
+`ContentViewRootLayoutTests` covers child-size changes without window resizing,
+measure invalidation and idle layout convergence.
 
 The Picker regression checks item replacement, no selection, collection
 mutations, managed selection mapping, native selection notifications, and
@@ -495,8 +491,7 @@ pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransfo
 The runner creates a private DBus session and display, requires nonzero executed
 tests with no failures or skips in the TRX, and rejects missing/empty filtered
 classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
-evidence. `-TestProject` and `-TestNamespace` select the DevFlow native WebKit
-pixel regression with the same no-skips gate; platform tests retain their defaults.
+evidence. Use `-TestProject` and `-TestNamespace` to select tests in another project.
 CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
 

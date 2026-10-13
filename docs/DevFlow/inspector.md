@@ -67,18 +67,10 @@ Linux/GTK apps use `Microsoft.Maui.DevFlow.Agent.Gtk` and, for Blazor Hybrid,
 `Microsoft.Maui.DevFlow.Blazor.Gtk`. For plain .NET Android, iOS, Mac Catalyst, or macOS apps, see
 the [DevFlow quick start](../../src/DevFlow/README.md#2b-or-in-a-plain-net-app-no-maui).
 
-GTK Blazor's CDP screenshots use WebKitGTK's asynchronous native snapshot of the
-selected CDP context, not a cached render node of the MAUI wrapper or a
-JavaScript-generated image. The WebView must be mapped with a nonzero viewport.
-`Page.captureScreenshot` supports PNG snapshots of the visible viewport; clipped
-or full-document captures and other image formats are reported as unsupported.
-Native completion supplies the pixels, and detaching the bridge cancels capture.
-The native pixel regression is `GtkWebViewSnapshotRuntimeTests` in
-`Microsoft.Maui.DevFlow.Agent.Gtk.Tests`; run it on Linux with a display,
-WebKitGTK 6.0, and `RUN_GTK_RUNTIME_TESTS=1`. It decodes the actual PNG and
-checks the rendered HTML's background color, not just a nonempty response.
-Integration CI runs it through the shared strict native-class runner, which
-requires every selected test to execute and pass rather than accepting skips.
+GTK Blazor CDP screenshots use WebKitGTK's native snapshot of the selected WebView.
+The WebView must be mapped with a nonzero viewport. `Page.captureScreenshot`
+supports visible-viewport PNG captures; clipping, full-document captures and other
+formats are unsupported. Detaching the bridge cancels pending capture.
 
 ### 3. Register DevFlow
 

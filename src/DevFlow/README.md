@@ -7,54 +7,13 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 
 ## Integration CI
 
-`devflow-integration.yml` runs automatically on DevFlow-relevant PR opens, updates,
-reopens and edits, including drafts, without an opt-in label. Every automatic run
-exercises MAUI and plain .NET samples on Android, iOS, Mac Catalyst and AppKit, plus
-MAUI Windows, GTK and WPF. Manual dispatch still supports focused platform/framework
-selection. The ordinary `ci-devflow.yml` host, browser, JavaScript and AOT tests
-remain enabled alongside these device tests.
-PR triggers also cover stacked feature-branch targets, not only `main`; product
-push triggers remain `main`-only.
+`devflow-integration.yml` automatically tests DevFlow-relevant pull requests,
+including drafts and stacked PRs. It covers MAUI and plain .NET apps on Android,
+iOS, Mac Catalyst and AppKit, plus MAUI Windows, GTK and WPF. Manual dispatch
+supports selecting a platform and framework.
 
-Path filters cover DevFlow, its CLI implementation and executable entry point,
-sample apps, the complete GTK, AppKit and WPF backend trees, and their shared
-platform sources. Backend changes can affect the agent's build or rendered UI, so both DevFlow workflows prefer
-extra runs over a fragile file allowlist. Shared build infrastructure, SDK and
-package/feed configuration are included because they can alter any tested app's
-compilation, restore or startup.
-
-MAUI recognizer tests require the MAUI gesture page and are excluded from plain
-.NET runs via the `framework=maui` trait. Native runs retain native actions,
-properties, hit-test envelopes, rejection, storage and protocol coverage.
-An uploaded TRX or green fixture-selection test is not evidence that a device
-test executed; inspect individual results and fixture failures.
-Fixture timeouts retain partial process output. Android startup failures collect
-logcat, and iOS startup timeouts collect device/bundle-scoped simulator logs. GTK crashes
-attach only native/managed stack frames; raw memory dumps stay in the runner's
-temporary directory and are not uploaded.
-These diagnostics belong to the test harness, not a sample-wide exception observer.
-SDK screenshot failures are returned through the existing response path, not app
-stderr. Blazor bridge diagnostics use only the explicitly configured `LogCallback`;
-they are not sent to the app's console or its `ILogger` providers. WebView console
-capture continues to use the existing private DevFlow log writer and streaming API.
-
-The baseline sizing fixture uses a 120-wide Grid with an auto-sized column and
-matched minimum/maximum child widths of 180 for the problem state and 80 for the corrected state.
-Integration tests assert those actual arranged widths as well as the diagnostic
-finding, so a correction cannot pass by changing only the fixture's state label.
-
-Fixture settling waits for two consecutive stable captures instead of a fixed
-delay. Read-only inspection polls only the documented
-`capture-changed-during-read` conflict; other failures remain fatal and these waits
-do not replay mutations. A scroll to the current offset completes without requesting a
-native scroll, because WinUI does not emit a completion event for an unchanged
-`ChangeView`.
-Hit-test envelope checks retain the raw response body and use the client's existing
-bounded read-only handling of `native-probe-busy`; a persistent busy probe still fails.
-GTK CDP readiness follows the captured native WebView's load signals. A delayed
-host page or replacement document is initialized after loading; an obsolete
-document cannot restart its log drain. Snapshot waits observe bridge cancellation;
-dispatcher rejection reports failure instead of leaving queued work pending.
+Triggers cover DevFlow, its CLI, samples, platform backends and shared build inputs.
+The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT tests.
 
 ## Packages
 
@@ -248,11 +207,14 @@ without registering the agent reports an error instead of silently doing nothing
 Use `maui devflow list` to discover the assigned port rather than assuming port 9223.
 
 For Blazor Hybrid, register `builder.AddMauiBlazorDevFlowTools()` from
-`Microsoft.Maui.DevFlow.Blazor.Gtk` as well. CDP wiring and WebView discovery start on the
-same initialized window lifecycle, even if application startup takes more than two seconds.
-Later windows and explicit `WireBlazorCdpToAgent()` calls do not duplicate registrations.
-WebViews created later are captured through their handlers, and detached handlers unregister
-their CDP contexts rather than remaining selectable.
+`Microsoft.Maui.DevFlow.Blazor.Gtk` as well. CDP wiring starts when the GTK window is
+created. WebViews are captured through their handlers, initialized on document load,
+and unregistered on detachment. Repeated `WireBlazorCdpToAgent()` calls are safe.
+
+Optional bridge diagnostics use `GtkBlazorWebViewDebugService.LogCallback`;
+`AddMauiBlazorDevFlowTools(enableLogging: true)` enables debugger output.
+JavaScript console entries are available through the DevFlow log API when log
+capture is enabled.
 
 ### 2b. Or, in a plain .NET app (no MAUI)
 
@@ -718,6 +680,16 @@ dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Tests/
 dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/
 ```
 
+Native GTK WebView tests require Linux, GTK 4.12+, WebKitGTK 6.0 and a display.
+Run them through the shared native test runner:
+
+```bash
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 \
+  -TestProject src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj \
+  -TestNamespace Microsoft.Maui.DevFlow.Agent.Gtk.Tests \
+  -TestClass GtkWebViewSnapshotRuntimeTests
+```
+
 The GTK agent and Blazor bridge reference the in-repo Linux GTK4 projects. `DevFlow.slnf`
 includes those shipping dependencies and is used by both PR validation and the official
 DevFlow build. `publishDevFlowNuget` automatically enables the Linux GTK4 publication stage
@@ -753,15 +725,10 @@ For local reliability, prefer running one platform suite at a time from a given 
 CI sets `DEVFLOW_TEST_IOS_ISOLATED=true`: the fixture creates a fresh iPhone from
 the installed runtime's supported device types, then shuts down and deletes only
 that owned simulator, including after startup failure. `DEVFLOW_TEST_IOS_VERSION`
-still selects the runtime; isolation does not downgrade it or retry boots. Set
-the same flag locally to avoid deploying into an existing simulator. Without
-the flag, the existing booted-device selection behavior is unchanged.
-The iOS CI job uses the current macOS 26 host with the workload-compatible
-Xcode 26.3 and defaults to iOS 26.2, preserving the prior runtime coverage.
-Boot completion has a 300-second deadline and logs its measured duration. Hosted
-successful boots reached 174.2 seconds against the earlier 180-second deadline;
-the longer window measures slow startup without retrying boot or changing app assertions.
-Manual dispatch can select a different installed runtime via `ios-runtime`.
+selects the runtime. Set the isolation flag locally to avoid using an existing
+simulator; otherwise, the fixture prefers an available booted iPhone.
+The workflow pins the toolchain and runtime. Manual dispatch can select another
+installed runtime through `ios-runtime`.
 
 #### Running the suite against a plain .NET app
 
