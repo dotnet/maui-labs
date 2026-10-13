@@ -104,9 +104,9 @@ public sealed class LinuxAccelerometer : LinuxSensor, IAccelerometer
         _yScale = ReadDoubleOrDefault(Path.Combine(dir, "in_accel_y_scale"), commonScale);
         _zScale = ReadDoubleOrDefault(Path.Combine(dir, "in_accel_z_scale"), commonScale);
 
-        _xOffset = ReadDoubleOrDefault(Path.Combine(dir, "in_accel_x_offset"));
-        _yOffset = ReadDoubleOrDefault(Path.Combine(dir, "in_accel_y_offset"));
-        _zOffset = ReadDoubleOrDefault(Path.Combine(dir, "in_accel_z_offset"));
+        _xOffset = ReadDoubleOrDefault(Path.Combine(dir, "in_accel_x_offset"), 0.0);
+        _yOffset = ReadDoubleOrDefault(Path.Combine(dir, "in_accel_y_offset"), 0.0);
+        _zOffset = ReadDoubleOrDefault(Path.Combine(dir, "in_accel_z_offset"), 0.0);
 
         return dir;
     }
