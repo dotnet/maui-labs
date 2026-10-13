@@ -447,6 +447,124 @@ public class WebViewTests : IntegrationTestBase
 
     }
 
+    [Theory]
+    [InlineData("click")]
+    [InlineData("fill")]
+    [InlineData("query")]
+    public async Task TypedAction_ExecutesExactlyOnce_AndPreservesStructuredResult(string action)
+    {
+        await EnsureOnBlazorPageAsync();
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
+        const string fixtureId = "DevFlowExactlyOnceFixture";
+        var fixtureIdJson = JsonSerializer.Serialize(fixtureId);
+
+        async Task<string> EvaluateStringAsync(string expression)
+        {
+            var result = await Client.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
+            {
+                ["expression"] = expression,
+                ["returnByValue"] = true,
+            }, contextId);
+            Assert.False(result.TryGetProperty("error", out _), $"CDP evaluation failed: {result}");
+            var evaluation = result.GetProperty("result");
+            Assert.False(evaluation.TryGetProperty("exceptionDetails", out _), $"JavaScript evaluation failed: {result}");
+            return evaluation.GetProperty("result").GetProperty("value").GetString()!;
+        }
+
+        try
+        {
+            var ready = await EvaluateStringAsync(
+                $$"""
+                (() => {
+                    const id = {{fixtureIdJson}};
+                    const old = document.getElementById(id);
+                    if (old) old.remove();
+                    const root = document.createElement('div');
+                    root.id = id;
+                    root.style.cssText = 'position:fixed;top:10px;left:10px;z-index:99999;background:white;padding:10px;';
+                    root.dataset.clicks = '0';
+                    root.dataset.inputs = '0';
+                    root.dataset.changes = '0';
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.textContent = 'Exactly once';
+                    button.addEventListener('click', () => root.dataset.clicks = String(Number(root.dataset.clicks) + 1));
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.addEventListener('input', () => root.dataset.inputs = String(Number(root.dataset.inputs) + 1));
+                    input.addEventListener('change', () => root.dataset.changes = String(Number(root.dataset.changes) + 1));
+                    root.appendChild(button);
+                    root.appendChild(input);
+                    document.body.appendChild(root);
+                    return 'ready';
+                })()
+                """);
+            Assert.Equal("ready", ready);
+
+            var selector = $"#{fixtureId} {(action == "fill" ? "input" : "button")}";
+            var path = action == "query"
+                ? "/api/v1/webview/dom/query"
+                : $"/api/v1/webview/input/{action}";
+            var lease = await Client.ControlMutationLeaseAsync("claim");
+            Assert.True(lease.YouHold, "The regression must hold the mutation lease.");
+            using var request = new HttpRequestMessage(HttpMethod.Post, path);
+            request.Headers.Add("X-DevFlow-Lease", Client.MutationLeaseId);
+            request.Content = new StringContent(JsonSerializer.Serialize(new
+            {
+                selector,
+                text = "Exactly once value",
+                contextId,
+            }), System.Text.Encoding.UTF8, "application/json");
+
+            // Send exactly one mutation; transport/bridge retries would obscure its event count.
+            using var response = await Http.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, $"Typed {action} failed: {(int)response.StatusCode}: {body}");
+            using var result = JsonDocument.Parse(body);
+            if (action == "query")
+            {
+                Assert.Equal(JsonValueKind.Array, result.RootElement.ValueKind);
+                var match = Assert.Single(result.RootElement.EnumerateArray());
+                Assert.Equal("button", match.GetProperty("tagName").GetString());
+                Assert.Equal("Exactly once", match.GetProperty("text").GetString());
+            }
+            else
+            {
+                Assert.Equal(JsonValueKind.Object, result.RootElement.ValueKind);
+                Assert.True(result.RootElement.GetProperty("success").GetBoolean());
+                if (action == "click")
+                    Assert.Equal("button", result.RootElement.GetProperty("tagName").GetString());
+                else
+                    Assert.Equal("Exactly once value".Length, result.RootElement.GetProperty("textLength").GetInt32());
+            }
+
+            var stateJson = await EvaluateStringAsync(
+                $$"""
+                (() => {
+                    const root = document.getElementById({{fixtureIdJson}});
+                    return JSON.stringify({
+                        clicks: Number(root.dataset.clicks),
+                        inputs: Number(root.dataset.inputs),
+                        changes: Number(root.dataset.changes),
+                        value: root.querySelector('input').value
+                    });
+                })()
+                """);
+            using var state = JsonDocument.Parse(stateJson);
+            Assert.Equal(action == "click" ? 1 : 0, state.RootElement.GetProperty("clicks").GetInt32());
+            Assert.Equal(action == "fill" ? 1 : 0, state.RootElement.GetProperty("inputs").GetInt32());
+            Assert.Equal(action == "fill" ? 1 : 0, state.RootElement.GetProperty("changes").GetInt32());
+            Assert.Equal(action == "fill" ? "Exactly once value" : "", state.RootElement.GetProperty("value").GetString());
+            Output.WriteLine($"Verified {action} result and exact DOM event counts on {Platform}: {stateJson}");
+        }
+        finally
+        {
+            await EvaluateStringAsync(
+                $"(() => {{ const root = document.getElementById({fixtureIdJson}); if (root) root.remove(); return 'removed'; }})()");
+        }
+    }
+
     [Fact]
     public async Task InputText_InsertsText()
     {

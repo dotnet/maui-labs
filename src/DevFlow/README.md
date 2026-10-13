@@ -764,6 +764,10 @@ plain-.NET Windows, GTK, or WPF integration heads.
 
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
 
+`TypedAction_ExecutesExactlyOnce_AndPreservesStructuredResult` verifies actual
+DOM click/input/change event counts and structured results through the real
+WebView bridge on Android, iOS, Windows and Mac Catalyst.
+
 ## Version
 
 Current version is managed in [`eng/Versions.props`](../../eng/Versions.props).
