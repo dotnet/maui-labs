@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
@@ -291,8 +290,10 @@ public class UiInspectionTests : IntegrationTestBase
         var centerX = bounds!.X + (bounds.Width / 2);
         var centerY = bounds.Y + (bounds.Height / 2);
 
-        var json = await GetJsonAsync(
-            $"/api/v1/ui/hit-test?x={centerX.ToString(CultureInfo.InvariantCulture)}&y={centerY.ToString(CultureInfo.InvariantCulture)}");
+        var result = await Client.HitTestResultAsync(centerX, centerY);
+        Assert.True(result.Success, $"Hit test failed: {result.StatusCode} {result.Body}");
+        using var document = JsonDocument.Parse(result.Body);
+        var json = document.RootElement;
 
         Assert.Equal(JsonValueKind.Object, json.ValueKind);
 

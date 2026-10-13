@@ -31,10 +31,10 @@ logcat, and iOS startup timeouts collect device/bundle-scoped simulator logs. GT
 attach only native/managed stack frames; raw memory dumps stay in the runner's
 temporary directory and are not uploaded.
 
-The baseline sizing fixture uses explicit absolute child bounds so parent
-overflow is intentional on every backend, rather than depending on a Grid's
-platform-specific desired-size clamping. Its correction must update the actual
-arranged geometry as well as the fixture's state label.
+The baseline sizing fixture uses a 120-wide Grid with an auto-sized column and
+matched minimum/maximum child widths of 180 for the problem state and 80 for the corrected state.
+Integration tests assert those actual arranged widths as well as the diagnostic
+finding, so a correction cannot pass by changing only the fixture's state label.
 
 Fixture settling waits for two consecutive stable captures instead of a fixed
 delay. Read-only inspection polls only the documented
@@ -42,6 +42,8 @@ delay. Read-only inspection polls only the documented
 do not replay mutations. A scroll to the current offset completes without requesting a
 native scroll, because WinUI does not emit a completion event for an unchanged
 `ChangeView`.
+Hit-test envelope checks retain the raw response body and use the client's existing
+bounded read-only handling of `native-probe-busy`; a persistent busy probe still fails.
 
 ## Packages
 

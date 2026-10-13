@@ -19,6 +19,7 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
                 await ToggleFixturesAsync("Problem examples");
 
             var root = await FindElementAsync("BaselineFixtures");
+            await AssertOverflowGeometryAsync(180);
             var problems = await ScanAsync(root.Id);
             Assert.Equal("1.0", problems.SchemaVersion);
             Assert.Equal("1.1", problems.RuleSetVersion);
@@ -49,6 +50,7 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
                     or LayoutDiagnosticRules.ChildOutsideParent);
 
             await ToggleFixturesAsync("Valid layout");
+            await AssertOverflowGeometryAsync(80);
             var corrected = await ScanAsync(root.Id);
 
             Assert.True(corrected.Snapshot.Stable, corrected.Snapshot.StabilityReason);
@@ -70,6 +72,21 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
             }
             await Client.NavigateAsync(originalRoute);
             await Client.ControlMutationLeaseAsync("release");
+        }
+    }
+
+    private async Task AssertOverflowGeometryAsync(double childWidth)
+    {
+        foreach (var (automationId, expectedWidth) in new[]
+        {
+            ("BaselineOverflowParent", 120d),
+            ("BaselineOverflowChild", childWidth)
+        })
+        {
+            var element = await FindElementAsync(automationId);
+            var bounds = element.WindowBounds ?? element.Bounds;
+            Assert.NotNull(bounds);
+            Assert.Equal(expectedWidth, bounds!.Width, precision: 1);
         }
     }
 
