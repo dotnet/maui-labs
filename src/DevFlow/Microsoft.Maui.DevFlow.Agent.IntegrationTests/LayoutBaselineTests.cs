@@ -19,11 +19,11 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
                 await ToggleFixturesAsync("Problem examples");
 
             var root = await FindElementAsync("BaselineFixtures");
-            await AssertOverflowGeometryAsync(180);
             var problems = await ScanAsync(root.Id);
             Assert.Equal("1.0", problems.SchemaVersion);
             Assert.Equal("1.1", problems.RuleSetVersion);
             Assert.True(problems.Snapshot.Stable, problems.Snapshot.StabilityReason);
+            await AssertOverflowGeometryAsync(180);
             Assert.Contains(problems.Findings, finding => finding.RuleId == LayoutDiagnosticRules.ConstraintViolation
                 && finding.Element.AutomationId == "ConflictingLimitsBox" && finding.Outcome == "violation");
             Assert.Contains(problems.Findings, finding => finding.RuleId == LayoutDiagnosticRules.DesiredSizeConstrained
@@ -50,10 +50,10 @@ public class LayoutBaselineTests(AppFixture app, ITestOutputHelper output) : Int
                     or LayoutDiagnosticRules.ChildOutsideParent);
 
             await ToggleFixturesAsync("Valid layout");
-            await AssertOverflowGeometryAsync(80);
             var corrected = await ScanAsync(root.Id);
 
             Assert.True(corrected.Snapshot.Stable, corrected.Snapshot.StabilityReason);
+            await AssertOverflowGeometryAsync(80);
             Assert.DoesNotContain(corrected.Findings, finding => finding.Element.AutomationId is
                 "ConflictingLimitsBox" or "ConstrainedDesiredProbe" or "BaselineOverflowChild"
                 or "BaselineValidMargin" or "BaselineScrollableContent" or "BaselineValidScroll");
