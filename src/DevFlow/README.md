@@ -743,6 +743,9 @@ that owned simulator, including after startup failure. `DEVFLOW_TEST_IOS_VERSION
 still selects the runtime; isolation does not downgrade it or retry boots. Set
 the same flag locally to avoid deploying into an existing simulator. Without
 the flag, the existing booted-device selection behavior is unchanged.
+The iOS CI job uses the current macOS 26 host with the workload-compatible
+Xcode 26.3 and defaults to iOS 26.2, preserving the prior runtime coverage.
+Manual dispatch can select a different installed runtime via `ios-runtime`.
 
 #### Running the suite against a plain .NET app
 

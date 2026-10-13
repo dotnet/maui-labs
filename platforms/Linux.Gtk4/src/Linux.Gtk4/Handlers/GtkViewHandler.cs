@@ -53,6 +53,12 @@ public abstract class GtkViewHandler<TVirtualView, TPlatformView> : ViewHandler<
 		{
 			["Focus"] = MapFocus,
 			["Unfocus"] = MapUnfocus,
+			[nameof(IView.InvalidateMeasure)] = (handler, view, args) =>
+			{
+				if (handler.PlatformView is { } widget)
+					GtkLayoutPanel.InvalidateLayout(widget);
+				handler.InvalidateNativeAllocation();
+			},
 		};
 
 	protected GtkViewHandler(IPropertyMapper mapper, CommandMapper? commandMapper = null)

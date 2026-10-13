@@ -3,7 +3,10 @@ param(
     [ValidatePattern('^[A-Za-z_][A-Za-z0-9_]*$')]
     [string] $TestClass,
     [string] $MauiVersion,
-    [string] $ResultsDirectory = 'artifacts/TestResults/gtk-runtime'
+    [string] $ResultsDirectory = 'artifacts/TestResults/gtk-runtime',
+    [string] $TestProject = 'platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj',
+    [ValidatePattern('^[A-Za-z_][A-Za-z0-9_.]*$')]
+    [string] $TestNamespace = 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,7 +15,7 @@ if (-not $IsLinux) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
-$project = Join-Path $PSScriptRoot 'Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj'
+$project = (Resolve-Path -LiteralPath (Join-Path $repoRoot $TestProject)).Path
 $resultsName = if ($MauiVersion) { "$TestClass-maui-$MauiVersion" } else { $TestClass }
 $results = [IO.Path]::GetFullPath($ResultsDirectory, $repoRoot)
 $trxPath = Join-Path $results "$resultsName.trx"
@@ -23,7 +26,7 @@ if (Test-Path -LiteralPath $trxPath) {
 
 $env:RUN_GTK_RUNTIME_TESTS = '1'
 $env:GSK_RENDERER = 'cairo'
-$filter = "FullyQualifiedName~Microsoft.Maui.Platforms.Linux.Gtk4.Tests.$TestClass."
+$filter = "FullyQualifiedName~$TestNamespace.$TestClass."
 # Build as a direct statement, not an if/else expression: assigning the result of an
 # if-expression unrolls a single-element array to its bare scalar element, which then
 # makes the later `@mauiArgs` splat iterate the string's *characters* instead of

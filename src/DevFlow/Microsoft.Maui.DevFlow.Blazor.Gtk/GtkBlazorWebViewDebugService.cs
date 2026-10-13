@@ -135,6 +135,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
         private readonly CancellationTokenSource _lifetimeCts = new();
         private readonly CancellationToken _lifetimeToken;
         private readonly Func<string, Task<string?>>? _evaluateJavaScript;
+        private readonly Func<CancellationToken, Task<byte[]>>? _captureScreenshot;
         private global::WebKit.WebView? _webView;
         private bool _isInitialized;
         private bool _injecting;
@@ -150,12 +151,14 @@ public class GtkBlazorWebViewDebugService : IDisposable
         internal Task? LogDrainTask { get; private set; }
 
         internal GtkWebViewBridge(GtkBlazorWebViewDebugService owner, global::WebKit.WebView webView,
-            string? automationId, Func<string, Task<string?>>? evaluateJavaScript = null)
+            string? automationId, Func<string, Task<string?>>? evaluateJavaScript = null,
+            Func<CancellationToken, Task<byte[]>>? captureScreenshot = null)
         {
             _owner = owner;
             _webView = webView;
             AutomationId = automationId;
             _evaluateJavaScript = evaluateJavaScript;
+            _captureScreenshot = captureScreenshot;
             _lifetimeToken = _lifetimeCts.Token;
         }
 
@@ -317,6 +320,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
                     return await HandlePageReloadAsync(id);
                 if (method == "Page.navigate")
                     return await HandlePageNavigateAsync(cdpJson, id);
+                if (method == "Page.captureScreenshot")
+                    return await HandlePageCaptureScreenshotAsync(json.RootElement, id);
                 if (method.StartsWith("Browser."))
                     return HandleBrowserMethod(method, id);
 
@@ -390,6 +395,47 @@ public class GtkBlazorWebViewDebugService : IDisposable
             await Task.Delay(1500);
             await InjectDebugScriptAsync();
             return $"{{\"id\":{id},\"result\":{{}}}}";
+        }
+
+        private async Task<string> HandlePageCaptureScreenshotAsync(System.Text.Json.JsonElement command, int id)
+        {
+            if (command.TryGetProperty("params", out var parameters))
+            {
+                if (parameters.TryGetProperty("format", out var format) && format.GetString() != "png")
+                    throw new NotSupportedException("GTK WebView screenshots support PNG only.");
+                if (parameters.TryGetProperty("clip", out _) ||
+                    (parameters.TryGetProperty("captureBeyondViewport", out var beyondViewport) && beyondViewport.GetBoolean()))
+                    throw new NotSupportedException("GTK WebView screenshots capture the visible viewport only.");
+            }
+
+            try
+            {
+                // The bridge owns the exact native WebView for this CDP context.
+                // A MAUI wrapper's cached GTK render node need not contain the
+                // web process's current pixels; WebKit completes this asynchronously.
+                var png = _captureScreenshot != null
+                    ? await _captureScreenshot(_lifetimeToken).WaitAsync(_lifetimeToken)
+                    : await DispatchOnUiAsync<byte[]>(async () => await WebKitSnapshot.CaptureAsync(
+                        _webView ?? throw new InvalidOperationException("The WebView was detached before capture."),
+                        _lifetimeToken));
+                _lifetimeToken.ThrowIfCancellationRequested();
+                if (png is not { Length: > 0 })
+                    throw new InvalidOperationException("WebKit returned no screenshot PNG data.");
+
+                return new System.Text.Json.Nodes.JsonObject
+                {
+                    ["id"] = id,
+                    ["result"] = new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["data"] = Convert.ToBase64String(png)
+                    }
+                }.ToJsonString();
+            }
+            catch (Exception ex)
+            {
+                _owner.Log($"[BlazorDevFlow.Gtk] Native WebView screenshot failed: {ex.Message}");
+                throw;
+            }
         }
 
         private async Task<string> HandlePageNavigateAsync(string cdpJson, int id)

@@ -246,7 +246,9 @@ jobs:
       fail-fast: false
       matrix:
         framework: ${{ fromJSON(needs.plan.outputs.frameworks) }}
-    runs-on: macos-15
+    # Use the current host OS; macOS 15's CoreSimulator intermittently stalls
+    # before boot or the first FrontBoard launch, even with a fresh device.
+    runs-on: macos-26
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: ios
@@ -254,7 +256,8 @@ jobs:
       DEVFLOW_TEST_IOS_ISOLATED: 'true'
       # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
       TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
-      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime }}
+      # Preserve the 26.2 runtime used with the pinned workload/Xcode on macOS 15.
+      DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '26.2' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -512,6 +515,16 @@ jobs:
           --logger "trx;LogFileName=devflow-integration-gtk-maui.trx"
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/gtk
+
+      - name: Verify native WebKit screenshot pixels
+        if: success() || failure()
+        shell: pwsh
+        run: >
+          ./platforms/Linux.Gtk4/tests/run-native-tests.ps1
+          -TestProject src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
+          -TestNamespace Microsoft.Maui.DevFlow.Agent.Gtk.Tests
+          -TestClass GtkWebViewSnapshotRuntimeTests
+          -ResultsDirectory artifacts/TestResults/devflow-integration/gtk/native-snapshot
 
       - name: Report GTK crash backtraces
         if: failure()

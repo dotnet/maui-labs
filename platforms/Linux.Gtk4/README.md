@@ -467,6 +467,10 @@ The Blazor WebView lifetime regression additionally requires WebKitGTK 6.0.
 It checks that disposing the wrapper disconnects its detailed script-message
 signal from the user-content manager and that repeated disposal is harmless.
 
+The ContentView root-layout regression also changes child bounds and a custom
+desired-size probe without resizing the window. It verifies measure invalidation
+reaches the root layout driver and does not cause repeated layout on idle frames.
+
 The Picker regression checks item replacement, no selection, collection
 mutations, managed selection mapping, native selection notifications, and
 disconnect/reconnect behavior.
@@ -484,13 +488,16 @@ pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass Collection
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkBlazorWebViewLifetimeTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass ContentViewRootLayoutTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransformTests
 ```
 
 The runner creates a private DBus session and display, requires nonzero executed
 tests with no failures or skips in the TRX, and rejects missing/empty filtered
 classes. Use a fresh `-ResultsDirectory` when repeating a run to preserve prior
-evidence. CI's `runtime` matrix runs one existing native class per process; retain
+evidence. `-TestProject` and `-TestNamespace` select the DevFlow native WebKit
+pixel regression with the same no-skips gate; platform tests retain their defaults.
+CI's `runtime` matrix runs one existing native class per process; retain
 the union of native class entries when integrating other platform changes.
 
 The transform regression creates a real GTK window and repeatedly scales and
