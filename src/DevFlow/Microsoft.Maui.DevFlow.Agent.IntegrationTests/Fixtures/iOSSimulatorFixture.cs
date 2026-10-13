@@ -88,8 +88,28 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
         return (selected.Udid, false);
     }
 
-    static Task WaitForBootCompletionAsync(string udid) =>
-        RunProcessCheckedAsync("xcrun", $"simctl bootstatus {udid} -b", timeoutSeconds: 180);
+    static async Task WaitForBootCompletionAsync(string udid)
+    {
+        try
+        {
+            await RunProcessCheckedAsync("xcrun", $"simctl bootstatus {udid} -b", timeoutSeconds: 180);
+        }
+        catch (TimeoutException)
+        {
+            try
+            {
+                var (stdout, stderr, exitCode) = await RunProcessAsync("/usr/bin/log",
+                    $"show --last 3m --style compact --predicate \"process == 'CoreSimulatorService' AND eventMessage CONTAINS '{udid}'\"",
+                    timeoutSeconds: 15);
+                Console.Error.WriteLine($"[iOSFixture] Boot diagnostics for {udid} (exit {exitCode}):\n{stdout}\n{stderr}");
+            }
+            catch (TimeoutException ex)
+            {
+                Console.Error.WriteLine($"[iOSFixture] Boot log collection also timed out: {ex.Message}");
+            }
+            throw;
+        }
+    }
 
     /// <summary>
     /// Parses <c>xcrun simctl list devices --json</c> output into the set of available iPhone

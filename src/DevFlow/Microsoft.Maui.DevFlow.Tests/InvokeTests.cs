@@ -313,6 +313,16 @@ public class InvokeTests
 		Assert.NotSame(before, after);
 	}
 
+	[Fact]
+	public void ActionCacheFactory_DoesNotUseSharedMethodGroupCache()
+	{
+		var delegateCache = typeof(DevFlowAgentService).GetNestedTypes(BindingFlags.NonPublic)
+			.Where(type => type.Name == "<>O")
+			.SelectMany(type => type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static));
+
+		Assert.DoesNotContain(delegateCache, field => field.Name.EndsWith("__ScanActions", StringComparison.Ordinal));
+	}
+
 	#region Helpers
 
 	private static JsonArray JsonArray(params JsonElement[] elements)

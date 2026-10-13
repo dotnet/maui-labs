@@ -66,6 +66,23 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
             if (ViewCommandMapper is CommandMapper<IView, IViewHandler> cmdMapper)
             {
                 cmdMapper[nameof(IView.Focus)] = MapFocus;
+                cmdMapper[nameof(IView.InvalidateMeasure)] = (handler, view, args) =>
+                {
+                    if (handler.PlatformView is not NSView platformView)
+                        return;
+
+                    void Invalidate()
+                    {
+                        platformView.InvalidateIntrinsicContentSize();
+                        for (var ancestor = platformView; ancestor != null; ancestor = ancestor.Superview)
+                            ancestor.NeedsLayout = true;
+                    }
+
+                    if (Foundation.NSThread.IsMain)
+                        Invalidate();
+                    else
+                        platformView.BeginInvokeOnMainThread(Invalidate);
+                };
             }
         }
         catch

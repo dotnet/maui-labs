@@ -475,6 +475,7 @@ public class WebViewTests : IntegrationTestBase
     {
         await EnsureOnBlazorPageAsync();
         await AssertCdpResponsiveAsync();
+        await SettleAsync();
         var contextId = await GetActiveContextIdAsync();
 
         var response = await GetWithBridgeRetryAsync($"/api/v1/webview/screenshot?contextId={Uri.EscapeDataString(contextId)}");

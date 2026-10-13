@@ -27,9 +27,14 @@ properties, hit-test envelopes, rejection, storage and protocol coverage.
 An uploaded TRX or green fixture-selection test is not evidence that a device
 test executed; inspect individual results and fixture failures.
 Fixture timeouts retain partial process output. Android startup failures collect
-logcat, and iOS launch timeouts collect bundle-scoped simulator logs. GTK crashes
+logcat, and iOS startup timeouts collect device/bundle-scoped simulator logs. GTK crashes
 attach only native/managed stack frames; raw memory dumps stay in the runner's
 temporary directory and are not uploaded.
+
+The baseline sizing fixture uses explicit absolute child bounds so parent
+overflow is intentional on every backend, rather than depending on a Grid's
+platform-specific desired-size clamping. Its correction must update the actual
+arranged geometry as well as the fixture's state label.
 
 ## Packages
 
