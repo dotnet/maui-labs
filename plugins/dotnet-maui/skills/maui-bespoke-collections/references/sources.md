@@ -1,6 +1,6 @@
 # Portable source ledger
 
-Research checked **2026-10-12**; mobile behavior and interaction research updated
+Research checked **2026-10-12**; mobile behavior, interactions and Apple profiling updated
 **2026-10-13**.
 Vendor pages are live; sample revisions below are
 source-inspected. Refresh version-sensitive advice for the consuming project.
@@ -11,9 +11,9 @@ our measurements. These references remain inside the installed skill package.
 
 ### R4
 maui-labs nonshipping
-[mobile photo-masonry sample](https://github.com/dotnet/maui-labs/tree/main/samples/BespokeCollections)
+[mobile photo-masonry sample](https://github.com/dotnet/maui-labs/tree/17ce2e9245387b0ab355df14498d41066d7818d6/samples/BespokeCollections)
 and its
-[evidence record](https://github.com/dotnet/maui-labs/blob/main/samples/BespokeCollections/EVIDENCE.md):
+[evidence record](https://github.com/dotnet/maui-labs/blob/17ce2e9245387b0ab355df14498d41066d7818d6/samples/BespokeCollections/EVIDENCE.md):
 SDK 10.0.401/workload set 10.0.401, MAUI 10.0.110, Apple 26.5.10318/Xcode 26.6,
 Android 36.1.69. The implementation and results were obtained in the research
 worktree, not the R1 baseline commit. Build/runtime facts apply to this narrow
@@ -74,6 +74,65 @@ Useful prior art, not supported public internal-cell APIs.
 [MAUI .NET 8 performance work](https://devblogs.microsoft.com/dotnet/dotnet-8-performance-improvements-in-dotnet-maui/): historical publisher-measured JNI/marshaling and item-context storage lessons.
 
 ## Apple
+
+### AP1
+[Understanding hitches](https://developer.apple.com/documentation/xcode/understanding-hitches-in-your-app)
+and [render-loop explanation](https://developer.apple.com/videos/play/tech-talks/10855/):
+commit versus render hitches; variable deadlines; expected/actual buffered frame
+lifetime versus presentation cadence; hitch duration and provider-specific ratios.
+The current Organizer categories differ from historical 5/10 ms/s guidance.
+Record the chosen provider/version and project budget rather than declaring one
+historical threshold universal. Current Apple documentation checked 2026-10-13.
+
+### AP2
+Installed `xctrace 27.1 (27A9269)` help for record, export and symbolicate:
+explicit device/PID, bounded capture, separate TOC/XPath modes, dSYM input and
+fresh run/output semantics. A task-owned native macOS Swift utility was compiled,
+recorded with Time Profiler + Points of Interest, and exported successfully.
+The initial custom category yielded zero workload rows; `.pointsOfInterest`
+yielded exactly one completed named interval. CPU rows were also exported.
+This is command/signpost smoke evidence, not a MAUI control or native frame/hitch
+benchmark, and does not certify physical iOS, Catalyst or AppKit scrolling.
+Use installed help again for a different Xcode; export schemas are not fixed APIs.
+
+### AP3
+[Recording performance data](https://developer.apple.com/documentation/os/recording-performance-data),
+[OSSignposter](https://developer.apple.com/documentation/os/ossignposter)
+and [animation intervals](https://developer.apple.com/documentation/os/ossignposter/beginanimationinterval(_:id:)):
+balanced named intervals/state and distinct concurrent IDs; Swift API availability
+and native animation tracking. The compiled native smoke validates the selected
+Swift API/category on its Mac, not a public C# bridge.
+[macios OSLog](https://github.com/dotnet/macios/blob/354c2a645855dfdf774cc5e098cd214764f475b5/src/CoreFoundation/OSLog.cs)
+is a logging surface, not an OSSignposter binding. Legacy signpost macros aren't
+ordinary DllImport entry points.
+
+### AP4
+[Apple diagnostic properties](https://github.com/dotnet/macios/blob/354c2a645855dfdf774cc5e098cd214764f475b5/docs/building-apps/build-properties.md#enablediagnostics),
+[DiagnosticConfiguration](https://github.com/dotnet/macios/blob/354c2a645855dfdf774cc5e098cd214764f475b5/docs/building-apps/build-properties.md#diagnosticconfiguration),
+[Mono diagnostic tracing](https://github.com/dotnet/runtime/blob/f05194509ddbce06bd9459d05eb9d0bd51ec2e4c/docs/design/mono/diagnostics-tracing.md)
+and [dotnet-dsrouter](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-dsrouter):
+Release Mono components/EventSource/trimming, CoreCLR/NativeAOT distinctions,
+router transport/profiles, development-only endpoints and supported provider
+coverage. Internal runtime sample builder instructions aren't MAUI SDK properties.
+Local router/trace 9.0.661903 help verified profiles, printed-configuration workflow
+and bounded collection flags; no new managed mobile trace was executed.
+
+### AP5
+[Scrolling/deceleration metric](https://developer.apple.com/documentation/xctest/xctossignpostmetric/scrollinganddecelerationmetric),
+[signpost metric](https://developer.apple.com/documentation/xctest/xctossignpostmetric)
+and [XCTHitchMetric](https://developer.apple.com/documentation/xctest/xcthitchmetric):
+native XCTest scope/availability; the signpost metric needs matching intervals.
+Native UI-test/metric coverage must be verified for the actual collection/input.
+These are not automatically APIs in .NET xUnit or DevFlow; no new XCTest run is claimed.
+
+### AP6
+[Organizer's historical scrolling metric](https://developer.apple.com/videos/play/wwdc2020/10076/),
+[MXAnimationMetric ratio](https://developer.apple.com/documentation/metrickit/mxanimationmetric/hitchtimeratio)
+and [newer HitchTimeMetric](https://developer.apple.com/documentation/metrickit/hitchtimemetric):
+tracked scrolling/animation denominator, units, reporting/cohort boundaries and
+version-sensitive API changes. Current Swift HitchTimeMetric documentation lists
+27.0 availability; that is not a C# binding in the sample's Apple 26.5 pack.
+Do not substitute aggregate telemetry for a particular controlled traversal.
 
 ### U1
 [WWDC 2019 layout](https://developer.apple.com/videos/play/wwdc2019/215/): UIKit/AppKit compositional sections, sizing, chrome and orthogonal scrolling; iOS 13/macOS 10.15 introductions.

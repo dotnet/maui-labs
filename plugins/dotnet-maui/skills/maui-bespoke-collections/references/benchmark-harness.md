@@ -92,6 +92,12 @@ order where appropriate. Report spread/sample counts and plausible noise rather
 than a broad faster/slower guarantee from one pass. Keep control/data/accessibility
 contracts equivalent. Calibrate budgets on intended minimum hardware.
 
+Apple captures follow the [scrolling recipe](apple-scrolling-profiling.md): scope
+to actual active scrolling/animation, verify completed matching signposts and
+nonempty metric tables, and distinguish buffered frame lifetime from presentation
+intervals. CPU and managed tracing are attribution passes, not replacement hitch
+measurements. Keep metric-provider units/definitions and profiler sets comparable.
+
 ## Cleanup manifest and final application build
 
 Record task-owned instrumentation/configuration, seeded data, temporary hooks,

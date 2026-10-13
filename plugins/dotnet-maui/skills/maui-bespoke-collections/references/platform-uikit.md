@@ -100,6 +100,16 @@ Share UIKit with IOS || MACCATALYST. Catalyst is not AppKit: test resizable wind
 trackpad/wheel/keyboard, contextual actions, selection, accessibility and density.
 Use the owning UI dispatcher; no background MAUI/native view measurement.
 
+## Scrolling performance evidence
+
+Use the [Apple capture/analysis recipe](apple-scrolling-profiling.md). Verify
+drag/deceleration on physical iOS or the intended Catalyst window/display;
+programmatic offset steps and simulator CPU profiles are different evidence.
+Correlate commit hitches with bind/self-sizing/snapshot work and render hitches
+with layer/texture work. Frame Lifetime is not a single display interval.
+Separate native reuse from MAUI-tree and image ownership; verify actual frame/
+hitch records rather than inferring smoothness from a displayed screenshot.
+
 ## Requested interactions
 
 Use [drag/reorder](drag-drop-and-reordering.md) for interactive movement,

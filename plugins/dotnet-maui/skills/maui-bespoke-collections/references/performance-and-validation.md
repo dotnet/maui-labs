@@ -46,6 +46,12 @@ Pair native evidence with .NET allocations/GC and owned-resource counters using
 supported runtime tooling. DevFlow helps inspect native types, tree, screenshots
 and input, not certify frame rates. Check installed CLI help before using commands.
 
+For iOS, Catalyst and AppKit, use the [Apple scrolling recipe](apple-scrolling-profiling.md)
+for bounded xctrace capture/TOC export, signpost categories, expected versus actual
+frame lifetime, hitch-rate denominators, symbolication and supported managed traces.
+Frame lifetime is not presentation cadence; unsupported/empty tables and CPU-only
+samples cannot satisfy frame budgets.
+
 ## Fixture and budgets
 
 Record revision, SDK/native packages, OS/device, viewport/density/cadence, Release/

@@ -5,7 +5,7 @@
 
 **Status:** phase 1 skill foundation implemented from the 2026-10-12 research.
 The [entry skill](../../plugins/dotnet-maui/skills/maui-bespoke-collections/SKILL.md),
-27 focused references, and [64 authored evaluation
+28 focused references, and [76 authored evaluation
 scenarios](../../tests/dotnet-maui/maui-bespoke-collections/eval.yaml) are present.
 The 2026-10-13 [interaction research](interactions.md) adds source-backed drag/
 reorder, deletion/swipe, refresh/reconciliation and item-action contracts.
@@ -26,6 +26,9 @@ retained-MAUI text fixture is not being claimed by these reference additions.
 Twelve synthetic feedback regressions cover populated fixture validity, small
 compile/measurement bridges, loading heights and scroll ownership, bounded
 preflight, progressive checkpoints, priority/discovery and metric/cleanup contracts.
+Apple-specific maintenance adds a capture/analyze/interpret reference and twelve
+synthetic profiling regressions. Native command/signpost smoke evidence remains
+separate from actual collection frame measurements and physical qualification.
 
 ## 1. Product of the skill
 
@@ -65,7 +68,8 @@ The implemented description follows this routing contract:
 > virtualization, recycling and tailored layout. USE FOR: custom masonry/
 > waterfall, virtualized wrap, justified galleries, grouped timelines, nested
 > shelves, coverflow, custom native collection handlers, and HTTP/database-backed
-> paging for those controls. DO NOT USE FOR: routine CollectionView markup,
+> paging and Apple scrolling measurements for those controls.
+> DO NOT USE FOR: routine CollectionView markup,
 > generic MVVM/layout issues, general profiling, or installing a new backend.
 
 Routing matters: the existing repo already has `maui-controls-deep-dive` and
@@ -77,6 +81,7 @@ those skills wholesale.
 |---|---|
 | Basic stock CollectionView layout/selection/loading | Existing controls/CollectionView guidance |
 | General app performance symptom | Performance skill; this skill only when a bespoke collection is the actual solution |
+| Measure scrolling in a native/bespoke Apple collection | This skill's Apple profiling recipe plus its benchmark contract |
 | Build a new GTK/AppKit backend | Backend implementation guidance |
 | Generate a specific native-backed collection | This skill |
 | Debug its rendered behavior | Existing DevFlow inspect/fix workflow plus this skill's invariants |
@@ -147,6 +152,7 @@ references/
   paging-http-database.md
   performance-and-validation.md
   benchmark-harness.md
+  apple-scrolling-profiling.md
   platform-uikit.md
   platform-android.md
   platform-winui.md

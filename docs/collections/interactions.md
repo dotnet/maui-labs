@@ -527,7 +527,7 @@ visual state without announcing successful deletion or transfer.
 The authored skill evaluations catch routing, APIs and these failure modes.
 They are not executed model results or proof that a generated native implementation
 meets the matrix. The existing masonry example remains explicitly narrower.
-The bespoke skill has 64 authored scenarios (20 interaction additions and
-12 field-feedback regressions); the stock-control skill has eight focused
-interaction scenarios. Both remain
+The bespoke skill has 76 authored scenarios (20 interaction additions,
+12 field-feedback regressions and 12 Apple-profiling regressions); the stock-control
+skill has eight focused interaction scenarios. Both remain
 individually distributable without installing companion skills.

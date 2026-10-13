@@ -36,6 +36,8 @@ public sealed class MarketplaceSkillDistributionTests
 		Assert.Contains("SKILL.md", expected.Keys);
 		Assert.Contains(requiredFile, expected.Keys);
 		Assert.Contains(expected.Keys, path => path.StartsWith("references/", StringComparison.Ordinal));
+		if (skillName == "maui-bespoke-collections")
+			Assert.Contains("references/apple-scrolling-profiling.md", expected.Keys);
 
 		var before = test.Snapshot();
 		var listed = await test.Invoke("list", "skill", "--env", environment);

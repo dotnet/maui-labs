@@ -74,6 +74,13 @@ delegate ownership, reuse, stale callbacks, selection, trackpad/keyboard,
 VoiceOver, live resize/backing scale and Release native/managed traces.
 Portable geometry tests do not prove native rendering or performance.
 
+For [scrolling profiling](apple-scrolling-profiling.md), target the actual Mac
+process/window/display and verify the instrument's coverage instead of inheriting
+a UIKit/simulator result. Measure trackpad/wheel and live resize separately.
+Correlate native main-thread/render work with geometry and item-controller/MAUI/
+asset lifetime. Native allocation data isn't automatically managed GC data;
+buffered frame lifetime isn't presentation cadence.
+
 ## Requested interactions
 
 Native [drag/drop](drag-drop-and-reordering.md) uses modern collection index-path

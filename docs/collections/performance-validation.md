@@ -140,6 +140,21 @@ treated as proof of presented frame rate. For a new native-heavy control, expose
 appropriate semantics/automation rather than assuming every native item appears
 automatically in the MAUI logical tree.
 
+### Apple scrolling: capture, analyze, interpret
+
+The distributed skill now includes an [Apple-specific walkthrough](../../plugins/dotnet-maui/skills/maui-bespoke-collections/references/apple-scrolling-profiling.md):
+explicit iOS/Catalyst/AppKit target selection, bounded xctrace capture, matching
+signposts, TOC-driven export, commit/render attribution, symbols, native/managed
+memory and supported Mono diagnostic tracing. It keeps the actual scrolling/
+animation denominator and variable cadence, distinguishes buffered frame lifetime
+from presentation intervals, and rejects unsupported/empty data instead of using
+CPU samples or display callbacks as substitute frame measurements.
+
+The 2026-10-13 local native-utility smoke checked xctrace 27.1 capture/export and
+one completed Points of Interest interval. It did **not** measure a MAUI collection
+or qualify physical iOS, Catalyst or AppKit scrolling. The earlier sample's
+physical performance gates remain pending.
+
 ## 6. A repeatable benchmark fixture
 
 Record a manifest containing:

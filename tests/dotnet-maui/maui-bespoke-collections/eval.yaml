@@ -1313,3 +1313,285 @@ scenarios:
       - "Uses supported registration/reload or permitted direct source guidance without claiming registry activation or bypassing host restrictions"
       - "Keeps provenance unknown without metadata and does not auto-install companions or inspect unrelated application code"
     timeout: 120
+
+  - name: "Capture physical Apple collection scrolling with an explicit target"
+    prompt: |
+      Profile scrolling in our existing native UIKit MAUI collection on a
+      physical iPhone. Xcode lists several devices, and the bundle ID differs
+      from the executable name. Give a bounded native capture sequence and the
+      population/input checks before comparing renderer variants. Do not replace
+      the working control, run commands or claim results.
+    assertions:
+      - type: output_matches
+        pattern: 'xctrace.*(?:list|help)|(?:list|help).*xctrace'
+      - type: output_matches
+        pattern: '--device'
+      - type: output_matches
+        pattern: '--attach'
+      - type: output_matches
+        pattern: '--time-limit'
+      - type: output_matches
+        pattern: '(?i)visible.*(?:key|content)|loaded.*(?:row|content)|populated'
+      - type: output_not_matches
+        pattern: 'class\s+\w+(?:Handler|LayoutManager)\b'
+    rubric:
+      - "Inspects installed devices/templates/help and selects an explicit device and verified PID/executable rather than assuming the bundle ID is the attach target"
+      - "Provides bounded Release capture with fresh trace paths and drives the workload while recording, not after it exits"
+      - "Requires populated settled native content and equivalent drag/deceleration, warm/cold state and fixture data per variant"
+      - "Does not scaffold a replacement control or default to tracing all processes"
+    timeout: 120
+
+  - name: "Do not replace unsupported Apple hitches with CPU percentiles"
+    prompt: |
+      On our iOS simulator, Animation Hitches is in xctrace list templates but
+      recording fails with 'Hitches is not supported on this platform.'
+      Time Profiler records and exports successfully. Can its samples establish
+      the collection's p95 presented interval and zero hitches on physical iOS
+      or Mac Catalyst? Explain what evidence we actually have.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)unsupported|unavailable|not.?measured|missing'
+      - type: output_matches
+        pattern: '(?i)sampl|CPU'
+      - type: output_matches
+        pattern: '(?i)physical|device|Catalyst'
+      - type: output_matches
+        pattern: '(?i)not.*(?:presentation|presented|hitch|frame)|cannot.*(?:presentation|presented|hitch|frame)'
+    rubric:
+      - "Treats template discovery, successful CPU capture and actual supported frame measurement as independent states"
+      - "Preserves the native failure and reports missing hitch/presentation evidence instead of zero or inferred percentiles"
+      - "Limits simulator evidence and requires a supported physical/target-specific run before qualifying iOS or Catalyst"
+    timeout: 120
+
+  - name: "Distinguish buffered Apple frame lifetime from display cadence"
+    prompt: |
+      Our 120 Hz collection trace reports expected and actual Frame Lifetime
+      of 25 ms in triple buffering, while a new frame is presented every 8.33 ms.
+      A script labels every 25 ms row as three missed frames and uses Frame
+      Lifetime for p95 presentation intervals. Explain the correct interpretation,
+      including variable-refresh deadlines.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)buffer|pipeline'
+      - type: output_matches
+        pattern: '(?i)expected|deadline'
+      - type: output_matches
+        pattern: '(?i)presentation|presented'
+      - type: output_matches
+        pattern: '(?i)variable|cadence'
+    rubric:
+      - "Explains frame begin-to-presentation lifetime can span buffered intervals without missing the frame's expected deadline"
+      - "Rejects lifetime-column percentiles as presentation intervals and requires applicable actual presentation timestamps"
+      - "Uses actual per-frame expected timing/cadence rather than a fixed maximum-rate VSYNC subtraction"
+      - "Does not report three dropped frames from the 25 ms lifetime"
+    timeout: 120
+
+  - name: "Use tracked animation rather than recorder duration for hitch ratio"
+    prompt: |
+      We captured 30 seconds in Instruments, including startup and idle time.
+      The valid collection scroll/deceleration intervals total 20 seconds and
+      their raw compatible hitch durations total 120 ms. Someone reports 4 ms/s
+      and declares every Apple metric below an old 5 ms/s threshold a universal
+      pass. Calculate and explain the metric we can report.
+    assertions:
+      - type: output_matches
+        pattern: '6(?:\.0+)?\s*(?:ms\s*/\s*s|milliseconds?\s*(?:per|/)\s*second)'
+      - type: output_matches
+        pattern: '(?i)tracked|active|animation|scroll.*duration'
+      - type: output_matches
+        pattern: '(?i)provider|version|definition'
+      - type: output_matches
+        pattern: '(?i)budget|historical|perceptual|universal'
+    rubric:
+      - "Reports 6 ms/s from the 20-second compatible tracked interval rather than diluting it with idle/startup"
+      - "Keeps the units, sample/coverage and provider definition explicit and avoids double-counting unlike hitch events"
+      - "Does not apply historical 5/10 categories universally or equate newer perceptually adjusted telemetry to the raw calculation"
+    timeout: 120
+
+  - name: "Find missing Points of Interest intervals without fake C# bindings"
+    prompt: |
+      A native collection bridge emits an OSSignposter interval named
+      CollectionScroll in category 'Scrolling'. Time Profiler with Points of
+      Interest exports an OSSignpostIntervals table with zero workload rows.
+      ILogger messages are present. Should we DllImport os_signpost_interval_begin
+      or count the log messages as frames? Give the narrow fix and validation.
+    assertions:
+      - type: output_matches
+        pattern: 'pointsOfInterest|PointsOfInterest|Points of Interest'
+      - type: output_matches
+        pattern: '(?i)category|filter'
+      - type: output_matches
+        pattern: '(?i)matching|paired|balanced|begin.*end'
+      - type: output_matches
+        pattern: '(?i)macro|native.*bridge|binding'
+    rubric:
+      - "Checks category/instrument filtering and uses pointsOfInterest or deliberately configures the correct signpost instrument"
+      - "Verifies completed named begin/end intervals and distinct IDs for concurrent work rather than trusting a nonempty log"
+      - "Does not invent a C# OSSignposter API or DllImport a legacy macro/private encoding helper"
+      - "Does not treat signpost/log durations as presented frames or automatically tracked animations"
+    timeout: 120
+
+  - name: "Discover Apple trace tables and resolve export references"
+    prompt: |
+      Our collection analysis copies a frame-table XPath from another Xcode.
+      xctrace export exits zero but returns no rows. The available CPU/signpost
+      XML has id/ref references and rounded fmt values. Give the capture-to-analysis
+      checks before calculating frame percentiles, without guessing a schema.
+    assertions:
+      - type: output_matches
+        pattern: '--toc'
+      - type: output_matches
+        pattern: '--xpath'
+      - type: output_matches
+        pattern: '(?i)id/ref|references?|ref.*attribute'
+      - type: output_matches
+        pattern: '(?i)unit|schema|engineering'
+      - type: output_matches
+        pattern: '(?i)invalid|missing|empty|unavailable'
+    rubric:
+      - "Discovers the actual run/tables in this trace's TOC before choosing an XPath and filters the correct process/workload"
+      - "Requires relevant nonempty rows, completed intervals, units and sample counts; successful export alone is not measurement"
+      - "Resolves XML references and raw typed values instead of computing statistics from rounded fmt text"
+      - "Does not infer frame evidence from CPU/signpost tables or invent a stable Apple frame schema"
+    timeout: 120
+
+  - name: "Keep Apple Mono diagnostic builds separate from NativeAOT claims"
+    prompt: |
+      Our Release Mono MAUI iOS collection has no managed allocation/GC events
+      when we attach diagnostic tooling. A teammate suggests permanently enabling
+      every RuntimeComponents item, or setting EnableDiagnostics on a NativeAOT
+      variant to guarantee identical EventPipe support. Explain the supported
+      diagnostic-build path and production restoration.
+    assertions:
+      - type: output_matches
+        pattern: 'EnableDiagnostics'
+      - type: output_matches
+        pattern: '(?i)Mono'
+      - type: output_matches
+        pattern: 'NativeAOT'
+      - type: output_matches
+        pattern: '(?i)EventSource|trim|provider'
+      - type: output_matches
+        pattern: '(?i)production|restor|diagnostic.*build'
+    rubric:
+      - "Uses the consuming Apple SDK's Release Mono diagnostics properties and verifies provider/EventSource/trimming coverage"
+      - "Rejects copying runtime-internal sample builder items into an ordinary MAUI project"
+      - "Does not make NativeAOT EventPipe-capable with the Mono switch or change the production runtime to create a passing profile"
+      - "Records diagnostic-build effects and restores/verifies production settings without shipping development endpoints"
+    timeout: 120
+
+  - name: "Follow the current iOS router configuration and PID"
+    prompt: |
+      Profile managed GC during physical-iPhone collection scrolling. The installed
+      dotnet-dsrouter prints a configuration different from an older ios-sim recipe.
+      We have two phones attached, a remote app PID and a host router PID. Which
+      configuration and identity must the diagnostic build and dotnet-trace use?
+      Keep the route local and don't suspend startup for a steady-state benchmark.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)printed|actual.*config|info.*output|--info|(?:^|\s)-i\b'
+      - type: output_matches
+        pattern: '(?i)router.*PID|PID.*router'
+      - type: output_matches
+        pattern: '(?i)loopback|127\.0\.0\.1|usbmux|USB'
+      - type: output_matches
+        pattern: 'nosuspend|DiagnosticSuspend'
+    rubric:
+      - "Uses the installed physical-iOS profile's printed port and listen/connect mode, not copied simulator/version defaults"
+      - "Connects host tooling to the intended router PID/endpoint rather than the remote iPhone app PID"
+      - "Verifies/disambiguates the intended device and does not silently capture whichever attached phone connects"
+      - "Uses no startup suspension for this scrolling fixture and no unauthenticated LAN listener"
+    timeout: 120
+
+  - name: "Investigate Apple render hitches despite cheap collection binding"
+    prompt: |
+      Our collection has a low sampled bind cost and a quiet main thread, but
+      Instruments identifies render hitches during warm scroll. Cards use many
+      masked layers, shadows and large thumbnail textures. Should we increase the
+      pool or conclude the native renderer is smooth from CPU sampling?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)render.*(?:server|GPU)|GPU'
+      - type: output_matches
+        pattern: '(?i)layer|texture|mask|shadow|offscreen'
+      - type: output_matches
+        pattern: '(?i)commit'
+      - type: output_matches
+        pattern: '(?i)sample|sampling|signpost'
+    rubric:
+      - "Separates commit/main-thread work from render-server/GPU deadlines and investigates the traced phase"
+      - "Checks layer/texture/upload/offscreen costs rather than treating cheap sampled bind time as proof of frame quality"
+      - "Does not tune pools without reuse evidence or substitute sampling estimates for exact callback/frame durations"
+      - "Re-measures equivalent required content after a targeted change instead of removing accessibility or all visual behavior"
+    timeout: 120
+
+  - name: "Measure native and retained MAUI memory across warm traversals"
+    prompt: |
+      An AppKit collection's managed heap stays flat after one scroll, but process
+      footprint grows over repeated forward/reverse traversals. Native items,
+      retained MAUI handlers, decoded images and menu previews have separate
+      ownership. Define a memory experiment without forcing GC after every swipe
+      or treating Instruments Allocations as managed GC evidence.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)Allocations|VM|native.*(?:memory|allocation)'
+      - type: output_matches
+        pattern: '(?i)generations?|repeat|plateau'
+      - type: output_matches
+        pattern: '(?i)handler|controller|subscription|preview'
+      - type: output_matches
+        pattern: '(?i)decoded|image|pixel'
+      - type: output_matches
+        pattern: '(?i)disconnect|teardown|replacement'
+    rubric:
+      - "Separates native/process and managed heap/allocation evidence instead of assuming one describes the other"
+      - "Uses equivalent repeated routes and native allocation generations/retention plus independent resource peaks and post-disconnect counts"
+      - "Includes item/controller, MAUI tree/handler, decoded image and preview/subscription lifetimes"
+      - "Does not infer a plateau from one sample or alter the natural workload with forced GC after every swipe"
+    timeout: 120
+
+  - name: "Match Apple symbols and clocks before blaming GC for a hitch"
+    prompt: |
+      A collection hitch trace has unresolved AOT frames. We rebuilt the app and
+      kept the new dSYM instead of the measured build's symbols. A separate
+      nettrace has GC events; our script overlays its UTC/Stopwatch timestamps
+      directly on xctrace recording-relative nanoseconds and says GC caused the
+      hitch. What evidence and alignment must be fixed first?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)UUID|build.?matched|matching.*(?:dSYM|symbol)'
+      - type: output_matches
+        pattern: '(?i)PDB|assembl|managed.*symbol'
+      - type: output_matches
+        pattern: '(?i)clock|align|timebase'
+      - type: output_matches
+        pattern: '(?i)run.*ID|iteration|signpost|marker'
+    rubric:
+      - "Requires the measured build's executable/native dSYM UUIDs and appropriate managed symbols, not an arbitrary rebuild"
+      - "Retains symbol resolution limits and avoids assigning unresolved addresses to a guessed managed method"
+      - "Aligns compatible native/managed clocks using run/iteration markers before interpreting overlap"
+      - "Reports correlation uncertainty instead of claiming causal GC evidence from unaligned traces"
+    timeout: 120
+
+  - name: "Gate native Apple scrolling tests and field metrics by actual coverage"
+    prompt: |
+      We want collection regression coverage on iOS, Catalyst and AppKit using a
+      C# xUnit/DevFlow harness with an older Apple pack. Someone copies Swift
+      XCTHitchMetric and new MetricKit HitchTimeMetric code into it, assumes every
+      custom host emits the system scrolling signposts, and treats a daily metric
+      as the result of one 30-second traversal. Explain the valid test/telemetry boundary.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)XCTest|native.*test'
+      - type: output_matches
+        pattern: '(?i)availability|SDK|binding|version'
+      - type: output_matches
+        pattern: '(?i)matching|coverage|signpost'
+      - type: output_matches
+        pattern: '(?i)cohort|aggregate|reporting.*window|daily'
+    rubric:
+      - "Separates an optional native XCTest UI target from C# xUnit/DevFlow APIs and checks deployment/SDK/binding availability"
+      - "Verifies actual scrolling/deceleration signposts and measurement rows on each UIKit/AppKit target; no rows are not zero hitches"
+      - "Resets the starting viewport outside measurement and includes actual input/deceleration rather than ended-list swipes"
+      - "Treats MetricKit/Organizer reporting windows/cohorts as field evidence, not an exact controlled traversal or a portable Swift API"
+    timeout: 120
