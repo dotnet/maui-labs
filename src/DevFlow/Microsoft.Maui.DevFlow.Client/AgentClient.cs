@@ -3063,8 +3063,6 @@ public class AppDescriptor
 {
     [System.Text.Json.Serialization.JsonPropertyName("name")]
     public string? Name { get; set; }
-    [System.Text.Json.Serialization.JsonPropertyName("processId")]
-    public int? ProcessId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("packageId")]
     public string? PackageId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("version")]

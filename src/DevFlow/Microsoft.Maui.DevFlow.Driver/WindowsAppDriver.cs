@@ -257,16 +257,26 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
         return Task.CompletedTask;
     }
 
-    public Task<AlertActionResult> PressAlertButtonSafelyAsync(string buttonLabel)
+    public Task<AlertActionResult> PressAlertButtonSafelyAsync(AlertInfo reviewedDialog, string buttonLabel)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
         EnsureWindows();
-        var windows = ResolveTargetWindows();
-        var buttons = FindDialogButtonsCore(windows);
+        var candidate = FindDialogCandidate(ResolveTargetWindows());
+        var info = candidate == null ? null : CreateDialogInfo(candidate);
+        if (candidate == null || info == null || !NativeDialogIdentity.CreateFingerprint(Platform, string.Empty, info)
+            .Equals(NativeDialogIdentity.CreateFingerprint(Platform, string.Empty, reviewedDialog), StringComparison.Ordinal))
+        {
+            return Task.FromResult(new AlertActionResult(
+                false,
+                true,
+                "The reviewed Windows dialog changed or disappeared. Detect it again before acting.",
+                info));
+        }
+
+        var buttons = candidate.Buttons;
         var matches = buttons
             .Where(button => button.name.Equals(buttonLabel, StringComparison.Ordinal))
             .ToArray();
-        var info = DetectDialog(windows);
         if (matches.Length != 1)
         {
             return Task.FromResult(new AlertActionResult(
@@ -323,18 +333,16 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
 
     private static AlertInfo? DetectDialog(IReadOnlyList<IUIAutomationElement> windows)
     {
-        var buttons = FindDialogButtonsCore(windows);
-        if (buttons.Count == 0)
-            return null;
-
-        var alertButtons = buttons.Select(ToAlertButton).ToList();
-        var texts = FindDialogTextsCore(windows);
-        return new AlertInfo(texts.FirstOrDefault(), alertButtons)
-        {
-            InstanceId = FindDialogCandidate(windows)?.InstanceId,
-            Text = texts
-        };
+        var candidate = FindDialogCandidate(windows);
+        return candidate == null ? null : CreateDialogInfo(candidate);
     }
+
+    private static AlertInfo CreateDialogInfo(DialogCandidate candidate)
+        => new(candidate.Texts.FirstOrDefault(), candidate.Buttons.Select(ToAlertButton).ToList())
+        {
+            InstanceId = candidate.InstanceId,
+            Text = candidate.Texts
+        };
 
     private static List<(IUIAutomationElement element, string name)> FindDialogButtonsCore(IReadOnlyList<IUIAutomationElement> windows)
     {
@@ -404,7 +412,7 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
     public Task<AlertInfo?> DetectAlertAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task DismissAlertAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
-    public Task<AlertActionResult> PressAlertButtonSafelyAsync(string buttonLabel) => throw new PlatformNotSupportedException("Windows operations require Windows.");
+    public Task<AlertActionResult> PressAlertButtonSafelyAsync(AlertInfo reviewedDialog, string buttonLabel) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<string> GetAccessibilityTreeAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
 #endif
 

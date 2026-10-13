@@ -23,7 +23,7 @@ public sealed class ScreenshotResult
     /// <summary>Machine-readable cause identifier (e.g. <c>window-not-visible</c>) when available.</summary>
     public string? Reason { get; init; }
 
-    /// <summary>Whether retrying (e.g. after foregrounding the app) may succeed.</summary>
+    /// <summary>Whether retrying after correcting the reported precondition may succeed.</summary>
     public bool Retryable { get; init; }
 
     /// <summary>Optional actionable suggestions surfaced by the agent.</summary>

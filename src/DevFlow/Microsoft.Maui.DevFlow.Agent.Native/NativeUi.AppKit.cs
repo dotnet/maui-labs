@@ -339,11 +339,19 @@ internal static partial class NativeUi
 
         if (window != null)
         {
-            var screenCaptureKitBytes = await CaptureWindowViaScreenCaptureKitAsync(window);
-            if (screenCaptureKitBytes != null)
-                return screenCaptureKitBytes;
+            if (window is { IsSheet: true, SheetParent: { } parent })
+                window = parent;
 
-            if (window.AttachedSheet is NSWindow sheet)
+            var sheet = window.AttachedSheet ?? window.Sheets.LastOrDefault();
+            var capturedWindow = window;
+            var image = await AppKitScreenshotCapture.CaptureAsync(
+                hasAttachedSheet: sheet != null,
+                () => CaptureWindowViaScreenCaptureKitAsync(capturedWindow),
+                () => sheet == null ? null : AppKitWindowCapture.CaptureWindows(capturedWindow, sheet));
+            if (image != null)
+                return image;
+
+            if (sheet != null)
                 window = sheet;
 
             var windowPng = CaptureWindowViaCG(window);
@@ -447,7 +455,7 @@ internal static partial class NativeUi
     {
         try
         {
-            using var content = await GetShareableContentAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            using var content = await GetShareableContentAsync();
             var windowId = (uint)window.WindowNumber;
             var shareableWindow = content.Windows.FirstOrDefault(candidate => candidate.WindowId == windowId);
             if (shareableWindow == null)
@@ -505,10 +513,13 @@ internal static partial class NativeUi
     }
 
     [SupportedOSPlatform("macos14.0")]
-    private static Task<ScreenCaptureKit.SCShareableContent> GetShareableContentAsync()
+    private static async Task<ScreenCaptureKit.SCShareableContent> GetShareableContentAsync()
     {
         var completion = new TaskCompletionSource<ScreenCaptureKit.SCShareableContent>(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var registration = timeout.Token.Register(
+            () => completion.TrySetCanceled(timeout.Token));
 
         void Complete(
             ScreenCaptureKit.SCShareableContent content,
@@ -518,8 +529,8 @@ internal static partial class NativeUi
                 completion.TrySetException(new InvalidOperationException(error.LocalizedDescription));
             else if (content == null)
                 completion.TrySetException(new InvalidOperationException("ScreenCaptureKit returned no shareable content."));
-            else
-                completion.TrySetResult(content);
+            else if (!completion.TrySetResult(content))
+                content.Dispose();
         }
 
         if (OperatingSystem.IsMacOSVersionAtLeast(14, 4))
@@ -530,7 +541,7 @@ internal static partial class NativeUi
                 onScreenWindowsOnly: false,
                 Complete);
 
-        return completion.Task;
+        return await completion.Task;
     }
 
     [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]

@@ -74,6 +74,10 @@ internal static class MacAccessibility
     internal static extern nint CFRetain(nint cf);
 
     [DllImport(CoreFoundationLib)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static extern bool CFEqual(nint first, nint second);
+
+    [DllImport(CoreFoundationLib)]
     internal static extern uint CFGetTypeID(nint cf);
 
     [DllImport(CoreFoundationLib)]

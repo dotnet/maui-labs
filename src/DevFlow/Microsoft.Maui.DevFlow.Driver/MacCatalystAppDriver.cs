@@ -136,7 +136,9 @@ public class MacCatalystAppDriver : AppDriverBase, IAlertDriver
                     Platform,
                     $"{info.SourceProcessId ?? 0}:{info.SourceProcessName}",
                     info);
-                if (!string.Equals(lease.Fingerprint, currentFingerprint, StringComparison.Ordinal))
+                if (!string.Equals(lease.Fingerprint, currentFingerprint, StringComparison.Ordinal)
+                    || lease.Buttons.Count != currentButtons.Count
+                    || lease.Buttons.Where((button, index) => !button.IsSameElement(currentButtons[index])).Any())
                 {
                     return Task.FromResult(new AlertActionResult(
                         false,
@@ -194,7 +196,7 @@ public class MacCatalystAppDriver : AppDriverBase, IAlertDriver
     /// Dismiss the current alert by pressing an exact button label via AXPress.
     /// </summary>
     /// <param name="buttonLabel">The exact visible button label. A label is always required on macOS.</param>
-    public Task DismissAlertAsync(string buttonLabel)
+    public Task DismissAlertAsync(string? buttonLabel = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
         EnsureMacOS();
@@ -224,7 +226,7 @@ public class MacCatalystAppDriver : AppDriverBase, IAlertDriver
     /// Single AX tree walk — detects and dismisses in one pass to avoid stale coordinates.
     /// </summary>
     /// <param name="buttonLabel">The exact visible button label. A label is always required on macOS.</param>
-    public Task<AlertInfo?> HandleAlertIfPresentAsync(string buttonLabel)
+    public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
         EnsureMacOS();
@@ -365,60 +367,75 @@ public class MacCatalystAppDriver : AppDriverBase, IAlertDriver
         var targetProcessName = GetProcessName(targetPid) ?? AppName ?? "Target App";
         (AlertInfo info, List<AXElement> buttons)? unattributedSystemDialog = null;
 
-        foreach (var candidate in GetDialogProcesses(targetPid, targetProcessName))
+        try
         {
-            try
+            foreach (var candidate in GetDialogProcesses(targetPid, targetProcessName))
             {
-                using var app = AXElement.CreateForApplication(candidate.ProcessId);
-                var match = FindDialogButtons(app);
-                var isRecognizedDialog = match.isRecognizedDialog;
-                if ((match.info is null || match.buttons is null || match.buttons.Count == 0) &&
-                    candidate.IsSystemDialog)
+                List<AXElement>? ownedButtons = null;
+                try
                 {
-                    DisposeAll(match.buttons);
-                    match = FindSystemDialogButtons(app);
-                    isRecognizedDialog = false;
+                    using var app = AXElement.CreateForApplication(candidate.ProcessId);
+                    var match = FindDialogButtons(app);
+                    ownedButtons = match.buttons;
+                    var isRecognizedDialog = match.isRecognizedDialog;
+                    if ((match.info is null || match.buttons is null || match.buttons.Count == 0) &&
+                        candidate.IsSystemDialog)
+                    {
+                        DisposeAll(ownedButtons);
+                        ownedButtons = null;
+                        match = FindSystemDialogButtons(app);
+                        ownedButtons = match.buttons;
+                        isRecognizedDialog = false;
+                    }
+
+                    if (match.info is null || match.buttons is null || match.buttons.Count == 0)
+                        continue;
+
+                    var canRespond = !candidate.IsSystemDialog ||
+                        (isRecognizedDialog &&
+                        NativeDialogSafety.IsSystemDialogForTarget(
+                            match.info,
+                            AppName,
+                            targetProcessName));
+                    var info = match.info with
+                    {
+                        SourceProcessId = candidate.ProcessId,
+                        SourceProcessName = candidate.ProcessName,
+                        IsSystemDialog = candidate.IsSystemDialog,
+                        RequiresUserConfirmation = true,
+                        CanRespond = canRespond
+                    };
+
+                    if (canRespond)
+                    {
+                        ownedButtons = null;
+                        return (info, match.buttons);
+                    }
+
+                    if (unattributedSystemDialog is null)
+                    {
+                        unattributedSystemDialog = (info, match.buttons);
+                        ownedButtons = null;
+                    }
                 }
-
-                if (match.info is null || match.buttons is null || match.buttons.Count == 0)
+                catch when (candidate.IsSystemDialog)
                 {
-                    DisposeAll(match.buttons);
-                    continue;
+                    // System prompt hosts are short-lived; continue if one exits during the scan.
                 }
-
-                var canRespond = !candidate.IsSystemDialog ||
-                    (isRecognizedDialog &&
-                    NativeDialogSafety.IsSystemDialogForTarget(
-                        match.info,
-                        AppName,
-                        targetProcessName));
-                var info = match.info with
+                finally
                 {
-                    SourceProcessId = candidate.ProcessId,
-                    SourceProcessName = candidate.ProcessName,
-                    IsSystemDialog = candidate.IsSystemDialog,
-                    RequiresUserConfirmation = true,
-                    CanRespond = canRespond
-                };
-
-                if (canRespond)
-                {
-                    DisposeAll(unattributedSystemDialog?.buttons);
-                    return (info, match.buttons);
+                    DisposeAll(ownedButtons);
                 }
-
-                if (unattributedSystemDialog is null)
-                    unattributedSystemDialog = (info, match.buttons);
-                else
-                    DisposeAll(match.buttons);
             }
-            catch when (candidate.IsSystemDialog)
-            {
-                // System prompt hosts are short-lived; continue if one exits during the scan.
-            }
+
+            var result = unattributedSystemDialog;
+            unattributedSystemDialog = null;
+            return result;
         }
-
-        return unattributedSystemDialog;
+        finally
+        {
+            DisposeAll(unattributedSystemDialog?.buttons);
+        }
     }
 
     private AlertInfo CreateDialogLease(

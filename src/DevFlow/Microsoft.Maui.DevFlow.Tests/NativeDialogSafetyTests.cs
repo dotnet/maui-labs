@@ -1,9 +1,32 @@
 using Microsoft.Maui.DevFlow.Driver;
+using Microsoft.Maui.DevFlow.Driver.Mac;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
 public class NativeDialogSafetyTests
 {
+    [Fact]
+    public void IsSameElement_SameMacApplicationAcrossQueries_ReturnsTrue()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        using var first = AXElement.CreateForApplication(Environment.ProcessId);
+        using var second = AXElement.CreateForApplication(Environment.ProcessId);
+        Assert.True(first.IsSameElement(second));
+    }
+
+    [Fact]
+    public void IsSameElement_DifferentMacApplications_ReturnsFalse()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        using var first = AXElement.CreateForApplication(Environment.ProcessId);
+        using var second = AXElement.CreateForApplication(1);
+        Assert.False(first.IsSameElement(second));
+    }
+
     [Fact]
     public void CreatePromptId_SameSemanticDialog_IsStable()
     {
