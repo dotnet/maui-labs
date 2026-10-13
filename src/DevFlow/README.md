@@ -15,11 +15,11 @@ selection. The ordinary `ci-devflow.yml` host, browser, JavaScript and AOT tests
 remain enabled alongside these device tests.
 
 Path filters cover DevFlow, its CLI implementation and executable entry point,
-sample apps, custom-backend startup/native-inspection seams, and their Essentials
-and Blazor libraries. They do not trigger the integration matrix for unrelated
-platform handlers, platform samples or documentation. Shared MSBuild properties,
-targets, Arcade infrastructure, SDK and package/feed configuration are unavoidable
-inputs: changing them can alter any tested app's compilation, restore or startup.
+sample apps, the complete GTK, AppKit and WPF backend trees, and their shared platform sources. Backend changes
+can affect the agent's build or rendered UI, so both DevFlow workflows prefer
+extra runs over a fragile file allowlist. Shared build infrastructure, SDK and
+package/feed configuration are included because they can alter any tested app's
+compilation, restore or startup.
 
 MAUI recognizer tests require the MAUI gesture page and are excluded from plain
 .NET runs via the `framework=maui` trait. Native runs retain native actions,
@@ -175,6 +175,9 @@ Use `Microsoft.Maui.DevFlow.Agent.Gtk` instead of the standard agent package wit
 `Microsoft.Maui.DevFlow.Blazor.Gtk` alongside `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView`.
 These packages use the in-repo GTK backend; remove superseded `Platform.Maui.Linux.Gtk4*`
 package references when migrating. Mixing the two backends is not supported.
+For Essentials diagnostics, reference `Microsoft.Maui.Platforms.Linux.Gtk4.Essentials`
+and call `builder.AddLinuxGtk4Essentials()`; a package reference alone does not initialize
+MAUI's static Preferences and FileSystem facades.
 
 ```csharp
 using Microsoft.Maui.DevFlow.Agent.Gtk;
@@ -219,6 +222,8 @@ For Blazor Hybrid, register `builder.AddMauiBlazorDevFlowTools()` from
 `Microsoft.Maui.DevFlow.Blazor.Gtk` as well. CDP wiring and WebView discovery start on the
 same initialized window lifecycle, even if application startup takes more than two seconds.
 Later windows and explicit `WireBlazorCdpToAgent()` calls do not duplicate registrations.
+WebViews created later are captured through their handlers, and detached handlers unregister
+their CDP contexts rather than remaining selectable.
 
 ### 2b. Or, in a plain .NET app (no MAUI)
 

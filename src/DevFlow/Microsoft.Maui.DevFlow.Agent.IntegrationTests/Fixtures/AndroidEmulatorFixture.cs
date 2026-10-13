@@ -859,6 +859,8 @@ public sealed class AndroidEmulatorFixture : AppFixtureBase
             await Task.Delay(1000);
         }
 
-        throw new TimeoutException($"Android app process '{PackageId}' did not appear within {timeoutSeconds}s.");
+        var reason = $"Android app process '{PackageId}' did not appear within {timeoutSeconds}s.";
+        await CaptureCrashDiagnosticsAsync(reason);
+        throw new TimeoutException(reason);
     }
 }

@@ -80,6 +80,7 @@ public class WpfAgentService : MauiDevFlowAgentService
     }
 
     protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
+        => DispatchAsync(() =>
     {
         try
         {
@@ -88,22 +89,23 @@ public class WpfAgentService : MauiDevFlowAgentService
             {
                 if (target.Handler?.PlatformView is DependencyObject d)
                 {
-                    var scroll = FindAncestor<ScrollViewer>(d);
+                    var scroll = ReferenceEquals(target, element) ? FindDescendant<ScrollViewer>(d) : null;
+                    scroll ??= FindAncestor<ScrollViewer>(d);
                     if (scroll != null)
                     {
                         if (deltaX != 0)
                             scroll.ScrollToHorizontalOffset(Math.Max(0, scroll.HorizontalOffset + deltaX));
                         if (deltaY != 0)
                             scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset - deltaY));
-                        return Task.FromResult(true);
+                        return true;
                     }
                 }
                 target = target.Parent as VisualElement;
             }
         }
         catch { }
-        return Task.FromResult(false);
-    }
+        return false;
+    });
 
     protected override bool TryNativeTap(VisualElement ve)
     {
@@ -367,6 +369,17 @@ public class WpfAgentService : MauiDevFlowAgentService
         {
             return null;
         }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject start) where T : DependencyObject
+    {
+        if (start is T match) return match;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(start); i++)
+        {
+            var matchInChild = FindDescendant<T>(VisualTreeHelper.GetChild(start, i));
+            if (matchInChild != null) return matchInChild;
+        }
+        return null;
     }
 
     private static T? FindAncestor<T>(DependencyObject start) where T : DependencyObject

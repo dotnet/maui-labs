@@ -45,6 +45,7 @@
     <Compile Include="..\DevFlow.Sample\LayoutDiagnosticsTestPage.xaml.cs" Link="LayoutDiagnosticsTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\GestureTestPage.xaml.cs" Link="GestureTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\DesiredSizeProbe.cs" Link="DesiredSizeProbe.cs" />
+    <Compile Include="..\DevFlow.Sample\PreferenceDiagnostics.cs" Link="PreferenceDiagnostics.cs" />
     <Compile Include="..\DevFlow.Sample\ModalTestPage.xaml.cs" Link="ModalTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\NetworkTestPage.xaml.cs" Link="NetworkTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\TodoService.cs" Link="TodoService.cs" />

@@ -44,6 +44,40 @@ public class SampleProjectWiringTests
         }
     }
 
+    [Theory]
+    [InlineData("Linux")]
+    [InlineData("MacOS")]
+    [InlineData("WPF")]
+    public void CustomHead_LinksAndRegistersPreferenceDiagnostics(string head)
+    {
+        var directory = Path.Combine(FindRepoRoot(), "samples", $"DevFlow.Sample.{head}");
+        var projectPath = Path.Combine(directory, $"DevFlow.Sample.{head}.csproj");
+        AssertLinkedFile(XDocument.Load(projectPath), projectPath, "Compile", "PreferenceDiagnostics.cs");
+
+        var program = File.ReadAllText(Path.Combine(directory, "MauiProgram.cs"));
+        Assert.Matches("""
+            options\.RegisterExtension\(\s*"com\.example\.diagnostics"\s*,\s*"Sample diagnostics extension"\s*,\s*"1\.0\.0"\s*,\s*new\[\]\s*\{\s*"seed_pref"\s*\}\s*\)
+            """, program);
+        Assert.Contains("PreferenceDiagnostics.Register(diagnostics);", program);
+    }
+
+    [Fact]
+    public void LinuxHead_RegistersThePlatformEssentialsImplementations()
+    {
+        var program = File.ReadAllText(Path.Combine(FindRepoRoot(), "samples", "DevFlow.Sample.Linux", "MauiProgram.cs"));
+        Assert.Contains(".AddLinuxGtk4Essentials()", program);
+    }
+
+    [Theory]
+    [InlineData("Linux")]
+    [InlineData("MacOS")]
+    [InlineData("WPF")]
+    public void CustomHead_EnablesTheLayoutDiagnosticsUnderTest(string head)
+    {
+        var program = File.ReadAllText(Path.Combine(FindRepoRoot(), "samples", $"DevFlow.Sample.{head}", "MauiProgram.cs"));
+        Assert.Contains("options.EnableLayoutDiagnostics = true;", program);
+    }
+
     [Fact]
     public void NativeAndroid_ImportsThePackagedAgentMetadataTargets()
     {

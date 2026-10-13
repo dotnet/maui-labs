@@ -25,6 +25,7 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public static CommandMapper<IEntry, EntryHandler> CommandMapper = new(ViewCommandMapper)
 		{
+			[nameof(IView.Focus)] = MapFocus,
 		};
 
 		public EntryHandler() : base(Mapper, CommandMapper)
