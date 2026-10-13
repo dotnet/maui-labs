@@ -1,7 +1,7 @@
 ---
 name: maui-controls-deep-dive
 description: >-
-  Apply advanced MAUI control guidance. USE FOR: `CollectionView` incremental loading, `RemainingItemsThreshold`, `EmptyView`, `AutomationId`, avoiding `ScrollView` wrappers, .NET 10 `SafeAreaEdges`, `GraphicsView`/`IDrawable`, gestures, animations. DO NOT USE FOR: general layout, full accessibility, profiling, handlers.
+  Apply advanced MAUI control guidance. USE FOR: stock CollectionView loading, drag/drop and reorder commands, SwipeView deletion, RefreshView pull refresh, item context actions, EmptyView, AutomationId, .NET 10 SafeAreaEdges, GraphicsView, gestures and animations. DO NOT USE FOR: general layout, full accessibility, profiling, or bespoke native handler implementation.
 ---
 
 # MAUI Controls Deep Dive
@@ -20,14 +20,17 @@ MAUI APIs.
 
 ## Workflow
 
-1. Inspect the target framework and whether the UI is XAML, C# Markup, or another
-   MAUI UI style.
+1. Inspect the target framework, resolved MAUI version, backend and UI style.
 2. Identify the control area: `CollectionView`, safe area, gestures, animations,
    or `GraphicsView`.
 3. Apply the focused guidance below. Route broad accessibility audits to
    `maui-accessibility`; for GraphicsView-specific semantics, apply
    `SemanticProperties` and `AutomationId` directly (see GraphicsView section).
    Route performance profiling to `maui-performance`.
+   For stock collection interactions, read
+   [drag, delete, refresh and actions](references/collection-interactions.md).
+   Route custom native collection implementation to `maui-bespoke-collections`;
+   do not replace a working CollectionView just to add ordinary commands.
 4. Validate the control on the intended device sizes and platforms.
 
 ## CollectionView
@@ -69,6 +72,19 @@ Example state shell:
     </CollectionView>
 </Grid>
 ```
+
+### Collection interactions
+
+Keep the scrolling CollectionView and use focused public controls/commands.
+DragGestureRecognizer transfers data; it does not reorder ItemsSource for you.
+SwipeView reveals/invokes actions; removing the intended model key is app logic.
+RefreshView can wrap the finite collection directly; IsRefreshing=true can already
+invoke Command, so avoid duplicate dispatch and use separate operation ownership.
+FlyoutBase.ContextFlyout is documented for Catalyst/Windows, not every mobile
+long-press. Preserve pointer/keyboard and visible action alternatives.
+
+The [interaction reference](references/collection-interactions.md) covers
+version/backend limits, compiled-template command context, async races and tests.
 
 ## Safe Areas
 

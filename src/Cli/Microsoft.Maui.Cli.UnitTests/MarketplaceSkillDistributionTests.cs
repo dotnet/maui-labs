@@ -11,44 +11,48 @@ using Xunit;
 namespace Microsoft.Maui.Cli.UnitTests;
 
 [Collection("CLI")]
-public sealed class XcodeMigrationDistributionTests
+public sealed class MarketplaceSkillDistributionTests
 {
-	private const string SkillName = "maui-xcode27-migration";
-	private const string SkillSource = "plugins/dotnet-maui/skills/" + SkillName;
-
 	[Theory]
-	[InlineData("CopilotCli", ".github/skills")]
-	[InlineData("Claude", ".claude/skills")]
-	[InlineData("VsCode", ".github/skills")]
-	public async Task LocalMarketplace_ListAddStatusUpdate_DistributesOnlyCompleteMigrationSkill(
-		string environment, string skillsPath)
+	[InlineData("CopilotCli", ".github/skills", "maui-xcode27-migration", "scripts/audit-lifecycle.mjs")]
+	[InlineData("Claude", ".claude/skills", "maui-xcode27-migration", "scripts/audit-lifecycle.mjs")]
+	[InlineData("VsCode", ".github/skills", "maui-xcode27-migration", "scripts/audit-lifecycle.mjs")]
+	[InlineData("CopilotCli", ".github/skills", "maui-bespoke-collections", "references/recipe-photo-masonry.md")]
+	[InlineData("Claude", ".claude/skills", "maui-bespoke-collections", "references/recipe-photo-masonry.md")]
+	[InlineData("VsCode", ".github/skills", "maui-bespoke-collections", "references/recipe-photo-masonry.md")]
+	[InlineData("CopilotCli", ".github/skills", "maui-controls-deep-dive", "references/collection-interactions.md")]
+	[InlineData("Claude", ".claude/skills", "maui-controls-deep-dive", "references/collection-interactions.md")]
+	[InlineData("VsCode", ".github/skills", "maui-controls-deep-dive", "references/collection-interactions.md")]
+	public async Task LocalMarketplace_ListAddStatusUpdate_DistributesOnlyCompleteSkill(
+		string environment, string skillsPath, string skillName, string requiredFile)
 	{
+		var skillSource = "plugins/dotnet-maui/skills/" + skillName;
 		using var catalog = new LocalMarketplace(FindRepositoryRoot());
 		using var test = new AiCommandFixture();
 		AiCommands.HttpClientFactoryForTests = () => new HttpClient(catalog, disposeHandler: false);
 		var expected = catalog.Files
-			.Where(file => file.Key.StartsWith(SkillSource + "/", StringComparison.Ordinal))
-			.ToDictionary(file => file.Key[(SkillSource.Length + 1)..], file => file.Value, StringComparer.Ordinal);
+			.Where(file => file.Key.StartsWith(skillSource + "/", StringComparison.Ordinal))
+			.ToDictionary(file => file.Key[(skillSource.Length + 1)..], file => file.Value, StringComparer.Ordinal);
 		Assert.Contains("SKILL.md", expected.Keys);
-		Assert.Contains("scripts/audit-lifecycle.mjs", expected.Keys);
+		Assert.Contains(requiredFile, expected.Keys);
 		Assert.Contains(expected.Keys, path => path.StartsWith("references/", StringComparison.Ordinal));
 
 		var before = test.Snapshot();
 		var listed = await test.Invoke("list", "skill", "--env", environment);
 		AssertSuccess(listed);
-		var discovered = Assert.Single(Rows(listed.Result), row => row["name"]!.GetValue<string>() == SkillName);
+		var discovered = Assert.Single(Rows(listed.Result), row => row["name"]!.GetValue<string>() == skillName);
 		Assert.Equal("repository", discovered["owner"]!.GetValue<string>());
 		Assert.Equal("dotnet/maui-labs", discovered["origin"]!["repo"]!.GetValue<string>());
 		Assert.Equal("main", discovered["origin"]!["branch"]!.GetValue<string>());
-		Assert.Equal(SkillSource, discovered["origin"]!["path"]!.GetValue<string>());
+		Assert.Equal(skillSource, discovered["origin"]!["path"]!.GetValue<string>());
 		Assert.Equal(catalog.Commit, discovered["origin"]!["resolvedCommit"]!.GetValue<string>());
-		Assert.Contains(Rows(listed.Result), row => row["name"]!.GetValue<string>() != SkillName);
+		Assert.Contains(Rows(listed.Result), row => row["name"]!.GetValue<string>() != skillName);
 		Assert.Contains(".github/plugin/marketplace.json", catalog.RequestedFiles);
 		Assert.Contains("plugins/dotnet-maui/plugin.json", catalog.RequestedFiles);
 		Assert.Equal(before, test.Snapshot());
 
-		var directory = Path.GetFullPath(Path.Combine(test.Root, skillsPath, SkillName));
-		var added = await test.Invoke("add", "skill", SkillName, "--env", environment);
+		var directory = Path.GetFullPath(Path.Combine(test.Root, skillsPath, skillName));
+		var added = await test.Invoke("add", "skill", skillName, "--env", environment);
 		AssertSuccess(added);
 		var installed = Assert.Single(Rows(added.Result));
 		Assert.Equal("succeeded", installed["outcome"]!.GetValue<string>());
@@ -60,12 +64,12 @@ public sealed class XcodeMigrationDistributionTests
 		Assert.NotNull(version);
 		Assert.Equal("dotnet/maui-labs", version.Source);
 		Assert.Equal("main", version.Branch);
-		Assert.Equal(SkillSource, version.PluginPath);
+		Assert.Equal(skillSource, version.PluginPath);
 		Assert.Equal(catalog.Commit, version.Commit);
 		Assert.Equal(AiContentHash.DirectoryHash(directory), version.ContentHash);
 
 		before = test.Snapshot();
-		var repeated = await test.Invoke("add", "skill", SkillName, "--env", environment);
+		var repeated = await test.Invoke("add", "skill", skillName, "--env", environment);
 		AssertSuccess(repeated);
 		Assert.Equal("already-current", Assert.Single(Rows(repeated.Result))["reasonCode"]!.GetValue<string>());
 		Assert.Equal(before, test.Snapshot());
@@ -74,7 +78,7 @@ public sealed class XcodeMigrationDistributionTests
 		var status = await test.Invoke("status", "skill", "--env", environment);
 		AssertSuccess(status);
 		var inventory = Assert.Single(Rows(status.Result));
-		Assert.Equal(SkillName, inventory["name"]!.GetValue<string>());
+		Assert.Equal(skillName, inventory["name"]!.GetValue<string>());
 		Assert.True(inventory["managed"]!.GetValue<bool>());
 		Assert.Equal("installed", inventory["state"]!.GetValue<string>());
 		Assert.Equal(requestCount, catalog.RequestCount);
@@ -88,7 +92,7 @@ public sealed class XcodeMigrationDistributionTests
 		// Exercise an actual update, not just the already-current fast path.
 		var reference = expected.Keys.First(path => path.StartsWith("references/", StringComparison.Ordinal));
 		File.WriteAllText(Path.Combine(directory, reference), "Local customization");
-		var repaired = await test.Invoke("update", "skill", "--skill", SkillName, "--env", environment, "--force");
+		var repaired = await test.Invoke("update", "skill", "--skill", skillName, "--env", environment, "--force");
 		AssertSuccess(repaired);
 		Assert.Equal("succeeded", Assert.Single(Rows(repaired.Result))["outcome"]!.GetValue<string>());
 		AssertCompleteInstallation(test.Root, directory, expected);

@@ -1,0 +1,1055 @@
+scenarios:
+  - name: "Keep a working stock collection in scope"
+    prompt: |
+      My .NET 10 MAUI CollectionView already scrolls well, uses fixed-height rows
+      and compiled item bindings, and has the selection behavior we need. I only
+      need to adjust the space between its existing rows. Should I replace it
+      with a bespoke native collection control? Explain the smallest appropriate
+      approach; do not change files.
+    assertions:
+      - type: output_contains
+        value: CollectionView
+      - type: output_matches
+        pattern: '(?i)keep|retain|continue|no need|unnecessary|already'
+      - type: output_not_matches
+        pattern: 'class\s+\w+(?:Handler|LayoutManager)\b'
+    rubric:
+      - "Keeps the working CollectionView and scopes the answer to row spacing"
+      - "Does not scaffold a new native control, paging framework, or all-platform handlers"
+      - "Routes ordinary control use away from the bespoke-generation workflow"
+    timeout: 120
+
+  - name: "Choose metadata-driven UIKit waterfall geometry"
+    prompt: |
+      Design an iOS-only .NET MAUI PhotoMasonryView for a large paged catalog.
+      Photo width/height metadata arrives before thumbnails; bounded captions
+      can vary in height. The requirement is shortest-column placement, not
+      aligned grid rows. Explain the native layout, measurement, visibility
+      lookup and resize/update strategy. Do not claim benchmark results.
+    assertions:
+      - type: output_matches
+        pattern: 'UICollectionViewLayout|(?i:custom.*layout)'
+      - type: output_matches
+        pattern: '(?i)aspect|dimension|metadata'
+      - type: output_matches
+        pattern: '(?i)interval|binary|spatial|indexed|index.*(?:range|geometry)'
+      - type: output_not_matches
+        pattern: 'ItemSizingStrategy\s*=\s*(?:"MeasureFirstItem"|ItemSizingStrategy\.MeasureFirstItem)'
+    rubric:
+      - "Chooses a real UICollectionView custom layout or justified bounded metadata-based equivalent, not a uniform grid"
+      - "Uses dimension metadata and a width/font/content-sensitive caption measurement cache"
+      - "Avoids measuring or scanning every item on each scroll and acknowledges suffix reflow on early height edits"
+      - "Preserves a keyed anchor and identifies missing native/performance evidence"
+    timeout: 180
+
+  - name: "Reject a late UIKit image for a rebound cell"
+    prompt: |
+      In my custom MAUI UIKit collection, cell A starts downloading a thumbnail.
+      It is rebound to item B, and then I replace the search query before A's
+      request completes. I currently capture the cell and set its image in the
+      completion callback. Give a correct reusable-cell update protocol that
+      handles both races, not only cancellation.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)key|identifier|identity'
+      - type: output_matches
+        pattern: '(?i)generation'
+      - type: output_matches
+        pattern: '(?i)epoch|source.*version|query.*version'
+      - type: output_matches
+        pattern: '(?i)reconfigur|keyed|validate|check'
+    rubric:
+      - "Validates item key, binding generation and source/query epoch before active view publication, or updates accepted keyed source state"
+      - "Explains that cancellation can race with success and is not sufficient by itself"
+      - "Uses supported keyed reconfiguration instead of blindly assigning to a captured reusable cell"
+    timeout: 120
+
+  - name: "Keep UIKit registrations outside the cell provider"
+    prompt: |
+      My UICollectionView cell provider creates a fresh cell registration for
+      every requested photo. The cells are tiny but allocation remains high.
+      Why does this affect reuse, and where should registration and per-item
+      configuration live in a .NET MAUI bespoke UIKit handler?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)registration'
+      - type: output_matches
+        pattern: '(?i)once|outside|per.*type|lifetime'
+      - type: output_matches
+        pattern: '(?i)reuse.*(?:queue|pool)|(?:queue|pool).*reuse'
+    rubric:
+      - "Identifies the reuse queue's association with a registration instance"
+      - "Retains one compatible registration per cell type outside the provider"
+      - "Keeps per-item configuration/reset in bind and avoids claiming measured gains"
+    timeout: 120
+
+  - name: "Use UIKit rather than AppKit for Catalyst shelves"
+    prompt: |
+      Target only net10.0-maccatalyst for a MAUI product feed: a vertical page of
+      independently scrolling horizontal shelves. Prefer a native collection
+      arrangement rather than a MAUI ScrollView per shelf. Which APIs and code
+      boundary should the handler use, and which desktop interactions need proof?
+    assertions:
+      - type: output_contains
+        value: UICollectionView
+      - type: output_matches
+        pattern: '(?i)orthogonal|compositional'
+      - type: output_matches
+        pattern: 'MACCATALYST|(?i:Catalyst)'
+      - type: output_not_matches
+        pattern: 'using\s+AppKit\s*;|new\s+NSCollectionView\s*\('
+    rubric:
+      - "Uses UIKit compositional orthogonal sections for Catalyst, not an AppKit handler"
+      - "Checks native/binding deployment availability and scopes generated targets"
+      - "Includes resize, keyboard, trackpad/wheel, focus and accessibility validation"
+    timeout: 120
+
+  - name: "Map grouped staggered Android visibility and spans"
+    prompt: |
+      Our custom MAUI Android collection uses StaggeredGridLayoutManager with
+      three columns. It has date headers and loading footers. We currently use
+      only the first span's last-visible position to request pages, and reused
+      header holders sometimes leave normal photos full-span. Explain the
+      correct layout/data rules.
+    assertions:
+      - type: output_contains
+        value: StaggeredGridLayoutManager
+      - type: output_matches
+        pattern: '(?i)full.?span'
+      - type: output_matches
+        pattern: '(?i)all.*span|span.*(?:positions|minimum|maximum)'
+      - type: output_matches
+        pattern: 'NO_POSITION|(?i:invalid.*position)'
+    rubric:
+      - "Reduces all valid span visibility positions according to the data-loading question"
+      - "Resets full-span layout parameters on bind when row kind changes"
+      - "Excludes header/footer chrome from selectable data and remaining-data counts"
+      - "Does not silently disable gap handling instead of validating update/reverse-scroll behavior"
+    timeout: 120
+
+  - name: "Interpret Android fixed size as viewport size"
+    prompt: |
+      A MAUI RecyclerView handler fills a fixed parent viewport, but its rows
+      vary in height and image aspect ratio. Someone says SetHasFixedSize(true)
+      is invalid unless every row is identical in height. Is that correct?
+      Explain the actual native sizing condition and what still needs measuring.
+    assertions:
+      - type: output_matches
+        pattern: 'HasFixedSize|hasFixedSize'
+      - type: output_matches
+        pattern: '(?is)RecyclerView.{0,180}(?:own|itself)|(?:viewport|container).{0,80}size'
+    rubric:
+      - "Distinguishes RecyclerView's content-independent own size from uniform item size"
+      - "Allows the flag for the described independently constrained viewport"
+      - "Still requires correct variable-row measurement and does not treat the flag as a virtualization fix"
+    timeout: 120
+
+  - name: "Share nested Android pools only for compatible types"
+    prompt: |
+      A vertical MAUI RecyclerView contains horizontal product shelves.
+      Two inner adapters return view type 0, but one creates a photo card and
+      the other an interactive price editor. I want to share one pool and use
+      ConcatAdapter. Explain safe pooling, type isolation, prefetch and shelf
+      state restoration without inflating every inner item.
+    assertions:
+      - type: output_contains
+        value: RecycledViewPool
+      - type: output_matches
+        pattern: '(?i)view.?type|holder.*compatib|compatib.*holder'
+      - type: output_matches
+        pattern: '(?i)isola|namespace|distinct.*type'
+      - type: output_matches
+        pattern: 'InitialPrefetchItemCount|(?i:initial.*prefetch)'
+    rubric:
+      - "Rejects sharing holders solely because incompatible adapters use the same integer type"
+      - "Explains ConcatAdapter isolation or a deliberate globally compatible type namespace"
+      - "Bounds inner viewport/prefetch and restores offsets by section key"
+      - "Does not describe native prefetch as background view inflation"
+    timeout: 180
+
+  - name: "Correct the official sample identity and content comparison"
+    prompt: |
+      I adapted the Android Flowers sample to mutable-content photo records.
+      Its callback uses oldItem == newItem for areItemsTheSame and only
+      oldItem.id == newItem.id for areContentsTheSame. Captions and images
+      change while IDs stay stable. Show the correct comparison contract and
+      explain safe background diff inputs for my MAUI adapter.
+    assertions:
+      - type: output_matches
+        pattern: 'areItemsTheSame|AreItemsTheSame'
+      - type: output_matches
+        pattern: 'areContentsTheSame|AreContentsTheSame'
+      - type: output_matches
+        pattern: '(?i)immutable|unchang|must not mutat|snapshot'
+      - type: output_matches
+        pattern: '(?i)revision|display.*field|content'
+    rubric:
+      - "Uses stable ID/key equality for identity, not full mutable object equality"
+      - "Uses displayed fields or immutable content revision for contents, not ID-only equality"
+      - "Keeps both lists and compared element fields unchanged while diffing"
+    timeout: 120
+
+  - name: "Do not prescribe archived eager Flexbox for large wrap"
+    prompt: |
+      Choose an Android native path for a new MAUI virtualized tag collection
+      with 100,000 variable-width entries. A colleague suggests Google's
+      FlexboxLayout inside a ScrollView and calls it maintained/recycling.
+      Explain what to verify and the appropriate implementation choices.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)archiv'
+      - type: output_matches
+        pattern: 'FlexboxLayoutManager|(?i:custom.*(?:manager|layout))'
+      - type: output_matches
+        pattern: '(?i)eager|non.?virtual|does not.*recycl|not.*virtual'
+    rubric:
+      - "Distinguishes eager FlexboxLayout from recycling FlexboxLayoutManager"
+      - "Reports the researched archived status rather than automatically shipping it"
+      - "Chooses a reviewed compatible dependency/fork or specialized native manager with line geometry and real recycling"
+    timeout: 120
+
+  - name: "Distinguish Material masking from perspective coverflow"
+    prompt: |
+      My Android MAUI design requires actual 3D perspective: neighboring cards
+      rotate away, overlap and have depth around a center focus. Will Material
+      CarouselLayoutManager implement that exact effect? Explain a native
+      virtualized strategy and the input/reuse behavior it must preserve.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)mask|keyline'
+      - type: output_matches
+        pattern: '(?i)perspective|camera|rotation|rotate'
+      - type: output_matches
+        pattern: '(?i)hit.?test|drawing order|draw order|depth'
+    rubric:
+      - "Does not label Material masking/keylines as the requested perspective coverflow"
+      - "Keeps RecyclerView virtualization with specialized bounded-child transforms/snapping"
+      - "Resets transforms on reuse and tests transformed hit targets, focus and accessibility"
+    timeout: 120
+
+  - name: "Keep WinUI general wrap on the stable SDK contract"
+    prompt: |
+      Our MAUI Windows app is pinned to Windows App SDK 1.8.251106002 and may
+      not upgrade. We need general variable-width and variable-height wrap,
+      not fixed-height justified images. A current Gallery example uses
+      FlowLayout. Choose a correct native architecture for our version.
+    assertions:
+      - type: output_contains
+        value: VirtualizingLayout
+      - type: output_matches
+        pattern: '(?i)experimental'
+      - type: output_matches
+        pattern: 'LinedFlowLayout|(?i:fixed.?height)'
+      - type: output_not_matches
+        pattern: 'new\s+(?:[\w.]+\.)?FlowLayout\s*\(|<FlowLayout(?:\s|>)'
+    rubric:
+      - "Does not generate experimental general FlowLayout for the pinned 1.8 app"
+      - "Distinguishes LinedFlowLayout's fixed-height contract from arbitrary wrap"
+      - "Uses a custom stable VirtualizingLayout with finite viewport and geometry state without silently upgrading"
+    timeout: 120
+
+  - name: "Bridge paging explicitly for ItemsRepeater"
+    prompt: |
+      My bespoke MAUI WinUI handler hosts ItemsRepeater in a ScrollViewer.
+      I implemented ISupportIncrementalLoading and IItemsRangeInfo but neither
+      receives calls. Describe the correct loading/cache bridge and source
+      identity strategy without replacing the requested native host.
+    assertions:
+      - type: output_contains
+        value: ItemsRepeater
+      - type: output_matches
+        pattern: '(?i)viewport|ViewChanged|extent'
+      - type: output_matches
+        pattern: 'IKeyIndexMapping|(?i:stable.*key|key.*index)'
+    rubric:
+      - "States that the loading/range interfaces are ignored by ItemsRepeater"
+      - "Uses explicit viewport-driven bounded/deduplicating repository demand"
+      - "Keeps indexers nonblocking and uses stable key mapping for resets/updates"
+    timeout: 120
+
+  - name: "Harden WinUI sample geometry and per-host state"
+    prompt: |
+      I copied WinUI Gallery VariedImageSizeLayout for MAUI masonry. It scans
+      cached rectangles from index 0 to find the first visible item, clears
+      geometry on all source changes, and stores mutable caches on the layout
+      instance. We will share one layout across two hosts and page deep into
+      100,000 records. What must change before calling this scalable?
+    assertions:
+      - type: output_contains
+        value: LayoutState
+      - type: output_matches
+        pattern: '(?i)index|interval|binary|spatial'
+      - type: output_matches
+        pattern: '(?i)anchor'
+      - type: output_matches
+        pattern: '(?i)invalidat|suffix|checkpoint'
+    rubric:
+      - "Moves mutable host-specific state into VirtualizingLayoutContext.LayoutState"
+      - "Replaces linear start lookup with appropriate indexed/checkpointed geometry"
+      - "Uses precise invalidation, keyed anchors and explicit deep-seek/extent behavior"
+      - "Does not equate realized UI element counts with all geometry/source costs"
+    timeout: 180
+
+  - name: "Use a distinct AppKit native collection integration"
+    prompt: |
+      In dotnet/maui-labs we want a bespoke net10.0-macos photo collection using
+      NSCollectionView. Does the existing AppKit CollectionViewHandler already
+      provide that host? Explain the native item/controller and public backend
+      boundary, without substituting Catalyst or globally changing all lists.
+    assertions:
+      - type: output_contains
+        value: NSCollectionView
+      - type: output_contains
+        value: NSCollectionViewItem
+      - type: output_contains
+        value: MacOSViewHandler
+      - type: output_matches
+        pattern: 'NSScrollView|(?i:custom.*virtualiz)'
+    rubric:
+      - "Identifies the inspected existing handler as a custom NSScrollView virtualizer, not an NSCollectionView wrapper"
+      - "Uses native item controllers and the public AppKit backend integration/dispatcher"
+      - "Scopes a distinct bespoke handler and verifies current source/bindings instead of assuming parity"
+    timeout: 120
+
+  - name: "Avoid an invented AppKit Transform3D attribute"
+    prompt: |
+      Our MAUI AppKit coverflow design was copied from UIKit and tries to set
+      Transform3D on NSCollectionViewLayoutAttributes. Explain the correct
+      native capability check and a real perspective strategy while retaining
+      bounded item realization, input and accessibility.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)layer'
+      - type: output_matches
+        pattern: '(?i)binding|SDK|pack'
+      - type: output_matches
+        pattern: '(?i)hit.?test|focus|VoiceOver'
+      - type: output_not_matches
+        pattern: '(?i)(?:attributes|attrs|layoutAttributes)\s*\.\s*Transform3D\s*='
+    rubric:
+      - "Does not invent UIKit's Transform3D setter on AppKit layout attributes"
+      - "Checks consuming pack APIs and chooses suitable native item view/layer transforms"
+      - "Separates untransformed geometry from perspective, depth, hit testing and accessibility"
+    timeout: 120
+
+  - name: "Expose the GTK baseline grouped-grid header gap"
+    prompt: |
+      The MAUI Linux head deploys GTK 4.12 and GirCore 0.7.0. We require a single
+      scrolling regular grid with full-width group headers and footers.
+      GtkSectionModel prose mentions GridView, so can the handler just attach
+      a grid header factory? State what is actually available and the honest
+      implementation alternatives without upgrading or changing UX silently.
+    assertions:
+      - type: output_matches
+        pattern: '4\.12'
+      - type: output_matches
+        pattern: '4\.26'
+      - type: output_matches
+        pattern: '(?i)custom|gap|unavailable|unsupported|not available'
+      - type: output_not_matches
+        pattern: '(?i)(?:gridView|grid_view|grid)\s*\.\s*SetHeaderFactory\s*\('
+    rubric:
+      - "Separates 4.12 ListView section headers from grid headers annotated for 4.26"
+      - "Checks GirCore symbol plus deployed native export availability"
+      - "Requires a verified custom path or explicitly approved alternative, not an ordinary grid header cell/eager fallback"
+    timeout: 120
+
+  - name: "Retain GTK MAUI child trees across factory binding"
+    prompt: |
+      Our GtkSignalListItemFactory keeps native list items bounded, but OnBind
+      creates a fresh MAUI DataTemplate and OnUnbind disconnects all its handlers.
+      Scrolling still allocates heavily. Describe setup/bind/unbind/teardown
+      ownership for a retained compatible MAUI row, including stale image work.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)setup'
+      - type: output_matches
+        pattern: '(?i)unbind'
+      - type: output_matches
+        pattern: '(?i)teardown'
+      - type: output_matches
+        pattern: '(?i)retain|rebind|reus'
+      - type: output_matches
+        pattern: '(?i)generation|epoch'
+    rubric:
+      - "Separates native list-item reuse from MAUI tree/handler reuse"
+      - "Retains compatible children while undoing item-specific subscriptions/demand on unbind"
+      - "Disconnects owned content on replacement/eviction/teardown and checks binding/source generation on completion"
+    timeout: 120
+
+  - name: "Do not infer constant memory from a huge GTK model"
+    prompt: |
+      GTK's Colors demo can expose 16,777,216 logical entries. A developer says
+      this proves any MAUI GtkGridView catalog has constant-memory data
+      virtualization and cheap sorting. What does the example actually prove,
+      and what should a large local-database collection measure and bound?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)pointer|model.*memory|metadata|retain'
+      - type: output_matches
+        pattern: '(?i)sort'
+      - type: output_matches
+        pattern: '(?i)cache|window|bound'
+    rubric:
+      - "Recognizes limited native widget realization but separate model pointer-table/object retention costs"
+      - "Calls out global sorting costs rather than asserting constant-time/native-free data access"
+      - "Uses projected indexed/windowed database data and measures actual source/native/managed memory"
+    timeout: 120
+
+  - name: "Choose real WPF virtualized wrapping"
+    prompt: |
+      In the MAUI WPF backend we need 80,000 variable-width tiles in line-wrap
+      order. The existing GridItemsLayout handler picks WrapPanel. Can setting
+      IsVirtualizing=true on the list make this sufficient? Explain the native
+      panel/generator, sizing, reuse and verification path.
+    assertions:
+      - type: output_matches
+        pattern: 'VirtualizingWrapPanel|VirtualizingPanel|IScrollInfo'
+      - type: output_matches
+        pattern: '(?i)generator'
+      - type: output_matches
+        pattern: '(?i)size.*provider|metadata|size.*cache'
+    rubric:
+      - "Explains that ordinary WrapPanel is eager and a flag does not implement virtualization"
+      - "Chooses a real reviewed/custom virtualizing panel integrated with generator/scroll ownership"
+      - "Distinguishes recycled native containers from retained MAUI children and validates both"
+    timeout: 120
+
+  - name: "Keep SQLite query execution off the bind path"
+    prompt: |
+      My .NET MAUI custom list queries Microsoft.Data.Sqlite from its binder
+      using ExecuteReaderAsync and deep OFFSET. Results are sorted only by
+      CreatedUtc and multiple records share that timestamp. Explain a correct
+      scrolling query/worker design and its random-access limits.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)keyset|seek'
+      - type: output_matches
+        pattern: '(?i)unique|tie.?break'
+      - type: output_matches
+        pattern: '(?i)synchronous|synchronously'
+      - type: output_matches
+        pattern: '(?i)worker|background|off.*UI'
+    rubric:
+      - "Identifies Microsoft.Data.Sqlite's async-named methods as synchronous execution"
+      - "Uses a bounded repository-owned worker/projection and unique indexed continuation keys"
+      - "Does not promise free arbitrary index jumps or query from the UI bind/indexer"
+    timeout: 120
+
+  - name: "Make offline-first refresh one publication path"
+    prompt: |
+      Our MAUI collection appends an HTTP page directly, then appends the same
+      rows from its SQLite observer. Remote cursors are saved in a separate
+      write and old append requests can finish after refresh. Give the correct
+      source-of-truth, transaction and query-generation protocol.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)source of truth|single.*(?:source|publication)|one.*(?:source|publication)'
+      - type: output_matches
+        pattern: '(?i)transaction|atomic'
+      - type: output_matches
+        pattern: '(?i)epoch|generation|version'
+    rubric:
+      - "Publishes UI data from one database/projection path rather than HTTP plus database double append"
+      - "Commits query-scoped remote keys with corresponding rows atomically"
+      - "Refresh invalidates/rejects older append/prepend results and exposes real load errors"
+    timeout: 120
+
+  - name: "Preserve a reader's chat anchor on prepend"
+    prompt: |
+      We need a bespoke MAUI chat timeline with variable-height messages.
+      While the user reads older history, another page is prepended and the
+      current anchor message can be deleted. We must also follow new messages
+      when the user is at the bottom. Specify the anchor/fallback/follow-tail
+      protocol, including late height correction.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)anchor'
+      - type: output_matches
+        pattern: '(?i)relative.*offset|offset.*relative'
+      - type: output_matches
+        pattern: '(?i)neighbor|fallback|next.*key|previous.*key'
+      - type: output_matches
+        pattern: '(?i)follow.?tail|already.*(?:bottom|tail)|near.*bottom'
+    rubric:
+      - "Preserves keyed visible identity and relative offset, not only absolute scroll offset"
+      - "Uses an explicit surviving-neighbor fallback after anchor deletion"
+      - "Separates follow-tail from history reading and corrects measured extents without jumping"
+    timeout: 120
+
+  - name: "Observe group children and continue groups across pages"
+    prompt: |
+      Our custom MAUI grouped source has an ObservableCollection of groups,
+      each with mutable children. Existing group's children change without
+      changing the root, and HTTP pages can split a group in half. Explain
+      notifications, section identity, headers and final footers.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)child|children'
+      - type: output_matches
+        pattern: '(?i)subscribe|observ|immutable.*section'
+      - type: output_matches
+        pattern: '(?i)continu|complet'
+      - type: output_matches
+        pattern: '(?i)section.*key|group.*key|stable.*(?:section|group)'
+    rubric:
+      - "Does not assume root collection notifications observe child group mutations"
+      - "Subscribes/unsubscribes child groups or publishes immutable section snapshots"
+      - "Retains group identity across pages without duplicated headers and uses completeness for final footers"
+    timeout: 120
+
+  - name: "Reject queued work after handler or source replacement"
+    prompt: |
+      A native MAUI collection handler disconnects while its page load is
+      queued for the UI dispatcher. The same control reconnects with a new
+      MauiContext/source. Describe safe teardown/reconnect and publication:
+      cancellation alone has not prevented old rows or event leaks.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)epoch|generation|version'
+      - type: output_matches
+        pattern: '(?i)unsubscribe|detach'
+      - type: output_matches
+        pattern: '(?i)owned|ownership'
+      - type: output_matches
+        pattern: 'DisconnectHandler|(?i:disconnect)'
+    rubric:
+      - "Invalidates handler/source generation before queued publication can revive old state"
+      - "Removes root/group/item/native callbacks and handles new context without duplicate listeners"
+      - "Drains owned resources/pools but does not dispose app-shared repository/cache services"
+    timeout: 120
+
+  - name: "Report per-platform evidence without invented benchmarks"
+    prompt: |
+      The new collection builds on iOS/Android and I have one simulator screenshot.
+      Portable geometry tests pass, but I have no Release device traces; Windows
+      and Linux have not been built or run. Can I report that it is high-performing
+      and verified on every target? Give an honest completion/evidence table.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)not.?run|unverified|not.?measured|unavailable|blocked'
+      - type: output_matches
+        pattern: '(?i)Release|physical|device|native.*trace'
+      - type: output_matches
+        pattern: '(?i)memory|frame|hitch|percentile'
+    rubric:
+      - "Separates source research, builds, native behavior, lifecycle and performance evidence by target"
+      - "Does not claim all-target runtime support or high performance from screenshots/portable tests"
+      - "Names actual missing Release frame/memory/native evidence and unrun platforms"
+    timeout: 120
+
+  - name: "Use a native WPF perspective host rather than 2D transforms"
+    prompt: |
+      For the .NET MAUI WPF backend we need real perspective coverflow with
+      interactive cards, not just scale/translation. Can a VirtualizingPanel
+      assigning RenderTransform alone satisfy it? Describe a native 3D path,
+      its virtualization responsibilities and the input/accessibility proof.
+    assertions:
+      - type: output_contains
+        value: Viewport3D
+      - type: output_contains
+        value: PerspectiveCamera
+      - type: output_matches
+        pattern: 'Viewport2DVisual3D|(?i:interactive.*(?:3D|three.?dimensional))'
+      - type: output_not_matches
+        pattern: 'new\s+(?:[\w.]+\.)?PlaneProjection\s*\('
+    rubric:
+      - "Explains that WPF RenderTransform alone is a 2D path, not true perspective"
+      - "Chooses native WPF 3D/interactive visual hosting rather than inventing WinUI APIs"
+      - "Keeps a bounded realized candidate set and requires native transformed input/accessibility/Release evidence"
+    timeout: 120
+
+  - name: "Respect C# UIImage preparation affinity and full work lifetime"
+    prompt: |
+      Our .NET MAUI UIKit masonry uses Apple SDK 26.5.10318. Calling
+      GetImageByPreparingForDisplay from Task.Run throws a UI-thread exception,
+      although Apple's native guidance discusses background preparation.
+      How should the C# implementation initiate asynchronous preparation,
+      keep two preparation slots bounded, and publish only current images?
+    assertions:
+      - type: output_contains
+        value: PrepareForDisplayAsync
+      - type: output_matches
+        pattern: '(?i)dispatcher|main.?thread|UI.?thread'
+      - type: output_matches
+        pattern: '(?i)completion|until.*(?:finish|complete)|await'
+      - type: output_matches
+        pattern: '(?i)generation|epoch'
+    rubric:
+      - "Distinguishes installed C# binding affinity from native documentation"
+      - "Initiates PrepareForDisplayAsync on the owning dispatcher without moving native view operations to Task.Run"
+      - "Holds the bounded work slot through native preparation completion and safely disposes rejected results"
+      - "Validates current key, bind generation, source epoch and handler ownership before publication"
+    timeout: 120
+
+  - name: "Verify RecyclerView traversal after asynchronous RequestLayout"
+    prompt: |
+      My custom RecyclerView LayoutManager sets its offset immediately and calls
+      RequestLayout. A native proof changes offset ten times and waits only for
+      the offset field before counting created holders. It reports perfect reuse,
+      but the visible cells sometimes never changed. How should I correct the
+      proof without weakening geometry or reuse checks?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)asynchronous|queued|defer|settled'
+      - type: output_matches
+        pattern: '(?i)frame|bounds|geometry'
+      - type: output_matches
+        pattern: '(?i)visible.*(?:key|item)|(?:key|item).*visible'
+    rubric:
+      - "Explains that synchronous offset mutation is not evidence of completed native layout"
+      - "Waits for each actual native frame set and expected visible keys before the next traversal step"
+      - "Keeps independent warm/repeat creation counts and does not infer reuse from collapsed requests"
+    timeout: 120
+
+  - name: "Size a RecyclerView pool from the outgoing realization window"
+    prompt: |
+      A bespoke Android photo LayoutManager recycles all ten outgoing cards
+      before acquiring a disjoint incoming viewport. Its single compatible
+      view-type pool retains only five holders. Repeating warm forward/reverse
+      jumps keeps creating holders. Should I fix this with a pool of 100,000
+      or a strong HashSet of every holder ever created? Give a bounded fix.
+    assertions:
+      - type: output_matches
+        pattern: 'RecycledViewPool|SetMaxRecycledViews'
+      - type: output_matches
+        pattern: '(?i)viewport|overscan|realization.*window|realized.*window'
+      - type: output_matches
+        pattern: '(?i)warm|repeat|creat'
+    rubric:
+      - "Identifies pool discard during whole-window recycling rather than assuming stable IDs eliminate creation"
+      - "Sizes each compatible type's pool to measured viewport/overscan demand, not dataset size"
+      - "Avoids retaining all historical holders in diagnostic tracking and verifies bounded repeated traversal"
+    timeout: 120
+
+  - name: "Separate UIKit display image ownership from weak diagnostics"
+    prompt: |
+      Our custom UICollectionView cells own decoded UIImages. We track all
+      managed cell wrappers only with WeakReference and release images in
+      PrepareForReuse. After a long traversal, disconnect sometimes leaves
+      decoded ownership nonzero. Cells can also reenter display without a new
+      bind. Explain a bounded display/demand ownership strategy.
+    assertions:
+      - type: output_matches
+        pattern: 'WillDisplayCell|willDisplay|(?i:begin.*display)'
+      - type: output_matches
+        pattern: 'CellDisplayingEnded|didEndDisplaying|(?i:end.*display)'
+      - type: output_matches
+        pattern: '(?i)bounded|visible|displayed'
+      - type: output_matches
+        pattern: '(?i)reenter|resume|re-entry|redisplay'
+    rubric:
+      - "Does not make weak diagnostic references the sole ownership path for decoded resources"
+      - "Uses bounded displayed-cell ownership and releases image demand/pixels on end-display"
+      - "Retains binding identity separately so a still-bound cell resumes demand on redisplay"
+      - "Disconnect drains owned displayed resources and rejects queued stale publication"
+    timeout: 120
+
+  - name: "Keep HTTP fixture transport separate from native rendering"
+    prompt: |
+      The bespoke MAUI collection sample talks to an HTTP fixture and optionally
+      uses DevFlow. Does that mean its photo masonry is rendered in a WebView,
+      or that a SQLite-backed application must keep an HTTP server? Explain
+      the renderer, source, and inspection boundaries without adding files.
+    assertions:
+      - type: output_contains
+        value: UICollectionView
+      - type: output_contains
+        value: RecyclerView
+      - type: output_matches
+        pattern: '(?i)fixture|repository|data.*source'
+      - type: output_not_matches
+        pattern: 'new\s+(?:[\w.]+\.)?(?:WebView|BlazorWebView)\s*\('
+    rubric:
+      - "Identifies actual UIKit/RecyclerView rendering and explicitly rejects a WebView renderer"
+      - "Explains that HTTP is a deterministic sample source choice, not a collection-control requirement"
+      - "Adapts the app repository/loading boundary for SQLite or memory without inventing native HTTP dependency"
+      - "Keeps optional DevFlow inspection transport distinct from both renderer and production data"
+    timeout: 120
+
+  - name: "Adopt a UIKit diffable reorder instead of replaying it"
+    prompt: |
+      In a custom MAUI UIKit list, ReorderingHandlers.didReorder gives us the
+      final snapshot. We currently move the backing list by the old indices,
+      call MoveItem on UICollectionView again, and then apply another snapshot.
+      How should one native reorder become a durable repository change?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)final.*(?:snapshot|identifier)|transaction.*difference'
+      - type: output_matches
+        pattern: '(?i)backing|repository|persist'
+      - type: output_matches
+        pattern: '(?i)already|duplicate|replay|twice'
+    rubric:
+      - "Recognizes that didReorder reports an already-performed native transaction"
+      - "Adopts final identifiers/difference into one backing authority instead of replaying the move"
+      - "Separates accepted UI ordering from persistence, conflicts and failure reconciliation"
+    timeout: 120
+
+  - name: "Commit an external UIKit placeholder using its current location"
+    prompt: |
+      An external file drop inserts a UICollectionView placeholder. While its
+      NSItemProvider loads, other rows are inserted and the search query changes.
+      Our completion uses the original destinationIndexPath, updates the array,
+      calls InsertItems, and then CommitInsertion. Correct this protocol.
+    assertions:
+      - type: output_contains
+        value: CommitInsertion
+      - type: output_matches
+        pattern: '(?i)current|supplied|callback.*index|insertion.*path'
+      - type: output_matches
+        pattern: '(?i)false|removed|gone'
+      - type: output_matches
+        pattern: '(?i)epoch|generation|source'
+    rubric:
+      - "Uses the current insertion path supplied by CommitInsertion rather than a cached destination"
+      - "Updates backing data only in that callback and does not independently insert the same native item"
+      - "Handles removed placeholder/false result, import failure and old source ownership"
+    timeout: 120
+
+  - name: "Distinguish Android internal reorder from external data transfer"
+    prompt: |
+      Our RecyclerView custom MAUI control uses ItemTouchHelper for reorder.
+      We now need photos dragged into it from another Android app. A developer
+      wants to put the ViewHolder in localState and reuse OnMove for the import.
+      Explain the native transfer, URI access and target-validation boundary.
+    assertions:
+      - type: output_contains
+        value: ItemTouchHelper
+      - type: output_contains
+        value: ClipData
+      - type: output_matches
+        pattern: 'StartDragAndDrop|startDragAndDrop'
+      - type: output_matches
+        pattern: '(?i)permission|URI.*access'
+    rubric:
+      - "Uses OS drag/drop and ClipData rather than claiming ItemTouchHelper imports across apps"
+      - "Does not treat ViewHolder/localState as a cross-process representation"
+      - "Validates formats/counts/destination and requests/releases applicable URI permissions"
+    timeout: 120
+
+  - name: "Keep a custom Android manager's dragged holder visible"
+    prompt: |
+      ItemTouchHelper OnMove works in our bespoke masonry LayoutManager, but
+      dragging near a viewport edge ends suddenly when fill recycles the active
+      holder. Should we disable recycling for every item? Describe layout and
+      auto-scroll ownership without blocking on repository persistence.
+    assertions:
+      - type: output_matches
+        pattern: 'OnMoved|onMoved|(?i:dragged.*visible|active.*holder|keep.*visible)'
+      - type: output_matches
+        pattern: '(?i)auto.?scroll|edge'
+      - type: output_matches
+        pattern: '(?i)bounded|only.*active|not.*(?:all|every)'
+    rubric:
+      - "Keeps the active dragged view in the native layout/visible area after accepted moves"
+      - "Cooperates with bounded edge auto-scroll and resets interaction visual state"
+      - "Does not disable recycling globally or wait synchronously for HTTP/SQL in OnMove"
+    timeout: 120
+
+  - name: "Respect WinUI built-in reorder exclusions"
+    prompt: |
+      A Windows App SDK 1.8 custom MAUI collection has grouped ListView data,
+      another head uses VariableSizedWrapGrid, and an ItemsRepeater prototype
+      uses custom masonry. Can CanReorderItems=true solve all three?
+      Explain the supported flags and explicit implementation paths.
+    assertions:
+      - type: output_contains
+        value: AllowDrop
+      - type: output_matches
+        pattern: '(?i)group'
+      - type: output_contains
+        value: VariableSizedWrapGrid
+      - type: output_not_matches
+        pattern: '<ItemsRepeater[^>]*CanReorderItems\s*='
+    rubric:
+      - "Identifies grouped and VariableSizedWrapGrid built-in reorder exclusions"
+      - "Does not invent ListViewBase reorder flags on ItemsRepeater/ItemsView"
+      - "Explains app-owned transfer/targeting/mutation when the built-in mechanism does not fit"
+    timeout: 120
+
+  - name: "Do not copy WinUI Gallery uniform drop geometry into variable items"
+    prompt: |
+      We copied Gallery ListView_Drop into a variable-height paged MAUI control.
+      It gets ContainerFromIndex(0), divides pointer Y by that height, and gets
+      the destination container. Deep scroll returns null and grouping changes
+      indices. How should the drop destination be computed?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)unrealized|virtualiz|null'
+      - type: output_matches
+        pattern: '(?i)geometry|hit.?test|bounds'
+      - type: output_matches
+        pattern: '(?i)key|neighbou?r|section'
+    rubric:
+      - "Identifies the sample's uniform-height and realized-container assumptions"
+      - "Uses actual visible/indexed geometry and coordinate conversion without realizing all rows"
+      - "Resolves a keyed section/neighbour destination instead of caching old native positions"
+    timeout: 120
+
+  - name: "Register and validate modern AppKit collection drops"
+    prompt: |
+      Our native macOS MAUI NSCollectionView delegate implements AcceptDrop,
+      but drops never arrive. We also copied single NSIndexSet indices from an
+      old one-section sample into grouped data. Describe the correct native
+      registration, validation and section-aware source boundary.
+    assertions:
+      - type: output_matches
+        pattern: 'RegisterForDraggedTypes|registerForDraggedTypes'
+      - type: output_matches
+        pattern: 'ValidateDrop|validateDrop'
+      - type: output_matches
+        pattern: 'NSIndexPath|IndexPath|(?i:index.?path)'
+    rubric:
+      - "Requires registered accepted pasteboard types and validation as well as acceptance"
+      - "Uses modern section/index-path APIs rather than legacy single-section indices"
+      - "Explains proposed on/before operation and keyed source mutation without importing UIKit delegates"
+    timeout: 120
+
+  - name: "Move GTK model data once rather than recycled row widgets"
+    prompt: |
+      In a MAUI GtkListView factory we attach GtkDragSource to every row.
+      We want to drag the child widget itself to another list and delete its
+      model object in both Drop and drag-end delete_data. Rows recycle during
+      auto-scroll. Give a model-backed, bounded transfer/reorder protocol.
+    assertions:
+      - type: output_matches
+        pattern: 'GListModel|GListStore|(?i:model)'
+      - type: output_matches
+        pattern: '(?i)setup|teardown|unbind'
+      - type: output_matches
+        pattern: '(?i)delete_data|drag.?end|once|duplicate'
+    rubric:
+      - "Transfers stable typed model identity/data rather than moving factory-owned recycled widgets"
+      - "Attaches controllers once and cleans current bind/teardown ownership"
+      - "Has one source-removal authority and does not double-delete an internally committed move"
+    timeout: 120
+
+  - name: "Do not equate WPF Move effects with source reordering"
+    prompt: |
+      Our WPF MAUI list sets DragEventArgs.Effects=Move and returns Move from
+      DoDragDrop, but no source data changed. Should ListBox have a
+      CanReorderItems switch like WinUI? Explain the native mutation and cleanup.
+    assertions:
+      - type: output_contains
+        value: DoDragDrop
+      - type: output_matches
+        pattern: '(?i)effect.*(?:intent|communicat|negotiat)|not.*(?:move|mutat).*data'
+      - type: output_matches
+        pattern: '(?i)source|projection|collection'
+      - type: output_matches
+        pattern: '(?i)adorner|auto.?scroll|cleanup|threshold'
+    rubric:
+      - "Explains that WPF effect values communicate outcomes but do not mutate the source"
+      - "Does not invent WinUI CanReorderItems as a WPF ListBox property"
+      - "Uses explicit keyed mutation, movement thresholds and bounded interaction cleanup"
+    timeout: 120
+
+  - name: "Respect cursor and computed-order limits during reorder"
+    prompt: |
+      A custom MAUI list shows a 500-record window from a server cursor sorted
+      by score. Users should drag an item to global position 50,000, and we plan
+      to save its visible array index as rank while old pages keep appending.
+      Give an honest ordering/paging contract rather than invented random access.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)manual.*order|computed.*sort|server.*order|canonical'
+      - type: output_matches
+        pattern: '(?i)cursor|continuation'
+      - type: output_matches
+        pattern: '(?i)neighbou?r|revision|version|invalidate'
+    rubric:
+      - "Rejects visible indices as global durable ranks and discloses unavailable target/seek capability"
+      - "Defines manual order or a real domain operation instead of arbitrary reorder under score sorting"
+      - "Invalidates/version-reconciles order-dependent cursors and late page results"
+    timeout: 120
+
+  - name: "Preserve a noncontiguous selected block on reorder"
+    prompt: |
+      In a grouped native-backed MAUI control we drag selected keys A, C and F
+      before H. Headers are also in the flattened native adapter. Our code
+      decrements the destination index once, then moves each old index.
+      Specify an identity-based block move and header/group rules.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)relative.*order|block.*order|preserv.*order'
+      - type: output_matches
+        pattern: '(?i)surviv|neighbou?r|remove.*(?:keys|items|block)'
+      - type: output_matches
+        pattern: '(?i)header|chrome|section'
+    rubric:
+      - "Captures keys in declared order and resolves the destination after removing the moving keys"
+      - "Preserves block order and defines self-drop and allowed cross-group behavior"
+      - "Excludes chrome from movable data and publishes group membership/geometry coherently"
+    timeout: 120
+
+  - name: "Prevent deleted rows returning from a same-epoch append"
+    prompt: |
+      We optimistically delete key D from a bespoke MAUI cursor feed while
+      an append is in flight. The append returns D again under the same query
+      epoch. Undo also blindly inserts D at its former index after other edits.
+      Cancellation alone has not worked. Correct the source and undo policy.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)tombstone|overlay|mutation.*revision|reconcil'
+      - type: output_matches
+        pattern: '(?i)neighbou?r|surviv|operation.*(?:ID|identifier)'
+      - type: output_matches
+        pattern: '(?i)failure|pending|acknowledg'
+    rubric:
+      - "Recognizes that a query epoch alone does not protect same-epoch accepted local mutations"
+      - "Reconciles fetched data against accepted deletes or invalidates/reloads appropriately"
+      - "Uses bounded operation/key/neighbour-based undo rather than an obsolete index or full old snapshot"
+    timeout: 120
+
+  - name: "Do not attach UIKit list swipe APIs to arbitrary masonry"
+    prompt: |
+      Our custom UICollectionViewLayout displays Pinterest masonry. To add
+      delete actions, can we implement UITableViewDelegate trailing-swipe methods
+      or just set a UICollectionLayoutListConfiguration provider on this layout?
+      Explain a correct native action path and destructive full-swipe policy.
+    assertions:
+      - type: output_contains
+        value: UICollectionLayoutListConfiguration
+      - type: output_matches
+        pattern: '(?i)list.*(?:section|layout)|custom.*(?:reveal|gesture|action)'
+      - type: output_matches
+        pattern: 'PerformsFirstActionWithFullSwipe|performsFirstActionWithFullSwipe|(?i:full.?swipe)'
+    rubric:
+      - "Does not claim UITableView swipe delegates or native list configuration automatically govern arbitrary masonry"
+      - "Chooses an explicit native reveal/action or suitable retained SwipeView path without changing required geometry"
+      - "Treats destructive/full-swipe activation, failure and undo as explicit policy"
+    timeout: 120
+
+  - name: "Report backend gesture substitutions honestly"
+    prompt: |
+      In maui-labs AppKit, GTK and WPF, RefreshView and SwipeView handlers are
+      registered. Can our new skill promise native pull-to-refresh, every
+      Reveal/Execute direction, and portable drag/drop recognizers on all three?
+      Give the inspected capability table and actual implementation gaps.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)spinner|indicator|progress'
+      - type: output_matches
+        pattern: '(?i)context.?menu'
+      - type: output_matches
+        pattern: '(?i)partial|gap|missing|not.*parity'
+    rubric:
+      - "Identifies AppKit/WPF indicator refresh and GTK button/spinner rather than certified pull gestures"
+      - "Identifies WPF SwipeView context-menu substitution and partial AppKit/GTK horizontal reveal"
+      - "Separates native toolkit drag capability from absent/partial MAUI gesture bridges and unrun runtime proof"
+    timeout: 120
+
+  - name: "Keep refresh completion owned by the current operation"
+    prompt: |
+      Query A refresh starts, then query B refresh replaces it. A eventually
+      completes and its finally sets IsRefreshing=false while B still loads.
+      An old native refresh deferral is also leaked on cancellation. Describe
+      both data/indicator ownership and native request completion.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)owner|operation.*(?:ID|identifier)|generation|epoch'
+      - type: output_matches
+        pattern: '(?i)deferral|native.*request'
+      - type: output_matches
+        pattern: '(?i)cancel|teardown|disconnect'
+    rubric:
+      - "Rejects A's data and shared-state completion when B is the accepted owner"
+      - "Completes the old native request/deferral without incorrectly stopping B's app-owned refresh state"
+      - "Handles success, failure, cancellation and disconnect with explicit load/error state"
+    timeout: 120
+
+  - name: "Avoid RefreshView double dispatch and the already-true guard"
+    prompt: |
+      With MAUI 10.0.41, our refresh button sets RefreshView.IsRefreshing=true
+      and calls RefreshCommand.Execute. The command starts with
+      if (IsRefreshing) return. Pull sometimes leaves the spinner running
+      without loading, while the button can issue duplicate requests.
+      What is the correct state/entry-point protocol?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)already|before.*command|triggers|invokes'
+      - type: output_matches
+        pattern: '(?i)single.?flight|separate.*(?:owner|operation|guard)|request.*(?:ID|identifier)'
+      - type: output_contains
+        value: IsRefreshing
+    rubric:
+      - "Explains that IsRefreshing=true itself invokes Command in the inspected version"
+      - "Does not use the public already-true indicator flag as the work-start guard"
+      - "Uses one invocation route and separate operation ownership, with error/cancel completion"
+    timeout: 120
+
+  - name: "Keep a menu's intended item through renderer reuse"
+    prompt: |
+      A native item menu opens for key A. Its pooled row is rebound to B,
+      permission changes, and the user selects Delete after a confirmation.
+      We read the row's current BindingContext and delete B. Give the
+      correct action target, validation and lifetime protocol.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)intended|captur.*key|original.*key'
+      - type: output_matches
+        pattern: '(?i)permission|revalidat|revision'
+      - type: output_matches
+        pattern: '(?i)source|epoch|scope'
+    rubric:
+      - "Captures A's stable key/scope and revalidates that target rather than retargeting to B"
+      - "Rechecks current permission/existence/pending state after asynchronous confirmation"
+      - "Cleans up owned menu/preview callbacks and preserves explicit failure/cancellation behavior"
+    timeout: 120
+
+  - name: "Bridge WPF popup context rather than row ancestor binding"
+    prompt: |
+      A shared ContextMenu in our WPF MAUI collection uses RelativeSource
+      FindAncestor to reach the row view model. It sometimes keeps the first
+      row's DataContext and deletes the wrong item after recycling. What native
+      context bridge and action-target rules should the skill require?
+    assertions:
+      - type: output_contains
+        value: PlacementTarget
+      - type: output_matches
+        pattern: '(?i)separate.*tree|popup.*tree|not.*(?:visual|logical).*tree'
+      - type: output_matches
+        pattern: '(?i)key|current.*context'
+    rubric:
+      - "Identifies popup-tree separation rather than assuming row visual-tree ancestors are available"
+      - "Resolves placement/current context on opening and captures intended model keys for the action"
+      - "Does not retain the first row's context in a reused/shared menu or bypass command validation"
+    timeout: 120
+
+  - name: "Handle UIKit multi-item and empty-space context callbacks"
+    prompt: |
+      On iOS 16 our collection context-menu callback receives an NSIndexPath
+      array. We currently always take indexPaths[0] and delete SelectedItem.
+      Explain zero/one/multiple target cases and what older iOS targets require.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)empty.*space|zero'
+      - type: output_matches
+        pattern: '(?i)multiple|selection|selected.*keys'
+      - type: output_matches
+        pattern: '(?i)16|13|availability|version'
+    rubric:
+      - "Treats zero paths as empty-space context, one as item context and multiple as selected content"
+      - "Translates native paths to stable intended keys rather than always using SelectedItem"
+      - "Version-gates the iOS 16 multi-item route and does not invent it on older deployments"
+    timeout: 120
+
+  - name: "Provide a non-drag pointer alternative rather than keyboard only"
+    prompt: |
+      Our bespoke MAUI collection supports drag reordering and Ctrl+Arrow keys,
+      but touch and eye-gaze users cannot perform a hold-and-drag. Is keyboard
+      equivalence enough? Propose an equivalent non-drag operation, preserving
+      the native interaction and source contract without claiming certification.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)click|tap|single.?pointer'
+      - type: output_matches
+        pattern: '(?i)move.*(?:up|down|group)|select.*place'
+      - type: output_matches
+        pattern: '(?i)same.*command|same.*(?:intent|mutation)|equivalent'
+    rubric:
+      - "Distinguishes keyboard support from clickable/tappable single-pointer non-drag access"
+      - "Provides equivalent Move up/down/to-group or select-then-place through the same keyed command"
+      - "Retains keyboard/screen-reader and focus behavior without declaring native legal/performance certification"
+    timeout: 120

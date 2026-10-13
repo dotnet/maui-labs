@@ -200,6 +200,13 @@ Direct plugin installation remains available for agent runtimes that support plu
 
 See [plugins/](plugins/) for the full catalog and [plugins/CONTRIBUTING.md](plugins/CONTRIBUTING.md) for how to add skills.
 
+The [bespoke collections skill](plugins/dotnet-maui/skills/maui-bespoke-collections/SKILL.md)
+guides scenario-specific native collection handlers, reuse, geometry, and bounded
+data loading. Its recipes require target-specific runtime and performance evidence;
+they are not packaged or certified native controls.
+The nonshipping [mobile photo-masonry example](samples/BespokeCollections/README.md)
+uses UIKit and RecyclerView, with bounded data/images and explicit behavior evidence.
+
 ## Nightly Builds
 
 Preview packages from `main` are published automatically to the dotnet10 feed:
@@ -226,6 +233,11 @@ For the formal DevFlow HTTP and WebSocket contract, see [`docs/DevFlow/spec`](do
 
 For live app inspection and host setup, see the
 [MAUI DevFlow Inspector guide](docs/DevFlow/inspector.md).
+
+For native collection layouts, virtualization, data-loading patterns, and the
+bespoke-control skill plan, see the [collection research](docs/collections/README.md).
+For drag/reorder, swipe deletion, refresh and native item actions, see the
+[collection interaction research](docs/collections/interactions.md).
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
 the [`IChatClient` playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for live

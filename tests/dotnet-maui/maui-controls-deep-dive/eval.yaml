@@ -1,0 +1,153 @@
+scenarios:
+  - name: "Add reorder intent without inventing a stock CollectionView flag"
+    prompt: |
+      My stock .NET 10 MAUI CollectionView scrolls correctly. I want local
+      drag reordering in a small manual-order list. Can I set CanReorderItems
+      or attach DragGestureRecognizer and rely on automatic ItemsSource moves?
+      Explain the smallest command/data approach, not a new handler framework.
+    assertions:
+      - type: output_contains
+        value: CollectionView
+      - type: output_matches
+        pattern: '(?i)key|neighbou?r|source.*move|ItemsSource'
+      - type: output_not_matches
+        pattern: '<CollectionView[^>]*CanReorderItems\s*='
+    rubric:
+      - "Keeps the working stock control and does not invent a portable CanReorderItems property"
+      - "Explains that drag/drop recognizers transfer data and the app must apply accepted source ordering"
+      - "Uses stable intended keys, UI-dispatcher mutation and non-drag alternatives"
+    timeout: 120
+
+  - name: "Do not promise mouse swipe on stock Windows SwipeView"
+    prompt: |
+      We use SwipeView around CollectionView rows on Windows. Touch delete
+      works, but mouse users cannot reveal it. Should SwipeGestureRecognizer
+      make the same built-in control work? Give accessible deletion entry
+      points while keeping the existing row source and command.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)touch'
+      - type: output_matches
+        pattern: '(?i)context.*menu|visible.*(?:button|action)|keyboard'
+      - type: output_matches
+        pattern: '(?i)same.*command|key'
+    rubric:
+      - "Identifies the documented stock Windows touch-swipe limit"
+      - "Does not equate a direction gesture event with a complete SwipeView reveal implementation"
+      - "Provides pointer/keyboard/visible actions through the same keyed delete policy"
+    timeout: 120
+
+  - name: "Disable refresh without disabling the collection subtree"
+    prompt: |
+      On MAUI 10.0.41 we need to temporarily prevent pull refresh while rows,
+      selection and their buttons remain usable. RefreshView.IsEnabled=false
+      makes the children unusable. Which supported property and command-state
+      rules fit, and what should custom backends be checked for?
+    assertions:
+      - type: output_contains
+        value: IsRefreshEnabled
+      - type: output_matches
+        pattern: '(?i)CanExecute|command'
+      - type: output_matches
+        pattern: '(?i)backend|resolved|version|mapping'
+    rubric:
+      - "Uses IsRefreshEnabled from the inspected .NET 10 source rather than disabling the subtree"
+      - "Distinguishes gesture enabling, command execution and completion of current work"
+      - "Does not assume every custom backend maps the newer property or supplies native pull"
+    timeout: 120
+
+  - name: "Start refresh once despite the already-active public indicator"
+    prompt: |
+      Our .NET 10 refresh command begins with if (IsRefreshing) return.
+      The button also sets RefreshView.IsRefreshing=true before Execute.
+      Sometimes no work happens, sometimes there are two HTTP requests.
+      Explain MAUI's trigger and the correct work-start/completion ownership.
+    assertions:
+      - type: output_contains
+        value: IsRefreshing
+      - type: output_matches
+        pattern: '(?i)already|triggers|invokes|before.*command'
+      - type: output_matches
+        pattern: '(?i)single.?flight|separate.*(?:guard|operation|owner)'
+    rubric:
+      - "Explains the public IsRefreshing transition can already invoke Refreshing/Command"
+      - "Does not use the indicator flag, set before command entry, as the work-start guard"
+      - "Chooses one invocation route and separate operation ownership, completing errors/cancellation"
+    timeout: 120
+
+  - name: "Reject old refresh completion without discarding useful data"
+    prompt: |
+      A stock CollectionView refresh A is superseded by B. A's finally clears
+      IsRefreshing, and an old page brings back a locally deleted item.
+      We currently clear all rows at every refresh. Specify owner/reconciliation
+      policy while retaining the working stock control.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)owner|generation|epoch|operation.*(?:ID|identifier)'
+      - type: output_matches
+        pattern: '(?i)reconcil|tombstone|overlay|mutation.*revision'
+      - type: output_matches
+        pattern: '(?i)retain|preserv|same.?query'
+    rubric:
+      - "Keeps B's state/data protected from A's late completion"
+      - "Reconciles accepted local edits instead of relying only on query generation"
+      - "Defines same-query content/anchor retention versus deliberate query-reset policy without replacing the control"
+    timeout: 120
+
+  - name: "Do not prescribe desktop ContextFlyout as mobile long press"
+    prompt: |
+      We need More actions on stock CollectionView rows on Android and iOS.
+      A snippet sets FlyoutBase.ContextFlyout and promises long-press menus
+      everywhere. What stock/native presentation choices and item-target
+      protocol should we use without adding a WebView?
+    assertions:
+      - type: output_matches
+        pattern: '(?i)Catalyst|Windows|desktop'
+      - type: output_matches
+        pattern: '(?i)action.?sheet|More.*button|visible.*(?:button|action)|native.*(?:menu|provider)'
+      - type: output_matches
+        pattern: '(?i)key|intended|context'
+    rubric:
+      - "Identifies stock ContextFlyout's documented Catalyst/Windows scope rather than automatic mobile support"
+      - "Offers visible actions/action sheet or actually implemented native providers without web rendering"
+      - "Preserves intended item keys across confirmation/reuse rather than always using SelectedItem"
+    timeout: 120
+
+  - name: "Version-check dynamic context menus instead of a blanket ban"
+    prompt: |
+      The context-menu docs say runtime add/remove is impossible, but our
+      MAUI 10.0.41 Windows MenuFlyout changes and Catalyst does not. Should
+      the skill declare universal support or universal prohibition? Explain
+      the platform-specific source evidence and validation boundary.
+    assertions:
+      - type: output_matches
+        pattern: '(?i)Windows'
+      - type: output_matches
+        pattern: '(?i)UIKit|Catalyst'
+      - type: output_matches
+        pattern: '(?i)Add|Remove|Insert|empty|no.?op'
+    rubric:
+      - "Recognizes implemented Windows updates and empty UIKit update methods in inspected source"
+      - "Does not flatten the documentation warning into universal runtime support/prohibition"
+      - "Requires consuming-version/backend verification and appropriate native rebuild/update strategy"
+    timeout: 120
+
+  - name: "Keep typed template commands and intended item keys"
+    prompt: |
+      Our CollectionView DataTemplate has x:DataType=OrderRow. A SwipeItem
+      binds DeleteCommand directly and fails because the command is on
+      OrdersViewModel. After async confirmation we delete a cached index.
+      Correct binding context and mutation targeting without dropping
+      compiled bindings or replacing the list.
+    assertions:
+      - type: output_matches
+        pattern: 'RelativeSource|(?i:ancestor.*context|typed.*command.*bridge)'
+      - type: output_contains
+        value: x:DataType
+      - type: output_matches
+        pattern: '(?i)key|Id|identifier'
+    rubric:
+      - "Uses an explicit correctly typed view-model command source while retaining item template typing"
+      - "Passes/captures intended stable item identity and revalidates after confirmation"
+      - "Does not replace the working CollectionView or silently disable compiled binding"
+    timeout: 120
