@@ -899,6 +899,159 @@ public class DevFlowAgentServiceLifecycleTests
     }
 
     [Theory]
+    [InlineData("tree", false)]
+    [InlineData("tree", true)]
+    [InlineData("managed-tree", false)]
+    [InlineData("managed-tree", true)]
+    [InlineData("envelope", false)]
+    [InlineData("envelope", true)]
+    [InlineData("query", false)]
+    [InlineData("query", true)]
+    [InlineData("css-query", false)]
+    [InlineData("css-query", true)]
+    [InlineData("element", false)]
+    [InlineData("element", true)]
+    [InlineData("registered-element", false)]
+    [InlineData("registered-element", true)]
+    public async Task ManagedCapture_ChangesOutsideUiCallback_DoNotRejectRead(
+        string surface,
+        bool changeAfterCallback)
+    {
+        var port = GetFreePort();
+        var registry = new RegisteredNativeElementRegistry();
+        using var service = new ManagedCaptureAgentService(new AgentOptions { Port = port }, registry);
+        using var client = new AgentClient("localhost", port);
+        var button = new Button { AutomationId = "CaptureTarget", Text = "Before" };
+        var action = new MenuItem { Text = "Before" };
+        var window = new Window(new ContentPage { Content = button });
+        var app = new Application();
+        typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+        var registeredId = registry.Register(window, action, "DialogAction");
+        var dispatcher = new ControlledCaptureDispatcher();
+        service.StartServerOnly(dispatcher);
+        service.BindApp(app);
+        Assert.NotNull(await WaitForStatusAsync(client));
+        Assert.Equal(200, (await service.ReadAsync("tree", registeredId)).StatusCode);
+
+        var continuations = new CaptureContinuationContext();
+        dispatcher.IsDispatchRequired = true;
+        var read = continuations.Run(() => service.ReadAsync(surface, registeredId));
+        Assert.True(dispatcher.HasPendingDispatch);
+
+        void ChangeUi()
+        {
+            button.Text = "After";
+            action.Text = "After";
+            registry.Register(window, action, "DialogAction", "Updated");
+        }
+
+        if (!changeAfterCallback)
+            ChangeUi();
+        dispatcher.RunPendingDispatch();
+        if (changeAfterCallback)
+            ChangeUi();
+        dispatcher.IsDispatchRequired = false;
+        await continuations.CompleteAsync(read);
+
+        var response = await read;
+        Assert.Equal(200, response.StatusCode);
+        var targetId = surface == "registered-element" ? registeredId : button.AutomationId;
+        var captured = ReadCapturedElement(response, targetId);
+        Assert.Equal(changeAfterCallback ? "Before" : "After", captured.Text);
+        Assert.True(captured.CaptureEpoch > 0);
+        Assert.Equal(changeAfterCallback ? registry.Generation - 1 : registry.Generation, captured.RegistryGeneration);
+        Assert.Equal(0, captured.WindowId);
+
+        var tap = await client.TapResultAsync(
+            captured.Id,
+            captured.CaptureEpoch,
+            captured.RegistryGeneration);
+        if (changeAfterCallback)
+        {
+            Assert.False(tap.Success);
+            Assert.Equal("stale-capture-epoch", tap.Reason);
+        }
+        else
+        {
+            Assert.True(tap.Success, $"Tap failed: {tap.Error}; reason={tap.Reason}");
+        }
+
+        var fresh = await service.ReadAsync(surface, registeredId);
+        var unchanged = await service.ReadAsync(surface, registeredId);
+        Assert.Equal(200, fresh.StatusCode);
+        Assert.Equal(200, unchanged.StatusCode);
+        var first = ReadCapturedElement(fresh, targetId);
+        var second = ReadCapturedElement(unchanged, targetId);
+        Assert.Equal(first.Text, second.Text);
+        Assert.Equal(first.RegistryGeneration, second.RegistryGeneration);
+        Assert.True(second.CaptureEpoch > first.CaptureEpoch);
+    }
+
+    [Theory]
+    [InlineData("tree", false)]
+    [InlineData("tree", true)]
+    [InlineData("managed-tree", false)]
+    [InlineData("managed-tree", true)]
+    [InlineData("envelope", false)]
+    [InlineData("envelope", true)]
+    [InlineData("query", false)]
+    [InlineData("query", true)]
+    [InlineData("css-query", false)]
+    [InlineData("css-query", true)]
+    [InlineData("element", false)]
+    [InlineData("element", true)]
+    public async Task ManagedCapture_ChangeDuringWalk_ReturnsConflict(string surface, bool registryChange)
+    {
+        var registry = new RegisteredNativeElementRegistry();
+        using var service = new ManagedCaptureAgentService(
+            new AgentOptions { Port = GetFreePort() },
+            registry);
+        var button = new CaptureChangingButton { AutomationId = "CaptureTarget", Text = "Before" };
+        var window = new Window(new ContentPage { Content = button });
+        var app = new Application();
+        typeof(Application).GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [window]);
+        var native = new object();
+        var registeredId = registry.Register(window, native, "Dialog");
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(app);
+        Assert.Equal(200, (await service.ReadAsync("tree", registeredId)).StatusCode);
+
+        button.OnRead = () =>
+        {
+            if (registryChange)
+                registry.Register(window, native, "Dialog", "Updated");
+            else
+                button.Text = "During";
+        };
+
+        var response = await service.ReadAsync(surface, registeredId);
+        Assert.Equal(409, response.StatusCode);
+        using var error = JsonDocument.Parse(response.Body!);
+        Assert.Equal("capture-changed-during-read", error.RootElement.GetProperty("reason").GetString());
+        var details = error.RootElement.GetProperty("details");
+        var generation = registryChange ? "RegistryGeneration" : "ExternalMutationGeneration";
+        Assert.True(
+            details.GetProperty("current" + generation).GetInt64()
+                > details.GetProperty("captured" + generation).GetInt64());
+        Assert.Equal(200, (await service.ReadAsync(surface, registeredId)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ManagedCapture_MissingElement_ReturnsNotFound()
+    {
+        using var service = new ManagedCaptureAgentService(
+            new AgentOptions { Port = GetFreePort() },
+            new RegisteredNativeElementRegistry());
+        service.StartServerOnly(new ImmediateDispatcher());
+        service.BindApp(new Application());
+
+        Assert.Equal(404, (await service.ReadAsync("element", "missing")).StatusCode);
+        Assert.Equal(404, (await service.ReadAsync("registered-element", "native:registered:missing")).StatusCode);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task TreeSnapshot_SizingOnlyChanges_AdvanceDiagnosticInputsWithoutChangingGeometry(bool includeNative)
@@ -1542,6 +1695,111 @@ public class DevFlowAgentServiceLifecycleTests
 
             foreach (var child in Flatten(element.Children))
                 yield return child;
+        }
+    }
+
+    private static DriverElementInfo ReadCapturedElement(HttpResponse response, string id)
+    {
+        using var document = JsonDocument.Parse(response.Body!);
+        var root = document.RootElement;
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("elements", out var elements))
+            root = elements;
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var captures = root.ValueKind == JsonValueKind.Array
+            ? JsonSerializer.Deserialize<List<DriverElementInfo>>(root.GetRawText(), options)!
+            : [JsonSerializer.Deserialize<DriverElementInfo>(root.GetRawText(), options)!];
+        return Assert.Single(Flatten(captures), element => element.Id == id);
+    }
+
+    private sealed class ManagedCaptureAgentService(
+        AgentOptions options,
+        RegisteredNativeElementRegistry registry)
+        : MauiDevFlowAgentService(options, registry, nativeElementSubscription: null)
+    {
+        protected override VisualTreeWalker CreateTreeWalker() => new(NativeElementRegistry!);
+
+        public Task<HttpResponse> ReadAsync(string surface, string registeredId)
+            => surface switch
+            {
+                "tree" => HandleTree(new HttpRequest()),
+                "managed-tree" => HandleTree(new HttpRequest { QueryParams = { ["native"] = "false" } }),
+                "envelope" => HandleTree(new HttpRequest { QueryParams = { ["envelope"] = "true" } }),
+                "query" => HandleQuery(new HttpRequest { QueryParams = { ["automationId"] = "CaptureTarget" } }),
+                "css-query" => HandleQuery(new HttpRequest { QueryParams = { ["selector"] = "#CaptureTarget" } }),
+                "element" => HandleElement(new HttpRequest { RouteParams = { ["id"] = "CaptureTarget" } }),
+                "registered-element" => HandleElement(new HttpRequest { RouteParams = { ["id"] = registeredId } }),
+                _ => throw new ArgumentOutOfRangeException(nameof(surface))
+            };
+    }
+
+    private sealed class CaptureChangingButton : Button, IVisualTreeElement
+    {
+        public Action? OnRead { get; set; }
+
+        IReadOnlyList<IVisualTreeElement> IVisualTreeElement.GetVisualChildren()
+        {
+            var onRead = OnRead;
+            OnRead = null;
+            onRead?.Invoke();
+            return [];
+        }
+
+        IVisualTreeElement? IVisualTreeElement.GetVisualParent() => Parent;
+    }
+
+    private sealed class ControlledCaptureDispatcher : IDispatcher
+    {
+        private Action? _pending;
+        public bool IsDispatchRequired { get; set; }
+        public bool HasPendingDispatch => _pending != null;
+
+        public bool Dispatch(Action action)
+        {
+            Assert.Null(_pending);
+            _pending = action;
+            return true;
+        }
+
+        public void RunPendingDispatch()
+        {
+            var action = _pending;
+            _pending = null;
+            Assert.NotNull(action);
+            action();
+        }
+
+        public bool DispatchDelayed(TimeSpan delay, Action action) => Dispatch(action);
+        public IDispatcherTimer CreateTimer() => new ImmediateDispatcherTimer();
+    }
+
+    private sealed class CaptureContinuationContext : SynchronizationContext
+    {
+        private readonly System.Threading.Channels.Channel<Action> _continuations =
+            System.Threading.Channels.Channel.CreateUnbounded<Action>();
+
+        public override void Post(SendOrPostCallback callback, object? state)
+            => _continuations.Writer.TryWrite(() => callback(state));
+
+        public T Run<T>(Func<T> action)
+        {
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try { return action(); }
+            finally { SetSynchronizationContext(previous); }
+        }
+
+        public async Task CompleteAsync(Task task)
+        {
+            while (!task.IsCompleted)
+            {
+                var continuation = await _continuations.Reader.ReadAsync().AsTask()
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+                Run(() =>
+                {
+                    continuation();
+                    return true;
+                });
+            }
         }
     }
 

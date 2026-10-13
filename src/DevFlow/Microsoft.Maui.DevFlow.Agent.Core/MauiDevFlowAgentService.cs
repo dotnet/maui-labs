@@ -503,24 +503,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             || !bool.TryParse(native, out var parsedNative)
             || parsedNative;
 
-        var capture = BeginUiCapture(windowIndex);
-        // The managed-only walk still runs under the capture lifecycle so `native=false`
-        // callers get the same stale-capture rejection contract as the default path.
-        var tree = includeNative
-            ? await CaptureUiOrNativeAsync(
-                () => _treeWalker.WalkTree(_app, maxDepth, windowIndex),
-                hwnds => _treeWalker.WalkNativeTree(hwnds, maxDepth),
-                windowIndex)
-            : await DispatchAsync(() =>
-            {
-                var result = _treeWalker.WalkTree(_app, maxDepth, windowIndex);
-                RefreshCaptureInvalidationHooks(windowIndex);
-                return result;
-            });
-        StampCaptureMetadata(tree, capture);
-        if (!CommitUiCapture(capture))
-            return BuildCaptureChangedResponse(capture);
-        return envelope
+        HttpResponse FormatTree(List<ElementInfo> tree, UiCaptureContext capture) => envelope
             ? HttpResponse.Json(new Dictionary<string, object?>
             {
                 ["revision"] = VisualTreeRevision.ComputeTree(tree),
@@ -529,6 +512,30 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 ["elements"] = tree
             })
             : HttpResponse.Json(tree);
+
+        if (!includeNative || !_treeWalker.SupportsNativeElements)
+        {
+            var managed = await CaptureManagedUiAsync(
+                _ =>
+                {
+                    var result = _treeWalker.WalkTree(_app, maxDepth, windowIndex);
+                    RefreshCaptureInvalidationHooks(windowIndex);
+                    return result;
+                },
+                StampCaptureMetadata,
+                windowIndex);
+            return managed.Error ?? FormatTree(managed.Result, managed.Capture);
+        }
+
+        var capture = BeginUiCapture(windowIndex);
+        var tree = await CaptureUiOrNativeAsync(
+            () => _treeWalker.WalkTree(_app, maxDepth, windowIndex),
+            hwnds => _treeWalker.WalkNativeTree(hwnds, maxDepth),
+            windowIndex);
+        StampCaptureMetadata(tree, capture);
+        if (!CommitUiCapture(capture))
+            return BuildCaptureChangedResponse(capture);
+        return FormatTree(tree, capture);
     }
 
     protected override async Task<HttpResponse> HandleElement(HttpRequest request)
@@ -536,6 +543,20 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
         if (!request.RouteParams.TryGetValue("id", out var id))
             return HttpResponse.Error("Element ID required");
+
+        if (!_treeWalker.SupportsNativeElements)
+        {
+            var managed = await CaptureManagedUiAsync(
+                context =>
+                {
+                    RefreshCaptureInvalidationHooks(windowIndex: null);
+                    return ReadManagedElementInfo(id, _app, context);
+                },
+                (element, context) => StampCaptureMetadata(element!, context));
+            return managed.Error ?? (managed.Result != null
+                ? HttpResponse.Json(managed.Result)
+                : HttpResponse.NotFound($"Element '{id}' not found"));
+        }
 
         var capture = BeginUiCapture(windowIndex: null);
         await DispatchAsync(() =>
@@ -576,33 +597,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return nativeElement != null ? HttpResponse.Json(nativeElement) : HttpResponse.NotFound($"Element '{id}' not found");
         }
 
-        var element = await DispatchAsync(() =>
-        {
-            var el = _treeWalker.GetElementById(id, _app);
-            if (el is IVisualTreeElement vte)
-            {
-                var info = _treeWalker.WalkElement(vte, null, 1, 2);
-
-                // The depth-limited detail subtree has no parent-path context to map source
-                // directly, so source is transferred from a full source-mapped walk. That walk is
-                // expensive and this is an interactive path, so the id -> source map is cached
-                // until the UI actually changes.
-                if (info != null && _treeWalker.HasActiveSourceMaps)
-                {
-                    var sources = GetCachedSourceMap(capture);
-                    if (sources.Count > 0)
-                        VisualTreeWalker.ApplySourceById(info, sources);
-                }
-
-                return (object?)info;
-            }
-
-            // Synthetic elements: build detail from marker
-            if (el != null)
-                return (object?)_treeWalker.BuildSyntheticElementInfo(id, el);
-
-            return null;
-        });
+        var element = await DispatchAsync(() => ReadManagedElementInfo(id, _app, capture));
 
         if (element is ElementInfo elementInfo)
         {
@@ -611,6 +606,35 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 return BuildCaptureChangedResponse(capture);
         }
         return element != null ? HttpResponse.Json(element) : HttpResponse.NotFound($"Element '{id}' not found");
+    }
+
+    private ElementInfo? ReadManagedElementInfo(string id, Application app, UiCaptureContext capture)
+    {
+        if (IsRegisteredNativeElementId(id))
+        {
+            var registered = _treeWalker.GetNativeElementInfoById(id);
+            if (registered != null)
+                registered.WindowId ??= _treeWalker.GetRegisteredNativeWindowId(id, app);
+            return registered;
+        }
+
+        var element = _treeWalker.GetElementById(id, app);
+        if (element is IVisualTreeElement visualElement)
+        {
+            var info = _treeWalker.WalkElement(visualElement, null, 1, 2);
+
+            // Detail subtrees lack the parent-path context needed for source mapping.
+            if (info != null && _treeWalker.HasActiveSourceMaps)
+            {
+                var sources = GetCachedSourceMap(capture);
+                if (sources.Count > 0)
+                    VisualTreeWalker.ApplySourceById(info, sources);
+            }
+
+            return info;
+        }
+
+        return element != null ? _treeWalker.BuildSyntheticElementInfo(id, element) : null;
     }
 
     protected override async Task<HttpResponse> HandleQuery(HttpRequest request)
@@ -622,6 +646,19 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             try
             {
+                if (!_treeWalker.SupportsNativeElements)
+                {
+                    var managed = await CaptureManagedUiAsync(
+                        _ =>
+                        {
+                            var result = _treeWalker.QueryCss(_app, selector);
+                            RefreshCaptureInvalidationHooks(windowIndex: null);
+                            return result;
+                        },
+                        StampCaptureMetadata);
+                    return managed.Error ?? HttpResponse.Json(managed.Result);
+                }
+
                 var capture = BeginUiCapture(windowIndex: null);
                 var results = await CaptureUiOrNativeAsync(
                     () => _treeWalker.QueryCss(_app, selector),
@@ -644,6 +681,19 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         if (type == null && automationId == null && text == null)
             return HttpResponse.Error("At least one query parameter required: type, automationId, text, or selector");
 
+        if (!_treeWalker.SupportsNativeElements)
+        {
+            var managed = await CaptureManagedUiAsync(
+                _ =>
+                {
+                    var result = _treeWalker.Query(_app, type, automationId, text);
+                    RefreshCaptureInvalidationHooks(windowIndex: null);
+                    return result;
+                },
+                StampCaptureMetadata);
+            return managed.Error ?? HttpResponse.Json(managed.Result);
+        }
+
         var simpleCapture = BeginUiCapture(windowIndex: null);
         var simpleResults = await CaptureUiOrNativeAsync(
             () => _treeWalker.Query(_app, type, automationId, text),
@@ -653,6 +703,26 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return BuildCaptureChangedResponse(simpleCapture);
         return HttpResponse.Json(simpleResults);
     }
+
+    private Task<(T Result, UiCaptureContext Capture, HttpResponse? Error)> CaptureManagedUiAsync<T>(
+        Func<UiCaptureContext, T> read,
+        Action<T, UiCaptureContext> stamp,
+        int? windowIndex = null)
+        => DispatchAsync(() =>
+        {
+            // Queued updates before this callback belong in the snapshot; later updates
+            // invalidate its action lease without rejecting the completed read.
+            var capture = BeginUiCapture(windowIndex);
+            var result = read(capture);
+            HttpResponse? error = null;
+            if (result is not null)
+            {
+                stamp(result, capture);
+                if (!CommitUiCapture(capture))
+                    error = BuildCaptureChangedResponse(capture);
+            }
+            return (result, capture, error);
+        });
 
     private async Task<List<ElementInfo>> CaptureUiOrNativeAsync(
         Func<List<ElementInfo>> uiCallback,
