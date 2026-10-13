@@ -148,6 +148,10 @@ jobs:
         test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, PickerSelectionTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests]
         maui: ['']
         include:
+          - test-class: GtkWebViewSnapshotRuntimeTests
+            maui: ''
+            test-project: src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
+            test-namespace: Microsoft.Maui.DevFlow.Agent.Gtk.Tests
           - test-class: WindowSizingTests
             maui: '10.0.70'
           - test-class: WindowSizingTests
@@ -170,6 +174,8 @@ jobs:
         run: >-
           ./platforms/Linux.Gtk4/tests/run-native-tests.ps1
           -TestClass '${{ matrix.test-class }}'
+          -TestProject '${{ matrix.test-project || 'platforms/Linux.Gtk4/tests/Linux.Gtk4.Tests/Linux.Gtk4.Tests.csproj' }}'
+          -TestNamespace '${{ matrix.test-namespace || 'Microsoft.Maui.Platforms.Linux.Gtk4.Tests' }}'
           ${{ matrix.maui && format('-MauiVersion {0}', matrix.maui) || '' }}
       - name: Build DevFlow sample
         if: matrix.test-class == 'CollectionViewHandlerTests'

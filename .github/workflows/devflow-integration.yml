@@ -515,16 +515,6 @@ jobs:
           --logger "console;verbosity=normal"
           --results-directory ./artifacts/TestResults/devflow-integration/gtk
 
-      - name: Verify native WebKit screenshot pixels
-        if: success() || failure()
-        shell: pwsh
-        run: >
-          ./platforms/Linux.Gtk4/tests/run-native-tests.ps1
-          -TestProject src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
-          -TestNamespace Microsoft.Maui.DevFlow.Agent.Gtk.Tests
-          -TestClass GtkWebViewSnapshotRuntimeTests
-          -ResultsDirectory artifacts/TestResults/devflow-integration/gtk/native-snapshot
-
       - name: Report GTK crash backtraces
         if: failure()
         shell: bash

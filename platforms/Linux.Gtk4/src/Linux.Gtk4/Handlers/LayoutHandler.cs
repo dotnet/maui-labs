@@ -209,7 +209,7 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 		{
 			var platformChild = (Gtk.Widget)child.ToPlatform(MauiContext);
 			PlatformView.AddChild(platformChild);
-			MarkLayoutDirty();
+			GtkLayoutPanel.InvalidateLayout(PlatformView);
 		}
 		catch (Exception ex)
 		{
@@ -222,7 +222,7 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 		if (child.Handler?.PlatformView is Gtk.Widget widget)
 		{
 			PlatformView.RemoveChild(widget);
-			MarkLayoutDirty();
+			GtkLayoutPanel.InvalidateLayout(PlatformView);
 		}
 	}
 
@@ -235,22 +235,13 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 	{
 		while (PlatformView.GetFirstChild() is Gtk.Widget child)
 			PlatformView.RemoveChild(child);
-		MarkLayoutDirty();
+		GtkLayoutPanel.InvalidateLayout(PlatformView);
 	}
 
 	public void Update(int index, IView child)
 	{
 		Remove(child);
 		Add(child);
-	}
-
-	/// <summary>
-	/// Walk up the widget tree to the root GtkLayoutPanel and set its LayoutDirty flag
-	/// so the tick callback re-measures and re-arranges on the next frame.
-	/// </summary>
-	void MarkLayoutDirty()
-	{
-		GtkLayoutPanel.InvalidateLayout(PlatformView);
 	}
 
 	public void UpdateZIndex(IView child)
