@@ -159,7 +159,8 @@ public sealed class iOSSimulatorFixture : AppFixtureBase
         var timer = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            await RunProcessCheckedAsync("xcrun", $"simctl bootstatus {udid} -b", timeoutSeconds: 180);
+            Console.WriteLine($"[iOSFixture] Waiting for simulator {udid} boot completion (limit 300s).");
+            await RunProcessCheckedAsync("xcrun", $"simctl bootstatus {udid} -b", timeoutSeconds: 300);
             Console.WriteLine($"[iOSFixture] Simulator {udid} boot completed in {timer.Elapsed.TotalSeconds:F1}s.");
         }
         catch (TimeoutException)

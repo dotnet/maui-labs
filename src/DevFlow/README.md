@@ -13,6 +13,8 @@ exercises MAUI and plain .NET samples on Android, iOS, Mac Catalyst and AppKit, 
 MAUI Windows, GTK and WPF. Manual dispatch still supports focused platform/framework
 selection. The ordinary `ci-devflow.yml` host, browser, JavaScript and AOT tests
 remain enabled alongside these device tests.
+PR triggers also cover stacked feature-branch targets, not only `main`; product
+push triggers remain `main`-only.
 
 Path filters cover DevFlow, its CLI implementation and executable entry point,
 sample apps, the complete GTK, AppKit and WPF backend trees, and their shared
@@ -30,6 +32,11 @@ Fixture timeouts retain partial process output. Android startup failures collect
 logcat, and iOS startup timeouts collect device/bundle-scoped simulator logs. GTK crashes
 attach only native/managed stack frames; raw memory dumps stay in the runner's
 temporary directory and are not uploaded.
+These diagnostics belong to the test harness, not a sample-wide exception observer.
+SDK screenshot failures are returned through the existing response path, not app
+stderr. Blazor bridge diagnostics use only the explicitly configured `LogCallback`;
+they are not sent to the app's console or its `ILogger` providers. WebView console
+capture continues to use the existing private DevFlow log writer and streaming API.
 
 The baseline sizing fixture uses a 120-wide Grid with an auto-sized column and
 matched minimum/maximum child widths of 180 for the problem state and 80 for the corrected state.
@@ -44,6 +51,10 @@ native scroll, because WinUI does not emit a completion event for an unchanged
 `ChangeView`.
 Hit-test envelope checks retain the raw response body and use the client's existing
 bounded read-only handling of `native-probe-busy`; a persistent busy probe still fails.
+GTK CDP readiness follows the captured native WebView's load signals. A delayed
+host page or replacement document is initialized after loading; an obsolete
+document cannot restart its log drain. Snapshot waits observe bridge cancellation;
+dispatcher rejection reports failure instead of leaving queued work pending.
 
 ## Packages
 
@@ -747,6 +758,9 @@ the same flag locally to avoid deploying into an existing simulator. Without
 the flag, the existing booted-device selection behavior is unchanged.
 The iOS CI job uses the current macOS 26 host with the workload-compatible
 Xcode 26.3 and defaults to iOS 26.2, preserving the prior runtime coverage.
+Boot completion has a 300-second deadline and logs its measured duration. Hosted
+successful boots reached 174.2 seconds against the earlier 180-second deadline;
+the longer window measures slow startup without retrying boot or changing app assertions.
 Manual dispatch can select a different installed runtime via `ios-runtime`.
 
 #### Running the suite against a plain .NET app
