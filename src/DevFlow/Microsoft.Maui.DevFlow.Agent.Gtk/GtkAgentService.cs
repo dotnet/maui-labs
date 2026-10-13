@@ -243,15 +243,27 @@ public class GtkAgentService : MauiDevFlowAgentService
             var width = paintable.GetIntrinsicWidth();
             var height = paintable.GetIntrinsicHeight();
 
-            if (width <= 0 || height <= 0) return null;
+            if (width <= 0 || height <= 0)
+            {
+                Console.Error.WriteLine($"[DevFlow.Gtk screenshot] {widget.GetType().Name} has no paintable area ({width} x {height}).");
+                return null;
+            }
 
             var snapshot = global::Gtk.Snapshot.New();
             paintable.Snapshot(snapshot, width, height);
             var node = snapshot.ToNode();
-            if (node == null) return null;
+            if (node == null)
+            {
+                Console.Error.WriteLine($"[DevFlow.Gtk screenshot] {widget.GetType().Name} produced no render node.");
+                return null;
+            }
 
             var renderer = widget.GetNative()?.GetRenderer();
-            if (renderer == null) return null;
+            if (renderer == null)
+            {
+                Console.Error.WriteLine($"[DevFlow.Gtk screenshot] {widget.GetType().Name} has no native renderer.");
+                return null;
+            }
 
             var texture = renderer.RenderTexture(node, null);
             if (texture == null) return null;
@@ -267,8 +279,9 @@ public class GtkAgentService : MauiDevFlowAgentService
                 try { System.IO.File.Delete(tmpPath); } catch { }
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"[DevFlow.Gtk screenshot] {widget.GetType().Name} capture failed: {ex}");
             return null;
         }
     }

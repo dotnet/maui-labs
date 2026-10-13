@@ -70,10 +70,11 @@ internal sealed class GtkRootLayoutDriver : IDisposable
 		// Record this attempt before entering application layout code. A failed
 		// layout is retried on a new allocation or invalidation, not every frame.
 		_lastConstraints = constraints;
-		_panel.LayoutDirty = false;
 		try
 		{
 			(view as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
+			// Consume this pass's cache invalidation, not invalidations raised during layout.
+			_panel.LayoutDirty = false;
 			var measure = constraints.MeasureConstraints;
 			var measured = layout.CrossPlatformMeasure(measure.Width, measure.Height);
 			layout.CrossPlatformArrange(constraints.ArrangeBounds(measured));

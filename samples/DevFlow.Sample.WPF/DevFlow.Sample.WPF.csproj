@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <UseMaui>true</UseMaui>
@@ -25,7 +25,13 @@
     <ProjectReference Include="..\..\platforms\Windows.WPF\src\Windows.WPF\Windows.WPF.csproj" />
     <ProjectReference Include="..\..\platforms\Windows.WPF\src\Windows.WPF.Essentials\Windows.WPF.Essentials.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.WPF\Microsoft.Maui.DevFlow.Agent.WPF.csproj" />
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer" />
   </ItemGroup>
+
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" />
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" />
 
   <ItemGroup>
     <Compile Include="..\DevFlow.Sample\App.xaml.cs" Link="App.xaml.cs" />
@@ -34,6 +40,10 @@
     <Compile Include="..\DevFlow.Sample\BlazorTodoPage.xaml.cs" Link="BlazorTodoPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\DialogTestPage.xaml.cs" Link="DialogTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\InteractionTestPage.xaml.cs" Link="InteractionTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\LayoutDiagnosticsTestPage.xaml.cs" Link="LayoutDiagnosticsTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\GestureTestPage.xaml.cs" Link="GestureTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\DesiredSizeProbe.cs" Link="DesiredSizeProbe.cs" />
+    <Compile Include="..\DevFlow.Sample\PreferenceDiagnostics.cs" Link="PreferenceDiagnostics.cs" />
     <Compile Include="..\DevFlow.Sample\ModalTestPage.xaml.cs" Link="ModalTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\NetworkTestPage.xaml.cs" Link="NetworkTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\MultiBlazorPage.xaml.cs" Link="MultiBlazorPage.xaml.cs" />
@@ -49,6 +59,8 @@
     <MauiXaml Include="..\DevFlow.Sample\BlazorTodoPage.xaml" Link="BlazorTodoPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\DialogTestPage.xaml" Link="DialogTestPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\InteractionTestPage.xaml" Link="InteractionTestPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\LayoutDiagnosticsTestPage.xaml" Link="LayoutDiagnosticsTestPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\GestureTestPage.xaml" Link="GestureTestPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\ModalTestPage.xaml" Link="ModalTestPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\MultiBlazorPage.xaml" Link="MultiBlazorPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\NetworkTestPage.xaml" Link="NetworkTestPage.xaml" />

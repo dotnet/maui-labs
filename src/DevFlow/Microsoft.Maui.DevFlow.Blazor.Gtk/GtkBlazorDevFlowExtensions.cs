@@ -32,6 +32,7 @@ public static class GtkBlazorDevFlowExtensions
 
     internal static void ConfigureStartup(MauiAppBuilder builder, Func<IServiceProvider> getServices)
     {
+        GtkBlazorWebViewDebugService.ConfigureHandlerCapture();
         builder.ConfigureLifecycleEvents(lifecycle => lifecycle.AddGtk(gtk =>
             gtk.OnWindowCreated(_ =>
             {

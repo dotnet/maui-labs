@@ -132,10 +132,10 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 				_rootWidth = width;
 				_rootHeight = height;
 				_rootScrollOrientation = scrollOrientation;
-				platformView.LayoutDirty = false;
 				(view as Microsoft.Maui.Controls.VisualElement)?.InvalidateMeasure();
 				if (LayoutGeneration != generation || VirtualView != view || PlatformView != platformView)
 					return true;
+				platformView.LayoutDirty = false;
 				var scrollsHorizontally = scrollOrientation is ScrollOrientation.Horizontal or ScrollOrientation.Both;
 				var scrollsVertically = scrollOrientation is ScrollOrientation.Vertical or ScrollOrientation.Both;
 				var measured = view.Measure(
@@ -250,18 +250,7 @@ public class LayoutHandler : GtkViewHandler<ILayout, GtkLayoutPanel>, ILayoutHan
 	/// </summary>
 	void MarkLayoutDirty()
 	{
-		PlatformView.LayoutDirty = true;
-
-		// Propagate to ancestor layout panels (root tick callback drives layout)
-		Gtk.Widget? current = PlatformView.GetParent();
-		while (current != null)
-		{
-			if (current is GtkLayoutPanel panel)
-			{
-				panel.LayoutDirty = true;
-			}
-			current = current.GetParent();
-		}
+		GtkLayoutPanel.InvalidateLayout(PlatformView);
 	}
 
 	public void UpdateZIndex(IView child)

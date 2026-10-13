@@ -7,15 +7,15 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 
 ## Integration CI
 
-Both DevFlow workflows cover relevant PRs targeting main or stacked feature
-branches. `devflow-integration.yml` runs automatically on PR opens, updates,
-reopens and edits, including drafts, without an opt-in label. Every automatic run
-executes all existing MAUI integration cases on Android, iOS, Mac Catalyst and
-Windows. Manual dispatch retains all platform/framework choices, including
-GTK, WPF, AppKit and plain .NET samples. Their full backend/native repair layer
-is not included in this core foundation; manual runs can still expose existing
-failures. The ordinary `ci-devflow.yml` host, browser, JavaScript, AOT and native
-sample-build jobs remain enabled alongside these device tests.
+`devflow-integration.yml` runs automatically on DevFlow-relevant PR opens, updates,
+reopens and edits, including drafts and PRs targeting other branches in a stack,
+without an opt-in label. Every automatic run
+exercises MAUI and plain .NET samples on Android, iOS, Mac Catalyst and AppKit, plus
+MAUI Windows, GTK and WPF: 11 platform/framework legs in total.
+Both DevFlow workflows accept every PR base branch; ordinary CI pushes remain
+limited to `main`. Manual dispatch still supports focused platform/framework
+selection. The ordinary `ci-devflow.yml` host, browser, JavaScript and AOT tests
+remain enabled alongside these device tests.
 
 Path filters cover DevFlow, its CLI implementation and executable entry point,
 sample apps, the complete GTK, AppKit and WPF backend trees, and their shared
@@ -24,13 +24,18 @@ extra runs over a fragile file allowlist. Shared build infrastructure, SDK and
 package/feed configuration are included because they can alter any tested app's
 compilation, restore or startup.
 
+MAUI recognizer tests require the MAUI gesture page and are excluded from plain
+.NET runs via the `framework=maui` trait. Native runs retain native actions,
+properties, hit-test envelopes, rejection, storage and protocol coverage.
 An uploaded TRX or green fixture-selection test is not evidence that a device
 test executed; inspect individual results and fixture failures.
 Fixture timeouts retain partial process output. Android startup failures collect
-logcat, and iOS startup timeouts collect device/bundle-scoped simulator logs.
+logcat, and iOS startup timeouts collect device/bundle-scoped simulator logs. GTK crashes
+attach only native/managed stack frames; raw memory dumps stay in the runner's
+temporary directory and are not uploaded.
 
 The baseline sizing fixture uses explicit absolute child bounds so parent
-overflow is intentional across the core platforms, rather than depending on a Grid's
+overflow is intentional on every backend, rather than depending on a Grid's
 platform-specific desired-size clamping. Its correction must update the actual
 arranged geometry as well as the fixture's state label.
 
@@ -189,6 +194,9 @@ Use `Microsoft.Maui.DevFlow.Agent.Gtk` instead of the standard agent package wit
 `Microsoft.Maui.DevFlow.Blazor.Gtk` alongside `Microsoft.Maui.Platforms.Linux.Gtk4.BlazorWebView`.
 These packages use the in-repo GTK backend; remove superseded `Platform.Maui.Linux.Gtk4*`
 package references when migrating. Mixing the two backends is not supported.
+For Essentials diagnostics, reference `Microsoft.Maui.Platforms.Linux.Gtk4.Essentials`
+and call `builder.AddLinuxGtk4Essentials()`; a package reference alone does not initialize
+MAUI's static Preferences and FileSystem facades.
 
 ```csharp
 using Microsoft.Maui.DevFlow.Agent.Gtk;
@@ -233,6 +241,8 @@ For Blazor Hybrid, register `builder.AddMauiBlazorDevFlowTools()` from
 `Microsoft.Maui.DevFlow.Blazor.Gtk` as well. CDP wiring and WebView discovery start on the
 same initialized window lifecycle, even if application startup takes more than two seconds.
 Later windows and explicit `WireBlazorCdpToAgent()` calls do not duplicate registrations.
+WebViews created later are captured through their handlers, and detached handlers unregister
+their CDP contexts rather than remaining selectable.
 
 ### 2b. Or, in a plain .NET app (no MAUI)
 
@@ -760,8 +770,8 @@ DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=maccatalyst \
   dotnet test src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/ --filter "framework!=maui"
 ```
 
-`native` is supported for `android`, `ios` and `maccatalyst`. There is no plain-.NET Windows head,
-and the AppKit head under `samples/DevFlow.Sample.Native/MacOS` does not yet have a driving fixture.
+`native` is supported for `android`, `ios`, `maccatalyst`, and `macos`. There are no
+plain-.NET Windows, GTK, or WPF integration heads.
 
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
 

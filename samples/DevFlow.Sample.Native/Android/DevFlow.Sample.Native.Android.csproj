@@ -35,4 +35,7 @@
     <Compile Include="..\..\DevFlow.Sample\PreferenceDiagnostics.cs" Link="Shared\PreferenceDiagnostics.cs" />
   </ItemGroup>
 
+  <!-- Project references do not import the agent package's buildTransitive metadata targets. -->
+  <Import Project="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\buildTransitive\Microsoft.Maui.DevFlow.Agent.targets" />
+
 </Project>

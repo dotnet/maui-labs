@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Microsoft.Maui.DevFlow.Blazor\WebViewNavigation.cs" Link="WebViewNavigation.cs" />
     <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent.Gtk.Tests" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Core\Microsoft.Maui.DevFlow.Agent.Core.csproj" />
     <ProjectReference Include="..\..\..\platforms\Linux.Gtk4\src\Linux.Gtk4.BlazorWebView\Linux.Gtk4.BlazorWebView.csproj" />

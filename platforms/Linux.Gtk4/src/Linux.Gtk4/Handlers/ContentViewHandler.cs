@@ -100,15 +100,6 @@ public class ContentViewHandler : GtkViewHandler<IContentView, Platform.GtkLayou
 			layout.CrossPlatformArrange(new Rect(0, 0, size.Width, size.Height));
 		}
 
-		// Propagate layout dirty to ancestor layout panels
-		Gtk.Widget? current = panel;
-		while (current != null)
-		{
-			if (current is Platform.GtkLayoutPanel layoutPanel)
-			{
-				layoutPanel.LayoutDirty = true;
-			}
-			current = current.GetParent();
-		}
+		Platform.GtkLayoutPanel.InvalidateLayout(panel);
 	}
 }

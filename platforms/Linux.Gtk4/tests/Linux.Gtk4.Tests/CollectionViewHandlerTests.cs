@@ -181,6 +181,7 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 			((IElementHandler)handler).DisconnectHandler();
 			Assert.All(connected, item => Assert.Equal(1, item.DisconnectCount));
 
+			VerifyOwnedSignalLifetime(app.Services);
 			VerifyLayoutCallbackLifetime(app.Services, window);
 			VerifyGroupedHeaderRefresh(app.Services, window, singlePass: false);
 			VerifyGroupedHeaderRefresh(app.Services, window, singlePass: true);
@@ -192,6 +193,100 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 				((IElementHandler)handler).DisconnectHandler();
 			window.Destroy();
 		}
+	}
+
+	static void VerifyOwnedSignalLifetime(IServiceProvider services)
+	{
+		var collection = new CollectionView { ItemsSource = new[] { "First", "Second" } };
+		var handler = new CollectionViewHandler();
+		var layout = new Grid();
+		var layoutHandler = new LayoutHandler();
+		handler.SetMauiContext(new GtkMauiContext(services));
+		layoutHandler.SetMauiContext(new GtkMauiContext(services));
+		try
+		{
+			handler.SetVirtualView(collection);
+			var listView = Assert.IsType<Gtk.ListView>(handler.PlatformView.GetChild());
+			var factory = Assert.IsType<Gtk.SignalListItemFactory>(listView.GetFactory());
+			AssertFactorySignals(factory, setup: true, bind: true, unbind: false, teardown: false);
+
+			var retiredFactories = new List<Gtk.SignalListItemFactory> { factory };
+			for (var i = 0; i < 20; i++)
+			{
+				collection.ItemTemplate = i % 2 == 0 ? new DataTemplate(() => new Label()) : null;
+				AssertFactorySignals(factory, setup: false, bind: false, unbind: false, teardown: false);
+				listView = Assert.IsType<Gtk.ListView>(handler.PlatformView.GetChild());
+				var replacement = Assert.IsType<Gtk.SignalListItemFactory>(listView.GetFactory());
+				Assert.NotSame(factory, replacement);
+				var templated = collection.ItemTemplate != null;
+				AssertFactorySignals(replacement, setup: !templated, bind: true, unbind: templated, teardown: templated);
+				factory = replacement;
+				retiredFactories.Add(factory);
+			}
+
+			layoutHandler.SetVirtualView(layout);
+			var widget = layoutHandler.PlatformView;
+			var controllers = widget.ObserveControllers();
+			var ownedControllers = Enumerable.Range(0, (int)controllers.GetNItems())
+				.Select(i => controllers.GetObject((uint)i))
+				.Where(controller => controller is Gtk.EventControllerMotion or Gtk.GestureClick or Gtk.EventControllerFocus)
+				.Cast<Gtk.EventController>()
+				.Where(controller => HasVisualStateSignals(controller))
+				.ToArray();
+			Assert.Equal(3, ownedControllers.Length);
+
+			((IElementHandler)handler).DisconnectHandler();
+			((IElementHandler)layoutHandler).DisconnectHandler();
+			Assert.All(retiredFactories, retired => AssertFactorySignals(retired,
+				setup: false, bind: false, unbind: false, teardown: false));
+			Assert.All(ownedControllers, controller =>
+			{
+				Assert.Null(controller.GetWidget());
+				Assert.False(HasVisualStateSignals(controller));
+			});
+			((IElementHandler)handler).DisconnectHandler();
+
+			GC.Collect();
+			GC.WaitForPendingFinalizers();
+			GC.KeepAlive(retiredFactories);
+			GC.KeepAlive(ownedControllers);
+			GC.KeepAlive(widget);
+			GC.KeepAlive(controllers);
+		}
+		finally
+		{
+			if (collection.Handler != null)
+				((IElementHandler)handler).DisconnectHandler();
+			if (layout.Handler != null)
+				((IElementHandler)layoutHandler).DisconnectHandler();
+		}
+	}
+
+	static void AssertFactorySignals(Gtk.SignalListItemFactory factory, bool setup, bool bind, bool unbind, bool teardown)
+	{
+		var type = Gtk.SignalListItemFactory.GetGType();
+		Assert.Equal(setup, HasSignal(factory, type, "setup"));
+		Assert.Equal(bind, HasSignal(factory, type, "bind"));
+		Assert.Equal(unbind, HasSignal(factory, type, "unbind"));
+		Assert.Equal(teardown, HasSignal(factory, type, "teardown"));
+	}
+
+	static bool HasVisualStateSignals(Gtk.EventController controller) => controller switch
+	{
+		Gtk.EventControllerMotion motion => HasSignal(motion, Gtk.EventControllerMotion.GetGType(), "enter") ||
+			HasSignal(motion, Gtk.EventControllerMotion.GetGType(), "leave"),
+		Gtk.GestureClick click => HasSignal(click, Gtk.GestureClick.GetGType(), "pressed") ||
+			HasSignal(click, Gtk.GestureClick.GetGType(), "released"),
+		Gtk.EventControllerFocus focus => HasSignal(focus, Gtk.EventControllerFocus.GetGType(), "enter") ||
+			HasSignal(focus, Gtk.EventControllerFocus.GetGType(), "leave"),
+		_ => false,
+	};
+
+	static bool HasSignal(GObject.Object instance, GObject.Type type, string signal)
+	{
+		var id = GObject.Functions.SignalLookup(signal, type);
+		Assert.NotEqual(0u, id);
+		return GObject.Functions.SignalHasHandlerPending(instance, id, new GLib.Quark(0), true);
 	}
 
 	void VerifyLayoutCallbackLifetime(IServiceProvider services, Gtk.Window window)
