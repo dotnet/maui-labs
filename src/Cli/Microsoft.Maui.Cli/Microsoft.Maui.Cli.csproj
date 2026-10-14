@@ -71,6 +71,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Cli.UnitTests" />
     <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Tests" />
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>

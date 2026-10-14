@@ -314,5 +314,5 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
     public void InvalidateBlazorReady() => _blazorReady = false;
 }
 
-[CollectionDefinition("AgentIntegration")]
+[CollectionDefinition("AgentIntegration", DisableParallelization = true)]
 public class AgentIntegrationCollection : ICollectionFixture<AppFixture>;

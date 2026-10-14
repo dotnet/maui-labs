@@ -1945,7 +1945,7 @@ public class DevFlowCommands
         }
     }
     
-    // ===== CDP Helper: Send command via AgentClient =====
+    // ===== Agent connection preparation =====
 
     private static readonly string s_cliMutationLeaseId = Guid.NewGuid().ToString("N");
 
@@ -1975,58 +1975,14 @@ public class DevFlowCommands
         };
     }
 
-    private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, JsonNode? parameters = null, string? webview = null)
-    {
-        using var client = await CreateAgentClientAsync(host, port);
-        var result = await client.SendCdpCommandAsync(method, parameters, webview);
-        return result;
-    }
-
-    private static async Task<string> CdpEvaluateAsync(string host, int port, string expression, string? webview = null)
-    {
-        var result = await SendCdpCommandAsync(host, port, "Runtime.evaluate", new JsonObject
-        {
-            ["expression"] = expression,
-            ["returnByValue"] = true
-        }, webview);
-
-        if (result == null) return "null";
-        var root = result.Value;
-
-        if (root.TryGetProperty("result", out var evalResult))
-        {
-            if (evalResult.TryGetProperty("result", out var resultProp))
-            {
-                if (resultProp.TryGetProperty("value", out var value))
-                {
-                    if (value.ValueKind == JsonValueKind.String)
-                        return value.GetString() ?? "null";
-                    if (value.ValueKind == JsonValueKind.Object || value.ValueKind == JsonValueKind.Array)
-                        return CliJson.PrettyPrint(value);
-                    return value.ToString();
-                }
-            }
-            if (evalResult.TryGetProperty("exceptionDetails", out var exception))
-            {
-                var text = exception.TryGetProperty("text", out var t) ? t.GetString() : "Unknown error";
-                return $"Error: {text}";
-            }
-        }
-
-        // Response might be the raw chobitsu response
-        if (root.TryGetProperty("result", out var rawResult) && rawResult.TryGetProperty("value", out var rawValue))
-            return rawValue.GetString() ?? rawValue.ToString();
-
-        return root.ToString();
-    }
-
     // ===== Browser Domain =====
     
     private static async Task BrowserGetVersionAsync(string host, int port, string? webview = null)
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Browser.getVersion", webview: webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).BrowserGetVersionAsync(webview);
             Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2038,7 +1994,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, expression, webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).EvaluateAsync(expression, webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2050,7 +2007,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "DOM.getDocument", webview: webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).DomGetDocumentAsync(webview);
             Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2060,18 +2018,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                JSON.stringify((function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
-                    if (!el) return null;
-                    return {{
-                        tagName: el.tagName.toLowerCase(),
-                        id: el.id || null,
-                        className: el.className || null,
-                        textContent: el.textContent?.trim().substring(0, 100) || null
-                    }};
-                }})())
-            ", webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).DomQuerySelectorAsync(selector, webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2081,18 +2029,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                JSON.stringify((function() {{
-                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)});
-                    return Array.from(els).map((el, i) => ({{
-                        index: i,
-                        tagName: el.tagName.toLowerCase(),
-                        id: el.id || null,
-                        className: el.className || null,
-                        textContent: el.textContent?.trim().substring(0, 50) || null
-                    }}));
-                }})(), null, 2)
-            ", webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).DomQuerySelectorAllAsync(selector, webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2102,7 +2040,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).DomGetOuterHtmlAsync(selector, webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2114,10 +2053,8 @@ public class DevFlowCommands
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Page.navigate", new JsonObject
-            {
-                ["url"] = url
-            }, webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            await new WebViewOperations(client).PageNavigateAsync(url, webview);
             Console.WriteLine($"Navigated to: {url}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2127,7 +2064,8 @@ public class DevFlowCommands
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Page.reload", webview: webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            await new WebViewOperations(client).PageReloadAsync(webview);
             Console.WriteLine("Page reloaded");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2137,17 +2075,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Page.captureScreenshot", webview: webview);
-            if (result.HasValue &&
-                result.Value.TryGetProperty("result", out var resultProp) && 
-                resultProp.TryGetProperty("data", out var dataProp))
-            {
-                Console.WriteLine(dataProp.GetString());
-            }
-            else
-            {
-                Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
-            }
+            using var client = await CreateAgentClientAsync(host, port);
+            Console.WriteLine(await new WebViewOperations(client).PageCaptureScreenshotAsync(webview));
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2158,14 +2087,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
-                    if (!el) return 'Error: Element not found';
-                    el.click();
-                    return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
-                }})()
-            ", webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).InputDispatchClickAsync(selector, webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2175,10 +2098,8 @@ public class DevFlowCommands
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Input.insertText", new JsonObject
-            {
-                ["text"] = text
-            }, webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            await new WebViewOperations(client).InputInsertTextAsync(text, webview);
             Console.WriteLine($"Inserted: {text.Length} characters");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2188,23 +2109,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
-                    if (!el) return 'Error: Element not found';
-                    
-                    const text = {CliJson.SerializeUntyped(text, indented: false)};
-                    if (el.isContentEditable) {{
-                        el.textContent = text;
-                    }} else {{
-                        el.value = text;
-                        el.focus();
-                    }}
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    return 'Filled: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' with ' + text.length + ' chars';
-                }})()
-            ", webview);
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).InputFillAsync(selector, text, webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2217,15 +2123,9 @@ public class DevFlowCommands
         EnsureAgentPortResolved(port);
         try
         {
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(5);
-            var response = await http.GetAsync($"http://{host}:{port}/api/v1/agent/status");
-            var body = await response.Content.ReadAsStringAsync();
-            var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-
-            var cdpReady = root.TryGetProperty("cdpReady", out var cdpProp) && cdpProp.GetBoolean();
-            var cdpCount = root.TryGetProperty("cdpWebViewCount", out var countProp) ? countProp.GetInt32() : 0;
+            // Status historically bypasses broker labels and Android forwarding.
+            using var client = new AgentClient(host, port);
+            var (cdpReady, cdpCount) = await new WebViewOperations(client).GetStatusAsync();
             Console.WriteLine(cdpReady
                 ? $"Connected: CDP ready ({cdpCount} WebView{(cdpCount != 1 ? "s" : "")})"
                 : "Agent connected but CDP not ready");
@@ -2241,7 +2141,7 @@ public class DevFlowCommands
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var result = await client.GetCdpWebViewsAsync();
+            var result = await new WebViewOperations(client).GetWebViewsAsync();
             var body = result.ToString();
 
             if (json)
@@ -2282,7 +2182,7 @@ public class DevFlowCommands
         try
         {
             using var client = await CreateAgentClientAsync(host, port);
-            var source = await client.GetCdpSourceAsync(webview);
+            var source = await new WebViewOperations(client).GetSourceAsync(webview);
             Console.WriteLine(source);
         }
         catch (Exception ex)
@@ -2295,44 +2195,8 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, @"
-                (function() {
-                    function walk(node, depth) {
-                        if (depth > 8) return '';
-                        let result = '';
-                        const indent = '  '.repeat(depth);
-                        
-                        if (node.nodeType === 1) {
-                            const tag = node.tagName.toLowerCase();
-                            const text = node.childNodes.length === 1 && node.childNodes[0].nodeType === 3 
-                                ? node.textContent?.trim().substring(0, 80) : null;
-                            const isClickable = node.onclick || tag === 'button' || tag === 'a' || 
-                                               node.getAttribute('role') === 'button' ||
-                                               (tag === 'input' && node.type === 'submit');
-                            const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
-                            
-                            result += indent + '<' + tag;
-                            if (node.id) result += ' id=""' + node.id + '""';
-                            if (node.className && typeof node.className === 'string') result += ' class=""' + node.className.split(' ').slice(0,2).join(' ') + '""';
-                            if (isClickable) result += ' [clickable]';
-                            if (isInput) result += ' [input]';
-                            if (tag === 'a' && node.href) result += ' href=""' + node.getAttribute('href') + '""';
-                            if (tag === 'input') result += ' type=""' + (node.type || 'text') + '""';
-                            result += '>';
-                            if (text) result += ' ' + text;
-                            result += '\n';
-                            
-                            for (const child of node.children) {
-                                result += walk(child, depth + 1);
-                            }
-                        }
-                        return result;
-                    }
-                    
-                    return 'Title: ' + document.title + '\nURL: ' + location.href + '\n\n' + walk(document.body, 0);
-                })()
-            ", webview);
-            
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await new WebViewOperations(client).SnapshotAsync(webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }

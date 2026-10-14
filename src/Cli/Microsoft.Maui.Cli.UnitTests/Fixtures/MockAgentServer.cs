@@ -97,6 +97,9 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     public int Port { get; private set; }
 
+    public string? WebViewEvaluateResponse { get; set; }
+    public string? AgentStatusResponse { get; set; }
+
     public IReadOnlyList<RecordedRequest> RecordedRequests
     {
         get
@@ -168,7 +171,7 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     private void RegisterAgentEndpoints(WebApplication app)
     {
-        app.MapGet("/api/v1/agent/status", () => Results.Content(MockAgentResponses.AgentStatus, "application/json"));
+        app.MapGet("/api/v1/agent/status", () => Results.Content(AgentStatusResponse ?? MockAgentResponses.AgentStatus, "application/json"));
         app.MapGet("/api/v1/agent/capabilities", () =>
         {
             if (Interlocked.Increment(ref _capabilitiesRequestCount) <= _capabilitiesErrorResponseCount)
@@ -552,7 +555,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapDelete("/api/v1/storage/files/{path}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
 
-    private static void RegisterWebViewEndpoints(WebApplication app)
+    private void RegisterWebViewEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/webview/contexts", () => Results.Content(MockAgentResponses.WebViews, "application/json"));
         app.MapGet("/api/v1/webview/source", () => Results.Content(MockAgentResponses.WebViewSource, "text/html"));
@@ -567,7 +570,7 @@ public sealed class MockAgentServer : IAsyncDisposable
             using var reader = new StreamReader(context.Request.Body);
             var body = await reader.ReadToEndAsync();
             var method = JsonDocument.Parse(body).RootElement.GetProperty("method").GetString() ?? string.Empty;
-            return Results.Content(MockAgentResponses.WebViewEvaluate(method), "application/json");
+            return Results.Content(WebViewEvaluateResponse ?? MockAgentResponses.WebViewEvaluate(method), "application/json");
         });
     }
 
