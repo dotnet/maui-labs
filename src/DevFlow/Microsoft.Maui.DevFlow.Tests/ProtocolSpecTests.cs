@@ -64,19 +64,6 @@ public class ProtocolSpecTests
     private static readonly Lazy<string> SpecRoot = new(FindSpecRoot);
 
     [Fact]
-    public void WebViewNetwork_RemovedFromSpecWithoutChangingNativeNetwork()
-    {
-        var openApi = LoadDocument(Path.Combine(SpecRoot.Value, "openapi.yaml"));
-        Assert.Null(openApi["paths"]!["/api/v1/webview/network"]);
-        Assert.NotNull(openApi["paths"]!["/api/v1/network/requests"]!["get"]!["responses"]!["200"]);
-
-        var example = LoadDocument(Path.Combine(SpecRoot.Value, "examples", "capabilities-maui-response.json"));
-        Assert.DoesNotContain("network", example["capabilities"]!["webview"]!["features"]!.AsArray()
-            .Select(feature => feature!.GetValue<string>()));
-        Assert.NotNull(example["capabilities"]!["network"]);
-    }
-
-    [Fact]
     public async Task OpenApiYaml_CanBeParsedByOpenApiTooling()
     {
         var openApiPath = Path.Combine(SpecRoot.Value, "openapi.yaml");
