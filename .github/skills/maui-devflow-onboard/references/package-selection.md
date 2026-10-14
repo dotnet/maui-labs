@@ -5,6 +5,7 @@ Choose packages based on the app flavor:
 | Project flavor | Packages |
 | --- | --- |
 | Standard MAUI | `Microsoft.Maui.DevFlow.Agent` |
+| MAUI + WebView or HybridWebView | `Microsoft.Maui.DevFlow.Agent`, `Microsoft.Maui.DevFlow.WebView` |
 | MAUI + Blazor WebView | `Microsoft.Maui.DevFlow.Agent`, `Microsoft.Maui.DevFlow.Blazor` |
 | GTK MAUI | `Microsoft.Maui.DevFlow.Agent.Gtk` |
 | GTK MAUI + Blazor WebView | `Microsoft.Maui.DevFlow.Agent.Gtk`, `Microsoft.Maui.DevFlow.Blazor.Gtk` |
@@ -19,5 +20,10 @@ Blazor WebView indicators:
 
 - package reference to `Microsoft.AspNetCore.Components.WebView.Maui`;
 - call to `AddMauiBlazorWebView()` in `MauiProgram.cs`.
+
+For standard `WebView` or `HybridWebView` HTML/JavaScript automation, use the
+generic WebView package; it does not require Blazor/Razor. Blazor registration
+includes generic registration and adds its own startup/routing adapter.
+GTK and WPF generic WebView adapters are not supplied by this package.
 
 Use Central Package Management if `Directory.Packages.props` exists. Otherwise place versions directly on project package references.

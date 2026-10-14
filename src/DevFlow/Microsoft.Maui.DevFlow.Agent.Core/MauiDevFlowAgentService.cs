@@ -5041,6 +5041,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             var element = await DispatchAsync(() =>
             {
+                if (webView.Owner is { } ownerReference)
+                    return ownerReference.TryGetTarget(out var owner) && owner is VisualElement ownerElement
+                        ? ownerElement
+                        : null;
+
                 if (!string.IsNullOrWhiteSpace(webView.ElementId))
                 {
                     var byId = _treeWalker.GetElementById(webView.ElementId!, _app) as VisualElement;

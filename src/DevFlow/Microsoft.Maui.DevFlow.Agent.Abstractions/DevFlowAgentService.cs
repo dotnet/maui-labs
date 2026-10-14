@@ -337,7 +337,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 ["schemaVersion"] = "1.0",
                 ["ruleSetVersion"] = "1.0",
                 ["features"] = new[] { "clipping", "overflow", "text-truncation", "overlap", "occlusion", "coverage", "suppressions", "watch" }
-                    .Concat(cdpWebViews.Any(view => view.IsReady)
+                    .Concat(cdpWebViews.Any(view => view.HostKind == "blazor" && view.IsReady)
                         ? ["blazor-dom"]
                         : Array.Empty<string>())
                     .ToArray(),
@@ -348,8 +348,8 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
                 },
                 ["blazor"] = new Dictionary<string, object?>
                 {
-                    ["supported"] = cdpWebViews.Any(view => view.IsReady),
-                    ["readyWebViewCount"] = cdpWebViews.Count(view => view.IsReady)
+                    ["supported"] = cdpWebViews.Any(view => view.HostKind == "blazor" && view.IsReady),
+                    ["readyWebViewCount"] = cdpWebViews.Count(view => view.HostKind == "blazor" && view.IsReady)
                 },
                 ["profiles"] = new[] { "agent", "strict", "exhaustive", "ci" },
                 ["rules"] = GetLayoutRuleSupport()

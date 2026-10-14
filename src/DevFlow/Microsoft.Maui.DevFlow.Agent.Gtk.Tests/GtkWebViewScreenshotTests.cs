@@ -143,6 +143,7 @@ public class GtkWebViewScreenshotTests
     sealed class TestAgent : Microsoft.Maui.DevFlow.Agent.Core.DevFlowAgentService
     {
         public Task<string> SendToAsync(string id, string command)
-            => GetCdpWebViewsSnapshot().Single(view => view.AutomationId == id).CommandHandler(command);
+            => (ResolveCdpWebView(id) ?? throw new InvalidOperationException($"WebView '{id}' is not registered."))
+                .CommandHandler(command);
     }
 }

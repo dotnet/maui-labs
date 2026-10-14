@@ -61,8 +61,11 @@ public class GtkBlazorWebViewDebugService : IDisposable
     {
         if (_agent != null && !_registrations.ContainsKey(bridge))
         {
+            object? owner = null;
+            bridge.Owner?.TryGetTarget(out owner);
             var index = _agent.RegisterCdpWebView(
-                bridge.SendCdpCommandAsync, () => bridge.IsReady, bridge.AutomationId, bridge.ElementId);
+                bridge.SendCdpCommandAsync, () => bridge.IsReady, bridge.AutomationId, bridge.ElementId,
+                hostKind: "blazor", owner: owner);
             foreach (var previous in _registrations.Where(entry => entry.Value == index).Select(entry => entry.Key).ToArray())
                 _registrations.Remove(previous);
             _registrations.Add(bridge, index);
@@ -94,7 +97,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
             if (_capturedHandlers.ContainsKey(handler))
                 return;
 
-            bridge = new GtkWebViewBridge(this, webView, control.AutomationId);
+            bridge = new GtkWebViewBridge(this, webView, control.AutomationId, owner: control);
             EventHandler<Microsoft.Maui.Controls.HandlerChangingEventArgs>? changing = null;
             changing = (_, args) =>
             {
@@ -120,7 +123,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
             if (!_bridges.Remove(bridge))
                 return;
             if (_registrations.Remove(bridge, out var index))
-                _agent?.UnregisterCdpWebView(index);
+                _agent?.UnregisterCdpWebView(index, bridge.SendCdpCommandAsync);
         }
         bridge.Dispose();
     }
@@ -148,18 +151,21 @@ public class GtkBlazorWebViewDebugService : IDisposable
         public string? AutomationId { get; }
         public string? ElementId { get; set; }
         public bool IsReady => !_disposed && _isInitialized && (_webView != null || _evaluateJavaScript != null) && _chobitsuLoaded;
+        internal WeakReference<object>? Owner { get; }
         internal Action? LifetimeCleanup { get; set; }
         internal Task? LogDrainTask { get; private set; }
 
-        internal GtkWebViewBridge(GtkBlazorWebViewDebugService owner, global::WebKit.WebView webView,
+        internal GtkWebViewBridge(GtkBlazorWebViewDebugService service, global::WebKit.WebView webView,
             string? automationId, Func<string, Task<string?>>? evaluateJavaScript = null,
-            Func<CancellationToken, Task<byte[]>>? captureScreenshot = null)
+            Func<CancellationToken, Task<byte[]>>? captureScreenshot = null,
+            Microsoft.Maui.Controls.View? owner = null)
         {
-            _owner = owner;
+            _owner = service;
             _webView = webView;
             AutomationId = automationId;
             _evaluateJavaScript = evaluateJavaScript;
             _captureScreenshot = captureScreenshot;
+            Owner = owner is null ? null : new WeakReference<object>(owner);
             _lifetimeToken = _lifetimeCts.Token;
             if (_webView != null)
                 _webView.OnLoadChanged += OnLoadChanged;
@@ -476,10 +482,10 @@ public class GtkBlazorWebViewDebugService : IDisposable
         {
             var json = System.Text.Json.JsonDocument.Parse(cdpJson);
             var url = json.RootElement.GetProperty("params").GetProperty("url").GetString() ?? "";
-            if (Microsoft.Maui.DevFlow.Blazor.WebViewNavigation.IsAbsoluteUrl(url))
+            if (Microsoft.Maui.DevFlow.WebView.WebViewNavigation.IsAbsoluteUrl(url))
                 await DispatchOnUiAsync(() => _webView?.LoadUri(url));
             else
-                await EvaluateJavaScriptAsync(Microsoft.Maui.DevFlow.Blazor.WebViewNavigation.CreateRelativeNavigationScript(url));
+                await EvaluateJavaScriptAsync(Microsoft.Maui.DevFlow.WebView.WebViewNavigation.CreateRelativeNavigationScript(url));
             await Task.Delay(1500);
             await InitializeAsync();
             return $"{{\"id\":{id},\"result\":{{\"frameId\":\"main\"}}}}";
@@ -628,17 +634,6 @@ public class GtkBlazorWebViewDebugService : IDisposable
         return null;
     }
 
-    /// <summary>
-    /// Backward-compatible: sends CDP command to the first WebView bridge.
-    /// </summary>
-    public Task<string> SendCdpCommandAsync(string cdpJson)
-    {
-        var bridge = Bridges.FirstOrDefault();
-        if (bridge == null)
-            return Task.FromResult("{\"error\":\"No WebViews available\"}");
-        return bridge.SendCdpCommandAsync(cdpJson);
-    }
-
     private void Log(string message)
     {
         LogCallback?.Invoke(message);
@@ -742,8 +737,8 @@ public class GtkBlazorWebViewDebugService : IDisposable
         {
             if (_disposed) return;
             _disposed = true;
-            foreach (var index in _registrations.Values)
-                _agent?.UnregisterCdpWebView(index);
+            foreach (var (bridge, index) in _registrations)
+                _agent?.UnregisterCdpWebView(index, bridge.SendCdpCommandAsync);
             _registrations.Clear();
             foreach (var bridge in _bridges)
                 bridge.Dispose();
