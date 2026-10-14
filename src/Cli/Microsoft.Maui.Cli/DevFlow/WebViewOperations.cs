@@ -6,19 +6,13 @@ namespace Microsoft.Maui.Cli.DevFlow;
 
 internal sealed class WebViewOperations(AgentClient client)
 {
-    internal async Task<JsonElement?> SendCdpCommandAsync(string method, JsonNode? parameters = null, string? webview = null)
-        => await client.SendCdpCommandAsync(method, parameters, webview);
-
     internal async Task<string> EvaluateAsync(string expression, string? webview = null)
     {
-        var result = await SendCdpCommandAsync("Runtime.evaluate", new JsonObject
+        var root = await client.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
         {
             ["expression"] = expression,
             ["returnByValue"] = true
         }, webview);
-
-        if (result == null) return "null";
-        var root = result.Value;
 
         if (root.TryGetProperty("result", out var evalResult))
         {
@@ -47,11 +41,11 @@ internal sealed class WebViewOperations(AgentClient client)
         return root.ToString();
     }
 
-    internal Task<JsonElement?> BrowserGetVersionAsync(string? webview = null)
-        => SendCdpCommandAsync("Browser.getVersion", webview: webview);
+    internal async Task<JsonElement?> BrowserGetVersionAsync(string? webview = null)
+        => await client.SendCdpCommandAsync("Browser.getVersion", webviewId: webview);
 
-    internal Task<JsonElement?> DomGetDocumentAsync(string? webview = null)
-        => SendCdpCommandAsync("DOM.getDocument", webview: webview);
+    internal async Task<JsonElement?> DomGetDocumentAsync(string? webview = null)
+        => await client.SendCdpCommandAsync("DOM.getDocument", webviewId: webview);
 
     internal Task<string> DomQuerySelectorAsync(string selector, string? webview = null)
         => EvaluateAsync($@"
@@ -85,25 +79,24 @@ internal sealed class WebViewOperations(AgentClient client)
         => EvaluateAsync($@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", webview);
 
     internal async Task PageNavigateAsync(string url, string? webview = null)
-        => await SendCdpCommandAsync("Page.navigate", new JsonObject
+        => await client.SendCdpCommandAsync("Page.navigate", new JsonObject
         {
             ["url"] = url
         }, webview);
 
     internal async Task PageReloadAsync(string? webview = null)
-        => await SendCdpCommandAsync("Page.reload", webview: webview);
+        => await client.SendCdpCommandAsync("Page.reload", webviewId: webview);
 
     internal async Task<string?> PageCaptureScreenshotAsync(string? webview = null)
     {
-        var result = await SendCdpCommandAsync("Page.captureScreenshot", webview: webview);
-        if (result.HasValue &&
-            result.Value.TryGetProperty("result", out var resultProp) &&
+        var result = await client.SendCdpCommandAsync("Page.captureScreenshot", webviewId: webview);
+        if (result.TryGetProperty("result", out var resultProp) &&
             resultProp.TryGetProperty("data", out var dataProp))
         {
             return dataProp.GetString();
         }
 
-        return result.HasValue ? CliJson.PrettyPrint(result.Value) : "null";
+        return CliJson.PrettyPrint(result);
     }
 
     internal Task<string> InputDispatchClickAsync(string selector, string? webview = null)
@@ -117,7 +110,7 @@ internal sealed class WebViewOperations(AgentClient client)
             ", webview);
 
     internal async Task InputInsertTextAsync(string text, string? webview = null)
-        => await SendCdpCommandAsync("Input.insertText", new JsonObject
+        => await client.SendCdpCommandAsync("Input.insertText", new JsonObject
         {
             ["text"] = text
         }, webview);

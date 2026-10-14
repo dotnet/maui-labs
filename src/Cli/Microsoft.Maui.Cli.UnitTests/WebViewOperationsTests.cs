@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
@@ -108,21 +107,19 @@ public class WebViewOperationsTests
     }
 
     [Fact]
-    public async Task SendCdpCommandAsync_ForwardsArbitraryParametersWithoutMutatingThem()
+    public async Task DomGetDocumentAsync_NoTarget_PreservesDefaultSelection()
     {
         await using var server = new MockAgentServer();
         await server.StartAsync();
         using var client = new AgentClient("localhost", server.Port);
-        var parameters = new JsonObject { ["depth"] = 2 };
-
-        var result = await new WebViewOperations(client).SendCdpCommandAsync("DOM.getDocument", parameters);
+        var result = await new WebViewOperations(client).DomGetDocumentAsync();
 
         Assert.True(result!.Value.GetProperty("result").TryGetProperty("root", out _));
-        Assert.Equal(2, parameters["depth"]!.GetValue<int>());
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
         Assert.Equal("", request.QueryString);
         using var body = JsonDocument.Parse(request.Body!);
-        Assert.Equal(2, body.RootElement.GetProperty("params").GetProperty("depth").GetInt32());
+        Assert.Equal("DOM.getDocument", body.RootElement.GetProperty("method").GetString());
+        Assert.False(body.RootElement.TryGetProperty("params", out _));
     }
 
     [Theory]

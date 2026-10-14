@@ -1975,14 +1975,25 @@ public class DevFlowCommands
         };
     }
 
+    private static async Task<T> SendCdpCommandAsync<T>(string host, int port, Func<WebViewOperations, Task<T>> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        return await command(new WebViewOperations(client));
+    }
+
+    private static async Task SendCdpCommandAsync(string host, int port, Func<WebViewOperations, Task> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        await command(new WebViewOperations(client));
+    }
+
     // ===== Browser Domain =====
     
     private static async Task BrowserGetVersionAsync(string host, int port, string? webview = null)
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).BrowserGetVersionAsync(webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.BrowserGetVersionAsync(webview));
             Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -1994,8 +2005,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).EvaluateAsync(expression, webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.EvaluateAsync(expression, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2007,8 +2017,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).DomGetDocumentAsync(webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.DomGetDocumentAsync(webview));
             Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2018,8 +2027,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).DomQuerySelectorAsync(selector, webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.DomQuerySelectorAsync(selector, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2029,8 +2037,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).DomQuerySelectorAllAsync(selector, webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.DomQuerySelectorAllAsync(selector, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2040,8 +2047,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).DomGetOuterHtmlAsync(selector, webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.DomGetOuterHtmlAsync(selector, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2053,8 +2059,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            await new WebViewOperations(client).PageNavigateAsync(url, webview);
+            await SendCdpCommandAsync(host, port, operations => operations.PageNavigateAsync(url, webview));
             Console.WriteLine($"Navigated to: {url}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2064,8 +2069,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            await new WebViewOperations(client).PageReloadAsync(webview);
+            await SendCdpCommandAsync(host, port, operations => operations.PageReloadAsync(webview));
             Console.WriteLine("Page reloaded");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2075,8 +2079,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            Console.WriteLine(await new WebViewOperations(client).PageCaptureScreenshotAsync(webview));
+            Console.WriteLine(await SendCdpCommandAsync(host, port, operations => operations.PageCaptureScreenshotAsync(webview)));
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2087,8 +2090,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).InputDispatchClickAsync(selector, webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.InputDispatchClickAsync(selector, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2098,8 +2100,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            await new WebViewOperations(client).InputInsertTextAsync(text, webview);
+            await SendCdpCommandAsync(host, port, operations => operations.InputInsertTextAsync(text, webview));
             Console.WriteLine($"Inserted: {text.Length} characters");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2109,8 +2110,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).InputFillAsync(selector, text, webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.InputFillAsync(selector, text, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2140,8 +2140,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).GetWebViewsAsync();
+            var result = await SendCdpCommandAsync(host, port, operations => operations.GetWebViewsAsync());
             var body = result.ToString();
 
             if (json)
@@ -2181,8 +2180,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var source = await new WebViewOperations(client).GetSourceAsync(webview);
+            var source = await SendCdpCommandAsync(host, port, operations => operations.GetSourceAsync(webview));
             Console.WriteLine(source);
         }
         catch (Exception ex)
@@ -2195,8 +2193,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await new WebViewOperations(client).SnapshotAsync(webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.SnapshotAsync(webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
