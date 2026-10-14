@@ -4,6 +4,7 @@ name: DevFlow Integration Tests
 # The DevFlow integration suite builds the sample app, boots a simulator/emulator,
 # installs and launches it, then runs real HTTP round-trips against the agent.
 # Runs automatically for DevFlow-relevant PR changes, including draft PRs.
+# Every push to main runs the full platform/framework matrix, without path filters.
 # workflow_dispatch retains platform/framework selection for focused investigations.
 #
 # Entry points per platform fixture:
@@ -16,6 +17,8 @@ name: DevFlow Integration Tests
 #   WPF       -> src/DevFlow/Microsoft.Maui.DevFlow.Agent.IntegrationTests/Fixtures/WpfFixture.cs
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       platforms:
@@ -117,15 +120,15 @@ jobs:
             local p=$1
             if [[ "$EVENT" == "workflow_dispatch" ]]; then
               [[ "$PLATFORMS" == "all" || "$PLATFORMS" == "$p" ]] && echo true || echo false
-            elif [[ "$EVENT" == "pull_request" ]]; then
+            elif [[ "$EVENT" == "pull_request" || "$EVENT" == "push" ]]; then
               echo true
             else
               echo false
             fi
           }
-          # PRs exercise both frameworks; manual runs retain their selected framework.
+          # PRs and main pushes exercise both frameworks; manual runs retain their selection.
           DEFAULT_FRAMEWORK=maui
-          [[ "$EVENT" == "pull_request" ]] && DEFAULT_FRAMEWORK=both
+          [[ "$EVENT" == "pull_request" || "$EVENT" == "push" ]] && DEFAULT_FRAMEWORK=both
           {
             echo "android=$(should_run android)"
             echo "ios=$(should_run ios)"
