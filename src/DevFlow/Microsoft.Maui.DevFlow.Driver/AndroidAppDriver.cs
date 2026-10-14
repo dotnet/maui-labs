@@ -168,17 +168,50 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     /// </summary>
     public async Task<AlertInfo?> DetectAlertAsync()
     {
+        var before = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
         var xml = await DumpUiHierarchyAsync().ConfigureAwait(false);
         if (xml is null) return null;
         var alert = ParseAlertFromHierarchy(xml);
         if (alert is null) return null;
-        return alert with { InstanceId = await GetFocusedWindowInstanceIdAsync() };
+        var after = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
+        var beforeId = AndroidDialogWindowSafety.GetInstanceId(before, alert.SourceProcessName);
+        var afterId = AndroidDialogWindowSafety.GetInstanceId(after, alert.SourceProcessName);
+        return alert with { InstanceId = beforeId != null && beforeId == afterId ? afterId : null };
+    }
+
+    public async Task<bool> IsDialogAttributedToTargetAsync(
+        AlertInfo dialog, string expectedPackageId, string expectedAppName)
+    {
+        var ownerPackage = dialog.SourceProcessName;
+        if (string.IsNullOrWhiteSpace(ownerPackage) || string.IsNullOrWhiteSpace(dialog.InstanceId))
+            return false;
+        if (!Regex.IsMatch(ownerPackage, @"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*$", RegexOptions.CultureInvariant))
+            return false;
+        if (dialog.IsSystemDialog)
+        {
+            if (ownerPackage is not ("com.google.android.permissioncontroller" or "com.android.permissioncontroller")
+                || !PermissionPromptNamesTarget(dialog.Title, expectedAppName))
+            {
+                return false;
+            }
+        }
+        else if (ownerPackage != expectedPackageId)
+        {
+            return false;
+        }
+
+        var packageInfo = await RunAdbWithOutputAsync("shell", "cmd", "package", "list", "packages", "-U", ownerPackage);
+        var ownerUid = AndroidDialogWindowSafety.GetPackageUid(packageInfo, ownerPackage);
+        if (!ownerUid.HasValue)
+            return false;
+        var windows = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
+        return AndroidDialogWindowSafety.IsUnobscuredDialog(windows, dialog, ownerPackage, ownerUid.Value);
     }
 
     public async Task<bool> IsTargetAppForegroundAsync(string packageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-        var windowState = await RunAdbWithOutputAsync("shell dumpsys window windows");
+        var windowState = await RunAdbWithOutputAsync("shell", "dumpsys", "window");
         if (string.IsNullOrWhiteSpace(windowState))
             return false;
 
@@ -217,10 +250,19 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         AlertInfo reviewedDialog,
         string buttonLabel,
         string expectedPackageId,
-        string expectedAppName)
+        string expectedAppName,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
-        var matches = reviewedDialog.Buttons
+        cancellationToken.ThrowIfCancellationRequested();
+        var currentDialog = await DetectAlertAsync();
+        if (currentDialog == null || !NativeDialogIdentity.CreateFingerprint(Platform, Serial ?? string.Empty, currentDialog)
+            .Equals(NativeDialogIdentity.CreateFingerprint(Platform, Serial ?? string.Empty, reviewedDialog), StringComparison.Ordinal))
+        {
+            return new AlertActionResult(false, true, "The reviewed Android dialog changed or disappeared. Detect it again before acting.", currentDialog);
+        }
+
+        var matches = currentDialog.Buttons
             .Where(button => button.Label.Equals(buttonLabel, StringComparison.Ordinal))
             .ToArray();
         if (matches.Length != 1)
@@ -234,19 +276,18 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
                 reviewedDialog);
         }
 
-        var attributedToTarget = reviewedDialog.IsSystemDialog
-            ? PermissionPromptNamesTarget(reviewedDialog.Title, expectedAppName)
-            : await IsTargetAppForegroundAsync(expectedPackageId);
+        var attributedToTarget = await IsDialogAttributedToTargetAsync(currentDialog, expectedPackageId, expectedAppName);
         if (!attributedToTarget)
         {
             return new AlertActionResult(
                 false,
                 true,
-                "The visible Android dialog cannot be safely attributed to the connected app. Detect the prompt again.",
+                "The Android dialog window owner or unobscured button could not be verified. Respond manually or detect the prompt again.",
                 reviewedDialog);
         }
 
-        await RunAdbAsync($"shell input tap {matches[0].CenterX} {matches[0].CenterY}");
+        cancellationToken.ThrowIfCancellationRequested();
+        await TapAsync(matches[0]);
         return new AlertActionResult(
             true,
             false,
@@ -289,22 +330,6 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
 
         try { return XElement.Parse(content); }
         catch { return null; }
-    }
-
-    private async Task<string?> GetFocusedWindowInstanceIdAsync()
-    {
-        var windowState = await RunAdbWithOutputAsync("shell dumpsys window windows");
-        var focusedWindowLine = windowState
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault(line => line.Contains("mCurrentFocus", StringComparison.Ordinal));
-        if (focusedWindowLine is null)
-            return null;
-
-        var window = Regex.Match(
-            focusedWindowLine,
-            @"Window\{(?<token>[^\s}]+)",
-            RegexOptions.CultureInvariant);
-        return window.Success ? window.Groups["token"].Value : null;
     }
 
     /// <summary>
@@ -371,7 +396,8 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
 
         return new AlertInfo(title, buttons)
         {
-            Text = CollectVisibleText(parentPanel)
+            Text = CollectVisibleText(parentPanel),
+            SourceProcessName = GetHierarchyPackage(parentPanel)
         };
     }
 
@@ -383,7 +409,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     {
         // Permission dialogs come from com.google.android.permissioncontroller
         var permNodes = root.DescendantsAndSelf("node")
-            .Where(n => n.Attribute("package")?.Value == "com.google.android.permissioncontroller")
+            .Where(n => n.Attribute("package")?.Value is "com.google.android.permissioncontroller" or "com.android.permissioncontroller")
             .ToList();
 
         if (permNodes.Count == 0) return null;
@@ -418,8 +444,17 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         {
             Text = CollectVisibleText(root),
             IsSystemDialog = true,
-            SourceProcessName = "com.google.android.permissioncontroller"
+            SourceProcessName = GetHierarchyPackage(permNodes.First())
         };
+    }
+
+    private static string? GetHierarchyPackage(XElement root)
+    {
+        var packages = root.DescendantsAndSelf("node")
+            .Select(node => node.Attribute("package")?.Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return packages.Length == 1 ? packages[0] : null;
     }
 
     internal static bool PermissionPromptNamesTarget(string? promptText, string targetName)
@@ -652,7 +687,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     private async Task RunAdbAsync(params string[] arguments)
         => _ = await RunAdbWithOutputAsync(arguments).ConfigureAwait(false);
 
-    private Task<string> RunAdbWithOutputAsync(params string[] arguments)
+    internal virtual Task<string> RunAdbWithOutputAsync(params string[] arguments)
         => RunAdbForSerialAsync(Serial, arguments);
 
     private async Task<string> RunAdbForSerialAsync(string? serial, string[] arguments)

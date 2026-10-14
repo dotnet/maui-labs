@@ -359,14 +359,28 @@ rendering without activating or reordering windows. On macOS 14.0–14.1, an att
 forces a parent/sheet CoreGraphics composite because ScreenCaptureKit cannot include child
 windows until macOS 14.2. Capture does not request screen-recording permission automatically.
 
-The MCP native-dialog workflow detects the visible prompt, asks the user to choose an exact
-button label, and then responds with `promptId`, `buttonLabel`, and `confirmedByUser=true`.
+The MCP native-dialog workflow detects the visible prompt, then receives `promptId` and
+`buttonLabel`. Before acting, the server sends a form elicitation request to the MCP host,
+which must present the exact app, dialog and button to the user and return explicit approval.
+The former caller-supplied `confirmedByUser` flag has been removed; it cannot prove consent.
+Declines, cancellations, malformed approval responses and hosts without form elicitation
+support result in no action. As with other MCP elicitation, the host is trusted to show the
+request to a human rather than approve it automatically.
 Tokens expire after two minutes, are scoped to the detecting MCP session, and can be used only
 once. Responses revalidate the target and prompt and respect the app's global mutation lease.
 macOS uses AXPress, Windows uses UI Automation Invoke, Linux uses the connected agent, and
 Android/iOS Simulator input is restricted to the device associated with that agent. Physical
 iOS and unattributed system dialogs require manual interaction. macOS requires Accessibility
 permission for native dialog automation.
+
+Android verifies the hierarchy package against the focused dialog window's package and
+WindowManager owner UID, as resolved by the device's package manager. Before tapping, it
+re-reads the dialog and rejects visible windows above it that overlap its response buttons.
+This includes non-focusable overlays even when `mFocusedApp` still names the target app.
+Missing ownership, visibility or geometry information and non-default displays require
+manual interaction. This minimizes stale coordinate risks; device input is not an atomic
+window-targeted invocation, so callers must not use it while another actor is manipulating
+the device UI.
 
 **Behavior change:** `MacCatalystAppDriver.DismissAlertAsync` and
 `HandleAlertIfPresentAsync` no longer choose a button implicitly: a null or empty label throws.
