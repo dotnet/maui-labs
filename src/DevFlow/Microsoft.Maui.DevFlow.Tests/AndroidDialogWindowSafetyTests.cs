@@ -144,6 +144,34 @@ public class AndroidDialogWindowSafetyTests
         Assert.Empty(driver.Taps);
     }
 
+    [Fact]
+    public async Task DetectAlertAsync_PermissionDialog_IgnoresUnrelatedAppTextInFingerprint()
+    {
+        using var driver = new WindowDriver
+        {
+            WindowState = TargetWindow().Replace("com.example.app", "com.google.android.permissioncontroller"),
+            Title = "Allow Sample App to access your contacts?",
+            BackgroundText = "Before"
+        };
+        var reviewed = await driver.DetectAlertAsync();
+        Assert.NotNull(reviewed);
+        Assert.Equal(["Allow Sample App to access your contacts?", "Allow"], reviewed.Text);
+
+        driver.BackgroundText = "After";
+        var current = await driver.DetectAlertAsync();
+        Assert.NotNull(current);
+        Assert.Equal(
+            NativeDialogIdentity.CreateFingerprint(driver.Platform, driver.Serial ?? string.Empty, reviewed),
+            NativeDialogIdentity.CreateFingerprint(driver.Platform, driver.Serial ?? string.Empty, current));
+
+        driver.Title = "Allow Other App to access your contacts?";
+        var changed = await driver.DetectAlertAsync();
+        Assert.NotNull(changed);
+        Assert.NotEqual(
+            NativeDialogIdentity.CreateFingerprint(driver.Platform, driver.Serial ?? string.Empty, reviewed),
+            NativeDialogIdentity.CreateFingerprint(driver.Platform, driver.Serial ?? string.Empty, changed));
+    }
+
     [Theory]
     [InlineData(10042, "Sample App", true)]
     [InlineData(10099, "Sample App", false)]
@@ -203,6 +231,7 @@ public class AndroidDialogWindowSafetyTests
     {
         public string WindowState { get; set; } = TargetWindow();
         public string Title { get; set; } = "Permission";
+        public string? BackgroundText { get; set; }
         public List<string[]> Taps { get; } = [];
         public Action? AfterUidLookup { get; set; }
 
@@ -221,6 +250,16 @@ public class AndroidDialogWindowSafetyTests
                 return Task.FromResult(string.Empty);
             if (arguments.SequenceEqual(["shell", "cat", "/sdcard/window_dump.xml"]))
             {
+                if (BackgroundText is not null)
+                {
+                    return Task.FromResult($"""
+                        <hierarchy>
+                          <node package="com.example.app" text="{BackgroundText}" />
+                          <node package="com.google.android.permissioncontroller" class="android.widget.TextView" text="{Title}" />
+                          <node package="com.google.android.permissioncontroller" class="android.widget.Button" clickable="true" text="Allow" bounds="[100,150][300,250]" />
+                        </hierarchy>
+                        """);
+                }
                 return Task.FromResult($"""
                     <hierarchy>
                       <node resource-id="android:id/parentPanel" package="com.example.app">

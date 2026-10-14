@@ -442,7 +442,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
         if (buttons.Count == 0) return null;
         return new AlertInfo(title ?? "Permission Request", buttons)
         {
-            Text = CollectVisibleText(root),
+            Text = CollectVisibleText(permNodes),
             IsSystemDialog = true,
             SourceProcessName = GetHierarchyPackage(permNodes.First())
         };
@@ -471,7 +471,10 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     }
 
     private static IReadOnlyList<string> CollectVisibleText(XElement root)
-        => root.DescendantsAndSelf("node")
+        => CollectVisibleText(root.DescendantsAndSelf("node"));
+
+    private static IReadOnlyList<string> CollectVisibleText(IEnumerable<XElement> nodes)
+        => nodes
             .SelectMany(node => new[]
             {
                 node.Attribute("text")?.Value,
