@@ -13,13 +13,13 @@ public class WebViewScreenshotCommandTests
         await server.StartAsync();
         var cli = new CliTestHarness(server.Port);
 
-        var result = await cli.InvokeAsync("devflow", "webview", "--webview", "Left View/#", "Page", "captureScreenshot");
+        var result = await cli.InvokeAsync("devflow", "webview", "--context-id", "webview-1", "Page", "captureScreenshot");
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(MockAgentResponses.ScreenshotPng, Convert.FromBase64String(result.StdOut.Trim()));
         var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
         Assert.Equal("GET", request.Method);
-        Assert.Contains("webview=Left%20View%2F%23", request.QueryString);
+        Assert.Equal("?contextId=webview-1", request.QueryString);
         Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
     }
 

@@ -213,10 +213,16 @@ duplicate-AutomationId controls across visible pages/windows.
 packages together and rebuild consumers. The singleton CDP properties, unguarded
 unregister, Blazor script facade, old base class, ConfigureHandler and first-bridge
 helpers are removed; all current callers use typed registration with guarded cleanup.
-External index/AutomationId/element selectors, `--webview`, `ready`/`isReady` and
-Blazor-only `includeBlazorElements` layout coverage remain unchanged in this layer.
-Use the index to disambiguate duplicate host IDs. `hostKind` describes hosting,
-not the native UI backend or behavior dispatch.
+**Breaking external contract:** Contexts have unique `webview-<index>` IDs and a
+single `ready` wire field. Select with HTTP/Client/MCP/Inspector `contextId` or CLI
+`--context-id`. Numeric, AutomationId and element selectors, `webview` query,
+`--webview`/`-w` and `isReady` are removed. Metadata remains descriptive; duplicate
+AutomationIds do not affect selection. Omission/null selects the active host;
+explicit blank/invalid values fail without dispatch. Query contextId takes
+precedence over typed body contextId; raw CDP selection is query-only.
+Upgrade all packages together and rebuild consumers. Blazor-only
+`includeBlazorElements` layout coverage remains unchanged for the next layer.
+`hostKind` is open descriptive hosting metadata, not native backend or dispatch.
 
 The asset-free Blazor adapter uses the ordinary .NET SDK and excludes the
 application-only WebView build imports from its private compile reference.
@@ -233,12 +239,19 @@ original CDP evaluation. Bridges that return object references despite
 Structured results are preserved; missing or invalid serialized results fail
 without replaying the action. Raw CDP evaluation is unchanged.
 
+WebView DOM query, snapshot and input helpers forward the selected `--context-id`
+outside JavaScript. Typed click/fill actions execute once, and CLI/MCP screenshots
+use the agent's native-first `/api/v1/webview/screenshot` endpoint with PNG
+signature verification. `devflow batch` stops at the first failure unless
+`--continue-on-error` is supplied; either mode returns a nonzero process exit if
+any command failed.
+
 ### WebView screenshots
 
 `maui devflow webview Page captureScreenshot` and `maui_cdp_screenshot` use the
 existing native-first `/api/v1/webview/screenshot` endpoint instead of sending
 `Page.captureScreenshot` directly through CDP. The selected WebView is forwarded
-by the portable `AgentClient.GetWebViewScreenshotAsync(webviewId: null)` API.
+by the portable `AgentClient.GetWebViewScreenshotAsync(contextId: null)` API.
 The CLI still returns base64; MCP returns an `image/png` content block.
 
 The client checks the eight-byte PNG signature before returning image bytes.

@@ -7,8 +7,9 @@ public class AgentClientWebViewScreenshotTests
 {
     [Theory]
     [InlineData(null, "")]
-    [InlineData("", "")]
-    [InlineData("Left View/#", "webview=Left%20View%2F%23")]
+    [InlineData("", "contextId=")]
+    [InlineData("webview-1", "contextId=webview-1")]
+    [InlineData("Left View/#", "contextId=Left%20View%2F%23")]
     public async Task GetWebViewScreenshotAsync_UsesNativeFirstEndpointAndTarget(string? target, string query)
     {
         var png = Convert.FromBase64String(
