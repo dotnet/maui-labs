@@ -64,12 +64,10 @@ public class ProtocolSpecTests
     private static readonly Lazy<string> SpecRoot = new(FindSpecRoot);
 
     [Fact]
-    public void WebViewNetwork_DocumentsUnsupportedBrowserCaptureWithoutChangingNativeNetwork()
+    public void WebViewNetwork_RemovedFromSpecWithoutChangingNativeNetwork()
     {
         var openApi = LoadDocument(Path.Combine(SpecRoot.Value, "openapi.yaml"));
-        var responses = openApi["paths"]!["/api/v1/webview/network"]!["get"]!["responses"]!;
-        Assert.Null(responses["200"]);
-        Assert.Equal("#/components/responses/BackendNotSupported", responses["501"]!["$ref"]!.GetValue<string>());
+        Assert.Null(openApi["paths"]!["/api/v1/webview/network"]);
         Assert.NotNull(openApi["paths"]!["/api/v1/network/requests"]!["get"]!["responses"]!["200"]);
 
         var example = LoadDocument(Path.Combine(SpecRoot.Value, "examples", "capabilities-maui-response.json"));

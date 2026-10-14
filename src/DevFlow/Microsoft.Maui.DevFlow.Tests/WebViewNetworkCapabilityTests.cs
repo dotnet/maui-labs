@@ -8,13 +8,10 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class WebViewNetworkCapabilityTests
 {
-    private const string UnsupportedReason =
-        "Browser-network capture is not implemented. Use /api/v1/network/requests for native .NET HTTP traffic.";
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task WebViewNetwork_ReturnsUnsupportedWithoutReadingNativeTraffic(bool registerWebView)
+    public async Task WebViewNetwork_ReturnsRouteNotFoundWithoutReadingNativeTraffic(bool registerWebView)
     {
         using var service = CreateService(out var port);
         if (registerWebView)
@@ -25,14 +22,13 @@ public class WebViewNetworkCapabilityTests
 
         using var response = await http.GetAsync("/api/v1/webview/network?host=native.test&contextId=0");
 
-        Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var body = document.RootElement;
-        Assert.Equal(3, body.EnumerateObject().Count());
-        Assert.Equal("not_supported", body.GetProperty("error").GetString());
-        Assert.Equal("webview.network", body.GetProperty("capability").GetString());
-        Assert.Equal(UnsupportedReason, body.GetProperty("reason").GetString());
+        Assert.Equal(2, body.EnumerateObject().Count());
+        Assert.False(body.GetProperty("success").GetBoolean());
+        Assert.Equal("Route not found", body.GetProperty("error").GetString());
         Assert.Same(entry, service.NetworkStore.GetById(entry.Id));
         Assert.Equal(1, service.NetworkStore.Count);
     }

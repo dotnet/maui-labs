@@ -1469,19 +1469,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /api/v1/webview/network:
-    get:
-      operationId: getWebViewNetworkRequests
-      tags: [webview]
-      summary: Discover unsupported browser-network capture
-      description: >
-        Browser fetch/XHR capture is not implemented. Returns the standard
-        not_supported envelope for webview.network. Native .NET HTTP traffic
-        remains available through /api/v1/network/requests.
-      responses:
-        "501":
-          $ref: "#/components/responses/BackendNotSupported"
-
   /api/v1/webview/console:
     get:
       operationId: getWebViewConsoleLogs
