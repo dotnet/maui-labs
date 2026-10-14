@@ -929,11 +929,16 @@ public class WebViewTests : IntegrationTestBase
             await Client.NavigateAsync("//blazor");
             App.InvalidateBlazorReady();
             await EnsureOnBlazorPageAsync();
+            var mainContext = await WebViewReadiness.WaitForMainContextAsync(
+                Client.GetCdpWebViewsAsync,
+                (contextId, expression) => Client.SendCdpCommandAsync(
+                    "Runtime.evaluate", new JsonObject { ["expression"] = expression }, contextId),
+                timeoutMs);
 
             await Client.SendCdpCommandAsync(
                 "Runtime.evaluate",
                 JsonNode.Parse("""{"expression":"window.__devflowContext = 'main'"}"""),
-                "BlazorWebView");
+                mainContext);
             var defaultResult = await Client.SendCdpCommandAsync(
                 "Runtime.evaluate",
                 JsonNode.Parse("""{"expression":"window.__devflowContext"}"""));

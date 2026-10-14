@@ -61,9 +61,11 @@ public class GtkBlazorWebViewDebugService : IDisposable
     {
         if (_agent != null && !_registrations.ContainsKey(bridge))
         {
+            object? owner = null;
+            bridge.Owner?.TryGetTarget(out owner);
             var index = _agent.RegisterCdpWebView(
                 bridge.SendCdpCommandAsync, () => bridge.IsReady, bridge.AutomationId, bridge.ElementId,
-                hostKind: "blazor");
+                hostKind: "blazor", owner: owner);
             foreach (var previous in _registrations.Where(entry => entry.Value == index).Select(entry => entry.Key).ToArray())
                 _registrations.Remove(previous);
             _registrations.Add(bridge, index);
@@ -95,7 +97,7 @@ public class GtkBlazorWebViewDebugService : IDisposable
             if (_capturedHandlers.ContainsKey(handler))
                 return;
 
-            bridge = new GtkWebViewBridge(this, webView, control.AutomationId);
+            bridge = new GtkWebViewBridge(this, webView, control.AutomationId, owner: control);
             EventHandler<Microsoft.Maui.Controls.HandlerChangingEventArgs>? changing = null;
             changing = (_, args) =>
             {
@@ -149,18 +151,21 @@ public class GtkBlazorWebViewDebugService : IDisposable
         public string? AutomationId { get; }
         public string? ElementId { get; set; }
         public bool IsReady => !_disposed && _isInitialized && (_webView != null || _evaluateJavaScript != null) && _chobitsuLoaded;
+        internal WeakReference<object>? Owner { get; }
         internal Action? LifetimeCleanup { get; set; }
         internal Task? LogDrainTask { get; private set; }
 
-        internal GtkWebViewBridge(GtkBlazorWebViewDebugService owner, global::WebKit.WebView webView,
+        internal GtkWebViewBridge(GtkBlazorWebViewDebugService service, global::WebKit.WebView webView,
             string? automationId, Func<string, Task<string?>>? evaluateJavaScript = null,
-            Func<CancellationToken, Task<byte[]>>? captureScreenshot = null)
+            Func<CancellationToken, Task<byte[]>>? captureScreenshot = null,
+            Microsoft.Maui.Controls.View? owner = null)
         {
-            _owner = owner;
+            _owner = service;
             _webView = webView;
             AutomationId = automationId;
             _evaluateJavaScript = evaluateJavaScript;
             _captureScreenshot = captureScreenshot;
+            Owner = owner is null ? null : new WeakReference<object>(owner);
             _lifetimeToken = _lifetimeCts.Token;
             if (_webView != null)
                 _webView.OnLoadChanged += OnLoadChanged;
