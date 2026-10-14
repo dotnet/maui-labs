@@ -2062,7 +2062,7 @@ public class DevFlowCommands
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 JSON.stringify((function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
+                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
                     if (!el) return null;
                     return {{
                         tagName: el.tagName.toLowerCase(),
@@ -2071,7 +2071,7 @@ public class DevFlowCommands
                         textContent: el.textContent?.trim().substring(0, 100) || null
                     }};
                 }})())
-            ");
+            ", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2083,7 +2083,7 @@ public class DevFlowCommands
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 JSON.stringify((function() {{
-                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)}, webview);
+                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)});
                     return Array.from(els).map((el, i) => ({{
                         index: i,
                         tagName: el.tagName.toLowerCase(),
@@ -2092,7 +2092,7 @@ public class DevFlowCommands
                         textContent: el.textContent?.trim().substring(0, 50) || null
                     }}));
                 }})(), null, 2)
-            ");
+            ", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2160,12 +2160,12 @@ public class DevFlowCommands
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
+                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
                     if (!el) return 'Error: Element not found';
                     el.click();
                     return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
                 }})()
-            ");
+            ", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2190,7 +2190,7 @@ public class DevFlowCommands
         {
             var result = await CdpEvaluateAsync(host, port, $@"
                 (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
+                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
                     if (!el) return 'Error: Element not found';
                     
                     const text = {CliJson.SerializeUntyped(text, indented: false)};
@@ -2204,7 +2204,7 @@ public class DevFlowCommands
                     el.dispatchEvent(new Event('change', {{ bubbles: true }}));
                     return 'Filled: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' with ' + text.length + ' chars';
                 }})()
-            ");
+            ", webview);
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2300,7 +2300,7 @@ public class DevFlowCommands
                     function walk(node, depth) {
                         if (depth > 8) return '';
                         let result = '';
-                        const indent = '  '.repeat(depth, webview);
+                        const indent = '  '.repeat(depth);
                         
                         if (node.nodeType === 1) {
                             const tag = node.tagName.toLowerCase();
@@ -2331,7 +2331,7 @@ public class DevFlowCommands
                     
                     return 'Title: ' + document.title + '\nURL: ' + location.href + '\n\n' + walk(document.body, 0);
                 })()
-            ");
+            ", webview);
             
             Console.WriteLine(result);
         }
@@ -3000,7 +3000,7 @@ public class DevFlowCommands
         new("webview DOM querySelector", "Find element by CSS selector", false),
         new("webview DOM querySelectorAll", "Find all elements by CSS selector", false),
         new("webview DOM getOuterHTML", "Get element outer HTML", false),
-        new("webview Input click", "Click element by CSS selector", true),
+        new("webview Input dispatchClickEvent", "Click element by CSS selector", true),
         new("webview Input insertText", "Insert text at cursor", true),
         new("webview Input fill", "Fill form field by CSS selector", true),
         new("webview Page navigate", "Navigate WebView to URL", true),
