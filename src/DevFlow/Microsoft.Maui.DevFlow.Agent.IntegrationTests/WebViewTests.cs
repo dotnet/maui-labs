@@ -294,16 +294,32 @@ public class WebViewTests : IntegrationTestBase
                 MinimumSeverity = "info",
                 Scope = new LayoutInspectionScope
                 {
-                    IncludeBlazorElements = true,
+                    IncludeWebViewElements = true,
                     IncludeNativeElements = false
                 },
                 Stability = new LayoutStabilityOptions { Mode = "immediate" }
             });
 
             Assert.NotNull(result);
-            Assert.Contains(result!.Findings, finding =>
+            var finding = Assert.Single(result!.Findings, finding =>
                 finding.RuleId == LayoutDiagnosticRules.TextNotFullyRendered
                 && finding.Element.AutomationId == fixtureId);
+            var contexts = await Client.GetCdpWebViewsAsync();
+            var host = contexts.GetProperty("webviews").EnumerateArray()
+                .Last(context => context.GetProperty("active").GetBoolean()
+                    && context.GetProperty("ready").GetBoolean());
+            Assert.StartsWith($"web-{host.GetProperty("index").GetInt32()}-", finding.Element.Id);
+            Assert.Equal(host.GetProperty("elementId").GetString(), finding.Element.ParentId);
+
+            var nativeOnly = await Client.AnalyzeLayoutAsync(new LayoutInspectionRequest
+            {
+                MinimumSeverity = "info",
+                Scope = new LayoutInspectionScope { IncludeWebViewElements = false, IncludeNativeElements = false },
+                Stability = new LayoutStabilityOptions { Mode = "immediate" }
+            });
+            Assert.NotNull(nativeOnly);
+            Assert.DoesNotContain(nativeOnly!.Findings, finding => finding.Element.Id.StartsWith("web-", StringComparison.Ordinal));
+            Assert.True(nativeOnly.Snapshot.NodeCount < result.Snapshot.NodeCount);
         }
         finally
         {
