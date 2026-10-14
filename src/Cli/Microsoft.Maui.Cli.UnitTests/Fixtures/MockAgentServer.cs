@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -99,6 +100,12 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     public string? WebViewEvaluateResponse { get; set; }
     public string? AgentStatusResponse { get; set; }
+    public string? FileDownloadResponse { get; set; }
+    public string BrokerHealthResponse { get; set; } = """{"agents":2}""";
+    public string LayoutResponse { get; set; } = """{"summary":{"incomplete":1}}""";
+    public int LayoutStatusCode { get; set; } = 200;
+    public Dictionary<string, string[]> StreamMessages { get; } = [];
+    public int StreamFragmentSize { get; set; } = 1024;
 
     public IReadOnlyList<RecordedRequest> RecordedRequests
     {
@@ -116,6 +123,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         builder.Logging.ClearProviders();
 
         _app = builder.Build();
+        _app.UseWebSockets();
 
         _app.Use(async (context, next) =>
         {
@@ -149,6 +157,8 @@ public sealed class MockAgentServer : IAsyncDisposable
         RegisterWebViewEndpoints(_app);
         RegisterNetworkEndpoints(_app);
         RegisterExtensionEndpoints(_app);
+        RegisterStreamEndpoints(_app);
+        _app.MapGet("/api/health", () => Results.Content(BrokerHealthResponse, "application/json"));
 
         await _app.StartAsync();
         Port = _app.Urls.Select(url => new Uri(url).Port).First();
@@ -271,6 +281,9 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     private void RegisterUiEndpoints(WebApplication app)
     {
+        app.MapPost("/api/v1/ui/diagnostics/layout", () =>
+            Results.Content(LayoutResponse, "application/json", statusCode: LayoutStatusCode));
+
         app.MapGet("/api/v1/ui/tree", () => Results.Content(
             _returnEmptyTree
                 ? "[]"
@@ -535,7 +548,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapPost("/api/v1/device/sensors/{sensor}/stop", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
 
-    private static void RegisterStorageEndpoints(WebApplication app)
+    private void RegisterStorageEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/storage/preferences", () => Results.Content(MockAgentResponses.PreferencesList, "application/json"));
         app.MapGet("/api/v1/storage/preferences/{key}", () => Results.Content(MockAgentResponses.PreferenceValue, "application/json"));
@@ -550,7 +563,7 @@ public sealed class MockAgentServer : IAsyncDisposable
 
         app.MapGet("/api/v1/storage/roots", () => Results.Content(MockAgentResponses.StorageRoots, "application/json"));
         app.MapGet("/api/v1/storage/files", () => Results.Content(MockAgentResponses.FilesList, "application/json"));
-        app.MapGet("/api/v1/storage/files/{path}", (string path) => Results.Content(MockAgentResponses.FileDownload(path), "application/json"));
+        app.MapGet("/api/v1/storage/files/{path}", (string path) => Results.Content(FileDownloadResponse ?? MockAgentResponses.FileDownload(path), "application/json"));
         app.MapPut("/api/v1/storage/files/{path}", (string path) => Results.Content(MockAgentResponses.FileUpload(path), "application/json"));
         app.MapDelete("/api/v1/storage/files/{path}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
@@ -580,6 +593,40 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/network/requests/{id}", (string id) => Results.Content($$"""{"id":"{{id}}"}""", "application/json"));
         app.MapDelete("/api/v1/network/requests", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
         app.MapGet("/api/v1/logs", () => Results.Content("""[{"level":"info","message":"ok"}]""", "application/json"));
+    }
+
+    private void RegisterStreamEndpoints(WebApplication app)
+    {
+        foreach (var stream in new[] { "logs", "network", "sensors" })
+        {
+            app.MapGet($"/ws/v1/{stream}", async (HttpContext context) =>
+            {
+                using var ws = await context.WebSockets.AcceptWebSocketAsync();
+                foreach (var message in StreamMessages.GetValueOrDefault(stream) ?? [])
+                {
+                    var bytes = Encoding.UTF8.GetBytes(message);
+                    for (var offset = 0; offset < bytes.Length; offset += StreamFragmentSize)
+                    {
+                        var length = Math.Min(StreamFragmentSize, bytes.Length - offset);
+                        await ws.SendAsync(new ArraySegment<byte>(bytes, offset, length),
+                            WebSocketMessageType.Text, offset + length == bytes.Length, context.RequestAborted);
+                    }
+                }
+
+                try
+                {
+                    var buffer = new byte[1024];
+                    while (ws.State == WebSocketState.Open)
+                    {
+                        var result = await ws.ReceiveAsync(buffer, context.RequestAborted);
+                        if (result.MessageType == WebSocketMessageType.Close)
+                            break;
+                    }
+                }
+                catch (WebSocketException) { }
+                catch (OperationCanceledException) { }
+            });
+        }
     }
 }
 

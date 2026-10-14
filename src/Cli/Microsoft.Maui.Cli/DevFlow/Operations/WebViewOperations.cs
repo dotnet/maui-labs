@@ -41,14 +41,14 @@ internal sealed class WebViewOperations(AgentClient client)
         return root.ToString();
     }
 
-    internal async Task<JsonElement?> BrowserGetVersionAsync(string? webview = null)
-        => await client.SendCdpCommandAsync("Browser.getVersion", webviewId: webview);
+    internal async Task<JsonElement?> BrowserGetVersionAsync(string? webview = null) =>
+        await client.SendCdpCommandAsync("Browser.getVersion", webviewId: webview);
 
-    internal async Task<JsonElement?> DomGetDocumentAsync(string? webview = null)
-        => await client.SendCdpCommandAsync("DOM.getDocument", webviewId: webview);
+    internal async Task<JsonElement?> DomGetDocumentAsync(string? webview = null) =>
+        await client.SendCdpCommandAsync("DOM.getDocument", webviewId: webview);
 
-    internal Task<string> DomQuerySelectorAsync(string selector, string? webview = null)
-        => EvaluateAsync($@"
+    internal Task<string> DomQuerySelectorAsync(string selector, string? webview = null) =>
+        EvaluateAsync($@"
                 JSON.stringify((function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
                     if (!el) return null;
@@ -61,8 +61,8 @@ internal sealed class WebViewOperations(AgentClient client)
                 }})())
             ", webview);
 
-    internal Task<string> DomQuerySelectorAllAsync(string selector, string? webview = null)
-        => EvaluateAsync($@"
+    internal Task<string> DomQuerySelectorAllAsync(string selector, string? webview = null) =>
+        EvaluateAsync($@"
                 JSON.stringify((function() {{
                     const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)});
                     return Array.from(els).map((el, i) => ({{
@@ -75,17 +75,17 @@ internal sealed class WebViewOperations(AgentClient client)
                 }})(), null, 2)
             ", webview);
 
-    internal Task<string> DomGetOuterHtmlAsync(string selector, string? webview = null)
-        => EvaluateAsync($@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", webview);
+    internal Task<string> DomGetOuterHtmlAsync(string selector, string? webview = null) =>
+        EvaluateAsync($@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", webview);
 
-    internal async Task PageNavigateAsync(string url, string? webview = null)
-        => await client.SendCdpCommandAsync("Page.navigate", new JsonObject
+    internal async Task PageNavigateAsync(string url, string? webview = null) =>
+        await client.SendCdpCommandAsync("Page.navigate", new JsonObject
         {
             ["url"] = url
         }, webview);
 
-    internal async Task PageReloadAsync(string? webview = null)
-        => await client.SendCdpCommandAsync("Page.reload", webviewId: webview);
+    internal async Task PageReloadAsync(string? webview = null) =>
+        await client.SendCdpCommandAsync("Page.reload", webviewId: webview);
 
     internal async Task<string?> PageCaptureScreenshotAsync(string? webview = null)
     {
@@ -99,8 +99,8 @@ internal sealed class WebViewOperations(AgentClient client)
         return CliJson.PrettyPrint(result);
     }
 
-    internal Task<string> InputDispatchClickAsync(string selector, string? webview = null)
-        => EvaluateAsync($@"
+    internal Task<string> InputDispatchClickAsync(string selector, string? webview = null) =>
+        EvaluateAsync($@"
                 (function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
                     if (!el) return 'Error: Element not found';
@@ -109,14 +109,14 @@ internal sealed class WebViewOperations(AgentClient client)
                 }})()
             ", webview);
 
-    internal async Task InputInsertTextAsync(string text, string? webview = null)
-        => await client.SendCdpCommandAsync("Input.insertText", new JsonObject
+    internal async Task InputInsertTextAsync(string text, string? webview = null) =>
+        await client.SendCdpCommandAsync("Input.insertText", new JsonObject
         {
             ["text"] = text
         }, webview);
 
-    internal Task<string> InputFillAsync(string selector, string text, string? webview = null)
-        => EvaluateAsync($@"
+    internal Task<string> InputFillAsync(string selector, string text, string? webview = null) =>
+        EvaluateAsync($@"
                 (function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)});
                     if (!el) return 'Error: Element not found';
@@ -147,14 +147,14 @@ internal sealed class WebViewOperations(AgentClient client)
         return (cdpReady, cdpCount);
     }
 
-    internal Task<JsonElement> GetWebViewsAsync()
-        => client.GetCdpWebViewsAsync();
+    internal Task<JsonElement> GetWebViewsAsync() =>
+        client.GetCdpWebViewsAsync();
 
-    internal Task<string> GetSourceAsync(string? webview = null)
-        => client.GetCdpSourceAsync(webview);
+    internal Task<string> GetSourceAsync(string? webview = null) =>
+        client.GetCdpSourceAsync(webview);
 
-    internal Task<string> SnapshotAsync(string? webview = null)
-        => EvaluateAsync(@"
+    internal Task<string> SnapshotAsync(string? webview = null) =>
+        EvaluateAsync(@"
                 (function() {
                     function walk(node, depth) {
                         if (depth > 8) return '';

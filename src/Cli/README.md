@@ -464,6 +464,13 @@ For Inspector reconnect behavior, control handoff, and XAML workspace recovery, 
 
 ## Development
 
+DevFlow command registration, argument validation, presentation, exit codes, and batch
+parser re-entry live in `DevFlowCommands`. Internal instance operations under the
+`DevFlow/Operations/` directory own native UI, WebView/CDP, storage/device, streaming, theme,
+extensions, capture/recording, host alerts/permissions, and broker/discovery execution.
+Command-side helpers prepare and own agent connections; operations borrow clients and
+do not dispose them. Stream cancellation subscriptions and rendering stay at the CLI boundary.
+
 ```bash
 # Open just the CLI in your IDE
 open src/Cli/Cli.slnf

@@ -684,41 +684,8 @@ public class WebViewTests : IntegrationTestBase
         }
     }
 
-    async Task<(int ExitCode, string Stdout, string Stderr)> InvokeWebViewCommandAsync(params string[] args)
-    {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        using var stdout = new StringWriter();
-        using var stderr = new StringWriter();
-        var errorField = typeof(DevFlowCommands).GetField("_errorOccurred", BindingFlags.Static | BindingFlags.NonPublic)!;
-        var exitCodeField = typeof(DevFlowCommands).GetField("_requestedExitCode", BindingFlags.Static | BindingFlags.NonPublic)!;
-        var labelField = typeof(DevFlowCommands).GetField("_agentLabelEmitted", BindingFlags.Static | BindingFlags.NonPublic)!;
-        var previousError = errorField.GetValue(null);
-        var previousExitCode = exitCodeField.GetValue(null);
-        var previousLabel = labelField.GetValue(null);
-        try
-        {
-            Console.SetOut(stdout);
-            Console.SetError(stderr);
-            errorField.SetValue(null, false);
-            exitCodeField.SetValue(null, null);
-            labelField.SetValue(null, false);
-            var exitCode = await Microsoft.Maui.Cli.Program.Main([
-                "devflow", "webview", .. args,
-                "--agent-host", new Uri(App.AgentBaseUrl).Host,
-                "--agent-port", App.AgentPort.ToString()
-            ]);
-            return (exitCode, stdout.ToString().TrimEnd(), stderr.ToString().TrimEnd());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-            errorField.SetValue(null, previousError);
-            exitCodeField.SetValue(null, previousExitCode);
-            labelField.SetValue(null, previousLabel);
-        }
-    }
+    Task<(int ExitCode, string Stdout, string Stderr)> InvokeWebViewCommandAsync(params string[] args) =>
+        InvokeCliCommandAsync(["webview", .. args]);
 
     [Theory]
     [InlineData("click", "button")]
