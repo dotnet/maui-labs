@@ -27,9 +27,6 @@ so behaviour lives in exactly one place while each head stays an idiomatic plain
 
 The agent never starts itself — each head bootstraps it explicitly.
 
-The iOS and Mac Catalyst heads use UIKit's scene lifecycle. `AppDelegate` starts the agent once;
-the shared `Apple/SceneDelegate.cs` creates and owns each scene's window and native screen.
-
 ```csharp
 // Android — MainActivity.OnCreate
 this.StartDevFlowAgent();
