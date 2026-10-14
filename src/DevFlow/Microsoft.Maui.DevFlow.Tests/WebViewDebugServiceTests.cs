@@ -660,11 +660,96 @@ public class WebViewDebugServiceTests
         protected override void PostToMainThread(Action action) => action();
     }
 
+    [Fact]
+    public async Task JavaScriptHost_StartupHandshake_PrecedesFirstCommandResponse()
+    {
+        using var host = new JavaScriptHost(beforeReady: """
+            const deadline = Date.now() + 5100;
+            while (Date.now() < deadline) {}
+            """);
+
+        Assert.Equal("initialized", await host.EvaluateAsync("window.__fixture = 'initialized'"));
+        Assert.Equal("initialized", await host.EvaluateAsync("window.__fixture"));
+    }
+
+    [Theory]
+    [InlineData("process.stderr.write('startup-test-error\\n'); process.exit(7);", "exit=7", "startup-test-error")]
+    [InlineData("process.stdout.write('unexpected\\n');", "Unexpected startup acknowledgement", "unexpected")]
+    public async Task JavaScriptHost_StartupFailure_ReportsPhaseAndStopsFurtherCommands(
+        string beforeReady, string expected, string detail)
+    {
+        using var host = new JavaScriptHost(beforeReady);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => host.EvaluateAsync("'unused'"));
+        Assert.Contains("startup", error.Message);
+        Assert.Contains("pid=", error.Message);
+        Assert.Contains(expected, error.Message);
+        Assert.Contains(detail, error.Message);
+        Assert.True(host.HasExited);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.EvaluateAsync("'must not be sent'"));
+    }
+
+    [Fact]
+    public async Task JavaScriptHost_StartupTimeout_CancelsReadAndTerminatesOwnedProcess()
+    {
+        using var host = new JavaScriptHost(beforeReady: "while (true) {}",
+            startupTimeout: TimeSpan.FromMilliseconds(250));
+
+        var error = await Assert.ThrowsAsync<TimeoutException>(() => host.EvaluateAsync("'unused'"));
+
+        Assert.Contains("startup", error.Message);
+        Assert.Contains("pid=", error.Message);
+        Assert.Contains("exit=", error.Message);
+        Assert.True(host.HasExited);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.EvaluateAsync("'must not be sent'"));
+    }
+
+    [Fact]
+    public async Task JavaScriptHost_CommandExit_ReportsCommandPhaseAndStderr()
+    {
+        using var host = new JavaScriptHost(beforeReady: """
+            context.__exit = () => { process.stderr.write('command-test-error\n'); process.exit(9); };
+            """);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            host.EvaluateAsync("__exit()"));
+
+        Assert.Contains("command", error.Message);
+        Assert.Contains("pid=", error.Message);
+        Assert.Contains("exit=9", error.Message);
+        Assert.Contains("command-test-error", error.Message);
+        Assert.True(host.HasExited);
+    }
+
+    [Fact]
+    public async Task JavaScriptHost_CommandTimeout_CancelsReadBeforeAnyFurtherCommand()
+    {
+        using var host = new JavaScriptHost();
+
+        var error = await Assert.ThrowsAsync<TimeoutException>(() => host.EvaluateAsync("while (true) {}"));
+
+        Assert.Contains("command", error.Message);
+        Assert.Contains("5 seconds", error.Message);
+        Assert.True(host.HasExited);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.EvaluateAsync("'must not be sent'"));
+    }
+
     private sealed class JavaScriptHost : IDisposable
     {
+        private const string ReadyMessage = "__devflow_test_ready__";
         private readonly Process _process;
-        public JavaScriptHost()
+        private readonly Task _stderrDrain;
+        private readonly TimeSpan _startupTimeout;
+        private readonly object _stderrGate = new();
+        private readonly System.Text.StringBuilder _stderr = new();
+        private Task? _startup;
+        private bool _failed;
+        public bool HasExited => _process.HasExited;
+
+        public JavaScriptHost(string? beforeReady = null, TimeSpan? startupTimeout = null)
         {
+            // Node startup is external-process work, not part of the five-second command budget.
+            _startupTimeout = startupTimeout ?? TimeSpan.FromSeconds(30);
             var start = new ProcessStartInfo("node")
             {
                 RedirectStandardInput = true,
@@ -707,26 +792,119 @@ public class WebViewDebugServiceTests
                         process.stdout.write(JSON.stringify({error: error.message}) + '\n');
                     }
                 });
-                """);
+                """ + "\n" + beforeReady + "\n" +
+                $"process.stdout.write('{ReadyMessage}\\n');");
             _process = Process.Start(start) ?? throw new InvalidOperationException("Could not start Node script evaluator.");
+            _stderrDrain = DrainStderrAsync();
         }
 
         public async Task<string?> EvaluateAsync(string script)
         {
-            await _process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(script));
-            var response = await _process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5))
-                ?? throw new InvalidOperationException("Node script evaluator exited.");
+            if (_failed)
+                throw new InvalidOperationException(Diagnostics("command", "Node evaluator is unavailable after a transport failure."));
+            await (_startup ??= WaitForStartupAsync());
+            using var commandTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            string response;
+            try
+            {
+                await _process.StandardInput.WriteLineAsync(
+                    JsonSerializer.Serialize(script).AsMemory(), commandTimeout.Token);
+                await _process.StandardInput.FlushAsync(commandTimeout.Token);
+                response = await ReadResponseAsync("command", commandTimeout.Token);
+            }
+            catch (OperationCanceledException ex) when (commandTimeout.IsCancellationRequested)
+            {
+                await StopFailedProcessAsync();
+                throw new TimeoutException(Diagnostics("command", "Response timed out after 5 seconds."), ex);
+            }
+            catch (IOException ex)
+            {
+                await StopFailedProcessAsync();
+                throw new InvalidOperationException(Diagnostics("command", "Node pipe failed."), ex);
+            }
             using var result = JsonDocument.Parse(response);
             if (result.RootElement.ValueKind == JsonValueKind.Object)
-                throw new InvalidOperationException(result.RootElement.GetProperty("error").GetString());
+                throw new InvalidOperationException(Diagnostics("command", result.RootElement.GetProperty("error").GetString()!));
             return result.RootElement.ValueKind == JsonValueKind.Null ? null : result.RootElement.GetString();
+        }
+
+        private async Task WaitForStartupAsync()
+        {
+            using var timeout = new CancellationTokenSource(_startupTimeout);
+            try
+            {
+                var ready = await ReadResponseAsync("startup", timeout.Token);
+                if (ready != ReadyMessage)
+                {
+                    await StopFailedProcessAsync();
+                    throw new InvalidOperationException(Diagnostics("startup", $"Unexpected startup acknowledgement: {ready}"));
+                }
+            }
+            catch (OperationCanceledException ex) when (timeout.IsCancellationRequested)
+            {
+                await StopFailedProcessAsync();
+                throw new TimeoutException(Diagnostics("startup", $"Ready handshake timed out after {_startupTimeout}."), ex);
+            }
+            catch (IOException ex)
+            {
+                await StopFailedProcessAsync();
+                throw new InvalidOperationException(Diagnostics("startup", "Node pipe failed."), ex);
+            }
+        }
+
+        private async Task<string> ReadResponseAsync(string phase, CancellationToken token)
+        {
+            var response = await _process.StandardOutput.ReadLineAsync(token);
+            if (response is not null)
+                return response;
+            await StopFailedProcessAsync();
+            throw new InvalidOperationException(Diagnostics(phase, "Node stdout closed before a response."));
+        }
+
+        private async Task DrainStderrAsync()
+        {
+            var buffer = new char[1024];
+            int read;
+            while ((read = await _process.StandardError.ReadAsync(buffer)) > 0)
+            {
+                lock (_stderrGate)
+                {
+                    _stderr.Append(buffer, 0, read);
+                    if (_stderr.Length > 4096)
+                        _stderr.Remove(0, _stderr.Length - 4096);
+                }
+            }
+        }
+
+        private async Task StopFailedProcessAsync()
+        {
+            _failed = true;
+            if (!_process.HasExited)
+            {
+                try { _process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) when (_process.HasExited) { }
+            }
+            await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            await _stderrDrain.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        private string Diagnostics(string phase, string message)
+        {
+            lock (_stderrGate)
+                return $"Node {phase}: {message} pid={_process.Id}; " +
+                    $"exit={(_process.HasExited ? _process.ExitCode.ToString() : "(running)")}; stderr={_stderr}";
         }
 
         public void Dispose()
         {
-            _process.StandardInput.Close();
-            if (!_process.WaitForExit(5000)) _process.Kill(entireProcessTree: true);
-            _process.Dispose();
+            try
+            {
+                _process.StandardInput.Close();
+                if (!_process.WaitForExit(5000))
+                    StopFailedProcessAsync().GetAwaiter().GetResult();
+                _stderrDrain.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+            }
+            finally { _process.Dispose(); }
         }
     }
 
