@@ -76,8 +76,6 @@ internal static class WebViewReadiness
     {
         if (context.ValueKind == JsonValueKind.Undefined)
             return null;
-        if (context.TryGetProperty("id", out var id))
-            return id.GetString();
         return context.GetProperty("index").GetInt32().ToString(CultureInfo.InvariantCulture);
     }
 
