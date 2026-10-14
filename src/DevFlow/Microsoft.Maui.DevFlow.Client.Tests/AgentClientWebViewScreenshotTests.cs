@@ -1,3 +1,4 @@
+using System.Net.Http;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Client.Tests;
