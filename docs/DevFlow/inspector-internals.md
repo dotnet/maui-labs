@@ -211,6 +211,13 @@ Windows CI runs the full browser fixture suite and repeats the three synchroniza
 times, failing immediately on any failure or skip. The Windows live integration job also includes
 these browser cases alongside the tests that genuinely require a native agent.
 
+The Android integration job preinstalls emulator-runner's SDK prerequisites before snapshot
+warm-up or test execution. `eng/scripts/install-android-sdk-with-retry.sh` allows three installation
+attempts for recognized corrupt-ZIP or network-download errors, waiting 5 then 10 seconds.
+Unknown packages, rejected licenses, permissions, disk-space errors, and other non-transient
+failures are not retried. Exhausted attempts preserve the installer's failure exit code.
+Emulator boot and integration-test failures are outside the retry scope.
+
 ## Implementation
 
 | Area | Location |

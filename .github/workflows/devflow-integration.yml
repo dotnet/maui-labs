@@ -191,6 +191,18 @@ jobs:
             ~/.android/adb*
           key: avd-${{ env.DEVFLOW_TEST_ANDROID_API }}-x86_64
 
+      - name: Test Android SDK installation retries
+        run: node --test eng/scripts/install-android-sdk-with-retry.test.mjs
+
+      # Match emulator-runner's SDK prerequisites so both action invocations reuse installed bits.
+      - name: Install Android emulator SDK packages with retry
+        run: |
+          bash eng/scripts/install-android-sdk-with-retry.sh \
+            'build-tools;37.0.0' platform-tools \
+            "platforms;android-${DEVFLOW_TEST_ANDROID_API}" \
+            emulator "system-images;android-${DEVFLOW_TEST_ANDROID_API};google_apis;x86_64" \
+            --channel=0
+
       - name: Warm up AVD snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
