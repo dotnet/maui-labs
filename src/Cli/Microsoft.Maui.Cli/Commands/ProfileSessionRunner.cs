@@ -11,6 +11,7 @@ internal static class ProfileSessionRunner
 	{
 		var context = await ProfileSessionSetup.PrepareAsync(request, cancellationToken);
 		var stopRequestedByUser = false;
+		var appExitRequestedWhileTracing = false;
 		try
 		{
 			await ProfileSessionLaunch.StartAsync(context, cancellationToken);
@@ -30,13 +31,21 @@ internal static class ProfileSessionRunner
 					context.Formatter,
 					context.UseJson,
 					context.Verbose,
-					cancellationToken);
+					cancellationToken,
+					beforeCollectorStop: context.OutputFormat == TraceOutputFormat.Mibc && context.ExitControlServer is not null
+						? async token =>
+						{
+							appExitRequestedWhileTracing = await TryRequestAppExitAsync(context, token);
+							return appExitRequestedWhileTracing;
+						}
+						: null);
 			}
 
 			var postProcessingCancellationToken = ProfileCommand.ResolvePostProcessingCancellationToken(stopRequestedByUser, cancellationToken);
 
 			if (!context.UseRuntimeOwnedTraceCollection
-				&& context.ExitControlServer is not null)
+				&& context.ExitControlServer is not null
+				&& !appExitRequestedWhileTracing)
 				await TryRequestAppExitAsync(context, postProcessingCancellationToken);
 
 			if (context.OutputFormat == TraceOutputFormat.Mibc)
@@ -146,7 +155,7 @@ internal static class ProfileSessionRunner
 		}
 	}
 
-	internal static async Task TryRequestAppExitAsync(ProfileSessionContext context, CancellationToken cancellationToken)
+	internal static async Task<bool> TryRequestAppExitAsync(ProfileSessionContext context, CancellationToken cancellationToken)
 	{
 		var appExitRequested = await context.ExitControlServer!.TryRequestExitAsync(
 			ProfileCommand.s_exitControlConnectTimeout,
@@ -161,6 +170,8 @@ internal static class ProfileSessionRunner
 				: "The app did not connect to the startup profiling exit channel, so it may remain running and not flush PGO data. " +
 				  "Ensure it references Microsoft.Maui.ProfilingHelper and loads that assembly during startup.");
 		}
+
+		return appExitRequested;
 	}
 
 	static void EnsurePrimaryOutputExists(string primaryOutputPath)

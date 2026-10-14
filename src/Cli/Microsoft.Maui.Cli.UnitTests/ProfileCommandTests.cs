@@ -201,6 +201,37 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public async Task WaitForCompletionAsync_TimedStopRequestsAppExitBeforeStoppingCollector()
+	{
+		await using var testProcess = StartProfileTestProcess("exit-on-stdin");
+		await testProcess.Ready.WaitAsync(TimeSpan.FromMinutes(1));
+		var appExitRequested = false;
+
+		var stopRequested = await ProfileTraceLifecycle.WaitForCompletionAsync(
+			testProcess.MonitoredProcess,
+			allowManualStop: false,
+			duration: TimeSpan.FromMilliseconds(10),
+			finalizationStartedTask: testProcess.FinalizationStarted,
+			traceStopTimeout: TimeSpan.FromSeconds(2),
+			new JsonOutputFormatter(TextWriter.Null),
+			useJson: true,
+			verbose: false,
+			CancellationToken.None,
+			traceStopInterruptDelay: TimeSpan.FromSeconds(1),
+			beforeCollectorStop: async _ =>
+			{
+				appExitRequested = true;
+				await testProcess.Process.StandardInput.WriteLineAsync();
+				return true;
+			});
+
+		Assert.True(stopRequested);
+		Assert.True(appExitRequested);
+		Assert.True(testProcess.Process.HasExited);
+		Assert.Equal(0, testProcess.Process.ExitCode);
+	}
+
+	[Fact]
 	public async Task WaitForCompletionAsync_TimedStopUsesTraceStopTimeout()
 	{
 		var releasePath = Path.Combine(Path.GetTempPath(), $"maui-profile-test-release-{Guid.NewGuid():N}");
