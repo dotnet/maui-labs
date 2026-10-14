@@ -16,28 +16,29 @@ public class DocumentSettingsViewModelTests
         Assert.Same(client, settings.SelectedClientOption!.Client);
         Assert.Same(reader, settings.SelectedReader);
         Assert.True(settings.HasSelection);
+        Assert.False(settings.CanSelectModel);
         settings.Mode = DocumentOperationMode.Reader;
         Assert.True(settings.IsReaderMode);
         Assert.False(settings.IsClientMode);
         Assert.Equal("Reader", settings.CurrentName);
-        settings.Mode = DocumentOperationMode.Extraction;
+        settings.Mode = DocumentOperationMode.OcrReader;
         Assert.True(settings.IsClientMode);
-        Assert.True(settings.IsExtractionMode);
-        Assert.Equal("Extract", settings.OperationLabel);
+        Assert.False(settings.IsExtractionMode);
+        Assert.Equal("Read", settings.OperationLabel);
     }
 
     [Fact]
-    public void CloudDisclosureTracksTheSelectedProviderAndOperation()
+    public void ModelOverridesAreOnlyForwardedWhereTheSelectedProviderSupportsThem()
     {
         using var local = Client("apple-client");
         using var cloud = Client("cloud-client", isCloud: true);
-        var settings = new DocumentSettingsViewModel([], [local, cloud]);
-        Assert.False(settings.CurrentIsCloud);
+        var settings = new DocumentSettingsViewModel([], [local, cloud]) { ModelId = "deployment" };
+        Assert.Null(settings.CreateOptions());
         settings.SelectedClientOption = settings.Clients[1];
-        Assert.True(settings.CurrentIsCloud);
-        Assert.True(settings.StreamPages);
+        Assert.True(settings.CanSelectModel);
+        Assert.Equal("deployment", settings.CreateOptions()!.ModelId);
         settings.Mode = DocumentOperationMode.Reader;
-        Assert.False(settings.CurrentIsCloud);
+        Assert.Null(settings.CreateOptions());
     }
 
     [Fact]
@@ -79,8 +80,11 @@ public class DocumentSettingsViewModelTests
 
     private sealed class TestClient : IDocumentExtractionClient
     {
-        public IAsyncEnumerable<DocumentExtractionPage> ExtractPagesAsync(
-            Stream document, string identifier, string mediaType, CancellationToken cancellationToken = default) =>
+        public Task<DocumentExtractionResult> ExtractAsync(
+            Stream document, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new DocumentExtractionResult([]));
+        public IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
+            Stream document, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
         public void Dispose() { }

@@ -1,7 +1,5 @@
 using System.Text.Json;
-using System.Text;
 using Microsoft.Extensions.DocumentExtraction;
-using Microsoft.Extensions.Documents;
 
 namespace Microsoft.Maui.Essentials.AI;
 
@@ -10,29 +8,38 @@ internal static class AppleVisionRecognizeDocumentsMapper
 	private const int MaximumNodes = 20_000;
 	private const int MaximumDepth = 64;
 
-	internal static DocumentExtractionPage ToPage(JsonElement snapshot, int pageNumber)
+	internal static DocumentPage ToPage(JsonElement snapshot, int pageNumber)
 	{
 		if (snapshot.ValueKind != JsonValueKind.Array)
 			throw new InvalidDataException("Vision returned an invalid document snapshot.");
 
-		var elements = new List<DocumentExtractionObservation>();
-		var index = 0;
+		var elements = new List<DocumentElement>();
+		var transcripts = new List<string>();
 		foreach (var observation in snapshot.EnumerateArray())
 		{
-			var prefix = $"page-{pageNumber}/snapshot-{index++}";
-			foreach (var node in ReadObservation(observation))
-				elements.Add(BuildElement(node, prefix, elements.Count));
+			var transcript = GetString(observation, "transcript");
+			if (!string.IsNullOrEmpty(transcript))
+				transcripts.Add(transcript);
+			elements.AddRange(ReadObservation(observation, pageNumber));
 		}
-		return new DocumentExtractionPage(pageNumber, elements);
+
+		return new DocumentPage(pageNumber, string.Join("\n\n", transcripts))
+		{
+			Elements = elements,
+			Dimensions = new DocumentPageDimensions(1, 1),
+			CoordinateUnit = DocumentCoordinateUnit.Normalized,
+			CoordinateOrigin = DocumentCoordinateOrigin.BottomLeft,
+			RawRepresentation = snapshot.Clone(),
+		};
 	}
 
-	private static IReadOnlyList<Node> ReadObservation(JsonElement observation)
+	private static IReadOnlyList<DocumentElement> ReadObservation(JsonElement observation, int pageNumber)
 	{
-		if (!observation.TryGetProperty("nodes", out var values) ||
-			values.ValueKind != JsonValueKind.Array || values.GetArrayLength() > MaximumNodes)
+		var values = observation.GetProperty("nodes");
+		if (values.ValueKind != JsonValueKind.Array || values.GetArrayLength() > MaximumNodes)
 			throw new InvalidDataException("Vision returned invalid document nodes.");
 
-		var nodes = values.EnumerateArray().Select((value, index) => new Node(value, index)).ToArray();
+		var nodes = values.EnumerateArray().Select(value => new Node(value, pageNumber)).ToArray();
 		var byPath = new Dictionary<string, Node>(StringComparer.Ordinal);
 		foreach (var node in nodes)
 			if (!byPath.TryAdd(node.Path, node))
@@ -56,63 +63,50 @@ internal static class AppleVisionRecognizeDocumentsMapper
 		}
 
 		var roots = nodes.Where(node => node.ParentPath is null).ToArray();
-		foreach (var table in nodes.Where(node => node.Kind == "table"))
-			ValidateTable(table);
+		foreach (var root in roots)
+			BuildElement(root, pageNumber);
 
 		// Vision supplies paragraph order. Replace paragraphs inside titles/tables, without spatially sorting columns.
-		var structured = roots.Where(node => node.Kind == "table" && node.Rows > 0 ||
-			node.Kind == "title" && !string.IsNullOrWhiteSpace(node.Text)).ToArray();
+		var structured = roots.Where(node => node.Element is DocumentTable ||
+			node.Element is DocumentBlock { Kind: var kind } && kind == DocumentBlockKind.Title).ToArray();
 		var emitted = new HashSet<string>(StringComparer.Ordinal);
-		var result = new List<Node>();
-		foreach (var paragraph in roots.Where(node => node.Kind == "paragraph" && !string.IsNullOrWhiteSpace(node.Text)))
+		var result = new List<DocumentElement>();
+		foreach (var paragraph in roots.Where(node => node.Kind == "paragraph" && node.Element is not null))
 		{
 			var match = structured.FirstOrDefault(candidate => candidate.Kind == "title"
 				? paragraph.Text == candidate.Text && Overlap(paragraph, candidate) >= 0.7
 				: Overlap(paragraph, candidate) >= 0.7);
 			var selected = match ?? paragraph;
 			if (emitted.Add(selected.Path))
-				result.Add(selected);
+				result.Add(selected.Element!);
 		}
 		foreach (var candidate in structured)
 			if (emitted.Add(candidate.Path))
-				result.Add(candidate);
+				result.Add(candidate.Element!);
 		return result;
 	}
 
-	private static DocumentExtractionObservation BuildElement(Node node, string prefix, int order)
+	private static void BuildElement(Node node, int pageNumber)
 	{
-		var id = $"{prefix}/node-{node.Index}";
-		if (node.Kind != "table")
-			return new DocumentExtractionText(id, order,
-				node.Kind == "title" ? DocumentTextKind.Header : DocumentTextKind.Paragraph, node.Text, node.Text);
+		foreach (var child in node.Children)
+			BuildElement(child, pageNumber);
 
-		var cells = node.Children.Where(child => child.Kind == "tableCell" && child.Text.Length > 0).Select((child, index) =>
-			new DocumentExtractionTableCell(child.Row, child.Column,
-				new DocumentExtractionText($"{prefix}/node-{child.Index}", index,
-					DocumentTextKind.Paragraph, child.Text, child.Text))).ToArray();
-		var grid = new string?[node.Rows, node.Columns];
-		foreach (var cell in cells)
-			grid[cell.Row, cell.Column] = cell.Content.Markdown;
-		var markdown = new StringBuilder();
-		for (var row = 0; row < node.Rows; row++)
+		node.Element = node.Kind switch
 		{
-			markdown.Append('|');
-			for (var column = 0; column < node.Columns; column++)
-				markdown.Append(' ').Append((grid[row, column] ?? "").Replace("|", "\\|")
-					.Replace("\r", " ").Replace("\n", " ")).Append(" |");
-			markdown.AppendLine();
-			if (row == 0)
-			{
-				markdown.Append('|');
-				for (var column = 0; column < node.Columns; column++)
-					markdown.Append(" --- |");
-				markdown.AppendLine();
-			}
+			"title" when !string.IsNullOrWhiteSpace(node.Text) => new DocumentBlock(node.Text) { Kind = DocumentBlockKind.Title },
+			"paragraph" when !string.IsNullOrWhiteSpace(node.Text) => new DocumentBlock(node.Text) { Kind = DocumentBlockKind.Paragraph },
+			"table" => ReadTable(node, pageNumber),
+			_ => null,
+		};
+		if (node.Element is { } element)
+		{
+			element.BoundingRegion = node.Region;
+			element.Confidence = node.Confidence;
+			element.RawRepresentation = node.Json.Clone();
 		}
-		return new DocumentExtractionTable(id, order, markdown.ToString().TrimEnd(), node.Rows, node.Columns, cells);
 	}
 
-	private static void ValidateTable(Node table)
+	private static DocumentTable? ReadTable(Node table, int pageNumber)
 	{
 		var cells = table.Children.Where(child => child.Kind == "tableCell").Select(child =>
 		{
@@ -122,29 +116,35 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			var columnSpan = child.Json.GetProperty("columnSpan").GetInt32();
 			if (row < 0 || column < 0 || rowSpan < 1 || columnSpan < 1)
 				throw new InvalidDataException("Vision returned an invalid table cell.");
-			child.Row = row;
-			child.Column = column;
-			return (Row: row, Column: column, RowSpan: rowSpan, ColumnSpan: columnSpan);
+			var nested = child.Children.Where(node => node.Element is not null).Select(node => node.Element!).ToArray();
+			return new DocumentTableCell(row, column, child.Text)
+			{
+				RowSpan = rowSpan,
+				ColumnSpan = columnSpan,
+				BoundingRegion = child.Region,
+				Confidence = child.Confidence,
+				Elements = nested.Length == 0 ? null : nested,
+				RawRepresentation = child.Json.Clone(),
+			};
 		}).ToArray();
 		if (cells.Length == 0)
-			return;
+			return null;
 
-		var rows = cells.Max(cell => (long)cell.Row + cell.RowSpan);
-		var columns = cells.Max(cell => (long)cell.Column + cell.ColumnSpan);
+		var rows = cells.Length == 0 ? 0 : cells.Max(cell => (long)cell.RowIndex + cell.RowSpan);
+		var columns = cells.Length == 0 ? 0 : cells.Max(cell => (long)cell.ColumnIndex + cell.ColumnSpan);
 		if (rows > MaximumNodes || columns > MaximumNodes || rows * columns > MaximumNodes)
 			throw new InvalidDataException("Vision returned invalid table dimensions.");
 
 		var occupied = new bool[(int)rows, (int)columns];
 		foreach (var cell in cells)
-			for (var row = cell.Row; row < cell.Row + cell.RowSpan; row++)
-				for (var column = cell.Column; column < cell.Column + cell.ColumnSpan; column++)
+			for (var row = cell.RowIndex; row < cell.RowIndex + cell.RowSpan; row++)
+				for (var column = cell.ColumnIndex; column < cell.ColumnIndex + cell.ColumnSpan; column++)
 				{
 					if (occupied[row, column])
 						throw new InvalidDataException("Vision returned overlapping table cells.");
 					occupied[row, column] = true;
 				}
-		table.Rows = (int)rows;
-		table.Columns = (int)columns;
+		return new DocumentTable((int)rows, (int)columns, cells);
 	}
 
 	private static double Overlap(Node first, Node second)
@@ -161,18 +161,17 @@ internal static class AppleVisionRecognizeDocumentsMapper
 
 	private sealed class Node
 	{
-		internal Node(JsonElement json, int index)
+		internal Node(JsonElement json, int pageNumber)
 		{
 			Json = json;
-			Index = index;
 			Path = GetString(json, "path") ?? throw new InvalidDataException("Vision returned a node without a path.");
 			ParentPath = GetString(json, "parentPath");
 			Kind = GetString(json, "kind") ?? "";
 			Text = GetString(json, "text") ?? "";
 			if (json.TryGetProperty("confidence", out var confidence) && confidence.ValueKind != JsonValueKind.Null)
 			{
-				var value = confidence.GetDouble();
-				if (!double.IsFinite(value) || value is < 0 or > 1)
+				Confidence = confidence.GetDouble();
+				if (!double.IsFinite(Confidence.Value) || Confidence is < 0 or > 1)
 					throw new InvalidDataException("Vision returned invalid confidence.");
 			}
 			if (!json.TryGetProperty("polygon", out var polygon))
@@ -183,22 +182,24 @@ internal static class AppleVisionRecognizeDocumentsMapper
 			if (coordinates.Length < 6 || coordinates.Length % 2 != 0 ||
 				coordinates.Any(value => !double.IsFinite(value) || !float.IsFinite((float)value)))
 				throw new InvalidDataException("Vision returned an invalid normalized polygon.");
+			var points = new DocumentPoint[coordinates.Length / 2];
+			for (var index = 0; index < points.Length; index++)
+				points[index] = new DocumentPoint((float)coordinates[index * 2], (float)coordinates[index * 2 + 1]);
+			Region = new DocumentBoundingRegion(pageNumber, points);
 			var xs = coordinates.Where((_, index) => index % 2 == 0).ToArray();
 			var ys = coordinates.Where((_, index) => index % 2 == 1).ToArray();
 			Bounds = (xs.Min(), ys.Min(), xs.Max(), ys.Max());
 		}
 
 		internal JsonElement Json { get; }
-		internal int Index { get; }
 		internal string Path { get; }
 		internal string? ParentPath { get; }
 		internal string Kind { get; }
 		internal string Text { get; }
+		internal double? Confidence { get; }
+		internal DocumentBoundingRegion? Region { get; }
 		internal (double Left, double Bottom, double Right, double Top)? Bounds { get; }
 		internal List<Node> Children { get; } = [];
-		internal int Row { get; set; }
-		internal int Column { get; set; }
-		internal int Rows { get; set; }
-		internal int Columns { get; set; }
+		internal DocumentElement? Element { get; set; }
 	}
 }

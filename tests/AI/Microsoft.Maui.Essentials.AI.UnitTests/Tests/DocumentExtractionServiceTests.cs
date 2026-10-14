@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.DocumentExtraction;
-using Microsoft.Extensions.Documents;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
@@ -11,112 +11,77 @@ public class DocumentExtractionServiceTests
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]
-	public async Task ExtractAsync_ReturnsIndependentDisplayAndDisposesOwnedArtifactsAndInput(bool stream)
+	public async Task ExtractAsync_UsesTheSelectedActualApiAndKeepsRawSeparate(bool stream)
 	{
 		using var client = new Client();
-		var progress = new ProgressCollector();
 		var input = new SelectedDocument("input.png", "image/png", [1, 2, 3]);
-		var result = await new DocumentExtractionService().ExtractAsync(client, input, stream, progress);
-		Assert.Equal("input.png", client.Identifier);
-		Assert.Equal(2, result.PageCount);
-		Assert.Equal(2, result.ObservationCount);
-		Assert.Contains("\"Type\": \"text\"", result.Output);
-		Assert.Contains("\"Identifier\": \"input.png\"", result.Output);
-		Assert.DoesNotContain("RawRepresentation", result.Output);
-		Assert.DoesNotContain("Metadata", result.Output);
-		Assert.True(client.Artifact.IsDisposed);
-		Assert.False(client.Source!.CanRead);
-		Assert.False(client.Disposed);
-		Assert.True(client.EnumeratorDisposed);
-		Assert.Equal(stream ? new[] { 1, 2 } : [], progress.Pages);
-	}
-
-	[Theory]
-	[InlineData(true)]
-	[InlineData(false)]
-	public async Task ExtractAsync_StreamingFailureDisposesArtifactsWithoutDisposingBorrowedClient(bool stream)
-	{
-		using var client = new Client { FailAfterPage = true };
-		await Assert.ThrowsAsync<InvalidDataException>(() =>
-			new DocumentExtractionService().ExtractAsync(client, new SelectedDocument("input.png", "image/png", [1]), stream));
-		Assert.True(client.Artifact.IsDisposed);
-		Assert.False(client.Source!.CanRead);
-		Assert.False(client.Disposed);
-		Assert.True(client.EnumeratorDisposed);
-	}
-
-	[Theory]
-	[InlineData(true)]
-	[InlineData(false)]
-	public async Task ExtractAsync_CancellationDisposesArtifactsAndInput(bool stream)
-	{
-		using var cancellation = new CancellationTokenSource();
-		using var client = new Client { CancelAfterPage = cancellation };
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-			new DocumentExtractionService().ExtractAsync(client, new SelectedDocument("input.png", "image/png", [1]), stream,
-				cancellationToken: cancellation.Token));
-		Assert.True(client.Artifact.IsDisposed);
-		Assert.False(client.Source!.CanRead);
-		Assert.True(client.EnumeratorDisposed);
+		var result = await new DocumentExtractionService().ExtractAsync(client, input, stream);
+		Assert.Equal(stream, client.StreamCalled);
+		Assert.Equal(!stream, client.SingleCalled);
+		Assert.Equal(2, result.Result.Pages.Count);
+		Assert.Contains("\"$type\": \"block\"", result.Output);
+		Assert.DoesNotContain("nativeOnly", result.Output);
+		Assert.Contains("nativeOnly", result.RawOutput);
+		Assert.Contains("rootOnly", result.RawOutput);
+		Assert.DoesNotContain("AdditionalProperties\": {", result.Output);
 	}
 
 	[Fact]
-	public async Task ExtractAsync_AlreadyCancelledDoesNotCallClient()
+	public async Task ExtractAsync_CancellationIsNotReportedAsSuccess()
 	{
 		using var cancellation = new CancellationTokenSource();
 		cancellation.Cancel();
 		using var client = new Client();
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-			new DocumentExtractionService().ExtractAsync(client, new SelectedDocument("input.png", "image/png", [1]), true,
-				cancellationToken: cancellation.Token));
-		Assert.Null(client.Source);
-	}
-
-	private sealed class ProgressCollector : IProgress<DocumentExtractionProgress>
-	{
-		internal List<int> Pages { get; } = [];
-		public void Report(DocumentExtractionProgress value) => Pages.Add(value.PagesProcessed);
+			new DocumentExtractionService().ExtractAsync(client,
+				new SelectedDocument("input.png", "image/png", [1]), true, cancellationToken: cancellation.Token));
+		Assert.False(client.StreamCalled);
 	}
 
 	private sealed class Client : IDocumentExtractionClient
 	{
-		internal DocumentArtifact Artifact { get; } = new("image/png", new MemoryStream([1]));
-		internal Stream? Source { get; private set; }
-		internal string? Identifier { get; private set; }
-		internal bool Disposed { get; private set; }
-		internal bool EnumeratorDisposed { get; private set; }
-		internal bool FailAfterPage { get; init; }
-		internal CancellationTokenSource? CancelAfterPage { get; init; }
+		private readonly object _raw = new { rootOnly = "document", nativeOnly = "complete response" };
+		internal bool StreamCalled { get; private set; }
+		internal bool SingleCalled { get; private set; }
 
-		public async IAsyncEnumerable<DocumentExtractionPage> ExtractPagesAsync(
-			Stream document, string identifier, string mediaType,
+		public Task<DocumentExtractionResult> ExtractAsync(
+			Stream document, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default)
+		{
+			SingleCalled = true;
+			using var root = JsonDocument.Parse("""{"rootOnly":"document","nativeOnly":"complete response"}""");
+			return Task.FromResult(new DocumentExtractionResult([Page(1), Page(2)])
+			{
+				RawRepresentation = root.RootElement.Clone(),
+			});
+		}
+
+		public async IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
+			Stream document, string mediaType, DocumentExtractionOptions? options = null,
 			[EnumeratorCancellation] CancellationToken cancellationToken = default)
 		{
-			Source = document;
-			Identifier = identifier;
-			try
+			StreamCalled = true;
+			for (var number = 1; number <= 2; number++)
 			{
-				await Task.Yield();
-				yield return new DocumentExtractionPage(1,
-					[new DocumentExtractionText("page-1", 0, DocumentTextKind.Paragraph, "Text", "Text", artifacts: [Artifact])]);
-				if (FailAfterPage)
-					throw new InvalidDataException("Stream failed.");
-				CancelAfterPage?.Cancel();
 				cancellationToken.ThrowIfCancellationRequested();
-				yield return new DocumentExtractionPage(3,
-					[new DocumentExtractionText("page-3", 0, DocumentTextKind.Paragraph, "Other", "Other")]);
+				await Task.Yield();
+				yield return new DocumentExtractionPageResult(Page(number))
+				{
+					PagesProcessed = number, TotalPages = 2, RawRepresentation = _raw,
+				};
 			}
-			finally
+		}
+
+		private static DocumentPage Page(int number)
+		{
+			using var json = JsonDocument.Parse("""{"nativeOnly":"original"}""");
+			return new DocumentPage(number, "Text")
 			{
-				EnumeratorDisposed = true;
-			}
+				Elements = [new DocumentBlock("Text") { Kind = DocumentBlockKind.Paragraph }],
+				RawRepresentation = json.RootElement.Clone(),
+			};
 		}
 
 		public object? GetService(Type serviceType, object? serviceKey = null) => null;
-		public void Dispose()
-		{
-			Disposed = true;
-			Artifact.Dispose();
-		}
+		public void Dispose() { }
 	}
 }

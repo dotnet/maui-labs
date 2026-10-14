@@ -11,7 +11,7 @@
     <IsPackable>false</IsPackable>
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
-    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;MEDE0001;EXTEXP0019;OPENAI001;XCODE_27_0_PREVIEW</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;MEDE0001;OPENAI001;XCODE_27_0_PREVIEW</NoWarn>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <ApplicationTitle>Chat Client Playground</ApplicationTitle>
@@ -47,6 +47,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
     <ProjectReference Include="..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
+    <ProjectReference Include="..\..\src\Libraries\Microsoft.Extensions.DataIngestion.DocumentExtraction\Microsoft.Extensions.DataIngestion.DocumentExtraction.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
   </ItemGroup>
 

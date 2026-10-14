@@ -1,42 +1,59 @@
-using System.Net;
 using System.Runtime.CompilerServices;
-using System.Text;
 using Azure.AI.DocumentIntelligence;
 using Microsoft.Extensions.DocumentExtraction;
-using Microsoft.Extensions.Documents;
+using ExtractionPage = Microsoft.Extensions.DocumentExtraction.DocumentPage;
+using ExtractionTable = Microsoft.Extensions.DocumentExtraction.DocumentTable;
+using ExtractionCell = Microsoft.Extensions.DocumentExtraction.DocumentTableCell;
+using ExtractionCellKind = Microsoft.Extensions.DocumentExtraction.DocumentTableCellKind;
+using AzureCellKind = Azure.AI.DocumentIntelligence.DocumentTableCellKind;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
 internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtractionClient
 {
     private readonly DocumentIntelligenceClient _client;
-    private readonly string _modelId;
+    private readonly DocumentExtractionClientMetadata _metadata;
     private bool _disposed;
 
-    public AzureDocumentIntelligenceExtractionClient(Uri endpoint, string key, string modelId = "prebuilt-layout")
-        : this(AzureDocumentIntelligenceReader.CreateClient(endpoint, key), modelId)
+    public AzureDocumentIntelligenceExtractionClient(Uri endpoint, string key)
+        : this(AzureDocumentIntelligenceReader.CreateClient(endpoint, key), endpoint)
     {
     }
 
-    internal AzureDocumentIntelligenceExtractionClient(DocumentIntelligenceClient client, string modelId = "prebuilt-layout")
+    internal AzureDocumentIntelligenceExtractionClient(DocumentIntelligenceClient client, Uri? endpoint = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
-        ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
-        _modelId = modelId;
+        _metadata = new("Azure.AI.DocumentIntelligence", endpoint, "prebuilt-layout");
     }
 
-    public async IAsyncEnumerable<DocumentExtractionPage> ExtractPagesAsync(
-        Stream document, string identifier, string mediaType,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async Task<DocumentExtractionResult> ExtractAsync(
+        Stream document, string mediaType, DocumentExtractionOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+        if (options?.ModelId is { } modelId)
+            ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
         var result = await AzureDocumentIntelligenceReader.AnalyzeAsync(
-            _client, document, mediaType, _modelId, cancellationToken).ConfigureAwait(false);
-        foreach (var page in MapPages(result, cancellationToken))
+            _client, document, mediaType, options?.ModelId ?? "prebuilt-layout", cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return MapResult(result, cancellationToken);
+    }
+
+    public async IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
+        Stream document, string mediaType, DocumentExtractionOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // The service completes one analysis before its pages can be enumerated.
+        var result = await ExtractAsync(document, mediaType, options, cancellationToken);
+        for (var index = 0; index < result.Pages.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            yield return page;
+            yield return new(result.Pages[index])
+            {
+                PagesProcessed = index + 1,
+                TotalPages = result.Pages.Count,
+                RawRepresentation = result.Pages[index].RawRepresentation,
+            };
         }
     }
 
@@ -46,21 +63,23 @@ internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtra
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (serviceKey is not null)
             return null;
-        return serviceType.IsInstanceOfType(this) ? this : serviceType.IsInstanceOfType(_client) ? _client : null;
+        if (serviceType == typeof(DocumentExtractionClientMetadata))
+            return _metadata;
+        if (serviceType.IsInstanceOfType(this))
+            return this;
+        return serviceType.IsInstanceOfType(_client) ? _client : null;
     }
 
     public void Dispose() => _disposed = true;
 
-    internal static IReadOnlyList<DocumentExtractionPage> MapPages(AnalyzeResult result, CancellationToken token = default)
+    internal static DocumentExtractionResult MapResult(AnalyzeResult result, CancellationToken token = default)
     {
-        var elements = new List<(int Page, int Offset, int Sequence, DocumentExtractionObservation Observation)>();
+        var elements = new List<(int Page, int Offset, int Order, DocumentElement Element)>();
         var tables = result.Tables ?? [];
-        var sequence = 0;
+        var order = 0;
         foreach (var paragraph in result.Paragraphs ?? [])
         {
             token.ThrowIfCancellationRequested();
-            if (string.IsNullOrEmpty(paragraph.Content))
-                continue;
             var number = AzureDocumentIntelligenceReader.GetPage(paragraph.BoundingRegions, paragraph.Spans, result.Pages);
             if (paragraph.Spans is { Count: > 0 } && tables.Any(table =>
                 AzureDocumentIntelligenceReader.GetTablePage(table, result.Pages) == number &&
@@ -68,78 +87,117 @@ internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtra
                     span.Offset >= tableSpan.Offset &&
                     (long)span.Offset + span.Length <= (long)tableSpan.Offset + tableSpan.Length))))
                 continue;
-            var order = sequence++;
-            var text = paragraph.Content ?? "";
-            elements.Add((number, AzureDocumentIntelligenceReader.GetOffset(paragraph.Spans), order,
-                new DocumentExtractionText($"page-{number}/paragraph-{order}", order,
-                    paragraph.Role == ParagraphRole.Title || paragraph.Role == ParagraphRole.SectionHeading
-                        ? DocumentTextKind.Header : DocumentTextKind.Paragraph, text, text)));
+            elements.Add((number, AzureDocumentIntelligenceReader.GetOffset(paragraph.Spans), order++,
+                new DocumentBlock(paragraph.Content ?? "")
+                {
+                    Kind = paragraph.Role == ParagraphRole.Title ? DocumentBlockKind.Title :
+                        paragraph.Role is null ? DocumentBlockKind.Paragraph : null,
+                    BoundingRegion = Region(paragraph.BoundingRegions),
+                    RawRepresentation = paragraph,
+                }));
         }
         foreach (var table in tables)
         {
             token.ThrowIfCancellationRequested();
             AzureDocumentIntelligenceReader.ValidateTable(table, token);
-            var number = AzureDocumentIntelligenceReader.GetTablePage(table, result.Pages);
-            var order = sequence++;
-            var id = $"page-{number}/table-{order}";
-            var cells = table.Cells.Where(cell => !string.IsNullOrEmpty(cell.Content))
-                .Select((cell, index) => new DocumentExtractionTableCell(cell.RowIndex, cell.ColumnIndex,
-                new DocumentExtractionText($"{id}/cell-{index}", index, DocumentTextKind.Paragraph,
-                    cell.Content ?? "", cell.Content ?? ""))).ToArray();
-            var grid = new string?[table.RowCount, table.ColumnCount];
-            foreach (var cell in cells)
-                grid[cell.Row, cell.Column] = cell.Content.Markdown;
-            var display = new StringBuilder("<table>");
-            for (var row = 0; row < table.RowCount; row++)
+            var cells = new List<ExtractionCell>();
+            foreach (var cell in table.Cells)
             {
                 token.ThrowIfCancellationRequested();
-                display.Append("<tr>");
-                for (var column = 0; column < table.ColumnCount; column++)
-                    display.Append("<td>").Append(WebUtility.HtmlEncode(grid[row, column] ?? "")).Append("</td>");
-                display.Append("</tr>");
+                var nested = (result.Paragraphs ?? []).Where(paragraph =>
+                    paragraph.Spans is { Count: > 0 } && paragraph.Spans.All(span =>
+                        cell.Spans.Any(cellSpan => span.Offset >= cellSpan.Offset &&
+                            (long)span.Offset + span.Length <= (long)cellSpan.Offset + cellSpan.Length)))
+                    .OrderBy(paragraph => AzureDocumentIntelligenceReader.GetOffset(paragraph.Spans))
+                    .Select(paragraph => (DocumentElement)new DocumentBlock(paragraph.Content ?? "")
+                    {
+                        Kind = paragraph.Role == ParagraphRole.Title ? DocumentBlockKind.Title :
+                            paragraph.Role is null ? DocumentBlockKind.Paragraph : null,
+                        BoundingRegion = Region(paragraph.BoundingRegions),
+                        RawRepresentation = paragraph,
+                    }).ToArray();
+                cells.Add(new(cell.RowIndex, cell.ColumnIndex, cell.Content ?? "")
+                {
+                    RowSpan = cell.RowSpan ?? 1,
+                    ColumnSpan = cell.ColumnSpan ?? 1,
+                    Kind = cell.Kind == AzureCellKind.ColumnHeader ? ExtractionCellKind.ColumnHeader :
+                        cell.Kind == AzureCellKind.RowHeader ? ExtractionCellKind.RowHeader :
+                        cell.Kind == AzureCellKind.Content ? ExtractionCellKind.Content : null,
+                    Elements = nested.Length > 0 ? nested : null,
+                    BoundingRegion = Region(cell.BoundingRegions),
+                    RawRepresentation = cell,
+                });
             }
-            display.Append("</table>");
-            elements.Add((number, AzureDocumentIntelligenceReader.GetOffset(table.Spans), order,
-                new DocumentExtractionTable(id, order, display.ToString(), table.RowCount, table.ColumnCount, cells)));
+            elements.Add((AzureDocumentIntelligenceReader.GetTablePage(table, result.Pages),
+                AzureDocumentIntelligenceReader.GetOffset(table.Spans), order++,
+                new ExtractionTable(table.RowCount, table.ColumnCount, cells)
+                {
+                    BoundingRegion = Region(table.BoundingRegions),
+                    RawRepresentation = table,
+                }));
+        }
+        foreach (var figure in result.Figures ?? [])
+        {
+            token.ThrowIfCancellationRequested();
+            elements.Add((AzureDocumentIntelligenceReader.GetPage(figure.BoundingRegions, figure.Spans, result.Pages),
+                AzureDocumentIntelligenceReader.GetOffset(figure.Spans), order++,
+                new DocumentImage
+                {
+                    Caption = figure.Caption?.Content,
+                    BoundingRegion = Region(figure.BoundingRegions),
+                    RawRepresentation = figure,
+                }));
         }
 
-        var pages = new List<DocumentExtractionPage>();
+        var pages = new List<ExtractionPage>();
         foreach (var page in result.Pages.OrderBy(page => page.PageNumber))
         {
             token.ThrowIfCancellationRequested();
-            var observations = elements.Where(item => item.Page == page.PageNumber)
-                .OrderBy(item => item.Offset).ThenBy(item => item.Sequence)
-                .Select((item, order) => Reorder(item.Observation, order)).ToList();
-            if (observations.Count == 0)
+            var pageElements = elements.Where(item => item.Page == page.PageNumber)
+                .OrderBy(item => item.Offset).ThenBy(item => item.Order).Select(item => item.Element).ToList();
+            // Lines are a fallback only: paragraph projections would duplicate their text.
+            if (pageElements.Count == 0)
                 foreach (var line in page.Lines ?? [])
-                {
-                    token.ThrowIfCancellationRequested();
-                    var text = line.Content ?? "";
-                    if (text.Length == 0)
-                        continue;
-                    observations.Add(new DocumentExtractionText($"page-{page.PageNumber}/line-{observations.Count}",
-                        observations.Count, DocumentTextKind.Paragraph, text, text));
-                }
-            var markdown = result.ContentFormat == DocumentContentFormat.Markdown && page.Spans.Count > 0
-                ? string.Join("", page.Spans.Select(span => Slice(result.Content, span))) : null;
-            pages.Add(new DocumentExtractionPage(page.PageNumber, observations, markdown));
+                    pageElements.Add(new DocumentBlock(line.Content ?? "")
+                    {
+                        Kind = DocumentBlockKind.Paragraph,
+                        BoundingRegion = Polygon(page.PageNumber, line.Polygon),
+                        RawRepresentation = line,
+                    });
+            var text = page.Spans.Count > 0
+                ? string.Join("", page.Spans.Select(span => Slice(result.Content, span)))
+                : string.Join("\n", page.Lines?.Select(line => line.Content) ?? []);
+            pages.Add(new(page.PageNumber, text)
+            {
+                Elements = pageElements,
+                Dimensions = page.Width is { } width && page.Height is { } height
+                    ? new DocumentPageDimensions(width, height) : null,
+                CoordinateUnit = page.Unit == LengthUnit.Inch ? DocumentCoordinateUnit.Inch :
+                    page.Unit == LengthUnit.Pixel ? DocumentCoordinateUnit.Pixel : null,
+                CoordinateOrigin = DocumentCoordinateOrigin.TopLeft,
+                RawRepresentation = page,
+            });
         }
-        return pages;
+        return new(pages) { RawRepresentation = result };
     }
-
-    private static DocumentExtractionObservation Reorder(DocumentExtractionObservation observation, int order) => observation switch
-    {
-        DocumentExtractionText text => new DocumentExtractionText(text.ProviderId, order, text.Kind, text.Markdown,
-            text.Text, text.HeaderLevel),
-        DocumentExtractionTable table => new DocumentExtractionTable(table.ProviderId, order, table.Markdown,
-            table.RowCount, table.ColumnCount, table.Cells),
-        _ => throw new InvalidOperationException("Unsupported Azure observation."),
-    };
 
     private static string Slice(string content, DocumentSpan span)
     {
         if (span.Offset < 0 || span.Length < 0 || (long)span.Offset + span.Length > content.Length)
             throw new InvalidDataException("Cloud returned an invalid document span.");
         return content.Substring(span.Offset, span.Length);
+    }
+
+    private static DocumentBoundingRegion? Region(IReadOnlyList<BoundingRegion>? regions) =>
+        regions is { Count: > 0 } ? Polygon(regions[0].PageNumber, regions[0].Polygon) : null;
+
+    private static DocumentBoundingRegion? Polygon(int number, IReadOnlyList<float>? coordinates)
+    {
+        if (coordinates is null || coordinates.Count == 0)
+            return null;
+        if (coordinates.Count % 2 != 0 || coordinates.Any(value => !float.IsFinite(value)))
+            throw new InvalidDataException("Cloud returned invalid geometry.");
+        return new(number, Enumerable.Range(0, coordinates.Count / 2)
+            .Select(index => new DocumentPoint(coordinates[index * 2], coordinates[index * 2 + 1])).ToArray());
     }
 }

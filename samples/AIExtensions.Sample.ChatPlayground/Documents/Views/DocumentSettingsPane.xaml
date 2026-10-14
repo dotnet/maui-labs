@@ -13,6 +13,8 @@
                              AutomationId="DocumentExtractionModeRadio" />
                 <RadioButton Content="Document reader" Value="{x:Static local:DocumentOperationMode.Reader}"
                              AutomationId="DocumentReaderModeRadio" />
+                <RadioButton Content="Upstream OCR reader" Value="{x:Static local:DocumentOperationMode.OcrReader}"
+                             AutomationId="DocumentOcrReaderModeRadio" />
             </VerticalStackLayout>
             <Label Text="CLIENT" Style="{StaticResource SectionHeading}" IsVisible="{Binding IsClientMode}" />
             <VerticalStackLayout Spacing="4" IsVisible="{Binding IsClientMode}" IsEnabled="{Binding IsIdle}"
@@ -33,9 +35,13 @@
                 <CheckBox IsChecked="{Binding StreamPages}" AutomationId="DocumentStreamPagesCheckBox" />
                 <Label Text="Stream completed pages" VerticalOptions="Center" />
             </HorizontalStackLayout>
+            <VerticalStackLayout IsVisible="{Binding CanSelectModel}" IsEnabled="{Binding IsIdle}">
+                <Label Text="Model / deployment override (optional)" Style="{StaticResource MutedLabel}" />
+                <Entry Text="{Binding ModelId}" AutomationId="DocumentModelIdEntry" />
+            </VerticalStackLayout>
             <HorizontalStackLayout Spacing="4" IsVisible="{Binding IsReaderMode}">
                 <Label Text="READER" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
-                <local:InfoTip Text="Choose a real IngestionDocumentReader. Apple uses a local projection of the shared Document. Cloud providers upload the selected document when you press Read." />
+                <local:InfoTip Text="Choose a real IngestionDocumentReader. Apple reads on-device; Azure uploads the selected document when you press Read. Switch readers and re-run the same file to compare." />
             </HorizontalStackLayout>
             <VerticalStackLayout Spacing="4" IsEnabled="{Binding IsIdle}" IsVisible="{Binding IsReaderMode}"
                                  RadioButtonGroup.GroupName="DocumentReader"

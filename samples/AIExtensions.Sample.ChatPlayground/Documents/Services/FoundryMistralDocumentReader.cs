@@ -35,12 +35,12 @@ internal sealed class FoundryMistralDocumentReader : IngestionDocumentReader
         Stream source, string identifier, string mediaType, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(identifier);
-        return await ReadResultAsync(source, mediaType,
+        return await ReadResultAsync(source, mediaType, null,
             (root, token) => MapResult(root, identifier, token), cancellationToken);
     }
 
     internal async Task<T> ReadResultAsync<T>(
-        Stream source, string mediaType, Func<JsonElement, CancellationToken, T> map,
+        Stream source, string mediaType, string? modelId, Func<JsonElement, CancellationToken, T> map,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -65,7 +65,7 @@ internal sealed class FoundryMistralDocumentReader : IngestionDocumentReader
 
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            model = _deploymentName,
+            model = modelId ?? _deploymentName,
             document = new { type = "document_url", document_url = $"data:{mediaType};base64,{Convert.ToBase64String(input.ToArray())}" },
             include_image_base64 = false,
             include_blocks = true,

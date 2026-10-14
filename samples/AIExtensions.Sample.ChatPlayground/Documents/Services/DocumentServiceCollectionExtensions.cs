@@ -72,7 +72,7 @@ internal static class DocumentServiceCollectionExtensions
         Describe(new AppleVisionRecognizeDocumentsClient(),
             new DocumentExtractionClientDescriptor(
                 "apple-vision-document", "Apple Vision RecognizeDocuments",
-                "RecognizeDocumentsRequest on-device. Returns supported observations; native geometry and spans are not projected."), provider);
+                "RecognizeDocumentsRequest on-device. Returns only the Apple/proposed-contract intersection; no synthesized metadata."), provider);
 
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
@@ -82,15 +82,16 @@ internal static class DocumentServiceCollectionExtensions
             new DocumentReaderDescriptor(
                 "apple-vision-document",
                 "Apple Vision RecognizeDocuments",
-                "Reads on-device via a local projection of the shared Document; requires iOS or Mac Catalyst 26+."));
+                "Reads images and PDFs on-device with Vision RecognizeDocumentsRequest; requires iOS or Mac Catalyst 26+."));
 #endif
 
     private static IDocumentExtractionClient Describe(
         IDocumentExtractionClient client, DocumentExtractionClientDescriptor descriptor, IServiceProvider provider) =>
-        new DocumentExtractionClientBuilder(client)
+        client.AsBuilder()
             .Use(inner => new DescribedDocumentExtractionClient(inner, descriptor))
             .UseLogging(provider.GetRequiredService<ILoggerFactory>())
-            .Build(provider);
+            .UseOpenTelemetry(sourceName: "AIExtensions.Sample.ChatPlayground.Documents")
+            .Build();
 
     private static IngestionDocumentReader CreateAzureDocumentReader(AISettings settings) =>
         new DescribedDocumentReader(

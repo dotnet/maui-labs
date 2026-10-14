@@ -34,6 +34,7 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     [ObservableProperty] private DocumentExtractionClientOption? selectedClientOption;
     [ObservableProperty] private DocumentOperationMode mode;
     [ObservableProperty] private bool streamPages = true;
+    [ObservableProperty] private string modelId = string.Empty;
 
     public IngestionDocumentReader? SelectedReader => SelectedOption?.Reader;
     public DocumentReaderDescriptor? SelectedDescriptor => SelectedOption?.Descriptor;
@@ -46,7 +47,11 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     public string CurrentName => IsReaderMode ? SelectedDescriptor?.DisplayName ?? "No reader" :
         SelectedClientOption?.Descriptor.DisplayName ?? "No client";
     public bool CurrentIsCloud => IsReaderMode ? SelectedDescriptor?.IsCloud == true : SelectedClientOption?.Descriptor.IsCloud == true;
+    public bool CanSelectModel => IsClientMode && SelectedClientOption?.Descriptor.IsCloud == true;
     public string OperationLabel => IsExtractionMode ? "Extract" : "Read";
+
+    public DocumentExtractionOptions? CreateOptions() =>
+        !CanSelectModel || string.IsNullOrWhiteSpace(ModelId) ? null : new DocumentExtractionOptions { ModelId = ModelId.Trim() };
 
     partial void OnSelectedOptionChanging(DocumentReaderOption? value)
     {
@@ -86,10 +91,11 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(CurrentName));
         OnPropertyChanged(nameof(CurrentIsCloud));
+        OnPropertyChanged(nameof(CanSelectModel));
     }
 }
 
-public enum DocumentOperationMode { Reader, Extraction }
+public enum DocumentOperationMode { Reader, Extraction, OcrReader }
 
 public sealed record DocumentReaderOption(IngestionDocumentReader Reader, int Index)
 {

@@ -1,67 +1,102 @@
 # Apple RecognizeDocuments prototype
 
-**Status:** Non-shipping experiment in #450.
+**Status:** Non-shipping API evaluation, revived in #450.
 **Native API:** Vision `RecognizeDocumentsRequest`.
-**Platforms:** iOS, Mac Catalyst and macOS 26+.
-**Proposal:** [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at
-`d44c549301d08119f86b73f3fcf58c8b65a2981e`.
+**Platforms:** iOS 26+, Mac Catalyst 26+, macOS 26+.
+**Proposal:** [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), commit
+`a215825ae2c96723e922e068c226ff77122c7c94`.
 
-## Current architecture
+## Goals and boundaries
+
+Exercise the real proposed Microsoft APIs as though their packages were available. Keep both complete proposed projects unchanged,
+including namespaces and public accessibility, in a separate source snapshot. File-link them through non-shipping build adapters.
+Do not substitute a smaller private contract, modify the proposal to accommodate Apple, or ship the copied assemblies.
+
+The provider returns the intersection of genuine Apple output and standardized proposal fields. If either side lacks a matching feature,
+leave it absent and record the gap. There are no fabricated image crops, inferred confidence/roles, custom barcode/list block kinds,
+provider-property-bag projections, or fallback clients. The proposal's explicit raw slot holds the bounded native snapshot.
+
+## Source layout
+
+| Location | Responsibility |
+|---|---|
+| `src/Libraries/DocumentExtraction/Upstream/` | Both complete verbatim proposal projects and original `OcrDocumentReader` |
+| `src/Libraries/DocumentExtraction/upstream-manifest.json` | Pinned file paths and hashes |
+| `src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/` | Local file-link build adapter, not a modified upstream project |
+| `src/Libraries/Microsoft.Extensions.DocumentExtraction/` | Local file-link middleware build adapter |
+| `src/Libraries/Microsoft.Extensions.DataIngestion.DocumentExtraction/` | File-link build of the unchanged upstream reader adapter |
+| `src/AI/AppleNative/EssentialsAI/RecognizeDocumentsRequest*.swift` | One request bridge and bounded native snapshot |
+| `src/AI/AppleNative/RecognizeDocumentsRequestApiDefinitions.cs` | Internal Objective-C bindings |
+| `src/AI/Microsoft.Maui.Essentials.AI/Platform/MaciOS/AppleVisionRecognizeDocumentsProcessor.cs` | Image orientation, PDFKit pages, native dispatch/cancellation |
+| `src/AI/Microsoft.Maui.Essentials.AI/Internal/DocumentExtraction/` | Canonical supported-field mapper and portable portion of the real client |
+| `src/AI/Microsoft.Maui.Essentials.AI/Platform/MaciOS/AppleVisionRecognizeDocumentsClient.cs` | Public Apple constructor/wiring |
+| `src/AI/Microsoft.Maui.Essentials.AI/Platform/MaciOS/AppleVisionRecognizeDocumentsReader.cs` | Public ingestion projection |
+| `samples/AIExtensions.Sample.ChatPlayground/Documents/` | Actual extraction and ingestion UI, following other feature composition |
+
+## Pipeline
 
 ```text
-image / PDF stream (caller-owned)
-  -> AppleVisionRecognizeDocumentsProcessor
-  -> internal RecognizeDocumentsRequestNative / bounded snapshot
-  -> supported DocumentExtractionObservation values
-  -> DocumentExtractionPage sequence
-  -> original DocumentExtractionDocumentBuilder / ExtractAsync extension
-  -> owned Microsoft.Extensions.Documents.Document
-       -> playground inspection
-       -> local AppleVisionRecognizeDocumentsReader projection to DataIngestion
+image stream / PDF stream
+    -> internal image validation / PDFKit rendering
+    -> RecognizeDocumentsRequestNative
+    -> bounded native JSON snapshot
+    -> AppleVisionRecognizeDocumentsMapper
+    -> original DocumentPage / DocumentBlock / DocumentTable / DocumentTableCell
+         -> ExtractAsync or ExtractPagesAsync
+         -> AppleVisionRecognizeDocumentsReader (standard typed ingestion projection)
+         -> original OcrDocumentReader (original full-page-text/image projection)
 ```
 
-Extraction no longer owns a parallel semantic tree. Providers implement one operation with identifier/media type/cancellation.
-The extension consumes the same operation and finalizes a disposable result/document. The concrete reader disposes that result after
-projecting supported canonical elements. Opaque references/evidence/artifacts are not used to smuggle native payloads.
+The client implements the original `IDocumentExtractionClient`, including standard service discovery and disposal.
+Caller streams are never owned by the provider. PDF pages are processed sequentially with cancellation between pages.
+The full-result path uses the original page-stream reducer rather than inventing a competing reduction convention.
 
-## Source and build
+The canonical mapper keeps native paragraph order, replacing overlapping title/table projections instead of sorting multi-column
+content by geometry. Table dimensions follow logical native ranges (`lowerBound + count`); merged cells keep their actual spans.
+Unsupported list/barcode/entity structure is not promoted into normalized elements.
 
-The complete current Documents, Extraction.Abstractions and Extraction projects are preserved byte-for-byte under
-`src/Libraries/DocumentExtraction/Upstream/`; the manifest records 28 files and their exact source hashes.
-Local sibling projects file-link those files and supply only repository build adapters/shared guards.
+## Native readiness
 
-The obsolete extraction-owned geometry/options/usage/metadata/tree, configuration/OpenTelemetry middleware and original OCR reader
-were removed upstream and are not locally preserved as compatibility APIs. Native rendering/recognition implementation remains independent.
-No copied project or prototype library is packable or shipping.
+The bridge uses the exact Swift `RecognizeDocumentsRequest`, not a fictitious Objective-C `VNRecognizeDocumentsRequest`.
+Text/barcode/revision controls and capability queries remain internally available with Apple terminology.
+The prototype exposes only standard request options it can truthfully implement; unsupported model selection and provider-specific
+option bags fail explicitly. No provisional key schema is pushed into the public contract.
 
-## Apple mapping and limitations
+Calling Apple's synthesized `Codable` directly is unsafe for framework-produced observations: the original checklist reproduced recursive
+`Table.Cell.content` and `List.Item.content` projections and stack overflow. The snapshot has ancestor re-entry detection, a traversal-depth
+limit, and a node-count limit. Diagnostics stay in raw JSON, not in standardized output metadata.
 
-Native text and titles map to shared text/header observations. Actual table grid addresses and content map to table observations.
-Native paragraph order and supported duplicate-structure replacement are retained. Unsupported merged-span semantics, geometry,
-confidence, native request options, detailed barcodes/entities/words and raw-provider payloads are left absent rather than forced.
-No image crops, artifacts, model IDs, header levels, table roles, cloud fallback or estimated usage are invented.
+Native completion runs directly from the Swift task. Redispatching through `OperationQueue.current` previously deadlocked page two when
+managed worker-thread code awaited the callback. The current bridge avoids that dispatch cycle and checks cancellation after serialization.
 
-Provider observation IDs are extraction-local, deterministic and unique across pages/observations, because the upstream finalizer
-validates identity globally. Stored provider Markdown and semantic rendering are distinct; native text is not evidence of original Markdown.
+PDF rendering rejects non-finite bounds and clamps scale before integer conversion. Rendering uses the crop box, white background,
+native page rotation, and bounded image dimensions. These are input-processing details, not extra document API fields.
 
-The Swift snapshot still needs bounded traversal: directly encoding Apple's Codable graph caused recursive list/table projections on
-real framework output. Native completion runs directly from the task to avoid the previous worker-thread PDF callback deadlock.
-Cancellation, orientation and finite/bounded PDF rendering remain unchanged.
+## Playground composition
 
-## Playground
+Documents uses `PlaygroundPageLayout`, the shared attachment preview, popup menus, and source-generated commands.
+Its page composes an area, composer, and settings view. Services run the actual contracts independently of MAUI; the observable view model
+owns input selection, status, cancellation, API/provider selection, and displayed output, matching Chat/Embeddings/Images.
 
-Documents follows the existing page/area/composer/settings and services/view-model conventions, with direct registrations of actual
-reader/client abstractions. The latest rebased Chat diagnostics, image input and native token usage remain intact.
+The settings select:
 
-Extraction offers completed-page enumeration or finalization through the upstream extension. The reader mode compares local ingestion
-adapters. There is no misleading option for the upstream `OcrDocumentReader`, which no longer exists.
-No removed options, provider metadata or OpenTelemetry surface is reimplemented.
-Cloud uploads remain immediate, explicit, disclosed selections; no credentials are committed and Debug binaries are not distributable.
+1. **Document extraction:** Actual `IDocumentExtractionClient`, either whole-result or completed-page calls.
+2. **Document reader:** The concrete `IngestionDocumentReader` projection.
+3. **Upstream OCR reader:** The unchanged proposal `OcrDocumentReader` wrapping the selected extraction client.
 
-## Review references
+Actual clients are registered in DI, decorated with the original builder/logging/OpenTelemetry pipeline, and described through `GetService`.
+There is no provider-factory abstraction and no silent switch between local/cloud engines.
+Normalized and provider-raw inspection are separate views of the actual result, not augmented metadata objects.
 
-- [What changed upstream](document-extraction-upstream-refresh.md)
-- [Apple/proposal feature gaps](apple-document-extraction-gaps.md)
-- [Historical investigation](apple-document-extraction-feedback.md)
+Azure Document Intelligence and Foundry Mistral are explicit sample-only comparisons using their existing live-tested transport/settings.
+Cloud calls upload immediately when the selected operation runs; inline text discloses this, and Debug binaries embedding secrets must
+not be distributed. Credentials are not committed. Neither cloud SDK is a dependency of the Apple implementation.
 
-Historical tests/documentation describing the old proposal apply only to the archived snapshot, not this contract.
+## Review evidence and gaps
+
+Portable tests cover the actual proposal inventory/member shapes, standard builder/options/logging/telemetry/DI, source-content extensions,
+reader behavior, native snapshot mapping, unsupported features, page progress, cancellation, and cloud protocol adapters.
+Device tests execute both the concrete reader and real client against representative images/tables/lists/PDFs and the original upstream reader.
+
+See [Apple/proposal feature gaps](apple-document-extraction-gaps.md) for all deliberately absent normalized fields and reader-adapter limitations.
+The [historical feedback](apple-document-extraction-feedback.md) retains prior investigations but does not prescribe the current mapping policy.

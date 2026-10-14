@@ -42,25 +42,6 @@ Generate images from text or edit a source image with a configured Azure provide
 Chat, Embeddings, and Images each have their own tab and services. Replay
 works without credentials or a model.
 
-### Documents experiment
-
-The Documents tab exercises the latest original [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588)
-at `d44c549301d08119f86b73f3fcf58c8b65a2981e`. Both Extraction projects and their shared Documents prerequisite are copied verbatim
-and file-linked, not replaced by private models. This branch is non-shipping/non-packable.
-
-Use **+** for the bundled PDF/image or a selected file. Extraction runs page enumeration or the core `ExtractAsync` finalizer and
-displays the resulting shared Documents content. Reader mode executes local `IngestionDocumentReader` projections.
-The upstream OCR reader, model/options controls, raw payload/typed geometry surface, and OpenTelemetry middleware were removed upstream;
-they are not presented as current features.
-
-Completed results are disposed after rendering. Caller-owned source streams remain open. Opaque references, evidence and artifacts are
-not used to encode unsupported native data. Cloud providers retain their bounded transports, upload immediately when selected,
-and never act as automatic fallbacks.
-
-See [the breaking-change report](../../docs/ai/document-extraction-upstream-refresh.md) and
-[Apple feature gaps](../../docs/ai/apple-document-extraction-gaps.md). Existing Chat diagnostics and image input are retained.
-The standard .NET command-line provider accepts `--page Documents` to select the initial tab.
-
 ## Build and run
 
 Install the repo's pinned .NET 10 SDK, the matching MAUI workload, and Xcode 27
@@ -101,7 +82,3 @@ required only when at least one Azure deployment name is configured.
 User secrets are **embedded in Debug builds** for device testing: never
 distribute those builds or commit keys. Azure prompts, images, and indexed
 text may leave the device and incur charges.
-
-For the explicit document comparisons, `AI:DocumentDeploymentName` selects the Foundry Mistral deployment and reuses `AI:Endpoint`
-and `AI:ApiKey`. Azure Document Intelligence uses `AI:DocumentIntelligenceEndpoint` and `AI:DocumentIntelligenceKey`.
-No document-specific model override is injected into the new extraction contract, and no new resource is required by this sample.

@@ -77,19 +77,6 @@ version check.
 
 ## Documentation
 
-### Documents experiment
-
-The non-shipping document prototype uses the latest complete
-[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) shared Documents/Extraction source verbatim.
-`AppleVisionRecognizeDocumentsClient` returns page observations; the original core finalizer produces an owned disposable
-`Microsoft.Extensions.Documents.Document`. The concrete Apple ingestion reader is a local projection over it.
-The old extraction-owned tree, geometry/options/usage/metadata and upstream OCR reader were removed upstream.
-
-The [upstream refresh report](../../docs/ai/document-extraction-upstream-refresh.md) explains the breaking changes.
-The [capability matrix](../../docs/ai/apple-document-extraction-gaps.md) records unsupported features rather than forcing native data
-into metadata/opaque associations. Original source lives under `src/Libraries/DocumentExtraction/Upstream/` with a hash manifest.
-The copied build adapters and prototype Essentials.AI library are non-shipping/non-packable.
-
 - [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
 - [Apple Foundation Models Image Input](../../docs/ai/apple-foundation-models-image-input.md)
 

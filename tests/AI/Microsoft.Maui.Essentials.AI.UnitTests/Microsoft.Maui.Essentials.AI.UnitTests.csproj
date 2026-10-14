@@ -5,7 +5,7 @@
     <AssemblyName>Microsoft.Maui.Essentials.AI.UnitTests</AssemblyName>
     <RootNamespace>Microsoft.Maui.Essentials.AI.UnitTests</RootNamespace>
     <IsPackable>false</IsPackable>
-    <NoWarn>$(NoWarn);MAUIAI0001;MEDE0001;EXTEXP0019;CA1416</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;MEDE0001;CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
     <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
+    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DataIngestion.DocumentExtraction\Microsoft.Extensions.DataIngestion.DocumentExtraction.csproj" />
     <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Internal\DocumentExtraction\AppleVisionRecognizeDocumentsClient.cs"
              Link="Documents\AppleVisionRecognizeDocumentsClient.cs" />
   </ItemGroup>
