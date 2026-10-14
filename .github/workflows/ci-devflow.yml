@@ -22,6 +22,7 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
+    branches: [main]
     paths:
       - 'src/DevFlow/**'
       - 'platforms/Linux.Gtk4/**'

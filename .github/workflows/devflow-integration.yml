@@ -53,6 +53,7 @@ on:
         type: string
   pull_request:
     types: [opened, synchronize, reopened, edited]
+    branches: [main]
     paths:
       - 'src/DevFlow/**'
       - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'

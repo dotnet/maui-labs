@@ -7,10 +7,11 @@ the agent was split away from MAUI, for plain .NET Android, iOS, Mac Catalyst an
 
 ## Integration CI
 
-`devflow-integration.yml` automatically tests DevFlow-relevant pull requests,
-including drafts and stacked PRs. It covers MAUI and plain .NET apps on Android,
+`devflow-integration.yml` automatically tests DevFlow-relevant pull requests targeting
+`main`, including drafts. It covers MAUI and plain .NET apps on Android,
 iOS, Mac Catalyst and AppKit, plus MAUI Windows, GTK and WPF. Manual dispatch
 supports selecting a platform and framework.
+Use manual dispatch to run it on a branch that does not target `main`.
 
 Triggers cover DevFlow, its CLI, samples, platform backends and shared build inputs.
 The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT tests.

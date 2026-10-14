@@ -15,6 +15,7 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
+    branches: [main]
     paths:
       - 'platforms/MacOS/**'
       - '.github/workflows/ci-macos-appkit.yml'

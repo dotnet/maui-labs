@@ -17,6 +17,7 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
+    branches: [main]
     paths:
       - '.github/workflows/ci-linux-gtk4.yml'
       - '.github/workflows/_build.yml'
