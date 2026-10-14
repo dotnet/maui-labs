@@ -75,6 +75,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Microsoft.Maui.DevFlow.Agent.IntegrationTests\Fixtures\WebViewReadiness.cs" Link="WebView\WebViewReadiness.cs" />
     <Using Include="Xunit" />
   </ItemGroup>
 
