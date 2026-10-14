@@ -303,6 +303,10 @@ For Blazor Hybrid, register `builder.AddMauiBlazorDevFlowTools()` from
 `Microsoft.Maui.DevFlow.Blazor.Gtk` as well. CDP wiring starts when the GTK window is
 created. WebViews are captured through their handlers, initialized on document load,
 and unregistered on detachment. Repeated `WireBlazorCdpToAgent()` calls are safe.
+Captured GTK bridges register their real MAUI control through a weak owner reference.
+Shell reactivation and handler replacement therefore target the active control,
+not an older bridge with the same AutomationId; manually registered native-only
+WebKit bridges retain ownerless element/AutomationId correlation.
 
 Optional bridge diagnostics use `GtkBlazorWebViewDebugService.LogCallback`;
 `AddMauiBlazorDevFlowTools(enableLogging: true)` enables debugger output.
