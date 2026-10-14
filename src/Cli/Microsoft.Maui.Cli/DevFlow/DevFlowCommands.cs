@@ -5910,6 +5910,7 @@ public class DevFlowCommands
         }
 
     done:
+        _errorOccurred = failed > 0;
         if (human)
         {
             originalOut.WriteLine();

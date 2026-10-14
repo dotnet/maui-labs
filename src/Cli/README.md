@@ -246,7 +246,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui devflow storage` | Access app preferences, secure storage, discover file storage roots, and manage sandboxed app files |
 | `maui devflow agent` | Discover and inspect connected DevFlow agents |
 | `maui devflow broker` | Manage the DevFlow agent broker (start, stop, status, log) |
-| `maui devflow batch` | Execute commands from stdin for scripting |
+| `maui devflow batch` | Execute commands from stdin for scripting; stop on failure by default. `--continue-on-error` runs later commands but still exits nonzero if any command fails. |
 | `maui devflow commands` | List all available commands (schema discovery) |
 | `maui devflow diagnose` | Check DevFlow agent health |
 | `maui devflow wait` | Wait for an agent to connect |
