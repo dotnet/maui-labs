@@ -3,8 +3,8 @@
 
 // Minimal local shim of `Microsoft.Shared.Diagnostics.Throw` from dotnet/extensions'
 // `src/Shared/Throw/Throw.cs`, trimmed to the members actually used by the vendored
-// `Microsoft.Extensions.DocumentExtraction(.Abstractions)` sources in this repo
-// (`Throw.IfNull` and `Throw.IfNullOrWhitespace`). Linked into both projects; do not
+// shared Documents and DocumentExtraction sources in this repo.
+// Linked into the local build adapters; do not
 // edit the copied upstream implementation files to accommodate this shim.
 
 using System;
@@ -75,6 +75,46 @@ internal static class Throw
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     [DoesNotReturn]
-    private static void ArgumentException(string paramName, string? message)
+    public static void ArgumentException(string paramName, string? message)
         => throw new ArgumentException(message, paramName);
+
+    [DoesNotReturn]
+    public static void ArgumentOutOfRangeException(string paramName, string? message = null) =>
+        throw new ArgumentOutOfRangeException(paramName, message);
+
+    public static int IfLessThan(int value, int other, [CallerArgumentExpression(nameof(value))] string paramName = "")
+    {
+        if (value < other) ArgumentOutOfRangeException(paramName);
+        return value;
+    }
+
+    public static int IfLessThanOrEqual(int value, int other, [CallerArgumentExpression(nameof(value))] string paramName = "")
+    {
+        if (value <= other) ArgumentOutOfRangeException(paramName);
+        return value;
+    }
+
+    public static double IfLessThanOrEqual(double value, double other, [CallerArgumentExpression(nameof(value))] string paramName = "")
+    {
+        if (value <= other) ArgumentOutOfRangeException(paramName);
+        return value;
+    }
+
+    public static int IfGreaterThan(int value, int other, [CallerArgumentExpression(nameof(value))] string paramName = "")
+    {
+        if (value > other) ArgumentOutOfRangeException(paramName);
+        return value;
+    }
+
+    public static int IfGreaterThanOrEqual(int value, int other, [CallerArgumentExpression(nameof(value))] string paramName = "")
+    {
+        if (value >= other) ArgumentOutOfRangeException(paramName);
+        return value;
+    }
+
+    public static int IfOutOfRange(int value, int min, int max, string paramName = "")
+    {
+        if (value < min || value > max) ArgumentOutOfRangeException(paramName);
+        return value;
+    }
 }

@@ -13,7 +13,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     private readonly DocumentExtractionService _extraction;
     private SelectedDocument? _selected;
     private string _normalizedOutput = string.Empty;
-    private string _rawOutput = string.Empty;
+    private DocumentExtractionRunResult? _extractionResult;
 
     public DocumentPlaygroundViewModel(
         DocumentReadingService reading, DocumentExtractionService extraction,
@@ -40,7 +40,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
     public bool HasDocument => _selected is not null;
     public bool HasResult => ResultOutput.Length > 0;
-    public bool HasRawResult => _rawOutput.Length > 0;
+    public bool HasRawResult => _extractionResult?.HasRawOutput == true;
     public bool CanInspect => !IsBusy && HasResult;
     public bool IsIdle => !IsBusy;
     public bool IsCloudSelected => Settings.CurrentIsCloud;
@@ -53,7 +53,7 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     public IRelayCommand RemoveDocumentAction => RemoveDocumentCommand;
     public System.Windows.Input.ICommand CancelReading => ReadDocumentCancelCommand;
     public IRelayCommand InspectNormalized => InspectNormalizedResultCommand;
-    public IRelayCommand InspectRaw => InspectRawResultCommand;
+    public IAsyncRelayCommand InspectRaw => InspectRawResultCommand;
 
     [RelayCommand(CanExecute = nameof(CanInspect))]
     private void InspectNormalizedResult() => ResultOutput = _normalizedOutput;
@@ -61,7 +61,24 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     private bool CanInspectRaw() => CanInspect && HasRawResult;
 
     [RelayCommand(CanExecute = nameof(CanInspectRaw))]
-    private void InspectRawResult() => ResultOutput = _rawOutput;
+    private async Task InspectRawResultAsync(CancellationToken cancellationToken)
+    {
+        var owner = _extractionResult;
+        if (owner is null)
+            return;
+        try
+        {
+            var raw = await owner.InspectRawAsync(cancellationToken);
+            if (ReferenceEquals(owner, _extractionResult))
+                ResultOutput = raw;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception exception)
+        {
+            if (ReferenceEquals(owner, _extractionResult))
+                ResultOutput = $"Raw inspection failed ({exception.GetType().Name}).";
+        }
+    }
 
     private bool CanChooseDocument() => !IsBusy;
     private bool CanReadDocument() => CanRead;
@@ -147,21 +164,22 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
                 var progress = new Progress<DocumentExtractionProgress>(update =>
                 {
                     if (IsBusy)
-                        StatusMessage = $"Extracted {update.PagesProcessed?.ToString() ?? "?"}/{update.TotalPages?.ToString() ?? "?"} pages.";
+                        StatusMessage = $"Extracted {update.PagesProcessed} completed page(s).";
                 });
                 var result = await _extraction.ExtractAsync(
                     client, file, Settings.StreamPages, Settings.CreateOptions(), progress, cancellationToken);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    result.Dispose();
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+                _extractionResult = result;
                 ResultOutput = result.Output;
-                _rawOutput = result.RawOutput;
-                pages = result.Result.Pages.Count;
+                pages = result.PageCount;
             }
             else
             {
-                var reader = Settings.IsReaderMode
-                    ? Settings.SelectedReader ?? throw new InvalidOperationException("Choose a document reader.")
-                    : new OcrDocumentReader(
-                        Settings.SelectedClientOption?.Client ?? throw new InvalidOperationException("Choose a document extraction client."),
-                        Settings.CreateOptions());
+                var reader = Settings.SelectedReader ?? throw new InvalidOperationException("Choose a document reader.");
                 var result = await _reading.ReadAsync(reader, file, cancellationToken);
                 ResultOutput = result.Output;
                 pages = result.PageCount;
@@ -174,18 +192,21 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            ClearResult();
             StatusMessage = Settings.CurrentIsCloud
                 ? "Document reading timed out; a submitted Azure operation may continue server-side."
                 : "Document reading timed out.";
         }
         catch (OperationCanceledException)
         {
+            ClearResult();
             StatusMessage = Settings.CurrentIsCloud
                 ? "Document reading cancelled; a submitted Azure operation may continue server-side."
                 : "Document reading cancelled.";
         }
         catch (Exception exception)
         {
+            ClearResult();
             StatusMessage = $"Document processing failed with {name}: {exception.Message}";
         }
         finally
@@ -201,6 +222,8 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
             e.PropertyName == nameof(DocumentSettingsViewModel.SelectedClientOption) ||
             e.PropertyName == nameof(DocumentSettingsViewModel.Mode))
         {
+            ReadDocumentCommand.Cancel();
+            InspectRawResultCommand.Cancel();
             ClearResult();
             ResultHeading = "DOCUMENT RESULT";
             StatusMessage = Settings.HasSelection
@@ -215,10 +238,18 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
     private void ClearResult()
     {
+        _extractionResult?.Dispose();
+        _extractionResult = null;
         ResultOutput = string.Empty;
         _normalizedOutput = string.Empty;
-        _rawOutput = string.Empty;
         OnPropertyChanged(nameof(HasRawResult));
+    }
+
+    public void ReleasePageResult()
+    {
+        ReadDocumentCommand.Cancel();
+        InspectRawResultCommand.Cancel();
+        ClearResult();
     }
 
     partial void OnResultOutputChanged(string value)

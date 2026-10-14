@@ -1,32 +1,49 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.AI;
-using Microsoft.Shared.DiagnosticIds;
+using System;
+using System.Collections.Generic;
+using Microsoft.Shared.Diagnostics;
 
 namespace Microsoft.Extensions.DocumentExtraction;
 
-/// <summary>Represents the options to configure an OCR request.</summary>
+/// <summary>Configures one extraction without depending on provider SDKs or AI abstractions.</summary>
 /// <remarks>
-/// Normalized options common to engines, plus an <see cref="AdditionalProperties"/> bag for
-/// provider-specific settings, mirroring <c>ChatOptions</c>.
+/// Providers apply absent overrides using their documented defaults and reject unsupported explicit settings.
+/// Provider-specific values are borrowed; callers must not mutate them during an operation.
+/// Each provider must construct a fresh SDK request rather than mutate shared client defaults.
 /// </remarks>
-[Experimental(DiagnosticIds.Experiments.DocumentExtraction, UrlFormat = DiagnosticIds.UrlFormat)]
-public class DocumentExtractionOptions
+public sealed class DocumentExtractionOptions
 {
-    /// <summary>Gets or sets the model or deployment identifier to use for this request.</summary>
-    public string? ModelId { get; set; }
+    private string? _modelId;
 
-    /// <summary>Gets or sets any additional provider-specific request settings.</summary>
-    public AdditionalPropertiesDictionary? AdditionalProperties { get; set; }
+    /// <summary>Gets or sets a per-call model or analyzer override, when supported.</summary>
+    public string? ModelId
+    {
+        get => _modelId;
+        set => _modelId = value is null ? null : Throw.IfNullOrWhitespace(value);
+    }
 
-    /// <summary>Produces a clone of the current <see cref="DocumentExtractionOptions"/> instance.</summary>
-    /// <returns>A shallow clone of the options instance.</returns>
-    public DocumentExtractionOptions Clone() =>
-        new()
+    /// <summary>Gets or sets a value indicating whether native output and available original response content are retained.</summary>
+    public bool CaptureRawOutput { get; set; } = true;
+
+    /// <summary>Gets adapter-specific overrides, including typed provider settings.</summary>
+    public IDictionary<string, object?> AdditionalProperties { get; } = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+    /// <summary>Copies this request's scalars and property entries; opaque values remain borrowed.</summary>
+    /// <returns>A separate request-options container.</returns>
+    public DocumentExtractionOptions Clone()
+    {
+        DocumentExtractionOptions copy = new()
         {
             ModelId = ModelId,
-            AdditionalProperties = AdditionalProperties?.Clone(),
+            CaptureRawOutput = CaptureRawOutput
         };
+        foreach (KeyValuePair<string, object?> property in AdditionalProperties)
+        {
+            copy.AdditionalProperties.Add(property.Key, property.Value);
+        }
+
+        return copy;
+    }
 }

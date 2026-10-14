@@ -35,6 +35,8 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     [ObservableProperty] private DocumentOperationMode mode;
     [ObservableProperty] private bool streamPages = true;
     [ObservableProperty] private string modelId = string.Empty;
+    [ObservableProperty] private bool captureRawOutput = true;
+    [ObservableProperty] private string appleRecognitionLanguages = string.Empty;
 
     public IngestionDocumentReader? SelectedReader => SelectedOption?.Reader;
     public DocumentReaderDescriptor? SelectedDescriptor => SelectedOption?.Descriptor;
@@ -48,10 +50,21 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
         SelectedClientOption?.Descriptor.DisplayName ?? "No client";
     public bool CurrentIsCloud => IsReaderMode ? SelectedDescriptor?.IsCloud == true : SelectedClientOption?.Descriptor.IsCloud == true;
     public bool CanSelectModel => IsClientMode && SelectedClientOption?.Descriptor.IsCloud == true;
+    public bool CanSelectAppleOptions => IsClientMode && SelectedClientOption?.Descriptor.Id == "apple-vision-document";
     public string OperationLabel => IsExtractionMode ? "Extract" : "Read";
 
-    public DocumentExtractionOptions? CreateOptions() =>
-        !CanSelectModel || string.IsNullOrWhiteSpace(ModelId) ? null : new DocumentExtractionOptions { ModelId = ModelId.Trim() };
+    public DocumentExtractionOptions CreateOptions()
+    {
+        var options = new DocumentExtractionOptions
+        {
+            CaptureRawOutput = CaptureRawOutput,
+            ModelId = CanSelectModel && !string.IsNullOrWhiteSpace(ModelId) ? ModelId.Trim() : null,
+        };
+        if (CanSelectAppleOptions && !string.IsNullOrWhiteSpace(AppleRecognitionLanguages))
+            options.AdditionalProperties["apple.vision.recognitionLanguages"] =
+                AppleRecognitionLanguages.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return options;
+    }
 
     partial void OnSelectedOptionChanging(DocumentReaderOption? value)
     {
@@ -92,10 +105,11 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentName));
         OnPropertyChanged(nameof(CurrentIsCloud));
         OnPropertyChanged(nameof(CanSelectModel));
+        OnPropertyChanged(nameof(CanSelectAppleOptions));
     }
 }
 
-public enum DocumentOperationMode { Reader, Extraction, OcrReader }
+public enum DocumentOperationMode { Reader, Extraction }
 
 public sealed record DocumentReaderOption(IngestionDocumentReader Reader, int Index)
 {

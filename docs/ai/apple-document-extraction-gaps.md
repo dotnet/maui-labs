@@ -1,88 +1,55 @@
-# Apple Vision and the proposed document APIs: supported intersection
+# Apple Vision / corrected Extraction feature coverage
 
-This prototype uses the original `Microsoft.Extensions.DocumentExtraction` APIs from
-[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), pinned at `a215825ae2c96723e922e068c226ff77122c7c94`.
-Both proposed projects are copied verbatim, file-linked, and non-shipping. There is no private substitute contract.
+Current contract: [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at
+`1fc95b5b77b48e085b49cf25fd1b3e4797825fa9`, including its corrected shared Documents prerequisite.
+See [the correction report](document-extraction-corrected-api.md) for the adoption and raw-output rules.
 
-The provider is `AppleVisionRecognizeDocumentsClient`, backed by Apple's `RecognizeDocumentsRequest`. The reader is
-`AppleVisionRecognizeDocumentsReader`; the playground also executes the unchanged upstream `OcrDocumentReader`.
-All three paths share one native request implementation. None falls back to another provider.
+## Policy
 
-## Mapping policy
+Use the explicit supported API surface rather than a rewritten private model or arbitrary `Metadata` keys.
+Preserve actual native information where the corrected contract has a corresponding field or intended structured extension.
+Never fabricate native figure bytes, confidence, cell roles, hierarchy levels or model identities to populate a field.
+Structured provider values are opaque supplied data, not a claim of standardized entity recognition.
 
-Use a normalized property only when its meaning matches a feature actually returned by Apple. Leave unavailable properties null.
-Do not infer confidence, crop figures, guess table roles, encode barcodes as invented block kinds, or attach Apple-only objects through
-`AdditionalProperties`. Results, pages, blocks, cells, and page updates have no provider-specific property bags in the Apple provider.
+## Restored opportunities
 
-The contract's explicit `RawRepresentation` slot contains a cloned, bounded native JSON snapshot. It is not a second normalized model.
-Unsupported native detail can be inspected there, but is not promoted into standardized fields. The native snapshot cannot use Apple's
-recursive Codable graph safely; finite traversal and ancestor re-entry checks are retained to prevent stack overflow on framework-produced
-list/table content. This limitation and any pruned structure are recorded in the snapshot itself, not in normalized metadata.
+The corrected API can preserve exact geometry/source frames, actual confidence, merged spans/empty-cell anchors, native cell roles,
+captionless images, structured extension values, request overrides and operation-scoped raw output.
+These are no longer inherent contract gaps, unlike the reverted `d44c549…` slice.
+The provider and tests must demonstrate that those values survive finalization and disposal boundaries.
 
-## Supported normalized features
+Apple's source coordinates are normalized with bottom-left origin. A normalized `1 x 1` frame describes that coordinate space;
+it is not a fabricated raster size. The implementation must not reduce rotated polygons to rectangles or infer a score from word candidates.
+Merged cells retain their ranges rather than repeating the anchor content in covered positions. Apple does not provide standardized cell roles.
 
-| Proposed feature | Apple implementation |
+## Remaining genuine mismatches
+
+| Native feature | Remaining limitation |
 |---|---|
-| Stream input | PNG, JPEG, HEIC, TIFF, and PDF; caller retains ownership |
-| Pages and page text | Native document transcripts; PDFKit renders one PDF page at a time internally |
-| Text blocks | Native titles and paragraphs, using the built-in `Title` and `Paragraph` kinds |
-| Reading order | Native paragraph sequence, replacing overlapping title/table projections instead of sorting columns spatially |
-| Tables and cells | Actual row/column ranges, spans, content, and supported nested text/table content |
-| Cell roles | Left null; Apple does not supply the proposal's header/content role classification |
-| Regions | Actual native polygons; normalized units and bottom-left origin, with normalized dimensions `1 x 1` |
-| Confidence | Only a confidence value present on the actual source node; no promotion of observation or word confidence to paragraph confidence |
-| Page streaming | One completed page update per recognized image/PDF page; no invented token or partial-word streaming |
-| Progress | Pages processed and known total page count |
-| Client metadata | Standard provider metadata and service discovery; no invented Apple model/deployment identity |
-| Cancellation | Passed through input loading and native task cancellation; no callback redispatch onto a blocked operation queue |
-| Builders and middleware | Original configuration, logging, OpenTelemetry, keyed registration, and delegating client implementations |
+| Lists/items/nested item content and marker kinds | No first-class normalized list schema; structured extensions/annotations may preserve supplied fields without portable list semantics |
+| Barcode symbologies, text/binary payloads, GS1/composite/supplemental details | No standardized barcode schema; raw/structured provider details remain explicitly provider-specific |
+| Links/email/phones/addresses/calendar/money/flights/tracking/measurements/payment identifiers | No normalized detected-entity schema; no promise consumers can interpret values without provider knowledge |
+| Lines/words/candidates/languages/alignment | No portable OCR text-candidate model; optional actual supporting details/raw output are not first-class text structure |
+| Native request controls | Generic per-call seam is restored, but Apple keys/types and supported flags are adapter behavior, not universal options |
+| Native Swift object | Bridge retains a detached bounded snapshot, not a live `DocumentObservation`; no original network response exists for this local API |
+| Document-wide recognition graph | Apple containers may re-enter ancestor projections; bounded traversal is necessary and not a claim that arbitrary graphs are lossless |
+| PDF facts | Labels/rotation/render DPI are internal input-layer facts; not intrinsic recognition or semantic-document properties |
+| Multi-frame TIFF/HEIC | Only the first raster frame is processed; explicit PDF page iteration is supported |
 
-## Apple features without matching normalized proposal fields
+`RecognizeDocumentsRequest` does not extract figure/image bytes or captions. No `DocumentExtractionImage` is invented from a screenshot crop.
+Other providers may return actual image bytes without captions, and the corrected empty-Markdown contract must not drop them.
 
-| Apple capability | Current treatment |
-|---|---|
-| Typed lists, item hierarchy, marker strings/types | Not normalized as custom `list`/`listItem` block kinds; ordinary native paragraph text remains text |
-| Barcode symbology, payload bytes, GS1/composite flags | No normalized barcode element; kept only in the explicit native snapshot |
-| Detected links, email, telephone, addresses, calendar events, money, flights, measurements | No normalized entity/field model; not injected into blocks or metadata |
-| Text lines, words, alternative candidates and their individual geometry/confidence | No matching normalized element types; not approximated as paragraphs |
-| Recognition languages and text alignment | No normalized output properties; not added to `AdditionalProperties` |
-| Observation UUID/confidence and repeated-container diagnostics | Snapshot detail, not copied onto page or block metadata |
-| PDF labels, rotation, render DPI, source pixel size | Internal input-processing facts, not fabricated normalized document fields |
-| Request revision, recognition languages/custom words/correction, barcode controls, region of interest | Native bridge remains capable, but the prototype exposes no custom request keys |
+## Ingestion and operational limits
 
-The generic `DocumentExtractionOptions` model remains exactly as proposed. `ModelId` is rejected by the Apple provider because
-`RecognizeDocumentsRequest` does not expose model selection. Nonempty provider-specific option bags are explicitly rejected rather than
-silently ignored. Native request controls can be considered later through the proposal's extensibility mechanism, but no key schema is
-invented in this pass.
+The upstream `OcrDocumentReader` remains removed. Our concrete Apple reader is a local projection over the finalized shared document.
+That ingestion model cannot express all geometry/confidence/spans/structured fields; no opaque metadata is added to disguise the reduction.
+Empty and covered table positions remain distinct in the rich shared model even if the ingestion matrix cannot express the full distinction.
 
-Image inputs represent one image observation, including the first frame of a multi-frame TIFF/HEIC container. Only PDFKit's real PDF page
-sequence is exposed as multi-page input in this prototype. Multi-image container iteration remains an input-layer gap, not an invented
-Vision document capability.
+Upstream usage/progress/client-metadata conveniences, configuration/OpenTelemetry middleware and URI/AI-content overloads remain absent.
+Completed-page UI counts are presentation only. Cloud extraction may finish its remote operation before enumerating pages.
+Caller input stays caller-owned; rich results/documents and owned original-response streams are disposed after use.
 
-## Proposed features Apple does not provide
+## Review boundary
 
-`DocumentImage` is left absent: this request does not return extracted figure/image bytes or captions. There is no crop/LLM approximation.
-No image-caption block is synthesized. Token usage, billing usage, model/deployment override, and provider-grade table-cell roles are absent.
-`DocumentTable.MarkdownRepresentation` stays null when Apple returned structured cells; ingestion Markdown is a presentation projection of
-those real cells, not claimed as an Apple output.
-
-## Ingestion differences worth reviewing upstream
-
-The custom reader projects standardized title/paragraph/table elements into standard ingestion headers, paragraphs, and table grids.
-Merged covered positions remain null. It adds no ingestion metadata.
-
-The unmodified upstream `OcrDocumentReader` calls `ExtractAsync`, emits each page's full text as one paragraph, and copies extracted images.
-It currently does not map title blocks or structured tables/cells, and does not set the page number on the section itself. Those are observable
-proposal limitations, not locally patched behavior. The playground offers it separately so the team can compare all actual output shapes.
-
-Raw page snapshots survive on `DocumentPage.RawRepresentation`. The original streaming reducer does not copy a page update's raw object
-onto the assembled result's top-level raw slot; the provider does not change the reducer to hide this distinction.
-The proposal marks page/element raw properties as ignored for JSON, but not the result's top-level raw property. The playground's
-normalized-inspection serializer excludes that property locally and offers its contents in the separate raw view; the copied contract
-and the API's own serializer behavior are not changed.
-
-## Scope and release boundary
-
-The public provider and reader are experimental prototype surfaces. Copied proposal assemblies and the prototype library cannot be packed
-or shipped. First validate the complete API and provider intersection; decide internal/public visibility and release dependencies afterward.
-No provider gap is resolved by modifying copied Microsoft source, inventing a normalized field, or forcing missing Apple capabilities.
+This is a non-shipping, non-packable prototype with exact copied source. Public/internal release decisions and official package
+dependencies are deferred until provider acceptance. Missing native facts remain absent; missing standardized schemas remain documented.

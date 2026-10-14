@@ -4,7 +4,7 @@
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
     <RootNamespace>Microsoft.Maui.AI.Chat.Tests</RootNamespace>
-    <NoWarn>$(NoWarn);MEAI001;MEDE0001;OPENAI001</NoWarn>
+    <NoWarn>$(NoWarn);MEAI001;MEDE0001;EXTEXP0019;OPENAI001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

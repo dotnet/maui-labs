@@ -351,18 +351,3 @@ internal sealed record RecognizeDocumentsRequestPdfPageInfo(
 	double EffectiveDpi,
 	double WidthPoints,
 	double HeightPoints);
-
-internal sealed class RecognizeDocumentsRequestOptions
-{
-	internal string[]? RecognitionLanguages { get; init; }
-	internal string[]? CustomWords { get; init; }
-	internal bool? UseLanguageCorrection { get; init; }
-	internal bool? AutomaticallyDetectLanguage { get; init; }
-	internal int? MaximumCandidateCount { get; init; }
-	internal float? MinimumTextHeightFraction { get; init; }
-	internal bool? BarcodeDetectionEnabled { get; init; }
-	internal string[]? BarcodeSymbologies { get; init; }
-	internal bool? CoalesceCompositeSymbologies { get; init; }
-	internal float[]? RegionOfInterest { get; init; }
-	internal int? Revision { get; init; }
-}

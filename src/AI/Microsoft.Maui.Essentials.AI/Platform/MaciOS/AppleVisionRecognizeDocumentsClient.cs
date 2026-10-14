@@ -12,10 +12,11 @@ public sealed partial class AppleVisionRecognizeDocumentsClient
 	private static async IAsyncEnumerable<AppleVisionRecognizeDocumentsPageSnapshot> RecognizePagesAsync(
 		Stream source,
 		string mediaType,
+		RecognizeDocumentsRequestOptions? options,
 		[EnumeratorCancellation] CancellationToken cancellationToken)
 	{
 		var processor = new AppleVisionRecognizeDocumentsProcessor();
-		await foreach (var page in processor.RecognizePagesAsync(source, mediaType, cancellationToken).ConfigureAwait(false))
+		await foreach (var page in processor.RecognizePagesAsync(source, mediaType, options, cancellationToken).ConfigureAwait(false))
 			yield return new AppleVisionRecognizeDocumentsPageSnapshot(page.PageNumber, page.TotalPages, page.Snapshot);
 	}
 }

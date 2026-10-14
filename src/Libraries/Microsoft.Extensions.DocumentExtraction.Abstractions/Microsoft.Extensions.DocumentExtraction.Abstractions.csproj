@@ -7,10 +7,8 @@
     <AssemblyName>Microsoft.Extensions.DocumentExtraction.Abstractions</AssemblyName>
     <RootNamespace>Microsoft.Extensions.DocumentExtraction</RootNamespace>
     <PackageId>Microsoft.Extensions.DocumentExtraction.Abstractions</PackageId>
-    <Description>Abstractions representing document extraction components (OCR, layout, tables, and figures).</Description>
-    <!-- MEDE0001: the vendored APIs are marked [Experimental] upstream.
-         MEAI001: the vendored APIs consume experimental Microsoft.Extensions.AI surface area. -->
-    <NoWarn>$(NoWarn);MEDE0001;MEAI001</NoWarn>
+    <Description>Provider observations, layout and source output over shared Documents.</Description>
+    <NoWarn>$(NoWarn);MEDE0001;EXTEXP0019</NoWarn>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
@@ -20,15 +18,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <ProjectReference Include="..\Microsoft.Extensions.Documents.Abstractions\Microsoft.Extensions.Documents.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Diagnostics.CodeAnalysis.ExperimentalAttribute">
+      <_Parameter1>MEDE0001</_Parameter1>
+      <_Parameter2>UrlFormat = "https://aka.ms/dotnet-extensions-warnings/{0}"</_Parameter2>
+      <_Parameter2_IsLiteral>true</_Parameter2_IsLiteral>
+    </AssemblyAttribute>
     <Compile Include="..\DocumentExtraction\Upstream\Microsoft.Extensions.DocumentExtraction.Abstractions\*.cs"
              Link="Upstream\%(Filename)%(Extension)" />
     <!-- Local shims for upstream's internal Microsoft.Shared.* helpers (see src/Libraries/Shared). -->
     <Compile Include="..\Shared\Diagnostics\Throw.cs" Link="Shared\Diagnostics\Throw.cs" />
-    <Compile Include="..\Shared\DiagnosticIds\DiagnosticIds.cs" Link="Shared\DiagnosticIds\DiagnosticIds.cs" />
   </ItemGroup>
 
 </Project>

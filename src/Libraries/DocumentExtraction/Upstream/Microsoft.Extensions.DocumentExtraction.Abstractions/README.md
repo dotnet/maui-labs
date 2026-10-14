@@ -1,39 +1,73 @@
 # Microsoft.Extensions.DocumentExtraction.Abstractions
 
-.NET developers need to turn documents such as scanned images and PDFs into structured, AI-ready content, recovering text along with layout, tables, figures, and coordinates in a provider-neutral way. The `Microsoft.Extensions.DocumentExtraction` libraries provide a unified approach for representing document-extraction components, complementing `Microsoft.Extensions.DataIngestion` (extraction pulls content out of documents; ingestion feeds that content into a retrieval pipeline).
+This experimental package defines the extraction-side contract over
+`Microsoft.Extensions.Documents.Abstractions`. Providers stream page envelopes
+containing semantic observations; `DocumentExtractionDocumentBuilder` explicitly
+finalizes those observations into the existing `Documents.Document` model.
+It does not define a second canonical tree.
 
-## The packages
+Finalization sorts out-of-order pages and observations, rejects duplicate page
+numbers and provider observation identifiers, validates table-cell ownership,
+and preserves equal text and duplicate ordered page references. Opaque evidence
+references and document-owned artifacts are associated with the resulting
+`Documents` elements. The builder owns artifacts until successful finalization;
+the finalized result owns them afterward and disposes them with its document.
 
-The [Microsoft.Extensions.DocumentExtraction.Abstractions](https://www.nuget.org/packages/Microsoft.Extensions.DocumentExtraction.Abstractions) package provides the core exchange types, including [`IDocumentExtractionClient`](https://learn.microsoft.com/dotnet/api/microsoft.extensions.documentextraction.idocumentextractionclient), [`DocumentExtractionResult`](https://learn.microsoft.com/dotnet/api/microsoft.extensions.documentextraction.documentextractionresult), [`DocumentPage`](https://learn.microsoft.com/dotnet/api/microsoft.extensions.documentextraction.documentpage), and the reading-order [`DocumentElement`](https://learn.microsoft.com/dotnet/api/microsoft.extensions.documentextraction.documentelement) model (blocks, tables, and images with bounding regions and confidence). Any .NET library that provides a document-extraction engine can implement these abstractions to enable seamless integration with consuming code.
+Unknown, list, barcode, and provider-specific observations can preserve opaque
+structured values through `DocumentExtractionExtension.Value` and shared
+`DocumentAnnotation` instances, without flattening them into Markdown. This is
+transport, not first-class list/item/nesting or normalized detection schemas;
+those remain separate review work. The package has no provider, AI, Azure, or
+MEDI dependencies and does not fabricate grounding or recognize detections.
 
-The [Microsoft.Extensions.DocumentExtraction](https://www.nuget.org/packages/Microsoft.Extensions.DocumentExtraction) package has an implicit dependency on the `Microsoft.Extensions.DocumentExtraction.Abstractions` package. This package enables you to easily integrate components such as logging, telemetry, and options configuration into your applications using familiar dependency injection and builder patterns.
+`IDocumentExtractionClient.ExtractPagesAsync(Stream, identifier, mediaType,
+DocumentExtractionOptions?, CancellationToken)` is the single provider operation. The `ExtractAsync`
+extension consumes that same page sequence and returns a disposable result.
+The caller owns the input stream; dispose the result to release its document
+and registered artifact streams. Page enumeration does not guarantee incremental
+network extraction: a provider may finish a remote operation before yielding pages.
 
-## Which package to reference
+## Layout and finalization
 
-Libraries that provide implementations of the abstractions typically reference only `Microsoft.Extensions.DocumentExtraction.Abstractions`.
+Source-page frames retain the reported page number, dimensions, coordinate unit
+and origin separately from the assembled page order. Annotations on pages,
+observations and table cells carry exact ordered polygons, optional reported
+confidence, roles and structured values into the shared document. Unknown units
+remain unknown; scores are not normalized or treated as cross-provider calibrated.
+Table cells preserve positive row/column spans, producer roles, empty anchors
+and annotations independently of content. Blank/image-only pages remain sections
+without invented Markdown. Stored document Markdown is assembled only when every
+page supplied it; semantic projection remains separate.
 
-To also have access to higher-level utilities for working with document-extraction clients, reference the `Microsoft.Extensions.DocumentExtraction` package instead (which itself references `Microsoft.Extensions.DocumentExtraction.Abstractions`). Most consuming applications and services should reference the `Microsoft.Extensions.DocumentExtraction` package along with a library that provides a concrete implementation of the abstractions.
+## Per-call options and break-glass output
 
-## Install the package
+`DocumentExtractionOptions` provides an optional model override and an
+adapter-specific `AdditionalProperties` dictionary. An absent override uses
+documented provider defaults. Providers must reject unsupported explicit settings,
+create fresh requests per operation and avoid mutating shared defaults. Typed
+provider feature settings belong to adapters, not Documents. `ExtractAsync`
+clones the options and dictionary entries before forwarding; opaque values remain
+borrowed and callers must not mutate them while the operation is in flight.
+Direct `ExtractPagesAsync` callers must follow the provider's snapshot contract.
 
-From the command-line:
+`CaptureRawOutput` defaults to `true`: providers retain the native result and
+available original detached response body in a per-operation
+`DocumentSourceOutput`, never a mutable client "last response". Unavailable
+native/body data is explicitly reported, not manufactured by serializing mapped
+objects. Set the flag to `false` to opt out; providers must return no retained raw
+slots, including native observations. Finalization rejects violations and releases
+new unowned artifacts instead of silently returning retained data.
 
-```console
-dotnet add package Microsoft.Extensions.DocumentExtraction.Abstractions --prerelease
-```
+Multiple pages may reference one operation. Finalization registers its raw-content
+artifact once under document ownership; semantic observation artifact duplication
+is still rejected. Disposing the result disposes owned streams, never borrowed
+native results/values or artifacts already owned by another document. Raw output
+is accessed explicitly through `GetRawRepresentation()`/`GetRawContent()` and
+does not automatically enter Markdown, logs, embeddings or ingestion records.
+Providers must not capture request credentials or authorization headers.
 
-Or directly in the C# project file:
-
-```xml
-<ItemGroup>
-  <PackageReference Include="Microsoft.Extensions.DocumentExtraction.Abstractions" Version="[CURRENTVERSION]" />
-</ItemGroup>
-```
-
-## Documentation
-
-Refer to the [Microsoft.Extensions.DocumentExtraction libraries documentation](https://learn.microsoft.com/dotnet/api/microsoft.extensions.documentextraction) for more information and API usage examples.
-
-## Feedback & Contributing
-
-We welcome feedback and contributions in [our GitHub repo](https://github.com/dotnet/extensions).
+All public APIs are experimental under `MEDE0001`. The shared Documents APIs
+use the separate `EXTEXP0019` diagnostic. Both surfaces are provisional pending
+API review. The package deliberately excludes the old extraction-owned tree,
+usage/progress APIs, configuration/OTel middleware, URI fetching and AI content
+overloads. Restoring information fidelity does not restore those operational APIs.

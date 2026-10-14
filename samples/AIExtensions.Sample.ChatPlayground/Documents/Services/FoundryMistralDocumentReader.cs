@@ -39,9 +39,14 @@ internal sealed class FoundryMistralDocumentReader : IngestionDocumentReader
             (root, token) => MapResult(root, identifier, token), cancellationToken);
     }
 
-    internal async Task<T> ReadResultAsync<T>(
+    internal Task<T> ReadResultAsync<T>(
         Stream source, string mediaType, string? modelId, Func<JsonElement, CancellationToken, T> map,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        ReadResultAsync(source, mediaType, modelId, (root, _, token) => map(root, token), false, cancellationToken);
+
+    internal async Task<T> ReadResultAsync<T>(
+        Stream source, string mediaType, string? modelId, Func<JsonElement, byte[], CancellationToken, T> map,
+        bool includeImageBase64, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(mediaType);
@@ -67,7 +72,7 @@ internal sealed class FoundryMistralDocumentReader : IngestionDocumentReader
         {
             model = modelId ?? _deploymentName,
             document = new { type = "document_url", document_url = $"data:{mediaType};base64,{Convert.ToBase64String(input.ToArray())}" },
-            include_image_base64 = false,
+            include_image_base64 = includeImageBase64,
             include_blocks = true,
             table_format = "html",
             extract_header = true,
@@ -112,10 +117,20 @@ internal sealed class FoundryMistralDocumentReader : IngestionDocumentReader
                 token.ThrowIfCancellationRequested();
                 try
                 {
-                    using var json = JsonDocument.Parse(bytes.ToArray());
-                    var result = map(json.RootElement, token);
-                    token.ThrowIfCancellationRequested();
-                    return result;
+                    var body = bytes.ToArray();
+                    using var json = JsonDocument.Parse(body);
+                    var result = map(json.RootElement, body, token);
+                    try
+                    {
+                        token.ThrowIfCancellationRequested();
+                        return result;
+                    }
+                    catch
+                    {
+                        if (result is IDisposable disposable)
+                            disposable.Dispose();
+                        throw;
+                    }
                 }
                 catch (JsonException)
                 {

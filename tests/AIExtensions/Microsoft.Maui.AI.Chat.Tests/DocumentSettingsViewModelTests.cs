@@ -21,8 +21,6 @@ public class DocumentSettingsViewModelTests
         Assert.True(settings.IsReaderMode);
         Assert.False(settings.IsClientMode);
         Assert.Equal("Reader", settings.CurrentName);
-        settings.Mode = DocumentOperationMode.OcrReader;
-        Assert.True(settings.IsClientMode);
         Assert.False(settings.IsExtractionMode);
         Assert.Equal("Read", settings.OperationLabel);
     }
@@ -33,12 +31,12 @@ public class DocumentSettingsViewModelTests
         using var local = Client("apple-client");
         using var cloud = Client("cloud-client", isCloud: true);
         var settings = new DocumentSettingsViewModel([], [local, cloud]) { ModelId = "deployment" };
-        Assert.Null(settings.CreateOptions());
+        Assert.Null(settings.CreateOptions().ModelId);
         settings.SelectedClientOption = settings.Clients[1];
         Assert.True(settings.CanSelectModel);
         Assert.Equal("deployment", settings.CreateOptions()!.ModelId);
         settings.Mode = DocumentOperationMode.Reader;
-        Assert.Null(settings.CreateOptions());
+        Assert.Null(settings.CreateOptions().ModelId);
     }
 
     [Fact]
@@ -64,6 +62,32 @@ public class DocumentSettingsViewModelTests
         Assert.True(settings.HasSelection);
     }
 
+    [Fact]
+    public void CaptureAndNativeLanguageControlsArePerCallAndNeverForceAppleDefaults()
+    {
+        using var apple = Client("apple-vision-document");
+        using var cloud = Client("cloud", isCloud: true);
+        var settings = new DocumentSettingsViewModel([], [apple, cloud]);
+        Assert.True(settings.CanSelectAppleOptions);
+        Assert.True(settings.CreateOptions().CaptureRawOutput);
+        Assert.Empty(settings.CreateOptions().AdditionalProperties);
+        settings.CaptureRawOutput = false;
+        settings.AppleRecognitionLanguages = " en, fr ";
+        settings.ModelId = "cloud-deployment";
+        var first = settings.CreateOptions();
+        Assert.False(first.CaptureRawOutput);
+        Assert.Null(first.ModelId);
+        Assert.Equal(["en", "fr"], Assert.IsType<string[]>(first.AdditionalProperties["apple.vision.recognitionLanguages"]));
+        settings.SelectedClientOption = settings.Clients[1];
+        var second = settings.CreateOptions();
+        Assert.False(settings.CanSelectAppleOptions);
+        Assert.Equal("cloud-deployment", second.ModelId);
+        Assert.Empty(second.AdditionalProperties);
+        Assert.False(second.CaptureRawOutput);
+        Assert.NotSame(first, second);
+        Assert.Single(first.AdditionalProperties);
+    }
+
     private static IngestionDocumentReader Reader(string id) =>
         new DescribedDocumentReader(new TestReader(), new DocumentReaderDescriptor(id, "Reader", "Description"));
 
@@ -80,11 +104,8 @@ public class DocumentSettingsViewModelTests
 
     private sealed class TestClient : IDocumentExtractionClient
     {
-        public Task<DocumentExtractionResult> ExtractAsync(
-            Stream document, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new DocumentExtractionResult([]));
-        public IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
-            Stream document, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
+        public IAsyncEnumerable<DocumentExtractionPage> ExtractPagesAsync(
+            Stream document, string identifier, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
         public void Dispose() { }

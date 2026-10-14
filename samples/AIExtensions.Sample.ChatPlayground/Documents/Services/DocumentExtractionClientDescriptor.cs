@@ -16,7 +16,7 @@ internal sealed class DescribedDocumentExtractionClient(
 public sealed record DocumentExtractionClientOption(IDocumentExtractionClient Client, int Index)
 {
     public DocumentExtractionClientDescriptor Descriptor { get; } =
-        Client.GetService<DocumentExtractionClientDescriptor>()
+        Client.GetService(typeof(DocumentExtractionClientDescriptor)) as DocumentExtractionClientDescriptor
         ?? throw new InvalidOperationException($"Document extraction client {Index} did not expose its descriptor.");
 
     public string AutomationId => $"DocumentExtractionClient{Index}Radio";

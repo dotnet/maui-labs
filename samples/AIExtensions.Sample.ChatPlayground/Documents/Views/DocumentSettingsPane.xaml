@@ -13,8 +13,6 @@
                              AutomationId="DocumentExtractionModeRadio" />
                 <RadioButton Content="Document reader" Value="{x:Static local:DocumentOperationMode.Reader}"
                              AutomationId="DocumentReaderModeRadio" />
-                <RadioButton Content="Upstream OCR reader" Value="{x:Static local:DocumentOperationMode.OcrReader}"
-                             AutomationId="DocumentOcrReaderModeRadio" />
             </VerticalStackLayout>
             <Label Text="CLIENT" Style="{StaticResource SectionHeading}" IsVisible="{Binding IsClientMode}" />
             <VerticalStackLayout Spacing="4" IsVisible="{Binding IsClientMode}" IsEnabled="{Binding IsIdle}"
@@ -35,9 +33,18 @@
                 <CheckBox IsChecked="{Binding StreamPages}" AutomationId="DocumentStreamPagesCheckBox" />
                 <Label Text="Stream completed pages" VerticalOptions="Center" />
             </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsExtractionMode}" IsEnabled="{Binding IsIdle}">
+                <CheckBox IsChecked="{Binding CaptureRawOutput}" AutomationId="DocumentCaptureRawCheckBox" />
+                <Label Text="Retain raw output for explicit inspection" VerticalOptions="Center" />
+            </HorizontalStackLayout>
             <VerticalStackLayout IsVisible="{Binding CanSelectModel}" IsEnabled="{Binding IsIdle}">
                 <Label Text="Model / deployment override (optional)" Style="{StaticResource MutedLabel}" />
                 <Entry Text="{Binding ModelId}" AutomationId="DocumentModelIdEntry" />
+            </VerticalStackLayout>
+            <VerticalStackLayout IsVisible="{Binding CanSelectAppleOptions}" IsEnabled="{Binding IsIdle}">
+                <Label Text="Apple recognition languages (optional, comma-separated)" Style="{StaticResource MutedLabel}" />
+                <Entry Text="{Binding AppleRecognitionLanguages}" AutomationId="DocumentAppleLanguagesEntry" />
+                <Label Text="Leave blank to keep native request defaults." Style="{StaticResource MutedLabel}" />
             </VerticalStackLayout>
             <HorizontalStackLayout Spacing="4" IsVisible="{Binding IsReaderMode}">
                 <Label Text="READER" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />

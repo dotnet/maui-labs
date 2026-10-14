@@ -1,69 +1,54 @@
-using System.Text;
 using Microsoft.Extensions.DataIngestion;
-using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
 
 namespace Microsoft.Maui.Essentials.AI;
 
 internal static class AppleVisionRecognizeDocumentsIngestionMapper
 {
-	internal static IngestionDocumentSection MapPage(DocumentPage page)
+	internal static IngestionDocument MapDocument(Document source)
 	{
-		var pageNumber = page.PageNumber;
+		var result = new IngestionDocument(source.Identifier);
+		for (var index = 0; index < source.Sections.Count; index++)
+		{
+			var pageNumber = source.SourcePages.Count > index ? source.SourcePages[index].PageNumber : index + 1;
+			result.Sections.Add(MapPage(source.Sections[index], pageNumber));
+		}
+		return result;
+	}
+
+	internal static IngestionDocumentSection MapPage(DocumentSection page, int pageNumber)
+	{
 		var section = new IngestionDocumentSection { PageNumber = pageNumber };
 		foreach (var element in page.Elements)
 		{
+			if (element is DocumentExtensionElement { Type: "apple.vision.list" } list &&
+				list.Text is { Length: > 0 } listText && listText.Split('\n').All(item =>
+					page.Elements.OfType<DocumentTextElement>().Any(text => text.Text?.Contains(item, StringComparison.Ordinal) == true)))
+				continue;
 			switch (element)
 			{
-				case DocumentBlock block when block.Kind == DocumentBlockKind.Title:
-					section.Elements.Add(new IngestionDocumentHeader(block.Text)
-						{ Level = 1, Text = block.Text, PageNumber = pageNumber });
+				case DocumentTextElement text when text.Kind == DocumentTextKind.Header && text.HeaderLevel is { } level:
+					section.Elements.Add(new IngestionDocumentHeader(text.GetMarkdown())
+						{ Level = level, Text = text.Text, PageNumber = pageNumber });
 					break;
-				case DocumentTable table:
-					section.Elements.Add(ReadTable(table, pageNumber));
+				case DocumentTableElement table:
+					var cells = new IngestionDocumentElement?[table.Cells.RowCount, table.Cells.ColumnCount];
+					foreach (var cell in table.Cells)
+						if (cell?.Content is { } content)
+							cells[cell.RowIndex, cell.ColumnIndex] = Paragraph(content.ToMarkdown(), content.Text, pageNumber);
+					section.Elements.Add(new IngestionDocumentTable(table.ToMarkdown(), cells) { PageNumber = pageNumber });
 					break;
-				case DocumentBlock block when block.Kind == DocumentBlockKind.Paragraph:
-					section.Elements.Add(Paragraph(block.Text, pageNumber));
+				default:
+					if (element.ToMarkdown().Length > 0 || element.Text is { Length: > 0 })
+						section.Elements.Add(Paragraph(element.ToMarkdown(), element.Text, pageNumber));
 					break;
 			}
 		}
-		if (section.Elements.Count == 0 && !string.IsNullOrWhiteSpace(page.Text))
-			section.Elements.Add(Paragraph(page.Text, pageNumber));
+		if (section.Elements.Count == 0 && !string.IsNullOrWhiteSpace(page.StoredMarkdown))
+			section.Elements.Add(Paragraph(page.StoredMarkdown, page.StoredMarkdown, pageNumber));
 		return section;
 	}
 
-	private static IngestionDocumentParagraph Paragraph(string text, int pageNumber) =>
-		new(text) { Text = text, PageNumber = pageNumber };
-
-	private static IngestionDocumentTable ReadTable(DocumentTable table, int pageNumber)
-	{
-		var rows = table.RowCount;
-		var columns = table.ColumnCount;
-		var cells = new IngestionDocumentElement?[rows, columns];
-		foreach (var cell in table.Cells ?? [])
-			if (!string.IsNullOrWhiteSpace(cell.Content))
-				cells[cell.RowIndex, cell.ColumnIndex] = Paragraph(cell.Content, pageNumber);
-
-		if (table.MarkdownRepresentation is { } representation)
-			return new IngestionDocumentTable(representation, cells) { PageNumber = pageNumber };
-
-		var markdown = new StringBuilder();
-		for (var row = 0; row < rows; row++)
-		{
-			markdown.Append('|');
-			for (var column = 0; column < columns; column++)
-			{
-				var text = cells[row, column]?.GetMarkdown() ?? "";
-				markdown.Append(' ').Append(text.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ")).Append(" |");
-			}
-			markdown.AppendLine();
-			if (row == 0)
-			{
-				markdown.Append('|');
-				for (var column = 0; column < columns; column++)
-					markdown.Append(" --- |");
-				markdown.AppendLine();
-			}
-		}
-		return new IngestionDocumentTable(markdown.ToString().TrimEnd(), cells) { PageNumber = pageNumber };
-	}
+	private static IngestionDocumentParagraph Paragraph(string markdown, string? text, int pageNumber) =>
+		new(markdown) { Text = text, PageNumber = pageNumber };
 }

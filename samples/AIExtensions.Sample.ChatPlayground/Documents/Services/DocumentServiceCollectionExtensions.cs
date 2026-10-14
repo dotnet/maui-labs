@@ -37,7 +37,7 @@ internal static class DocumentServiceCollectionExtensions
                     settings.DocumentIntelligenceEndpoint!, settings.DocumentIntelligenceKey!),
                     new DocumentExtractionClientDescriptor(
                         "azure-document-intelligence", "Azure Document Intelligence",
-                        "Uploads the document for actual prebuilt-layout output; charges may apply.", IsCloud: true), provider));
+                        "Uploads the document for the selected model (prebuilt-layout by default); charges may apply. Native SDK output is inspectable; original response-body capture is unavailable.", IsCloud: true), provider));
         }
 
         if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
@@ -59,7 +59,7 @@ internal static class DocumentServiceCollectionExtensions
                     provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings.DocumentDeploymentName!),
                     new DocumentExtractionClientDescriptor(
                         "foundry-mistral-document", "Foundry Mistral Document AI",
-                        "Uploads the document to the configured Mistral OCR deployment; charges may apply.", IsCloud: true), provider));
+                        "Uploads the document to the selected Mistral OCR deployment; charges may apply. Raw capture retains the detached original JSON response body.", IsCloud: true), provider));
         }
 
         return services;
@@ -72,7 +72,7 @@ internal static class DocumentServiceCollectionExtensions
         Describe(new AppleVisionRecognizeDocumentsClient(),
             new DocumentExtractionClientDescriptor(
                 "apple-vision-document", "Apple Vision RecognizeDocuments",
-                "RecognizeDocumentsRequest on-device. Returns only the Apple/proposed-contract intersection; no synthesized metadata."), provider);
+                "RecognizeDocumentsRequest on-device. Preserves native geometry, table spans and semantic annotations. Raw inspection is a bounded native bridge snapshot, not an Apple observation object."), provider);
 
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
@@ -87,10 +87,9 @@ internal static class DocumentServiceCollectionExtensions
 
     private static IDocumentExtractionClient Describe(
         IDocumentExtractionClient client, DocumentExtractionClientDescriptor descriptor, IServiceProvider provider) =>
-        client.AsBuilder()
+        new DocumentExtractionClientBuilder(client)
             .Use(inner => new DescribedDocumentExtractionClient(inner, descriptor))
             .UseLogging(provider.GetRequiredService<ILoggerFactory>())
-            .UseOpenTelemetry(sourceName: "AIExtensions.Sample.ChatPlayground.Documents")
             .Build();
 
     private static IngestionDocumentReader CreateAzureDocumentReader(AISettings settings) =>

@@ -1,10 +1,8 @@
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DocumentExtraction;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Documents;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
@@ -12,124 +10,98 @@ namespace Microsoft.Maui.Essentials.AI.UnitTests;
 public class ProposedDocumentPipelineTests
 {
 	[Fact]
-	public async Task FullBuilder_ConfigurationLoggingTelemetryAndDiscoveryUseActualProposal()
+	public async Task Builder_DelegationLoggingDiscoveryAndPerCallSnapshotUseOriginalPublicTypes()
 	{
-		using var leaf = new TestClient();
-		using var pipeline = leaf.AsBuilder()
-			.ConfigureOptions(options => options.ModelId ??= "configured")
-			.UseLogging(NullLoggerFactory.Instance)
-			.UseOpenTelemetry(sourceName: "proposal-test")
-			.Build();
-		var options = new DocumentExtractionOptions { AdditionalProperties = new() { ["caller"] = 42 } };
-		using var source = new MemoryStream([1, 2, 3]);
-		var result = await pipeline.ExtractAsync(source, "image/png", options);
-		Assert.Equal("Actual page", Assert.Single(result.Pages).Text);
-		Assert.Equal("configured", leaf.Options!.ModelId);
-		Assert.Null(options.ModelId);
+		var leaf = new TestClient();
+		var logger = new CapturingLogger();
+		using var pipeline = new DocumentExtractionClientBuilder(leaf)
+			.Use(inner => new ForwardingClient(inner))
+			.UseLogging(logger).Build();
+		var borrowed = new object();
+		var options = new DocumentExtractionOptions { ModelId = "request", CaptureRawOutput = false };
+		options.AdditionalProperties["borrowed"] = borrowed;
+		using var source = new MemoryStream([1]);
+		using var result = await pipeline.ExtractAsync(source, "input", "image/png", options);
+		Assert.Equal("input", result.Document.Identifier);
 		Assert.NotSame(options, leaf.Options);
-		Assert.Equal(42, options.AdditionalProperties["caller"]);
-		Assert.Same(leaf, pipeline.GetService<TestClient>());
-		Assert.Equal("test", pipeline.GetService<DocumentExtractionClientMetadata>()!.ProviderName);
-		Assert.NotNull(pipeline.GetService<ActivitySource>());
+		Assert.NotSame(options.AdditionalProperties, leaf.Options!.AdditionalProperties);
+		Assert.Same(borrowed, leaf.Options.AdditionalProperties["borrowed"]);
+		Assert.False(leaf.Options.CaptureRawOutput);
+		Assert.Equal("request", leaf.Options.ModelId);
+		Assert.Same(leaf, pipeline.GetService(typeof(TestClient)));
 		Assert.True(source.CanRead);
+		Assert.NotEmpty(logger.Messages);
+		Assert.DoesNotContain(logger.Messages, message => message.Contains("PRIVATE-TEXT", StringComparison.Ordinal));
+		Assert.DoesNotContain(logger.Messages, message => message.Contains("RAW-SECRET", StringComparison.Ordinal));
 	}
 
 	[Fact]
-	public async Task KeyedRegistration_BuildsRealMiddlewareAndDisposesInnerClient()
+	public async Task KeyedRegistrationBuildsMiddlewareAndDisposesInnerClient()
 	{
 		var services = new ServiceCollection();
 		var leaf = new TestClient();
-		services.AddKeyedDocumentExtractionClient("ocr", leaf).ConfigureOptions(options => options.ModelId = "configured");
+		services.AddKeyedDocumentExtractionClient("documents", _ => leaf)
+			.Use(inner => new ForwardingClient(inner));
 		using (var provider = services.BuildServiceProvider())
 		{
-			var client = provider.GetRequiredKeyedService<IDocumentExtractionClient>("ocr");
-			using var source = new MemoryStream([1]);
-			await client.ExtractAsync(source, "image/png");
-			Assert.Equal("configured", leaf.Options!.ModelId);
-			Assert.Same(leaf, client.GetService<TestClient>());
+			var client = provider.GetRequiredKeyedService<IDocumentExtractionClient>("documents");
+			using var input = new MemoryStream([1]);
+			using var result = await client.ExtractAsync(input, "input", "image/png");
+			Assert.Single(result.Pages);
+			Assert.Same(leaf, client.GetService(typeof(TestClient)));
 			Assert.Null(client.GetService(typeof(TestClient), "other"));
 		}
 		Assert.True(leaf.Disposed);
 	}
 
 	[Fact]
-	public async Task OriginalDataContentAndDataUriExtensionsReachTheStreamContract()
+	public async Task CoreExtraction_SnapshotsBeforeFirstPageAndCleansUpWhenCancelled()
 	{
-		using var leaf = new TestClient();
-		var binary = new DataContent(new byte[] { 1, 2, 3 }, "image/png");
-		await leaf.ExtractAsync(binary);
-		Assert.Equal("image/png", leaf.MediaType);
-		Assert.Equal([1, 2, 3], leaf.Bytes);
-		await leaf.ExtractAsync(new UriContent("data:image/png;base64,AQID", "image/png"));
-		Assert.Equal([1, 2, 3], leaf.Bytes);
-		await Assert.ThrowsAsync<NotSupportedException>(async () =>
-			await leaf.ExtractAsync(new UriContent("https://example.com/input.png", "image/png")));
-	}
-
-	[Fact]
-	public async Task OriginalOcrReaderUsesWholePageTextAndDoesNotInventTypedTables()
-	{
-		using var leaf = new TestClient();
-		using var source = new MemoryStream([1]);
-		var document = await new OcrDocumentReader(leaf).ReadAsync(source, "document", "image/png");
-		Assert.Equal("document", document.Identifier);
-		var section = Assert.Single(document.Sections);
-		var paragraph = Assert.IsType<IngestionDocumentParagraph>(Assert.Single(section.Elements));
-		Assert.Equal("Actual page", paragraph.Text);
-		Assert.Equal(1, paragraph.PageNumber);
-		Assert.True(source.CanRead);
-	}
-
-	[Fact]
-	public async Task OriginalPageReducerRetainsTypedPagesAndReportedUsage()
-	{
-		using var leaf = new TestClient();
-		using var source = new MemoryStream([1]);
-		var result = await leaf.ExtractPagesAsync(source, "image/png").ToDocumentExtractionResultAsync();
-		Assert.Single(result.Pages);
-		Assert.Equal(1, result.Usage!.PagesProcessed);
-		Assert.Equal(7, result.Usage.InputTokenCount);
-		Assert.Equal("Actual page", result.Text);
+		var leaf = new TestClient();
+		using var input = new MemoryStream([1]);
+		using var cancellation = new CancellationTokenSource();
+		var options = new DocumentExtractionOptions { ModelId = "initial" };
+		var pending = leaf.ExtractAsync(input, "input", "image/png", options, cancellation.Token);
+		options.ModelId = "changed";
+		using var result = await pending;
+		Assert.Equal("initial", leaf.Options!.ModelId);
+		Assert.Single(result.Document.SourceOutputs);
+		Assert.Equal(DocumentRawContentStatus.Retained, result.Document.SourceOutputs[0].NativeStatus);
 	}
 
 	private sealed class TestClient : IDocumentExtractionClient
 	{
-		internal DocumentExtractionOptions? Options { get; private set; }
-		internal string? MediaType { get; private set; }
-		internal byte[] Bytes { get; private set; } = [];
-		internal bool Disposed { get; private set; }
-
-		public async Task<DocumentExtractionResult> ExtractAsync(
-			Stream document, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default)
-		{
-			Options = options;
-			MediaType = mediaType;
-			using var output = new MemoryStream();
-			await document.CopyToAsync(output, cancellationToken);
-			Bytes = output.ToArray();
-			return new DocumentExtractionResult([new DocumentPage(1, "Actual page")
-			{
-				Elements = [new DocumentTable(1, 1, [new DocumentTableCell(0, 0, "Cell")])],
-			}]);
-		}
-
-		public async IAsyncEnumerable<DocumentExtractionPageResult> ExtractPagesAsync(
-			Stream document, string mediaType, DocumentExtractionOptions? options = null,
+		public DocumentExtractionOptions? Options { get; private set; }
+		public bool Disposed { get; private set; }
+		public async IAsyncEnumerable<DocumentExtractionPage> ExtractPagesAsync(
+			Stream document, string identifier, string mediaType, DocumentExtractionOptions? options = null,
 			[EnumeratorCancellation] CancellationToken cancellationToken = default)
 		{
-			var result = await ExtractAsync(document, mediaType, options, cancellationToken);
-			yield return new DocumentExtractionPageResult(result.Pages[0])
-			{
-				PagesProcessed = 1, TotalPages = 1,
-				Usage = new DocumentExtractionUsage { PagesProcessed = 1, InputTokenCount = 7 },
-			};
+			Options = options;
+			await Task.Yield();
+			cancellationToken.ThrowIfCancellationRequested();
+			var output = new DocumentSourceOutput("operation", rawRepresentation: options?.CaptureRawOutput != false ? "RAW-SECRET" : null,
+				captureDisabled: options?.CaptureRawOutput == false);
+			yield return new(1, [new DocumentExtractionText("paragraph", 0, DocumentTextKind.Paragraph, "PRIVATE-TEXT")],
+				sourceOutputs: [output]);
 		}
 
 		public object? GetService(Type serviceType, object? serviceKey = null) =>
-			serviceKey is not null ? null :
-			serviceType == typeof(DocumentExtractionClientMetadata) ? new DocumentExtractionClientMetadata("test") :
-			serviceType.IsInstanceOfType(this) ? this : null;
-
+			serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
 		public void Dispose() => Disposed = true;
+	}
+
+	private sealed class ForwardingClient(IDocumentExtractionClient inner) : DelegatingDocumentExtractionClient(inner);
+
+	private sealed class CapturingLogger : ILoggerFactory, ILogger
+	{
+		public List<string> Messages { get; } = [];
+		public ILogger CreateLogger(string categoryName) => this;
+		public void AddProvider(ILoggerProvider provider) { }
+		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+		public bool IsEnabled(LogLevel logLevel) => true;
+		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+			Messages.Add(formatter(state, exception));
+		public void Dispose() { }
 	}
 }

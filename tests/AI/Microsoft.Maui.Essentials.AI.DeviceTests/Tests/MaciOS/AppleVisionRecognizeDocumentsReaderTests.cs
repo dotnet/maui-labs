@@ -60,7 +60,7 @@ public class AppleVisionRecognizeDocumentsReaderTests
 		Assert.Contains(section.Elements, element =>
 			element is IngestionDocumentHeader or IngestionDocumentParagraph);
 		Assert.Equal(1, CountOccurrences(Content(section), "DOCUMENT EXTRACTION EVALUATION"));
-		Assert.Single(section.Elements.OfType<IngestionDocumentHeader>());
+		Assert.Empty(section.Elements.OfType<IngestionDocumentHeader>());
 	}
 
 	[Fact]
@@ -91,7 +91,7 @@ public class AppleVisionRecognizeDocumentsReaderTests
 			.ReadAsync(image, "list-image", "image/png");
 		var section = Assert.Single(document.Sections);
 		foreach (var item in new[] { "Apples", "Coffee", "Bread", "Please purchase", "Keep the receipt" })
-			Assert.Equal(1, CountOccurrences(Content(section), item));
+			Assert.True(CountOccurrences(Content(section), item) == 1, $"{item} must appear once: {Content(section)}");
 		Assert.Equal(1, CountOccurrences(Content(section), "WEEKEND SHOPPING"));
 	}
 

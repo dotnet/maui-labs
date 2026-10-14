@@ -77,6 +77,17 @@ version check.
 
 ## Documentation
 
+### Corrected Documents prototype
+
+The complete corrected shared Documents and Extraction API sources from
+[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), revision `1fc95b5…`, are preserved verbatim and file-linked.
+`AppleVisionRecognizeDocumentsClient` returns page observations; the core extension creates the owned shared document.
+`AppleVisionRecognizeDocumentsReader` remains the local ingestion projection, not an upstream `OcrDocumentReader` replacement.
+The prototype is non-shipping/non-packable. Geometry, spans, annotations, per-call settings and raw output now use intended API
+mechanisms rather than an internally rewritten contract or arbitrary semantic metadata.
+See [corrected adoption](../../docs/ai/document-extraction-corrected-api.md) and
+[capability gaps](../../docs/ai/apple-document-extraction-gaps.md).
+
 - [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
 - [Apple Foundation Models Image Input](../../docs/ai/apple-foundation-models-image-input.md)
 

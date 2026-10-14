@@ -169,6 +169,7 @@ final class RecognizeDocumentsRequestObservationSnapshot {
     let uuidString: String
     let confidence: Float
     let transcript: String
+    let polygon: [Double]
     let nodes: [RecognizeDocumentsRequestNodeSnapshot]
     let structureTruncated: Bool
     let projectedNodeCount: Int
@@ -181,6 +182,9 @@ final class RecognizeDocumentsRequestObservationSnapshot {
         self.uuidString = observation.uuid.uuidString
         self.confidence = observation.confidence
         self.transcript = observation.document.text.transcript
+        self.polygon = observation.document.boundingRegion.points.flatMap {
+            [Double($0.x), Double($0.y)]
+        }
         let buildResult = RecognizeDocumentsRequestSnapshotBuilder.build(
             observation.document,
             rootPath: "observations/\(observation.uuid.uuidString)/document"
@@ -199,6 +203,7 @@ final class RecognizeDocumentsRequestObservationSnapshot {
             "uuid": uuidString,
             "confidence": Double(confidence),
             "transcript": transcript,
+            "polygon": polygon,
             "structureTruncated": structureTruncated,
             "projectedNodeCount": projectedNodeCount,
             "maximumTraversalDepth": maximumTraversalDepth,
@@ -567,23 +572,7 @@ enum RecognizeDocumentsRequestSnapshotBuilder {
     }
 
     private static func polygon(_ region: NormalizedRegion) -> [NSNumber] {
-        var points = region.points
-        guard points.count >= 3 else {
-            return points.flatMap {
-                [NSNumber(value: Double($0.x)), NSNumber(value: Double($0.y))]
-            }
-        }
-
-        var signedArea = 0.0
-        for index in points.indices {
-            let next = points[(index + 1) % points.count]
-            signedArea += Double(points[index].x * next.y - next.x * points[index].y)
-        }
-        if signedArea > 0 {
-            points.reverse()
-        }
-
-        return points.flatMap {
+        return region.points.flatMap {
             [NSNumber(value: Double($0.x)), NSNumber(value: Double($0.y))]
         }
     }
