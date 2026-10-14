@@ -185,6 +185,32 @@ runtime descriptors. The Node client negotiates `ui.events`; unsupported agents 
 `polling-only` state and recheck the capability every 60 seconds so an in-place upgrade recovers
 without reconnect churn. Upgrade the agent packages and host tooling together.
 
+## Browser synchronization regressions
+
+The read-only property-filter and automatic Network refresh scenarios run against the real
+InspectorServer and embedded JavaScript in `InspectorLayoutWorkspaceTests`, without a live app.
+They use response gates to hold descriptor, legacy property, list, and detail requests pending
+until the corresponding UI state has been asserted. Playwright's clock advances the real polling
+intervals; no wall-clock sleeps or enlarged assertion timeouts are needed.
+
+The property filter is created only after property loading completes and remains usable without
+the mutation lease. Network detail loading clears the attachable Data snapshot, rejects late list
+responses, and pauses list polling until returning to the list. These are UI invariants, not
+promises that a native agent will respond within a browser assertion's default timeout.
+
+Run the self-contained suite after building the Inspector test project and installing its
+Playwright Chromium:
+
+```bash
+MAUI_INSPECTOR_BROWSER_TESTS=1 dotnet test \
+  src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests \
+  --filter "FullyQualifiedName~InspectorLayoutWorkspaceTests"
+```
+
+Windows CI runs the full browser fixture suite and repeats the three synchronization cases five
+times, failing immediately on any failure or skip. The Windows live integration job also includes
+these browser cases alongside the tests that genuinely require a native agent.
+
 ## Implementation
 
 | Area | Location |

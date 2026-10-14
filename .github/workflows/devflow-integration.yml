@@ -634,6 +634,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Playwright browser installation failed.' }
 
             $env:MAUI_INSPECTOR_LIVE_TESTS = '1'
+            $env:MAUI_INSPECTOR_BROWSER_TESTS = '1'
             $env:INSPECTOR_URL = 'http://localhost:19223/inspector/default/'
             dotnet test $inspectorTests -c Debug --no-build `
               --logger 'trx;LogFileName=devflow-inspector-windows.trx' `
