@@ -340,6 +340,24 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void ValidateOutputFormat_IosMibc_ReportsUnsupportedDynamicPgo()
+	{
+		var exception = Assert.Throws<MauiToolException>(() =>
+			ProfileTraceOutputValidation.ValidateOutputFormat(TraceOutputFormat.Mibc, Platforms.iOS));
+
+		Assert.Equal(ErrorCodes.PlatformNotSupported, exception.Code);
+		Assert.Contains("dynamic PGO", exception.Message, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains(exception.Remediation?.ManualSteps ?? [], step => step.Contains("--format nettrace", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public void ValidateOutputFormat_IosNonMibc_IsSupported()
+	{
+		ProfileTraceOutputValidation.ValidateOutputFormat(TraceOutputFormat.NetTrace, Platforms.iOS);
+		ProfileTraceOutputValidation.ValidateOutputFormat(TraceOutputFormat.Speedscope, Platforms.iOS);
+	}
+
+	[Fact]
 	public void ProfileCommand_DefaultPlatformIsAll()
 	{
 		var command = ProfileCommand.Create();

@@ -8,6 +8,21 @@ namespace Microsoft.Maui.Cli.Commands;
 
 internal static class ProfileTraceOutputValidation
 {
+	internal static void ValidateOutputFormat(TraceOutputFormat outputFormat, string platform)
+	{
+		if (outputFormat != TraceOutputFormat.Mibc ||
+			!string.Equals(platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
+			return;
+
+		throw MauiToolException.UserActionRequired(
+			ErrorCodes.PlatformNotSupported,
+			"MIBC profiling is not supported for iOS targets because the iOS CoreCLR runtime is built without dynamic code compilation and dynamic PGO.",
+			[
+				"Use `--format nettrace` or `--format speedscope` for iOS startup profiling.",
+				"Use an Android CoreCLR target to collect a reusable MIBC profile."
+			]);
+	}
+
 	internal static void ValidateTraceOutput(string primaryOutputPath, string collectorOutputPath, TraceOutputFormat outputFormat, string platform)
 	{
 		var primaryFile = new FileInfo(primaryOutputPath);

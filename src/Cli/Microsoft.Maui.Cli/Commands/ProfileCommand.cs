@@ -333,6 +333,8 @@ public static class ProfileCommand
 				isCi || useJson,
 				formatter as SpectreOutputFormatter);
 
+			ProfileTraceOutputValidation.ValidateOutputFormat(outputFormat, platform);
+
 			if (outputFormat == TraceOutputFormat.Mibc)
 				_ = await DotnetPgoInstaller.EnsureAvailableAsync(formatter, useJson, verbose, cancellationToken);
 
@@ -478,6 +480,8 @@ public static class ProfileCommand
 				WasOptionExplicitlySpecified(parseResult, formatOption),
 				isCi || useJson,
 				formatter as SpectreOutputFormatter);
+
+			ProfileTraceOutputValidation.ValidateOutputFormat(outputFormat, platform);
 
 			if (outputFormat == TraceOutputFormat.Mibc)
 				_ = await DotnetPgoInstaller.EnsureAvailableAsync(formatter, useJson, verbose, cancellationToken);
