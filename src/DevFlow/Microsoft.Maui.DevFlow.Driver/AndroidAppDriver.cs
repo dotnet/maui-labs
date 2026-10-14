@@ -168,15 +168,26 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     /// </summary>
     public async Task<AlertInfo?> DetectAlertAsync()
     {
-        var before = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
-        var xml = await DumpUiHierarchyAsync().ConfigureAwait(false);
-        if (xml is null) return null;
-        var alert = ParseAlertFromHierarchy(xml);
-        if (alert is null) return null;
-        var after = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
-        var beforeId = AndroidDialogWindowSafety.GetInstanceId(before, alert.SourceProcessName);
-        var afterId = AndroidDialogWindowSafety.GetInstanceId(after, alert.SourceProcessName);
-        return alert with { InstanceId = beforeId != null && beforeId == afterId ? afterId : null };
+        AlertInfo? unstableAlert = null;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var before = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
+            var xml = await DumpUiHierarchyAsync().ConfigureAwait(false);
+            if (xml is null) return null;
+            var alert = ParseAlertFromHierarchy(xml);
+            if (alert is null) return null;
+            var after = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
+            var beforeId = AndroidDialogWindowSafety.GetInstanceId(before, alert.SourceProcessName);
+            var afterId = AndroidDialogWindowSafety.GetInstanceId(after, alert.SourceProcessName);
+            if (beforeId != null && beforeId == afterId)
+                return alert with { InstanceId = afterId };
+
+            unstableAlert = alert;
+            if (attempt < 2)
+                await Task.Delay(100).ConfigureAwait(false);
+        }
+
+        return unstableAlert;
     }
 
     public async Task<bool> IsDialogAttributedToTargetAsync(
