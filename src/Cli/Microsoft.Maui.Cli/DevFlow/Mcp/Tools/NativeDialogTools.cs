@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.DevFlow.Driver;
 using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
@@ -74,12 +76,8 @@ public sealed class NativeDialogTools
         if (target.Kind == DialogPlatformKind.Android)
         {
             using var androidDriver = new AndroidAppDriver { Serial = target.AndroidDevice };
-            var attributedToTarget = dialog.IsSystemDialog
-                ? AndroidAppDriver.PermissionPromptNamesTarget(
-                    dialog.Title,
-                    target.AppName ?? string.Empty)
-                : !string.IsNullOrWhiteSpace(target.PackageId)
-                    && await androidDriver.IsTargetAppForegroundAsync(target.PackageId);
+            var attributedToTarget = await androidDriver.IsDialogAttributedToTargetAsync(
+                dialog, target.PackageId ?? string.Empty, target.AppName ?? string.Empty);
             if (!attributedToTarget)
             {
                 return SerializeManualAction(
@@ -108,6 +106,7 @@ public sealed class NativeDialogTools
                 platformPromptId,
                 target,
                 fingerprint,
+                dialog,
                 DateTimeOffset.UtcNow.Add(DialogLeaseLifetime),
                 platformPromptId is null
                     ? null
@@ -123,7 +122,7 @@ public sealed class NativeDialogTools
         result["detected"] = true;
         result["userActionRequired"] = true;
         result["instruction"] = canRespond
-            ? "Pause and ask the user which exact button to press. After they answer, call maui_native_dialog_respond with this promptId, the exact button label, and confirmedByUser=true."
+            ? "Call maui_native_dialog_respond with this promptId and the exact button label. The MCP host must present a separate confirmation and receive the user's approval before any action."
             : "This dialog cannot be safely automated on the current platform. Pause and ask the user to respond manually.";
         return Serialize(result);
     }
@@ -131,13 +130,28 @@ public sealed class NativeDialogTools
     [McpServerTool(Name = "maui_native_dialog_respond"), Description(
         "Invoke an exact button on the exact native dialog returned by maui_native_dialog_detect, using the safest platform primitive available. " +
         "Uses AXPress on macOS, UI Automation Invoke on Windows, app-agent actions on Linux, and device/simulator-scoped input on Android/iOS Simulator. " +
-        "Call only after the user explicitly confirms the button choice. Never infer consent for permission prompts.")]
-    public static async Task<string> Respond(
+        "Requests confirmation through the MCP host for this exact prompt and button; callers cannot assert consent. " +
+        "Hosts without form elicitation support require manual interaction.")]
+    public static Task<string> Respond(
         McpAgentSession session,
         [Description("One-time prompt token returned by maui_native_dialog_detect")] string promptId,
         [Description("Exact visible button label chosen by the user, such as Allow or Don't Allow")] string buttonLabel,
-        [Description("Must be true only after the user explicitly confirmed this exact button choice")] bool confirmedByUser,
-        [Description("Agent HTTP port (optional if only one agent is connected)")] int? agentPort = null)
+        [Description("Agent HTTP port (optional if only one agent is connected)")] int? agentPort = null,
+        [Description("MCP server supplied by the host, not a caller argument")] McpServer? server = null,
+        [Description("Cancellation token supplied by the host")] CancellationToken cancellationToken = default)
+        => RespondCore(
+            session, promptId, buttonLabel, agentPort,
+            server?.ClientCapabilities?.Elicitation?.Form != null
+                ? async (request, token) => await server.ElicitAsync(request, token) : null,
+            cancellationToken);
+
+    internal static async Task<string> RespondCore(
+        McpAgentSession session,
+        string promptId,
+        string buttonLabel,
+        int? agentPort = null,
+        Func<ElicitRequestParams, CancellationToken, Task<ElicitResult>>? requestConfirmation = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(promptId) || string.IsNullOrWhiteSpace(buttonLabel))
         {
@@ -149,16 +163,6 @@ public sealed class NativeDialogTools
             });
         }
 
-        if (!confirmedByUser)
-        {
-            return Serialize(new JsonObject
-            {
-                ["success"] = false,
-                ["userActionRequired"] = true,
-                ["instruction"] = "Pause and ask the user to confirm the exact button. Do not press a permission button without confirmation."
-            });
-        }
-
         PurgeExpiredDialogLeases();
         if (!DialogLeases.TryGetValue(promptId, out var candidateLease)
             || !ReferenceEquals(candidateLease.Owner, session))
@@ -167,7 +171,7 @@ public sealed class NativeDialogTools
         var targetLock = TargetLocks.GetOrAdd(
             candidateLease.Target.TargetIdentity,
             static _ => new SemaphoreSlim(1, 1));
-        await targetLock.WaitAsync();
+        await targetLock.WaitAsync(cancellationToken);
         try
         {
             if (!DialogLeases.TryRemove(promptId, out var lease))
@@ -179,6 +183,68 @@ public sealed class NativeDialogTools
                     return SerializeExpiredPrompt();
 
                 RemoveTargetDialogLeases(lease.Target.TargetIdentity);
+
+                var matchingButtons = lease.Dialog.Buttons.Count(button =>
+                    lease.Target.Kind == DialogPlatformKind.MacOS
+                        ? MacCatalystAppDriver.ButtonLabelsMatch(button.Label, buttonLabel)
+                        : button.Label.Equals(buttonLabel, StringComparison.Ordinal));
+                if (matchingButtons != 1)
+                {
+                    return SerializeResponseManualAction(
+                        "Choose one unambiguous exact label from the reviewed dialog before requesting confirmation.",
+                        "dialog-button-not-found-or-ambiguous");
+                }
+
+                if (requestConfirmation == null)
+                {
+                    return SerializeResponseManualAction(
+                        "This MCP host does not support native-dialog confirmation through form elicitation. Respond to the dialog manually.",
+                        "host-confirmation-unavailable");
+                }
+
+                using var confirmationTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                confirmationTimeout.CancelAfter(TimeSpan.FromMilliseconds(
+                    Math.Max(0, (lease.ExpiresAt - DateTimeOffset.UtcNow).TotalMilliseconds)));
+                ElicitResult confirmation;
+                try
+                {
+                    confirmation = await requestConfirmation(new ElicitRequestParams
+                    {
+                        Message = $"Approve pressing '{buttonLabel}' on the {lease.Target.Platform} dialog for '{lease.Target.AppName}'? " +
+                            $"Prompt: {lease.Dialog.Title}\n{string.Join("\n", lease.Dialog.Text)}\n" +
+                            $"Reviewed prompt token: {promptId}. This may change app permissions.",
+                        RequestedSchema = new()
+                        {
+                            Properties = new Dictionary<string, ElicitRequestParams.PrimitiveSchemaDefinition>
+                            {
+                                ["confirm"] = new ElicitRequestParams.BooleanSchema
+                                {
+                                    Title = $"Press '{buttonLabel}'",
+                                    Description = "Approve this exact action on the reviewed dialog.",
+                                    Default = false
+                                }
+                            },
+                            Required = ["confirm"]
+                        }
+                    }, confirmationTimeout.Token);
+                }
+                catch (OperationCanceledException) when (confirmationTimeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                {
+                    return SerializeExpiredPrompt();
+                }
+
+                if (!confirmation.IsAccepted || confirmation.Content == null
+                    || !confirmation.Content.TryGetValue("confirm", out var approved)
+                    || approved.ValueKind != JsonValueKind.True)
+                {
+                    return SerializeResponseManualAction(
+                        "The host did not receive approval for this exact dialog action. No button was pressed.",
+                        "host-confirmation-declined");
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (lease.ExpiresAt <= DateTimeOffset.UtcNow)
+                    return SerializeExpiredPrompt();
 
                 using var agent = await session.GetAgentClientAsync(agentPort);
                 var status = await agent.GetStatusAsync()
@@ -226,6 +292,7 @@ public sealed class NativeDialogTools
                             "accessibility-permission-required");
                     }
 
+                    cancellationToken.ThrowIfCancellationRequested();
                     action = await driver.PressAlertButtonAsync(
                         lease.PlatformPromptId
                             ?? throw new McpException("The macOS dialog response token is invalid."),
@@ -262,7 +329,8 @@ public sealed class NativeDialogTools
                     if (lease.ExpiresAt <= DateTimeOffset.UtcNow)
                         return SerializeExpiredPrompt();
 
-                    action = await PressDialogButtonAsync(lease.Target, currentDialog, buttonLabel, agent);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    action = await PressDialogButtonAsync(lease.Target, currentDialog, buttonLabel, agent, cancellationToken);
                 }
 
                 var result = new JsonObject
@@ -272,6 +340,7 @@ public sealed class NativeDialogTools
                     ["message"] = action.Message,
                     ["platform"] = lease.Target.Platform,
                     ["interactionMethod"] = lease.Target.InteractionMethod,
+                    ["confirmationMethod"] = "mcp-form-elicitation",
                     ["hostInputIsolated"] = true
                 };
                 if (action.Dialog is not null)
@@ -418,7 +487,8 @@ public sealed class NativeDialogTools
         DialogTarget target,
         AlertInfo dialog,
         string buttonLabel,
-        AgentClient agent)
+        AgentClient agent,
+        CancellationToken cancellationToken)
     {
         switch (target.Kind)
         {
@@ -430,7 +500,8 @@ public sealed class NativeDialogTools
                         target.PackageId
                             ?? throw new McpException("The Android dialog target has no package identifier."),
                         target.AppName
-                            ?? throw new McpException("The Android dialog target has no app name."));
+                            ?? throw new McpException("The Android dialog target has no app name."),
+                        cancellationToken);
             case DialogPlatformKind.IosSimulator:
                 using (var driver = new iOSSimulatorAppDriver
                 {
@@ -478,6 +549,7 @@ public sealed class NativeDialogTools
             ["canRespond"] = dialog.CanRespond,
             ["platform"] = target.Platform,
             ["interactionMethod"] = target.InteractionMethod,
+            ["confirmationMethod"] = "mcp-form-elicitation",
             ["hostInputIsolated"] = true
         };
 
@@ -590,6 +662,7 @@ public sealed class NativeDialogTools
         string? platformPromptId,
         DialogTarget target,
         string fingerprint,
+        AlertInfo dialog,
         DateTimeOffset expiresAt,
         Action? cleanup) : IDisposable
     {
@@ -597,6 +670,7 @@ public sealed class NativeDialogTools
         public string? PlatformPromptId { get; } = platformPromptId;
         public DialogTarget Target { get; } = target;
         public string Fingerprint { get; } = fingerprint;
+        public AlertInfo Dialog { get; } = dialog;
         public DateTimeOffset ExpiresAt { get; } = expiresAt;
 
         public void Dispose() => cleanup?.Invoke();
