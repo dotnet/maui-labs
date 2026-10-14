@@ -2298,7 +2298,9 @@ public partial class DevFlowAgentService
     }
 
     protected Task<HttpResponse> HandleWebViewNetwork(HttpRequest request)
-        => HandleNetworkList(request);
+        => Task.FromResult(NotSupported(
+            "webview.network",
+            "Browser-network capture is not implemented. Use /api/v1/network/requests for native .NET HTTP traffic."));
 
     protected Task<HttpResponse> HandleWebViewConsole(HttpRequest request)
     {

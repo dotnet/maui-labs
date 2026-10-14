@@ -201,6 +201,14 @@ explicit error rather than a success-shaped image. This is signature validation,
 not full PNG decoding, and does not guarantee that capture succeeds when the
 native WebView or CDP target is not ready.
 
+### WebView network capture
+
+Browser fetch/XHR capture is not implemented. **Breaking behavior:**
+`/api/v1/webview/network` now returns the standard 501 `not_supported` envelope
+with capability `webview.network`, rather than an HTTP 200 alias of the native
+capture store. `network` is no longer advertised as a WebView feature. Native
+.NET HTTP capture remains available, unchanged, at `/api/v1/network/requests`.
+
 ### GTK/Linux apps
 
 Use `Microsoft.Maui.DevFlow.Agent.Gtk` instead of the standard agent package with
