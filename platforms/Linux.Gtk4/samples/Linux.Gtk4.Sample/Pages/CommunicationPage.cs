@@ -187,7 +187,7 @@ class CommunicationPage : ContentPage
             Spacing = 6,
             Children =
             {
-                CreateStatusRow("Email", Email.Default.IsComposeSupported),
+                CreateStatusRow("Email", ((Essentials.Communication.LinuxEmail) Email.Default).IsSupported),
                 CreateStatusRow("SMS", Sms.Default.IsComposeSupported),
                 CreateStatusRow("PhoneDialer", PhoneDialer.Default.IsSupported),
             }
@@ -211,7 +211,9 @@ class CommunicationPage : ContentPage
                 new Label { Text = name },
                 new Label
                 {
-                    Text = supported ? "Supported" : "Not available",
+                    Text = 
+                    name == "Email" ? supported ? "Eml supported" : "Eml not available" :
+                    supported ? "Supported" : "Not available",
                     TextColor = Colors.Gray,
                     FontSize = 13
                 }
