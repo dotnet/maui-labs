@@ -16,7 +16,7 @@ internal static class ProfileTraceOutputValidation
 
 		throw MauiToolException.UserActionRequired(
 			ErrorCodes.PlatformNotSupported,
-			"MIBC profiling is not supported for iOS targets because the iOS CoreCLR runtime is built without dynamic code compilation and dynamic PGO.",
+			"MIBC profiling is not supported for iOS targets because the iOS runtime uses interpreter and ReadyToRun execution without tiered compilation or dynamic PGO.",
 			[
 				"Use `--format nettrace` or `--format speedscope` for iOS startup profiling.",
 				"Use an Android CoreCLR target to collect a reusable MIBC profile."

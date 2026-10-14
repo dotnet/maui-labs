@@ -358,6 +358,12 @@ public class ProfileCommandTests
 	}
 
 	[Fact]
+	public void ValidateOutputFormat_AndroidMibc_IsSupported()
+	{
+		ProfileTraceOutputValidation.ValidateOutputFormat(TraceOutputFormat.Mibc, Platforms.Android);
+	}
+
+	[Fact]
 	public void ProfileCommand_DefaultPlatformIsAll()
 	{
 		var command = ProfileCommand.Create();
