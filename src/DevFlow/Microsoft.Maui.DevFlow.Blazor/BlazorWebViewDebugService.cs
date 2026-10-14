@@ -39,7 +39,7 @@ public class BlazorWebViewDebugService : WebViewDebugService
         for (var attempt = 0; attempt < 40; attempt++)
         {
             token.ThrowIfCancellationRequested();
-            var ready = await evaluate("(function(){const app=document.querySelector('#app');return (app && app.children.length > 0 && !app.textContent.includes('Loading...')) ? 'ready' : 'waiting';})()");
+            var ready = await evaluate("(function(){const app=document.querySelector('#app');return (app && app.children.length > 0) ? 'ready' : 'waiting';})()");
             if (ready == "ready") return true;
             await Task.Delay(250, token);
         }

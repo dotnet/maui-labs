@@ -470,23 +470,59 @@ public class WebViewDebugServiceTests
         Assert.Equal(url, navigated);
     }
 
-    [Fact]
-    public async Task BlazorReadiness_RequiresRenderedAppRatherThanGenericDocumentReadiness()
+    [Theory]
+    [InlineData("null")]
+    [InlineData("""{"children":[],"textContent":""}""")]
+    [InlineData("""{"children":[],"textContent":"Loading..."}""")]
+    public async Task BlazorReadiness_UnrenderedApp_WaitsDespiteCompleteDocument(string app)
     {
-        using var service = new TestBlazorService(_ => Task.FromResult<string?>("complete"), _ => { });
+        using var host = new JavaScriptHost();
+        await host.EvaluateAsync($$"""
+            document = { readyState: 'complete', querySelector: selector => selector === '#app' ? {{app}} : null };
+            null
+            """);
+        using var service = new TestBlazorService(host.EvaluateAsync, _ => { });
         var probes = 0;
         using var cancellation = new CancellationTokenSource();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.HostReady(script =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.HostReady(async script =>
         {
-            Assert.Contains("querySelector('#app')", script);
-            Assert.Contains("app.children.length > 0", script);
-            Assert.Contains("Loading...", script);
+            var result = await host.EvaluateAsync(script);
+            Assert.Equal("waiting", result);
             probes++;
             cancellation.Cancel();
-            return Task.FromResult<string?>("waiting");
+            return result;
         }, cancellation.Token));
         Assert.Equal(1, probes);
-        Assert.True(await service.HostReady(_ => Task.FromResult<string?>("ready"), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("""{"children":[{"tagName":"H1"},{"tagName":"P"},{"tagName":"BUTTON"}],"textContent":"CounterCurrent count: 0Click me"}""")]
+    [InlineData("""{"children":[{"tagName":"H1"},{"tagName":"P","children":[{"tagName":"EM"}]}],"textContent":"WeatherLoading..."}""")]
+    public async Task BlazorReadiness_RenderedAppIncludingNestedLoadingText_AllowsBridgeInitialization(string app)
+    {
+        using var host = new JavaScriptHost();
+        await host.EvaluateAsync($$"""
+            document = { readyState: 'complete', querySelector: selector => selector === '#app' ? {{app}} : null };
+            null
+            """);
+        var hostProbes = 0;
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var service = new TestBlazorService(async script =>
+        {
+            if (!script.Contains("querySelector('#app')"))
+                return ReadyResult(script);
+
+            hostProbes++;
+            var result = await host.EvaluateAsync(script);
+            Assert.Equal("ready", result);
+            return result;
+        }, _ => { });
+
+        await service.InitializeOne().WaitAsync(cancellation.Token);
+
+        Assert.True(service.IsReady);
+        Assert.Equal(1, hostProbes);
+        Assert.Null(service.Bridges[0].LastError);
     }
 
     [Fact]
@@ -612,6 +648,7 @@ public class WebViewDebugServiceTests
 
     private sealed class TestBlazorService : BlazorWebViewDebugService
     {
+        public Task InitializeOne() => InitializeBridgeAsync(0);
         public Task<bool> HostReady(Func<string, Task<string?>> evaluate, CancellationToken token)
             => IsHostReadyAsync(evaluate, token);
         public TestBlazorService(Func<string, Task<string?>> evaluate, Action<string> navigate)

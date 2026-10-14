@@ -4,6 +4,8 @@
 BlazorWebView handler capture, rendered `#app` readiness and relative
 `Blazor.navigateTo` routing to the shared DevFlow WebView engine. Relative routes
 fall back to history/popstate, then document navigation when client routing is unavailable.
+Readiness waits for element content to replace the text-only `#app` startup
+placeholder, not for rendered components' nested loading indicators to disappear.
 
 ## Packages and requirements
 
