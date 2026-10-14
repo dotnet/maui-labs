@@ -53,7 +53,7 @@
                            TextColor="{StaticResource White}"
                            VerticalOptions="Center"
                            SemanticProperties.Description="Sage app icon" />
-                    <Label Text="Ask Sage"
+                    <Label Text="Ask Sage · App guide"
                            FontSize="{StaticResource FontSizeSubtitle}"
                            FontAttributes="Bold"
                            TextColor="{StaticResource White}"

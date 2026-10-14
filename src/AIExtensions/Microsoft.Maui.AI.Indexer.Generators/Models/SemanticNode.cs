@@ -20,9 +20,10 @@ internal sealed class SemanticNode
     // Cross-file user control reference
     public bool IsUserControlReference { get; set; }
 
-    // Shell navigation: the page class this ShellContent/Tab hosts (from ContentTemplate),
-    // and whether it is the app's entry/home screen (first ShellContent in the Shell).
+    // Shell navigation metadata is emitted into the catalog, not semantic Markdown.
     public string? NavigationTarget { get; set; }
+    public string? NavigationTargetTypeName { get; set; }
+    public string? NavigationRoute { get; set; }
     public bool IsEntry { get; set; }
     public bool HasTapGesture { get; set; }
 

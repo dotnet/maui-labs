@@ -22,12 +22,24 @@ public abstract class IndexedPageCatalog
     public virtual string? EntryPageName => null;
 
     /// <summary>
+    /// The fully qualified CLR type identity of the home/entry screen.
+    /// Defaults to <see cref="EntryPageName"/> for legacy generated catalogs.
+    /// </summary>
+    public virtual string? EntryPageTypeName => EntryPageName;
+
+    /// <summary>
     /// The app's home/entry screen, or <c>null</c> when it cannot be resolved.
     /// This is where a user starts, so any "how do I get to X" walkthrough should
     /// begin here.
     /// </summary>
     public IndexedPage? Home
-        => EntryPageName is null ? null : FindByName(EntryPageName);
+        => EntryPageTypeName is null
+            ? null
+            : Pages.FirstOrDefault(page => string.Equals(
+                page.TypeName,
+                EntryPageTypeName,
+                StringComparison.OrdinalIgnoreCase))
+                ?? (EntryPageName is null ? null : FindByName(EntryPageName));
 
     /// <summary>Find a page by its class name.</summary>
     public IndexedPage? FindByName(string name)

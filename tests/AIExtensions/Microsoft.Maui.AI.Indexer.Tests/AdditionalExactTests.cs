@@ -525,6 +525,39 @@ public class AdditionalExactTests
     }
 
     [Fact]
+    public void MultipleImplicitShellContents_DoNotShareParentRoute()
+    {
+        var shell = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                   xmlns:pages="clr-namespace:MyApp.Pages"
+                   x:Class="MyApp.AppShell">
+                <TabBar Route="main">
+                    <Tab Route="browse">
+                        <ShellContent ContentTemplate="{DataTemplate pages:FirstPage}" />
+                        <ShellContent ContentTemplate="{DataTemplate pages:SecondPage}" />
+                    </Tab>
+                </TabBar>
+            </Shell>
+            """;
+
+        var aggregate = GeneratorTestHarness.GetGeneratedSources(
+            ("AppShell.xaml", shell),
+            ("FirstPage.xaml", Page("MyApp.Pages.FirstPage", """<Label Text="First" />""")),
+            ("SecondPage.xaml", Page("MyApp.Pages.SecondPage", """<Label Text="Second" />""")))
+            ["IndexedPageCatalog.g.cs"];
+
+        Assert.Contains(
+            "\"MyApp.Pages.FirstPage\", global::MyApp.Pages.FirstPage_Indexed.Title, global::MyApp.Pages.FirstPage_Indexed.Elements)",
+            aggregate);
+        Assert.Contains(
+            "\"MyApp.Pages.SecondPage\", global::MyApp.Pages.SecondPage_Indexed.Title, global::MyApp.Pages.SecondPage_Indexed.Elements)",
+            aggregate);
+        Assert.DoesNotContain("""new string[] { "//main/browse" }""", aggregate);
+    }
+
+    [Fact]
     public void ShellRouteMetadata_UsesQualifiedPageIdentity()
     {
         var shell = """
@@ -844,5 +877,59 @@ public class AdditionalExactTests
         Assert.Contains("IndexedElementKind.Action", source);
         Assert.Contains("IndexedElementKind.Input", source);
         Assert.Contains("""public const string? Title = "Title";""", source);
+    }
+
+    [Fact]
+    public void StructuredPageTitle_PrefersStaticContentPageTitle()
+    {
+        var xaml = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         x:Class="MyApp.ImagesPage"
+                         Title="Images">
+                <Button Text="Generate image" />
+            </ContentPage>
+            """;
+
+        var source = GeneratorTestHarness.GetGeneratedSources(
+            ("ImagesPage.xaml", xaml))["MyApp_ImagesPage_Indexed.g.cs"];
+
+        Assert.Contains("""public const string? Title = "Images";""", source);
+    }
+
+    [Fact]
+    public void CrossFile_CustomControlInstanceContent_IsPreserved()
+    {
+        var page = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         xmlns:local="clr-namespace:MyApp"
+                         x:Class="MyApp.ImagesPage"
+                         Title="Images">
+                <local:PageLayout>
+                    <local:PageLayout.MainContent>
+                        <Button Text="Edit original image" />
+                    </local:PageLayout.MainContent>
+                </local:PageLayout>
+            </ContentPage>
+            """;
+        var layout = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         x:Class="MyApp.PageLayout">
+                <Label Text="Shared layout" />
+            </ContentView>
+            """;
+
+        var markdown = GeneratorTestHarness.GetMarkdown(
+            "ImagesPage",
+            ("ImagesPage.xaml", page),
+            ("PageLayout.xaml", layout));
+
+        Assert.Contains("Shared layout", markdown);
+        Assert.Contains("Edit original image", markdown);
     }
 }

@@ -139,18 +139,30 @@ namespace Microsoft.Maui.AI.Indexer
 {
     public sealed class IndexedPage
     {
-        public IndexedPage(string name, string? filePath, string markdown)
+        public IndexedPage(string name, string? filePath, string markdown, string? route = null)
         {
             Name = name; FilePath = filePath; Markdown = markdown;
+            Routes = route is null ? System.Array.Empty<string>() : new[] { route };
+            TypeName = name;
+        }
+        public IndexedPage(string name, string? filePath, string markdown, System.Collections.Generic.IReadOnlyList<string> routes, string typeName)
+        {
+            Name = name; FilePath = filePath; Markdown = markdown;
+            Routes = routes; TypeName = typeName;
         }
         public string Name { get; }
         public string? FilePath { get; }
         public string Markdown { get; }
+        public string TypeName { get; }
+        public System.Collections.Generic.IReadOnlyList<string> Routes { get; }
+        public string? Route => Routes.FirstOrDefault();
     }
 
     public abstract class IndexedPageCatalog
     {
         public abstract System.Collections.Generic.IReadOnlyList<IndexedPage> Pages { get; }
+        public virtual string? EntryPageName => null;
+        public virtual string? EntryPageTypeName => EntryPageName;
     }
 }
 ";

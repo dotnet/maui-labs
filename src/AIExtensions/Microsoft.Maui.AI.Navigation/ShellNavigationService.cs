@@ -58,15 +58,14 @@ public class ShellNavigationService
                     var sectionRoute = Routing.GetRoute(section);
                     foreach (var content in section.Items)
                     {
-                        var contentRoute = Routing.GetRoute(content);
-                        if (IsGenerated(contentRoute))
-                            continue;
-
-                        var fullPath = BuildHierarchyPath(
+                        if (CreateHierarchyRouteInfo(
                             itemRoute,
                             sectionRoute,
-                            contentRoute);
-                        routes.Add(new RouteInfo(contentRoute, fullPath, []));
+                            content,
+                            section.Items.Count == 1) is { } route)
+                        {
+                            routes.Add(route);
+                        }
                     }
                 }
             }
@@ -94,6 +93,35 @@ public class ShellNavigationService
         }
 
         return routes;
+    }
+
+    internal static RouteInfo? CreateHierarchyRouteInfo(
+        string itemRoute,
+        string sectionRoute,
+        ShellContent content,
+        bool sectionHasSingleContent = true)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        var contentRoute = Routing.GetRoute(content);
+        if (IsGenerated(contentRoute) && !sectionHasSingleContent)
+            return null;
+
+        var route = IsGenerated(contentRoute)
+            ? sectionRoute
+            : contentRoute;
+        if (IsGenerated(route))
+            return null;
+
+        var fullPath = IsGenerated(contentRoute)
+            ? BuildHierarchyPath(itemRoute, sectionRoute)
+            : BuildHierarchyPath(itemRoute, sectionRoute, contentRoute);
+        var pageType = content.Content?.GetType();
+        return new RouteInfo(
+            route,
+            fullPath,
+            DiscoverQueryParameters(pageType),
+            pageType?.FullName ?? pageType?.Name);
     }
 
     /// <summary>

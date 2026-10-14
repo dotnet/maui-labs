@@ -17,9 +17,9 @@ internal static class ShellParser
         {
             var name = child.Name.LocalName;
 
-            if (name == "TabBar" || name == "Tab" || name == "FlyoutItem" || name == "ShellContent")
+            if (IsNavigationElement(name))
             {
-                ParseShellNavigationElement(child, elements);
+                ParseShellNavigationElement(child, elements, new List<string>());
             }
             else if (!name.Contains("."))
             {
@@ -31,37 +31,45 @@ internal static class ShellParser
         return elements;
     }
 
-    private static void ParseShellNavigationElement(XElement element, List<SemanticNode> elements)
+    private static void ParseShellNavigationElement(
+        XElement element,
+        List<SemanticNode> elements,
+        List<string> parentRouteSegments)
     {
         if (IsExcludedWithChildren(element))
             return;
 
         var name = element.Name.LocalName;
         var title = element.Attribute("Title")?.Value;
+        var routeSegments = AppendRoute(parentRouteSegments, element.Attribute("Route")?.Value);
 
         if (name == "ShellContent")
         {
-            // Routes are an implementation detail and are never captured. Only the human-visible
-            // Title (if any) and the hosted page (used to identify HOME) are kept.
+            var (targetName, targetTypeName) = ExtractContentPage(element);
+            var explicitRoute = element.Attribute("Route")?.Value;
             var ui = new SemanticNode
             {
                 TypeName = "ShellContent",
                 Text = title ?? "",
-                NavigationTarget = ExtractContentPage(element),
+                NavigationTarget = targetName,
+                NavigationTargetTypeName = targetTypeName,
+                NavigationRoute = string.IsNullOrWhiteSpace(explicitRoute)
+                    ? BuildAbsoluteRoute(parentRouteSegments)
+                    : BuildAbsoluteRoute(routeSegments),
             };
 
             elements.Add(ui);
         }
-        else if (name == "TabBar" || name == "FlyoutItem")
+        else if (name == "TabBar" || name == "FlyoutItem" || name == "ShellItem")
         {
             // Walk children for ShellContent/Tab items
             foreach (var child in element.Elements())
             {
                 if (!child.Name.LocalName.Contains("."))
-                    ParseShellNavigationElement(child, elements);
+                    ParseShellNavigationElement(child, elements, routeSegments);
             }
         }
-        else if (name == "Tab")
+        else if (name == "Tab" || name == "ShellSection")
         {
             var ui = new SemanticNode
             {
@@ -70,26 +78,51 @@ internal static class ShellParser
             };
 
             // Walk children for ShellContent
-            foreach (var child in element.Elements())
+            var shellContents = element.Elements()
+                .Where(child => child.Name.LocalName == "ShellContent"
+                    && !IsExcludedWithChildren(child))
+                .ToArray();
+            foreach (var child in shellContents)
             {
-                if (child.Name.LocalName == "ShellContent")
+                var shellContentTitle = child.Attribute("Title")?.Value;
+                var explicitRoute = child.Attribute("Route")?.Value;
+                var (targetName, targetTypeName) = ExtractContentPage(child);
+                ui.Children.Add(new SemanticNode
                 {
-                    if (IsExcludedWithChildren(child))
-                        continue;
-
-                    var shellContentTitle = child.Attribute("Title")?.Value;
-                    ui.Children.Add(new SemanticNode
-                    {
-                        TypeName = "ShellContent",
-                        Text = shellContentTitle ?? "",
-                        NavigationTarget = ExtractContentPage(child),
-                    });
-                }
+                    TypeName = "ShellContent",
+                    Text = shellContentTitle ?? "",
+                    NavigationTarget = targetName,
+                    NavigationTargetTypeName = targetTypeName,
+                    NavigationRoute = string.IsNullOrWhiteSpace(explicitRoute)
+                        ? shellContents.Length == 1
+                            ? BuildAbsoluteRoute(routeSegments)
+                            : null
+                        : BuildAbsoluteRoute(AppendRoute(routeSegments, explicitRoute)),
+                });
             }
 
             elements.Add(ui);
         }
     }
+
+    private static List<string> AppendRoute(List<string> parent, string? route)
+    {
+        var result = new List<string>(parent);
+        if (!string.IsNullOrWhiteSpace(route))
+            result.Add(route!);
+        return result;
+    }
+
+    private static string? BuildAbsoluteRoute(List<string> segments)
+        => segments.Count == 0 ? null : $"//{string.Join("/", segments)}";
+
+    private static bool IsNavigationElement(string name)
+        => name == "TabBar"
+            || name == "Tab"
+            || name == "FlyoutItem"
+            || name == "ShellItem"
+            || name == "ShellSection"
+            || name == "ShellContent";
 
     private static bool IsExcludedWithChildren(XElement element)
     {
@@ -109,13 +142,14 @@ internal static class ShellParser
     /// <c>ContentTemplate="{DataTemplate pages:MainPage}"</c> or a nested
     /// <c>&lt;ShellContent.ContentTemplate&gt;&lt;DataTemplate&gt;&lt;pages:MainPage/&gt;...</c>.
     /// </summary>
-    private static string? ExtractContentPage(XElement shellContent)
+    private static (string? Name, string? TypeName) ExtractContentPage(
+        XElement shellContent)
     {
         // Inline markup extension form: ContentTemplate="{DataTemplate pages:MainPage}"
         var attr = shellContent.Attribute("ContentTemplate")?.Value;
-        var fromAttr = ExtractTypeFromDataTemplate(attr);
-        if (fromAttr != null)
-            return fromAttr;
+        var typeReference = ExtractTypeFromDataTemplate(attr);
+        if (typeReference != null)
+            return ResolveTypeReference(shellContent, typeReference);
 
         // Property-element form: <ShellContent.ContentTemplate><DataTemplate><pages:MainPage/>...
         foreach (var propEl in shellContent.Elements())
@@ -125,11 +159,17 @@ internal static class ShellParser
             foreach (var dt in propEl.Elements())
             {
                 foreach (var content in dt.Elements())
-                    return content.Name.LocalName;
+                {
+                    return (
+                        content.Name.LocalName,
+                        QualifyTypeName(
+                            content.Name.NamespaceName,
+                            content.Name.LocalName));
+                }
             }
         }
 
-        return null;
+        return (null, null);
     }
 
     /// <summary>Pull the type local name out of a <c>{DataTemplate prefix:TypeName}</c> expression.</summary>
@@ -149,11 +189,40 @@ internal static class ShellParser
             return null;
 
         var typeRef = inner.Substring(spaceIdx + 1).Trim();
-        // Drop any xmlns prefix (e.g. "pages:MainPage" -> "MainPage")
-        var colonIdx = typeRef.LastIndexOf(':');
-        if (colonIdx >= 0)
-            typeRef = typeRef.Substring(colonIdx + 1);
-
         return typeRef.Length > 0 ? typeRef : null;
+    }
+
+    private static (string Name, string TypeName) ResolveTypeReference(
+        XElement element,
+        string typeReference)
+    {
+        var colonIndex = typeReference.LastIndexOf(':');
+        if (colonIndex < 0)
+            return (typeReference, typeReference);
+
+        var prefix = typeReference.Substring(0, colonIndex);
+        var name = typeReference.Substring(colonIndex + 1);
+        var xmlNamespace = element.GetNamespaceOfPrefix(prefix)?.NamespaceName;
+        return (name, QualifyTypeName(xmlNamespace, name));
+    }
+
+    private static string QualifyTypeName(string? xmlNamespace, string name)
+    {
+        const string clrNamespacePrefix = "clr-namespace:";
+        if (xmlNamespace?.StartsWith(
+            clrNamespacePrefix,
+            StringComparison.Ordinal) != true)
+        {
+            return name;
+        }
+
+        var clrNamespace = xmlNamespace.Substring(clrNamespacePrefix.Length);
+        var assemblySeparator = clrNamespace.IndexOf(';');
+        if (assemblySeparator >= 0)
+            clrNamespace = clrNamespace.Substring(0, assemblySeparator);
+
+        return string.IsNullOrWhiteSpace(clrNamespace)
+            ? name
+            : $"{clrNamespace}.{name}";
     }
 }

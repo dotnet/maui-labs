@@ -240,6 +240,24 @@ public class BuildRouteTests
     }
 
     [Fact]
+    public void BuildRoute_RouteQualifiedParameter_OverridesIntermediateValue()
+    {
+        var svc = CreateService();
+        var route = svc.BuildRoute(
+            "//main/products",
+            ["product", "review"],
+            new Dictionary<string, string>
+            {
+                ["sku"] = "seed-basil",
+                ["product.sku"] = "seed-tomato",
+            });
+
+        Assert.Equal(
+            "//main/products/product/review?sku=seed-basil&product.sku=seed-tomato",
+            route);
+    }
+
+    [Fact]
     public void BuildRoute_SharedParameter_ProducesValidUri()
     {
         var svc = CreateService();
@@ -314,6 +332,66 @@ public class BuildRouteTests
             new Dictionary<string, string> { ["sku"] = "seed-tomato" });
 
         Assert.Equal("product?sku=seed-tomato", route);
+    }
+}
+
+public class ShellHierarchyTests
+{
+    private sealed class PlaygroundPage : ContentPage
+    {
+    }
+
+    [Fact]
+    public void BuildHierarchyPath_IncludesItemSectionAndContentRoutes()
+    {
+        var route = ShellNavigationService.BuildHierarchyPath(
+            "shop",
+            "browse",
+            "products");
+
+        Assert.Equal("//shop/browse/products", route);
+    }
+
+    [Fact]
+    public void BuildHierarchyPath_OmitsImplicitGeneratedItemRoute()
+    {
+        var route = ShellNavigationService.BuildHierarchyPath(
+            "IMPL_ShellItem",
+            "browse",
+            "products");
+
+        Assert.Equal("//browse/products", route);
+    }
+
+    [Fact]
+    public void CreateHierarchyRouteInfo_ImplicitContentRoute_UsesSectionAndMaterializedPage()
+    {
+        var content = new ShellContent
+        {
+            Content = new PlaygroundPage(),
+        };
+
+        var route = ShellNavigationService.CreateHierarchyRouteInfo(
+            "playground",
+            "chat",
+            content);
+
+        Assert.NotNull(route);
+        Assert.Equal("chat", route.Route);
+        Assert.Equal("//playground/chat", route.FullPath);
+        Assert.Equal(typeof(PlaygroundPage).FullName, route.TargetPageName);
+    }
+
+    [Fact]
+    public void CreateHierarchyRouteInfo_MultipleImplicitContents_DoesNotAdvertiseAmbiguousRoute()
+    {
+        var route = ShellNavigationService.CreateHierarchyRouteInfo(
+            "playground",
+            "chat",
+            new ShellContent { Content = new PlaygroundPage() },
+            sectionHasSingleContent: false);
+
+        Assert.Null(route);
     }
 }
 

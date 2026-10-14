@@ -56,6 +56,8 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
         if (pages.Count == 0)
             return;
 
+        pages = CrossFileResolver.DeepClonePages(pages);
+
         // Cross-file resolution: inline user control references
         var resolver = new CrossFileResolver(pages);
         resolver.ResolveAll(pages);
@@ -100,8 +102,8 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Walk the Shell page(s) to mark the first ShellContent (the screen the app opens to) as the
-    /// entry/home screen. This makes the home screen a discoverable, human-relevant fact. Routes are
-    /// an implementation detail and are never captured.
+    /// entry/home screen and capture ShellContent routes as generated catalog metadata.
+    /// Routes remain absent from the human-visible semantic Markdown.
     /// </summary>
     private static void ResolveShellNavigation(System.Collections.Generic.List<PageModel> pages, ProjectIndex projectIndex)
     {
@@ -118,6 +120,28 @@ public sealed class XamlIndexerGenerator : IIncrementalGenerator
                 {
                     nav.IsEntry = true;
                     projectIndex.EntryPageName ??= nav.NavigationTarget;
+                    projectIndex.EntryPageTypeName ??=
+                        nav.NavigationTargetTypeName ?? nav.NavigationTarget;
+                }
+
+                if (nav.NavigationTarget != null && nav.NavigationRoute != null)
+                {
+                    var targetTypeName = nav.NavigationTargetTypeName
+                        ?? nav.NavigationTarget;
+                    if (!projectIndex.RoutesByPageTypeName.TryGetValue(
+                        targetTypeName,
+                        out var routes))
+                    {
+                        routes = new System.Collections.Generic.List<string>();
+                        projectIndex.RoutesByPageTypeName[targetTypeName] = routes;
+                    }
+
+                    if (!routes.Contains(
+                        nav.NavigationRoute,
+                        System.StringComparer.OrdinalIgnoreCase))
+                    {
+                        routes.Add(nav.NavigationRoute);
+                    }
                 }
 
                 order++;

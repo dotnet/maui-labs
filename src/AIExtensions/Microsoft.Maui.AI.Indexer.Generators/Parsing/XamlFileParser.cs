@@ -87,6 +87,7 @@ internal static class XamlFileParser
             Namespace = ns,
             RootType = rootType,
             FilePath = relPath,
+            Title = GetStaticAttribute(root, "Title"),
         };
 
         // Special handling for Shell
@@ -159,6 +160,8 @@ internal static class XamlFileParser
                 Condition = customCondition,
                 HasTapGesture = HasDirectTapGesture(element),
             };
+            foreach (var child in element.Elements())
+                ucElement.Children.AddRange(WalkElement(child));
             results.Add(ucElement);
             return results;
         }
@@ -501,6 +504,15 @@ internal static class XamlFileParser
                 child.Name.LocalName,
                 "TapGestureRecognizer",
                 StringComparison.Ordinal));
+
+    private static string? GetStaticAttribute(XElement element, string name)
+    {
+        var value = GetAttr(element, name);
+        return string.IsNullOrWhiteSpace(value)
+            || value!.TrimStart().StartsWith("{", StringComparison.Ordinal)
+                ? null
+                : value;
+    }
 
     private static List<SemanticNode> WalkPropertyElement(XElement element)
     {

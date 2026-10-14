@@ -25,15 +25,19 @@
 
   <!-- Pack the source generator DLL into the analyzers folder so NuGet consumers get it -->
   <PropertyGroup>
-    <GetTargetPathDependsOn>$(GetTargetPathDependsOn);_ResolveGeneratorPath</GetTargetPathDependsOn>
+    <TargetsForTfmSpecificContentInPackage>
+      $(TargetsForTfmSpecificContentInPackage);_IncludeIndexerGenerator
+    </TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
-  <Target Name="_ResolveGeneratorPath" AfterTargets="ResolveProjectReferences">
+  <Target Name="_IncludeIndexerGenerator"
+          DependsOnTargets="ResolveProjectReferences"
+          Returns="@(TfmSpecificPackageFile)">
     <ItemGroup>
-      <None Include="@(Analyzer)" Condition="'%(Analyzer.NuGetPackageId)' == '' and '%(Filename)' == 'Microsoft.Maui.AI.Indexer.Generators'"
-            Pack="true"
-            PackagePath="analyzers/dotnet/cs"
-            Visible="false" />
+      <TfmSpecificPackageFile Include="@(Analyzer)"
+                              Condition="'%(Filename)' == 'Microsoft.Maui.AI.Indexer.Generators'">
+        <PackagePath>analyzers/dotnet/cs</PackagePath>
+      </TfmSpecificPackageFile>
     </ItemGroup>
   </Target>
 

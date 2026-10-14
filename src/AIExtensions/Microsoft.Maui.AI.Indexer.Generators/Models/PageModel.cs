@@ -9,5 +9,6 @@ internal sealed class PageModel
     public string Namespace { get; set; } = "";
     public string RootType { get; set; } = "";
     public string FilePath { get; set; } = "";
+    public string? Title { get; set; }
     public List<SemanticNode> Elements { get; set; } = new();
 }

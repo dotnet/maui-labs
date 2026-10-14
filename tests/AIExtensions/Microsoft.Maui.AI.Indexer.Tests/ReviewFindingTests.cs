@@ -1,3 +1,6 @@
+using Microsoft.Maui.AI.Indexer.Generators.Models;
+using Microsoft.Maui.AI.Indexer.Generators.Parsing;
+
 namespace Microsoft.Maui.AI.Indexer.Tests;
 
 /// <summary>
@@ -16,6 +19,48 @@ public class ReviewFindingTests
             {content}
         </ContentPage>
         """;
+
+    [Fact]
+    public void CrossFileResolution_DoesNotMutateCachedParsedModels()
+    {
+        var reference = new SemanticNode
+        {
+            TypeName = "Widget",
+            IsUserControlReference = true,
+            Children =
+            [
+                new SemanticNode { TypeName = "Button", Text = "Instance action" },
+            ],
+        };
+        var parsedPages = new List<PageModel>
+        {
+            new()
+            {
+                ClassName = "HostPage",
+                Elements = [reference],
+            },
+            new()
+            {
+                ClassName = "Widget",
+                Elements =
+                [
+                    new SemanticNode { TypeName = "Label", Text = "Shared content" },
+                ],
+            },
+        };
+
+        var firstRun = CrossFileResolver.DeepClonePages(parsedPages);
+        new CrossFileResolver(firstRun).ResolveAll(firstRun);
+        var secondRun = CrossFileResolver.DeepClonePages(parsedPages);
+        new CrossFileResolver(secondRun).ResolveAll(secondRun);
+
+        Assert.Single(parsedPages[0].Elements[0].Children);
+        Assert.Equal(2, firstRun[0].Elements[0].Children.Count);
+        Assert.Equal(2, secondRun[0].Elements[0].Children.Count);
+        Assert.Equal(
+            ["Shared content", "Instance action"],
+            secondRun[0].Elements[0].Children.Select(child => child.Text!).ToArray());
+    }
 
     // ──────────────────────────────────────────────
     // Issue #1/#2: Duplicate x:Class simple names

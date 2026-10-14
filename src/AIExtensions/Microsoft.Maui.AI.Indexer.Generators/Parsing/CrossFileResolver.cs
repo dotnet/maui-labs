@@ -38,6 +38,17 @@ internal sealed class CrossFileResolver
         }
     }
 
+    public static List<PageModel> DeepClonePages(IEnumerable<PageModel> pages)
+        => pages.Select(page => new PageModel
+        {
+            ClassName = page.ClassName,
+            Namespace = page.Namespace,
+            RootType = page.RootType,
+            FilePath = page.FilePath,
+            Title = page.Title,
+            Elements = DeepCloneElements(page.Elements),
+        }).ToList();
+
     /// <summary>
     /// Resolve all user control references in every page's element tree.
     /// Modifies pages in-place by replacing unresolved user control placeholders
@@ -60,6 +71,9 @@ internal sealed class CrossFileResolver
             if (el.IsUserControlReference)
             {
                 var inlined = ResolveUserControl(el.TypeName, ownerClassName);
+                var instanceChildren = el.Children.Count == 0
+                    ? []
+                    : ResolveElements(el.Children, ownerClassName);
                 if (inlined != null)
                 {
                     var wrapper = new SemanticNode
@@ -70,7 +84,7 @@ internal sealed class CrossFileResolver
                         HasTapGesture = el.HasTapGesture,
                         Semantics = el.Semantics,
                         Condition = el.Condition,
-                        Children = inlined,
+                        Children = [.. inlined, .. instanceChildren],
                     };
                     resolved.Add(wrapper);
                 }
@@ -86,6 +100,7 @@ internal sealed class CrossFileResolver
                         HasTapGesture = el.HasTapGesture,
                         Semantics = el.Semantics,
                         Condition = el.Condition,
+                        Children = instanceChildren,
                     };
                     resolved.Add(wrapper);
                 }
@@ -186,14 +201,30 @@ internal sealed class CrossFileResolver
             TextBinding = el.TextBinding,
             CommandName = el.CommandName,
             CommandParameter = el.CommandParameter,
-            Semantics = el.Semantics,
-            Condition = el.Condition,
+            Semantics = new SemanticInfo
+            {
+                Description = el.Semantics.Description,
+                Hint = el.Semantics.Hint,
+                HeadingLevel = el.Semantics.HeadingLevel,
+            },
+            Condition = el.Condition is null
+                ? null
+                : new VisibilityCondition
+                {
+                    Property = el.Condition.Property,
+                    Value = el.Condition.Value,
+                    IsInverted = el.Condition.IsInverted,
+                },
             ItemsSourceBinding = el.ItemsSourceBinding,
             IsGrouped = el.IsGrouped,
             IsBindableLayout = el.IsBindableLayout,
             BindableLayoutItemsSource = el.BindableLayoutItemsSource,
             IsUserControlReference = el.IsUserControlReference,
             IsConditionGroup = el.IsConditionGroup,
+            NavigationTarget = el.NavigationTarget,
+            NavigationTargetTypeName = el.NavigationTargetTypeName,
+            NavigationRoute = el.NavigationRoute,
+            IsEntry = el.IsEntry,
             Minimum = el.Minimum,
             Maximum = el.Maximum,
             ValueBinding = el.ValueBinding,
@@ -207,7 +238,11 @@ internal sealed class CrossFileResolver
             GroupFooterTemplate = el.GroupFooterTemplate != null ? DeepCloneElements(el.GroupFooterTemplate) : null,
             EmptyView = el.EmptyView != null ? DeepCloneElements(el.EmptyView) : null,
             BindableLayoutItemTemplate = el.BindableLayoutItemTemplate != null ? DeepCloneElements(el.BindableLayoutItemTemplate) : null,
-            TemplateVariants = el.TemplateVariants,
+            TemplateVariants = el.TemplateVariants?.Select(variant => new TemplateVariant
+            {
+                Name = variant.Name,
+                Elements = DeepCloneElements(variant.Elements),
+            }).ToList(),
         };
     }
 }

@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Wayfinding;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace AIExtensions.Sample.ChatPlayground;
@@ -26,6 +27,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<ChatDiagnostics>());
         builder.Logging.AddFilter<ChatDiagnostics>("Microsoft.Extensions.AI", LogLevel.Debug);
         builder.Logging.AddFilter<ChatDiagnostics>(ChatDiagnostics.AppleToolLogCategory, LogLevel.Debug);
+        builder.Services.AddMauiWayfinding(
+            AIExtensions_Sample_ChatPlaygroundIndexedPageCatalog.Default);
         builder.Services.AddChatFeature(aiSettings);
         builder.Services.AddEmbeddingFeature(aiSettings);
         builder.Services.AddImageFeature(aiSettings);

@@ -16,4 +16,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.AI.Indexer.Tests" />
+  </ItemGroup>
+
 </Project>

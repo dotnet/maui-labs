@@ -44,10 +44,11 @@ internal static class PageCodeEmitter
         sb.AppendLine($"        {delimiter};");
         sb.AppendLine();
         var elements = FlattenElements(page.Elements).ToArray();
-        var title = elements.FirstOrDefault(element =>
-            element.Kind == "Heading"
-            && !element.IsDynamic
-            && !string.IsNullOrWhiteSpace(element.Text))?.Text;
+        var title = page.Title
+            ?? elements.FirstOrDefault(element =>
+                element.Kind == "Heading"
+                && !element.IsDynamic
+                && !string.IsNullOrWhiteSpace(element.Text))?.Text;
         sb.AppendLine("    /// <summary>Structured semantic elements for the page.</summary>");
         sb.AppendLine("    public static global::System.Collections.Generic.IReadOnlyList<global::Microsoft.Maui.AI.Indexer.IndexedElement> Elements { get; } =");
         sb.AppendLine("    [");
