@@ -2008,8 +2008,7 @@ public class DevFlowCommands
             }
             if (evalResult.TryGetProperty("exceptionDetails", out var exception))
             {
-                var text = exception.TryGetProperty("text", out var t) ? t.GetString() : "Unknown error";
-                return $"Error: {text}";
+                throw new InvalidOperationException(exception.GetRawText());
             }
         }
 
@@ -2161,7 +2160,7 @@ public class DevFlowCommands
             var result = await CdpEvaluateAsync(host, port, $@"
                 (function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return 'Error: Element not found';
+                    if (!el) throw new Error('Element not found');
                     el.click();
                     return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
                 }})()
@@ -2191,7 +2190,7 @@ public class DevFlowCommands
             var result = await CdpEvaluateAsync(host, port, $@"
                 (function() {{
                     const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return 'Error: Element not found';
+                    if (!el) throw new Error('Element not found');
                     
                     const text = {CliJson.SerializeUntyped(text, indented: false)};
                     if (el.isContentEditable) {{
