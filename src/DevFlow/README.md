@@ -16,6 +16,11 @@ Use manual dispatch to run it on a branch that does not target `main`.
 Triggers cover DevFlow, its CLI, samples, platform backends and shared build inputs.
 The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT tests.
 
+Raw-touch gesture tests center the canvas without animation and verify its full
+viewport and corner hit tests before injecting once. UIKit coverage also deliberately
+clips the bottom edge, verifies refusal without callbacks, then verifies two-touch
+delivery after recentering; the synthetic-touch allow-list remains unchanged.
+
 ## Packages
 
 | Package | Description |
