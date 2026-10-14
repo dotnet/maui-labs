@@ -157,14 +157,6 @@ builder.AddMauiDevFlowAgent(options =>
 });
 ```
 
-### WebView network capture
-
-Browser fetch/XHR capture is not implemented. **Breaking behavior:**
-The `/api/v1/webview/network` alias has been removed and now returns the normal
-404 route-not-found response instead of native traffic.
-`network` is no longer advertised as a WebView feature. Native
-.NET HTTP capture remains available, unchanged, at `/api/v1/network/requests`.
-
 ### GTK/Linux apps
 
 Use `Microsoft.Maui.DevFlow.Agent.Gtk` instead of the standard agent package with
