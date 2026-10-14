@@ -172,6 +172,30 @@ public class AndroidDialogWindowSafetyTests
             NativeDialogIdentity.CreateFingerprint(driver.Platform, driver.Serial ?? string.Empty, changed));
     }
 
+    [Fact]
+    public async Task DetectAlertAsync_PermissionDialog_RetriesUntilWindowIdentityIsStable()
+    {
+        var appWindow = TargetWindow();
+        var permissionWindow = appWindow.Replace(
+            "com.example.app",
+            "com.google.android.permissioncontroller");
+        using var driver = new WindowDriver
+        {
+            BackgroundText = "Background",
+            Title = "Allow Sample App to access your contacts?"
+        };
+        driver.WindowStates.Enqueue(appWindow);
+        driver.WindowStates.Enqueue(permissionWindow);
+        driver.WindowStates.Enqueue(permissionWindow);
+        driver.WindowStates.Enqueue(permissionWindow);
+
+        var dialog = await driver.DetectAlertAsync();
+
+        Assert.NotNull(dialog);
+        Assert.Equal("abc123", dialog.InstanceId);
+        Assert.Empty(driver.WindowStates);
+    }
+
     [Theory]
     [InlineData(10042, "Sample App", true)]
     [InlineData(10099, "Sample App", false)]
@@ -232,13 +256,14 @@ public class AndroidDialogWindowSafetyTests
         public string WindowState { get; set; } = TargetWindow();
         public string Title { get; set; } = "Permission";
         public string? BackgroundText { get; set; }
+        public Queue<string> WindowStates { get; } = [];
         public List<string[]> Taps { get; } = [];
         public Action? AfterUidLookup { get; set; }
 
         internal override Task<string> RunAdbWithOutputAsync(params string[] arguments)
         {
             if (arguments.SequenceEqual(["shell", "dumpsys", "window", "-a"]))
-                return Task.FromResult(WindowState);
+                return Task.FromResult(WindowStates.TryDequeue(out var state) ? state : WindowState);
             if (arguments.SequenceEqual(["shell", "cmd", "package", "list", "packages", "-U", "com.example.app"]))
             {
                 AfterUidLookup?.Invoke();
