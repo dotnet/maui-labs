@@ -4,8 +4,8 @@
 `Microsoft.Extensions.AI` interfaces: `WindowsAIChatClient` (`IChatClient`) and
 `WindowsAIImageGenerator` (`IImageGenerator`). They use the Windows App SDK's
 on-device `LanguageModel` and `ImageGenerator`, respectively. The OS selects
-the underlying models; these APIs do not identify or select particular model
-weights. The two features do not share a model.
+the underlying models; callers cannot select particular model weights. The
+two features do not share a model.
 
 ## Requirements
 
@@ -19,13 +19,17 @@ weights. The two features do not share a model.
   Do not set `WindowsPackageType=None`: unpackaged apps cannot use this
   capability. Keep the manifest version-replacement properties disabled so
   the target-family values survive the build.
-- The library references `Microsoft.WindowsAppSDK.AI` **2.4.8-experimental**
-  and `Microsoft.WindowsAppSDK.Foundation` **2.3.11-experimental**; the
-  repo-wide `Microsoft.WindowsAppSDK` version is **2.4.1-experimental**. The
-  image API used here is not available in the stable SDK. The playground
-  bundles the experimental runtime (`SelfContained` and
+- The library references `Microsoft.WindowsAppSDK.AI` **2.5.4-experimental**
+  and `Microsoft.WindowsAppSDK.Foundation` **2.3.13-experimental**; the
+  repo-wide `Microsoft.WindowsAppSDK` version is **2.5.4-experimental**.
+  Structured JSON generation is stable as of Windows App SDK 2.3.1, but
+  `ImageGenerator` remains experimental even in the 2.5 release, so this
+  package cannot yet move to the stable channel without losing image generation.
+  The playground bundles the experimental runtime (`SelfContained` and
   `WindowsAppSDKSelfContained`) and uses BuildTools.WinApp for packaged
-  `dotnet run`. This is a development setup, not a Store distribution guide.
+  `dotnet run`. Build the Windows target on Windows: the SDK's `MakePri.exe`
+  packaging tool cannot run on macOS. This is a development setup, not a
+  Store distribution guide.
 
 Both adapters check `GetReadyState()` and call `EnsureReadyAsync()` when the
 model is not ready. A missing capability, unsupported hardware, or failed
@@ -44,6 +48,12 @@ conversation history into a text prompt and passes the leading system
 instruction as model context for ordinary text generation. Streaming updates
 and completed responses use the stable provider ID `windows-ai-language-model`;
 it identifies the Windows AI API, not the model weights selected by the OS.
+Windows App SDK 2.5 Experimental adds native
+[`LanguageModel.ModelName`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.windows.ai.text.languagemodel.modelname)
+and
+[`ModelVersion`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.windows.ai.text.languagemodel.modelversion)
+properties for inspecting the installed model. The adapter's provider ID
+remains independent of that OS-reported name and version.
 
 For `ChatResponseFormatJson` **with a schema**, it calls the native
 `GenerateStructuredJsonResponseAsync` API. That API lacks a context overload,
