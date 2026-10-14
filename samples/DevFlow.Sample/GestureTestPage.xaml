@@ -7,7 +7,7 @@
         <AppThemeBinding Light="#F5F5F5" Dark="#1C1B1F" />
     </ContentPage.BackgroundColor>
 
-    <ScrollView Padding="16">
+    <ScrollView Padding="16" AutomationId="GestureScrollView">
         <VerticalStackLayout Spacing="16">
 
             <Label Text="Each target reports the gesture it received, so an automated pinch/pan/swipe can be verified by reading the status label back."

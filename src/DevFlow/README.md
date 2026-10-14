@@ -16,6 +16,11 @@ Use manual dispatch to run it on a branch that does not target `main`.
 Triggers cover DevFlow, its CLI, samples, platform backends and shared build inputs.
 The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT tests.
 
+Raw-touch gesture tests center the canvas without animation and verify its full
+viewport and corner hit tests before injecting once. UIKit coverage also deliberately
+clips the bottom edge, verifies refusal without callbacks, then verifies two-touch
+delivery after recentering; the synthetic-touch allow-list remains unchanged.
+
 ## Packages
 
 | Package | Description |
@@ -156,6 +161,14 @@ builder.AddMauiDevFlowAgent(options =>
     options.EnableLayoutDiagnostics = true;
 });
 ```
+
+### WebView action evaluation
+
+Typed WebView click, fill and DOM query actions serialize their results in the
+original CDP evaluation. Bridges that return object references despite
+`returnByValue` no longer cause the action to run again to recover its result.
+Structured results are preserved; missing or invalid serialized results fail
+without replaying the action. Raw CDP evaluation is unchanged.
 
 ### GTK/Linux apps
 
@@ -755,6 +768,10 @@ DEVFLOW_TEST_FRAMEWORK=native DEVFLOW_TEST_PLATFORM=maccatalyst \
 plain-.NET Windows, GTK, or WPF integration heads.
 
 There is also a manual GitHub Actions workflow at `.github/workflows/devflow-integration.yml` for running the same suite in CI.
+
+`TypedAction_ExecutesExactlyOnce_AndPreservesStructuredResult` verifies actual
+DOM click/input/change event counts and structured results through the real
+WebView bridge on Android, iOS, Windows and Mac Catalyst.
 
 ## Version
 

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Text.Json;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
@@ -467,9 +468,42 @@ public class UiActionTests : IntegrationTestBase
     private async Task<ElementInfo> FindRawTouchTargetAsync()
     {
         await NavigateToGesturePageAsync();
-        await Client.ScrollAsync("RawTouchTarget");
+        // MakeVisible can leave an edge against the viewport clip; both pinch fingers
+        // need to hit the canvas, not just its centre.
+        Assert.True(await Client.ScrollAsync("RawTouchTarget", animated: false, scrollToPosition: "center"));
         await SettleAsync();
-        return await FindElementAsync("RawTouchTarget");
+        return await WaitForRawTouchViewportAsync();
+    }
+
+    private async Task<ElementInfo> WaitForRawTouchViewportAsync()
+    {
+        ElementInfo? target = null;
+        await WaitForAsync(async () =>
+        {
+            target = await FindElementAsync("RawTouchTarget");
+            var viewport = await FindElementAsync("GestureScrollView");
+            var bounds = target.WindowBounds;
+            var visible = viewport.WindowBounds;
+            if (bounds == null || visible == null || bounds.Width <= 4 || bounds.Height <= 4
+                || bounds.X < visible.X + 4 || bounds.Y < visible.Y + 4
+                || bounds.X + bounds.Width > visible.X + visible.Width - 4
+                || bounds.Y + bounds.Height > visible.Y + visible.Height - 4)
+                return false;
+
+            foreach (var x in new[] { bounds.X + 2, bounds.X + bounds.Width - 2 })
+            foreach (var y in new[] { bounds.Y + 2, bounds.Y + bounds.Height - 2 })
+            {
+                using var hit = JsonDocument.Parse(await Client.HitTestAsync(x, y));
+                var elements = hit.RootElement.GetProperty("elements");
+                if (elements.GetArrayLength() == 0 || elements[0].GetProperty("id").GetString() != target.Id)
+                    return false;
+            }
+
+            Output.WriteLine($"Raw-touch canvas ({bounds.X}, {bounds.Y}, {bounds.Width}, {bounds.Height}) " +
+                $"is inside viewport ({visible.X}, {visible.Y}, {visible.Width}, {visible.Height}); all four corners hit {target.Id}.");
+            return true;
+        });
+        return Assert.IsType<ElementInfo>(target);
     }
 
     [Trait(TestFramework.Trait, TestFramework.Maui)]
@@ -670,6 +704,45 @@ public class UiActionTests : IntegrationTestBase
         await SettleAsync();
         var status = await FindElementAsync("RawTouchStatusLabel");
         Assert.Contains("maxtouches=2", status.Text);
+        Assert.Contains("scale=0.50", status.Text);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task Pinch_OnRawTouchView_WithClippedBottomEdge_IsRefusedBeforeTouchCallbacks()
+    {
+        if (!SupportsSyntheticTouch)
+            return;
+
+        var target = await FindRawTouchTargetAsync();
+        var viewport = await FindElementAsync("GestureScrollView");
+        Assert.True(await Client.ScrollAsync(target.Id, animated: false, scrollToPosition: "end"));
+        Assert.True(await Client.ScrollAsync(viewport.Id, deltaY: -16, animated: false));
+        await WaitForAsync(async () =>
+        {
+            target = await FindElementAsync("RawTouchTarget");
+            viewport = await FindElementAsync("GestureScrollView");
+            var bounds = Assert.IsType<BoundsInfo>(target.WindowBounds);
+            var visible = Assert.IsType<BoundsInfo>(viewport.WindowBounds);
+            return bounds.Y + bounds.Height > visible.Y + visible.Height + 8
+                && bounds.Y + bounds.Height / 2 < visible.Y + visible.Height;
+        });
+
+        const string awaitingTouch = "rawtouch: awaiting edge pinch";
+        Assert.True(await Client.SetPropertyAsync("RawTouchStatusLabel", "Text", awaitingTouch));
+        var result = await Client.PinchAsync(target.Id, scale: 0.5, originX: 1, originY: 1);
+        Assert.False(result.Success);
+        Assert.Equal("none", result.HandledBy);
+        Assert.Contains("No pinch handler", result.Error);
+        Assert.Equal(awaitingTouch, (await FindElementAsync("RawTouchStatusLabel")).Text);
+
+        Assert.True(await Client.ScrollAsync(target.Id, animated: false, scrollToPosition: "center"));
+        target = await WaitForRawTouchViewportAsync();
+        result = await Client.PinchAsync(target.Id, scale: 0.5, originX: 1, originY: 1);
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+        var status = await FindElementAsync("RawTouchStatusLabel");
+        Assert.Contains("ended maxtouches=2", status.Text);
         Assert.Contains("scale=0.50", status.Text);
     }
 
