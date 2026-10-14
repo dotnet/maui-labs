@@ -27,20 +27,20 @@ public class WebViewReadinessTests
     }
 
     [Fact]
-    public async Task MainReadiness_CanonicalIdAndTransientReadOnlyError_StayPinnedToSameTarget()
+    public async Task MainReadiness_LegacyAliasAndTransientReadOnlyError_StayPinnedToIndex()
     {
         var probes = 0;
         var target = await WebViewReadiness.WaitForMainContextAsync(
-            () => Task.FromResult(Contexts(ready: true, canonical: true)),
+            () => Task.FromResult(Contexts(ready: true)),
             (id, expression) =>
             {
-                Assert.Equal("webview-3", id);
+                Assert.Equal("3", id);
                 if (++probes == 1)
                     throw new InvalidOperationException("Runtime.evaluate failed: WebView not ready");
                 return Task.FromResult(ProbeResult(expression));
             });
 
-        Assert.Equal("webview-3", target);
+        Assert.Equal("3", target);
         Assert.Equal(3, probes);
     }
 
@@ -63,22 +63,26 @@ public class WebViewReadinessTests
     }
 
     [Fact]
-    public async Task MainReadiness_ContextReplacedDuringProbes_DoesNotReturnOldRegistration()
+    public async Task MainReadiness_SameLegacyAliasReplacedDuringProbes_ReprobesNewIndex()
     {
         var reads = 0;
+        var newRenderProbes = 0;
         var targets = new List<string>();
         var target = await WebViewReadiness.WaitForMainContextAsync(
             () => Task.FromResult(++reads == 1
                 ? Contexts(ready: true)
-                : Contexts(ready: reads > 2, newestIndex: 4)),
+                : Contexts(ready: true, newestIndex: 4)),
             (id, expression) =>
             {
                 targets.Add(id);
+                if (id == "4" && expression != "1 + 1" && ++newRenderProbes == 1)
+                    return Task.FromResult(Json("""{"result":{"result":{"value":"waiting"}}}"""));
                 return Task.FromResult(ProbeResult(expression));
             });
 
         Assert.Equal("4", target);
-        Assert.Equal(new[] { "3", "3", "4", "4" }, targets);
+        Assert.Equal(new[] { "3", "3", "4", "4", "4", "4" }, targets);
+        Assert.Equal(2, newRenderProbes);
     }
 
     [Fact]
@@ -101,8 +105,8 @@ public class WebViewReadinessTests
     {
         var payload = Json("""
             {"webviews":[
-                {"index":0,"automationId":"BlazorWebView","active":false,"ready":true},
-                {"index":2,"automationId":"BlazorRight","active":true,"ready":true}
+                {"id":"BlazorWebView","index":0,"automationId":"BlazorWebView","active":false,"ready":true},
+                {"id":"BlazorRight","index":2,"automationId":"BlazorRight","active":true,"ready":true}
             ]}
             """);
         var error = await Assert.ThrowsAsync<TimeoutException>(() =>
@@ -132,12 +136,12 @@ public class WebViewReadinessTests
         Assert.Equal(1, probes);
     }
 
-    static JsonElement Contexts(bool ready, bool canonical = false, int newestIndex = 3)
+    static JsonElement Contexts(bool ready, int newestIndex = 3)
         => Json($$"""
             {"webviews":[
-                {"index":0,"automationId":"BlazorWebView","active":true,"ready":true},
-                {"index":2,"automationId":"BlazorRight","active":false,"ready":true},
-                {"index":{{newestIndex}},{{(canonical ? "\"id\":\"webview-" + newestIndex + "\"," : "")}}
+                {"id":"BlazorWebView","index":0,"automationId":"BlazorWebView","active":true,"ready":true},
+                {"id":"BlazorRight","index":2,"automationId":"BlazorRight","active":false,"ready":true},
+                {"id":"BlazorWebView","index":{{newestIndex}},
                  "automationId":"BlazorWebView","active":true,"ready":{{(ready ? "true" : "false")}}}
             ]}
             """);
