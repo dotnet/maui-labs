@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.DataIngestion;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
@@ -13,7 +12,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     private readonly DocumentExtractionService _extraction;
     private SelectedDocument? _selected;
     private string _normalizedOutput = string.Empty;
-    private string _rawOutput = string.Empty;
 
     public DocumentPlaygroundViewModel(
         DocumentReadingService reading, DocumentExtractionService extraction,
@@ -40,7 +38,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
     public bool HasDocument => _selected is not null;
     public bool HasResult => ResultOutput.Length > 0;
-    public bool HasRawResult => _rawOutput.Length > 0;
     public bool CanInspect => !IsBusy && HasResult;
     public bool IsIdle => !IsBusy;
     public bool IsCloudSelected => Settings.CurrentIsCloud;
@@ -53,15 +50,9 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     public IRelayCommand RemoveDocumentAction => RemoveDocumentCommand;
     public System.Windows.Input.ICommand CancelReading => ReadDocumentCancelCommand;
     public IRelayCommand InspectNormalized => InspectNormalizedResultCommand;
-    public IRelayCommand InspectRaw => InspectRawResultCommand;
 
     [RelayCommand(CanExecute = nameof(CanInspect))]
     private void InspectNormalizedResult() => ResultOutput = _normalizedOutput;
-
-    private bool CanInspectRaw() => CanInspect && HasRawResult;
-
-    [RelayCommand(CanExecute = nameof(CanInspectRaw))]
-    private void InspectRawResult() => ResultOutput = _rawOutput;
 
     private bool CanChooseDocument() => !IsBusy;
     private bool CanReadDocument() => CanRead;
@@ -147,28 +138,22 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
                 var progress = new Progress<DocumentExtractionProgress>(update =>
                 {
                     if (IsBusy)
-                        StatusMessage = $"Extracted {update.PagesProcessed?.ToString() ?? "?"}/{update.TotalPages?.ToString() ?? "?"} pages.";
+                        StatusMessage = $"Observed {update.PagesProcessed} completed page(s).";
                 });
                 var result = await _extraction.ExtractAsync(
-                    client, file, Settings.StreamPages, Settings.CreateOptions(), progress, cancellationToken);
+                    client, file, Settings.StreamPages, progress, cancellationToken);
                 ResultOutput = result.Output;
-                _rawOutput = result.RawOutput;
-                pages = result.Result.Pages.Count;
+                pages = result.PageCount;
             }
             else
             {
-                var reader = Settings.IsReaderMode
-                    ? Settings.SelectedReader ?? throw new InvalidOperationException("Choose a document reader.")
-                    : new OcrDocumentReader(
-                        Settings.SelectedClientOption?.Client ?? throw new InvalidOperationException("Choose a document extraction client."),
-                        Settings.CreateOptions());
+                var reader = Settings.SelectedReader ?? throw new InvalidOperationException("Choose a document reader.");
                 var result = await _reading.ReadAsync(reader, file, cancellationToken);
                 ResultOutput = result.Output;
                 pages = result.PageCount;
             }
             cancellationToken.ThrowIfCancellationRequested();
             _normalizedOutput = ResultOutput;
-            OnPropertyChanged(nameof(HasRawResult));
             ResultHeading = name.ToUpperInvariant() + " RESULT";
             StatusMessage = $"Processed {pages} page(s) with {name} using {Settings.Mode}.";
         }
@@ -217,8 +202,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
     {
         ResultOutput = string.Empty;
         _normalizedOutput = string.Empty;
-        _rawOutput = string.Empty;
-        OnPropertyChanged(nameof(HasRawResult));
     }
 
     partial void OnResultOutputChanged(string value)
@@ -226,7 +209,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         OnPropertyChanged(nameof(HasResult));
         OnPropertyChanged(nameof(CanInspect));
         InspectNormalizedResultCommand.NotifyCanExecuteChanged();
-        InspectRawResultCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsBusyChanged(bool value)
@@ -240,6 +222,5 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
         ReadDocumentCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanInspect));
         InspectNormalizedResultCommand.NotifyCanExecuteChanged();
-        InspectRawResultCommand.NotifyCanExecuteChanged();
     }
 }

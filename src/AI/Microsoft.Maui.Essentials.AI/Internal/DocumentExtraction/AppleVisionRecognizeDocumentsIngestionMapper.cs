@@ -1,69 +1,56 @@
-using System.Text;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
 
 namespace Microsoft.Maui.Essentials.AI;
 
+// Local compatibility projection; the upstream proposal does not provide a DataIngestion adapter.
 internal static class AppleVisionRecognizeDocumentsIngestionMapper
 {
-	internal static IngestionDocumentSection MapPage(DocumentPage page)
+	internal static IngestionDocument MapDocument(DocumentExtractionResult result, CancellationToken cancellationToken = default)
 	{
-		var pageNumber = page.PageNumber;
-		var section = new IngestionDocumentSection { PageNumber = pageNumber };
-		foreach (var element in page.Elements)
+		var document = new IngestionDocument(result.Document.Identifier);
+		using var sections = result.Document.Sections.GetEnumerator();
+		foreach (var page in result.Pages)
 		{
-			switch (element)
+			cancellationToken.ThrowIfCancellationRequested();
+			var section = new IngestionDocumentSection { PageNumber = page.PageNumber };
+			if (page.Observations.Count > 0)
 			{
-				case DocumentBlock block when block.Kind == DocumentBlockKind.Title:
-					section.Elements.Add(new IngestionDocumentHeader(block.Text)
-						{ Level = 1, Text = block.Text, PageNumber = pageNumber });
-					break;
-				case DocumentTable table:
-					section.Elements.Add(ReadTable(table, pageNumber));
-					break;
-				case DocumentBlock block when block.Kind == DocumentBlockKind.Paragraph:
-					section.Elements.Add(Paragraph(block.Text, pageNumber));
-					break;
+				if (!sections.MoveNext())
+					throw new InvalidDataException("The finalized document is missing a page section.");
+				foreach (var element in sections.Current.Elements)
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					section.Elements.Add(MapElement(element, page.PageNumber));
+				}
 			}
+			document.Sections.Add(section);
 		}
-		if (section.Elements.Count == 0 && !string.IsNullOrWhiteSpace(page.Text))
-			section.Elements.Add(Paragraph(page.Text, pageNumber));
-		return section;
+		cancellationToken.ThrowIfCancellationRequested();
+		return document;
 	}
 
-	private static IngestionDocumentParagraph Paragraph(string text, int pageNumber) =>
-		new(text) { Text = text, PageNumber = pageNumber };
-
-	private static IngestionDocumentTable ReadTable(DocumentTable table, int pageNumber)
+	private static IngestionDocumentElement MapElement(DocumentElement element, int pageNumber)
 	{
-		var rows = table.RowCount;
-		var columns = table.ColumnCount;
-		var cells = new IngestionDocumentElement?[rows, columns];
-		foreach (var cell in table.Cells ?? [])
-			if (!string.IsNullOrWhiteSpace(cell.Content))
-				cells[cell.RowIndex, cell.ColumnIndex] = Paragraph(cell.Content, pageNumber);
-
-		if (table.MarkdownRepresentation is { } representation)
-			return new IngestionDocumentTable(representation, cells) { PageNumber = pageNumber };
-
-		var markdown = new StringBuilder();
-		for (var row = 0; row < rows; row++)
+		if (element is DocumentTableElement table)
 		{
-			markdown.Append('|');
-			for (var column = 0; column < columns; column++)
-			{
-				var text = cells[row, column]?.GetMarkdown() ?? "";
-				markdown.Append(' ').Append(text.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ")).Append(" |");
-			}
-			markdown.AppendLine();
-			if (row == 0)
-			{
-				markdown.Append('|');
-				for (var column = 0; column < columns; column++)
-					markdown.Append(" --- |");
-				markdown.AppendLine();
-			}
+			var cells = new IngestionDocumentElement?[table.Cells.RowCount, table.Cells.ColumnCount];
+			for (var row = 0; row < table.Cells.RowCount; row++)
+				for (var column = 0; column < table.Cells.ColumnCount; column++)
+					if (table.Cells[row, column] is { } cell)
+						cells[row, column] = MapElement(cell.Content, pageNumber);
+			return new IngestionDocumentTable(table.GetMarkdown(), cells) { PageNumber = pageNumber, Text = table.Text };
 		}
-		return new IngestionDocumentTable(markdown.ToString().TrimEnd(), cells) { PageNumber = pageNumber };
+		if (element is DocumentTextElement { Kind: DocumentTextKind.Header } header)
+		{
+			var mapped = new IngestionDocumentHeader(header.GetMarkdown()) { Text = header.Text, PageNumber = pageNumber };
+			if (header.HeaderLevel is { } level)
+				mapped.Level = level;
+			return mapped;
+		}
+		if (element is DocumentTextElement text)
+			return new IngestionDocumentParagraph(text.GetMarkdown()) { Text = text.Text, PageNumber = pageNumber };
+		throw new NotSupportedException("The local Apple ingestion projection supports text and table elements.");
 	}
 }

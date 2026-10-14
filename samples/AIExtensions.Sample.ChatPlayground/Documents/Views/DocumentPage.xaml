@@ -8,7 +8,7 @@
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid>
         <local:PlaygroundPageLayout HeaderTitle="Documents"
-                                    HeaderInfo="Compare the proposed IDocumentExtractionClient, a native IngestionDocumentReader, and the unchanged upstream OcrDocumentReader. Unsupported provider features are left absent."
+                                    HeaderInfo="Compare document extraction with IngestionDocumentReader. Apple uses a local shared-Document projection. Geometry, confidence, spans, raw payloads, usage, and per-request options are not exposed by the proposal."
                                     HeaderStatus="{Binding StatusMessage}"
                                     StatusAutomationId="DocumentStatusLabel"
                                     SidebarTitle="Document settings">
@@ -20,8 +20,6 @@
                             <Label Text="INSPECT" Style="{StaticResource SectionHeading}" />
                             <Button Text="Normalized result" Command="{Binding InspectNormalized}"
                                     AutomationId="DocumentInspectNormalizedButton" />
-                            <Button Text="Provider raw result" Command="{Binding InspectRaw}"
-                                    AutomationId="DocumentInspectRawButton" />
                         </VerticalStackLayout>
                     </local:PopupMenu.Content>
                 </ImageButton>

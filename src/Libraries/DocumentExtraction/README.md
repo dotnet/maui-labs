@@ -1,11 +1,12 @@
 # Document extraction proposal snapshot
 
 This is non-shipping prototype scaffolding for [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588).
-The pinned commit is `a215825ae2c96723e922e068c226ff77122c7c94`.
+The pinned commit is `d44c549301d08119f86b73f3fcf58c8b65a2981e`.
 
 `Upstream/` preserves every file from both `Microsoft.Extensions.DocumentExtraction.Abstractions` and
-`Microsoft.Extensions.DocumentExtraction`, including their original project files, namespace, accessibility, API baselines,
-documentation, and license headers. The proposal's `Microsoft.Extensions.DataIngestion/OcrDocumentReader.cs` is also unchanged.
+`Microsoft.Extensions.DocumentExtraction`, plus their new `Microsoft.Extensions.Documents.Abstractions` prerequisite,
+including original project files, namespaces, accessibility, API baselines, documentation, and license headers.
+The old `OcrDocumentReader` has been removed upstream and is no longer copied or compiled.
 Do not edit these copies to make the Apple provider work.
 
 The local projects beside this folder file-link those sources. Their only purpose is adapting repository build infrastructure
@@ -19,6 +20,8 @@ python3 src/Libraries/DocumentExtraction/verify-upstream.py
 dotnet build src/Libraries/Microsoft.Extensions.DocumentExtraction/Microsoft.Extensions.DocumentExtraction.csproj
 ```
 
-The complete proposal surface is available: the client contract, result models, delegating clients, builders, service registration,
-option configuration, logging, and OpenTelemetry. Provider limitations do not remove or redefine proposal features. When the official
-packages become available, replace the local project references with package references; visibility changes are a later decision.
+The complete current proposal surface is available: page observations, shared semantic document finalization, artifact ownership,
+delegating clients, builders, service registration, and lifecycle-only logging. The old extraction-owned tree, typed geometry, options,
+usage, metadata, configuration middleware, and OpenTelemetry were removed upstream; they are not retained as local compatibility types.
+Provider limitations do not remove or redefine proposal features. When official packages become available, replace the local project
+references with package references; visibility changes remain a later decision.

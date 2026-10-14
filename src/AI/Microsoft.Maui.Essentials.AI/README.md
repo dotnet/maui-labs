@@ -153,6 +153,35 @@ callbacks preserve the originating .NET execution context, so their logs and
 async tool code inherit any active chat trace/span, including one created by
 `UseOpenTelemetry`. The client does not invent correlation when no span exists.
 
+### Document extraction experiment
+
+This branch is **non-shipping and non-packable** while evaluating
+[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at `d44c549301d08119f86b73f3fcf58c8b65a2981e`.
+It file-links the complete, unchanged shared Documents and Extraction projects; it does not redefine their contract.
+
+On iOS, Mac Catalyst and macOS 26+, `AppleVisionRecognizeDocumentsClient` implements the page-observation operation backed by
+Apple's `RecognizeDocumentsRequest`; PDFKit renders PDF pages internally. The upstream extension finalizes an owned shared document:
+
+```csharp
+using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Maui.Essentials.AI;
+
+using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+await using var source = File.OpenRead("receipt.pdf");
+using var result = await client.ExtractAsync(source, "receipt", "application/pdf");
+Console.WriteLine(result.Document.ToMarkdown());
+```
+
+The result/document must be disposed to release registered artifacts; the client never owns the caller's source stream.
+`AppleVisionRecognizeDocumentsReader : IngestionDocumentReader` is a local projection over the same canonical document.
+The upstream `OcrDocumentReader` was removed and is not recreated under its original name.
+
+Only actual semantically matching native text/table content is normalized. No geometry/confidence/raw data is hidden inside opaque
+references, evidence, metadata or artifacts, and no figure bytes or model IDs are invented.
+See [current capability gaps](../../../docs/ai/apple-document-extraction-gaps.md) and
+[the upstream change breakdown](../../../docs/ai/document-extraction-upstream-refresh.md).
+Existing Chat/Embeddings behavior and their published package documentation above remain separate from this prototype.
+
 ## Requirements
 
 - .NET 10

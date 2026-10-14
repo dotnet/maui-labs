@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
@@ -8,17 +9,58 @@ namespace Microsoft.Maui.Essentials.AI.UnitTests;
 public class AppleVisionRecognizeDocumentsIngestionMapperTests
 {
 	private static IngestionDocumentSection MapPage(JsonElement snapshot, int pageNumber) =>
-		AppleVisionRecognizeDocumentsIngestionMapper.MapPage(AppleVisionRecognizeDocumentsMapper.ToPage(snapshot, pageNumber));
+		MapPage(AppleVisionRecognizeDocumentsMapper.ToPage(snapshot, pageNumber));
+
+	private static IngestionDocumentSection MapPage(DocumentExtractionPage page)
+	{
+		using var result = new[] { page }.ToDocumentExtractionResult("identity");
+		return Assert.Single(AppleVisionRecognizeDocumentsIngestionMapper.MapDocument(result).Sections);
+	}
 
 	[Fact]
-	public void MapPage_UsesActualPageTextWhenNoSupportedElementsAreAvailable()
+	public void MapDocument_EmptyPagesDoNotShiftCanonicalSectionPageAttribution()
 	{
-		var page = new DocumentPage(2, "Actual transcript");
-		var paragraph = Assert.IsType<IngestionDocumentParagraph>(
-			Assert.Single(AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page).Elements));
-		Assert.Equal("Actual transcript", paragraph.Text);
-		Assert.Equal(2, paragraph.PageNumber);
-		Assert.False(paragraph.HasMetadata);
+		using var result = new[]
+		{
+			new DocumentExtractionPage(2, []),
+			new DocumentExtractionPage(4,
+				[new DocumentExtractionText("header", 0, DocumentTextKind.Header, "Heading", "Heading", headerLevel: 3)]),
+			new DocumentExtractionPage(5, []),
+			new DocumentExtractionPage(9, [new DocumentExtractionText("text", 0, DocumentTextKind.Paragraph, "Text", "Text")]),
+		}.ToDocumentExtractionResult("identity");
+		Assert.Equal(2, result.Document.Sections.Count);
+		var document = AppleVisionRecognizeDocumentsIngestionMapper.MapDocument(result);
+		Assert.Equal("identity", document.Identifier);
+		Assert.Equal([2, 4, 5, 9], document.Sections.Select(section => section.PageNumber));
+		Assert.Empty(document.Sections[0].Elements);
+		Assert.Empty(document.Sections[2].Elements);
+		var header = Assert.IsType<IngestionDocumentHeader>(Assert.Single(document.Sections[1].Elements));
+		Assert.Equal(3, header.Level);
+		Assert.Equal(4, header.PageNumber);
+		Assert.Equal(9, Assert.Single(document.Sections[3].Elements).PageNumber);
+		Assert.False(result.IsDisposed);
+		result.Dispose();
+		Assert.Equal("Text", document.Sections[3].Elements[0].Text);
+	}
+
+	[Fact]
+	public void MapDocument_CancellationDoesNotTakeCanonicalOwnership()
+	{
+		using var result = new[] { new DocumentExtractionPage(1, []) }.ToDocumentExtractionResult("identity");
+		using var cancellation = new CancellationTokenSource();
+		cancellation.Cancel();
+		Assert.ThrowsAny<OperationCanceledException>(() =>
+			AppleVisionRecognizeDocumentsIngestionMapper.MapDocument(result, cancellation.Token));
+		Assert.False(result.IsDisposed);
+	}
+
+	[Fact]
+	public void MapPage_EmptyPageRemainsEmptyWithoutInventedTranscriptFallback()
+	{
+		var section = MapPage(new DocumentExtractionPage(2, []));
+		Assert.Empty(section.Elements);
+		Assert.Equal(2, section.PageNumber);
+		Assert.False(section.HasMetadata);
 	}
 
 	[Fact]
@@ -123,16 +165,13 @@ public class AppleVisionRecognizeDocumentsIngestionMapperTests
 	}
 
 	[Theory]
-	[InlineData(null, "| Own \\| content |\n| --- |")]
 	[InlineData("| Provider markdown |", "| Provider markdown |")]
 	public void MapPage_TableUsesItsContentOrActualMarkdown(string? representation, string expected)
 	{
-		var cell = new DocumentTableCell(0, 0, "Own | content")
-		{
-			Elements = [new DocumentBlock("Nested text must not replace content")],
-		};
-		var page = new DocumentPage(2, "") { Elements = [new DocumentTable(1, 1, [cell], representation)] };
-		var table = Assert.IsType<IngestionDocumentTable>(Assert.Single(AppleVisionRecognizeDocumentsIngestionMapper.MapPage(page).Elements));
+		var cell = new DocumentExtractionTableCell(0, 0,
+			new DocumentExtractionText("cell", 0, DocumentTextKind.Paragraph, "Own | content", "Own | content"));
+		var page = new DocumentExtractionPage(2, [new DocumentExtractionTable("table", 0, representation!, 1, 1, [cell])]);
+		var table = Assert.IsType<IngestionDocumentTable>(Assert.Single(MapPage(page).Elements));
 		Assert.Equal(expected.Replace("\n", Environment.NewLine), table.GetMarkdown());
 		Assert.Equal("Own | content", table.Cells[0, 0]?.Text);
 		Assert.DoesNotContain("Nested", table.GetMarkdown());

@@ -146,8 +146,9 @@ document recognition, and PDFKit for explicit per-page PDF rendering.
 - **Streaming infrastructure** — progressive JSON deserialization of LLM responses
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 - **Tool calling** — function-calling support for on-device models
-- **Document API prototype** — `RecognizeDocumentsRequest` mapped only to supported proposal fields: titles, paragraphs, tables,
-  nested cells/spans, geometry, and page streaming. Lists/barcodes/entities are not forced into custom normalized types or metadata.
+- **Document API prototype** — `RecognizeDocumentsRequest` mapped only to supported shared Documents/Extraction observations:
+  native text, addressed tables and completed pages. Geometry, spans, raw payloads and other unsupported native data are not
+  forced into opaque associations or metadata.
 - **PDF page extraction** — internal PDFKit rendering shared by the native client and ingestion reader
 
 | Package | Description |

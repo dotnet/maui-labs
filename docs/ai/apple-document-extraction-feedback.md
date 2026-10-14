@@ -2,7 +2,9 @@
 
 > **Historical investigation.** Some sections below describe experiments with custom kinds and provider property bags that are no longer
 > part of the implementation. The revived prototype uses original proposal types and intersection-only mapping, with no such metadata.
-> See [current capability gaps](apple-document-extraction-gaps.md) for the reviewable supported/omitted feature matrix.
+> The October 14 upstream redesign also removed the old raw/geometry/options model. See
+> [current capability gaps](apple-document-extraction-gaps.md) and [the refresh report](document-extraction-upstream-refresh.md)
+> for the reviewable supported/omitted feature matrix. The historical workarounds below are not current implementation guidance.
 
 **Proposal reviewed:** `dotnet/extensions` PR #7588
 **Pinned commit:** `a215825ae2c96723e922e068c226ff77122c7c94`

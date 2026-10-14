@@ -3,8 +3,8 @@
 
 // Minimal local shim of `Microsoft.Shared.Diagnostics.Throw` from dotnet/extensions'
 // `src/Shared/Throw/Throw.cs`, trimmed to the members actually used by the vendored
-// `Microsoft.Extensions.DocumentExtraction(.Abstractions)` sources in this repo
-// (`Throw.IfNull` and `Throw.IfNullOrWhitespace`). Linked into both projects; do not
+// `Microsoft.Extensions.Documents` and `Microsoft.Extensions.DocumentExtraction` sources in this repo.
+// Linked into the local build adapters; do not
 // edit the copied upstream implementation files to accommodate this shim.
 
 using System;
@@ -75,6 +75,34 @@ internal static class Throw
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     [DoesNotReturn]
-    private static void ArgumentException(string paramName, string? message)
+    public static void ArgumentException(string paramName, string? message)
         => throw new ArgumentException(message, paramName);
+
+    public static int IfLessThan(int argument, int other, [CallerArgumentExpression(nameof(argument))] string paramName = "")
+    {
+        if (argument < other)
+            throw new ArgumentOutOfRangeException(paramName, argument, $"Value must be at least {other}.");
+        return argument;
+    }
+
+    public static int IfLessThanOrEqual(int argument, int other, [CallerArgumentExpression(nameof(argument))] string paramName = "")
+    {
+        if (argument <= other)
+            throw new ArgumentOutOfRangeException(paramName, argument, $"Value must be greater than {other}.");
+        return argument;
+    }
+
+    public static int IfGreaterThanOrEqual(int argument, int other, [CallerArgumentExpression(nameof(argument))] string paramName = "")
+    {
+        if (argument >= other)
+            throw new ArgumentOutOfRangeException(paramName, argument, $"Value must be less than {other}.");
+        return argument;
+    }
+
+    public static int IfOutOfRange(int argument, int min, int max, string paramName = "")
+    {
+        if (argument < min || argument > max)
+            throw new ArgumentOutOfRangeException(paramName, argument, $"Value must be between {min} and {max}.");
+        return argument;
+    }
 }

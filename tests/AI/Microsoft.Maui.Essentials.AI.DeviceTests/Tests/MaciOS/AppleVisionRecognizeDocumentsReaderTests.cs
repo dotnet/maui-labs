@@ -61,6 +61,7 @@ public class AppleVisionRecognizeDocumentsReaderTests
 			element is IngestionDocumentHeader or IngestionDocumentParagraph);
 		Assert.Equal(1, CountOccurrences(Content(section), "DOCUMENT EXTRACTION EVALUATION"));
 		Assert.Single(section.Elements.OfType<IngestionDocumentHeader>());
+		Assert.True(image.CanRead);
 	}
 
 	[Fact]
@@ -80,6 +81,7 @@ public class AppleVisionRecognizeDocumentsReaderTests
 		Assert.Equal(1, CountOccurrences(Content(section), "Notebook"));
 		Assert.Equal(1, CountOccurrences(Content(section), "Low stock"));
 		Assert.Equal(1, CountOccurrences(Content(section), "QUARTERLY INVENTORY"));
+		Assert.True(image.CanRead);
 	}
 
 	[Fact]
@@ -130,6 +132,7 @@ public class AppleVisionRecognizeDocumentsReaderTests
 		AssertPageNumbers(document.Sections[1], 2);
 		Assert.Equal(1, CountOccurrences(Content(document.Sections[0]), "FIRST PAGE"));
 		Assert.Equal(1, CountOccurrences(Content(document.Sections[1]), "SECOND PAGE"));
+		Assert.True(pdf.CanRead);
 	}
 
 	[Fact]
@@ -166,12 +169,15 @@ public class AppleVisionRecognizeDocumentsReaderTests
 		using var unsupported = new MemoryStream([1, 2, 3]);
 		await Assert.ThrowsAsync<NotSupportedException>(() =>
 			reader.ReadAsync(unsupported, "bad", "text/plain"));
+		Assert.True(unsupported.CanRead);
 		using var corruptImage = new MemoryStream([1, 2, 3]);
 		await Assert.ThrowsAsync<InvalidDataException>(() =>
 			reader.ReadAsync(corruptImage, "bad", "image/png"));
+		Assert.True(corruptImage.CanRead);
 		using var corruptPdf = new MemoryStream([1, 2, 3]);
 		await Assert.ThrowsAsync<InvalidDataException>(() =>
 			reader.ReadAsync(corruptPdf, "bad", "application/pdf"));
+		Assert.True(corruptPdf.CanRead);
 	}
 
 	[Fact]
@@ -183,6 +189,7 @@ public class AppleVisionRecognizeDocumentsReaderTests
 		cancellation.Cancel();
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
 			new AppleVisionRecognizeDocumentsReader().ReadAsync(image, "cancelled", "image/png", cancellation.Token));
+		Assert.True(image.CanRead);
 	}
 }
 #endif

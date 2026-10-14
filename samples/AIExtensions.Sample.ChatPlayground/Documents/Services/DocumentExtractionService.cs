@@ -1,77 +1,86 @@
 using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Runs the proposed client contract independently of MAUI controls.</summary>
+/// <summary>Finalizes, renders, and disposes extraction results before returning an independent display value.</summary>
 public sealed class DocumentExtractionService
 {
-    private static readonly JsonSerializerOptions s_normalizedOptions = new()
-    {
-        WriteIndented = true,
-        TypeInfoResolver = new DefaultJsonTypeInfoResolver
-        {
-            Modifiers =
-            {
-                type =>
-                {
-                    if (type.Type == typeof(DocumentExtractionResult))
-                        foreach (var property in type.Properties)
-                            if (property.Name == nameof(DocumentExtractionResult.RawRepresentation))
-                                property.ShouldSerialize = (_, _) => false;
-                },
-            },
-        },
-    };
+    private static readonly JsonSerializerOptions s_options = new() { WriteIndented = true };
 
     public async Task<DocumentExtractionRunResult> ExtractAsync(
-        IDocumentExtractionClient client,
-        SelectedDocument input,
-        bool streamPages,
-        DocumentExtractionOptions? options = null,
-        IProgress<DocumentExtractionProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        IDocumentExtractionClient client, SelectedDocument input, bool streamPages,
+        IProgress<DocumentExtractionProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
         using var source = new MemoryStream(input.Bytes, writable: false);
-        DocumentExtractionResult result;
-        var rawUpdates = new List<object>();
-        var seenRaw = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        if (streamPages)
+        using var result = streamPages
+            ? await BuildStreamAsync(client, source, input, progress, cancellationToken).ConfigureAwait(false)
+            : await client.ExtractAsync(source, input.FileName, input.MediaType, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var output = JsonSerializer.Serialize(new
         {
-            var updates = new List<DocumentExtractionPageResult>();
-            await foreach (var update in client.ExtractPagesAsync(source, input.MediaType, options, cancellationToken)
-                .ConfigureAwait(false))
+            Document = new
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                updates.Add(update);
-                if (update.RawRepresentation is { } rawUpdate && seenRaw.Add(rawUpdate))
-                    rawUpdates.Add(rawUpdate);
-                progress?.Report(new DocumentExtractionProgress(update.PagesProcessed, update.TotalPages));
-            }
-            result = updates.ToDocumentExtractionResult();
-        }
-        else
+                result.Document.Identifier,
+                result.Document.StoredMarkdown,
+                SemanticMarkdown = result.Document.ToMarkdown(),
+                Sections = result.Document.Sections.Select(section => new
+                {
+                    Elements = section.Elements.Select(RenderElement).ToArray(),
+                }).ToArray(),
+            },
+            Pages = result.Pages.Select(page => new { page.PageNumber, page.Markdown, ObservationCount = page.Observations.Count }),
+        }, s_options);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new DocumentExtractionRunResult(result.Pages.Count, result.Pages.Sum(page => page.Observations.Count), output);
+    }
+
+    private static async Task<DocumentExtractionResult> BuildStreamAsync(
+        IDocumentExtractionClient client, Stream source, SelectedDocument input,
+        IProgress<DocumentExtractionProgress>? progress, CancellationToken cancellationToken)
+    {
+        using var builder = new DocumentExtractionDocumentBuilder(input.FileName);
+        var observed = 0;
+        await foreach (var page in client.ExtractPagesAsync(source, input.FileName, input.MediaType, cancellationToken)
+            .ConfigureAwait(false))
         {
-            result = await client.ExtractAsync(source, input.MediaType, options, cancellationToken).ConfigureAwait(false);
+            builder.AddPage(page);
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(new DocumentExtractionProgress(++observed));
         }
         cancellationToken.ThrowIfCancellationRequested();
-        var serialization = new JsonSerializerOptions { WriteIndented = true };
-        var output = JsonSerializer.Serialize(result, s_normalizedOptions);
-        var rawPages = result.Pages.Select(page => page.RawRepresentation).ToArray();
-        object? rawResult = result.RawRepresentation;
-        if (rawResult is null && rawUpdates.Count > 0)
-            rawResult = rawUpdates.Count == 1 ? rawUpdates[0] : rawUpdates;
-        if (rawResult is null && rawPages.Any(page => page is not null))
-            rawResult = rawPages;
-        var raw = rawResult is null ? string.Empty : JsonSerializer.Serialize(rawResult, serialization);
-        return new DocumentExtractionRunResult(result, output, raw);
+        return builder.Build();
     }
+
+    private static object RenderElement(DocumentElement element) => element switch
+    {
+        DocumentTextElement text => new { Type = "text", text.Kind, text.Text, Markdown = text.GetMarkdown(), text.HeaderLevel },
+        DocumentImageElement image => new
+        {
+            Type = "image", image.Text, Markdown = image.GetMarkdown(), image.MediaType,
+            image.AlternativeText, ContentLength = image.Content?.Length,
+        },
+        DocumentTableElement table => new
+        {
+            Type = "table", table.Text, Markdown = table.GetMarkdown(), table.Cells.RowCount, table.Cells.ColumnCount,
+            Cells = table.Cells.Where(cell => cell is not null).Select(cell => new
+            {
+                cell!.RowIndex, cell.ColumnIndex, Content = RenderElement(cell.Content),
+            }).ToArray(),
+        },
+        DocumentSection section => new { Type = "section", Elements = section.Elements.Select(RenderElement).ToArray() },
+        DocumentExtensionElement extension => new
+        {
+            Type = "extension", ExtensionType = extension.Type, extension.Text, Markdown = extension.GetMarkdown(),
+        },
+        _ => new { Type = "element", element.Text, Markdown = element.GetMarkdown() },
+    };
 }
 
-public sealed record DocumentExtractionProgress(int? PagesProcessed, int? TotalPages);
+public sealed record DocumentExtractionProgress(int PagesProcessed);
 
-public sealed record DocumentExtractionRunResult(DocumentExtractionResult Result, string Output, string RawOutput);
+public sealed record DocumentExtractionRunResult(int PageCount, int ObservationCount, string Output);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.UnitTests;
@@ -7,9 +8,9 @@ namespace Microsoft.Maui.Essentials.AI.UnitTests;
 public class AppleVisionRecognizeDocumentsMapperTests
 {
 	[Fact]
-	public void ToPage_PreservesSupportedFieldsAndRawLifetimeWithoutPropertyBags()
+	public void ToPage_PreservesOnlySupportedFieldsWithoutOpaqueEscapes()
 	{
-		DocumentPage page;
+		DocumentExtractionPage page;
 		using (var json = JsonDocument.Parse("""
 			[{"uuid":"observation","confidence":0.9,"transcript":"Actual text","nodes":[
 				{"path":"p","kind":"paragraph","text":"Actual text","confidence":0.8,
@@ -21,20 +22,25 @@ public class AppleVisionRecognizeDocumentsMapperTests
 			page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 3);
 
 		Assert.Equal(3, page.PageNumber);
-		Assert.Equal("Actual text", page.Text);
-		Assert.Equal(DocumentCoordinateUnit.Normalized, page.CoordinateUnit);
-		Assert.Equal(DocumentCoordinateOrigin.BottomLeft, page.CoordinateOrigin);
-		Assert.Equal(new DocumentPageDimensions(1, 1), page.Dimensions);
-		var paragraph = Assert.IsType<DocumentBlock>(Assert.Single(page.Elements));
-		Assert.Equal(DocumentBlockKind.Paragraph, paragraph.Kind);
-		Assert.Equal(0.8, paragraph.Confidence);
-		Assert.Equal(3, paragraph.BoundingRegion!.PageNumber);
-		Assert.Equal(0.1f, paragraph.BoundingRegion.Polygon[0].X);
-		Assert.Null(paragraph.AdditionalProperties);
-		Assert.Null(page.AdditionalProperties);
-		var raw = Assert.IsType<JsonElement>(page.RawRepresentation);
-		Assert.Equal("qr", raw[0].GetProperty("nodes")[1].GetProperty("symbology").GetString());
-		Assert.Equal("p", Assert.IsType<JsonElement>(paragraph.RawRepresentation).GetProperty("path").GetString());
+		Assert.Null(page.Markdown);
+		Assert.Empty(page.PageReferences);
+		var paragraph = Assert.IsType<DocumentExtractionText>(Assert.Single(page.Observations));
+		Assert.Equal(DocumentTextKind.Paragraph, paragraph.Kind);
+		Assert.Equal("Actual text", paragraph.Text);
+		Assert.Equal("Actual text", paragraph.Markdown);
+		Assert.Empty(paragraph.PageReferences);
+		Assert.Empty(paragraph.Evidence);
+		Assert.Empty(paragraph.Artifacts);
+		using var result = new[] { page }.ToDocumentExtractionResult("identity");
+		Assert.False(result.Document.HasMetadata);
+		Assert.Empty(result.Document.Evidence);
+		Assert.Empty(result.Document.Artifacts);
+		Assert.All(result.Document.EnumerateContent(), element =>
+		{
+			Assert.False(element.HasMetadata);
+			Assert.Empty(element.Evidence);
+			Assert.Empty(element.Artifacts);
+		});
 	}
 
 	[Fact]
@@ -53,14 +59,17 @@ public class AppleVisionRecognizeDocumentsMapperTests
 			""");
 		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1);
 		Assert.Equal(["Heading", "Right column first", "Left column second", "- Apples"],
-			page.Elements.OfType<DocumentBlock>().Select(block => block.Text));
-		Assert.Equal(DocumentBlockKind.Title, Assert.IsType<DocumentBlock>(page.Elements[0]).Kind);
-		Assert.All(page.Elements.Skip(1), element =>
-			Assert.Equal(DocumentBlockKind.Paragraph, Assert.IsType<DocumentBlock>(element).Kind));
+			page.Observations.OfType<DocumentExtractionText>().Select(block => block.Text));
+		var header = Assert.IsType<DocumentExtractionText>(page.Observations[0]);
+		Assert.Equal(DocumentTextKind.Header, header.Kind);
+		Assert.Null(header.HeaderLevel);
+		Assert.Equal([0, 1, 2, 3], page.Observations.Select(element => element.Order));
+		Assert.All(page.Observations.Skip(1), element =>
+			Assert.Equal(DocumentTextKind.Paragraph, Assert.IsType<DocumentExtractionText>(element).Kind));
 	}
 
 	[Fact]
-	public void ToPage_TablePreservesLogicalSpansAndSupportedNestedContent()
+	public void ToPage_TableKeepsAnchorTextAndDimensionsButDoesNotInventSpansOrNestedContent()
 	{
 		using var json = JsonDocument.Parse("""
 			[{"nodes":[
@@ -72,17 +81,23 @@ public class AppleVisionRecognizeDocumentsMapperTests
 				{"path":"i","parentPath":"l","kind":"listItem","text":"Item","markerString":"1."}
 			]}]
 			""");
-		var table = Assert.IsType<DocumentTable>(Assert.Single(AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 2).Elements));
+		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 2);
+		var table = Assert.IsType<DocumentExtractionTable>(Assert.Single(page.Observations));
 		Assert.Equal(3, table.RowCount);
 		Assert.Equal(4, table.ColumnCount);
-		var cell = Assert.Single(table.Cells!);
-		Assert.Equal(2, cell.RowSpan);
-		Assert.Equal(2, cell.ColumnSpan);
-		Assert.Equal("Own cell", cell.Content);
-		Assert.Equal("Actual nested text", Assert.IsType<DocumentBlock>(Assert.Single(cell.Elements!)).Text);
-		Assert.Null(cell.Kind);
-		Assert.Null(cell.AdditionalProperties);
-		Assert.Null(table.MarkdownRepresentation);
+		var cell = Assert.Single(table.Cells);
+		Assert.Equal(1, cell.Row);
+		Assert.Equal(2, cell.Column);
+		Assert.Equal("Own cell", Assert.IsType<DocumentExtractionText>(cell.Content).Text);
+		Assert.Empty(cell.Content.Artifacts);
+		Assert.Empty(cell.Content.Evidence);
+		using var result = new[] { page }.ToDocumentExtractionResult("table");
+		var mapped = Assert.IsType<DocumentTableElement>(Assert.Single(Assert.Single(result.Document.Sections).Elements));
+		Assert.Equal("Own cell", mapped.Cells[1, 2]!.Content.Text);
+		Assert.Null(mapped.Cells[1, 3]);
+		Assert.Null(mapped.Cells[2, 2]);
+		Assert.Null(mapped.Cells[2, 3]);
+		Assert.DoesNotContain("Actual nested text", mapped.GetMarkdown());
 	}
 
 	[Fact]
@@ -98,12 +113,11 @@ public class AppleVisionRecognizeDocumentsMapperTests
 			]}]
 			""");
 		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1);
-		var block = Assert.IsType<DocumentBlock>(Assert.Single(page.Elements));
-		Assert.Null(block.Confidence);
-		Assert.Null(block.BoundingRegion);
-		Assert.Null(block.AdditionalProperties);
-		Assert.Equal(DocumentBlockKind.Paragraph, block.Kind);
-		Assert.Empty(page.Elements.OfType<DocumentImage>());
+		var block = Assert.IsType<DocumentExtractionText>(Assert.Single(page.Observations));
+		Assert.Empty(block.Evidence);
+		Assert.Empty(block.Artifacts);
+		Assert.Equal(DocumentTextKind.Paragraph, block.Kind);
+		Assert.Empty(page.Observations.OfType<DocumentExtractionImage>());
 	}
 
 	[Fact]
@@ -114,12 +128,16 @@ public class AppleVisionRecognizeDocumentsMapperTests
 			 {"transcript":"B","nodes":[{"path":"p","kind":"paragraph","text":"Two"}]}]
 			""");
 		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1);
-		Assert.Equal("A\n\nB", page.Text);
-		Assert.Equal(["One", "Two"], page.Elements.OfType<DocumentBlock>().Select(block => block.Text));
+		Assert.Null(page.Markdown);
+		Assert.Equal(["One", "Two"], page.Observations.OfType<DocumentExtractionText>().Select(block => block.Text));
+		Assert.Equal(2, page.Observations.Select(block => block.ProviderId).Distinct().Count());
+		using var result = new[] { page, AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 2) }
+			.ToDocumentExtractionResult("multi-page");
+		Assert.Equal(2, result.Document.Sections.Count);
 	}
 
 	[Fact]
-	public void ToPage_EmptyNativeTableIsNotInventedAndGeometryIsNotClamped()
+	public void ToPage_EmptyNativeTableIsNotInventedAndGeometryRemainsInternal()
 	{
 		using var json = JsonDocument.Parse("""
 			[{"transcript":"Actual text","nodes":[
@@ -127,9 +145,10 @@ public class AppleVisionRecognizeDocumentsMapperTests
 				{"path":"p","kind":"paragraph","text":"Actual text","polygon":[-0.01,0,1.01,0,1.01,1,-0.01,1]}]}]
 			""");
 		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1);
-		var block = Assert.IsType<DocumentBlock>(Assert.Single(page.Elements));
-		Assert.Equal(-0.01f, block.BoundingRegion!.Polygon[0].X);
-		Assert.Equal(1.01f, block.BoundingRegion.Polygon[1].X);
+		var block = Assert.IsType<DocumentExtractionText>(Assert.Single(page.Observations));
+		Assert.Equal("Actual text", block.Text);
+		Assert.Empty(block.Evidence);
+		Assert.Empty(block.PageReferences);
 	}
 
 	[Theory]
@@ -145,6 +164,11 @@ public class AppleVisionRecognizeDocumentsMapperTests
 		""")]
 	[InlineData("""[{"nodes":[{"path":"c","kind":"tableCell","rowIndex":0,"columnIndex":0,"rowSpan":1,"columnSpan":1}]}]""")]
 	[InlineData("""[{"nodes":[{"path":"item","kind":"listItem"}]}]""")]
+	[InlineData("""
+		[{"nodes":[{"path":"t","kind":"table"},
+		{"path":"c1","parentPath":"t","kind":"tableCell","rowIndex":0,"columnIndex":0,"rowSpan":1,"columnSpan":2},
+		{"path":"c2","parentPath":"t","kind":"tableCell","rowIndex":0,"columnIndex":1,"rowSpan":1,"columnSpan":1}]}]
+		""")]
 	[InlineData("""[{"nodes":{}}]""")]
 	[InlineData("""{}""")]
 	public void ToPage_MalformedSnapshot_Throws(string snapshot)
@@ -166,7 +190,7 @@ public class AppleVisionRecognizeDocumentsMapperTests
 		if (invalid)
 			Assert.Throws<InvalidDataException>(() => AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1));
 		else
-			Assert.Single(AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1).Elements);
+			Assert.Single(AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1).Observations);
 	}
 
 	[Fact]
@@ -175,5 +199,22 @@ public class AppleVisionRecognizeDocumentsMapperTests
 		var nodes = Enumerable.Range(0, 20_001).Select(index => new { path = index.ToString(), kind = "paragraph" });
 		using var json = JsonDocument.Parse(JsonSerializer.Serialize(new[] { new { nodes } }));
 		Assert.Throws<InvalidDataException>(() => AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1));
+	}
+
+	[Fact]
+	public void ToPage_EmptyCellTextIsNotReplacedWithNestedTextOrPlaceholder()
+	{
+		using var json = JsonDocument.Parse("""
+			[{"nodes":[{"path":"t","kind":"table"},
+			{"path":"c","parentPath":"t","kind":"tableCell","text":"","rowIndex":0,"columnIndex":0,"rowSpan":1,"columnSpan":1},
+			{"path":"p","parentPath":"c","kind":"paragraph","text":"Nested text"}]}]
+			""");
+		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1);
+		var table = Assert.IsType<DocumentExtractionTable>(Assert.Single(page.Observations));
+		Assert.Empty(table.Cells);
+		Assert.DoesNotContain("Nested text", table.Markdown);
+		using var result = new[] { page }.ToDocumentExtractionResult("identity");
+		var mapped = Assert.IsType<DocumentTableElement>(Assert.Single(result.Document.Sections[0].Elements));
+		Assert.Null(mapped.Cells[0, 0]);
 	}
 }
