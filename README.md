@@ -150,6 +150,8 @@ systems.
 - **Embeddings:** Apple NaturalLanguage generates text vectors on supported systems.
 - **Android:** Gemini Nano text/image chat, streaming, and input-token usage on
   supported AICore devices; model download is explicit and observable.
+- **Image generation:** Windows supports experimental text-to-image and single-image
+  edits; Apple and Android are not supported.
 
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
 
