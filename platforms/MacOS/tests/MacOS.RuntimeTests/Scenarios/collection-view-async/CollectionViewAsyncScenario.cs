@@ -8,6 +8,8 @@ using Foundation;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
+using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Platforms.MacOS.Handlers;
 
 namespace MacOS.RuntimeTests.Scenarios.CollectionViewAsync;
 
@@ -15,7 +17,7 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("collection-view-async", 4,
+        ScenarioRegistry.Register(new("collection-view-async", 5,
             context => new CollectionViewAsyncScenario().CreateDelegate(context)));
 }
 
@@ -27,6 +29,10 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
     Label _control = null!;
     Label _empty = null!;
     double _rowHeight = 44;
+
+    public override void Configure(MauiAppBuilder builder) =>
+        builder.ConfigureMauiHandlers(handlers =>
+            handlers.AddHandler<CollectionView, ObservedCollectionViewHandler>());
 
     public override Window CreateWindow(IActivationState? activationState)
     {
@@ -138,6 +144,28 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
             context.Pass($"Async insertion and redraw cycle {cycle + 1}");
         }
 
+        var settled = false;
+        var previous = (ObservedCollectionViewHandler.Measures, ObservedCollectionViewHandler.Arranges);
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            await Task.Delay(100);
+            await RuntimeTestContext.FlushMainQueueAsync();
+            var current = (ObservedCollectionViewHandler.Measures, ObservedCollectionViewHandler.Arranges);
+            if (current == previous)
+            {
+                settled = true;
+                break;
+            }
+            previous = current;
+        }
+        context.WriteJson("layout-convergence.json", new
+        {
+            settled,
+            ObservedCollectionViewHandler.Measures,
+            ObservedCollectionViewHandler.Arranges,
+        });
+        context.Assert(settled, "Content-measurement correction settles without perpetual measure/arrange invalidation.");
+
         _collection.HeightRequest = 112;
         _items.Clear();
         _labels.Clear();
@@ -167,6 +195,50 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
         context.Assert(visibleGlyphs.Count(count => count > 5) >= 2,
             "Scrolled constrained rows have visible compositor glyphs.");
         context.Pass("Constrained viewport retains virtualization and internal scrolling");
+
+        _collection.HeightRequest = -1;
+        _collection.MinimumHeightRequest = 140;
+        _collection.MaximumHeightRequest = 180;
+        _items.Clear();
+        _items.Add("Minimum-sized row");
+        await CaptureAsync(context, nativeWindow, "minimum.png");
+        context.Assert(Math.Abs(native.Bounds.Height - 140) < 1,
+            "An unconstrained short document honors MinimumHeightRequest.");
+        for (var i = 0; i < 5; i++)
+            _items.Add($"Maximum-sized row {i + 1}");
+        await CaptureAsync(context, nativeWindow, "maximum.png");
+        context.Assert(Math.Abs(native.Bounds.Height - 180) < 1,
+            "An unconstrained long document honors MaximumHeightRequest.");
+        _collection.HeightRequest = 156;
+        await CaptureAsync(context, nativeWindow, "explicit.png");
+        context.Assert(Math.Abs(native.Bounds.Height - 156) < 1,
+            "An explicit height inside the min/max limits is preserved.");
+        context.WriteJson("size-limits.json", new
+        {
+            minimum = _collection.MinimumHeightRequest,
+            maximum = _collection.MaximumHeightRequest,
+            explicitHeight = _collection.HeightRequest,
+            finalBounds = native.Bounds.ToString(),
+        });
+        context.Pass("Content sizing honors minimum, maximum and explicit height requests");
+    }
+
+    public sealed class ObservedCollectionViewHandler : CollectionViewHandler
+    {
+        public static int Measures { get; private set; }
+        public static int Arranges { get; private set; }
+
+        public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
+        {
+            Measures++;
+            return base.GetDesiredSize(widthConstraint, heightConstraint);
+        }
+
+        public override void PlatformArrange(Rect rect)
+        {
+            Arranges++;
+            base.PlatformArrange(rect);
+        }
     }
 
     async Task<RuntimeBitmap> CaptureAsync(RuntimeTestContext context, NSWindow window, string name)
