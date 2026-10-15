@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -17,6 +18,7 @@ namespace Microsoft.Maui.Essentials.AI;
 /// schema subset; it is not native typed generation. Model availability errors
 /// are surfaced to the caller without a cloud fallback.
 /// </remarks>
+[SupportedOSPlatform("android26.0")]
 public sealed class GeminiNanoChatClient : IChatClient
 {
 	private const string ProviderName = "google";
@@ -24,13 +26,17 @@ public sealed class GeminiNanoChatClient : IChatClient
 	private const string JsonOnlyInstruction =
 		"Return only a valid JSON value. Do not include Markdown fences, commentary, or text outside the JSON value.";
 
-	private readonly AndroidNative.GeminiNanoNativeClient _native = new();
+	private readonly AndroidNative.GeminiNanoNativeClient _native;
 	private ChatClientMetadata? _metadata;
 	private int _disposed;
 
 	/// <summary>Initializes a client using Gemini Nano.</summary>
 	public GeminiNanoChatClient()
 	{
+		if (!OperatingSystem.IsAndroidVersionAtLeast(26))
+			throw new PlatformNotSupportedException("Gemini Nano requires Android 8.0 (API 26) or later.");
+
+		_native = new();
 	}
 
 	/// <inheritdoc />
