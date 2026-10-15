@@ -57,6 +57,7 @@ jobs:
       project-name: devflow
       run-tests: true
       pack: true
+      build-arguments: /p:PackDriverNuGet=true
       os: '["windows-latest"]'
 
   inspector-layout-browser:
