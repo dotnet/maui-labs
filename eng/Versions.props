@@ -96,6 +96,11 @@
     <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
     <!-- MAUI Windows apps still resolve this umbrella; the library references its AI package directly. -->
     <MicrosoftWindowsAppSDKVersion>2.5.1</MicrosoftWindowsAppSDKVersion>
+    <!-- This stable API baseline also permits development apps to select the newer experimental AI API. -->
+    <MicrosoftWindowsAppSDKAIStableBaselineVersion>2.4.4</MicrosoftWindowsAppSDKAIStableBaselineVersion>
+    <!-- Windows AI development apps opt into the experimental runtime without changing library dependencies. -->
+    <MicrosoftWindowsAppSDKExperimentalVersion>2.5.4-experimental</MicrosoftWindowsAppSDKExperimentalVersion>
+    <MicrosoftWindowsAppSDKFoundationExperimentalVersion>2.3.13-experimental</MicrosoftWindowsAppSDKFoundationExperimentalVersion>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
   </PropertyGroup>

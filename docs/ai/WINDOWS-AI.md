@@ -15,16 +15,30 @@ callers cannot select particular model weights.
   Do not set `WindowsPackageType=None`: unpackaged apps cannot use this
   capability. Keep the manifest version-replacement properties disabled so
   the target-family values survive the build.
-- The library references stable `Microsoft.WindowsAppSDK.AI` **2.5.5**
+- The library references stable `Microsoft.WindowsAppSDK.AI` **2.4.4**
   and `Microsoft.WindowsAppSDK.Foundation` **2.3.12**; the
   repo-wide stable `Microsoft.WindowsAppSDK` version is **2.5.1**.
   Structured JSON generation is stable as of Windows App SDK 2.3.1.
   Experimental Windows AI image generation is not included in this version.
-  The playground bundles the stable runtime (`SelfContained` and
-  `WindowsAppSDKSelfContained`) and uses BuildTools.WinApp for packaged
-  `dotnet run`. Build the Windows target on Windows: the SDK's `MakePri.exe`
+  The stable AI API baseline supports all chat APIs used here and allows the
+  development apps to select the newer experimental AI package without a
+  NuGet downgrade.
+  The Playground and Windows device-test apps override their Windows SDK
+  umbrella and AI references to **2.5.4-experimental**, and Foundation to
+  **2.3.13-experimental**, bundling the matching experimental native runtime
+  (`SelfContained` and `WindowsAppSDKSelfContained`). The shipping library
+  keeps its stable package references; other apps keep the repo-wide defaults.
+  BuildTools.WinApp enables packaged `dotnet run`.
+  Build the Windows target on Windows: the SDK's `MakePri.exe`
   packaging tool cannot run on macOS. This is a development setup, not a
   Store distribution guide.
+
+Stable Phi Silica runtime access is a
+[Limited Access Feature](https://learn.microsoft.com/windows/ai/apis/phi-silica)
+requiring Microsoft's approved unlock token. A real request with the stable
+runtime on the development machine returned `Access is denied` for
+`com.microsoft.windows.ai.languagemodel`. The app-only experimental runtime
+selection is for development and testing, not a production access grant.
 
 The adapter checks `GetReadyState()` and calls `EnsureReadyAsync()` when the
 model is not ready. A missing capability, unsupported hardware, or failed

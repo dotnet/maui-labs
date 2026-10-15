@@ -79,7 +79,9 @@
 
   <!-- Windows AI WinRT APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <PackageReference Include="Microsoft.WindowsAppSDK.AI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKExperimentalVersion)" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" VersionOverride="$(MicrosoftWindowsAppSDKFoundationExperimentalVersion)" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.AI" VersionOverride="$(MicrosoftWindowsAppSDKExperimentalVersion)" />
     <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>
