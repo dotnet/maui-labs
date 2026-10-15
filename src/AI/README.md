@@ -5,32 +5,13 @@ This is the contributor README; see the package documentation below for consumer
 
 > **Experimental:** packages ship as previews; APIs may change.
 
-## Capabilities
-
-| Platform | Chat | Image input | Embeddings |
-|----------|------|-------------|------------|
-| iOS / Mac Catalyst / macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | Apple NaturalLanguage |
-| Windows | Not supported | Not supported | Not supported |
-| Android | Not supported | Not supported | Not supported |
-
-Apple OS 27 also provides native token usage. The chat client supports streaming
-and works with M.E.AI logging and OpenTelemetry middleware.
-
 ## Package and usage
 
 | Package | Consumer documentation |
 |---------|------------------------|
 | `Microsoft.Maui.Essentials.AI` | [Install and use the package](Microsoft.Maui.Essentials.AI/README.md) |
 
-For example, on a supported Apple device with Apple Intelligence enabled:
-
-```csharp
-using Microsoft.Extensions.AI;
-using Microsoft.Maui.Essentials.AI;
-
-using var client = new AppleIntelligenceChatClient();
-var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
-```
+The package README owns platform requirements, setup, and API examples.
 
 The [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md)
 compares providers interactively.

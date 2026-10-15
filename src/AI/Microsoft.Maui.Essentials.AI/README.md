@@ -38,7 +38,9 @@ using Microsoft.Maui.Essentials.AI;
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 ```
 
-Use the injected `IChatClient` to request a response or stream:
+## Chat
+
+Use the injected `IChatClient` (`chat` below) to request a response or stream:
 
 ```csharp
 var response = await chat.GetResponseAsync("Plan a day trip to Tokyo");
@@ -53,7 +55,7 @@ await foreach (var update in chat.GetStreamingResponseAsync("Suggest a walking r
 Structured responses stream only when the native provider emits partial
 updates; otherwise a completed response can arrive as one update.
 
-## Apple tools
+### Apple tools
 
 Supply `AIFunction` tools through standard `ChatOptions`. The native client
 invokes them and returns their results to the model:
@@ -74,7 +76,7 @@ var response = await chat.GetResponseAsync("What's the weather in Boston?", opti
 This example returns fixed demonstration data. Set `ChatOptions.ToolMode` to `ChatToolMode.None` to
 disable tools for a request.
 
-## Apple image input
+### Apple image input
 
 Image input requires Apple OS 27 and a ready vision-capable model:
 
@@ -93,7 +95,7 @@ bytes for recording and cross-platform use. Local `file://` image `UriContent`
 is supported; remote URLs are rejected rather than fetched silently.
 On Apple OS 26, the client is text-only and image requests throw an explicit error.
 
-## Token usage and telemetry
+### Token usage
 
 Apple token usage requires OS 27 and a native bridge built with Xcode 27+:
 
@@ -110,6 +112,8 @@ Streaming includes a final `UsageContent` update. Use `ToChatResponseAsync()`
 to aggregate the stream and read `ChatResponse.Usage`. Usage is per request;
 accumulate it with `UsageDetails.Add` for conversation totals. Counts come
 from Foundation Models, not estimates, and usage is `null` on Apple OS 26.
+
+## Diagnostics
 
 Reference `Microsoft.Extensions.AI` to use its telemetry middleware:
 

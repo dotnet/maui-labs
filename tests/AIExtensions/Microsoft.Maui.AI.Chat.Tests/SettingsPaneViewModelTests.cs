@@ -6,9 +6,12 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class SettingsPaneViewModelTests
 {
     [Fact]
-    public void ChatDescriptor_ToolCallingIsOptIn()
+    public void ChatDescriptor_ToolsAreOptInAndStructuredOutputIsOptOut()
     {
         Assert.False(new ChatClientDescriptor("test", "Test", "Ready").SupportsToolCalling);
+        Assert.True(new ChatClientDescriptor("test", "Test", "Ready").SupportsStructuredOutput);
+        Assert.False(new ChatClientDescriptor("test", "Test", "Ready",
+            SupportsStructuredOutput: false).SupportsStructuredOutput);
     }
 
     [Fact]
@@ -135,12 +138,31 @@ public sealed class SettingsPaneViewModelTests
         Assert.Same(ChatToolMode.RequireAny, settings.CreateChatOptions([tool]).ToolMode);
     }
 
+    [Fact]
+    public void CreateChatOptions_SwitchingFromStructuredProvider_DoesNotSendStaleJsonSettings()
+    {
+        using var live = CreateClient("Live", isReplay: false);
+        using var textOnly = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("text-only", "Text only", "Plain text",
+                SupportsStructuredOutput: false));
+        var settings = new SettingsPaneViewModel([live, textOnly]) { UseStructuredJson = true };
+        Assert.IsType<ChatResponseFormatJson>(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.SelectedClient = textOnly;
+        Assert.True(settings.UseStructuredJson);
+        Assert.False(settings.SelectedDescriptor!.SupportsStructuredOutput);
+        Assert.Null(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.SelectedClient = live;
+        Assert.IsType<ChatResponseFormatJson>(settings.CreateChatOptions([]).ResponseFormat);
+    }
+
     private static IChatClient CreateClient(string name, bool isReplay) =>
         new DescribedChatClient(
             new StubChatClient(),
             new ChatClientDescriptor(
                 name.ToLowerInvariant(), name, $"{name} ready",
-                IsReplay: isReplay, SupportsToolCalling: !isReplay));
+                IsReplay: isReplay, SupportsToolCalling: !isReplay, SupportsStructuredOutput: !isReplay));
 
     private sealed class StubChatClient : IChatClient
     {

@@ -22,14 +22,15 @@ Chat displays the model ID reported by the provider, including during replay.
 It auto-saves the current recording locally. **New** replaces that recording;
 **More** loads a bundled example or imports and exports recordings. Replay
 works offline without credentials or a model. Select a live provider to
-continue a conversation. Uncheck unneeded tools or choose **None** to disable
-tool calls.
+continue a conversation. Features are shown only when the selected provider
+supports them. Uncheck unneeded tools or choose **None** to disable tool calls.
+Switching providers preserves your Structured JSON preference, but providers
+that opt out receive plain-text requests and their responses display as text.
 
 The local, bounded diagnostics sidebar starts collapsed on Chat, Embeddings,
 and Images. The header's **Logs** button toggles it without stopping diagnostic
 capture while hidden. In narrower windows, tap outside the sidebar to dismiss it.
-It groups
-built-in logs and completed spans by trace, including tool lifecycle logs from
+It groups built-in logs and completed spans by trace, including tool lifecycle logs from
 MEAI and Apple. Apple's native tool callbacks retain the originating request's
 trace/span. Chat and embeddings emit spans; the pinned MEAI version provides
 image logging only. Model and usage data appear only when supplied by the provider.
@@ -43,11 +44,12 @@ Use the repository's pinned .NET 10 SDK and matching MAUI workload.
 Apple builds require Xcode 27. On macOS, from the repository root:
 
 ```sh
-dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -t:Build,Run -p:UseXcode27Preview=true
+dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-Use `net10.0-ios27.0` for iOS. Apple Intelligence text chat requires iOS or Mac
+Use `net10.0-ios27.0` for iOS and select a device with `--device <device-id>`.
+Use `--list-devices` to list available targets. Apple Intelligence text chat requires iOS or Mac
 Catalyst 26+ on a supported device with the model enabled. Image input requires
 27+ and a ready vision model. Apple sentence embeddings require the English
 language asset, which may be absent on simulators.
@@ -60,6 +62,13 @@ dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sam
 
 The Windows sample remains unpackaged and offers Azure-backed features and
 offline Chat Replay, not on-device AI. Azure and Replay also run on Android.
+
+With Java and the Android SDK installed:
+
+```sh
+dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-android --device <device-id>
+```
 
 ## Configure Azure OpenAI
 
