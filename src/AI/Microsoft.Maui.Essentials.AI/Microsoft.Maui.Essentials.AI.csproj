@@ -47,7 +47,7 @@
   </ItemGroup>
   <!-- Windows AI WinRT APIs -->
   <ItemGroup Condition=" $(TargetFramework.Contains('-windows')) ">
-    <PackageReference Include="Microsoft.WindowsAppSDK.AI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.AI" VersionOverride="$(MicrosoftWindowsAppSDKAIStableBaselineVersion)" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
   </ItemGroup>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
