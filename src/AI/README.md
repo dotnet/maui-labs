@@ -86,3 +86,4 @@ For Windows packaging, runtime selection and model access, see
 [Windows integration](../../docs/ai/WINDOWS-AI.md).
 For Android build and device requirements, see
 [Gemini Nano integration](../../docs/ai/gemini-nano-android.md).
+- [Gemini Nano structured-output experiment](../../docs/ai/gemini-nano-structured-output-experiment.md)
