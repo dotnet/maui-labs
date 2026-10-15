@@ -1,12 +1,7 @@
 using Microsoft.Windows.AI;
-using Microsoft.Windows.AI.Imaging;
 using Microsoft.Windows.AI.Text;
 using System.Runtime.Versioning;
 using Windows.Foundation;
-
-// CS8305: ImageGenerator is marked [Experimental] in WinRT metadata. Stable Windows
-// App SDK 2.5 does not expose image generation.
-#pragma warning disable CS8305
 
 namespace Microsoft.Maui.Essentials.AI;
 
@@ -31,23 +26,6 @@ internal static class WindowsAIModelFactory
 			LanguageModel.EnsureReadyAsync);
 
 		return await LanguageModel.CreateAsync();
-	}
-
-	/// <summary>
-	/// Creates an <see cref="ImageGenerator"/> instance, ensuring the Windows AI image generation model is ready.
-	/// </summary>
-	/// <returns>A ready-to-use <see cref="ImageGenerator"/> instance.</returns>
-	/// <exception cref="NotSupportedException">
-	/// Thrown when image generation is not supported on the current system, disabled by the user, or not ready.
-	/// </exception>
-	public static async Task<ImageGenerator> CreateImageGeneratorAsync()
-	{
-		await EnsureReadyAsync(
-			"Windows AI image generation",
-			ImageGenerator.GetReadyState,
-			ImageGenerator.EnsureReadyAsync);
-
-		return await ImageGenerator.CreateAsync();
 	}
 
 	/// <summary>
