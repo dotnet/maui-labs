@@ -1,6 +1,28 @@
+buildscript {
+    if (providers.gradleProperty("enableGeminiStructuredOutputProbe").orNull == "true") {
+        repositories {
+            google()
+            mavenCentral()
+            gradlePluginPortal()
+        }
+        dependencies {
+            classpath("com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.3.6")
+        }
+    }
+}
+
 plugins {
     id("com.android.library") version "8.12.0"
     id("org.jetbrains.kotlin.android") version "2.3.0"
+}
+
+val enableGeminiStructuredOutputProbe =
+    providers.gradleProperty("enableGeminiStructuredOutputProbe").orNull == "true"
+
+if (enableGeminiStructuredOutputProbe) {
+    apply(plugin = "com.google.devtools.ksp")
+    // Never replace the default AAR/runtime exports consumed by AndroidGradleProject.
+    layout.buildDirectory.set(layout.projectDirectory.dir("build/structured-output-probe"))
 }
 
 android {
@@ -10,6 +32,16 @@ android {
     defaultConfig {
         minSdk = 26
         consumerProguardFiles("consumer-rules.pro")
+        if (enableGeminiStructuredOutputProbe) {
+            consumerProguardFiles("src/structuredOutputProbe/consumer-rules.pro")
+        }
+    }
+
+    if (enableGeminiStructuredOutputProbe) {
+        sourceSets {
+            getByName("main").java.srcDir("src/structuredOutputProbe/kotlin")
+            getByName("test").java.srcDir("src/structuredOutputProbeTest/kotlin")
+        }
     }
 
     buildTypes {
@@ -44,6 +76,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    if (enableGeminiStructuredOutputProbe) {
+        compileOnly("com.google.mlkit:genai-schema:1.0.0-alpha1")
+        add("ksp", "com.google.mlkit:genai-schema-compiler:1.0.0-alpha1")
+    }
 }
 
 // Shared Kotlin, AndroidX and Google dependencies are supplied by NuGet.
