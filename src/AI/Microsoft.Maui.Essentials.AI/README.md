@@ -12,7 +12,7 @@ This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/do
 | Mac Catalyst 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
 | macOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
 | Android 8.0+ on supported AICore devices | ✅ Gemini Nano (ML Kit GenAI Prompt) | ✅ Image prompts | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | Not available | 🔜 Coming soon |
+| Windows 11 24H2+ | Windows AI text and structured JSON | Not supported | Not supported |
 
 ## Getting started
 
@@ -36,8 +36,17 @@ if (OperatingSystem.IsAndroidVersionAtLeast(26))
     builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
 #elif IOS || MACCATALYST || MACOS
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
+#elif WINDOWS
+if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
+    builder.Services.AddSingleton<IChatClient>(new WindowsAIChatClient());
 #endif
 ```
+
+Windows requires supported hardware and an MSIX package declaring
+`systemAIModels`; stable Phi Silica runtime access also requires Microsoft's
+Limited Access Feature approval. See the
+[Windows integration guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md).
+Windows chat accepts text and structured JSON, not tools or image input.
 
 ### 3. Use in your app
 
@@ -118,7 +127,10 @@ requests.
 
 ### Provider-specific options
 
-Apple Intelligence supports tools and structured JSON responses.
+Apple Intelligence supports tools and structured JSON responses. Windows AI
+supports structured JSON, but not tools. Structured responses stream only when
+the native provider emits partial updates; otherwise the completed response can
+arrive as one update.
 Gemini Nano supports `Temperature`, `TopK`, `Seed`, and `MaxOutputTokens`, but
 not tools or JSON response formats.
 
@@ -178,4 +190,5 @@ older devices must guard client registration, as shown above, and apply the
 - [Contributor and implementation guides](https://github.com/dotnet/maui-labs/tree/main/src/AI)
 - [Chat Playground sample](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
+- [Windows integration](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md)
 - [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)

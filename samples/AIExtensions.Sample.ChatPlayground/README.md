@@ -1,67 +1,107 @@
 # AI Chat Playground
 
-A .NET MAUI app for comparing on-device AI, Azure OpenAI, and recorded responses.
-Runs on Android, iOS, Mac Catalyst, and Windows.
+A .NET MAUI sample for comparing on-device Apple, Windows, and Android AI with optional
+Azure OpenAI providers. It runs on Android, iOS, Mac Catalyst, and Windows
+(not native macOS); providers vary by platform.
 
-| Tab | What to try |
-| --- | --- |
-| Chat | Switch providers, stream replies, attach images, and record/replay conversations |
-| Embeddings | Import documents, build an index, and search with Apple or Azure embeddings |
-| Images | Generate or edit images with a configured Azure provider |
+## What you can try
 
-Apple Intelligence is available on Apple platforms; Gemini Nano is available on
-supported Android devices. Azure is optional, and Replay needs no credentials
-or model. Provider requirements and API capabilities are in the
-[package README](../../src/AI/Microsoft.Maui.Essentials.AI/README.md).
+| Tab | Features | Providers |
+|-----|----------|-----------|
+| Chat | Text, streaming, structured JSON, optional tools and image input | Apple Intelligence (iOS/Mac Catalyst), Windows AI, Gemini Nano (Android), Azure OpenAI, offline Replay |
+| Embeddings | Import documents, index them, and search | Apple NaturalLanguage (iOS/Mac Catalyst), Azure OpenAI |
+| Images | Generate images or edit a source image | Azure OpenAI |
 
-## Build and run
+Apple image input requires OS 27 and a ready vision-capable model. Apple does
+not generate images or fall back to Azure. Azure chat uses the Responses API
+and supports image input, reasoning summaries, and an optional image-generation
+tool. Structured responses stream only when the provider emits incremental
+updates. Each tab has its own services.
+Windows AI supports text and schema-constrained JSON, not tool calls or image input.
+Gemini Nano supports text and in-memory image input, not tools or structured JSON.
 
-Install the repo's pinned SDK and matching MAUI workloads. From the repository
-root, run Mac Catalyst with Xcode 27:
+Chat displays the model ID reported by the provider, including during replay.
+It auto-saves the current recording locally. **New** replaces that recording;
+**More** loads a bundled example or imports and exports recordings. Replay
+works offline without credentials or a model. Select a live provider to
+continue a conversation. Features are shown only when the selected provider
+supports them. Uncheck unneeded tools or choose **None** to disable tool calls.
+Switching providers preserves your Structured JSON preference, but providers
+that opt out receive plain-text requests and their responses display as text.
+
+The local, bounded diagnostics sidebar starts collapsed on Chat, Embeddings,
+and Images. The header's **Logs** button toggles it without stopping diagnostic
+capture while hidden. In narrower windows, tap outside the sidebar to dismiss it.
+It groups built-in logs and completed spans by trace, including tool lifecycle logs from
+MEAI and Apple. Apple's native tool callbacks retain the originating request's
+trace/span. Chat and embeddings emit spans; the pinned MEAI version provides
+image logging only. Model and usage data appear only when supplied by the provider.
+Trace payload logging and sensitive telemetry capture are disabled, but
+exceptions may still contain sensitive data. Diagnostics are not exported
+automatically.
+
+## Run the sample
+
+Use the repository's pinned .NET 10 SDK and matching MAUI workload.
+Apple builds require Xcode 27. On macOS, from the repository root:
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
   -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-For iOS, use `-f net10.0-ios27.0` and select the device with `--device`.
-For Android, install Java 17+ and the Android SDK, then run:
+Use `net10.0-ios27.0` for iOS and select a device with `--device <device-id>`.
+Use `--list-devices` to list available targets. Apple Intelligence text chat requires iOS or Mac
+Catalyst 26+ on a supported device with the model enabled. Image input requires
+27+ and a ready vision model. Apple sentence embeddings require the English
+language asset, which may be absent on simulators.
+
+On Windows:
+
+```powershell
+dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net10.0-windows10.0.19041.0
+```
+
+Keep the Windows sample MSIX-packaged for on-device AI. It bundles an
+experimental Windows App SDK runtime while the library uses stable APIs.
+See the [Windows integration guide](../../docs/ai/WINDOWS-AI.md) for hardware,
+capability and access requirements.
+
+With Java and the Android SDK installed:
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
   -f net10.0-android --device <device-id>
 ```
 
-Emulators can exercise Azure and Replay, but cannot run Gemini inference.
+Gemini requires API 26+, a supported physical device with a locked bootloader,
+and current AICore services with a ready model. Its first request checks model
+availability; Android emulators can exercise Azure and Replay, not Gemini inference.
+The native bridge builds automatically with Java 17+ and the Android SDK.
+See the [Android integration guide](../../docs/ai/gemini-nano-android.md).
 
-## Using the playground
+## Configure Azure OpenAI
 
-Choose a Chat provider in settings, enter a prompt, and select **Send**.
-Unavailable features are hidden: Gemini has no tools or structured JSON.
-For Apple and Azure tools, uncheck the ones you do not need or select **None**.
+Azure is optional. On-device providers and Replay need no cloud credentials.
+Configure an endpoint (typically ending in `/openai/v1/`), a key, and only the
+deployments you want to use. The project uses user-secrets ID
+`2727d4aa-a3a5-484b-9447-91604761972b`. From the repository root:
 
-The **More** menu loads a bundled recording or imports/exports chats; **New**
-clears the current conversation. **Logs** shows local diagnostics without
-exporting them. Sensitive payload logging is disabled, but exceptions may
-still contain sensitive data.
-
-## Optional Azure configuration
-
-To enable Azure, set an endpoint, key, and the deployment names you want to use.
-From the repository root:
-
-```sh
-cd samples/AIExtensions.Sample.ChatPlayground
-dotnet user-secrets set "AI:Endpoint" "https://<resource>.openai.azure.com/openai/v1/"
-dotnet user-secrets set "AI:ApiKey" "<key>"
-dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>"
-dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>"
-dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>"
+```powershell
+$project = "samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj"
+dotnet user-secrets set "AI:Endpoint" "https://<resource>.openai.azure.com/openai/v1/" --project $project
+dotnet user-secrets set "AI:ApiKey" "<key>" --project $project
+dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>" --project $project
+dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>" --project $project
+dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>" --project $project
 ```
 
-Chat uses `DeploymentName`, Images and Chat's image-generation tool use
-`ImageDeploymentName`, and Embeddings uses `EmbeddingDeploymentName`.
-Leave unused deployment names unset.
+`AI:DeploymentName` enables Chat, `AI:EmbeddingDeploymentName` enables Embeddings,
+and `AI:ImageDeploymentName` enables Images and Chat's image-generation tool for
+providers that support tool calling. The endpoint and key are required only
+when at least one Azure deployment is configured.
 
-User secrets are **embedded in Debug builds**: do not distribute those builds or
-commit keys. Azure requests may send text/images off-device and incur charges.
+**Debug builds embed your local user secrets. Do not distribute these builds
+or commit credentials.** Azure prompts, images, and indexed text may leave the
+device and incur charges. Recordings may also contain sensitive data; review
+them before sharing.
