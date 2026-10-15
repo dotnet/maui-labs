@@ -43,6 +43,12 @@ before packing/signing on Windows. See
 [ci-essentialsai.yml](../../.github/workflows/ci-essentialsai.yml) and the
 [official pipeline](../../eng/pipelines/devflow-official.yml) for the artifact flow.
 
+To build only the Windows chat library:
+
+```powershell
+dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj -f net10.0-windows10.0.19041.0
+```
+
 ## Tests and implementation
 
 Portable tests live in `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests`:
@@ -56,7 +62,7 @@ The overrides keep the build portable and enable Arcade's test infrastructure
 for this existing test project without building the Apple targets.
 Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
-Apple device/runtime and model availability; portable tests do not run a model.
+Apple or Windows device/runtime and model availability; portable tests do not run a model.
 
 - `AppleNative/EssentialsAI/`: Swift bridge and binding definitions, producing `.xcframework` bundles.
 - `Microsoft.Maui.Essentials.AI/Platform/`: platform clients and streaming helpers.
@@ -66,3 +72,5 @@ Apple device/runtime and model availability; portable tests do not run a model.
 Further design documentation:
 [Apple image input](../../docs/ai/apple-foundation-models-image-input.md) and
 [JSON stream chunking](../../docs/ai/json-stream-chunker-design.md).
+For Windows packaging, runtime selection and model access, see
+[Windows integration](../../docs/ai/WINDOWS-AI.md).

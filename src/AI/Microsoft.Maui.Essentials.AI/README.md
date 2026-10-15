@@ -11,10 +11,10 @@ No cloud service is required.
 | Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
 |----------|---------------------|-------------|-----------------------------------|
 | iOS / Mac Catalyst / macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | Apple NaturalLanguage |
-| Windows | Not supported | Not supported | Not supported |
+| Windows 11 24H2+ | Windows AI text and structured JSON | Not supported | Not supported |
 | Android | Not supported | Not supported | Not supported |
 
-The Apple chat client does not generate images. On-device models must be
+These chat clients do not generate images. On-device models must be
 enabled and available on a supported device.
 
 ## Install and use
@@ -37,6 +37,12 @@ using Microsoft.Maui.Essentials.AI;
 
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 ```
+
+For Windows, register `new WindowsAIChatClient()` instead. Windows requires
+supported hardware and an MSIX package declaring `systemAIModels`; stable Phi
+Silica runtime access also requires Microsoft's Limited Access Feature approval.
+See the [Windows integration guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md).
+Windows chat accepts text and structured JSON, not tools or image input.
 
 ## Chat
 
@@ -157,4 +163,5 @@ The corresponding NaturalLanguage model asset must be installed on the device.
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
+- [Windows integration](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md)
 - [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)
