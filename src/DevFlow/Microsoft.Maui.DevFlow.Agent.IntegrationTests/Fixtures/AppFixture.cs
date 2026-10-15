@@ -24,9 +24,12 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
     public int AgentPort => _inner.AgentPort;
     public string AgentBaseUrl => _inner.AgentBaseUrl;
     public string Platform => _inner.Platform;
+    public string? DeviceId => _inner.DeviceId;
+    public string? AppIdentifier => _inner.AppIdentifier;
 
     public Task InitializeAsync() => _inner.InitializeAsync();
     public Task DisposeAsync() => _inner.DisposeAsync();
+    public Task ResetPermissionAsync(PermissionService permission) => _inner.ResetPermissionAsync(permission);
 
     internal static async Task<JsonElement> ReadCaptureAsync(HttpClient http, string path, int timeoutMs = 5000)
     {

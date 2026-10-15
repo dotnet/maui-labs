@@ -2962,6 +2962,8 @@ public class AgentDescriptor
 
 public class DeviceDescriptor
 {
+    [System.Text.Json.Serialization.JsonPropertyName("id")]
+    public string? Id { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("platform")]
     public string? Platform { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("deviceType")]
@@ -2982,14 +2984,14 @@ public class AppDescriptor
 {
     [System.Text.Json.Serialization.JsonPropertyName("name")]
     public string? Name { get; set; }
-    [System.Text.Json.Serialization.JsonPropertyName("processId")]
-    public int? ProcessId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("packageId")]
     public string? PackageId { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("version")]
     public string? Version { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("build")]
     public string? Build { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("processId")]
+    public int? ProcessId { get; set; }
 }
 
 public class AgentCapabilities

@@ -35,6 +35,18 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             ? new PlatformVisualTreeWalker()
             : new PlatformVisualTreeWalker(NativeElementRegistry);
 
+    protected override string? DeviceIdentifier
+    {
+        get
+        {
+#if IOS
+            return Environment.GetEnvironmentVariable("SIMULATOR_UDID");
+#else
+            return null;
+#endif
+        }
+    }
+
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
         try
@@ -1213,25 +1225,30 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             var attachedSheet = parentWindow?.AttachedSheet
                 ?? parentWindow?.Sheets.LastOrDefault()
                 ?? FindRegisteredDialogWindow(parentWindow);
-            if (parentWindow != null && attachedSheet != null)
-            {
-                var composited = CaptureWindowsViaCG(parentWindow, attachedSheet);
-                if (composited != null)
-                    return composited;
-
-                window = attachedSheet;
-            }
-            else
-            {
-                window = parentWindow;
-            }
-
+            window = parentWindow;
             if (window != null)
             {
+                // ScreenCaptureKit captures the complete AppKit window, including native
+                // chrome and attached child windows, without activating or ordering it.
+                var capturedWindow = window;
+                var capturedImage = await AppKitScreenshotCapture.CaptureAsync(
+                    hasAttachedSheet: attachedSheet != null,
+                    () => CaptureWindowViaScreenCaptureKitAsync(capturedWindow),
+                    () => attachedSheet == null ? null : AppKitWindowCapture.CaptureWindows(capturedWindow, attachedSheet));
+                if (capturedImage != null)
+                    return capturedImage;
+
+                if (attachedSheet != null)
+                {
+                    // Quartz can only capture one window ID. Prefer the sheet when
+                    // compositing is unavailable so modal UI remains visible.
+                    window = attachedSheet;
+                }
+
                 // Primary: CGWindowListCreateImage gives a composited capture including
                 // layer-backed controls and WebView content. This can return null when the
-                // window is not frontmost / fully occluded (the window server may have purged
-                // its backing store), so we fall through to occlusion-independent paths below.
+                // window is fully occluded (the window server may have purged its backing
+                // store), so we fall through to occlusion-independent paths below.
                 var pngBytes = CaptureWindowViaCG(window);
                 if (pngBytes != null)
                     return pngBytes;
@@ -1241,7 +1258,9 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
                 {
                     // Occlusion-independent fallback: CacheDisplay re-renders the view
                     // hierarchy directly, so it works even when the window is not frontmost.
-                    var cached = CaptureNSView(contentView);
+                    // Capture the theme frame when possible so native title-bar chrome is
+                    // included instead of limiting the result to the content view.
+                    var cached = CaptureNSView(contentView.Superview ?? contentView);
                     if (cached != null)
                         return cached;
 
@@ -1374,10 +1393,6 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         _ => null
     };
 
-    /// <summary>
-    /// On macOS, reports an actionable cause when a screenshot fails because the app window
-    /// is not the frontmost application (a common reason CGWindowListCreateImage returns null).
-    /// </summary>
     protected override ScreenshotCaptureFailure? DescribeScreenshotFailure()
     {
         try
@@ -1388,20 +1403,16 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
             var nsWindow = NSWindowFromPlatformView(mauiWindow?.Handler?.PlatformView)
                 ?? app.KeyWindow ?? app.MainWindow;
 
-            var appActive = app.Active;
-            var windowVisible = nsWindow == null || nsWindow.IsVisible;
-
-            if (!appActive || !windowVisible)
+            if (nsWindow != null && (!nsWindow.IsVisible || nsWindow.IsMiniaturized))
             {
                 return new ScreenshotCaptureFailure(
-                    "Failed to capture screenshot because the app window is not frontmost (the app is not the active application). " +
-                    "Bring the app to the foreground and retry.",
-                    "window-not-frontmost",
+                    "Failed to capture the app window because it is hidden or minimized.",
+                    "window-not-visible",
                     retryable: true,
                     suggestions: new[]
                     {
-                        "Bring the MAUI app window to the foreground (click it or use the app switcher / Cmd+Tab), then retry.",
-                        "Ensure the app window is visible and not minimized."
+                        "Restore the app window without activating it, then retry.",
+                        "Ensure Screen & System Audio Recording permission is granted if native window capture is required."
                     });
             }
         }
@@ -1494,17 +1505,114 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         return pngData?.ToArray();
     }
 
+    private static async Task<byte[]?> CaptureWindowViaScreenCaptureKitAsync(NSWindow window)
+    {
+        // Never trigger the system screen-recording prompt from automation. Preflight is
+        // non-interactive; when access is absent we use the in-process rendering fallbacks.
+        if (!OperatingSystem.IsMacOSVersionAtLeast(14) ||
+            (!OperatingSystem.IsMacOSVersionAtLeast(14, 4) && !CGPreflightScreenCaptureAccess()))
+            return null;
+
+        try
+        {
+            using var content = await GetShareableContentAsync();
+            var windowId = (uint)window.WindowNumber;
+            var shareableWindow = content.Windows.FirstOrDefault(candidate => candidate.WindowId == windowId);
+            if (shareableWindow == null)
+                return null;
+
+            using var filter = new ScreenCaptureKit.SCContentFilter(shareableWindow);
+            using var configuration = new ScreenCaptureKit.SCStreamConfiguration
+            {
+                Width = (nuint)Math.Max(1, Math.Ceiling(shareableWindow.Frame.Width * window.BackingScaleFactor)),
+                Height = (nuint)Math.Max(1, Math.Ceiling(shareableWindow.Frame.Height * window.BackingScaleFactor)),
+                ShowsCursor = false,
+                PreservesAspectRatio = true,
+                IgnoreShadowsSingleWindow = true,
+                IgnoreGlobalClipSingleWindow = true,
+                CaptureResolution = ScreenCaptureKit.SCCaptureResolutionType.Best
+            };
+
+            if (OperatingSystem.IsMacOSVersionAtLeast(14, 2))
+                configuration.IncludeChildWindows = true;
+
+            var completion = new TaskCompletionSource<byte[]?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            ScreenCaptureKit.SCScreenshotManager.CaptureImage(
+                filter,
+                configuration,
+                (image, error) =>
+                {
+                    if (error != null || image == null)
+                    {
+                        completion.TrySetResult(null);
+                        return;
+                    }
+
+                    try
+                    {
+                        using var bitmapRep = new NSBitmapImageRep(image);
+                        using var properties = new NSDictionary();
+                        using var pngData = bitmapRep.RepresentationUsingTypeProperties(
+                            NSBitmapImageFileType.Png, properties);
+                        completion.TrySetResult(pngData?.ToArray());
+                    }
+                    catch
+                    {
+                        completion.TrySetResult(null);
+                    }
+                });
+
+            return await completion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("macos14.0")]
+    private static async Task<ScreenCaptureKit.SCShareableContent> GetShareableContentAsync()
+    {
+        var completion = new TaskCompletionSource<ScreenCaptureKit.SCShareableContent>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var registration = timeout.Token.Register(
+            () => completion.TrySetCanceled(timeout.Token));
+
+        void Complete(
+            ScreenCaptureKit.SCShareableContent content,
+            Foundation.NSError error)
+        {
+            if (error != null)
+                completion.TrySetException(new InvalidOperationException(error.LocalizedDescription));
+            else if (content == null)
+                completion.TrySetException(new InvalidOperationException("ScreenCaptureKit returned no shareable content."));
+            else if (!completion.TrySetResult(content))
+                content.Dispose();
+        }
+
+        if (OperatingSystem.IsMacOSVersionAtLeast(14, 4))
+            ScreenCaptureKit.SCShareableContent.GetCurrentProcessShareableContent(Complete);
+        else
+            ScreenCaptureKit.SCShareableContent.GetShareableContent(
+                excludeDesktopWindows: true,
+                onScreenWindowsOnly: false,
+                Complete);
+
+        return await completion.Task;
+    }
+
+    [System.Runtime.InteropServices.DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.U1)]
+    static extern bool CGPreflightScreenCaptureAccess();
+
     [System.Runtime.InteropServices.DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
     static extern IntPtr CGWindowListCreateImage(
         CoreGraphics.CGRect screenBounds,
         uint listOption,
         uint windowID,
-        uint imageOption);
-
-    [System.Runtime.InteropServices.DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
-    static extern IntPtr CGWindowListCreateImageFromArray(
-        CoreGraphics.CGRect screenBounds,
-        IntPtr windowArray,
         uint imageOption);
 
     private static byte[]? CaptureWindowViaCG(NSWindow window)
@@ -1513,50 +1621,6 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         {
             using var bitmapRep = CaptureWindowBitmapViaCG(window);
             return EncodeBitmapRepresentation(bitmapRep);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static byte[]? CaptureWindowsViaCG(
-        NSWindow parentWindow,
-        NSWindow sheetWindow)
-    {
-        try
-        {
-            var windows = new[] { sheetWindow, parentWindow };
-            var windowNumbers = windows
-                .Where(window => window.WindowNumber > 0)
-                .Select(window => new NSNumber((uint)window.WindowNumber))
-                .ToArray();
-            if (windowNumbers.Length == 0)
-                return null;
-
-            using var windowArray = NSArray.FromNSObjects(windowNumbers);
-            foreach (var windowNumber in windowNumbers)
-                windowNumber.Dispose();
-
-            // kCGWindowImageBoundsIgnoreFraming = 0x01,
-            // kCGWindowImageBestResolution = 0x08.
-            var cgImagePtr = CGWindowListCreateImageFromArray(
-                CoreGraphics.CGRect.Null,
-                windowArray.Handle,
-                0x09);
-            if (cgImagePtr != IntPtr.Zero)
-            {
-                using var cgImage = ObjCRuntime.Runtime.GetINativeObject<CoreGraphics.CGImage>(
-                    cgImagePtr,
-                    owns: true);
-                if (cgImage != null)
-                {
-                    using var bitmapRep = new NSBitmapImageRep(cgImage);
-                    return EncodeBitmapRepresentation(bitmapRep);
-                }
-            }
-
-            return CaptureWindowPairViaCG(parentWindow, sheetWindow);
         }
         catch
         {
@@ -1583,71 +1647,6 @@ public partial class PlatformAgentService : MauiDevFlowAgentService
         return cgImage == null
             ? null
             : new NSBitmapImageRep(cgImage);
-    }
-
-    private static byte[]? CaptureWindowPairViaCG(
-        NSWindow parentWindow,
-        NSWindow sheetWindow)
-    {
-        using var parentRep = CaptureWindowBitmapViaCG(parentWindow);
-        using var sheetRep = CaptureWindowBitmapViaCG(sheetWindow);
-        if (parentRep == null || sheetRep == null)
-            return null;
-
-        var logicalSize = parentWindow.Frame.Size;
-        using var compositedRep = new NSBitmapImageRep(
-            IntPtr.Zero,
-            (int)parentRep.PixelsWide,
-            (int)parentRep.PixelsHigh,
-            8,
-            4,
-            true,
-            false,
-            NSColorSpace.DeviceRGB,
-            0,
-            0);
-        compositedRep.Size = logicalSize;
-
-        using var parentImage = new NSImage(logicalSize);
-        parentImage.AddRepresentation(parentRep);
-        using var sheetImage = new NSImage(sheetWindow.Frame.Size);
-        sheetImage.AddRepresentation(sheetRep);
-
-        NSGraphicsContext.GlobalSaveGraphicsState();
-        try
-        {
-            var context = NSGraphicsContext.FromBitmap(compositedRep);
-            if (context == null)
-                return null;
-
-            NSGraphicsContext.CurrentContext = context;
-            parentImage.Draw(
-                new CoreGraphics.CGRect(CoreGraphics.CGPoint.Empty, logicalSize),
-                new CoreGraphics.CGRect(CoreGraphics.CGPoint.Empty, parentImage.Size),
-                NSCompositingOperation.SourceOver,
-                1,
-                respectContextIsFlipped: false,
-                hints: null);
-
-            var sheetDestination = new CoreGraphics.CGRect(
-                sheetWindow.Frame.X - parentWindow.Frame.X,
-                sheetWindow.Frame.Y - parentWindow.Frame.Y,
-                sheetWindow.Frame.Width,
-                sheetWindow.Frame.Height);
-            sheetImage.Draw(
-                sheetDestination,
-                new CoreGraphics.CGRect(CoreGraphics.CGPoint.Empty, sheetImage.Size),
-                NSCompositingOperation.SourceOver,
-                1,
-                respectContextIsFlipped: false,
-                hints: null);
-        }
-        finally
-        {
-            NSGraphicsContext.GlobalRestoreGraphicsState();
-        }
-
-        return EncodeBitmapRepresentation(compositedRep);
     }
 
     private static byte[]? EncodeBitmapRepresentation(NSBitmapImageRep? bitmapRep)

@@ -74,6 +74,7 @@ public static class McpServerHost
 			.WithTools<FileTools>()
 			.WithTools<BatchTools>()
 			.WithTools<InvokeTools>()
+			.WithTools<NativeDialogTools>()
 			.WithTools<ExtensionTools>()
 			.WithTools<MutationLeaseTools>()
 			.WithTools<Flows.FlowTools>()
