@@ -52,12 +52,12 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
                     HeightRequest = 44,
                     ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Star) },
                 };
-                _empty = new Label { Text = "No rows yet" };
                 grid.Add(caption, 0);
                 grid.Add(value, 1);
                 return grid;
             }),
         };
+        _empty = new Label { Text = "No rows yet" };
         var page = new ContentPage
         {
             Title = "Async rows",
