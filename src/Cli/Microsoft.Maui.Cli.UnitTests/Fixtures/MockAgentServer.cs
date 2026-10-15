@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -98,6 +99,8 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     public int Port { get; private set; }
 
+    public bool BindToLocalhost { get; init; }
+
     public string? WebViewEvaluateResponse { get; set; }
     public string? AgentStatusResponse { get; set; }
     public string? FileDownloadResponse { get; set; }
@@ -119,7 +122,21 @@ public sealed class MockAgentServer : IAsyncDisposable
     public async Task StartAsync()
     {
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            if (BindToLocalhost)
+            {
+                using var listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start();
+                var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                listener.Stop();
+                options.ListenLocalhost(port);
+            }
+            else
+            {
+                options.Listen(IPAddress.Loopback, 0);
+            }
+        });
         builder.Logging.ClearProviders();
 
         _app = builder.Build();

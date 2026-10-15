@@ -57,7 +57,7 @@ public sealed class BrokerOperationsTests
     [Fact]
     public async Task Status_FallbackHealth_ReturnsLegacyNoStateFileShape()
     {
-        await using var server = new MockAgentServer();
+        await using var server = new MockAgentServer { BindToLocalhost = true };
         await server.StartAsync();
 
         var status = await new BrokerOperations().GetStatusAsync(null, server.Port);
@@ -66,12 +66,17 @@ public sealed class BrokerOperationsTests
         Assert.False(status.StateFile);
         Assert.Equal(2, status.Agents);
         Assert.Equal(server.Port, status.Port);
+        Assert.Equal("/api/health", Assert.Single(server.RecordedRequests).Path);
     }
 
     [Fact]
     public async Task Status_MalformedHealth_PreservesStaleStateResult()
     {
-        await using var server = new MockAgentServer { BrokerHealthResponse = "invalid JSON" };
+        await using var server = new MockAgentServer
+        {
+            BindToLocalhost = true,
+            BrokerHealthResponse = "invalid JSON"
+        };
         await server.StartAsync();
 
         var status = await new BrokerOperations().GetStatusAsync(server.Port);
@@ -79,6 +84,7 @@ public sealed class BrokerOperationsTests
         Assert.False(status.Running);
         Assert.True(status.Stale);
         Assert.Equal(server.Port, status.Port);
+        Assert.Equal("/api/health", Assert.Single(server.RecordedRequests).Path);
     }
 
     [Fact]

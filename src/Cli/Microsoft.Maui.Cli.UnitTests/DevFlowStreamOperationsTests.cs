@@ -82,19 +82,35 @@ public sealed class NetworkOperationsTests
         [
             """{"type":"replay","entries":[{"host":"api.test","method":"GET","id":"one"},{"host":"api.test","method":"GET","id":"two"},{"host":"other","method":"GET","id":"filtered"}]}""",
             """{"type":"request","entry":{"host":"api.test","method":"GET","id":"over-limit"}}""",
-            """{"type":"request","entry":{"host":"api.test","method":"POST","id":"filtered-method"}}"""
+            """{"type":"request","entry":{"host":"api.test","method":"POST","id":"filtered-method"}}""",
+            """{"type":"replay","entries":[{"host":"api.test","method":"GET","id":"complete"}]}"""
         ];
         await server.StartAsync();
-        using var client = new AgentClient("localhost", server.Port);
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var client = new AgentClient("127.0.0.1", server.Port);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var entries = new List<string>();
+        var completed = false;
 
         var count = await new NetworkOperations(client).MonitorAsync(1, "API", "get", _ => { },
-            (_, entry) => entries.Add(entry.GetProperty("id").GetString()!),
+            (_, entry) =>
+            {
+                var id = entry.GetProperty("id").GetString()!;
+                if (id == "complete")
+                {
+                    completed = true;
+                    cts.Cancel();
+                }
+                else
+                {
+                    entries.Add(id);
+                }
+            },
             ex => throw new InvalidOperationException("Unexpected stream error", ex), cts.Token);
 
+        Assert.True(completed, "The client did not process the complete ordered stream within 30 seconds.");
         Assert.Equal(["one", "two"], entries);
-        Assert.Equal(3, count);
+        // Two replay entries, one suppressed live entry, and the completion marker are counted.
+        Assert.Equal(4, count);
     }
 
     [Theory]
