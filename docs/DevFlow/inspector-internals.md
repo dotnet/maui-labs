@@ -212,10 +212,15 @@ times, failing immediately on any failure or skip. The Windows live integration 
 these browser cases alongside the tests that genuinely require a native agent.
 
 The Android integration job preinstalls emulator-runner's SDK prerequisites before snapshot
-warm-up or test execution. `eng/scripts/install-android-sdk-with-retry.sh` allows three installation
-attempts for recognized corrupt-ZIP or network-download errors, waiting 5 then 10 seconds.
+warm-up or test execution, using the pinned `AndroidSdk.Tool` .NET tool from
+`.config/dotnet-tools.json`. The Android job's `ANDROID_BUILD_TOOLS_VERSION` defines the build-tools
+version. `eng/scripts/Install-AndroidSdk.ps1` allows three installation attempts for recognized
+corrupt-ZIP or network-download errors, waiting 5 then 10 seconds.
 Unknown packages, rejected licenses, permissions, disk-space errors, and other non-transient
-failures are not retried. Exhausted attempts preserve the installer's failure exit code.
+failures are not retried. Exhausted attempts fail the step and report the tool's last exit code.
+The wrapper also checks error output and each requested package's `package.xml` identity because
+the pinned tool can return zero after a command error. PowerShell regressions cover recovery,
+exhaustion, permanent errors, and false-success prevention without Node.js.
 Emulator boot and integration-test failures are outside the retry scope.
 
 Portable client retry-budget tests inject transport failures at the HTTP handler boundary and

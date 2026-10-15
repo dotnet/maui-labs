@@ -71,6 +71,7 @@ on:
       - 'platforms/Windows.WPF/**'
       - 'platforms/Shared/**'
       - '.github/workflows/devflow-integration.yml'
+      - '.config/dotnet-tools.json'
       # These inputs change compilation/restore for every sample and agent.
       - 'eng/**'
       - 'Directory.Build.props'
@@ -158,6 +159,7 @@ jobs:
       DevFlowSampleEssentials: ${{ inputs.android-preferences-only && matrix.framework == 'native' && 'true' || 'false' }}
       DEVFLOW_TEST_ANDROID_API: ${{ inputs.android-api || '35' }}
       DEVFLOW_TEST_ANDROID_AVD: devflow-tests-api${{ inputs.android-api || '35' }}
+      ANDROID_BUILD_TOOLS_VERSION: '37.0.0'
     steps:
       - uses: actions/checkout@v6
 
@@ -192,16 +194,24 @@ jobs:
           key: avd-${{ env.DEVFLOW_TEST_ANDROID_API }}-x86_64
 
       - name: Test Android SDK installation retries
-        run: node --test eng/scripts/install-android-sdk-with-retry.test.mjs
+        shell: pwsh
+        run: ./eng/scripts/Install-AndroidSdk.Tests.ps1
+
+      - name: Restore Android SDK dotnet tool
+        run: dotnet tool restore --configfile NuGet.config
 
       # Match emulator-runner's SDK prerequisites so both action invocations reuse installed bits.
       - name: Install Android emulator SDK packages with retry
+        shell: pwsh
         run: |
-          bash eng/scripts/install-android-sdk-with-retry.sh \
-            'build-tools;37.0.0' platform-tools \
-            "platforms;android-${DEVFLOW_TEST_ANDROID_API}" \
-            emulator "system-images;android-${DEVFLOW_TEST_ANDROID_API};google_apis;x86_64" \
-            --channel=0
+          . ./eng/scripts/Install-AndroidSdk.ps1
+          Install-AndroidSdkPackages -SdkRoot $env:ANDROID_HOME -Packages @(
+            "build-tools;$env:ANDROID_BUILD_TOOLS_VERSION",
+            'platform-tools',
+            "platforms;android-$env:DEVFLOW_TEST_ANDROID_API",
+            'emulator',
+            "system-images;android-$env:DEVFLOW_TEST_ANDROID_API;google_apis;x86_64"
+          )
 
       - name: Warm up AVD snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
