@@ -1,6 +1,6 @@
 # AI Chat Playground
 
-A .NET MAUI sample for comparing on-device Apple Intelligence with optional
+A .NET MAUI sample for comparing on-device Apple and Windows AI with optional
 Azure OpenAI providers. It runs on Android, iOS, Mac Catalyst, and Windows
 (not native macOS); providers vary by platform.
 
@@ -8,7 +8,7 @@ Azure OpenAI providers. It runs on Android, iOS, Mac Catalyst, and Windows
 
 | Tab | Features | Providers |
 |-----|----------|-----------|
-| Chat | Text, streaming, structured JSON, optional tools and image input | Apple Intelligence (iOS/Mac Catalyst), Azure OpenAI, offline Replay |
+| Chat | Text, streaming, structured JSON, optional tools and image input | Apple Intelligence (iOS/Mac Catalyst), Windows AI, Azure OpenAI, offline Replay |
 | Embeddings | Import documents, index them, and search | Apple NaturalLanguage (iOS/Mac Catalyst), Azure OpenAI |
 | Images | Generate images or edit a source image | Azure OpenAI |
 
@@ -17,6 +17,7 @@ not generate images or fall back to Azure. Azure chat uses the Responses API
 and supports image input, reasoning summaries, and an optional image-generation
 tool. Structured responses stream only when the provider emits incremental
 updates. Each tab has its own services.
+Windows AI supports text and schema-constrained JSON, not tool calls or image input.
 
 Chat displays the model ID reported by the provider, including during replay.
 It auto-saves the current recording locally. **New** replaces that recording;
@@ -60,8 +61,10 @@ On Windows:
 dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net10.0-windows10.0.19041.0
 ```
 
-The Windows sample remains unpackaged and offers Azure-backed features and
-offline Chat Replay, not on-device AI. Azure and Replay also run on Android.
+Keep the Windows sample MSIX-packaged for on-device AI. It bundles an
+experimental Windows App SDK runtime while the library uses stable APIs.
+See the [Windows integration guide](../../docs/ai/WINDOWS-AI.md) for hardware,
+capability and access requirements. Azure and Replay also run on Android.
 
 With Java and the Android SDK installed:
 
