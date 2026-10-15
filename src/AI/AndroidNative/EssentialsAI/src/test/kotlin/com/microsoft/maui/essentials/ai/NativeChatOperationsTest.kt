@@ -23,10 +23,17 @@ class NativeChatOperationsTest {
     private class Callback(private val onTerminal: () -> Unit = {}) : NativeChatCallback {
         val text = mutableListOf<String>()
         val thoughts = mutableListOf<String>()
+        val models = mutableListOf<String>()
         val responses = mutableListOf<NativeChatResponse>()
         val errors = mutableListOf<NativeChatError>()
-        override fun onText(text: String) { this.text.add(text) }
-        override fun onThought(thought: String) { thoughts.add(thought) }
+        override fun onText(text: String, modelName: String) {
+            this.text.add(text)
+            models.add(modelName)
+        }
+        override fun onThought(thought: String, modelName: String) {
+            thoughts.add(thought)
+            models.add(modelName)
+        }
         override fun onComplete(response: NativeChatResponse) {
             onTerminal()
             responses.add(response)
@@ -172,12 +179,31 @@ class NativeChatOperationsTest {
     }
 
     @Test
+    fun streamedContentAndFinalResponseRetainTheNativeModelName() = runTest {
+        val operations = operations(infer = { _, _, _, progress ->
+            progress.onThought("thinking", response.modelName)
+            progress.onText("answer", response.modelName)
+            response
+        })
+        val callback = Callback()
+        operations.generate(request, true, callback)
+        runCurrent()
+
+        assertEquals(listOf("thinking"), callback.thoughts)
+        assertEquals(listOf("answer"), callback.text)
+        assertEquals(listOf(response.modelName, response.modelName), callback.models)
+        assertEquals(response.modelName, callback.responses.single().modelName)
+        assertTrue(callback.errors.isEmpty())
+        operations.close()
+    }
+
+    @Test
     fun earlyStreamTerminationClosesModelBeforeTerminalCallback() = runTest {
         val model = Model()
         val operations = operations(create = { model }, infer = { _, _, streaming, progress ->
             assertTrue(streaming)
-            progress.onText("first")
-            progress.onThought("thinking")
+            progress.onText("first", response.modelName)
+            progress.onThought("thinking", response.modelName)
             awaitCancellation()
         })
         val callback = Callback { assertTrue(model.closed) }
@@ -260,8 +286,8 @@ class NativeChatOperationsTest {
         operations.generate(request, true, callback)
         runCurrent()
 
-        progress.onText("late")
-        progress.onThought("late")
+        progress.onText("late", response.modelName)
+        progress.onThought("late", response.modelName)
         assertTrue(callback.text.isEmpty())
         assertTrue(callback.thoughts.isEmpty())
         assertEquals(1, callback.responses.size)
@@ -278,7 +304,7 @@ class NativeChatOperationsTest {
             createModel = { Model() },
             closeModel = { it.closed = true; modelClosed.complete(Unit) },
             infer = { _, _, _, progress ->
-                progress.onText("first")
+                progress.onText("first", response.modelName)
                 assertTrue(entered.await(5, TimeUnit.SECONDS))
                 response
             },
@@ -286,11 +312,11 @@ class NativeChatOperationsTest {
             dispatcher = Dispatchers.Default,
         )
         val callback = object : NativeChatCallback {
-            override fun onText(text: String) {
+            override fun onText(text: String, modelName: String) {
                 entered.countDown()
                 assertTrue(release.await(5, TimeUnit.SECONDS))
             }
-            override fun onThought(thought: String) = Unit
+            override fun onThought(thought: String, modelName: String) = Unit
             override fun onComplete(response: NativeChatResponse) { terminal.complete(Unit) }
             override fun onError(error: NativeChatError) {
                 terminal.completeExceptionally(AssertionError(error.message))

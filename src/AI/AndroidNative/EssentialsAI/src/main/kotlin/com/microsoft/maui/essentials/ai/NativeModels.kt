@@ -45,8 +45,8 @@ class NativeChatError(
 )
 
 interface NativeChatCallback {
-    fun onText(text: String)
-    fun onThought(thought: String)
+    fun onText(text: String, modelName: String)
+    fun onThought(thought: String, modelName: String)
     fun onComplete(response: NativeChatResponse)
     fun onError(error: NativeChatError)
 }

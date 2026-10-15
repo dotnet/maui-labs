@@ -36,8 +36,8 @@ class GeminiNanoNativeClient {
             val tokenCount = model.countTokens(nativeRequest).totalTokens
             val generated = if (streaming) {
                 model.generateContent(nativeRequest, object : StreamingCallback {
-                    override fun onNewText(additionalText: String) = callback.onText(additionalText)
-                    override fun onNewThought(additionalThought: String) = callback.onThought(additionalThought)
+                    override fun onNewText(additionalText: String) = callback.onText(additionalText, modelName)
+                    override fun onNewThought(additionalThought: String) = callback.onThought(additionalThought, modelName)
                 })
             } else {
                 model.generateContent(nativeRequest)

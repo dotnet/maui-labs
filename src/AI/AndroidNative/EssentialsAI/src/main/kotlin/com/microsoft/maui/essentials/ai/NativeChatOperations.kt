@@ -42,19 +42,19 @@ internal class NativeChatOperations<Model>(
         }
 
         val job = scope.launch {
-            val updates = Channel<Pair<Boolean, String>>(Channel.UNLIMITED)
+            val updates = Channel<Triple<Boolean, String, String>>(Channel.UNLIMITED)
             val progressTask = async {
-                for ((thought, text) in updates) {
-                    if (thought) callback.onThought(text) else callback.onText(text)
+                for ((thought, text, modelName) in updates) {
+                    if (thought) callback.onThought(text, modelName) else callback.onText(text, modelName)
                 }
             }
             val progress = object : NativeChatCallback {
-                override fun onText(text: String) {
-                    if (isActive) updates.trySend(false to text)
+                override fun onText(text: String, modelName: String) {
+                    if (isActive) updates.trySend(Triple(false, text, modelName))
                 }
 
-                override fun onThought(thought: String) {
-                    if (isActive) updates.trySend(true to thought)
+                override fun onThought(thought: String, modelName: String) {
+                    if (isActive) updates.trySend(Triple(true, thought, modelName))
                 }
 
                 override fun onComplete(response: NativeChatResponse) =

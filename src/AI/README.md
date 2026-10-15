@@ -64,8 +64,9 @@ The CI pipeline handles the macOS → Windows artifact flow automatically. See `
 
 The product solution builds the
 [`Chat Playground`](../../samples/AIExtensions.Sample.ChatPlayground/README.md)
-and its portable chat tests. `samples/EssentialsAISample` is unchanged and is
-not the Gemini Nano validation sample.
+and its portable chat tests alongside the existing `samples/EssentialsAISample`
+so both Android consumers remain covered. Chat Playground is the Gemini Nano
+validation sample.
 
 ### Android native build
 
