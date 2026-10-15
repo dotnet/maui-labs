@@ -139,7 +139,27 @@ jobs:
             }
           }
 
-      - name: Upload browser and client retry runtime evidence
+      - name: Repeat Windows profiling fixture regressions
+        shell: pwsh
+        run: |
+          $project = 'src\Cli\Microsoft.Maui.Cli.UnitTests\Microsoft.Maui.Cli.UnitTests.csproj'
+          dotnet build $project --configuration Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          for ($iteration = 1; $iteration -le 5; $iteration++) {
+            $logName = "profile-fixtures-$iteration.trx"
+            dotnet test $project --configuration Release --no-build --no-restore `
+              --filter "FullyQualifiedName~ProfileCommandTests.GetTargetFrameworks_|FullyQualifiedName~ConfigureDnxStartInfo_" `
+              --logger "console;verbosity=normal" --logger "trx;LogFileName=$logName" `
+              --results-directory artifacts\TestResults\InspectorBrowser
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\$logName"
+            $results = @($trx.TestRun.Results.UnitTestResult)
+            if ($results.Count -ne 8 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+              throw "All eight profiling fixture regressions must pass on iteration $iteration."
+            }
+          }
+
+      - name: Upload browser and fixture runtime evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:

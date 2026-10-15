@@ -226,6 +226,18 @@ loopback coverage. Cancellation, timeout, protocol, and trust failures remain no
 The dedicated Windows Chromium job also repeats all 20 client retry regressions five times on
 each of `net472` and `net10.0`, failing immediately on any failure or skip.
 
+MAUI clipping/overlap integration cases scope their captures to MAUI elements; native accessibility
+and Blazor probes are separate capabilities and are not needed to assert those XAML findings.
+The hit-test envelope case waits only for the server's explicit retryable `409` read state to
+clear, within the existing fixture readiness budget, before checking every required envelope field.
+Other HTTP failures still fail immediately.
+
+Profiling resolver fixtures evaluate SDK-free MSBuild projects, including an imported-properties
+case, so workload discovery is not required to test framework-property parsing. The Windows DNX
+argument fixture disables persistent build/compiler servers for its generated helper. Cleanup
+allows bounded retries for that fixture's temporarily locked executable only; exhausted cleanup
+still fails, and the build and argument assertions are never retried.
+
 ## Implementation
 
 | Area | Location |
