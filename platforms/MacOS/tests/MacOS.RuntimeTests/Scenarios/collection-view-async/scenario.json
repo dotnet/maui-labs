@@ -1,0 +1,17 @@
+{
+  "name": "collection-view-async",
+  "expectedCases": 3,
+  "evidence": ["empty.png", "rows-0.png", "rows-0.json", "assertions.txt"],
+  "fixedEvidence": ["rows-1.png", "rows-1.json", "rows-2.png", "rows-2.json"],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/CollectionViewHandler.cs",
+    "replace": {
+      "old": "        PlatformView.Tile();",
+      "new": ""
+    },
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "collection-view-async.zero-clip",
+    "message": "BASELINE_685: realized async rows are clipped by a zero-height NSClipView."
+  }
+}
