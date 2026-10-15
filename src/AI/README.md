@@ -1,107 +1,52 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions) abstractions.
+Contributor guide for the `Microsoft.Maui.Essentials.AI` package: Apple Intelligence
+chat, NaturalLanguage embeddings, and Gemini Nano chat through `Microsoft.Extensions.AI`.
 
-> **Note:** This is the contributor/repo-browsing README. The NuGet consumer README with install instructions and full usage examples is at [`Microsoft.Maui.Essentials.AI/README.md`](Microsoft.Maui.Essentials.AI/README.md).
+For installation, platform support, and API examples, use the
+[package README](Microsoft.Maui.Essentials.AI/README.md).
 
-## Features
+> This package is experimental and ships as `-preview`. APIs may change.
 
-- **`IChatClient`** — backed by Apple Intelligence on Apple platforms and Gemini Nano through ML Kit GenAI Prompt on Android
-- **Streaming** — native text deltas on Android, and progressive JSON/text snapshots on Apple platforms
-- **Native token usage** — standard `ChatResponse.Usage` and streaming `UsageContent` on Apple OS 27+, without estimated counts
-- **Telemetry** — compatible with M.E.AI's built-in `UseOpenTelemetry` spans, token metrics, and streaming timings
-- **Tool calling** — function-calling support for Apple Intelligence
-- **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
+## Source layout
 
-### Platform Support
+| Path | Purpose |
+| --- | --- |
+| `Microsoft.Maui.Essentials.AI/` | Managed providers, native bindings, and streaming utilities |
+| `AppleNative/` | Swift bridge and Xcode project for Foundation Models |
+| `AndroidNative/` | Kotlin bridge and Gradle project for ML Kit |
 
-| Platform | Chat (IChatClient) | Image input | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|-------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| Android 8.0+ on supported AICore devices | ✅ Gemini Nano | ✅ Image prompts | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | Not available | 🔜 Coming soon |
+## Build and test
 
-## Quick Start
-
-```csharp
-using Microsoft.Extensions.AI;
-using Microsoft.Maui.Essentials.AI;
-
-// Register in MauiProgram.cs
-#if ANDROID
-if (OperatingSystem.IsAndroidVersionAtLeast(26))
-    builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
-#elif IOS || MACCATALYST || MACOS
-builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
-#endif
-
-// Use via DI
-var client = serviceProvider.GetRequiredService<IChatClient>();
-var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
-```
-
-## Packages
-
-| Package | Description |
-|---------|-------------|
-| `Microsoft.Maui.Essentials.AI` | On-device AI APIs for MAUI |
-
-## Building
+Run from the repository root with the SDK pinned in `global.json` and matching
+MAUI workloads. Android builds need Java 17+ and the Android SDK. Apple native
+builds need macOS and Xcode 27; Windows CI reuses the macOS-built artifacts.
 
 ```bash
-# macOS (builds Swift bindings + .NET library)
 dotnet build src/AI/EssentialsAI.slnf
-
-# Windows (CI only — the Azure DevOps pipeline downloads macOS-built
-# native artifacts automatically. Local Windows builds require CI=true
-# or TF_BUILD=true for the pre-built artifact path to activate.)
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/
+dotnet test tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/
 ```
 
-The CI pipeline handles the macOS → Windows artifact flow automatically. See `.github/workflows/ci-essentialsai.yml` for details.
-
-Android builds require Java 17+ and the Android SDK. To build only the Android library:
+For an Android-only build:
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj -f net10.0-android
 ```
 
-Try Gemini Nano in [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md).
+Native Android tests run during the Gradle build. Model-dependent tests need
+supported physical hardware; see the platform guides below for build and device
+validation details.
 
-### Xcode 27 builds
+## Samples
 
-CI builds the native Swift library on an Xcode 27 runner while keeping the
-package's normal Apple target frameworks unchanged. To opt into Apple 27
-reference packs locally, install the .NET 10.0.401 SDK and matching workloads,
-use Xcode 27 (no `DEVELOPER_DIR` override when it is the default), and build with
-`-p:UseXcode27Preview=true -f net10.0-maccatalyst27.0` (or the corresponding
-`ios27.0` / `macos27.0` framework). `UseXcode27Preview` only changes this
-repo's target-framework list; it does not install or select Xcode. When
-building the normal Apple 26.x reference packs with Xcode 27, the native
-CI job passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode
-version check.
-
-## Architecture
-
-- **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
-- **Kotlin Android bridge** (`AndroidNative/EssentialsAI/`) — ML Kit requests, streaming, and cancellation behind internal .NET bindings
-- **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
-- **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
+- [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md):
+  compare providers, stream replies, use images, and record/replay conversations.
+- [Essentials AI sample](../../samples/EssentialsAISample/):
+  additional examples built alongside the library.
 
 ## Documentation
 
-- [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
-- [Apple Foundation Models Image Input](../../docs/ai/apple-foundation-models-image-input.md)
+- [Apple build, image input, and validation](../../docs/ai/apple-foundation-models-image-input.md)
 - [Gemini Nano Android implementation](../../docs/ai/gemini-nano-android.md)
-
-## Requirements
-
-- .NET 10
-- MAUI workload (`dotnet workload install maui`)
-- Apple Intelligence features require iOS 26+, Mac Catalyst 26+, or macOS 26+
-- Gemini Nano requires a supported AICore-enabled Android device. See the
-  [consumer requirements](Microsoft.Maui.Essentials.AI/README.md#requirements)
-  for availability and Android minimum-version configuration.
-
-> ⚠️ **This package is experimental** (always ships as `-preview`). APIs may change between releases.
+- [JSON stream chunker design](../../docs/ai/json-stream-chunker-design.md)
