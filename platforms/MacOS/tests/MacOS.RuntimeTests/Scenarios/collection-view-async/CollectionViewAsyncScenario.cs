@@ -107,12 +107,12 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
                 scrollBounds = native.Bounds.ToString(),
                 clipBounds = native.ContentView.Bounds.ToString(),
                 documentBounds = document.Bounds.ToString(),
-                rows = rows.Select(row => new { frame = row.Frame.ToString(), visible = row.VisibleRect.ToString() }),
+                rows = rows.Select(row => new { frame = row.Frame.ToString(), visible = row.VisibleRect().ToString() }),
                 labels = labels.Select(label => new
                 {
                     label.Text,
                     bounds = Native(label).Bounds.ToString(),
-                    visible = Native(label).VisibleRect.ToString(),
+                    visible = Native(label).VisibleRect().ToString(),
                 }),
                 glyphs,
             });
