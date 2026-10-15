@@ -62,7 +62,16 @@ The overrides keep the build portable and enable Arcade's test infrastructure
 for this existing test project without building the Apple targets.
 Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
-Apple device/runtime and model availability; portable tests do not run a model.
+platform device/runtime and model availability; portable tests do not run a model.
+
+### Android native
+
+Android source builds require Java 17+ and the Android SDK. The Gradle bridge
+tests run as part of the Android library build. See the
+[Gemini Nano Android guide](../../docs/ai/gemini-nano-android.md) for commands
+and binding details.
+
+### Apple native
 
 Run every model-free provider binding on Mac Catalyst:
 
