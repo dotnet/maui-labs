@@ -25,6 +25,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
     readonly List<Label> _labels = new();
     CollectionView _collection = null!;
     Label _control = null!;
+    Label _empty = null!;
 
     public override Window CreateWindow(IActivationState? activationState)
     {
@@ -39,7 +40,6 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
         {
             ItemsSource = _items,
             SelectionMode = SelectionMode.None,
-            HeightRequest = 0,
             ItemTemplate = new DataTemplate(() =>
             {
                 var caption = new Label { TextColor = Colors.Magenta };
@@ -52,6 +52,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
                     HeightRequest = 44,
                     ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Star) },
                 };
+                _empty = new Label { Text = "No rows yet" };
                 grid.Add(caption, 0);
                 grid.Add(value, 1);
                 return grid;
@@ -65,7 +66,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
                 Content = new VerticalStackLayout
                 {
                     Padding = 24,
-                    Children = { _control, _collection, new Button { Text = "Below rows" } },
+                    Children = { _control, _empty, _collection, new Button { Text = "Below rows" } },
                 },
             },
         };
@@ -80,22 +81,20 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
         var native = (NSScrollView)_collection.Handler!.PlatformView!;
         var nativeWindow = native.Window ?? throw new InvalidOperationException("CollectionView is not in a window.");
         await CaptureAsync(context, nativeWindow, "empty.png");
-        context.Assert(_items.Count == 0 && native.Bounds.Height == 0,
-            "The CollectionView starts empty and zero-height after the Shell page appears.");
+        context.Assert(_items.Count == 0,
+            "The CollectionView starts empty after the Shell page appears.");
 
         for (var cycle = 0; cycle < 3; cycle++)
         {
-            // Model the content-sized list growing inside an outer ScrollView.
-            // Setting its height also isolates drawing from intrinsic measurement.
             _items.Clear();
             _labels.Clear();
-            _collection.HeightRequest = 0;
+            _empty.IsVisible = true;
             await RuntimeTestContext.FlushMainQueueAsync();
             await Task.Delay(50);
             context.Assert(NSThread.IsMain, "Async insertions resume on AppKit's UI thread.");
             for (var i = 0; i < cycle + 3; i++)
                 _items.Add($"Row {cycle + 1}.{i + 1}");
-            _collection.HeightRequest = _items.Count * 44;
+            _empty.IsVisible = false;
             var image = await CaptureAsync(context, nativeWindow, $"rows-{cycle}.png");
             var document = native.DocumentView ?? throw new InvalidOperationException("Missing document view.");
             var rows = document.Subviews.Single().Subviews;
@@ -122,14 +121,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
                 "Realized labels have positive native bounds.");
             var clipHasHeight = native.ContentView.Bounds.Height >= native.Bounds.Height - 1;
             var rowsDraw = glyphs.All(count => count > 5);
-            if (!clipHasHeight && !rowsDraw && cycle == 0)
-            {
-                context.Assert(native.Bounds.Height > 100 && native.ContentView.Bounds.Height == 0,
-                    "The list reserves height but the native clip view remains zero-height.");
-                context.BaselineFailure("collection-view-async.zero-clip",
-                    "BASELINE_685: realized async rows are clipped by a zero-height NSClipView.");
-                return;
-            }
+            context.Assert(native.Bounds.Height > 100, "The content-sized list reserves height for its rows.");
             context.Assert(clipHasHeight, "The native clip view follows the arranged list height.");
             context.Assert(rowsDraw, "Every realized row label has visible magenta glyphs in the compositor capture.");
             context.Pass($"Async insertion and redraw cycle {cycle + 1}");

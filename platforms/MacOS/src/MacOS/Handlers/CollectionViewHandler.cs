@@ -113,9 +113,6 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     public override void PlatformArrange(Rect rect)
     {
         base.PlatformArrange(rect);
-        // The base handler suppresses autoresizing while applying MAUI geometry.
-        // Retile AppKit's clip view before using its viewport or adding row views.
-        PlatformView.Tile();
         if (rect.Width > 0 && rect.Height > 0 && !_isInLayout)
         {
             _isInLayout = true;
