@@ -22,11 +22,9 @@ offline. The **More** menu includes a bundled example; **New** replaces the
 current recording. Uncheck tools you do not need, or choose **None** to disable
 tool calls.
 
-Gemini Nano includes the supplied user/assistant conversation in each text/image
-prompt. Conversation formatting happens in Kotlin; the playground retains and
-sends history normally. Structured JSON and tools remain unsupported, and their
-controls are hidden for Gemini.
-System instructions require Nano V3+ and fail explicitly if unavailable.
+Gemini Nano supports text/images and conversation history, but not structured
+JSON or tools. Those controls are hidden for Gemini. System instructions
+require Nano V3+.
 
 The header's **Logs** button toggles the local, bounded diagnostics sidebar
 (also available on Embeddings and Images). It groups built-in logs and spans
@@ -66,13 +64,17 @@ image input requires 27+ and a ready vision-capable model. Apple embeddings
 require the English sentence-embedding asset, which may be absent on
 simulators. Azure-backed features also run on Android and Windows.
 
-Android requires API 24+. Gemini Nano is registered only on API 26+ and requires a supported
-physical device with a locked bootloader and an updated, provisioned AICore
-model. On API 26+ the Gemini slot is available, but its first request checks
-actual model readiness and shows errors if the device or model is unavailable.
-Android emulators can exercise the playground and Replay, not AICore inference.
-The native bridge is built through .NET 10's `AndroidGradleProject`; a source
-build requires the Android SDK and Java 17+.
+Android builds require Java 17+ and the Android SDK:
+
+```sh
+dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-android --device <device-id>
+```
+
+The app supports API 24+; Gemini is offered only on API 26+ and requires a
+[supported physical device](https://developers.google.com/ml-kit/genai#prompt-device)
+with a ready AICore model and locked bootloader. Emulators can exercise Azure
+and Replay, but cannot run Gemini inference.
 
 ## Optional Azure configuration
 
@@ -97,51 +99,3 @@ required only when at least one Azure deployment name is configured.
 User secrets are **embedded in Debug builds** for device testing: never
 distribute those builds or commit keys. Azure prompts, images, and indexed
 text may leave the device and incur charges.
-
-## What to try
-
-- **Chat:** Choose a provider, send text, and switch between streaming and
-  single-response modes. The multiline prompt uses Enter/Return for a new line;
-  select **Send** to submit it. Structured JSON requests a summary, key points,
-  a free-form category, and a constrained sentiment. The common .NET schema
-  leaves fields optional for other providers, while Apple and Azure OpenAI
-  require all four in their native structured-output schemas. Gemini does not
-  support structured JSON; stale JSON settings from another provider are not
-  sent or used to interpret its plain-text response. The transcript displays the provider's actual JSON, including extra
-  fields, without rewriting it through the request schema. Restoring an
-  auto-saved chat keeps the selected live client; without one configured,
-  Replay remains the offline default. Apple and Azure support optional tools.
-  Date/time, calculator, and connection status start checked; connection
-  status returns JSON with network access and connection types, not SSIDs or
-  IP addresses. Gemini supports text and in-memory image input but not tools,
-  image generation, structured output, or reasoning summaries; its JSON/tool
-  controls are hidden and follow-up sends require **New**.
-  **None** disables tool calls even when tools remain checked;
-  **Auto** makes checked tools available, and a model may call them for
-  unrelated prompts. Uncheck unneeded tools to prevent those calls. Azure
-  can accept images and create them through a separately configured
-  image-generation tool.
-- **Embeddings:** Import documents, create an index, and search it. Apple
-  on-device and configured Azure providers are available. Imported content
-  and indexes are separate from chats.
-- **Images:** Generate from text or edit a single source image and inspect the
-  result. Configured Azure providers are offered; there is no on-device image
-  provider in this branch. The Images tab does not save generated results.
-
-The app saves one Chat recording locally for replay. Use the Chat **More**
-menu to load a bundled example without credentials, or import/export a
-recording; **New** replaces the current chat. Replay is read-only and returns
-successive recorded turns without calling a model or checking new prompts.
-Switching from a chat with images to a text-only provider requires clearing
-that chat first.
-Successful compilation and managed/JVM tests do not demonstrate Gemini
-inference or image/thinking support on physical hardware.
-
-## Organization
-
-`Chat/`, `Embeddings/`, and `Images/` each contain their own services, views,
-and view models. Each feature registers its page and selected real abstractions
-with dependency injection. `MainWindow` composes the three registered pages
-as tabs. Reusable controls are in `Views/`, and shared configuration, image
-input, and atomic storage are in `Services/`. Chat recording and document
-indexing remain separate.

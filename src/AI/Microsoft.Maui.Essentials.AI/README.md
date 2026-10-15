@@ -5,7 +5,7 @@ On-device AI for .NET MAUI apps using platform-native models — no cloud requir
 This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`) backed by on-device AI capabilities:
 
 | Platform | Chat (IChatClient) | Image input | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|-------------|----------------------------------|
+| --- | --- | --- | --- |
 | iOS 26+ | ✅ Apple Intelligence (Foundation Models) | 27+ with vision-capable model | ✅ NL Embeddings |
 | Mac Catalyst 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
 | macOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
@@ -28,8 +28,7 @@ builder.UseMauiApp<App>();
 
 // Register the platform-native chat client
 #if ANDROID
-if (OperatingSystem.IsAndroidVersionAtLeast(26))
-    builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
 #elif IOS || MACCATALYST || MACOS
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 #endif
@@ -38,18 +37,11 @@ builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 ### 3. Use in your app
 
 ```csharp
-public class MyViewModel
+public class MyViewModel(IChatClient chat)
 {
-    private readonly IChatClient _chat;
-
-    public MyViewModel(IChatClient chat)
-    {
-        _chat = chat;
-    }
-
     public async Task<string> AskAsync(string question)
     {
-        var response = await _chat.GetResponseAsync(question);
+        var response = await chat.GetResponseAsync(question);
         return response.Text;
     }
 }
@@ -58,7 +50,7 @@ public class MyViewModel
 ### Streaming responses
 
 ```csharp
-await foreach (var update in _chat.GetStreamingResponseAsync("Plan a day trip to Tokyo"))
+await foreach (var update in chat.GetStreamingResponseAsync("Plan a day trip to Tokyo"))
 {
     Console.Write(update.Text);
 }
@@ -145,46 +137,19 @@ only when the provider supplies them.
 
 ### Android capabilities
 
-`GeminiNanoChatClient` maps text and in-memory image prompts to
-Google's ML Kit GenAI Prompt beta4 API, with incremental text streaming.
-Kotlin includes the supplied user/assistant conversation in each request,
-preserving content order and images. Conversation messages use ordinary `User:`
-and `Assistant:` text labels, not special model tokens. A single user prompt is
-passed through unchanged. Tool and custom roles remain unsupported.
+`GeminiNanoChatClient` supports text, in-memory image `DataContent`, streaming,
+and supplied user/assistant conversation history. Include the earlier messages
+in each request; the client does not retain them. Tools and JSON/structured
+response formats are unsupported.
 
-The client does not retain conversation or inference state. Each concurrent call
-uses its own ML Kit model instance. `ChatOptions.Instructions` is prepended as
-a system message; Kotlin combines it with system-message text in order and uses
-the native `SystemInstruction` API. This requires Nano V3+ and fails explicitly
-if `isSystemPromptAvailable()` is false. There is no prompt-prefix fallback.
+`ChatOptions.Instructions` and system messages require Nano V3+. Full thinking
+output uses `Reasoning = new() { Output = ReasoningOutput.Full }` and requires
+Nano V4+; effort levels and reasoning summaries are unsupported. Unavailable
+model capabilities produce errors rather than falling back to another provider.
+Only input token usage is reported.
 
-Temperature, TopK, Seed (checked for native 32-bit integer representability),
-and MaxOutputTokens map directly to Google's builder. Native numeric validation
-is left to that builder. Request full thinking output using
-`Reasoning = new() { Output = ReasoningOutput.Full }` without an effort level.
-This enables the native thinking flag and requires Nano V4+; unavailable thinking
-fails explicitly. Effort levels and reasoning summaries have no native mapping
-and are rejected. Input token usage comes from native `countTokens`; output token
-counts are not estimated.
-
-The public surface remains `Microsoft.Extensions.AI` plus
-`GeminiNanoChatClient`; ML Kit and coroutine types are internal. The Kotlin
-bridge and its pinned ML Kit runtime assets are built and packaged through
-`AndroidGradleProject`. Consumers do not need Gradle or a separate GenAI binding
-package.
-
-JSON response formats (with or without schemas), tool definitions, enabled tool
-modes, additional options, and unsupported content kinds fail explicitly before
-inference. `ChatToolMode.None` alone simply means no tool use. This client does
-not provide structured output, JSON prompt guidance, response-schema validation,
-tool calling, or tool middleware. Apple's existing structured-output support
-is unchanged.
-
-AICore and the model must already be ready for inference. If Gemini Nano is
-downloadable but not ready, prepare it through AICore and retry. Model errors are
-returned to the caller; the client never switches to a cloud model.
-Managed/JVM tests and Android builds do not verify model-dependent inference,
-image decoding, thinking, or availability on a provisioned physical device.
+For request mapping, native builds, and testing, see the
+[Android implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md).
 
 ### Embeddings for semantic search
 
@@ -214,21 +179,12 @@ async tool code inherit any active chat trace/span, including one created by
 - The Android package minimum is API 24. Guard Gemini Nano registration with
   `OperatingSystem.IsAndroidVersionAtLeast(26)` so other app features remain
   available on older devices. Constructing the client below API 26 throws
-  `PlatformNotSupportedException` before initializing the native bridge.
+  `PlatformNotSupportedException`.
 
-Apps with an Android minimum below API 26 must also opt into the guarded native
-libraries in their `Platforms/Android/AndroidManifest.xml`:
-
-```xml
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          xmlns:tools="http://schemas.android.com/tools">
-  <uses-sdk android:targetSdkVersion="36" tools:overrideLibrary="com.microsoft.maui.essentials.ai,com.google.mlkit.genai.common,com.google.mlkit.genai.prompt" />
-</manifest>
-```
-
+Apps with an Android minimum below API 26 also need
+[native manifest configuration](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#android-minimum-and-model-availability).
 This permits installation on older devices; it does not make Gemini Nano
-available there. Retain your app's target SDK level (36 in this example) and keep
-all Gemini Nano usage behind the API 26 runtime guard.
+available there. Keep all Gemini Nano usage behind the API 26 runtime guard.
 
 ## Status
 

@@ -5,5 +5,5 @@
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.INTERNET" />
 	<!-- Gemini requires an API 26 runtime guard; other AI sample features support API 24. -->
-	<uses-sdk android:targetSdkVersion="36" tools:overrideLibrary="com.microsoft.maui.essentials.ai,com.google.mlkit.genai.common,com.google.mlkit.genai.prompt" />
+	<uses-sdk tools:overrideLibrary="com.microsoft.maui.essentials.ai,com.google.mlkit.genai.common,com.google.mlkit.genai.prompt" />
 </manifest>
