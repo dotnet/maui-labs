@@ -1788,6 +1788,33 @@ public class AgentClient : IDisposable
         return body;
     }
 
+    /// <summary>Capture the registered WebView using the agent's native-first screenshot path.</summary>
+    /// <exception cref="HttpRequestException">The agent returned an HTTP error, including its response body.</exception>
+    /// <exception cref="InvalidOperationException">The response does not have a PNG signature.</exception>
+    public async Task<byte[]> GetWebViewScreenshotAsync(string? webviewId = null)
+    {
+        var path = $"{WebViewApi}/screenshot";
+        if (!string.IsNullOrEmpty(webviewId))
+            path += $"?webview={Uri.EscapeDataString(webviewId)}";
+
+        using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync($"{_baseUrl}{path}"));
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw CreateHttpRequestException(
+                $"WebView screenshot failed with HTTP {(int)response.StatusCode}: {error}",
+                null,
+                response.StatusCode);
+        }
+
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        if (bytes.Length < 8
+            || bytes[0] != 137 || bytes[1] != 80 || bytes[2] != 78 || bytes[3] != 71
+            || bytes[4] != 13 || bytes[5] != 10 || bytes[6] != 26 || bytes[7] != 10)
+            throw new InvalidOperationException("The WebView screenshot endpoint did not return a PNG image.");
+        return bytes;
+    }
+
     public async Task<bool> NavigateWebViewAsync(string url, string? contextId = null)
     {
         var payload = new JsonObject

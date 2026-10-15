@@ -2136,17 +2136,9 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Page.captureScreenshot", webview: webview);
-            if (result.HasValue &&
-                result.Value.TryGetProperty("result", out var resultProp) && 
-                resultProp.TryGetProperty("data", out var dataProp))
-            {
-                Console.WriteLine(dataProp.GetString());
-            }
-            else
-            {
-                Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
-            }
+            using var client = await CreateAgentClientAsync(host, port);
+            var bytes = await client.GetWebViewScreenshotAsync(webview);
+            Console.WriteLine(Convert.ToBase64String(bytes));
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
