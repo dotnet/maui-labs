@@ -137,7 +137,7 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 
 ### Essentials.AI
 
-On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, wraps Apple Intelligence (Foundation Models) for chat completion with streaming and tool calling, and Apple NaturalLanguage APIs for on-device embeddings. On supported Android AICore devices, `GeminiNanoChatClient` maps single-turn text/image requests to ML Kit GenAI Prompt without simulating chat history, tools, or structured output.
+On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, wraps Apple Intelligence (Foundation Models) for chat completion with streaming and tool calling, and Apple NaturalLanguage APIs for on-device embeddings. On supported Android AICore devices, `GeminiNanoChatClient` maps text/image requests to ML Kit GenAI Prompt, including the supplied conversation in each prompt, without tool calling or structured output.
 
 - **`IChatClient`** backed by Apple Intelligence on iOS, macOS, and Mac Catalyst, and Gemini Nano on supported Android devices
 - **Streaming infrastructure** — progressive JSON deserialization of LLM responses

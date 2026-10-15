@@ -11,7 +11,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 - **Native token usage** — standard `ChatResponse.Usage` and streaming `UsageContent` on Apple OS 27+, without estimated counts
 - **Telemetry** — compatible with M.E.AI's built-in `UseOpenTelemetry` spans, token metrics, and streaming timings
 - **Tool calling** — function-calling support for Apple Intelligence; ML Kit Prompt beta4 does not expose native tools
-- **Android native requests** — single-turn user text/images, native system instructions (Nano V3+), and full thinking output (Nano V4+); no structured output or assistant/tool history
+- **Android native requests** — text/images with supplied user/assistant conversation context, native system instructions (Nano V3+), and full thinking output (Nano V4+); no structured output or tool calling
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 
 ### Platform Support
@@ -101,7 +101,7 @@ version check.
 - **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
 - **Kotlin Android bridge** (`AndroidNative/EssentialsAI/`) — builds native ML Kit requests and owns capability checks, streaming, cancellation, and per-request model cleanup behind a Java-friendly AAR
 - **`GeminiNanoChatClient`** — the only Android public API; maps `Microsoft.Extensions.AI` roles/content/options to internal DTOs, prepending `ChatOptions.Instructions` as a system message like the Apple client
-- **Native-only Android scope** — Kotlin combines ordered system text into `SystemInstruction` and maps user parts directly to native `Content`; assistant/tool/custom histories fail explicitly. No role tokens, prompt-prefix fallback, JSON schema guidance, structured-output validation, or tool middleware
+- **Android request processing** — Kotlin combines ordered system text into `SystemInstruction` and includes user/assistant history in the prompt with ordinary text labels, preserving content order and images. Tool/custom roles fail explicitly. No special role tokens, system-prompt fallback, JSON schema guidance, structured-output validation, or tool middleware
 - **Structured output** — Apple's existing schema transformation and native generation remain Apple-specific and unchanged
 - **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
 - **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization

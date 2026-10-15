@@ -145,11 +145,12 @@ only when the provider supplies them.
 
 ### Android capabilities
 
-`GeminiNanoChatClient` maps **single-turn** text and in-memory image prompts to
+`GeminiNanoChatClient` maps text and in-memory image prompts to
 Google's ML Kit GenAI Prompt beta4 API, with incremental text streaming.
-The API accepts a list of user `Content` values, but has no conversation roles
-or multi-turn session API. Assistant, tool, and custom-role history is rejected,
-not flattened, silently dropped, or rendered with invented role tokens.
+Kotlin includes the supplied user/assistant conversation in each request,
+preserving content order and images. Conversation messages use ordinary `User:`
+and `Assistant:` text labels, not special model tokens. A single user prompt is
+passed through unchanged. Tool and custom roles remain unsupported.
 
 The client does not retain conversation or inference state. Each concurrent call
 uses its own ML Kit model instance. `ChatOptions.Instructions` is prepended as

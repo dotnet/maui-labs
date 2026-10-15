@@ -10,5 +10,4 @@ public sealed record ChatClientDescriptor(
     bool SupportsImageGeneration = false,
     bool IsReplay = false,
     bool SupportsToolCalling = false,
-    bool SupportsStructuredOutput = true,
-    bool SupportsConversationHistory = true);
+    bool SupportsStructuredOutput = true);

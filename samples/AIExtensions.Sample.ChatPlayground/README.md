@@ -22,10 +22,10 @@ offline. The **More** menu includes a bundled example; **New** replaces the
 current recording. Uncheck tools you do not need, or choose **None** to disable
 tool calls.
 
-Gemini Nano is native-only: single-turn user text/images, no assistant/tool
-history, no structured JSON, and no tools. Its JSON/tool controls are hidden.
-After a request (or when selecting Gemini with an existing chat), select **New**
-before sending another request. The playground does not drop or fake history.
+Gemini Nano includes the supplied user/assistant conversation in each text/image
+prompt. Conversation formatting happens in Kotlin; the playground retains and
+sends history normally. Structured JSON and tools remain unsupported, and their
+controls are hidden for Gemini.
 System instructions require Nano V3+ and fail explicitly if unavailable.
 
 The header's **Logs** button toggles the local, bounded diagnostics sidebar
