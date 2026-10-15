@@ -84,9 +84,14 @@ These chat clients analyze images; they do not generate them.
 
 ### Token usage
 
-Token usage requires the native Swift bridge to be built with Xcode 27 or
-later and the app to run on Apple OS 27 or later. Usage is returned through
-the standard `Microsoft.Extensions.AI` response APIs:
+**Android:** Gemini Nano counts the request's input tokens with ML Kit's
+`countTokens` before generation and reports `Usage.InputTokenCount`. The SDK
+does not return output, cached, reasoning, or total usage counts; those fields
+remain unset.
+
+**Apple:** Token usage requires the native Swift bridge to be built with
+Xcode 27+ and the app to run on Apple OS 27+. Usage is returned through the
+standard `Microsoft.Extensions.AI` response APIs:
 
 ```csharp
 var response = await _chat.GetResponseAsync("Summarize this text.");
@@ -109,13 +114,13 @@ var response = await _chat
     .GetStreamingResponseAsync("Plan a day trip to Tokyo")
     .ToChatResponseAsync();
 
-Console.WriteLine($"Total tokens: {response.Usage?.TotalTokenCount}");
+Console.WriteLine($"Input tokens: {response.Usage?.InputTokenCount}");
 ```
 
 Each response reports usage for that request. To track a conversation or
 application total, accumulate responses with `UsageDetails.Add`. Usage is
 `null` on Apple OS 26 because the native Foundation Models usage API was
-introduced in OS 27. Counts come directly from Foundation Models; the client
+introduced in OS 27. Apple counts come directly from Foundation Models; the client
 does not reconstruct or estimate missing usage.
 
 ### OpenTelemetry
