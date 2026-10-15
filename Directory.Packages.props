@@ -73,9 +73,12 @@
   </ItemGroup>
 
   <!-- EssentialsAI dependencies -->
+  <ItemGroup Label="EssentialsAI Android UI"
+             Condition="$(MSBuildProjectName.StartsWith('Microsoft.Maui.Essentials.AI')) or '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground' or '$(MSBuildProjectName)' == 'EssentialsAISample'">
+    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.8.9" />
+  </ItemGroup>
   <ItemGroup Label="EssentialsAI Android"
              Condition="$(MSBuildProjectName.StartsWith('Microsoft.Maui.Essentials.AI')) or '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground'">
-    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.8.9" />
     <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.9.2.1" />
     <PackageVersion Include="Xamarin.Firebase.Encoders" Version="117.0.0.21" />
     <PackageVersion Include="Xamarin.Firebase.Encoders.JSON" Version="118.0.1.13" />
