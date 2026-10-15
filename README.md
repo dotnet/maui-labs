@@ -143,7 +143,7 @@ and Android integration **coming soon**; its capabilities are not specified.
 - **Chat:** Apple Intelligence and Windows AI provide text, native streaming
   updates, and structured JSON. Apple also supports tools and image input where available.
 - **Embeddings:** Apple NaturalLanguage generates text vectors; Windows is not supported.
-- **Image generation:** not provided on Apple; Windows is coming soon.
+- **Image generation:** not provided on Apple; Windows supports experimental generation and single-image edits.
   Android support is not specified.
 
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
