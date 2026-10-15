@@ -1,14 +1,11 @@
 using System.ClientModel;
+using System.Runtime.Versioning;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 
-#if IOS || MACCATALYST
-using System.Runtime.Versioning;
-using Microsoft.Maui.Essentials.AI;
-#endif
-#if ANDROID
+#if IOS || MACCATALYST || ANDROID
 using Microsoft.Maui.Essentials.AI;
 #endif
 
@@ -36,7 +33,8 @@ internal static class ChatServiceCollectionExtensions
             services.AddSingleton<IChatClient>(CreateAppleChatClient);
 #endif
 #if ANDROID
-        services.AddSingleton<IChatClient>(CreateGeminiChatClient);
+        if (OperatingSystem.IsAndroidVersionAtLeast(26))
+            services.AddSingleton<IChatClient>(CreateGeminiChatClient);
 #endif
 
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
@@ -67,6 +65,7 @@ internal static class ChatServiceCollectionExtensions
 #endif
 
 #if ANDROID
+    [SupportedOSPlatform("android26.0")]
     private static IChatClient CreateGeminiChatClient(IServiceProvider serviceProvider) =>
         new GeminiNanoChatClient()
             .AsBuilder()
