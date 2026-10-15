@@ -21,6 +21,12 @@ compares providers interactively.
 Use the .NET 10 SDK pinned in the repository's `global.json` and matching
 MAUI workloads. Apple native bindings require Xcode.
 
+The library always targets `net10.0` and Android. Apple targets are added on
+non-Linux hosts, using either the default reference packs or the OS 27 packs
+when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
+The Chat Playground and device tests use the same platform conditions, without
+the portable `net10.0` target or native macOS app target.
+
 ```sh
 # macOS: native Swift bindings and managed projects
 dotnet build src/AI/EssentialsAI.slnf
