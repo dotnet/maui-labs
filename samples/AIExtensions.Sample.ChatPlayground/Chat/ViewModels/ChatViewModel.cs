@@ -240,11 +240,6 @@ public partial class ChatViewModel : ObservableObject
             Chat.StatusMessage = "Replay is read-only. Use Play all or Next turn.";
             return;
         }
-        if (!descriptor.SupportsConversationHistory && _conversation.HasHistory)
-        {
-            Chat.StatusMessage = SingleTurnHistoryHint(descriptor);
-            return;
-        }
         if (string.IsNullOrWhiteSpace(Chat.Prompt) && attachment is null)
         {
             Chat.StatusMessage = "Enter a prompt or attach an image before sending.";
@@ -306,8 +301,7 @@ public partial class ChatViewModel : ObservableObject
             {
                 var count = _recording.InteractionCount;
                 Chat.StatusMessage = $"Response complete and auto-saved " +
-                    $"({count} {(count == 1 ? "interaction" : "interactions")})." +
-                    (descriptor.SupportsConversationHistory ? "" : $" {SingleTurnHistoryHint(descriptor)}");
+                    $"({count} {(count == 1 ? "interaction" : "interactions")}).";
             }
         }
         catch (OperationCanceledException)
@@ -458,7 +452,6 @@ public partial class ChatViewModel : ObservableObject
         }
 
         if (_replayIncomplete || descriptor.IsReplay ||
-            (!descriptor.SupportsConversationHistory && _conversation.HasHistory) ||
             (!descriptor.SupportsImageInput &&
                 (Chat.HasSelectedImage || _conversation.HistoryContainsImage)))
         {
@@ -514,9 +507,6 @@ public partial class ChatViewModel : ObservableObject
         if (_replayIncomplete)
             return "Finish replay before continuing with a live client, or start a new chat.";
 
-        if (!descriptor.SupportsConversationHistory && _conversation.HasHistory)
-            return SingleTurnHistoryHint(descriptor);
-
         if (!descriptor.SupportsImageInput && Chat.HasSelectedImage)
             return $"{descriptor.Description} The pending image cannot be sent by {descriptor.DisplayName}.";
 
@@ -524,12 +514,8 @@ public partial class ChatViewModel : ObservableObject
             return $"{descriptor.Description} This conversation contains image content " +
                 $"and cannot be sent to {descriptor.DisplayName}.";
 
-        return $"{descriptor.DisplayName} selected.{ImageAvailabilityHint}" +
-            (descriptor.SupportsConversationHistory ? "" : $" {descriptor.Description}");
+        return $"{descriptor.DisplayName} selected.{ImageAvailabilityHint}";
     }
-
-    private static string SingleTurnHistoryHint(ChatClientDescriptor descriptor) =>
-        $"{descriptor.DisplayName} supports single-turn requests only. Start a New chat; existing history will not be sent or silently dropped.";
 
     private void SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

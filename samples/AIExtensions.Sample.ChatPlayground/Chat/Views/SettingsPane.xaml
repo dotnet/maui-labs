@@ -28,16 +28,6 @@
                    Style="{StaticResource MutedLabel}" FontSize="12"
                    IsVisible="{Binding SelectedDescriptor.IsReplay}"
                    AutomationId="ReplayOptionsHint" />
-            <Label Text="{Binding SelectedDescriptor.Description}"
-                   Style="{StaticResource MutedLabel}" FontSize="12"
-                   IsVisible="False" AutomationId="SingleTurnOptionsHint">
-                <Label.Triggers>
-                    <DataTrigger TargetType="Label"
-                                 Binding="{Binding SelectedDescriptor.SupportsConversationHistory}" Value="False">
-                        <Setter Property="IsVisible" Value="True" />
-                    </DataTrigger>
-                </Label.Triggers>
-            </Label>
             <VerticalStackLayout Spacing="12" IsEnabled="{Binding CanEditOptions}" AutomationId="ChatOptionsPanel">
                 <VerticalStackLayout.Triggers>
                     <DataTrigger TargetType="VerticalStackLayout"

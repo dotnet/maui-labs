@@ -97,14 +97,13 @@ internal static class ChatServiceCollectionExtensions
             .UseDescriptor(new ChatClientDescriptor(
                 "gemini-nano-chat",
                 "Gemini Nano",
-                "Gemini Nano supports single-turn text/image requests only. Start a New chat before each request. " +
+                "Gemini Nano includes the supplied conversation in each text/image request. " +
                     "No tools or structured JSON. System instructions require Nano V3+. The first request confirms model availability.",
                 SupportsImageInput: true,
                 SupportsReasoningSummary: false,
                 SupportsImageGeneration: false,
                 SupportsToolCalling: false,
-                SupportsStructuredOutput: false,
-                SupportsConversationHistory: false))
+                SupportsStructuredOutput: false))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();

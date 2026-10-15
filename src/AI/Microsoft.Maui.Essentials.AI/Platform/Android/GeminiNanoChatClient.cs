@@ -11,9 +11,9 @@ namespace Microsoft.Maui.Essentials.AI;
 /// Google ML Kit GenAI Prompt API.
 /// </summary>
 /// <remarks>
-/// Requests are single-turn and use independent native models. Only user text,
-/// in-memory images, and native system instructions are supported. Assistant
-/// history, tools, and structured output are not supported. Model availability
+/// Requests use independent native models. Supplied user/assistant history is
+/// included in the prompt by the Kotlin bridge, with in-memory images and native
+/// system instructions. Tools and structured output are not supported. Model availability
 /// errors are surfaced to the caller without a cloud fallback.
 /// </remarks>
 [SupportedOSPlatform("android26.0")]
