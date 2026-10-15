@@ -12,6 +12,7 @@ class CommunicationPage : ContentPage
     readonly Editor _bodyEditor;
     readonly Entry _phoneEntry;
     readonly Entry _smsBodyEntry;
+    readonly Entry _smsRecipientEntry;
     readonly Label _statusLabel;
 
     public CommunicationPage()
@@ -50,6 +51,13 @@ class CommunicationPage : ContentPage
         {
             Placeholder = "SMS body",
             Text = "Hello from MAUI SMS on Linux!"
+        };
+
+        _smsRecipientEntry = new Entry
+        {
+            Placeholder = "+1 555 123 4567",
+            Keyboard = Keyboard.Telephone,
+            Text = "+15551234567"
         };
 
         _statusLabel = new Label
@@ -134,16 +142,17 @@ class CommunicationPage : ContentPage
 
 					// ---------- SMS ----------
 					BuildSectionHeader("SMS"),
-                    new Label { Text = "Recipient (phone)", FontAttributes = FontAttributes.Bold },
-                    new Entry
+                    new Label
                     {
-                        Placeholder = "+1 555 123 4567",
-                        Keyboard = Keyboard.Telephone,
-                        Text = "+15551234567",
-						// Re-use the same field for simplicity in this sample
-					},
-                    new Label { Text = "Message", FontAttributes = FontAttributes.Bold },
-                    _smsBodyEntry,
+                        Text = "Recipient (phone)",
+                        FontAttributes = FontAttributes.Bold
+                    },
+                    _smsRecipientEntry,
+                    new Label
+                    {
+                        Text = "Message",
+                        FontAttributes = FontAttributes.Bold
+                    }, _smsBodyEntry,
 
                     new Button
                     {
@@ -335,7 +344,7 @@ class CommunicationPage : ContentPage
     {
         try
         {
-            var number = _phoneEntry.Text?.Trim();
+            var number = _smsRecipientEntry.Text?.Trim();
             if (string.IsNullOrWhiteSpace(number))
             {
                 await DisplayAlertAsync("Input required", "Please enter a phone number.", "OK");
