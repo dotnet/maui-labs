@@ -123,7 +123,7 @@ internal sealed class HostOperations(Func<Task<AgentStatus?>> getStatus)
         return "maccatalyst";
     }
 
-    private async Task<int> ResolveMacCatalystPidAsync(int? pid)
+    internal async Task<int> ResolveMacCatalystPidAsync(int? pid)
     {
         if (pid.HasValue)
             return pid.Value;

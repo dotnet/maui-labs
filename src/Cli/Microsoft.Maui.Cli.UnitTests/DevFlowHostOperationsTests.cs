@@ -49,6 +49,57 @@ public sealed class HostOperationsTests
             await operations.ResolveAlertPlatformAsync(null, 123));
         Assert.Equal("simulator-1", await HostOperations.ResolveUdidAsync("simulator-1"));
     }
+
+    [Fact]
+    public async Task MacCatalystPid_ExplicitTarget_BypassesAgentProbe()
+    {
+        var operations = new HostOperations(() => throw new InvalidOperationException("Must not query agent"));
+
+        Assert.Equal(123, await operations.ResolveMacCatalystPidAsync(123));
+    }
+
+    [Fact]
+    public async Task MacCatalystPid_AgentReportsProcessId_UsesReportedId()
+    {
+        var operations = new HostOperations(() => Task.FromResult<AgentStatus?>(new()
+        {
+            App = new() { ProcessId = 4242, Name = "No process lookup needed" }
+        }));
+
+        Assert.Equal(4242, await operations.ResolveMacCatalystPidAsync(null));
+    }
+
+    [Fact]
+    public async Task MacCatalystPid_UnresolvableApp_RequiresExplicitPid()
+    {
+        var operations = new HostOperations(() => Task.FromResult<AgentStatus?>(new()
+        {
+            App = new() { Name = $"unresolvable-app-{Guid.NewGuid():N}" }
+        }));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => operations.ResolveMacCatalystPidAsync(null));
+
+        Assert.Contains("Specify --pid", error.Message);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task DismissAlert_MacWithoutButton_ReportsExactLabelGuidance(string? label)
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        var operations = new HostOperations(() => throw new InvalidOperationException("Must not query agent"));
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(
+            () => operations.DismissAlertAsync(null, Environment.ProcessId, label));
+
+        Assert.Equal("buttonLabel", error.ParamName);
+        Assert.Contains("maui devflow ui alert detect", error.Message);
+    }
 }
 
 [Collection("CLI")]
