@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
@@ -14,6 +15,8 @@ public class StartupLayoutTests(ITestOutputHelper output)
 	[GtkRuntimeFact]
 	public void FirstShellPage_ShowsLoadedChildren_WithoutNavigationOrResize()
 	{
+		var backend = typeof(GtkMauiApplication).Assembly;
+		output.WriteLine($"Backend: {backend.FullName}; path={backend.Location}; SHA256={Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(backend.Location)))}");
 		var host = new StartupHost(output);
 		host.Run([]);
 		Assert.Null(host.Failure);
