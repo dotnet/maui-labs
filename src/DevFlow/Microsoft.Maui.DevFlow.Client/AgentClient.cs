@@ -85,9 +85,14 @@ public class AgentClient : IDisposable
     public TimeSpan TransientFailureRetryDelay { get; set; } = TimeSpan.FromMilliseconds(250);
 
     public AgentClient(string host = "localhost", int port = 9223)
+        : this(host, port, CreateTransportHandler(host))
+    {
+    }
+
+    internal AgentClient(string host, int port, HttpMessageHandler transportHandler)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = CreateHttpClient(host, GetCurrentMutationLease);
+        _http = CreateHttpClient(transportHandler, GetCurrentMutationLease);
     }
 
     /// <summary>
@@ -292,8 +297,19 @@ public class AgentClient : IDisposable
             throw new MutationLeaseException(status);
     }
 
+    private static HttpClient CreateHttpClient(
+        HttpMessageHandler transportHandler,
+        Func<MutationLeaseIdentity?> mutationLeaseProvider)
+    {
+        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
+        {
+            InnerHandler = transportHandler
+        };
+        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
     /// <summary>
-    /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
+    /// Builds the underlying HTTP transport. When <paramref name="host"/> is the
     /// <c>localhost</c> alias, the IPv4 (<c>127.0.0.1</c>) loopback used by the built-in agent is
     /// preferred, with IPv6 (<c>::1</c>) kept as a fallback.
     /// </summary>
@@ -312,17 +328,6 @@ public class AgentClient : IDisposable
     /// between the two.
     /// </para>
     /// </remarks>
-    private static HttpClient CreateHttpClient(
-        string host,
-        Func<MutationLeaseIdentity?> mutationLeaseProvider)
-    {
-        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
-        {
-            InnerHandler = CreateTransportHandler(host)
-        };
-        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
-    }
-
     private static HttpMessageHandler CreateTransportHandler(string host)
     {
         if (!IsLoopbackAlias(host))

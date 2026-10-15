@@ -117,7 +117,29 @@ jobs:
             }
           }
 
-      - name: Upload browser runtime evidence
+      - name: Repeat portable client retry regressions on both Windows runtimes
+        shell: pwsh
+        run: |
+          $project = 'src\DevFlow\Microsoft.Maui.DevFlow.Client.Tests\Microsoft.Maui.DevFlow.Client.Tests.csproj'
+          dotnet build $project --configuration Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($framework in @('net472', 'net10.0')) {
+            for ($iteration = 1; $iteration -le 5; $iteration++) {
+              $logName = "client-retry-$framework-$iteration.trx"
+              dotnet test $project --configuration Release --framework $framework --no-build --no-restore `
+                --filter "FullyQualifiedName~AgentClientRetryTests" `
+                --logger "console;verbosity=normal" --logger "trx;LogFileName=$logName" `
+                --results-directory artifacts\TestResults\InspectorBrowser
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\$logName"
+              $results = @($trx.TestRun.Results.UnitTestResult)
+              if ($results.Count -ne 20 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+                throw "All 20 retry regressions must execute and pass on $framework iteration $iteration."
+              }
+            }
+          }
+
+      - name: Upload browser and client retry runtime evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:

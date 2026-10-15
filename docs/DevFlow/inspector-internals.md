@@ -218,6 +218,14 @@ Unknown packages, rejected licenses, permissions, disk-space errors, and other n
 failures are not retried. Exhausted attempts preserve the installer's failure exit code.
 Emulator boot and integration-test failures are outside the retry scope.
 
+Portable client retry-budget tests inject transport failures at the HTTP handler boundary and
+assert exact send counts through the public tap API on modern .NET and .NET Framework. They do
+not infer retry counts from TCP resets, whose exception shape and wire-level retries depend on
+the platform HTTP stack. Separate real-socket tests retain delayed-listener and IPv4/IPv6
+loopback coverage. Cancellation, timeout, protocol, and trust failures remain non-retryable.
+The dedicated Windows Chromium job also repeats all 20 client retry regressions five times on
+each of `net472` and `net10.0`, failing immediately on any failure or skip.
+
 ## Implementation
 
 | Area | Location |
