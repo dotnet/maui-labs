@@ -6,12 +6,9 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class SettingsPaneViewModelTests
 {
     [Fact]
-    public void ChatDescriptor_ToolsAreOptInAndStructuredOutputIsOptOut()
+    public void ChatDescriptor_ToolCallingIsOptIn()
     {
         Assert.False(new ChatClientDescriptor("test", "Test", "Ready").SupportsToolCalling);
-        Assert.True(new ChatClientDescriptor("test", "Test", "Ready").SupportsStructuredOutput);
-        Assert.False(new ChatClientDescriptor("test", "Test", "Ready",
-            SupportsStructuredOutput: false).SupportsStructuredOutput);
     }
 
     [Fact]
@@ -150,11 +147,13 @@ public sealed class SettingsPaneViewModelTests
 
         settings.SelectedClient = textOnly;
         Assert.True(settings.UseStructuredJson);
-        Assert.False(settings.SelectedDescriptor!.SupportsStructuredOutput);
         Assert.Null(settings.CreateChatOptions([]).ResponseFormat);
 
         settings.SelectedClient = live;
         Assert.IsType<ChatResponseFormatJson>(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.UseStructuredJson = false;
+        Assert.Null(settings.CreateChatOptions([]).ResponseFormat);
     }
 
     private static IChatClient CreateClient(string name, bool isReplay) =>
@@ -162,7 +161,7 @@ public sealed class SettingsPaneViewModelTests
             new StubChatClient(),
             new ChatClientDescriptor(
                 name.ToLowerInvariant(), name, $"{name} ready",
-                IsReplay: isReplay, SupportsToolCalling: !isReplay, SupportsStructuredOutput: !isReplay));
+                IsReplay: isReplay, SupportsToolCalling: !isReplay));
 
     private sealed class StubChatClient : IChatClient
     {

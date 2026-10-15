@@ -22,8 +22,6 @@
   <ItemGroup>
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Views\PlaygroundLayoutMetrics.cs"
              Link="Views\PlaygroundLayoutMetrics.cs" />
-    <EmbeddedResource Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Views\PlaygroundPageLayout.xaml"
-                      LogicalName="PlaygroundPageLayout.xaml" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnostics.cs"
              Link="Services\ChatDiagnostics.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ChatDiagnosticsExtensions.cs"
