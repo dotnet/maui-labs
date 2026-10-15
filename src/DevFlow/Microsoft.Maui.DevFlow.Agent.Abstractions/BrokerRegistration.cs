@@ -144,7 +144,7 @@ public class BrokerRegistration : IDisposable
                 logger?.LogInformation("DevFlow agent registered. Broker assigned port: {Port}", _assignedPort);
 
                 // Start background task to keep connection alive
-                _ = Task.Run(() => MonitorConnectionAsync(_cts.Token));
+                _ = Task.Run(() => MonitorConnectionAsync(_ws, _cts.Token));
 
                 return _assignedPort;
             }
@@ -167,22 +167,43 @@ public class BrokerRegistration : IDisposable
         }
     }
 
-    private async Task MonitorConnectionAsync(CancellationToken ct)
+    private async Task MonitorConnectionAsync(ClientWebSocket socket, CancellationToken ct)
     {
         var buffer = new byte[256];
         try
         {
-            while (_ws?.State == WebSocketState.Open && !ct.IsCancellationRequested)
+            while (socket.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
-                var result = await _ws.ReceiveAsync(buffer, ct);
+                var result = await socket.ReceiveAsync(buffer, ct);
                 if (result.MessageType == WebSocketMessageType.Close)
                     break;
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    try
+                    {
+                        using var ping = JsonDocument.Parse(buffer.AsMemory(0, result.Count));
+                        if (ping.RootElement.TryGetProperty("type", out var type) &&
+                            type.GetString() == "ping" &&
+                            ping.RootElement.TryGetProperty("nonce", out var nonce) &&
+                            nonce.GetString() is { Length: > 0 } value)
+                        {
+                            var pong = AgentJson.Serialize(new Dictionary<string, object?>
+                            {
+                                ["type"] = "pong",
+                                ["nonce"] = value
+                            });
+                            await socket.SendAsync(Encoding.UTF8.GetBytes(pong),
+                                WebSocketMessageType.Text, true, ct);
+                        }
+                    }
+                    catch (JsonException) { }
+                }
             }
         }
         catch { }
 
         // Connection lost — start reconnection
-        if (!_disposed && !ct.IsCancellationRequested)
+        if (!_disposed && !ct.IsCancellationRequested && ReferenceEquals(socket, _ws))
         {
             var logger = _logger ?? _staticLogger;
             logger?.LogWarning("DevFlow agent lost broker connection — starting reconnection");
@@ -242,7 +263,7 @@ public class BrokerRegistration : IDisposable
                     logger?.LogInformation("DevFlow agent reconnected to broker after {Attempt} attempts", attempt);
                     _reconnectTimer?.Dispose();
                     _reconnectTimer = null;
-                    _ = Task.Run(() => MonitorConnectionAsync(lifetimeToken));
+                    _ = Task.Run(() => MonitorConnectionAsync(_ws!, lifetimeToken));
                     return;
                 }
             }
@@ -448,7 +469,8 @@ public class BrokerRegistration : IDisposable
         ["version"] = typeof(BrokerRegistration).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         ["sessionId"] = _sessionId,
-        ["processId"] = Environment.ProcessId
+        ["processId"] = Environment.ProcessId,
+        ["supportsHeartbeat"] = true
     });
 
     internal record RegistrationResponse

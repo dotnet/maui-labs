@@ -23,6 +23,9 @@ public class BrokerServer : IDisposable
 
     private readonly int _port;
     private readonly TimeSpan _idleTimeout;
+    private readonly TimeSpan _heartbeatInterval;
+    private readonly TimeSpan _heartbeatTimeout;
+    private readonly string _stateFilePath;
     private readonly XamlSourceWorkspace _sourceWorkspace;
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -44,9 +47,19 @@ public class BrokerServer : IDisposable
 
     public BrokerServer(int port = DefaultPort, TimeSpan? idleTimeout = null, Action<string>? log = null,
         string? workspaceStartPath = null)
+        : this(port, idleTimeout, log, workspaceStartPath, TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(5), BrokerPaths.StateFile)
+    {
+    }
+
+    internal BrokerServer(int port, TimeSpan? idleTimeout, Action<string>? log,
+        string? workspaceStartPath, TimeSpan heartbeatInterval, TimeSpan heartbeatTimeout, string stateFilePath)
     {
         _port = port;
         _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
+        _heartbeatInterval = heartbeatInterval;
+        _heartbeatTimeout = heartbeatTimeout;
+        _stateFilePath = stateFilePath;
         _log = log;
         _sourceWorkspace = XamlSourceWorkspace.Capture(
             workspaceStartPath ?? Environment.GetEnvironmentVariable("MAUI_DEVFLOW_PROJECT_ROOT"));
@@ -369,7 +382,7 @@ public class BrokerServer : IDisposable
             await ws.SendAsync(Encoding.UTF8.GetBytes(response), WebSocketMessageType.Text, true, CancellationToken.None);
 
             // Keep connection alive — wait for disconnect
-            await MonitorAgentConnection(connection);
+            await MonitorAgentConnection(connection, registration.SupportsHeartbeat);
         }
         catch (WebSocketException) { }
         catch (OperationCanceledException) { }
@@ -401,19 +414,72 @@ public class BrokerServer : IDisposable
         }
     }
 
-    private async Task MonitorAgentConnection(AgentConnection connection)
+    private async Task MonitorAgentConnection(AgentConnection connection, bool supportsHeartbeat)
     {
         var buffer = new byte[256];
+        using var heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? CancellationToken.None);
+        var heartbeat = supportsHeartbeat
+            ? RunHeartbeatAsync(connection, heartbeatCts.Token)
+            : Task.CompletedTask;
         try
         {
             while (connection.WebSocket.State == WebSocketState.Open && !(_cts?.Token.IsCancellationRequested ?? true))
             {
                 var result = await connection.WebSocket.ReceiveAsync(buffer, _cts?.Token ?? CancellationToken.None);
                 if (result.MessageType == WebSocketMessageType.Close) break;
+                if (supportsHeartbeat && result.MessageType == WebSocketMessageType.Text)
+                {
+                    try
+                    {
+                        using var reply = JsonDocument.Parse(buffer.AsMemory(0, result.Count));
+                        if (reply.RootElement.TryGetProperty("type", out var type) &&
+                            type.GetString() == "pong" &&
+                            reply.RootElement.TryGetProperty("nonce", out var receivedNonce) &&
+                            receivedNonce.GetString() == connection.PendingNonce)
+                            connection.AcknowledgeHeartbeat();
+                    }
+                    catch (JsonException) { }
+                }
                 TouchActivity();
             }
         }
         catch { }
+        finally
+        {
+            heartbeatCts.Cancel();
+            connection.WebSocket.Abort();
+            await heartbeat;
+        }
+    }
+
+    private async Task RunHeartbeatAsync(AgentConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(_heartbeatInterval, cancellationToken);
+                var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+                var acknowledged = connection.BeginHeartbeat(nonce);
+                var ping = CliJson.SerializeUntyped(new JsonObject
+                {
+                    ["type"] = "ping",
+                    ["nonce"] = nonce
+                }, indented: false);
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                deadline.CancelAfter(_heartbeatTimeout);
+                await connection.WebSocket.SendAsync(Encoding.UTF8.GetBytes(ping),
+                    WebSocketMessageType.Text, true, deadline.Token);
+                await acknowledged.WaitAsync(deadline.Token);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or ObjectDisposedException)
+        {
+            Log($"Agent heartbeat failed: {connection.Registration.AppName}|{connection.Registration.Tfm}: {ex.Message}");
+            connection.WebSocket.Abort();
+            await CleanupAgentConnectionAsync(connection);
+        }
     }
 
     private async Task CleanupAgentConnectionAsync(AgentConnection connection)
@@ -557,10 +623,10 @@ public class BrokerServer : IDisposable
 
     private void WriteBrokerState()
     {
-        var tmpPath = BrokerPaths.StateFile + ".tmp";
+        var tmpPath = _stateFilePath + ".tmp";
         try
         {
-            var dir = BrokerPaths.ConfigDir;
+            var dir = Path.GetDirectoryName(_stateFilePath)!;
             Directory.CreateDirectory(dir);
             BrokerPaths.RestrictConfigDirectoryPermissions(dir);
 
@@ -575,7 +641,7 @@ public class BrokerServer : IDisposable
             var json = CliJson.SerializeUntyped(state, indented: true);
             File.WriteAllText(tmpPath, json);
             BrokerPaths.RestrictStateFilePermissions(tmpPath);
-            File.Move(tmpPath, BrokerPaths.StateFile, overwrite: true);
+            File.Move(tmpPath, _stateFilePath, overwrite: true);
         }
         catch (Exception ex)
         {
@@ -840,9 +906,9 @@ public class BrokerServer : IDisposable
 
     private sealed class RequestBodyTooLargeException : Exception;
 
-    private static void DeleteBrokerState()
+    private void DeleteBrokerState()
     {
-        try { File.Delete(BrokerPaths.StateFile); } catch { }
+        try { File.Delete(_stateFilePath); } catch { }
     }
 
     private void Log(string message)
@@ -880,7 +946,25 @@ public class BrokerServer : IDisposable
         _flows.Clear();
         _cts?.Dispose();
     }
-    private record AgentConnection(AgentRegistration Registration, WebSocket WebSocket);
+    private sealed class AgentConnection(AgentRegistration registration, WebSocket webSocket)
+    {
+        private string? _pendingNonce;
+        private TaskCompletionSource? _acknowledged;
+
+        public AgentRegistration Registration { get; } = registration;
+        public WebSocket WebSocket { get; } = webSocket;
+        public string? PendingNonce => Volatile.Read(ref _pendingNonce);
+
+        public Task BeginHeartbeat(string nonce)
+        {
+            var acknowledged = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Volatile.Write(ref _acknowledged, acknowledged);
+            Volatile.Write(ref _pendingNonce, nonce);
+            return acknowledged.Task;
+        }
+
+        public void AcknowledgeHeartbeat() => Volatile.Read(ref _acknowledged)?.TrySetResult();
+    }
 
     // ── Inspector integration ──
 
