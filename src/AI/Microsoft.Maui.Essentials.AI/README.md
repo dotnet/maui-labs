@@ -12,7 +12,7 @@ This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/do
 | Android 8.0+ on supported AICore devices | ✅ Gemini Nano (ML Kit GenAI Prompt) | ✅ Image prompts | 🔜 Coming soon |
 | Windows | 🔜 Coming soon | Not available | 🔜 Coming soon |
 
-## Getting Started
+## Getting started
 
 ### 1. Install the package
 
@@ -46,6 +46,8 @@ public class MyViewModel(IChatClient chat)
     }
 }
 ```
+
+## Chat
 
 ### Streaming responses
 
@@ -123,6 +125,33 @@ application total, accumulate responses with `UsageDetails.Add`. Usage is
 introduced in OS 27. Apple counts come directly from Foundation Models; the client
 does not reconstruct or estimate missing usage.
 
+### Android capabilities
+
+`GeminiNanoChatClient` supports text, in-memory image `DataContent`, streaming,
+and supplied user/assistant conversation history. Include the earlier messages
+in each request; the client does not retain them. Tools and JSON/structured
+response formats are unsupported.
+
+`ChatOptions.Instructions` and system messages require Nano V3+. Full thinking
+output uses `Reasoning = new() { Output = ReasoningOutput.Full }` and requires
+Nano V4+; effort levels and reasoning summaries are unsupported. Unavailable
+model capabilities produce errors rather than falling back to another provider.
+Only input token usage is reported.
+
+For request mapping, native builds, and testing, see the
+[Android implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md).
+
+## Embeddings
+
+Use Apple's NaturalLanguage embeddings for on-device semantic search:
+
+```csharp
+var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
+var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
+```
+
+## Diagnostics
+
 ### OpenTelemetry
 
 Reference `Microsoft.Extensions.AI` to use its built-in telemetry middleware,
@@ -150,29 +179,6 @@ available on `UsageDetails`, but do not have separate built-in span tags or
 metrics. On OS 26, request timing and model metadata remain available without
 token usage. Provider-specific response IDs and finish reasons are emitted
 only when the provider supplies them.
-
-### Android capabilities
-
-`GeminiNanoChatClient` supports text, in-memory image `DataContent`, streaming,
-and supplied user/assistant conversation history. Include the earlier messages
-in each request; the client does not retain them. Tools and JSON/structured
-response formats are unsupported.
-
-`ChatOptions.Instructions` and system messages require Nano V3+. Full thinking
-output uses `Reasoning = new() { Output = ReasoningOutput.Full }` and requires
-Nano V4+; effort levels and reasoning summaries are unsupported. Unavailable
-model capabilities produce errors rather than falling back to another provider.
-Only input token usage is reported.
-
-For request mapping, native builds, and testing, see the
-[Android implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md).
-
-### Embeddings for semantic search
-
-```csharp
-var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
-var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
-```
 
 ### Tool diagnostics
 
