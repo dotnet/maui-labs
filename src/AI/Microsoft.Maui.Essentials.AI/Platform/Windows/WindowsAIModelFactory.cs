@@ -1,7 +1,6 @@
+using System.Runtime.Versioning;
 using Microsoft.Windows.AI;
 using Microsoft.Windows.AI.Text;
-using System.Runtime.Versioning;
-using Windows.Foundation;
 
 namespace Microsoft.Maui.Essentials.AI;
 
@@ -20,28 +19,7 @@ internal static class WindowsAIModelFactory
 	/// </exception>
 	public static async Task<LanguageModel> CreateModelAsync()
 	{
-		await EnsureReadyAsync(
-			"Windows AI language model",
-			LanguageModel.GetReadyState,
-			LanguageModel.EnsureReadyAsync);
-
-		return await LanguageModel.CreateAsync();
-	}
-
-	/// <summary>
-	/// Runs the shared Windows AI readiness handshake: check the state, download the model if
-	/// needed, then confirm it became ready.
-	/// </summary>
-	/// <param name="featureName">The display name used in error messages.</param>
-	/// <param name="getReadyState">Reads the current readiness of the feature.</param>
-	/// <param name="ensureReadyAsync">Makes the feature ready, downloading the model if required.</param>
-	/// <exception cref="NotSupportedException">Thrown when the feature cannot be made ready.</exception>
-	private static async Task EnsureReadyAsync(
-		string featureName,
-		Func<AIFeatureReadyState> getReadyState,
-		Func<IAsyncOperationWithProgress<AIFeatureReadyResult, double>> ensureReadyAsync)
-	{
-		var readyState = getReadyState();
+		var readyState = LanguageModel.GetReadyState();
 
 		if (readyState is not AIFeatureReadyState.Ready and not AIFeatureReadyState.NotReady)
 		{
@@ -54,26 +32,28 @@ internal static class WindowsAIModelFactory
 				AIFeatureReadyState.OSUpdateNeeded => "OS update needed",
 				_ => readyState.ToString()
 			};
-			throw new NotSupportedException($"{featureName} is not available: {message}");
+			throw new NotSupportedException($"Windows AI language model is not available: {message}");
 		}
 
 		if (readyState is AIFeatureReadyState.NotReady)
 		{
-			var result = await ensureReadyAsync();
+			var result = await LanguageModel.EnsureReadyAsync();
 
 			if (result.Status is not AIFeatureReadyResultState.Success)
 			{
 				var reason = string.IsNullOrWhiteSpace(result.ErrorDisplayText)
 					? result.Status.ToString()
 					: $"{result.Status}: {result.ErrorDisplayText}";
-				throw new NotSupportedException($"{featureName} could not be made ready: {reason}", result.ExtendedError);
+				throw new NotSupportedException($"Windows AI language model could not be made ready: {reason}", result.ExtendedError);
 			}
 		}
 
-		var finalState = getReadyState();
+		var finalState = LanguageModel.GetReadyState();
 		if (finalState is not AIFeatureReadyState.Ready)
 		{
-			throw new NotSupportedException($"{featureName} is not available after setup: {finalState}");
+			throw new NotSupportedException($"Windows AI language model is not available after setup: {finalState}");
 		}
+
+		return await LanguageModel.CreateAsync();
 	}
 }

@@ -20,6 +20,8 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// <summary>The default model identifier.</summary>
 	private const string DefaultModelId = "windows-ai-language-model";
 
+	private const int InvalidArgumentHResult = unchecked((int)0x80070057);
+
 	/// <summary>Lazily-initialized task that creates the underlying <see cref="LanguageModel"/>.</summary>
 	private readonly Lazy<Task<LanguageModel>> _modelTask;
 
@@ -79,8 +81,9 @@ public sealed class WindowsAIChatClient : IChatClient
 		ChatOptions? options = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
+		ArgumentNullException.ThrowIfNull(chatMessages);
 		ValidateOptions(options);
-		var model = await _modelTask.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+		cancellationToken.ThrowIfCancellationRequested();
 
 		var (systemPrompt, history) = NormalizeChatMessages(chatMessages, options);
 
@@ -97,6 +100,7 @@ public sealed class WindowsAIChatClient : IChatClient
 		// Structured generation has no LanguageModelContext overload, so the system prompt
 		// is folded into the prompt text.
 		var jsonSchema = GetConstraintSchema(options);
+		var model = await _modelTask.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
 
 		LanguageModelContext? context = null;
 		Action cancel;
@@ -136,14 +140,8 @@ public sealed class WindowsAIChatClient : IChatClient
 					{
 						var operation = model.GenerateResponseAsync(createdContext, prompt, modelOptions);
 
-						// Other statuses are left alone: the API reports Error for benign
-						// cases such as an empty prompt.
-						WireUp(operation, handler, cancellationToken, static result =>
-							result.Status is LanguageModelResponseStatus.PromptLargerThanContext
-								? throw new InvalidOperationException(
-									"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
-									result.ExtendedError)
-								: result.Text);
+						WireUp(operation, handler, cancellationToken, result =>
+							GetResponseText(result.Status, result.Text, result.ExtendedError, string.IsNullOrEmpty(prompt)));
 						return ((Action)operation.Cancel, createdContext);
 					}
 					catch
@@ -175,6 +173,24 @@ public sealed class WindowsAIChatClient : IChatClient
 			context?.Dispose();
 		}
 	}
+
+	internal static string? GetResponseText(
+		LanguageModelResponseStatus status,
+		string? text,
+		Exception? extendedError,
+		bool isEmptyPrompt) => status switch
+	{
+		LanguageModelResponseStatus.Complete => text,
+		// Native empty prompts report E_INVALIDARG rather than an empty completion.
+		LanguageModelResponseStatus.Error when isEmptyPrompt &&
+			(extendedError is null ||
+			 extendedError is ArgumentException && extendedError.HResult == InvalidArgumentHResult) => text,
+		LanguageModelResponseStatus.PromptLargerThanContext =>
+			throw new InvalidOperationException(
+				"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
+				extendedError),
+		_ => throw new InvalidOperationException($"Response generation failed: {status}", extendedError)
+	};
 
 	private static async Task<(Action Cancel, LanguageModelContext? Context)> StartOperationAsync(
 		Func<(Action Cancel, LanguageModelContext? Context)> start,
@@ -441,12 +457,7 @@ public sealed class WindowsAIChatClient : IChatClient
 			languageModelOptions.Temperature = temp;
 
 		if (options.TopK is { } topK)
-		{
-			if (topK < 0)
-				throw new ArgumentOutOfRangeException(nameof(options), "TopK must be non-negative.");
-
 			languageModelOptions.TopK = (uint)topK;
-		}
 
 		if (options.TopP is { } topP)
 			languageModelOptions.TopP = topP;
@@ -461,6 +472,9 @@ public sealed class WindowsAIChatClient : IChatClient
 
 		if (options.MaxOutputTokens is <= 0)
 			throw new ArgumentOutOfRangeException(nameof(options), "MaxOutputTokens must be greater than zero.");
+
+		if (options.TopK is < 0)
+			throw new ArgumentOutOfRangeException(nameof(options), "TopK must be non-negative.");
 
 		if (options.Tools is { Count: > 0 })
 			throw new NotSupportedException("The Windows AI language model does not support tool calling through the Windows App SDK.");
