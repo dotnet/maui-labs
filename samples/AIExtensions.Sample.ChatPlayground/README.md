@@ -25,8 +25,10 @@ works offline without credentials or a model. Select a live provider to
 continue a conversation. Uncheck unneeded tools or choose **None** to disable
 tool calls.
 
-**Logs** toggles the local, bounded diagnostics sidebar on each tab. In narrower
-windows, tap the exposed scrim outside the sidebar to dismiss it. It groups
+The local, bounded diagnostics sidebar starts collapsed on Chat, Embeddings,
+and Images. The header's **Logs** button toggles it without stopping diagnostic
+capture while hidden. In narrower windows, tap outside the sidebar to dismiss it.
+It groups
 built-in logs and completed spans by trace, including tool lifecycle logs from
 MEAI and Apple. Apple's native tool callbacks retain the originating request's
 trace/span. Chat and embeddings emit spans; the pinned MEAI version provides
