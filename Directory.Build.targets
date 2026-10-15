@@ -3,6 +3,12 @@
   <Import Project="Sdk.targets" Sdk="Microsoft.DotNet.Arcade.Sdk" />
   <Import Project="$(MSBuildThisFileDirectory)eng/Common.targets" />
 
+  <!-- The Android SDK can omit targetSdkVersion when uses-sdk only contains library overrides. -->
+  <PropertyGroup Condition="'$(TargetPlatformIdentifier)' == 'android' and ('$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground' or '$(MSBuildProjectName)' == 'EssentialsAISample')">
+    <AndroidManifestMergerExtraArgs>$(AndroidManifestMergerExtraArgs) --property TARGET_SDK_VERSION=$([System.Version]::Parse('$(TargetPlatformVersion)').Major)</AndroidManifestMergerExtraArgs>
+    <AndroidManifestMergerExtraArgs>$(AndroidManifestMergerExtraArgs.Trim())</AndroidManifestMergerExtraArgs>
+  </PropertyGroup>
+
   <!-- Workaround for dotnet/arcade#16611: Arcade SDK Sign.proj expects
        WixToolsPath at .packages/microsoft.wixtoolset.sdk/{ver}/tools/net472/{Platform}
        but the WiX 5 SDK package has no platform subfolder under tools/net472/.

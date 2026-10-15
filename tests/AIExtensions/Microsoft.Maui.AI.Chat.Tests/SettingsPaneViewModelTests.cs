@@ -6,9 +6,12 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class SettingsPaneViewModelTests
 {
     [Fact]
-    public void ChatDescriptor_ToolCallingIsOptIn()
+    public void ChatDescriptor_ToolsAreOptInAndStructuredOutputIsOptOut()
     {
         Assert.False(new ChatClientDescriptor("test", "Test", "Ready").SupportsToolCalling);
+        Assert.True(new ChatClientDescriptor("test", "Test", "Ready").SupportsStructuredOutput);
+        Assert.False(new ChatClientDescriptor("test", "Test", "Ready",
+            SupportsStructuredOutput: false).SupportsStructuredOutput);
     }
 
     [Fact]
@@ -135,12 +138,57 @@ public sealed class SettingsPaneViewModelTests
         Assert.Same(ChatToolMode.RequireAny, settings.CreateChatOptions([tool]).ToolMode);
     }
 
+    [Fact]
+    public void CreateChatOptions_SwitchingFromStructuredProvider_DoesNotSendStaleJsonSettings()
+    {
+        using var live = CreateClient("Live", isReplay: false);
+        using var textOnly = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("text-only", "Text only", "Plain text",
+                SupportsStructuredOutput: false));
+        var settings = new SettingsPaneViewModel([live, textOnly]) { UseStructuredJson = true };
+        Assert.IsType<ChatResponseFormatJson>(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.SelectedClient = textOnly;
+        Assert.True(settings.UseStructuredJson);
+        Assert.False(settings.SelectedDescriptor!.SupportsStructuredOutput);
+        Assert.Null(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.SelectedClient = live;
+        Assert.IsType<ChatResponseFormatJson>(settings.CreateChatOptions([]).ResponseFormat);
+    }
+
     private static IChatClient CreateClient(string name, bool isReplay) =>
         new DescribedChatClient(
             new StubChatClient(),
             new ChatClientDescriptor(
                 name.ToLowerInvariant(), name, $"{name} ready",
-                IsReplay: isReplay, SupportsToolCalling: !isReplay));
+                IsReplay: isReplay, SupportsToolCalling: !isReplay, SupportsStructuredOutput: !isReplay));
+
+    [Fact]
+    public void CreateChatOptions_GeminiDescriptor_DisablesToolsReasoningAndStructuredOutput()
+    {
+        using var client = new DescribedChatClient(
+            new StubChatClient(),
+            new ChatClientDescriptor(
+                "gemini-nano-chat", "Gemini Nano", "The first request confirms availability.",
+                SupportsImageInput: true, SupportsToolCalling: false, SupportsStructuredOutput: false));
+        var settings = new SettingsPaneViewModel([client]) { UseStructuredJson = true };
+
+        var options = settings.CreateChatOptions([]);
+
+        Assert.Same(client, settings.SelectedClient);
+        Assert.Same(ChatToolMode.None, options.ToolMode);
+        Assert.Null(options.Tools);
+        Assert.Null(options.AllowMultipleToolCalls);
+        Assert.Null(options.Reasoning);
+        Assert.Null(options.ResponseFormat);
+        Assert.True(settings.UseStructuredJson);
+        Assert.True(settings.SelectedDescriptor!.SupportsImageInput);
+        Assert.False(settings.SelectedDescriptor.SupportsReasoningSummary);
+        Assert.False(settings.SelectedDescriptor.SupportsImageGeneration);
+        Assert.False(settings.SelectedDescriptor.SupportsStructuredOutput);
+        Assert.Contains("first request", settings.ClientStatus);
+    }
 
     private sealed class StubChatClient : IChatClient
     {

@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0-macos;net10.0-windows10.0.19041.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true'">net10.0;net10.0-android;net10.0-ios27.0;net10.0-maccatalyst27.0;net10.0-macos27.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFrameworks>net10.0;net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0-macos</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true'">net10.0;net10.0-android;net10.0-ios27.0;net10.0-maccatalyst27.0;net10.0-macos27.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
     <AssemblyName>Microsoft.Maui.Essentials.AI</AssemblyName>
     <RootNamespace>Microsoft.Maui.Essentials.AI</RootNamespace>
     <UseMaui>true</UseMaui>
@@ -12,6 +13,9 @@
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
     <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition="$(TargetFramework.Contains('-android'))">
+    <NoWarn>$(NoWarn);BG8605;BG8606</NoWarn>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
@@ -29,6 +33,7 @@
     <PackageTags>$(DefaultPackageTags);essentials;ai</PackageTags>
     <Description>.NET Multi-platform App UI (.NET MAUI) is a cross-platform framework for creating native mobile and desktop apps with C# and XAML. This package contains a collection of cross-platform APIs for working with device AI and local models.</Description>
     <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
@@ -39,9 +44,50 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
+  <!-- Windows AI WinRT APIs -->
+  <ItemGroup Condition=" $(TargetFramework.Contains('-windows')) ">
+    <PackageReference Include="Microsoft.WindowsAppSDK.AI" VersionOverride="$(MicrosoftWindowsAppSDKAIVersion)" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" />
+    <PackageReference Include="Xamarin.Firebase.Encoders" />
+    <PackageReference Include="Xamarin.Firebase.Encoders.JSON" />
+    <PackageReference Include="Xamarin.Google.Android.DataTransport.TransportApi" />
+    <PackageReference Include="Xamarin.Google.Android.DataTransport.TransportBackendCct" />
+    <PackageReference Include="Xamarin.Google.Android.DataTransport.TransportRuntime" />
+    <PackageReference Include="Xamarin.Google.Guava" />
+    <PackageReference Include="Xamarin.Google.MLKit.Common" />
+    <PackageReference Include="Xamarin.GooglePlayServices.Basement" />
+    <PackageReference Include="Xamarin.GooglePlayServices.Tasks" />
+    <PackageReference Include="Xamarin.Kotlin.StdLib" />
+    <PackageReference Include="Xamarin.KotlinX.Coroutines.Core" />
+    <PackageReference Include="Xamarin.KotlinX.Coroutines.Guava" />
+    <PackageReference Include="Xamarin.KotlinX.Coroutines.Reactive" />
+    <!-- Keep separate archives on .NET 10: its Gradle 9 init-script bug blocks fused AARs (dotnet/android#10738).
+         Explicit inclusion binds only the bridge and packages Google runtimes unbound; revisit fusion on .NET 11. -->
+    <AndroidGradleProject Include="../AndroidNative/EssentialsAI/build.gradle.kts" CreateAndroidLibrary="false" />
+    <TransformFile Include="Platform\Android\Transforms\Metadata.xml" />
+  </ItemGroup>
+  <Target Name="CollectGeminiNanoAndroidLibraries"
+          AfterTargets="_BuildAndroidGradleProjects"
+          Condition="$(TargetFramework.Contains('-android'))">
+    <ItemGroup>
+      <AndroidLibrary Include="%(AndroidGradleProject.OutputPath)outputs/aar/EssentialsAI-release.aar" />
+      <AndroidLibrary Include="%(AndroidGradleProject.OutputPath)outputs/mlkit-runtime/*.aar" Bind="false" />
+      <AndroidLibrary Include="%(AndroidGradleProject.OutputPath)outputs/mlkit-runtime/*.jar" Bind="false" />
+    </ItemGroup>
+  </Target>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
     <Compile Remove="Platform\MaciOS\**\*.cs" />
+  </ItemGroup>
+  <!-- Exclude Windows-only files from non-Windows TFMs -->
+  <ItemGroup Condition="!$(TargetFramework.Contains('-windows'))">
+    <Compile Remove="Platform\Windows\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="!$(TargetFramework.Contains('-android'))">
+    <Compile Remove="Platform\Android\**\*.cs" />
   </ItemGroup>
   <ItemGroup Condition=" $(TargetFramework.Contains('-ios')) or $(TargetFramework.Contains('-maccatalyst')) or $(TargetFramework.Contains('-macos')) ">
     <XcodeProject Include="..\AppleNative\EssentialsAI\EssentialsAI.xcodeproj">

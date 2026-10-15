@@ -8,32 +8,10 @@
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
     <Grid SafeAreaEdges="None">
         <Grid x:Name="RootGrid" ColumnDefinitions="330,*,0" ColumnSpacing="12" Padding="12"
-              SafeAreaEdges="Container">
-            <BoxView x:Name="SettingsBackdrop" Grid.ColumnSpan="3" ZIndex="9"
-                     Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
-                     IsVisible="False" AutomationId="SettingsDismissOverlay">
-                <BoxView.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="CloseSettingsClicked" />
-                </BoxView.GestureRecognizers>
-            </BoxView>
-            <Border x:Name="SettingsPanel" Grid.Column="0" ZIndex="10"
-                    Style="{StaticResource PlaygroundPanel}" AutomationId="SettingsSidebar">
-                <Grid RowDefinitions="Auto,*">
-                    <Grid Padding="16,16,16,0" ColumnDefinitions="*,Auto">
-                        <Label Text="{Binding SidebarTitle, Source={x:Reference PlaygroundLayout}}"
-                               FontSize="20" FontAttributes="Bold" />
-                        <ImageButton x:Name="CloseSettingsButton" Grid.Column="1" Source="close.png"
-                                     IsVisible="False" Clicked="CloseSettingsClicked"
-                                     Style="{StaticResource AttachmentButton}"
-                                     SemanticProperties.Description="Close settings"
-                                     AutomationId="CloseSettingsButton" />
-                    </Grid>
-                    <ContentView Grid.Row="1"
-                                 Content="{Binding SettingsContent, Source={x:Reference PlaygroundLayout}}" />
-                </Grid>
-            </Border>
-
-            <Grid x:Name="MainPanel" Grid.Column="1" Grid.ColumnSpan="2" RowDefinitions="Auto,*,Auto" RowSpacing="12">
+              SafeAreaEdges="Container"
+              AutomationId="PlaygroundContentGrid">
+            <Grid x:Name="MainPanel" Grid.Column="1" Grid.ColumnSpan="2" RowDefinitions="Auto,*,Auto" RowSpacing="12"
+                  AutomationId="PlaygroundMainPanel">
                 <Border x:Name="HeaderPanel" Style="{StaticResource PlaygroundPanel}" Padding="16">
                     <Grid ColumnDefinitions="Auto,*,Auto"
                           RowDefinitions="Auto,Auto" ColumnSpacing="10">
@@ -73,20 +51,45 @@
                 <ContentView Grid.Row="2"
                              Content="{Binding InputContent, Source={x:Reference PlaygroundLayout}}" />
             </Grid>
-            <BoxView x:Name="DiagnosticsBackdrop" Grid.ColumnSpan="3" ZIndex="19"
-                     Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
-                     IsVisible="False"
-                     AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='{0}LogsDismissOverlay'}">
-                <BoxView.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="CloseDiagnosticsClicked" />
-                </BoxView.GestureRecognizers>
-            </BoxView>
-            <Border x:Name="DiagnosticsPanel" Grid.Column="1" ZIndex="20"
-                    IsVisible="False" Style="{StaticResource PlaygroundPanel}"
-                    AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='{0}LogsSidebar'}">
-                <local:ChatLogsView BindingContext="{Binding Diagnostics, Source={x:Reference PlaygroundLayout}}"
-                                    AutomationPrefix="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}}" />
-            </Border>
         </Grid>
+        <BoxView x:Name="SettingsBackdrop" ZIndex="9"
+                 Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
+                 IsVisible="False" AutomationId="SettingsDismissOverlay">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="CloseSettingsClicked" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        <Border x:Name="SettingsPanel" ZIndex="10" Margin="12"
+                HorizontalOptions="Start" WidthRequest="330"
+                Style="{StaticResource PlaygroundPanel}" AutomationId="SettingsSidebar">
+            <Grid RowDefinitions="Auto,*">
+                <Grid Padding="16,16,16,0" ColumnDefinitions="*,Auto">
+                    <Label Text="{Binding SidebarTitle, Source={x:Reference PlaygroundLayout}}"
+                           FontSize="20" FontAttributes="Bold" />
+                    <ImageButton x:Name="CloseSettingsButton" Grid.Column="1" Source="close.png"
+                                 IsVisible="False" Clicked="CloseSettingsClicked"
+                                 Style="{StaticResource AttachmentButton}"
+                                 SemanticProperties.Description="Close settings"
+                                 AutomationId="CloseSettingsButton" />
+                </Grid>
+                <ContentView Grid.Row="1"
+                             Content="{Binding SettingsContent, Source={x:Reference PlaygroundLayout}}" />
+            </Grid>
+        </Border>
+        <BoxView x:Name="DiagnosticsBackdrop" ZIndex="19"
+                 Color="{AppThemeBinding Light={StaticResource OverlayScrim}, Dark={StaticResource OverlayScrimDark}}"
+                 IsVisible="False"
+                 AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='{0}LogsDismissOverlay'}">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="CloseDiagnosticsClicked" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        <Border x:Name="DiagnosticsPanel" ZIndex="20" Margin="12"
+                HorizontalOptions="End" WidthRequest="390"
+                IsVisible="False" Style="{StaticResource PlaygroundPanel}"
+                AutomationId="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}, StringFormat='{0}LogsSidebar'}">
+            <local:ChatLogsView BindingContext="{Binding Diagnostics, Source={x:Reference PlaygroundLayout}}"
+                                AutomationPrefix="{Binding DiagnosticsAutomationPrefix, Source={x:Reference PlaygroundLayout}}" />
+        </Border>
     </Grid>
 </ContentView>

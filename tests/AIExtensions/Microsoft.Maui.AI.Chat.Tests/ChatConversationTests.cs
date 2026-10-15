@@ -12,6 +12,58 @@ public sealed class ChatConversationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task ExecuteTurn_TextOnlyClientWithStaleJsonSetting_ProjectsPlainText(bool streaming)
+    {
+        var scripted = new ScriptedClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, "Plain answer")]),
+            [new ChatResponseUpdate(ChatRole.Assistant, "Plain answer")]);
+        using var client = new DescribedChatClient(scripted,
+            new ChatClientDescriptor("text-only", "Text only", "Plain text",
+                SupportsStructuredOutput: false));
+        var settings = new SettingsPaneViewModel([client]) { UseStructuredJson = true };
+        var options = settings.CreateChatOptions([]);
+        var conversation = new ChatConversation();
+        var changes = new List<TranscriptChange>();
+
+        await foreach (var change in conversation.SendTurnAsync(
+            client, new(ChatRole.User, "Hello"), "Hello", options, streaming,
+            structuredJson: options.ResponseFormat is ChatResponseFormatJson))
+            changes.Add(change);
+
+        Assert.Null(options.ResponseFormat);
+        Assert.Contains(changes, change => change is
+            TranscriptChange.EntryAdded { EntryKind: TranscriptEntryKind.Assistant, Text: "Plain answer", Label: "Text" }
+            or TranscriptChange.EntryTextChanged { Text: "Plain answer" });
+        Assert.DoesNotContain(changes.OfType<TranscriptChange.EntryAdded>(),
+            change => change.Label == "Structured JSON");
+
+        await foreach (var _ in conversation.SendTurnAsync(
+            client, new(ChatRole.User, "Next question"), "Next question", options, streaming,
+            structuredJson: options.ResponseFormat is ChatResponseFormatJson)) { }
+
+        Assert.Collection(scripted.ReceivedMessages!,
+            message =>
+            {
+                Assert.Equal(ChatRole.User, message.Role);
+                Assert.Equal("Hello", message.Text);
+            },
+            message =>
+            {
+                Assert.Equal(ChatRole.Assistant, message.Role);
+                Assert.Equal("Plain answer", message.Text);
+            },
+            message =>
+            {
+                Assert.Equal(ChatRole.User, message.Role);
+                Assert.Equal("Next question", message.Text);
+            });
+
+        conversation.Clear();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task ExecuteTurn_ToolCallAndReasoning_EmitOrderedTranscriptChanges(bool streaming)
     {
         var call = new FunctionCallContent("call-1", "calculate",
