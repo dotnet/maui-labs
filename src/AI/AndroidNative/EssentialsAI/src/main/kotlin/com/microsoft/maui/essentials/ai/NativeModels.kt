@@ -13,12 +13,11 @@ class NativeContentPart(
 )
 
 class NativeChatMessage(
-    val role: Int,
+    val role: String,
     val parts: Array<NativeContentPart>,
 )
 
 class NativeChatOptions(
-    val systemInstruction: String?,
     val temperature: Float?,
     val topK: Int?,
     val seed: Int?,

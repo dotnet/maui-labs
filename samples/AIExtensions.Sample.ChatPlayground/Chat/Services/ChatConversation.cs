@@ -12,6 +12,7 @@ public sealed class ChatConversation
     private readonly TranscriptEmitter _transcript = new();
 
     public bool HistoryContainsImage => _turns.HistoryContainsImage;
+    public bool HasHistory => _turns.HasHistory;
 
     /// <summary>Clears protocol history and the tracked visible-entry state.</summary>
     public void Clear()

@@ -8,8 +8,8 @@ and Windows (not native macOS); available providers vary by platform.
 
 ### Chat
 
-Switch between providers, stream responses, request structured JSON, and try
-optional tools. `Microsoft.Maui.Essentials.AI` provides on-device text chat
+Switch between providers and stream responses. Apple and Azure also support
+structured JSON and optional tools. `Microsoft.Maui.Essentials.AI` provides on-device text chat
 through `AppleIntelligenceChatClient` on Apple platforms and `GeminiNanoChatClient`
 on supported Android devices. On iOS and Mac Catalyst 27+, image
 attachments require a ready vision-capable model. Azure uses the Responses
@@ -21,6 +21,12 @@ Save the current chat locally, import or export recordings, and replay them
 offline. The **More** menu includes a bundled example; **New** replaces the
 current recording. Uncheck tools you do not need, or choose **None** to disable
 tool calls.
+
+Gemini Nano is native-only: single-turn user text/images, no assistant/tool
+history, no structured JSON, and no tools. Its JSON/tool controls are hidden.
+After a request (or when selecting Gemini with an existing chat), select **New**
+before sending another request. The playground does not drop or fake history.
+System instructions require Nano V3+ and fail explicitly if unavailable.
 
 The header's **Logs** button toggles the local, bounded diagnostics sidebar
 (also available on Embeddings and Images). It groups built-in logs and spans
@@ -99,16 +105,17 @@ text may leave the device and incur charges.
   select **Send** to submit it. Structured JSON requests a summary, key points,
   a free-form category, and a constrained sentiment. The common .NET schema
   leaves fields optional for other providers, while Apple and Azure OpenAI
-  require all four in their native structured-output schemas. Gemini uses the
-  same normalization, prompt-guided JSON and managed validation; key points may
-  be empty. The transcript displays the provider's actual JSON, including extra
+  require all four in their native structured-output schemas. Gemini does not
+  support structured JSON; stale JSON settings from another provider are not
+  sent or used to interpret its plain-text response. The transcript displays the provider's actual JSON, including extra
   fields, without rewriting it through the request schema. Restoring an
   auto-saved chat keeps the selected live client; without one configured,
   Replay remains the offline default. Apple and Azure support optional tools.
   Date/time, calculator, and connection status start checked; connection
   status returns JSON with network access and connection types, not SSIDs or
   IP addresses. Gemini supports text and in-memory image input but not tools,
-  image generation, or reasoning summaries; its tool controls are disabled.
+  image generation, structured output, or reasoning summaries; its JSON/tool
+  controls are hidden and follow-up sends require **New**.
   **None** disables tool calls even when tools remain checked;
   **Auto** makes checked tools available, and a model may call them for
   unrelated prompts. Uncheck unneeded tools to prevent those calls. Azure
@@ -127,6 +134,8 @@ recording; **New** replaces the current chat. Replay is read-only and returns
 successive recorded turns without calling a model or checking new prompts.
 Switching from a chat with images to a text-only provider requires clearing
 that chat first.
+Successful compilation and managed/JVM tests do not demonstrate Gemini
+inference or image/thinking support on physical hardware.
 
 ## Organization
 

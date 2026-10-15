@@ -145,15 +145,26 @@ only when the provider supplies them.
 
 ### Android capabilities
 
-`GeminiNanoChatClient` supports text and image prompts, incremental text streaming,
-system instructions on compatible Nano versions, prompt-guided JSON responses for
-a DTO-oriented schema subset, and Nano V4 thinking
-through `ChatOptions.Reasoning`. AICore does not support native multi-turn
-sessions, so supplied chat history is flattened into each request.
+`GeminiNanoChatClient` maps **single-turn** text and in-memory image prompts to
+Google's ML Kit GenAI Prompt beta4 API, with incremental text streaming.
+The API accepts a list of user `Content` values, but has no conversation roles
+or multi-turn session API. Assistant, tool, and custom-role history is rejected,
+not flattened, silently dropped, or rendered with invented role tokens.
 
 The client does not retain conversation or inference state. Each concurrent call
-uses its own ML Kit model session. JSON schemas are included in the request and
-the completed response is parsed and validated against the requested schema.
+uses its own ML Kit model instance. `ChatOptions.Instructions` is prepended as
+a system message; Kotlin combines it with system-message text in order and uses
+the native `SystemInstruction` API. This requires Nano V3+ and fails explicitly
+if `isSystemPromptAvailable()` is false. There is no prompt-prefix fallback.
+
+Temperature, TopK, Seed (checked for native 32-bit integer representability),
+and MaxOutputTokens map directly to Google's builder. Native numeric validation
+is left to that builder. Request full thinking output using
+`Reasoning = new() { Output = ReasoningOutput.Full }` without an effort level.
+This enables the native thinking flag and requires Nano V4+; unavailable thinking
+fails explicitly. Effort levels and reasoning summaries have no native mapping
+and are rejected. Input token usage comes from native `countTokens`; output token
+counts are not estimated.
 
 The public surface remains `Microsoft.Extensions.AI` plus
 `GeminiNanoChatClient`; ML Kit and coroutine types are internal. The Kotlin
@@ -161,18 +172,18 @@ bridge and its pinned ML Kit runtime assets are built and packaged through
 `AndroidGradleProject`. Consumers do not need Gradle or a separate GenAI binding
 package.
 
-Schemas support objects, arrays, primitives, nullable types, enums, numeric
-bounds, and collection size limits. Unsupported schema constructs fail before
-inference; invalid generated JSON fails after generation. This does not use
-ML Kit's compile-time Kotlin typed-output API or guarantee constrained decoding.
-
-The current ML Kit beta does not expose dynamic .NET tool calling. Unsupported
-`ChatOptions` values fail explicitly rather than being ignored. `ChatToolMode.None`
-disables supplied tool definitions.
+JSON response formats (with or without schemas), tool definitions, enabled tool
+modes, additional options, and unsupported content kinds fail explicitly before
+inference. `ChatToolMode.None` alone simply means no tool use. This client does
+not provide structured output, JSON prompt guidance, response-schema validation,
+tool calling, or tool middleware. Apple's existing structured-output support
+is unchanged.
 
 AICore and the model must already be ready for inference. If Gemini Nano is
 downloadable but not ready, prepare it through AICore and retry. Model errors are
 returned to the caller; the client never switches to a cloud model.
+Managed/JVM tests and Android builds do not verify model-dependent inference,
+image decoding, thinking, or availability on a provisioned physical device.
 
 ### Embeddings for semantic search
 
