@@ -1,6 +1,12 @@
 using System.Runtime.Versioning;
 using Microsoft.Windows.AI;
+using Microsoft.Windows.AI.Imaging;
 using Microsoft.Windows.AI.Text;
+using Windows.Foundation;
+
+// CS8305: ImageGenerator is marked [Experimental] in WinRT metadata. Stable Windows
+// App SDK 2.5 does not expose image generation.
+#pragma warning disable CS8305
 
 namespace Microsoft.Maui.Essentials.AI;
 
@@ -19,7 +25,45 @@ internal static class WindowsAIModelFactory
 	/// </exception>
 	public static async Task<LanguageModel> CreateModelAsync()
 	{
-		var readyState = LanguageModel.GetReadyState();
+		await EnsureReadyAsync(
+			"Windows AI language model",
+			LanguageModel.GetReadyState,
+			LanguageModel.EnsureReadyAsync);
+
+		return await LanguageModel.CreateAsync();
+	}
+
+	/// <summary>
+	/// Creates an <see cref="ImageGenerator"/> instance, ensuring the Windows AI image generation model is ready.
+	/// </summary>
+	/// <returns>A ready-to-use <see cref="ImageGenerator"/> instance.</returns>
+	/// <exception cref="NotSupportedException">
+	/// Thrown when image generation is not supported on the current system, disabled by the user, or not ready.
+	/// </exception>
+	public static async Task<ImageGenerator> CreateImageGeneratorAsync()
+	{
+		await EnsureReadyAsync(
+			"Windows AI image generation",
+			ImageGenerator.GetReadyState,
+			ImageGenerator.EnsureReadyAsync);
+
+		return await ImageGenerator.CreateAsync();
+	}
+
+	/// <summary>
+	/// Runs the shared Windows AI readiness handshake: check the state, download the model if
+	/// needed, then confirm it became ready.
+	/// </summary>
+	/// <param name="featureName">The display name used in error messages.</param>
+	/// <param name="getReadyState">Reads the current readiness of the feature.</param>
+	/// <param name="ensureReadyAsync">Makes the feature ready, downloading the model if required.</param>
+	/// <exception cref="NotSupportedException">Thrown when the feature cannot be made ready.</exception>
+	private static async Task EnsureReadyAsync(
+		string featureName,
+		Func<AIFeatureReadyState> getReadyState,
+		Func<IAsyncOperationWithProgress<AIFeatureReadyResult, double>> ensureReadyAsync)
+	{
+		var readyState = getReadyState();
 
 		if (readyState is not AIFeatureReadyState.Ready and not AIFeatureReadyState.NotReady)
 		{
@@ -32,28 +76,26 @@ internal static class WindowsAIModelFactory
 				AIFeatureReadyState.OSUpdateNeeded => "OS update needed",
 				_ => readyState.ToString()
 			};
-			throw new NotSupportedException($"Windows AI language model is not available: {message}");
+			throw new NotSupportedException($"{featureName} is not available: {message}");
 		}
 
 		if (readyState is AIFeatureReadyState.NotReady)
 		{
-			var result = await LanguageModel.EnsureReadyAsync();
+			var result = await ensureReadyAsync();
 
 			if (result.Status is not AIFeatureReadyResultState.Success)
 			{
 				var reason = string.IsNullOrWhiteSpace(result.ErrorDisplayText)
 					? result.Status.ToString()
 					: $"{result.Status}: {result.ErrorDisplayText}";
-				throw new NotSupportedException($"Windows AI language model could not be made ready: {reason}", result.ExtendedError);
+				throw new NotSupportedException($"{featureName} could not be made ready: {reason}", result.ExtendedError);
 			}
 		}
 
-		var finalState = LanguageModel.GetReadyState();
+		var finalState = getReadyState();
 		if (finalState is not AIFeatureReadyState.Ready)
 		{
-			throw new NotSupportedException($"Windows AI language model is not available after setup: {finalState}");
+			throw new NotSupportedException($"{featureName} is not available after setup: {finalState}");
 		}
-
-		return await LanguageModel.CreateAsync();
 	}
 }

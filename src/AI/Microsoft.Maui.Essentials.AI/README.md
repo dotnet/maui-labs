@@ -1,6 +1,6 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device chat and embeddings through
+On-device chat, embeddings, and image generation through
 [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions),
 using Apple and Windows native models without a cloud service.
 Android integration is **coming soon**; its capabilities and requirements
@@ -180,10 +180,24 @@ Image generation is separate from chat image input and tool calling.
 | Platform | Native image generation |
 |----------|-------------------------|
 | Apple | Not supported |
-| Windows | Coming soon |
+| Windows | Experimental text-to-image and single-image edits |
 | Android | Not specified |
 
-Native image generation is not implemented in this version.
+Use `WindowsAIImageGenerator` as an `IImageGenerator` in a packaged Windows app
+with the matching experimental SDK:
+
+```csharp
+using var generator = new WindowsAIImageGenerator();
+var response = await generator.GenerateAsync(
+    new ImageGenerationRequest("A blue sailboat on a lake."));
+```
+
+Acknowledge `MEAI001` where using the experimental M.E.AI image API. Requests
+accept zero or one source image and return encoded bytes (PNG by default);
+masks and multiple source images are unsupported. First use may download a
+large optional model. Native inference is synchronous and cannot be interrupted
+mid-call. See the [Windows guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md)
+for formats, options, and dependencies.
 
 ## Diagnostics
 

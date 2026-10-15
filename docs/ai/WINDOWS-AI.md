@@ -1,4 +1,4 @@
-# Windows AI chat
+# Windows AI
 
 `WindowsAIChatClient` implements `Microsoft.Extensions.AI.IChatClient` using
 the on-device Windows App SDK `LanguageModel`. It supports text conversations,
@@ -20,19 +20,19 @@ Build Windows targets on Windows; the SDK's packaging tools cannot run on macOS.
 
 ## Library and development-app dependencies
 
-The library references stable AI. Windows sample/test apps select the experimental
+Image generation requires experimental AI. Windows sample/test apps select the experimental
 umbrella SDK, which supplies matching AI, Foundation, and InteractiveExperiences
 dependencies:
 
 | Package | Library | Windows samples and device tests |
 |---------|---------|-----------------------------|
 | `Microsoft.WindowsAppSDK` | Not referenced | `2.5.4-experimental` |
-| `Microsoft.WindowsAppSDK.AI` | `2.4.4` | `2.5.4-experimental` (transitive) |
-| `Microsoft.WindowsAppSDK.Foundation` | `2.3.9` (transitive) | `2.3.13-experimental` (transitive) |
-| `Microsoft.WindowsAppSDK.InteractiveExperiences` | `2.1.3` (transitive) | `2.1.10-experimental` (transitive) |
+| `Microsoft.WindowsAppSDK.AI` | `2.5.4-experimental` | `2.5.4-experimental` (transitive) |
+| `Microsoft.WindowsAppSDK.Foundation` | `2.3.13-experimental` (transitive) | `2.3.13-experimental` (transitive) |
+| `Microsoft.WindowsAppSDK.InteractiveExperiences` | `2.1.10-experimental` (transitive) | `2.1.10-experimental` (transitive) |
 
-The library baseline supports its chat APIs without preventing experimental app
-overrides. All three Windows app heads select SDK `2.5.4-experimental` explicitly:
+The library directly references only AI; Foundation is transitive.
+All three Windows app heads select SDK `2.5.4-experimental` explicitly:
 MAUI 10's implicit 1.8 graph conflicts with the newer AI packages.
 There is no global SDK pin.
 
@@ -75,12 +75,28 @@ returned no callbacks: [WindowsAppSDK #6872](https://github.com/microsoft/Window
 
 ## Limitations
 
-- No image input, native tool calling, image generation, or Windows embeddings.
+- No chat image input, native tool calling, or Windows embeddings.
 - `MaxOutputTokens` is checked for a positive value but is not a native output limit.
 - Prompts exceeding the context window fail; history is not silently truncated.
 - Native generation can stall. Cancellation releases the waiting caller but
   does not guarantee recovery of the native model. See
   [WindowsAppSDK #6871](https://github.com/microsoft/WindowsAppSDK/issues/6871).
+
+## Image generation
+
+`WindowsAIImageGenerator` implements `IImageGenerator` for text-to-image and
+prompt-guided edits with one source image. It uses a separate optional model;
+obtain consent before first use, which may trigger a multi-gigabyte download.
+
+Results are encoded PNG (default), JPEG, BMP, or TIFF bytes. `Count` controls
+output count; `AdditionalProperties` accepts native `Creativity`,
+`MaxInferenceSteps`, and `Seed` options. Masks, multiple source images,
+requested sizes, and hosted URI output are rejected. Unsupported output formats
+fail before model setup.
+
+Native `Generate*` calls are synchronous and cannot be interrupted mid-call.
+Actual image inference and UI responsiveness have not been runtime-verified.
+The Playground exposes the Windows provider with logging alongside Azure.
 
 ## Device tests
 

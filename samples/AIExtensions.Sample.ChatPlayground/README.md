@@ -43,15 +43,18 @@ Generate text vectors, index imported documents, and search their content.
 
 ### Image generation
 
-Generate or edit images using a configured Azure OpenAI deployment. Chat image
+Generate or edit images using Windows AI or a configured Azure OpenAI deployment. Chat image
 input does not imply image-generation support.
 
 | Provider | Image generation |
 |----------|------------------|
 | Apple on-device | Not supported |
-| Windows on-device | Coming soon |
+| Windows on-device | Experimental text-to-image and single-image edits |
 | Android on-device | Not specified |
 | Azure OpenAI | Supported by the configured image deployment |
+
+Windows may download a large optional model on first use. Select PNG or JPEG;
+WebP is unsupported.
 
 ## Diagnostics
 
@@ -90,7 +93,7 @@ dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sam
 ```
 
 Keep the Windows sample MSIX-packaged for on-device AI. It bundles an
-experimental Windows App SDK runtime while the library uses stable APIs.
+experimental Windows App SDK runtime matching the image-enabled library.
 See the [Windows integration guide](../../docs/ai/WINDOWS-AI.md) for hardware,
 capability and access requirements.
 
