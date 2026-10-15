@@ -99,6 +99,7 @@ internal suspend fun NativeChatRequest.toNative(
 ): GenerateContentRequest {
     val instructions = mutableListOf<String>()
     val contents = mutableListOf<Content>()
+    val hasAssistantHistory = messages.any { it.role == "assistant" }
     messages.forEach { message ->
         when (message.role) {
             "system" -> message.parts.forEach { part ->
@@ -107,8 +108,11 @@ internal suspend fun NativeChatRequest.toNative(
                 }
                 instructions.add(part.text.orEmpty())
             }
-            "user" -> {
+            "user", "assistant" -> {
                 val builder = Content.builder()
+                if (hasAssistantHistory) {
+                    builder.addPart(TextPart(if (message.role == "user") "User:\n" else "Assistant:\n"))
+                }
                 message.parts.forEach { part ->
                     when (part.kind) {
                         CONTENT_TEXT -> builder.addPart(TextPart(part.text.orEmpty()))
@@ -118,15 +122,15 @@ internal suspend fun NativeChatRequest.toNative(
                         else -> error("Unsupported native content kind '${part.kind}'.")
                     }
                 }
+                if (hasAssistantHistory) builder.addPart(TextPart("\n\n"))
                 contents.add(builder.build())
             }
             else -> error(
-                "Gemini Nano supports single-turn user input and native system instructions only; " +
-                    "chat role '${message.role}' and assistant/tool history are not supported."
+                "Gemini Nano does not support chat role '${message.role}'."
             )
         }
     }
-    require(contents.isNotEmpty()) { "At least one user message is required." }
+    require(contents.isNotEmpty()) { "At least one user or assistant message is required." }
 
     val builder = GenerateContentRequest.Builder(contents)
     if (instructions.isNotEmpty()) {

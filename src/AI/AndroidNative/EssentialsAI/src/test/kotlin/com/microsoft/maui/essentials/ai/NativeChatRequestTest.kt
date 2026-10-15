@@ -30,6 +30,22 @@ class NativeChatRequestTest {
     }
 
     @Test
+    fun userAssistantConversationIsIncludedInOrderAsOrdinaryPromptText() = runBlocking {
+        val result = request(
+            message("system", "Be concise."),
+            message("user", "hello", " world"),
+            message("assistant", "Hello!"),
+            message("user", "What did I say?"),
+        ).toNative({ true }, { false })
+
+        val prompt = result.contents.flatMap { it.parts }
+            .joinToString("") { (it as TextPart).textString }
+        assertEquals("User:\nhello world\n\nAssistant:\nHello!\n\nUser:\nWhat did I say?\n\n", prompt)
+        assertEquals("Be concise.", result.systemInstruction!!.textString)
+        assertFalse(prompt.contains("<|"))
+    }
+
+    @Test
     fun prependedOptionsInstructionsAndSystemPartsKeepTheirOrder() = runBlocking {
         val result = request(
             message("system", "options instructions"),
@@ -66,8 +82,8 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun assistantToolAndCustomRolesAreRejectedEvenInEmptyHistoryEntries() = runBlocking {
-        for (role in listOf("assistant", "tool", "custom")) {
+    fun toolAndCustomRolesAreRejectedEvenInEmptyHistoryEntries() = runBlocking {
+        for (role in listOf("tool", "custom")) {
             for (parts in listOf(emptyArray(), arrayOf(NativeContentPart(CONTENT_TEXT, "history", null)))) {
                 val error = runCatching {
                     request(message("user", "hello"), NativeChatMessage(role, parts), message("user", "next"))
@@ -93,7 +109,7 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun userContentIsRequired() = runBlocking {
+    fun conversationContentIsRequired() = runBlocking {
         for (request in listOf(request(), request(message("system", "instructions")))) {
             assertTrue(runCatching { request.toNative({ true }, { true }) }
                 .exceptionOrNull() is IllegalArgumentException)
