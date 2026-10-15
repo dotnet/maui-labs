@@ -13,10 +13,6 @@
     <!-- CA1416: Apple Intelligence APIs require iOS/macOS 26+ but the library supports
          older OS versions with runtime guards. Suppress to avoid errors in Release builds. -->
     <NoWarn>$(NoWarn);CA1416;XCODE_27_0_PREVIEW</NoWarn>
-    <!-- Prevent MSBuild from overriding the MaxVersionTested set in Package.appxmanifest
-         (needed for the systemAIModels capability declaration to survive restore) -->
-    <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
-    <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->

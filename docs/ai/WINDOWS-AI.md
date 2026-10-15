@@ -46,6 +46,8 @@ supplied conversation history, and uses the leading system instruction as
 context. It maps temperature, TopK, and TopP to native options.
 The response model ID, `windows-ai-language-model`, identifies the API, not
 particular model weights.
+Native policy, moderation, language, and generation failures are reported as
+exceptions rather than successful empty responses.
 
 For `ChatResponseFormatJson` with a schema, the client calls
 `GenerateStructuredJsonResponseAsync`. It requires every declared property,

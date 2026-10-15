@@ -2,6 +2,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
+using Microsoft.Windows.AI.Text;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
@@ -101,6 +102,89 @@ public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<
 }
 public class WindowsAIChatClientValidationTests
 {
+	[Theory]
+	[InlineData(LanguageModelResponseStatus.Error)]
+	[InlineData(LanguageModelResponseStatus.BlockedByPolicy)]
+	[InlineData(LanguageModelResponseStatus.PromptBlockedByContentModeration)]
+	[InlineData(LanguageModelResponseStatus.ResponseBlockedByContentModeration)]
+	[InlineData(LanguageModelResponseStatus.UnsupportedLanguage)]
+	[InlineData(LanguageModelResponseStatus.LanguageMismatch)]
+	[InlineData((LanguageModelResponseStatus)int.MaxValue)]
+	public void GetResponseText_NativeFailure_ThrowsWithStatusAndExtendedError(LanguageModelResponseStatus status)
+	{
+		var cause = new InvalidOperationException("Native failure");
+
+		var error = Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetResponseText(status, "Partial response", cause, isEmptyPrompt: false));
+
+		Assert.Contains(status.ToString(), error.Message, StringComparison.Ordinal);
+		Assert.Same(cause, error.InnerException);
+	}
+
+	[Fact]
+	public void GetResponseText_NonemptyPromptWithoutExtendedError_Throws()
+	{
+		Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetResponseText(LanguageModelResponseStatus.Error, "", null, isEmptyPrompt: false));
+	}
+
+	[Fact]
+	public void GetResponseText_EmptyPromptBlockedByPolicy_Throws()
+	{
+		Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetResponseText(LanguageModelResponseStatus.BlockedByPolicy, "", null, isEmptyPrompt: true));
+	}
+
+	[Fact]
+	public void GetResponseText_Complete_ReturnsNativeText()
+	{
+		Assert.Equal("Hello", WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.Complete, "Hello", null, isEmptyPrompt: false));
+	}
+
+	[Fact]
+	public void GetResponseText_EmptyPromptWithoutExtendedError_PreservesEmptyResponse()
+	{
+		Assert.Equal("", WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.Error, "", null, isEmptyPrompt: true));
+	}
+
+	[Fact]
+	public void GetResponseText_EmptyPromptInvalidArgument_PreservesEmptyResponse()
+	{
+		Assert.Equal("", WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.Error, "", new ArgumentException(), isEmptyPrompt: true));
+	}
+
+	[Fact]
+	public void GetResponseText_NonemptyPromptInvalidArgument_Throws()
+	{
+		Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetResponseText(
+				LanguageModelResponseStatus.Error, "", new ArgumentException(), isEmptyPrompt: false));
+	}
+
+	[Fact]
+	public void GetResponseText_EmptyPromptWithExtendedError_Throws()
+	{
+		var cause = new InvalidOperationException("Native failure");
+
+		var error = Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetResponseText(LanguageModelResponseStatus.Error, "", cause, isEmptyPrompt: true));
+
+		Assert.Same(cause, error.InnerException);
+	}
+
+	[Fact]
+	public void GetResponseText_PromptLargerThanContext_ExplainsLimit()
+	{
+		var error = Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetResponseText(
+				LanguageModelResponseStatus.PromptLargerThanContext, "", null, isEmptyPrompt: false));
+
+		Assert.Contains("context window", error.Message, StringComparison.Ordinal);
+	}
+
 	[Fact]
 	public async Task GetResponseAsync_WithNonAIFunctionTool_ThrowsNotSupportedException()
 	{
