@@ -18,6 +18,10 @@ class GeminiNanoNativeClient {
         createModel = { Generation.getClient() },
         closeModel = { it.close() },
         infer = { model, request, streaming, callback ->
+            val nativeRequest = request.toNative(
+                model::isSystemPromptAvailable,
+                model::isThinkingModeAvailable,
+            )
             val status = model.checkStatus()
             if (status != FeatureStatus.AVAILABLE) {
                 val preparation = when (status) {
@@ -28,7 +32,6 @@ class GeminiNanoNativeClient {
                 error("Gemini Nano is not ready for inference. Current status: $status.$preparation")
             }
 
-            val nativeRequest = buildRequest(model, request)
             val modelName = model.getBaseModelName()
             val tokenCount = model.countTokens(nativeRequest).totalTokens
             val generated = if (streaming) {
@@ -73,62 +76,6 @@ class GeminiNanoNativeClient {
         else -> NativeChatError(exception.message ?: "Gemini Nano inference failed.", 0, null)
     }
 
-    private suspend fun buildRequest(
-        model: com.google.mlkit.genai.prompt.GenerativeModel,
-        request: NativeChatRequest,
-    ): GenerateContentRequest {
-        val contents = request.messages.map { message ->
-            val builder = Content.builder()
-            message.parts.forEach { part ->
-                when (part.kind) {
-                    CONTENT_TEXT -> builder.addPart(TextPart(part.text.orEmpty()))
-                    CONTENT_IMAGE -> builder.addPart(
-                        ImagePart(requireNotNull(part.image) { "Image part has no data." })
-                    )
-                    else -> error("Unsupported native content kind '${part.kind}'.")
-                }
-            }
-            builder.build()
-        }
-
-        val builder = GenerateContentRequest.Builder(contents)
-        val options = request.options
-        if (options.systemInstruction != null) {
-            if (model.isSystemPromptAvailable()) {
-                builder.systemInstruction = SystemInstruction(options.systemInstruction)
-            } else {
-                val systemContent = Content.builder()
-                    .addPart(TextPart("<|system|>\n${options.systemInstruction}\n<|end|>\n"))
-                    .build()
-                return buildConfiguredRequest(
-                    model,
-                    GenerateContentRequest.Builder(listOf(systemContent) + contents),
-                    options,
-                )
-            }
-        }
-
-        return buildConfiguredRequest(model, builder, options)
-    }
-
-    private suspend fun buildConfiguredRequest(
-        model: com.google.mlkit.genai.prompt.GenerativeModel,
-        builder: GenerateContentRequest.Builder,
-        options: NativeChatOptions,
-    ): GenerateContentRequest {
-        builder.temperature = options.temperature
-        builder.topK = options.topK
-        builder.seed = options.seed
-        builder.maxOutputTokens = options.maxOutputTokens
-        if (options.enableThinking) {
-            if (!model.isThinkingModeAvailable()) {
-                error("The selected Gemini Nano model does not support thinking mode.")
-            }
-            builder.enableThinking = true
-        }
-        return builder.build()
-    }
-
     private fun GenerateContentResponse.toNativeResponse(
         modelName: String,
         inputTokens: Int,
@@ -144,4 +91,60 @@ class GeminiNanoNativeClient {
             inputTokens,
         )
     }
+}
+
+internal suspend fun NativeChatRequest.toNative(
+    isSystemPromptAvailable: suspend () -> Boolean,
+    isThinkingModeAvailable: suspend () -> Boolean,
+): GenerateContentRequest {
+    val instructions = mutableListOf<String>()
+    val contents = mutableListOf<Content>()
+    messages.forEach { message ->
+        when (message.role) {
+            "system" -> message.parts.forEach { part ->
+                require(part.kind == CONTENT_TEXT) {
+                    "Gemini Nano system instructions support text only."
+                }
+                instructions.add(part.text.orEmpty())
+            }
+            "user" -> {
+                val builder = Content.builder()
+                message.parts.forEach { part ->
+                    when (part.kind) {
+                        CONTENT_TEXT -> builder.addPart(TextPart(part.text.orEmpty()))
+                        CONTENT_IMAGE -> builder.addPart(
+                            ImagePart(requireNotNull(part.image) { "Image part has no data." })
+                        )
+                        else -> error("Unsupported native content kind '${part.kind}'.")
+                    }
+                }
+                contents.add(builder.build())
+            }
+            else -> error(
+                "Gemini Nano supports single-turn user input and native system instructions only; " +
+                    "chat role '${message.role}' and assistant/tool history are not supported."
+            )
+        }
+    }
+    require(contents.isNotEmpty()) { "At least one user message is required." }
+
+    val builder = GenerateContentRequest.Builder(contents)
+    if (instructions.isNotEmpty()) {
+        check(isSystemPromptAvailable()) {
+            "The selected Gemini Nano model does not support native system instructions (requires Nano V3 or later)."
+        }
+        builder.systemInstruction = SystemInstruction(instructions.joinToString("\n\n"))
+    }
+
+    builder.temperature = options.temperature
+    builder.topK = options.topK
+    builder.seed = options.seed
+    builder.maxOutputTokens = options.maxOutputTokens
+    if (options.enableThinking) {
+        check(isThinkingModeAvailable()) {
+            "The selected Gemini Nano model does not support thinking mode (requires Nano V4 or later)."
+        }
+        builder.enableThinking = true
+    }
+    return builder.build()
 }

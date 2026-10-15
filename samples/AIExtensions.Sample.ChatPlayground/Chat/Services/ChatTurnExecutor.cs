@@ -8,6 +8,8 @@ internal sealed class ChatTurnExecutor
 {
     private readonly List<ChatMessage> _history = [];
 
+    public bool HasHistory => _history.Count > 0;
+
     public bool HistoryContainsImage => _history.SelectMany(message => message.Contents)
         .Any(content => content is DataContent ||
             content is ImageGenerationToolResultContent { Outputs: { } outputs } &&

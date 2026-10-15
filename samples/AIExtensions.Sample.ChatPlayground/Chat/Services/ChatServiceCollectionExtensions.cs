@@ -80,7 +80,8 @@ internal static class ChatServiceCollectionExtensions
                 "Apple Intelligence",
                 "Apple Intelligence is supported on this OS. The first request confirms that the local model is enabled and available.",
                 SupportsImageInput: OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27),
-                SupportsToolCalling: true))
+                SupportsToolCalling: true,
+                SupportsStructuredOutput: true))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
@@ -96,11 +97,15 @@ internal static class ChatServiceCollectionExtensions
             .UseDescriptor(new ChatClientDescriptor(
                 "gemini-nano-chat",
                 "Gemini Nano",
-                "Gemini Nano runs on supported Android devices. The first request confirms that the local model is available.",
+                "Gemini Nano supports single-turn text/image requests only. Start a New chat before each request. " +
+                    "No tools or structured JSON. System instructions require Nano V3+. The first request confirms model availability.",
                 SupportsImageInput: true,
                 SupportsReasoningSummary: false,
                 SupportsImageGeneration: false,
-                SupportsToolCalling: false))
+                SupportsToolCalling: false,
+                SupportsStructuredOutput: false,
+                SupportsConversationHistory: false))
+            .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif
@@ -129,7 +134,8 @@ internal static class ChatServiceCollectionExtensions
                 SupportsImageInput: true,
                 SupportsReasoningSummary: true,
                 SupportsImageGeneration: imageGenerator is not null,
-                SupportsToolCalling: true))
+                SupportsToolCalling: true,
+                SupportsStructuredOutput: true))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>());
         if (imageGenerator is not null)
