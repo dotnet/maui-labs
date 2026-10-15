@@ -7,6 +7,7 @@ using Microsoft.Maui.Platforms.Linux.Gtk4.Handlers;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using Xunit.Abstractions;
+using static Microsoft.Maui.Platforms.Linux.Gtk4.Tests.GtkSignalAssertions;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
@@ -269,24 +270,6 @@ public class CollectionViewHandlerTests(ITestOutputHelper output)
 		Assert.Equal(bind, HasSignal(factory, type, "bind"));
 		Assert.Equal(unbind, HasSignal(factory, type, "unbind"));
 		Assert.Equal(teardown, HasSignal(factory, type, "teardown"));
-	}
-
-	static bool HasVisualStateSignals(Gtk.EventController controller) => controller switch
-	{
-		Gtk.EventControllerMotion motion => HasSignal(motion, Gtk.EventControllerMotion.GetGType(), "enter") ||
-			HasSignal(motion, Gtk.EventControllerMotion.GetGType(), "leave"),
-		Gtk.GestureClick click => HasSignal(click, Gtk.GestureClick.GetGType(), "pressed") ||
-			HasSignal(click, Gtk.GestureClick.GetGType(), "released"),
-		Gtk.EventControllerFocus focus => HasSignal(focus, Gtk.EventControllerFocus.GetGType(), "enter") ||
-			HasSignal(focus, Gtk.EventControllerFocus.GetGType(), "leave"),
-		_ => false,
-	};
-
-	static bool HasSignal(GObject.Object instance, GObject.Type type, string signal)
-	{
-		var id = GObject.Functions.SignalLookup(signal, type);
-		Assert.NotEqual(0u, id);
-		return GObject.Functions.SignalHasHandlerPending(instance, id, new GLib.Quark(0), true);
 	}
 
 	void VerifyLayoutCallbackLifetime(IServiceProvider services, Gtk.Window window)

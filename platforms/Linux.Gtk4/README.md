@@ -464,10 +464,10 @@ and visual-state controller replacement.
 `GtkBlazorWebViewLifetimeTests` requires WebKitGTK 6.0 and covers script-message
 handler cleanup on disposal.
 
-`GtkSignalLifetimeTests` repeatedly connects real MAUI button handlers, forces
-collection, emits native clicks, verifies disconnection, and retires the widgets
-while pumping GTK during finalization. This is bounded signal-lifetime coverage,
-not proof that an intermittent application startup abort has been resolved.
+`GtkSignalLifetimeTests` repeatedly connects real MAUI button and layout handlers,
+forces collection, emits native clicks, and verifies that click and visual-state
+controller signals are disconnected before retiring their owners. It pumps GTK
+during finalization to exercise closure/native teardown lifetime boundaries.
 
 `ContentViewRootLayoutTests` covers child-size changes without window resizing,
 measure invalidation and idle layout convergence.

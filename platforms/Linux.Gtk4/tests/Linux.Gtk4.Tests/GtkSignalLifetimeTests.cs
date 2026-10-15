@@ -6,6 +6,7 @@ using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platform;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
+using static Microsoft.Maui.Platforms.Linux.Gtk4.Tests.GtkSignalAssertions;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 
@@ -13,7 +14,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Tests;
 public class GtkSignalLifetimeTests
 {
 	[GtkRuntimeFact]
-	public void ButtonSignals_SurviveCollection_AndDisconnectBeforeNativeTeardown()
+	public void Signals_SurviveCollection_AndDisconnectBeforeNativeTeardown()
 	{
 		Gtk.Module.Initialize();
 		Gtk.Functions.Init();
@@ -27,7 +28,7 @@ public class GtkSignalLifetimeTests
 		{
 			for (var batch = 0; batch < 20; batch++)
 			{
-				ConnectAndRetireButtons(context, box);
+				ConnectAndRetireViews(context, box);
 				var collect = Task.Run(() =>
 				{
 					GC.Collect();
@@ -50,7 +51,7 @@ public class GtkSignalLifetimeTests
 	}
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	static void ConnectAndRetireButtons(GtkMauiContext context, Gtk.Box box)
+	static void ConnectAndRetireViews(GtkMauiContext context, Gtk.Box box)
 	{
 		for (var i = 0; i < 20; i++)
 		{
@@ -77,6 +78,34 @@ public class GtkSignalLifetimeTests
 			{
 				box.Remove(native);
 				handler.DisconnectHandler();
+			}
+
+			var layout = new VerticalStackLayout();
+			using var panel = (GtkLayoutPanel)layout.ToPlatform(context);
+			using var controllers = panel.ObserveControllers();
+			var ownedControllers = Enumerable.Range(0, (int)controllers.GetNItems())
+				.Select(index => controllers.GetObject((uint)index))
+				.OfType<Gtk.EventController>()
+				.Where(HasVisualStateSignals)
+				.ToArray();
+			Assert.Equal(3, ownedControllers.Length);
+			box.Append(panel);
+			var layoutHandler = layout.Handler!;
+			try
+			{
+				GC.Collect();
+				layoutHandler.DisconnectHandler();
+				Assert.All(ownedControllers, controller =>
+				{
+					Assert.Null(controller.GetWidget());
+					Assert.False(HasVisualStateSignals(controller));
+				});
+			}
+			finally
+			{
+				box.Remove(panel);
+				layoutHandler.DisconnectHandler();
+				GC.KeepAlive(ownedControllers);
 			}
 		}
 	}
