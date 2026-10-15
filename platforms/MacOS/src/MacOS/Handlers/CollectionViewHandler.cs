@@ -485,7 +485,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             // Items shrank — more items may now fit in the viewport; re-run once
             UpdateVisibleItems(viewportOverride);
             if (_measureContent)
-                VirtualView.InvalidateMeasure();
+                ((IView)VirtualView).InvalidateMeasure();
         }
     }
 
@@ -1021,7 +1021,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         try
         {
             ReloadItemsCore();
-            VirtualView.InvalidateMeasure();
+            ((IView)VirtualView).InvalidateMeasure();
         }
         finally
         {
