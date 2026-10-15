@@ -78,6 +78,10 @@ supply the artifacts. CI downloads them before packing/signing on Windows. See
 
 ## Tests and implementation
 
+Android source builds require Java 17+ and the Android SDK. See the
+[Gemini Nano Android guide](../../docs/ai/gemini-nano-android.md) for native build
+commands and binding details.
+
 Portable tests live in `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests`:
 
 ```sh
