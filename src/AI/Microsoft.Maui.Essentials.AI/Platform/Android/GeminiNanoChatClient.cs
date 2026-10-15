@@ -1,7 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
-using System.Text;
-using System.Text.Json;
 using System.Threading.Channels;
 using AndroidNative = Com.Microsoft.Maui.Essentials.AI;
 using Microsoft.Extensions.AI;
@@ -13,19 +11,16 @@ namespace Microsoft.Maui.Essentials.AI;
 /// Google ML Kit GenAI Prompt API.
 /// </summary>
 /// <remarks>
-/// Requests are stateless and use independent native models. Images must contain
-/// in-memory data. JSON output is prompt-guided and validated against a bounded
-/// schema subset; it is not native typed generation. Model availability errors
-/// are surfaced to the caller without a cloud fallback.
+/// Requests are single-turn and use independent native models. Only user text,
+/// in-memory images, and native system instructions are supported. Assistant
+/// history, tools, and structured output are not supported. Model availability
+/// errors are surfaced to the caller without a cloud fallback.
 /// </remarks>
 [SupportedOSPlatform("android26.0")]
 public sealed class GeminiNanoChatClient : IChatClient
 {
 	private const string ProviderName = "google";
 	private const string DefaultModelId = "gemini-nano";
-	private const string JsonOnlyInstruction =
-		"Return only a valid JSON value. Do not include Markdown fences, commentary, or text outside the JSON value.";
-
 	private readonly AndroidNative.GeminiNanoNativeClient _native;
 	private ChatClientMetadata? _metadata;
 	private int _disposed;
@@ -49,20 +44,13 @@ public sealed class GeminiNanoChatClient : IChatClient
 		cancellationToken.ThrowIfCancellationRequested();
 		ThrowIfDisposed();
 
-		var messageList = messages.ToList();
-		GeminiNanoPromptFormatter.ValidateMessages(messageList);
-		GeminiNanoPromptFormatter.ValidateOptions(options);
-
-		ThrowIfDisposed();
-		using var request = CreateRequest(messageList, options);
+		using var request = ToNative(messages, options);
 		using var callback = new NativeCallback(cancellationToken: cancellationToken);
 		using var cancellation = _native.Generate(request, streaming: false, callback);
 		using var registration = cancellationToken.Register(() => cancellation.Cancel());
 
 		var nativeResponse = await callback.Response.ConfigureAwait(false);
-		var response = FromNative(nativeResponse, options);
-		ValidateJsonResponse(response.Text, options?.ResponseFormat);
-		return response;
+		return FromNative(nativeResponse, options);
 	}
 
 	/// <inheritdoc />
@@ -75,19 +63,14 @@ public sealed class GeminiNanoChatClient : IChatClient
 		cancellationToken.ThrowIfCancellationRequested();
 		ThrowIfDisposed();
 
-		var messageList = messages.ToList();
-		GeminiNanoPromptFormatter.ValidateMessages(messageList);
-		GeminiNanoPromptFormatter.ValidateOptions(options);
-
 		AndroidNative.NativeCancellation? nativeCancellation = null;
 		NativeCallback? callback = null;
 		try
 		{
 			ThrowIfDisposed();
-			using var request = CreateRequest(messageList, options);
+			using var request = ToNative(messages, options);
 			var messageId = Guid.NewGuid().ToString("N");
 			var responseId = Guid.NewGuid().ToString("N");
-			var text = new StringBuilder();
 			var channel = Channel.CreateUnbounded<ChatResponseUpdate>(new()
 			{
 				SingleReader = true,
@@ -97,7 +80,6 @@ public sealed class GeminiNanoChatClient : IChatClient
 			callback = new NativeCallback(
 				onText: chunk =>
 				{
-					text.Append(chunk);
 					channel.Writer.TryWrite(new ChatResponseUpdate(ChatRole.Assistant, chunk)
 					{
 						MessageId = messageId,
@@ -115,19 +97,8 @@ public sealed class GeminiNanoChatClient : IChatClient
 					: null,
 				onComplete: response =>
 				{
-					try
-					{
-						ValidateJsonResponse(text.ToString(), options?.ResponseFormat);
-						channel.Writer.TryWrite(CreateFinalUpdate(
-							response,
-							messageId,
-							responseId));
-						channel.Writer.TryComplete();
-					}
-					catch (Exception exception)
-					{
-						channel.Writer.TryComplete(exception);
-					}
+					channel.Writer.TryWrite(CreateFinalUpdate(response, messageId, responseId));
+					channel.Writer.TryComplete();
 				},
 				onError: exception => channel.Writer.TryComplete(exception),
 				cancellationToken: cancellationToken);
@@ -181,65 +152,46 @@ public sealed class GeminiNanoChatClient : IChatClient
 		// rejects them after Close and its peer is released by normal GC.
 	}
 
-	private static AndroidNative.NativeChatRequest CreateRequest(
-		IReadOnlyList<ChatMessage> messages,
+	internal static AndroidNative.NativeChatRequest ToNative(
+		IEnumerable<ChatMessage> messages,
 		ChatOptions? options)
 	{
-		var responseInstruction = CreateResponseInstruction(options?.ResponseFormat);
-		var systemInstruction = GeminiNanoPromptFormatter.GetSystemInstruction(
-			messages,
-			options,
-			responseInstruction);
-		var nativeMessages = new List<AndroidNative.NativeChatMessage>();
+		ValidateOptions(options);
+		var messageList = messages.ToList();
+		if (messageList.Count == 0)
+			throw new ArgumentException("At least one chat message is required.", nameof(messages));
+		if (options?.Instructions is { } instructions)
+			messageList.Insert(0, new ChatMessage(ChatRole.System, instructions));
 
-		foreach (var message in GeminiNanoPromptFormatter.GetConversationMessages(messages))
-		{
-			var role = message.Role == ChatRole.User ? 0 : 1;
-			var parts = new List<AndroidNative.NativeContentPart>
-			{
-				new(
-					kind: 0,
-					text: GeminiNanoPromptFormatter.RoleStart(
-						GeminiNanoPromptFormatter.FormatRole(message.Role)),
-					image: null),
-			};
-
-			foreach (var content in message.Contents)
-			{
-				switch (content)
-				{
-					case TextContent { Text.Length: > 0 } text:
-						parts.Add(new(0, text.Text, null));
-						break;
-					case TextContent:
-						break;
-					case TextReasoningContent:
-						break;
-					case DataContent data when data.HasTopLevelMediaType("image") && data.Data is { } bytes:
-						parts.Add(new(1, null, bytes.ToArray()));
-						break;
-					case DataContent data when data.HasTopLevelMediaType("image"):
-						throw new NotSupportedException("Gemini Nano image content must contain in-memory data.");
-					default:
-						throw new NotSupportedException(
-							$"Content type '{content.GetType().Name}' is not supported by Gemini Nano.");
-				}
-			}
-
-			parts.Add(new(0, GeminiNanoPromptFormatter.RoleEnd, null));
-			nativeMessages.Add(new(role, [.. parts]));
-		}
-
-		var reasoning = options?.Reasoning;
+		var nativeMessages = messageList.Select(ToNative).ToArray();
 		var nativeOptions = new AndroidNative.NativeChatOptions(
-			systemInstruction,
 			options?.Temperature is { } temperature ? Java.Lang.Float.ValueOf(temperature) : null,
 			options?.TopK is { } topK ? Java.Lang.Integer.ValueOf(topK) : null,
 			options?.Seed is { } seed ? Java.Lang.Integer.ValueOf(checked((int)seed)) : null,
 			options?.MaxOutputTokens is { } maxOutputTokens ? Java.Lang.Integer.ValueOf(maxOutputTokens) : null,
-			enableThinking: ShouldEnableThinking(reasoning));
+			enableThinking: options?.Reasoning?.Output == ReasoningOutput.Full);
 
-		return new AndroidNative.NativeChatRequest([.. nativeMessages], nativeOptions);
+		return new AndroidNative.NativeChatRequest(nativeMessages, nativeOptions);
+	}
+
+	private static AndroidNative.NativeChatMessage ToNative(ChatMessage message)
+	{
+		ArgumentNullException.ThrowIfNull(message);
+		return new(message.Role.Value, message.Contents.Select(ToNative).ToArray());
+	}
+
+	private static AndroidNative.NativeContentPart ToNative(AIContent content)
+	{
+		ArgumentNullException.ThrowIfNull(content);
+		return content switch
+		{
+			TextContent text => new(0, text.Text, null),
+			DataContent data when data.HasTopLevelMediaType("image") && data.Data is { Length: > 0 } bytes =>
+				new(1, null, bytes.ToArray()),
+			DataContent data when data.HasTopLevelMediaType("image") =>
+				throw new NotSupportedException("Gemini Nano images require non-empty in-memory data."),
+			_ => throw new NotSupportedException($"Content type '{content.GetType().Name}' is not supported by Gemini Nano."),
+		};
 	}
 
 	private static ChatResponse FromNative(
@@ -298,42 +250,28 @@ public sealed class GeminiNanoChatClient : IChatClient
 			_ => new ChatFinishReason("other"),
 		};
 
-	private static string? CreateResponseInstruction(ChatResponseFormat? responseFormat) =>
-		responseFormat switch
-		{
-			null or ChatResponseFormatText => null,
-			ChatResponseFormatJson json when json.Schema is null => JsonOnlyInstruction,
-			ChatResponseFormatJson json =>
-				$"{JsonOnlyInstruction}\nThe JSON value must conform to this schema:\n{StructuredOutputSchema.GetRequiredSchema(json).GetRawText()}",
-			_ => throw new NotSupportedException(
-				$"Response format '{responseFormat.GetType().Name}' is not supported by Gemini Nano."),
-		};
-
-	private static bool ShouldEnableThinking(ReasoningOptions? reasoning) =>
-		reasoning is not null &&
-		(reasoning.Effort is not null and not ReasoningEffort.None ||
-		 reasoning.Output == ReasoningOutput.Full);
-
-	private static void ValidateJsonResponse(string text, ChatResponseFormat? responseFormat)
+	private static void ValidateOptions(ChatOptions? options)
 	{
-		if (responseFormat is not ChatResponseFormatJson)
+		if (options is null)
 			return;
 
-		try
-		{
-			using var document = JsonDocument.Parse(text);
-			if (responseFormat is ChatResponseFormatJson jsonFormat &&
-				jsonFormat.Schema is not null)
-			{
-				StructuredOutputSchema.ValidateResponse(
-					document.RootElement,
-					StructuredOutputSchema.GetRequiredSchema(jsonFormat));
-			}
-		}
-		catch (JsonException exception)
-		{
-			throw new InvalidOperationException("Gemini Nano returned invalid JSON.", exception);
-		}
+		if (options.ResponseFormat is not null and not ChatResponseFormatText)
+			throw new NotSupportedException("Gemini Nano does not support ChatOptions JSON or structured response formats.");
+		if (options.Tools is { Count: > 0 } ||
+			options.ToolMode is { } toolMode && toolMode != ChatToolMode.None ||
+			options.AllowMultipleToolCalls is not null)
+			throw new NotSupportedException("The ML Kit GenAI Prompt API does not support tool calling.");
+		if (options.TopP is not null || options.FrequencyPenalty is not null ||
+			options.PresencePenalty is not null || options.ConversationId is not null ||
+			options.ContinuationToken is not null || options.ModelId is not null ||
+			options.RawRepresentationFactory is not null || options.AllowBackgroundResponses == true ||
+			options.StopSequences is { Count: > 0 } || options.AdditionalProperties is { Count: > 0 })
+			throw new NotSupportedException("Gemini Nano received chat options without a native ML Kit mapping.");
+		if (options.Reasoning is { } reasoning &&
+			(reasoning.Effort is not null and not ReasoningEffort.None ||
+			 reasoning.Output is not null and not ReasoningOutput.None and not ReasoningOutput.Full ||
+			 reasoning.Effort == ReasoningEffort.None && reasoning.Output == ReasoningOutput.Full))
+			throw new NotSupportedException("Gemini Nano supports full thinking output, not effort levels or summaries. Set Reasoning.Output to Full without an effort level.");
 	}
 
 	private void ThrowIfDisposed() =>

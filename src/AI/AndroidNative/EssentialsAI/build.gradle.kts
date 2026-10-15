@@ -42,6 +42,7 @@ dependencies {
     mlKitRuntime("com.google.mlkit:genai-common:1.0.0-beta4")
     mlKitRuntime("com.google.mlkit:genai-schema:1.0.0-alpha1")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 

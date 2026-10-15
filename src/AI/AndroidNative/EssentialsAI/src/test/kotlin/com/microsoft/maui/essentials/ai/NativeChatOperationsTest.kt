@@ -38,8 +38,8 @@ class NativeChatOperationsTest {
     }
 
     private val request = NativeChatRequest(
-        arrayOf(NativeChatMessage(0, arrayOf(NativeContentPart(CONTENT_TEXT, "hello", null)))),
-        NativeChatOptions(null, null, null, null, null, false),
+        arrayOf(NativeChatMessage("user", arrayOf(NativeContentPart(CONTENT_TEXT, "hello", null)))),
+        NativeChatOptions(null, null, null, null, false),
     )
     private val response = NativeChatResponse("answer", emptyArray(), 0, "test", 1)
 
