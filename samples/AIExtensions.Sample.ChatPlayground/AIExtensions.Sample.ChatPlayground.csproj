@@ -53,9 +53,9 @@
   </ItemGroup>
 
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKExperimentalVersion)" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" VersionOverride="$(MicrosoftWindowsAppSDKFoundationExperimentalVersion)" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.AI" VersionOverride="$(MicrosoftWindowsAppSDKExperimentalVersion)" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion_Experimental)" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" VersionOverride="$(MicrosoftWindowsAppSDKFoundationVersion_Experimental)" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.AI" VersionOverride="$(MicrosoftWindowsAppSDKAIVersion_Experimental)" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>
 

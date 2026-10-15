@@ -94,14 +94,14 @@
     <MicrosoftAgentsAIHostingVersion>1.0.0-preview.260225.1</MicrosoftAgentsAIHostingVersion>
     <!-- DeviceRunners (device test runner OSS replacement) -->
     <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
-    <!-- MAUI Windows apps still resolve this umbrella; the library references its AI package directly. -->
+    <!-- Stable Windows packages. -->
     <MicrosoftWindowsAppSDKVersion>2.5.1</MicrosoftWindowsAppSDKVersion>
+    <MicrosoftWindowsAppSDKAIVersion>2.4.4</MicrosoftWindowsAppSDKAIVersion>
     <MicrosoftWindowsAppSDKFoundationVersion>2.3.12</MicrosoftWindowsAppSDKFoundationVersion>
-    <!-- This stable API baseline also permits development apps to select the newer experimental AI API. -->
-    <MicrosoftWindowsAppSDKAIStableBaselineVersion>2.4.4</MicrosoftWindowsAppSDKAIStableBaselineVersion>
     <!-- Windows AI development apps opt into the experimental runtime without changing library dependencies. -->
-    <MicrosoftWindowsAppSDKExperimentalVersion>2.5.4-experimental</MicrosoftWindowsAppSDKExperimentalVersion>
-    <MicrosoftWindowsAppSDKFoundationExperimentalVersion>2.3.13-experimental</MicrosoftWindowsAppSDKFoundationExperimentalVersion>
+    <MicrosoftWindowsAppSDKVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKVersion_Experimental>
+    <MicrosoftWindowsAppSDKAIVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKAIVersion_Experimental>
+    <MicrosoftWindowsAppSDKFoundationVersion_Experimental>2.3.13-experimental</MicrosoftWindowsAppSDKFoundationVersion_Experimental>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
   </PropertyGroup>
