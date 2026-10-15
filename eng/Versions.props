@@ -95,7 +95,7 @@
     <!-- DeviceRunners (device test runner OSS replacement) -->
     <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
     <!-- MAUI Windows apps still resolve this umbrella; the library references its AI package directly. -->
-    <MicrosoftWindowsAppSDKVersion>2.5.4-experimental</MicrosoftWindowsAppSDKVersion>
+    <MicrosoftWindowsAppSDKVersion>2.5.1</MicrosoftWindowsAppSDKVersion>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
   </PropertyGroup>
