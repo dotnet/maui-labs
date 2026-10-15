@@ -464,6 +464,11 @@ and visual-state controller replacement.
 `GtkBlazorWebViewLifetimeTests` requires WebKitGTK 6.0 and covers script-message
 handler cleanup on disposal.
 
+`GtkSignalLifetimeTests` repeatedly connects real MAUI button handlers, forces
+collection, emits native clicks, verifies disconnection, and retires the widgets
+while pumping GTK during finalization. This is bounded signal-lifetime coverage,
+not proof that an intermittent application startup abort has been resolved.
+
 `ContentViewRootLayoutTests` covers child-size changes without window resizing,
 measure invalidation and idle layout convergence.
 
@@ -482,6 +487,7 @@ From the repository root on Linux, use the shared class runner (PowerShell 7,
 ```bash
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkBlazorWebViewLifetimeTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSignalLifetimeTests -MauiVersion 10.0.70
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass ContentViewRootLayoutTests
