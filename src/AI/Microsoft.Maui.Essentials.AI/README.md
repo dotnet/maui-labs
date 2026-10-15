@@ -56,9 +56,10 @@ await foreach (var update in chat.GetStreamingResponseAsync("Plan a day trip to 
 }
 ```
 
-### Image input on Apple 27+
+### Image input
 
-Attach portable image bytes with `Microsoft.Extensions.AI.DataContent`:
+Apple Intelligence and Gemini Nano both accept image input. Attach encoded
+image bytes with `Microsoft.Extensions.AI.DataContent`:
 
 ```csharp
 var message = new ChatMessage(ChatRole.User,
@@ -69,7 +70,17 @@ var message = new ChatMessage(ChatRole.User,
 var response = await _chat.GetResponseAsync([message]);
 ```
 
-On Apple, a `CGImage` (or `UIImage` on iOS/Mac Catalyst, `NSImage` on macOS) can be passed through without re-decoding by setting `RawRepresentation` on the `DataContent`; retain valid encoded bytes for recording and cross-platform consumers. Local `file://` `UriContent` is supported, while remote image URLs are rejected rather than fetched silently. Image prompting requires runtime OS 27 and a vision-capable, ready Apple Intelligence model; on 26 the client remains text-only and an image request throws an explicit error. Image *generation* is not provided by this Apple chat client.
+**Android:** Requires a supported device with a ready AICore/Gemini Nano model.
+Images must be supplied as in-memory `DataContent`; `UriContent` is unsupported.
+
+**Apple:** Requires OS 27+ and a ready, vision-capable Apple Intelligence model.
+Local `file://` `UriContent` is also supported; remote image URLs are rejected.
+Native `CGImage`, `UIImage`, or `NSImage` values can be supplied through
+`RawRepresentation` while retaining encoded bytes. See the
+[Apple image-input guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
+for native-image handling.
+
+These chat clients analyze images; they do not generate them.
 
 ### Token usage
 
