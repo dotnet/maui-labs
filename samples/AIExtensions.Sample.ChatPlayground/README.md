@@ -21,8 +21,9 @@ offline. The **More** menu includes a bundled example; **New** replaces the
 current recording. Uncheck tools you do not need, or choose **None** to disable
 tool calls.
 
-The header's **Logs** button toggles the local, bounded diagnostics sidebar
-(also available on Embeddings and Images). It groups built-in logs and spans
+The local, bounded diagnostics sidebar starts collapsed on Chat, Embeddings,
+and Images. The header's **Logs** button toggles it without stopping diagnostic
+capture while hidden. It groups built-in logs and spans
 by trace, including existing tool-invocation lifecycle logs from MEAI and Apple.
 Apple's native tool callbacks retain the originating request's trace/span.
 Chat and embeddings emit spans, while the pinned MEAI version
