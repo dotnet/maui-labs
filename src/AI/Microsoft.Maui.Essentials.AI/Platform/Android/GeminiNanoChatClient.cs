@@ -78,21 +78,23 @@ public sealed class GeminiNanoChatClient : IChatClient
 			});
 
 			callback = new NativeCallback(
-				onText: chunk =>
+				onText: (chunk, modelName) =>
 				{
 					channel.Writer.TryWrite(new ChatResponseUpdate(ChatRole.Assistant, chunk)
 					{
 						MessageId = messageId,
 						ResponseId = responseId,
+						ModelId = modelName,
 					});
 				},
 				onThought: options?.Reasoning?.Output == ReasoningOutput.Full
-					? thought => channel.Writer.TryWrite(new ChatResponseUpdate(
+					? (thought, modelName) => channel.Writer.TryWrite(new ChatResponseUpdate(
 						ChatRole.Assistant,
 						[new TextReasoningContent(thought)])
 					{
 						MessageId = messageId,
 						ResponseId = responseId,
+						ModelId = modelName,
 					})
 					: null,
 				onComplete: response =>
@@ -278,8 +280,8 @@ public sealed class GeminiNanoChatClient : IChatClient
 		ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
 	private sealed class NativeCallback(
-		Action<string>? onText = null,
-		Action<string>? onThought = null,
+		Action<string, string>? onText = null,
+		Action<string, string>? onThought = null,
 		Action<AndroidNative.NativeChatResponse>? onComplete = null,
 		Action<Exception>? onError = null,
 		CancellationToken cancellationToken = default) : Java.Lang.Object, AndroidNative.INativeChatCallback
@@ -296,16 +298,16 @@ public sealed class GeminiNanoChatClient : IChatClient
 
 		internal Task Terminated => _terminated.Task;
 
-		public void OnText(string? text)
+		public void OnText(string? text, string modelName)
 		{
 			if (!string.IsNullOrEmpty(text))
-				onText?.Invoke(text);
+				onText?.Invoke(text, modelName);
 		}
 
-		public void OnThought(string? thought)
+		public void OnThought(string? thought, string modelName)
 		{
 			if (!string.IsNullOrEmpty(thought))
-				onThought?.Invoke(thought);
+				onThought?.Invoke(thought, modelName);
 		}
 
 		public void OnComplete(AndroidNative.NativeChatResponse? response)
