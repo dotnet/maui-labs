@@ -64,6 +64,8 @@
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Core" />
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Guava" />
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Reactive" />
+    <!-- Keep separate archives on .NET 10: its Gradle 9 init-script bug blocks fused AARs (dotnet/android#10738).
+         Explicit inclusion binds only the bridge and packages Google runtimes unbound; revisit fusion on .NET 11. -->
     <AndroidGradleProject Include="../AndroidNative/EssentialsAI/build.gradle.kts" CreateAndroidLibrary="false" />
     <TransformFile Include="Platform\Android\Transforms\Metadata.xml" />
   </ItemGroup>
