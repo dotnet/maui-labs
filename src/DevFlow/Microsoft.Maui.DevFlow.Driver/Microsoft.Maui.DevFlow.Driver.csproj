@@ -27,9 +27,9 @@
   </ItemGroup>
 
   <!-- This dependency is only published to a transport feed, not NuGet.org.
-       Bundle its assemblies, localized resources, and any standalone symbols. -->
+       Bundle its entire library folder, including localized resources and symbols. -->
   <ItemGroup>
-    <None Include="$(PkgXamarin_Android_Tools_AndroidSdk)\lib\netstandard2.0\**\*.dll;$(PkgXamarin_Android_Tools_AndroidSdk)\lib\netstandard2.0\**\*.pdb"
+    <None Include="$(PkgXamarin_Android_Tools_AndroidSdk)\lib\netstandard2.0\**\*"
           Pack="true"
           PackagePath="lib\$(TargetFramework)\"
           Visible="false" />
