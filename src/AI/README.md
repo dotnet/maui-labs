@@ -31,7 +31,8 @@ using Microsoft.Maui.Essentials.AI;
 
 // Register in MauiProgram.cs
 #if ANDROID
-builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+if (OperatingSystem.IsAndroidVersionAtLeast(26))
+    builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
 #elif IOS || MACCATALYST || MACOS
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 #endif
@@ -115,7 +116,9 @@ version check.
 - Apple Intelligence features require iOS 26+, Mac Catalyst 26+, or macOS 26+
 - Gemini Nano requires a device listed in [ML Kit GenAI device support](https://developers.google.com/ml-kit/genai#prompt-device), current AICore system services, and a locked bootloader
 - Android emulators do not provide AICore/Gemini Nano inference
-- Android apps referencing this package require API 26+. Successful AICore
+- Android apps can target API 24+, but Gemini Nano must be guarded with
+  `OperatingSystem.IsAndroidVersionAtLeast(26)` and apps below API 26 need the
+  native manifest overrides documented in the [consumer README](Microsoft.Maui.Essentials.AI/README.md#requirements). Successful AICore
   inference, image input, thinking, and parallel inference still require a
   provisioned supported physical device; JVM/managed tests do not prove model
   availability.

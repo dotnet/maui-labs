@@ -28,7 +28,8 @@ builder.UseMauiApp<App>();
 
 // Register the platform-native chat client
 #if ANDROID
-builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+if (OperatingSystem.IsAndroidVersionAtLeast(26))
+    builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
 #elif IOS || MACCATALYST || MACOS
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 #endif
@@ -194,12 +195,28 @@ async tool code inherit any active chat trace/span, including one created by
 - MAUI workload (`dotnet workload install maui`)
 - Apple Intelligence requires iOS 26+, macOS 26+, or Mac Catalyst 26+
 - Image input additionally requires iOS, macOS, or Mac Catalyst 27+ with a ready vision model
-- Android requires API 26+, current Google system services/AICore, a locked
+- Gemini Nano requires API 26+, current Google system services/AICore, a locked
   bootloader, and a device listed in
   [Prompt API device support](https://developers.google.com/ml-kit/genai#prompt-device)
 - Android emulators do not include AICore and cannot run Gemini Nano inference
-- The Android package minimum is API 26; apps referencing it must also target
-  API 26 or later
+- The Android package minimum is API 24. Guard Gemini Nano registration with
+  `OperatingSystem.IsAndroidVersionAtLeast(26)` so other app features remain
+  available on older devices. Constructing the client below API 26 throws
+  `PlatformNotSupportedException` before initializing the native bridge.
+
+Apps with an Android minimum below API 26 must also opt into the guarded native
+libraries in their `Platforms/Android/AndroidManifest.xml`:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+  <uses-sdk android:targetSdkVersion="36" tools:overrideLibrary="com.microsoft.maui.essentials.ai,com.google.mlkit.genai.common,com.google.mlkit.genai.prompt" />
+</manifest>
+```
+
+This permits installation on older devices; it does not make Gemini Nano
+available there. Retain your app's target SDK level (36 in this example) and keep
+all Gemini Nano usage behind the API 26 runtime guard.
 
 ## Status
 

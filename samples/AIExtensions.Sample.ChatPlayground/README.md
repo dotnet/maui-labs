@@ -60,9 +60,9 @@ image input requires 27+ and a ready vision-capable model. Apple embeddings
 require the English sentence-embedding asset, which may be absent on
 simulators. Azure-backed features also run on Android and Windows.
 
-Android requires API 26+. Gemini Nano additionally requires a supported
+Android requires API 24+. Gemini Nano is registered only on API 26+ and requires a supported
 physical device with a locked bootloader and an updated, provisioned AICore
-model. The Gemini slot is available on Android, but its first request checks
+model. On API 26+ the Gemini slot is available, but its first request checks
 actual model readiness and shows errors if the device or model is unavailable.
 Android emulators can exercise the playground and Replay, not AICore inference.
 The native bridge is built through .NET 10's `AndroidGradleProject`; a source
