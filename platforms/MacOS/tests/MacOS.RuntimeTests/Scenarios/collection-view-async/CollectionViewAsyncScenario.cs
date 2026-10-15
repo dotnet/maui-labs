@@ -15,7 +15,7 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("collection-view-async", 3,
+        ScenarioRegistry.Register(new("collection-view-async", 4,
             context => new CollectionViewAsyncScenario().CreateDelegate(context)));
 }
 
@@ -26,6 +26,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
     CollectionView _collection = null!;
     Label _control = null!;
     Label _empty = null!;
+    double _rowHeight = 44;
 
     public override Window CreateWindow(IActivationState? activationState)
     {
@@ -49,7 +50,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
                 _labels.Add(value);
                 var grid = new Grid
                 {
-                    HeightRequest = 44,
+                    HeightRequest = _rowHeight,
                     ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Star) },
                 };
                 grid.Add(caption, 0);
@@ -92,6 +93,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
             await RuntimeTestContext.FlushMainQueueAsync();
             await Task.Delay(50);
             context.Assert(NSThread.IsMain, "Async insertions resume on AppKit's UI thread.");
+            _rowHeight = 36 + cycle * 10;
             for (var i = 0; i < cycle + 3; i++)
                 _items.Add($"Row {cycle + 1}.{i + 1}");
             _empty.IsVisible = false;
@@ -121,11 +123,50 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
                 "Realized labels have positive native bounds.");
             var clipHasHeight = native.ContentView.Bounds.Height >= native.Bounds.Height - 1;
             var rowsDraw = glyphs.All(count => count > 5);
-            context.Assert(native.Bounds.Height > 100, "The content-sized list reserves height for its rows.");
+            if (cycle == 0 && native.Bounds.Height == 0 && document.Bounds.Height > 100 && glyphs.All(count => count == 0))
+            {
+                context.Assert(native.ContentView.Bounds.Height == 0 && rows.All(row => row.VisibleRect().Height == 0),
+                    "The realized document is clipped by a zero-height CollectionView viewport.");
+                context.BaselineFailure("collection-view-async.zero-height",
+                    "BASELINE_685_SIZING: async rows are realized in a positive-height document inside a zero-height CollectionView.");
+                return;
+            }
+            context.Assert(Math.Abs(native.Bounds.Height - _items.Count * _rowHeight) < 1,
+                "The content-sized list follows actual row measurements, not the estimated height.");
             context.Assert(clipHasHeight, "The native clip view follows the arranged list height.");
             context.Assert(rowsDraw, "Every realized row label has visible magenta glyphs in the compositor capture.");
             context.Pass($"Async insertion and redraw cycle {cycle + 1}");
         }
+
+        _collection.HeightRequest = 112;
+        _items.Clear();
+        _labels.Clear();
+        for (var i = 0; i < 20; i++)
+            _items.Add($"Constrained row {i + 1}");
+        await CaptureAsync(context, nativeWindow, "constrained.png");
+        var constrainedDocument = native.DocumentView!;
+        var realized = constrainedDocument.Subviews.Single().Subviews.Length;
+        context.Assert(Math.Abs(native.Bounds.Height - 112) < 1,
+            "An explicit viewport height is preserved instead of expanding to the document extent.");
+        context.Assert(constrainedDocument.Bounds.Height > native.Bounds.Height && realized < _items.Count,
+            "Constrained lists retain a scrollable document and virtualize offscreen rows.");
+        _collection.ScrollTo(19, position: ScrollToPosition.End, animate: false);
+        var scrolledImage = await CaptureAsync(context, nativeWindow, "constrained-scrolled.png");
+        var visibleLabels = _labels.Where(label => label.Handler?.PlatformView is NSView view &&
+            view.Window == nativeWindow && view.VisibleRect().Height > 0).ToArray();
+        var visibleGlyphs = visibleLabels.Select(label => CountPixels(scrolledImage, nativeWindow, Native(label), cyan: false)).ToArray();
+        context.WriteJson("constrained.json", new
+        {
+            bounds = native.Bounds.ToString(),
+            clip = native.ContentView.Bounds.ToString(),
+            document = constrainedDocument.Bounds.ToString(),
+            realized,
+            visibleGlyphs,
+        });
+        context.Assert(native.ContentView.Bounds.Y > 0, "Constrained lists still scroll to later items.");
+        context.Assert(visibleGlyphs.Count(count => count > 5) >= 2,
+            "Scrolled constrained rows have visible compositor glyphs.");
+        context.Pass("Constrained viewport retains virtualization and internal scrolling");
     }
 
     async Task<RuntimeBitmap> CaptureAsync(RuntimeTestContext context, NSWindow window, string name)
