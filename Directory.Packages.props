@@ -77,8 +77,8 @@
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIAbstractionsVersion)" />
     <!-- Windows AI WinRT APIs (the umbrella SDK version is pinned for MAUI's WinUI runtime) -->
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="$(MicrosoftWindowsAppSDKVersion)" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.AI" Version="2.5.5" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.12" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.AI" Version="$(MicrosoftWindowsAppSDKAIVersion)" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="$(MicrosoftWindowsAppSDKFoundationVersion)" />
     <!-- Sample app: Microsoft Agents AI -->
     <PackageVersion Include="Microsoft.Agents.AI" Version="$(MicrosoftAgentsAIVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Hosting" Version="$(MicrosoftAgentsAIHostingVersion)" />
@@ -97,8 +97,6 @@
     <PackageVersion Include="DeviceRunners.VisualRunners.Xunit" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
-    <PackageVersion Include="DeviceRunners.XHarness.Xunit" Version="$(DeviceRunnersVersion)" />
-    <PackageVersion Include="DeviceRunners.XHarness.Maui" Version="$(DeviceRunnersVersion)" />
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="$(MicrosoftWindowsSDKBuildToolsWinAppVersion)" />
   </ItemGroup>
