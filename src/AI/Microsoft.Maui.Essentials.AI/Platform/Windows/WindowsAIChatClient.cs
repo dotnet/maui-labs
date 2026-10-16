@@ -235,18 +235,27 @@ public sealed class WindowsAIChatClient : IChatClient
 
 				// Do not wait for blocked native work or dispose the token it still needs.
 				// Observe any late faults even though the consumer may no longer be reading.
-				_ = producer.ContinueWith(task =>
-				{
-					try
-					{
-						if (task.IsFaulted)
-							System.Diagnostics.Trace.TraceError($"Windows AI generation failed: {task.Exception}");
-					}
-					finally
-					{
-						source.Dispose();
-					}
-				}, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+				_ = FinishProducerAsync(producer, source);
+			}
+		}
+
+		static async Task FinishProducerAsync(Task producer, CancellationTokenSource source)
+		{
+			try
+			{
+				await producer.ConfigureAwait(false);
+			}
+			catch (OperationCanceledException) when (producer.IsCanceled)
+			{
+				// Cancellation is expected when generation or its consumer stops.
+			}
+			catch (Exception)
+			{
+				System.Diagnostics.Trace.TraceError($"Windows AI generation failed: {producer.Exception}");
+			}
+			finally
+			{
+				source.Dispose();
 			}
 		}
 	}
