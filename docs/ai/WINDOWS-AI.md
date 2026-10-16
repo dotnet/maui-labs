@@ -52,8 +52,11 @@ Text requests use a fresh native context and labelled user/assistant text.
 `ChatOptions.Instructions` comes first, followed by all system messages in history
 order, joined with blank lines into one native system string. This also hoists
 mid-history system messages; their chronological positions are not retained.
-Non-text message content and tool-history contents are ignored, not replaced with
-synthetic descriptions. Tool-request options remain unsupported.
+Recorded function calls/results are retained as `Tool call:` / `Tool result:`
+blocks containing the function name and JSON, so shared conversation history keeps
+its context. Results use their call ID if no matching function name is available.
+Other non-text content, including image-generation history, is ignored.
+This is history replay, not native tool calling; tool-request options remain unsupported.
 Temperature, TopK, and TopP map to native options.
 The response model ID, `windows-ai-language-model`, identifies the API, not
 particular model weights.

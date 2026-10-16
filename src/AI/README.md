@@ -93,7 +93,9 @@ Apple or Windows device/runtime and model availability; portable tests do not ru
 
 Shared chat suites cover unknown content/roles and combined, multiple, or interleaved
 system instructions. Apple and Windows convert message content they support and
-ignore content they cannot map, without inventing tool/image-history text.
+ignore content they cannot map. Windows replays recorded function calls/results
+as named JSON text blocks for context, without emulating tool execution;
+image-generation history is ignored.
 Custom roles are ignored, following the Azure/OpenAI adapters.
 
 For live cloud baselines, configure the device project's user secrets:

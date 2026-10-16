@@ -24,7 +24,7 @@ public class WindowsAIImageHistoryTests
 #pragma warning restore MEAI001
 
 		Assert.Equal(
-			"User: Generate an image." + Environment.NewLine + "User: What did I request?",
+			"User: Generate an image." + Environment.NewLine + Environment.NewLine + "User: What did I request?",
 			WindowsAIChatClient.ConvertToPrompt(history));
 	}
 }

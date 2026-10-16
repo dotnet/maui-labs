@@ -196,7 +196,7 @@ public class WindowsAIChatClientValidationTests
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]
-	public void ConvertToPrompt_WithToolHistory_DoesNotSerializeUnsupportedContent(bool functionCall)
+	public void ConvertToPrompt_WithToolHistory_FormatsNameAndJson(bool functionCall)
 	{
 		using var result = JsonDocument.Parse("""{"temperature":23}""");
 		AIContent historyContent = functionCall
@@ -208,7 +208,51 @@ public class WindowsAIChatClientValidationTests
 			new(ChatRole.User, [new DataContent(new byte[] { 0 }, "image/png"), new TextContent("Hello")]),
 		};
 
-		Assert.Equal("User: Hello", WindowsAIChatClient.ConvertToPrompt(messages));
+		var separator = Environment.NewLine + Environment.NewLine;
+		var argumentsJson = string.Join(Environment.NewLine, "{", "  \"city\": \"Paris\"", "}");
+		var resultJson = string.Join(Environment.NewLine, "{", "  \"temperature\": 23", "}");
+		var expected = functionCall
+			? string.Join(separator, "Tool call:", "GetWeather", argumentsJson, "User: Hello")
+			: string.Join(separator, "Tool result:", "call-1", resultJson, "User: Hello");
+
+		Assert.Equal(expected, WindowsAIChatClient.ConvertToPrompt(messages));
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void ConvertToPrompt_WithMatchedToolResult_UsesFunctionName(bool dictionaryResult)
+	{
+		using var result = JsonDocument.Parse("""{"temperature":23}""");
+		object value = dictionaryResult
+			? new Dictionary<string, object?> { ["temperature"] = 23 }
+			: result.RootElement;
+		ChatMessage[] messages =
+		[
+			new(ChatRole.Assistant, [new FunctionCallContent("call-1", "GetWeather",
+				new Dictionary<string, object?> { ["city"] = "Paris" })]),
+			new(ChatRole.Tool, [new FunctionResultContent("call-1", value)])
+		];
+		var separator = Environment.NewLine + Environment.NewLine;
+		var argumentsJson = string.Join(Environment.NewLine, "{", "  \"city\": \"Paris\"", "}");
+		var resultJson = string.Join(Environment.NewLine, "{", "  \"temperature\": 23", "}");
+
+		Assert.Equal(
+			string.Join(separator, "Tool call:", "GetWeather", argumentsJson,
+				"Tool result:", "GetWeather", resultJson),
+			WindowsAIChatClient.ConvertToPrompt(messages));
+	}
+
+	[Theory]
+	[InlineData(null, "null")]
+	[InlineData("Sunny", "\"Sunny\"")]
+	public void ConvertToPrompt_WithScalarToolResult_UsesJson(string? result, string json)
+	{
+		var message = new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", result)]);
+
+		Assert.Equal(
+			string.Join(Environment.NewLine + Environment.NewLine, "Tool result:", "call-1", json),
+			WindowsAIChatClient.ConvertToPrompt([message]));
 	}
 
 	[Fact]

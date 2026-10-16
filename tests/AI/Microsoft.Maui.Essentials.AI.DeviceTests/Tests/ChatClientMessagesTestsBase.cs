@@ -317,5 +317,27 @@ public abstract class ChatClientMessagesTestsBase<T>
 		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithFunctionHistory_RetainsToolResultContext()
+	{
+		using var client = new T();
+		ChatMessage[] messages =
+		[
+			new(ChatRole.User, "Get the weather."),
+			new(ChatRole.Assistant, [new FunctionCallContent("call_context", "GetWeather",
+				new Dictionary<string, object?> { ["city"] = "Paris" })]),
+			new(ChatRole.Tool, [new FunctionResultContent("call_context",
+				new Dictionary<string, object?> { ["city"] = "Paris", ["temperatureCelsius"] = 23 })]),
+			new(ChatRole.User, "What city and temperature did the tool return? Answer briefly.")
+		];
+
+		var response = await client.GetResponseAsync(messages);
+
+		Assert.NotNull(response);
+		Assert.Contains("Paris", response.Text, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("23", response.Text, StringComparison.Ordinal);
+	}
+
 	protected sealed class UnsupportedContentForTesting : AIContent;
 }

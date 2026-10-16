@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Windows.AI.ContentSafety;
 using Microsoft.Windows.AI.Text;
@@ -397,12 +398,11 @@ public sealed class WindowsAIChatClient : IChatClient
 	internal static string ConvertToPrompt(IEnumerable<ChatMessage> history)
 	{
 		var promptParts = new List<string>();
+		var functionNames = new Dictionary<string, string>();
+		var separator = Environment.NewLine + Environment.NewLine;
 
 		foreach (var message in history)
 		{
-			if (message.Role == ChatRole.Tool)
-				continue;
-
 			// System entries have already been moved to the native system prompt.
 			var rolePrefix = message.Role == ChatRole.User ? "User: "
 				: message.Role == ChatRole.Assistant ? "Assistant: "
@@ -411,9 +411,31 @@ public sealed class WindowsAIChatClient : IChatClient
 
 			foreach (var content in message.Contents)
 			{
-				if (content is TextContent textContent && !string.IsNullOrEmpty(textContent.Text))
+				if (message.Role != ChatRole.Tool &&
+					content is TextContent textContent && !string.IsNullOrEmpty(textContent.Text))
 				{
 					promptParts.Add($"{rolePrefix}{textContent.Text}");
+				}
+				else if (message.Role == ChatRole.Assistant && content is FunctionCallContent call)
+				{
+					functionNames[call.CallId] = call.Name;
+#pragma warning disable IL3050, IL2026
+					var json = call.Arguments is null
+						? "{}"
+						: JsonSerializer.Serialize(call.Arguments, AIJsonUtilities.DefaultOptions);
+#pragma warning restore IL3050, IL2026
+					promptParts.Add(string.Join(separator, "Tool call:", call.Name, json));
+				}
+				else if (message.Role == ChatRole.Tool && content is FunctionResultContent result)
+				{
+					// Preserve an unmatched result's real call ID rather than inventing a function name.
+					var name = functionNames.TryGetValue(result.CallId, out var functionName)
+						? functionName
+						: result.CallId;
+#pragma warning disable IL3050, IL2026
+					var json = JsonSerializer.Serialize(result.Result, AIJsonUtilities.DefaultOptions);
+#pragma warning restore IL3050, IL2026
+					promptParts.Add(string.Join(separator, "Tool result:", name, json));
 				}
 				// The native text API has no representation for other content.
 			}
@@ -422,7 +444,7 @@ public sealed class WindowsAIChatClient : IChatClient
 				promptParts.Add(rolePrefix);
 		}
 
-		return string.Join(Environment.NewLine, promptParts);
+		return string.Join(separator, promptParts);
 	}
 
 	private static LanguageModelOptions ConvertToLanguageModelOptions(ChatOptions? options)
