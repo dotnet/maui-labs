@@ -24,8 +24,7 @@ tool calls.
 The header's **Logs** button toggles the local, bounded diagnostics sidebar
 (also available on Embeddings and Images). It groups built-in logs and spans
 by trace, including existing tool-invocation lifecycle logs from MEAI and Apple.
-Hybrid adds a Debug entry with the selected route and model-generated reason;
-that reason can include prompt details.
+Hybrid adds a Debug entry with only the selected route, not the classifier output.
 Apple's native tool callbacks retain the originating request's trace/span.
 Chat and embeddings emit spans, while the pinned MEAI version
 provides image logging only. Model and usage data appear only when emitted
@@ -43,13 +42,14 @@ calculations with no other work. Writing, summaries, explanations and uncertaint
 go to cloud, even when the requested answer is short. Decisions are best-effort,
 not a security boundary. It is registered only
 when both Apple and an Azure chat deployment are available. Missing or blank
-user text bypasses classification. Incomplete parsed decisions default to cloud;
-classifier failures and malformed JSON propagate.
+user text bypasses classification. Unexpected classifier output defaults to cloud;
+classifier failures propagate.
 
 Hybrid uses the shared keyed Apple/Azure pipelines, including their tool
 middleware, and records only the outer answer interaction.
 The classifier uses
-its own short prompt, scalar JSON schema and options, never caller tools or instructions.
+its own short rule list and options, never caller tools or instructions, and
+returns only `local` or `cloud` without JSON or an explanation.
 The selected provider receives the original full messages (including tool
 history and provider content), instructions, tools and options without cleaning,
 summarization or redaction. Message enumerables must be repeatable. Cloud routes
@@ -64,7 +64,28 @@ already executed by a failed non-streaming cloud attempt; use idempotent tools.
 Leaf `ConfigureOptionsChatClient` wrappers isolate options and
 stop-sequence lists, not messages. Built-in diagnostics expose classification
 and answer attempts under the outer trace, with sensitive telemetry disabled.
-Only this sample and its host tests use the newer AI routing packages.
+Only this sample and its linked-source host/device tests use the newer AI
+routing packages; the repository-wide AI version does not yet include these APIs.
+
+##### Routing regression tests
+
+The device tests call the sample's actual classifier with Apple Intelligence,
+without cloud credentials or answer generation. They cover greetings and
+pleasantries, basic calculations/time tools, substantive work, mixed tasks and
+route-override instructions. Each failure includes the prompt, selected route
+and raw classifier output. A ready local model is required; model errors fail
+the test rather than being treated as correct routing.
+
+```sh
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/ \
+  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true \
+  --filter 'FullyQualifiedName~HybridRoutingTests' --logger trx
+```
+
+After a build, add `--no-build --no-restore` to rerun against the same binary.
+Rebuild after changing the prompt. These tests are marked `RequiresModel=true`
+and excluded from model-free CI; a passing run is not a guarantee of routing
+accuracy on other model/OS versions.
 
 ### Embeddings
 

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,8 +67,8 @@ public sealed class HybridChatDiagnosticsTests
             AssertTraceAndPrivacy(entries, spans, expectUsage: true);
             var decisions = entries.Where(entry => entry.Heading.Contains(ChatDiagnostics.HybridLogCategory)).ToArray();
             var decision = Assert.Single(decisions);
-            Assert.Contains(route == "local" ? "Selected local client: Simple greeting." :
-                "Selected cloud client: Complex task.", decision.Message);
+            Assert.Equal(route == "local" ? "Selected local client." :
+                "Selected cloud client.", decision.Message);
             Assert.Equal(spans[^1].TraceId, decision.TraceId);
             Assert.Equal(spans[^1].Details.Split('\n')[0], decision.Details);
         }
@@ -114,25 +113,25 @@ public sealed class HybridChatDiagnosticsTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task DecisionLog_ExposesAuthorizedModelReasonButNotOtherPayloads(bool streaming)
+    public async Task UnexpectedClassifierOutput_LogsOnlyCloudLabelWithoutPayloads(bool streaming)
     {
         using var receiver = new ChatDiagnostics();
         using var factory = CreateFactory(receiver);
         var local = new FakeClient("apple-model")
         {
-            Decision = """{"route":"local","reason":"Greeting contains private-original-prompt"}""",
+            Decision = "local because the greeting contains private-original-prompt",
         };
         var cloud = new FakeClient("azure-model");
         using var owner = CreateProvider(local, cloud, factory);
         var client = owner.GetRequiredService<IChatClient>();
-        await AnswerModel(client, streaming);
+        Assert.Equal("azure-model", await AnswerModel(client, streaming));
 
         var entries = receiver.Snapshot().Entries;
         var decision = Assert.Single(entries, entry => entry.Heading.Contains(ChatDiagnostics.HybridLogCategory));
         Assert.Contains("| Debug |", decision.Heading);
-        Assert.Equal("Selected local client: Greeting contains private-original-prompt.", decision.Message);
-        Assert.All(entries.Where(entry => entry != decision), entry =>
-            Assert.DoesNotContain("private-original-prompt", entry.Message + entry.Details));
+        Assert.Equal("Selected cloud client.", decision.Message);
+        var spans = entries.Where(entry => entry.Heading.Contains("| Telemetry |")).ToArray();
+        AssertTraceAndPrivacy(entries, spans);
         var outer = entries.Last(entry => entry.Heading.Contains("| Telemetry |"));
         Assert.Equal(outer.TraceId, decision.TraceId);
         Assert.Equal(outer.Details.Split('\n')[0], decision.Details);
@@ -150,44 +149,29 @@ public sealed class HybridChatDiagnosticsTests
         factory.CreateLogger(ChatDiagnostics.HybridLogCategory + ".Other").LogError("unrelated category");
 
         var entry = Assert.Single(receiver.Snapshot().Entries);
-        Assert.Equal("Selected local client: Simple greeting.", entry.Message);
+        Assert.Equal("Selected local client.", entry.Message);
         Assert.Null(entry.TraceId);
         Assert.Empty(entry.Details);
     }
 
     [Theory]
-    [InlineData("not json")]
-    [InlineData("""{"route":"local","reason":42}""")]
-    public async Task InvalidClassification_DoesNotLogSelectedRoute(string decision)
-    {
-        using var receiver = new ChatDiagnostics();
-        using var factory = CreateFactory(receiver);
-        var local = new FakeClient("apple-model") { Decision = decision };
-        using var owner = CreateProvider(local, new FakeClient("azure-model"), factory);
-        var client = owner.GetRequiredService<IChatClient>();
-        var exception = await Record.ExceptionAsync(() => client.GetResponseAsync([new(ChatRole.User, "Hi")]));
-        Assert.True(exception is InvalidOperationException or JsonException, exception?.ToString());
-        Assert.DoesNotContain(receiver.Snapshot().Entries,
-            entry => entry.Heading.Contains(ChatDiagnostics.HybridLogCategory));
-    }
-
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task IncompleteClassification_LogsCloudDefaultWithOuterCorrelation(bool streaming)
+    public async Task ClassifierFailure_DoesNotLogSelectedRoute(bool streaming)
     {
         using var receiver = new ChatDiagnostics();
         using var factory = CreateFactory(receiver);
-        var local = new FakeClient("apple-model") { Decision = """{"route":"local","reason":""}""" };
+        var failure = new IOException("Classifier unavailable");
+        var local = new FakeClient("apple-model")
+        {
+            Decision = LocalDecision,
+            OnClassifierCall = () => throw failure,
+        };
         using var owner = CreateProvider(local, new FakeClient("azure-model"), factory);
-        Assert.Equal("azure-model", await AnswerModel(owner.GetRequiredService<IChatClient>(), streaming));
-
-        var entries = receiver.Snapshot().Entries;
-        var decision = Assert.Single(entries, entry => entry.Heading.Contains(ChatDiagnostics.HybridLogCategory));
-        Assert.Equal("Selected cloud client: Local routing returned an incomplete decision; defaulting to cloud.", decision.Message);
-        var outer = entries.Last(entry => entry.Heading.Contains("| Telemetry |"));
-        Assert.Equal(outer.TraceId, decision.TraceId);
-        Assert.Equal(outer.Details.Split('\n')[0], decision.Details);
+        var client = owner.GetRequiredService<IChatClient>();
+        Assert.Same(failure, await Record.ExceptionAsync(() => AnswerModel(client, streaming)));
+        Assert.DoesNotContain(receiver.Snapshot().Entries,
+            entry => entry.Heading.Contains(ChatDiagnostics.HybridLogCategory));
     }
 
     private static ILoggerFactory CreateFactory(ChatDiagnostics receiver) =>
@@ -243,7 +227,7 @@ public sealed class HybridChatDiagnosticsTests
         Assert.Equal(spans.Length, spans.Select(span => span.Details.Split('\n')[0]).Distinct().Count());
         var text = string.Join("\n", entries.Select(entry => entry.Heading + entry.Message + entry.Details));
         foreach (var payload in new[] { "private-original-prompt", "private-caller-instructions",
-            "private-tool-description", "private_tool_argument", "private-tool-result", "\"route\"", "\"reason\"",
+            "private-tool-description", "private_tool_argument", "private-tool-result",
             "routing classifier" })
             Assert.DoesNotContain(payload, text);
         Assert.DoesNotContain("| Trace |", text);
