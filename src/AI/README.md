@@ -7,6 +7,7 @@ On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://
 ## Features
 
 - **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
+- **Generation options** — standard sampling and output-token controls on Apple OS 26+; see [usage](Microsoft.Maui.Essentials.AI/README.md#sampling-options-on-apple-26).
 - **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
 - **Native token usage** — standard `ChatResponse.Usage` and streaming `UsageContent` on Apple OS 27+, without estimated counts
 - **Telemetry** — compatible with M.E.AI's built-in `UseOpenTelemetry` spans, token metrics, and streaming timings

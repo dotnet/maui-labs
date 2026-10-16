@@ -11,6 +11,45 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public abstract class ChatClientOptionsTestsBase<T>
 	where T : class, IChatClient, new()
 {
+	[Theory]
+	[InlineData("top-p", false)]
+	[InlineData("top-p", true)]
+	[InlineData("top-k", false)]
+	[InlineData("top-k", true)]
+	[InlineData("temperature-only", false)]
+	[InlineData("temperature-only", true)]
+	[InlineData("seed-only", false)]
+	[InlineData("seed-only", true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task SamplingHints_ReturnNonEmptyResponse(string sampling, bool streaming)
+	{
+		using var client = new T();
+		using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+		var options = sampling switch
+		{
+			"top-p" => new ChatOptions { TopP = 0.9f, Temperature = 0.5f, Seed = 42 },
+			"top-k" => new ChatOptions { TopK = 20, Temperature = 0.5f, Seed = 42 },
+			"temperature-only" => new ChatOptions { Temperature = 0.5f },
+			"seed-only" => new ChatOptions { Seed = 42 },
+			_ => throw new ArgumentOutOfRangeException(nameof(sampling))
+		};
+		options.MaxOutputTokens = 64;
+		ChatMessage[] messages = [new(ChatRole.User, "Say hello in one brief sentence.")];
+		ChatResponse response;
+		if (streaming)
+		{
+			var updates = new List<ChatResponseUpdate>();
+			await foreach (var update in client.GetStreamingResponseAsync(messages, options, timeout.Token))
+				updates.Add(update);
+			response = updates.ToChatResponse();
+		}
+		else
+		{
+			response = await client.GetResponseAsync(messages, options, timeout.Token);
+		}
+		Assert.False(string.IsNullOrWhiteSpace(response.Text));
+	}
+
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_AcceptsNullOptions()
