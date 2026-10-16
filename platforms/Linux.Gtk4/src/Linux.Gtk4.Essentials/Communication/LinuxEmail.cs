@@ -36,14 +36,21 @@ public class LinuxEmail : LinuxCommunication, IEmail
         if (needsEml) uri = await WriteTempEmlAsync(uri);
         try
         {
-           await LaunchAsync(uri);
+            await LaunchAsync(uri);
+        }
+        catch (LauncherExitException)
+        {
+            // Ambiguous: a handler may already have opened the file (this happens on WSL).
         }
         catch
         {
             if (needsEml) TryDelete(uri);
             throw;
         }
-        if (needsEml) ScheduleTempFileCleanup(uri);
+        finally
+        {
+            if (needsEml) ScheduleTempFileCleanup(uri);
+        }
     }
 
     internal static bool RequiresEml(EmailMessage? message) =>
