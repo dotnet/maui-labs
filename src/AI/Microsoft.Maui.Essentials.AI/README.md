@@ -86,7 +86,16 @@ Supply the response schema in `ChatOptions`:
 using System.Text.Json;
 
 using var schema = JsonDocument.Parse("""
-    {"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}
+    {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "type": "string"
+        }
+      },
+      "required": ["answer"],
+      "additionalProperties": false
+    }
     """);
 var options = new ChatOptions
 {
