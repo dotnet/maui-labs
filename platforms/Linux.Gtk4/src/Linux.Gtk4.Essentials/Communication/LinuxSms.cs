@@ -11,12 +11,13 @@ public class LinuxSms : LinuxCommunication, ISms
 
     public bool IsComposeSupported => HasHandler;
 
-    public async Task ComposeAsync(SmsMessage? message)
+    public Task ComposeAsync(SmsMessage? message)
     {
         if (!IsComposeSupported)
             throw new FeatureNotSupportedException("SMS is not available on this Linux system.");
 
-        await LaunchAsync(BuildSmsUri(message));
+        Launch(BuildSmsUri(message));
+        return Task.CompletedTask;
     }
 
     internal static string BuildSmsUri(SmsMessage? message)

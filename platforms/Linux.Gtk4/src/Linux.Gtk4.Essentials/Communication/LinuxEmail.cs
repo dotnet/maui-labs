@@ -36,7 +36,7 @@ public class LinuxEmail : LinuxCommunication, IEmail
         if (needsEml) uri = await WriteTempEmlAsync(uri);
         try
         {
-            await LaunchAsync(uri);
+            Launch(uri);
         }
         catch (LauncherExitException)
         {

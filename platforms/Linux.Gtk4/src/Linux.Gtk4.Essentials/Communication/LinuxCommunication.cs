@@ -14,49 +14,34 @@ public class LinuxCommunication : LinuxScheme
     {
     }
 
-    protected Process StartLauncher(string target)
+    protected void Launch(string uri)
     {
-        var psi = new ProcessStartInfo("xdg-open")
+        ArgumentException.ThrowIfNullOrWhiteSpace(uri);
+
+        using var process = Process.Start(new ProcessStartInfo
         {
+            FileName = "xdg-open",
+            ArgumentList = { uri },
             UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardError = true,
-        };
-        psi.ArgumentList.Add(target);
+            RedirectStandardError = true
+        }) ?? throw new InvalidOperationException("Could not start xdg-open.");
 
-        return Process.Start(psi)
-            ?? throw new InvalidOperationException("Could not start xdg-open.");
-    }
+        var stderr = process.StandardError.ReadToEndAsync();
 
-    protected async Task WaitForLauncherAsync(Process process, CancellationToken ct = default)
-    {
-        using (process)
+        // Still running after the timeout: a handler has taken over, treat as handed off
+        if (!process.WaitForExit(TimeSpan.FromSeconds(2)))
+            return;
+
+        if (process.ExitCode != 0)
         {
-            var stderr = process.StandardError.ReadToEndAsync(ct);
+            // A handler that inherited stderr can keep the pipe open, so don't wait for it forever
+            var detail = stderr.Wait(TimeSpan.FromMilliseconds(500)) ? stderr.Result.Trim() : "";
 
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(10));
-            try
-            {
-                await process.WaitForExitAsync(cts.Token);
-            }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                return;   // handler still running: treat as handed off
-            }
-
-            if (process.ExitCode != 0)
-                throw new LauncherExitException(
-                    process.ExitCode,
-                    $"xdg-open failed with exit code {process.ExitCode} ({Describe(process.ExitCode)}): {(await stderr).Trim()}");
-
+            throw new LauncherExitException(
+                process.ExitCode,
+                $"xdg-open failed with exit code {process.ExitCode} ({Describe(process.ExitCode)}): {detail}");
         }
     }
-
-    // The awaited path used by Email and SMS stays the same for callers
-    protected async Task LaunchAsync(string target, CancellationToken ct = default)
-        => await WaitForLauncherAsync(StartLauncher(target), ct);
-
 
     static string Describe(int code) => code switch
     {

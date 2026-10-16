@@ -1,5 +1,4 @@
 ﻿using Microsoft.Maui.ApplicationModel.Communication;
-using System.Diagnostics;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Communication;
 
@@ -18,13 +17,6 @@ public class LinuxPhoneDialer : LinuxCommunication, IPhoneDialer
 
         ArgumentException.ThrowIfNullOrWhiteSpace(number);
 
-        var process = StartLauncher("tel:" + PhoneNumberNormalizer.Normalize(number, nameof(number)));
-        _ = ObserveAsync(WaitForLauncherAsync(process));
-    }
-
-    static async Task ObserveAsync(Task task)
-    {
-        try { await task.ConfigureAwait(false); }
-        catch (Exception ex) { Trace.TraceError($"PhoneDialer: {ex.Message}"); }
+        Launch("tel:" + PhoneNumberNormalizer.Normalize(number, nameof(number)));
     }
 }
