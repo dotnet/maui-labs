@@ -16,7 +16,7 @@
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <RuntimeIdentifiers Condition="$(TargetFramework.Contains('-android'))">android-arm64;android-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
-    <NoWarn>$(NoWarn);MAUIAI0001;CA1416;XCODE_27_0_PREVIEW</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;CA1416;XCODE_27_0_PREVIEW;MEAI001</NoWarn>
     <UserSecretsId>808cc184-141a-409e-addd-565c973dbce6</UserSecretsId>
     <!-- Required for DeviceRunners dotnet test integration -->
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
@@ -57,6 +57,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\HybridChatClient.cs"
+             Link="Sample\HybridChatClient.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(EnableOpenAIClient)' == 'true' or '$(EnableOpenAITests)' == 'true'">

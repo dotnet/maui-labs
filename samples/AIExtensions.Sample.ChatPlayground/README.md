@@ -24,11 +24,47 @@ tool calls.
 The header's **Logs** button toggles the local, bounded diagnostics sidebar
 (also available on Embeddings and Images). It groups built-in logs and spans
 by trace, including existing tool-invocation lifecycle logs from MEAI and Apple.
+Hybrid adds a Debug entry with only the selected route, not the classifier output.
 Apple's native tool callbacks retain the originating request's trace/span.
-Chat and embeddings emit spans, while the pinned MEAI version
-provides image logging only. Model and usage data appear only when emitted
+Chat and embeddings emit spans; image generation uses logging.
+Model and usage data appear only when emitted
 by the provider. Trace payload logging and sensitive telemetry capture are
 disabled; exceptions may still contain sensitive data. Nothing is exported.
+
+#### Hybrid chat
+
+On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses an enabled Apple
+Intelligence model to choose between local and Azure chat. Both providers must
+be configured. Greetings, device time lookups and basic calculations usually
+stay local; most other work goes to cloud. Only the last user message is
+classified, so follow-ups that depend on earlier context may route differently.
+Hybrid supports tools, but not images, reasoning summaries or image generation.
+
+The selected provider receives the full conversation, instructions and settings.
+Cloud handoff is automatic, without redaction or per-turn approval. **Do not send
+secrets or data that must stay on-device.** Routing is best-effort, not a privacy
+boundary. Classifier errors propagate rather than sending the request to cloud.
+
+If cloud fails before any streaming update, Hybrid can fall back to local.
+Cancellation and failures after output propagate. A failed non-streaming attempt
+may already have called tools; use idempotent tools. Recordings contain one
+answer interaction; the Logs sidebar shows classification and answer attempts.
+
+##### Routing regression tests
+
+`HybridRoutingTestsBase<TClient>` tests the sample's classifier with a real
+provider. The Apple subclass requires a ready on-device model, not Azure
+credentials. Cases cover simple tasks, substantive work and mixed requests.
+
+```sh
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/ \
+  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true \
+  --filter 'FullyQualifiedName~HybridRoutingTests' --logger trx
+```
+
+Add `--no-build --no-restore` to repeat a run without rebuilding. Rebuild after
+changing the prompt. These tests are marked `RequiresModel=true` and excluded
+from model-free CI.
 
 ### Embeddings
 

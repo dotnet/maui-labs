@@ -25,13 +25,13 @@
       <Uri>https://github.com/dotnet/dotnet</Uri>
       <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5">
+    <Dependency Name="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>4099f83977f4d29604a9aeb971fb0a7bc1d5f699</Sha>
     </Dependency>
-    <Dependency Name="System.Text.Json" Version="10.0.5">
+    <Dependency Name="System.Text.Json" Version="10.0.13">
       <Uri>https://github.com/dotnet/dotnet</Uri>
-      <Sha>73b3b5ac0e4a5658c7a0555b67d91a22ad39de4b</Sha>
+      <Sha>4099f83977f4d29604a9aeb971fb0a7bc1d5f699</Sha>
     </Dependency>
     <Dependency Name="Xamarin.Apple.Tools.MaciOS" Version="1.0.0-preview.1.26301.3">
       <Uri>https://github.com/dotnet/macios-devtools</Uri>

@@ -30,6 +30,8 @@
              Link="ViewModels\DiagnosticsViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatClientDescriptor.cs"
              Link="Chat\Services\ChatClientDescriptor.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\HybridChatClient.cs"
+             Link="Chat\Services\HybridChatClient.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatConversation.cs"
              Link="Chat\Services\ChatConversation.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ConnectionStatusResult.cs"
