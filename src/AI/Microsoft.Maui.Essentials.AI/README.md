@@ -1,67 +1,84 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device AI for .NET MAUI apps using platform-native models — no cloud required.
+On-device chat and embeddings using platform-native models and
+[`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions).
+No cloud service is required.
 
-This package provides [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions) abstractions (`IChatClient`, `IEmbeddingGenerator`) backed by on-device AI capabilities:
+> **Experimental:** this package ships as a preview. APIs may change.
 
-| Platform | Chat (IChatClient) | Image input | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|-------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence (Foundation Models) | 27+ with vision-capable model | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | Not available | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | Not available | 🔜 Coming soon |
+## Supported platforms
 
-## Getting Started
+| Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
+|----------|---------------------|-------------|-----------------------------------|
+| iOS / Mac Catalyst / macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | Apple NaturalLanguage |
+| Windows | Not supported | Not supported | Not supported |
+| Android | Not supported | Not supported | Not supported |
 
-### 1. Install the package
+The Apple chat client does not generate images. On-device models must be
+enabled and available on a supported device.
 
-```
+## Install and use
+
+Requires .NET 10 and the MAUI workload.
+
+| Package | Purpose |
+|---------|---------|
+| `Microsoft.Maui.Essentials.AI` | Platform-native chat and embeddings through M.E.AI abstractions |
+
+```sh
 dotnet add package Microsoft.Maui.Essentials.AI --prerelease
 ```
 
-### 2. Register services
+Register the Apple client in a supported iOS, macOS, or Mac Catalyst app:
 
 ```csharp
-var builder = MauiApp.CreateBuilder();
-builder.UseMauiApp<App>();
+using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
 
-// Register Apple Intelligence chat client (iOS/macOS/Mac Catalyst)
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 ```
 
-### 3. Use in your app
+## Chat
+
+Use the injected `IChatClient` (`chat` below) to request a response or stream:
 
 ```csharp
-public class MyViewModel
-{
-    private readonly IChatClient _chat;
+var response = await chat.GetResponseAsync("Plan a day trip to Tokyo");
+Console.WriteLine(response.Text);
 
-    public MyViewModel(IChatClient chat)
-    {
-        _chat = chat;
-    }
-
-    public async Task<string> AskAsync(string question)
-    {
-        var response = await _chat.GetResponseAsync(question);
-        return response.Text;
-    }
-}
-```
-
-### Streaming responses
-
-```csharp
-await foreach (var update in _chat.GetStreamingResponseAsync("Plan a day trip to Tokyo"))
+await foreach (var update in chat.GetStreamingResponseAsync("Suggest a walking route"))
 {
     Console.Write(update.Text);
 }
 ```
 
-### Image input on Apple 27+
+Structured responses stream only when the native provider emits partial
+updates; otherwise a completed response can arrive as one update.
 
-Attach portable image bytes with `Microsoft.Extensions.AI.DataContent`:
+### Apple tools
+
+Supply `AIFunction` tools through standard `ChatOptions`. The native client
+invokes them and returns their results to the model:
+
+```csharp
+var options = new ChatOptions
+{
+    Tools =
+    [
+        AIFunctionFactory.Create(
+            (string city) => $"Weather for {city}: sunny.",
+            name: "GetWeather"),
+    ],
+};
+var response = await chat.GetResponseAsync("What's the weather in Boston?", options);
+```
+
+This example returns fixed demonstration data. Set `ChatOptions.ToolMode` to `ChatToolMode.None` to
+disable tools for a request.
+
+### Apple image input
+
+Image input requires Apple OS 27 and a ready vision-capable model:
 
 ```csharp
 var message = new ChatMessage(ChatRole.User,
@@ -69,51 +86,36 @@ var message = new ChatMessage(ChatRole.User,
     new TextContent("Describe this photo."),
     new DataContent(pngBytes, "image/png"),
 ]);
-var response = await _chat.GetResponseAsync([message]);
+var response = await chat.GetResponseAsync([message]);
 ```
 
-On Apple, a `CGImage` (or `UIImage` on iOS/Mac Catalyst, `NSImage` on macOS) can be passed through without re-decoding by setting `RawRepresentation` on the `DataContent`; retain valid encoded bytes for recording and cross-platform consumers. Local `file://` `UriContent` is supported, while remote image URLs are rejected rather than fetched silently. Image prompting requires runtime OS 27 and a vision-capable, ready Apple Intelligence model; on 26 the client remains text-only and an image request throws an explicit error. Image *generation* is not provided by this Apple chat client.
+For native images, set `RawRepresentation` on the `DataContent` to a `CGImage`,
+`UIImage` (iOS/Mac Catalyst), or `NSImage` (macOS), while retaining valid encoded
+bytes for recording and cross-platform use. Local `file://` image `UriContent`
+is supported; remote URLs are rejected rather than fetched silently.
+On Apple OS 26, the client is text-only and image requests throw an explicit error.
 
 ### Token usage
 
-Token usage requires the native Swift bridge to be built with Xcode 27 or
-later and the app to run on Apple OS 27 or later. Usage is returned through
-the standard `Microsoft.Extensions.AI` response APIs:
+Apple token usage requires OS 27 and a native bridge built with Xcode 27+:
 
 ```csharp
-var response = await _chat.GetResponseAsync("Summarize this text.");
-
-if (response.Usage is { } usage)
-{
-    Console.WriteLine($"Input: {usage.InputTokenCount}");
-    Console.WriteLine($"Output: {usage.OutputTokenCount}");
-    Console.WriteLine($"Cached input: {usage.CachedInputTokenCount}");
-    Console.WriteLine($"Reasoning: {usage.ReasoningTokenCount}");
-    Console.WriteLine($"Total: {usage.TotalTokenCount}");
-}
+var response = await chat.GetResponseAsync("Summarize this text.");
+Console.WriteLine($"Input: {response.Usage?.InputTokenCount}");
+Console.WriteLine($"Output: {response.Usage?.OutputTokenCount}");
+Console.WriteLine($"Cached input: {response.Usage?.CachedInputTokenCount}");
+Console.WriteLine($"Reasoning: {response.Usage?.ReasoningTokenCount}");
+Console.WriteLine($"Total: {response.Usage?.TotalTokenCount}");
 ```
 
-Streaming responses emit a final `UsageContent` update. Aggregate the stream
-into a `ChatResponse` to read it from `ChatResponse.Usage`:
+Streaming includes a final `UsageContent` update. Use `ToChatResponseAsync()`
+to aggregate the stream and read `ChatResponse.Usage`. Usage is per request;
+accumulate it with `UsageDetails.Add` for conversation totals. Counts come
+from Foundation Models, not estimates, and usage is `null` on Apple OS 26.
 
-```csharp
-var response = await _chat
-    .GetStreamingResponseAsync("Plan a day trip to Tokyo")
-    .ToChatResponseAsync();
+## Diagnostics
 
-Console.WriteLine($"Total tokens: {response.Usage?.TotalTokenCount}");
-```
-
-Each response reports usage for that request. To track a conversation or
-application total, accumulate responses with `UsageDetails.Add`. Usage is
-`null` on Apple OS 26 because the native Foundation Models usage API was
-introduced in OS 27. Counts come directly from Foundation Models; the client
-does not reconstruct or estimate missing usage.
-
-### OpenTelemetry
-
-Reference `Microsoft.Extensions.AI` to use its built-in telemetry middleware,
-just as with an Azure OpenAI client:
+Reference `Microsoft.Extensions.AI` to use its telemetry middleware:
 
 ```csharp
 using var client = new AppleIntelligenceChatClient().AsBuilder()
@@ -123,50 +125,36 @@ using var client = new AppleIntelligenceChatClient().AsBuilder()
     .Build();
 ```
 
-Configure your application's OpenTelemetry listeners or exporters for the
-`MyApp.AI` activity source and meter. The middleware emits provider/model
-metadata, request duration, and native usage through standard `gen_ai` spans
-and metrics. Fully enumerate streaming responses to capture final usage.
+Configure your application's listeners or exporters for the `MyApp.AI` activity
+source and meter. Middleware records request timings, model metadata, and usage
+when supplied by the provider. Fully enumerate streams to capture final usage.
 Streaming also produces time-to-first-chunk and time-per-output-chunk metrics.
-Prompts and responses are excluded by the explicit sensitive-data setting.
+The explicit sensitive-data setting above excludes prompt and response content.
 
 With the repository's pinned M.E.AI 10.4.1, input/output tokens are span tags
 and `gen_ai.client.token.usage` measurements; cached input is also a span tag
 (`gen_ai.usage.cache_read.input_tokens`). Total and reasoning counts remain
-available on `UsageDetails`, but do not have separate built-in span tags or
-metrics. On OS 26, request timing and model metadata remain available without
-token usage. Provider-specific response IDs and finish reasons are emitted
-only when the provider supplies them.
+available on `UsageDetails`, without separate built-in span tags or metrics.
+On OS 26, timing and model metadata remain available without token usage.
+Response IDs and finish reasons are emitted only when supplied by the provider.
 
-### Embeddings for semantic search
+For Apple tool diagnostics, supply an `ILoggerFactory` to the client.
+Lifecycle logs use Debug; arguments and results require Trace. Native callbacks
+preserve the originating .NET execution context, including an active chat
+trace/span and async tool code. No correlation is invented when no span exists.
+
+## Embeddings
 
 ```csharp
 var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
 
-### Tool diagnostics
+The corresponding NaturalLanguage model asset must be installed on the device.
 
-Pass an `ILoggerFactory` to `AppleIntelligenceChatClient` to receive existing
-tool lifecycle logs at Debug (arguments/results require Trace). Native tool
-callbacks preserve the originating .NET execution context, so their logs and
-async tool code inherit any active chat trace/span, including one created by
-`UseOpenTelemetry`. The client does not invent correlation when no span exists.
+## Examples and source
 
-## Requirements
-
-- .NET 10
-- MAUI workload (`dotnet workload install maui`)
-- Apple Intelligence requires iOS 26+, macOS 26+, or Mac Catalyst 26+
-- Image input additionally requires iOS, macOS, or Mac Catalyst 27+ with a ready vision model
-
-## Status
-
-> ⚠️ **This package is experimental** (always ships as `-preview`). APIs may change between releases.
-
-## Links
-
-- [Source code](https://github.com/dotnet/maui-labs/tree/main/src/AI)
-- [Sample app](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
-- [Image-input playground and macOS 27 test checklist](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
-- [Microsoft.Extensions.AI documentation](https://learn.microsoft.com/dotnet/ai/ai-extensions)
+- [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
+- [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
+- [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
+- [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)

@@ -47,10 +47,13 @@
                     <local:InfoTip Grid.Column="2" Text="Update the response as text arrives." />
 
                     <CheckBox Grid.Row="1" IsChecked="{Binding UseStructuredJson}"
+                              IsVisible="{Binding SelectedDescriptor.SupportsStructuredOutput}"
                               WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
                               AutomationId="StructuredJsonCheckBox" />
-                    <Label Grid.Row="1" Grid.Column="1" Text="Structured JSON" VerticalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="1" Text="Structured JSON" VerticalOptions="Center"
+                           IsVisible="{Binding SelectedDescriptor.SupportsStructuredOutput}" />
                     <local:InfoTip Grid.Row="1" Grid.Column="2"
+                                   IsVisible="{Binding SelectedDescriptor.SupportsStructuredOutput}"
                                    Text="Request JSON matching the playground response schema." />
 
                     <CheckBox Grid.Row="2" IsChecked="{Binding UseReasoningSummary}"

@@ -117,7 +117,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
                 Effort = ReasoningEffort.Medium,
                 Output = ReasoningOutput.Summary,
             };
-        if (UseStructuredJson)
+        if (UseStructuredJson && SelectedDescriptor?.SupportsStructuredOutput == true)
             options.ResponseFormat = ChatResponseFormat.ForJsonSchema<PlaygroundResponse>(PlaygroundJsonContext.Default.Options);
         return options;
     }

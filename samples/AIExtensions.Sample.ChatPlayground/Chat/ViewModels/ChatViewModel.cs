@@ -275,7 +275,7 @@ public partial class ChatViewModel : ObservableObject
         var prompt = Chat.Prompt;
         var userMessage = CreateUserMessage(prompt, attachment);
         var userText = string.IsNullOrWhiteSpace(prompt) ? $"Attached {attachment!.FileName}" : prompt.Trim();
-        var useStructuredJson = Settings.UseStructuredJson;
+        var useStructuredJson = options.ResponseFormat is ChatResponseFormatJson;
         Chat.Prompt = string.Empty;
         Chat.ClearSelectedImage();
 
