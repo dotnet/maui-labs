@@ -1,9 +1,12 @@
 # Essentials.AI
 
-On-device AI for Apple and Windows apps through `Microsoft.Extensions.AI`.
+On-device AI through `Microsoft.Extensions.AI`, with Apple and Windows providers
+and Android integration **coming soon**.
 Apple Intelligence and Windows AI provide text chat, native streaming updates,
 and schema-constrained JSON; Apple NaturalLanguage provides embeddings.
 This contributor README covers building and testing both implementations.
+Android provider details, capabilities, and requirements are placeholders for
+separate work and are not specified here.
 
 > **Experimental:** packages ship as previews; APIs may change.
 
@@ -27,12 +30,14 @@ MAUI workloads.
 |----------|----------------|---------------------------|
 | Apple Intelligence | `Platform/MaciOS` and the Swift bridge | macOS and Xcode; Xcode 27 for the OS 27 bridge |
 | Windows AI | `Platform/Windows` and Windows App SDK | Windows and the SDK's Windows build tools |
+| Android (coming soon) | Provider not available yet | Not specified |
 
 The library always targets `net10.0` and Android. Apple targets are added on
 non-Linux hosts, using either the default reference packs or the OS 27 packs
 when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
 the portable `net10.0` target or native macOS app target.
+The existing Android target does not imply an available on-device provider.
 
 ### Apple
 

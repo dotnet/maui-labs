@@ -1,7 +1,8 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device AI for Apple and Windows apps using platform-native models and
+On-device AI using platform-native models and
 [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions).
+Providers cover Apple and Windows, with Android integration **coming soon**.
 Apple Intelligence and Windows AI implement the same `IChatClient` interface
 for text, native streaming updates, and schema-constrained JSON. No cloud
 service is required.
@@ -14,9 +15,11 @@ service is required.
 |----------|----------------|--------------|-------------|------------|
 | Apple Intelligence | iOS / Mac Catalyst / macOS 26+ | Supported | OS 27+ with a ready vision model | Apple NaturalLanguage |
 | Windows AI | Windows 11 24H2+ on a supported Copilot+ PC | Not supported | Not supported | Not supported |
+| Android (coming soon) | Provider not available yet | Not specified | Not specified | Not specified |
 
-Android has no on-device provider in this package. Neither chat client generates
-images. Models must be enabled and available on a supported device.
+Android is a placeholder: its provider details, capabilities, and requirements
+are not specified here. The available Apple and Windows chat clients do not
+generate images. Models must be enabled and available on a supported device.
 
 ## Install
 
@@ -36,6 +39,7 @@ dotnet add package Microsoft.Maui.Essentials.AI --prerelease
 |----------|-------|
 | Apple Intelligence | Enable Apple Intelligence on supported hardware with Apple OS 26+. Image input and usage metadata require OS 27+ and the corresponding native bridge. |
 | Windows AI | Use supported Copilot+ hardware, an MSIX package declaring `systemAIModels`, and a compatible Windows App SDK. Stable Phi Silica access also requires Microsoft's Limited Access Feature approval. |
+| Android (coming soon) | Provider setup is not available yet. |
 
 Register the provider for the app's platform. The factory keeps client ownership
 with dependency injection and rejects unsupported OS versions explicitly.

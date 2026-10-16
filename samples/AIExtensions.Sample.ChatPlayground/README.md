@@ -3,6 +3,8 @@
 A .NET MAUI sample for comparing Apple Intelligence, Windows AI, Azure OpenAI,
 and offline Replay through the same chat UI. It runs on Android, iOS, Mac Catalyst,
 and Windows (not native macOS); providers vary by platform.
+An Android on-device provider is **coming soon**; its capabilities and setup
+are not specified yet.
 
 ## What you can try
 
@@ -18,11 +20,13 @@ and Windows (not native macOS); providers vary by platform.
 |----------|--------------|------------------------|
 | Apple Intelligence | iOS / Mac Catalyst 26+ on supported hardware | Text, streaming, structured JSON, and tools. Image input requires OS 27 and a ready vision model. NaturalLanguage embeddings require the language asset. |
 | Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Text, streaming, and schema-constrained JSON. Requires MSIX packaging and model access; no tools, image input, or embeddings. |
+| Android on-device (coming soon) | Not available yet | Provider details, capabilities, and requirements are not specified. |
 | Azure OpenAI | All sample platforms with configured deployments | Responses API chat, tools, image input, and reasoning summaries; embeddings and image generation use their own deployments. |
 | Replay | All sample platforms | Recorded conversations without credentials or a running model. |
 
-Native providers do not generate images or fall back to Azure. Structured
-responses stream only when the selected provider emits incremental updates.
+The available Apple and Windows chat providers do not generate images or fall
+back to Azure. Structured responses stream only when the selected provider emits
+incremental updates.
 Each tab has its own services and only exposes supported features.
 
 Chat displays the model ID reported by the provider, including during replay.
@@ -77,7 +81,8 @@ capability and access requirements.
 
 ### Android
 
-Android runs the Azure and Replay providers. With Java and the Android SDK installed:
+Android currently runs the Azure and Replay providers; the on-device provider
+is coming soon. With Java and the Android SDK installed:
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
