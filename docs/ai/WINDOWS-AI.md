@@ -20,9 +20,9 @@ Build Windows targets on Windows; the SDK's packaging tools cannot run on macOS.
 
 ## Library and development-app dependencies
 
-The library directly references only the stable AI package. The Windows sample
-and device-test apps override only the umbrella SDK; NuGet resolves its newer AI,
-Foundation, and InteractiveExperiences dependencies automatically:
+The library references stable AI. Windows sample/test apps select the experimental
+umbrella SDK, which supplies matching AI, Foundation, and InteractiveExperiences
+dependencies:
 
 | Package | Library | Windows samples and device tests |
 |---------|---------|-----------------------------|
@@ -31,46 +31,39 @@ Foundation, and InteractiveExperiences dependencies automatically:
 | `Microsoft.WindowsAppSDK.Foundation` | `2.3.9` (transitive) | `2.3.13-experimental` (transitive) |
 | `Microsoft.WindowsAppSDK.InteractiveExperiences` | `2.1.3` (transitive) | `2.1.10-experimental` (transitive) |
 
-The stable AI baseline supports every chat API used by the library and lets
-development apps select the experimental package without a NuGet downgrade.
-Select a compatible umbrella SDK explicitly in the Windows app: MAUI 10's
-default 1.8 SDK has exact dependencies that conflict with these newer AI packages.
-All three Windows app heads select `2.5.4-experimental`. The library does not pin
-the SDK globally.
+The library baseline supports its chat APIs without preventing experimental app
+overrides. All three Windows app heads select SDK `2.5.4-experimental` explicitly:
+MAUI 10's implicit 1.8 graph conflicts with the newer AI packages.
+There is no global SDK pin.
 
 The Playground and device tests bundle the native runtime with `SelfContained`
 and `WindowsAppSDKSelfContained`; BuildTools.WinApp enables their packaged
-`dotnet run`. The older Essentials AI sample only selects the compatible SDK
-so it compiles. Its unpackaged runtime setup, cloud services, and tool-based
-workflows are unchanged; native Windows AI integration is deferred.
-These sample settings are not a production access grant.
+`dotnet run`. The older Essentials AI sample has only a compile-compatibility
+update; its unpackaged setup and cloud/tool workflows are unchanged.
+Experimental sample settings are not a production access grant.
 
 ## Behavior
 
-Model setup is lazy: the first request checks readiness and downloads the
-model if needed. Unsupported hardware, missing capabilities, and setup
-failures surface as errors; the client does not switch providers.
+The first request checks readiness and downloads the model if needed.
+Unsupported hardware, missing capabilities, and setup failures are errors;
+the client does not switch providers.
 
-The client creates a fresh native context for each response, serializes the
-supplied conversation history, and uses the leading system instruction as
-context. It maps temperature, TopK, and TopP to native options.
+Text requests use a fresh native context, serialized conversation history,
+and the leading system instruction. Temperature, TopK, and TopP map to native options.
 The response model ID, `windows-ai-language-model`, identifies the API, not
 particular model weights.
-Native policy, moderation, language, and generation failures are reported as
-exceptions rather than successful empty responses.
+Native policy, moderation, language, and generation failures throw exceptions.
 
 For `ChatResponseFormatJson` with a schema, the client calls
-`GenerateStructuredJsonResponseAsync`. It requires every declared property,
-including nested properties, and disallows additional properties. The system
-instruction is included in the prompt because this API has no context overload.
+`GenerateStructuredJsonResponseAsync`. The native schema requires all declared
+fields, including nested fields, and no additional properties; the caller's
+schema is unchanged. System instructions are included in the prompt because
+this API has no context overload.
 A JSON format without a schema uses ordinary generation.
 
-Streaming forwards native progress. If the native API returns only a completed
-result, the client emits that result rather than inventing partial updates.
-The Windows API documents partial JSON progress, but the current runtime has
-also returned long, valid JSON with no progress callbacks. This is tracked in
-[WindowsAppSDK #6872](https://github.com/microsoft/WindowsAppSDK/issues/6872);
-it is not an intentional UI buffer or simulated streaming.
+Streaming forwards native progress, or the final result if no progress arrives.
+The API documents partial JSON output, but long successful responses have
+returned no callbacks: [WindowsAppSDK #6872](https://github.com/microsoft/WindowsAppSDK/issues/6872).
 
 ## Limitations
 

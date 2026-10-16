@@ -1,17 +1,8 @@
 # Essentials.AI
 
-On-device AI through `Microsoft.Extensions.AI`, with Apple and Windows providers
-and Android integration **coming soon**.
-Feature areas are documented separately:
-
-- **Chat:** text, image input, tools, and structured JSON, with per-provider capabilities.
-- **Embeddings:** text-vector generation and related operations, independently of chat.
-- **Image generation:** not provided on Apple; Windows is coming soon and Android
-  support is not specified.
-
-This contributor README covers building and testing the available implementations.
-Android provider details, capabilities, and requirements are placeholders for
-separate work and are not specified here.
+Build and test the Apple and Windows implementations of Essentials.AI.
+Android integration is **coming soon**; its capabilities and requirements are
+not specified.
 
 > **Experimental:** packages ship as previews; APIs may change.
 
@@ -21,7 +12,8 @@ separate work and are not specified here.
 |---------|------------------------|
 | `Microsoft.Maui.Essentials.AI` | [Install and use the package](Microsoft.Maui.Essentials.AI/README.md) |
 
-The package README owns platform requirements, setup, and API examples.
+The package README documents **Chat**, **Embeddings**, and **Image generation**
+separately, with capability tables and usage examples.
 
 The [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md)
 compares providers interactively.
@@ -55,11 +47,10 @@ dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.cs
   -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-Use the corresponding `ios27.0` or `macos27.0` framework for those platforms.
-`UseXcode27Preview` selects this repository's target-framework list; it does not
-install or select Xcode. When Xcode 27 is the default, no `DEVELOPER_DIR` override
-is needed. For normal Apple 26.x reference packs with Xcode 27, the native CI job
-passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode version check.
+Use `ios27.0` or `macos27.0` for those platforms. `UseXcode27Preview` selects
+reference-pack targets; it does not install or select Xcode. With Xcode 27
+already selected, no `DEVELOPER_DIR` override is needed. Building against Apple
+26.x reference packs with Xcode 27 requires `ValidateXcodeVersion=false`, as in CI.
 
 ### Windows
 
@@ -69,10 +60,9 @@ Build the Windows implementation without the Apple native build:
 dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj -f net10.0-windows10.0.19041.0
 ```
 
-Full solution builds on Windows also require prebuilt Apple native artifacts.
-The prebuilt-artifact path activates only with `CI=true` or `TF_BUILD=true`;
-setting a flag alone does not supply the artifacts. CI builds them on macOS
-before packing/signing on Windows. See
+Full solution builds require Apple native artifacts built on macOS.
+The prebuilt path activates with `CI=true` or `TF_BUILD=true`; those flags do not
+supply the artifacts. CI downloads them before packing/signing on Windows. See
 [ci-essentialsai.yml](../../.github/workflows/ci-essentialsai.yml) and the
 [official pipeline](../../eng/pipelines/devflow-official.yml) for the artifact flow.
 

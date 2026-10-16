@@ -8,8 +8,7 @@ are not specified yet.
 
 ## What you can try
 
-Each tab has its own providers and capabilities. Image input in Chat is distinct
-from generating or editing an image in Images.
+Chat, Embeddings, and Images have separate providers and capabilities.
 
 ### Chat
 
@@ -24,19 +23,16 @@ from generating or editing an image in Images.
 Native chat does not fall back to Azure. Structured responses stream only when
 the selected provider emits incremental updates.
 
-Chat displays the model ID reported by the provider, including during replay.
-It auto-saves the current recording locally. **New** replaces that recording;
-**More** loads a bundled example or imports and exports recordings. Replay
-works offline without credentials or a model. Select a live provider to
-continue a conversation. Features are shown only when the selected provider
-supports them. Uncheck unneeded tools or choose **None** to disable tool calls.
+Chat shows the provider's model ID and auto-saves the recording locally.
+**New** replaces the recording; **More** loads examples or imports/exports
+recordings. Replay works offline; switch to a live provider to continue chatting.
+Controls reflect provider capabilities. Uncheck tools or choose **None** to disable calls.
 Switching providers preserves your Structured JSON preference, but providers
 that opt out receive plain-text requests and their responses display as text.
 
 ### Embeddings
 
-The Embeddings tab generates text vectors, indexes imported documents, and
-searches their content.
+Generate text vectors, index imported documents, and search their content.
 
 | Provider | Text vectors | Document indexing | Semantic search |
 |----------|--------------|-------------------|-----------------|
@@ -47,8 +43,8 @@ searches their content.
 
 ### Image generation
 
-The Images tab currently uses Azure OpenAI for image generation and source-image
-editing. Native provider status is separate:
+Generate or edit images using a configured Azure OpenAI deployment. Chat image
+input does not imply image-generation support.
 
 | Provider | Image generation |
 |----------|------------------|
@@ -57,22 +53,16 @@ editing. Native provider status is separate:
 | Android on-device | Not specified |
 | Azure OpenAI | Supported by the configured image deployment |
 
-Android on-device entries are placeholders, not promises of specific features
-or requirements. Available tabs only expose features implemented by their
-selected provider.
-
 ## Diagnostics
 
-The local, bounded diagnostics sidebar starts collapsed on Chat, Embeddings,
-and Images. The header's **Logs** button toggles it without stopping diagnostic
-capture while hidden. In narrower windows, tap outside the sidebar to dismiss it.
-It groups built-in logs and completed spans by trace, including tool lifecycle logs from
-MEAI and Apple. Apple's native tool callbacks retain the originating request's
-trace/span. Chat and embeddings emit spans; the pinned MEAI version provides
-image logging only. Model and usage data appear only when supplied by the provider.
-Trace payload logging and sensitive telemetry capture are disabled, but
-exceptions may still contain sensitive data. Diagnostics are not exported
-automatically.
+Each tab's **Logs** button toggles a local diagnostics sidebar; capture continues
+while hidden. It starts collapsed. In narrow windows, tap outside to dismiss it.
+
+Logs and completed spans are grouped by trace, including MEAI/Apple tool events.
+Apple callbacks retain the request's trace/span. Chat and embeddings emit spans;
+the pinned MEAI version provides image logging only. Model/usage data come from
+the provider. Payload logging and sensitive telemetry are disabled, but exceptions
+may contain sensitive data. Diagnostics are not exported automatically.
 
 ## Run the sample
 
