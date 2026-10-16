@@ -48,8 +48,13 @@ The first request checks readiness and downloads the model if needed.
 Unsupported hardware, missing capabilities, and setup failures are errors;
 the client does not switch providers.
 
-Text requests use a fresh native context, serialized conversation history,
-and the leading system instruction. Temperature, TopK, and TopP map to native options.
+Text requests use a fresh native context and labelled user/assistant text.
+`ChatOptions.Instructions` comes first, followed by all system messages in history
+order, joined with blank lines into one native system string. This also hoists
+mid-history system messages; their chronological positions are not retained.
+Non-text message content and tool-history contents are ignored, not replaced with
+synthetic descriptions. Tool-request options remain unsupported.
+Temperature, TopK, and TopP map to native options.
 The response model ID, `windows-ai-language-model`, identifies the API, not
 particular model weights.
 Native policy, moderation, language, and generation failures throw exceptions.

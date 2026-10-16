@@ -8,10 +8,8 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public class WindowsAIImageHistoryTests
 {
 	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_ImageGenerationHistory_KeepsToolActivityWithoutDecodingImage()
+	public void ConvertToPrompt_ImageGenerationHistory_DoesNotInventToolActivity()
 	{
-		using var client = new WindowsAIChatClient();
 #pragma warning disable MEAI001 // The image-generation tool content API is experimental.
 		var history = new ChatMessage[]
 		{
@@ -25,8 +23,9 @@ public class WindowsAIImageHistoryTests
 		};
 #pragma warning restore MEAI001
 
-		var response = await client.GetResponseAsync(history);
-		Assert.NotNull(response);
+		Assert.Equal(
+			"User: Generate an image." + Environment.NewLine + "User: What did I request?",
+			WindowsAIChatClient.ConvertToPrompt(history));
 	}
 }
 #endif

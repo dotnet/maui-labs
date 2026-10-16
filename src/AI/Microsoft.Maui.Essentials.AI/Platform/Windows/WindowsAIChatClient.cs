@@ -363,44 +363,51 @@ public sealed class WindowsAIChatClient : IChatClient
 				TaskContinuationOptions.ExecuteSynchronously);
 	}
 
-	private static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(
+	internal static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(
 		IEnumerable<ChatMessage> chatMessages,
 		ChatOptions? options = null)
 	{
-		var messages = chatMessages.ToList();
+		var systemParts = new List<string>();
+		var history = new List<ChatMessage>();
+		if (!string.IsNullOrWhiteSpace(options?.Instructions))
+			systemParts.Add(options.Instructions);
 
-		// Use system instructions as the system prompt if provided
-		if (options?.Instructions is { } system)
-			return (system, messages);
-
-		// Extract the first system message as the system prompt
-		if (messages.Count > 0 && messages[0].Role == ChatRole.System)
+		// The native API has one system string; hoist all system entries in encounter order.
+		foreach (var message in chatMessages)
 		{
-			var systemPrompt = messages[0].Text;
-			messages.RemoveAt(0);
-
-			return (systemPrompt, messages);
+			if (message.Role == ChatRole.System)
+			{
+				if (!string.IsNullOrWhiteSpace(message.Text))
+					systemParts.Add(message.Text);
+			}
+			else if (message.Role == ChatRole.User ||
+				message.Role == ChatRole.Assistant ||
+				message.Role == ChatRole.Tool)
+			{
+				history.Add(message);
+			}
 		}
 
-		return (string.Empty, messages);
+		return (string.Join(Environment.NewLine + Environment.NewLine, systemParts), history);
 	}
 
 	/// <summary>
 	/// Flattens the conversation into the single prompt string the language model accepts.
 	/// </summary>
-	private static string ConvertToPrompt(IEnumerable<ChatMessage> history)
+	internal static string ConvertToPrompt(IEnumerable<ChatMessage> history)
 	{
 		var promptParts = new List<string>();
 
 		foreach (var message in history)
 		{
-			// Add role prefix so the model can distinguish speakers in multi-turn conversations.
-			// System messages after the first (which becomes the context system prompt) are
-			// injected as instructions. User/Assistant labels help the model track the conversation.
+			if (message.Role == ChatRole.Tool)
+				continue;
+
+			// System entries have already been moved to the native system prompt.
 			var rolePrefix = message.Role == ChatRole.User ? "User: "
 				: message.Role == ChatRole.Assistant ? "Assistant: "
-				: message.Role == ChatRole.System ? "System: "
 				: "";
+			var partCount = promptParts.Count;
 
 			foreach (var content in message.Contents)
 			{
@@ -408,49 +415,11 @@ public sealed class WindowsAIChatClient : IChatClient
 				{
 					promptParts.Add($"{rolePrefix}{textContent.Text}");
 				}
-				else if (content is DataContent data && data.HasTopLevelMediaType("image"))
-				{
-					throw new NotSupportedException(
-						"The Windows AI language model accepts text only. Describe images separately before passing them to this client.");
-				}
-				else if (content is FunctionCallContent functionCall)
-				{
-#pragma warning disable IL3050, IL2026
-					var argsJson = functionCall.Arguments is not null
-						? System.Text.Json.JsonSerializer.Serialize(functionCall.Arguments, AIJsonUtilities.DefaultOptions)
-						: "{}";
-					promptParts.Add($"{rolePrefix}[Tool call: {functionCall.Name}({argsJson})]");
-#pragma warning restore IL3050, IL2026
-				}
-				else if (content is FunctionResultContent functionResult)
-				{
-#pragma warning disable IL3050, IL2026
-					var resultStr = functionResult.Result switch
-					{
-						string s => s,
-						not null => System.Text.Json.JsonSerializer.Serialize(functionResult.Result, AIJsonUtilities.DefaultOptions),
-						_ => "{}"
-					};
-#pragma warning restore IL3050, IL2026
-					promptParts.Add($"[Tool result: {resultStr}]");
-				}
-#pragma warning disable MEAI001 // Image-generation tool content is experimental in Microsoft.Extensions.AI.
-				else if (content is ImageGenerationToolCallContent)
-				{
-					promptParts.Add($"{rolePrefix}[Image generation requested]");
-				}
-				else if (content is ImageGenerationToolResultContent imageResult)
-				{
-					var count = imageResult.Outputs?.OfType<DataContent>()
-						.Count(image => image.HasTopLevelMediaType("image")) ?? 0;
-					promptParts.Add($"[Image generation result: {count} image(s)]");
-				}
-#pragma warning restore MEAI001
-				else if (content is not TextContent)
-				{
-					throw new ArgumentException($"Unsupported content type: {content.GetType().Name}", nameof(history));
-				}
+				// The native text API has no representation for other content.
 			}
+
+			if (message.Role == ChatRole.User && promptParts.Count == partCount)
+				promptParts.Add(rolePrefix);
 		}
 
 		return string.Join(Environment.NewLine, promptParts);

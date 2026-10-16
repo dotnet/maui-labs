@@ -20,6 +20,51 @@ public class WindowsAIChatClientInstantiationTests : ChatClientInstantiationTest
 }
 public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<WindowsAIChatClient>
 {
+	[Theory]
+	[InlineData(null)]
+	[InlineData("")]
+	[InlineData("OPTIONS")]
+	public void NormalizeChatMessages_WithInterleavedSystems_CollectsInstructionsInOrder(string? instructions)
+	{
+		var user = new ChatMessage(ChatRole.User, "Hello");
+		var assistant = new ChatMessage(ChatRole.Assistant, "Hi");
+		var tool = new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "Done")]);
+		ChatMessage[] messages =
+		[
+			new(ChatRole.System, "FIRST"),
+			user,
+			new(ChatRole.System, "SECOND"),
+			assistant,
+			new(ChatRole.System, "LAST"),
+			tool
+		];
+
+		var (systemPrompt, history) = WindowsAIChatClient.NormalizeChatMessages(
+			messages, new ChatOptions { Instructions = instructions });
+
+		var expected = string.IsNullOrEmpty(instructions)
+			? new[] { "FIRST", "SECOND", "LAST" }
+			: new[] { instructions, "FIRST", "SECOND", "LAST" };
+		Assert.Equal(string.Join(Environment.NewLine + Environment.NewLine, expected), systemPrompt);
+		Assert.Collection(history,
+			message => Assert.Same(user, message),
+			message => Assert.Same(assistant, message),
+			message => Assert.Same(tool, message));
+		Assert.Equal(6, messages.Length);
+		Assert.Equal(ChatRole.System, messages[0].Role);
+	}
+
+	[Fact]
+	public void NormalizeChatMessages_WithBlankInstructions_DoesNotCreateSystemPrompt()
+	{
+		var user = new ChatMessage(ChatRole.User, "Hello");
+
+		var (systemPrompt, history) = WindowsAIChatClient.NormalizeChatMessages(
+			[new(ChatRole.System, " \t"), user], new ChatOptions { Instructions = "\r\n" });
+
+		Assert.Empty(systemPrompt);
+		Assert.Same(user, Assert.Single(history));
+	}
 }
 public class WindowsAIChatClientOptionsTests : ChatClientOptionsTestsBase<WindowsAIChatClient>
 {
@@ -148,25 +193,11 @@ public class WindowsAIChatClientValidationTests
 			client.GetResponseAsync([new ChatMessage(ChatRole.User, "Hello")], options));
 	}
 
-	[Fact]
-	public async Task GetResponseAsync_WithImage_RejectsWithoutDescribing()
-	{
-		using var client = new WindowsAIChatClient();
-		var message = new ChatMessage(ChatRole.User,
-			[new DataContent(new byte[] { 0 }, "image/png"), new TextContent("What is shown?")]);
-
-		var error = await Assert.ThrowsAsync<NotSupportedException>(
-			() => client.GetResponseAsync([message]));
-
-		Assert.Contains("text only", error.Message, StringComparison.Ordinal);
-	}
-
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]
-	public async Task GetResponseAsync_WithSerializedToolHistory_RejectsImagesBeforeModelSetup(bool functionCall)
+	public void ConvertToPrompt_WithToolHistory_DoesNotSerializeUnsupportedContent(bool functionCall)
 	{
-		using var client = new WindowsAIChatClient();
 		using var result = JsonDocument.Parse("""{"temperature":23}""");
 		AIContent historyContent = functionCall
 			? new FunctionCallContent("call-1", "GetWeather", new Dictionary<string, object?> { ["city"] = "Paris" })
@@ -174,14 +205,10 @@ public class WindowsAIChatClientValidationTests
 		var messages = new ChatMessage[]
 		{
 			new(functionCall ? ChatRole.Assistant : ChatRole.Tool, [historyContent]),
-			new(ChatRole.User, [new DataContent(new byte[] { 0 }, "image/png")]),
+			new(ChatRole.User, [new DataContent(new byte[] { 0 }, "image/png"), new TextContent("Hello")]),
 		};
 
-		// The history must serialize before image validation rejects this request.
-		// No native model is needed, including when JSON reflection is disabled.
-		var error = await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(messages));
-
-		Assert.Contains("text only", error.Message, StringComparison.Ordinal);
+		Assert.Equal("User: Hello", WindowsAIChatClient.ConvertToPrompt(messages));
 	}
 
 	[Fact]

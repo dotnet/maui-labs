@@ -91,6 +91,18 @@ Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
 Apple or Windows device/runtime and model availability; portable tests do not run a model.
 
+Shared chat suites cover unknown content/roles and combined, multiple, or interleaved
+system instructions. Apple and Windows convert message content they support and
+ignore content they cannot map, without inventing tool/image-history text.
+Custom roles are ignored, following the Azure/OpenAI adapters.
+
+For live cloud baselines, configure the device project's user secrets:
+`AI:ApiKey`, `AI:Endpoint` (Azure `/openai/v1/`), `AI:DeploymentName`, and
+`AI:EmbeddingDeploymentName`. Build in Debug with `-p:EnableOpenAIClient=true`
+and select the `OpenAIChatClient` tests. These make real requests; sampling-option
+support depends on the configured model. Conflicting instructions have no shared
+last-wins guarantee.
+
 - `Microsoft.Maui.Essentials.AI/Platform/MaciOS/`: Apple chat and embedding clients.
 - `Microsoft.Maui.Essentials.AI/Platform/Windows/`: Windows chat client and model readiness.
 - `AppleNative/EssentialsAI/` and `AppleBindings.targets`: Swift bridge, bindings, and `.xcframework` packaging.

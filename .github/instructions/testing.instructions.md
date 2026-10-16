@@ -106,6 +106,8 @@ Use descriptive names that communicate the scenario:
   Do not turn one provider's tolerance or error format into a universal contract.
 - Preserve assertions and `RequiresModel` traits when moving tests. Unsupported features
   must remain explicit, not silently skipped or treated as successful no-ops.
+- Establish Azure/OpenAI compatibility with live cloud tests, not compilation alone.
+  Model-specific sampling support and conflict precedence are not universal contracts.
 
 ### What to Test
 

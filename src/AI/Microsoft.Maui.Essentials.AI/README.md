@@ -150,7 +150,9 @@ For native images, set `RawRepresentation` on the `DataContent` to a `CGImage`,
 `UIImage` (iOS/Mac Catalyst), or `NSImage` (macOS), while retaining valid encoded
 bytes for recording and cross-platform use. Local `file://` image `UriContent`
 is supported; remote URLs are rejected rather than fetched silently.
-Apple OS 26 rejects image requests.
+Apple OS 26 ignores image content. Windows ignores non-text message content.
+Unsupported message content is omitted, not replaced with synthetic descriptions;
+errors processing supported content are still reported.
 
 ## Embeddings
 

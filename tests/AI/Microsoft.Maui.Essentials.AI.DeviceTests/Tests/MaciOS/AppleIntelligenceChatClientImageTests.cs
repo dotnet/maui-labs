@@ -241,111 +241,45 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Throws<InvalidDataException>(() => AppleIntelligenceChatClient.FromNative(native));
 	}
 
-	[Fact]
-	public async Task GetResponseAsync_WithImageOnOlderOS_ReportsUnsupported()
+	[Theory]
+	[InlineData("user", false)]
+	[InlineData("assistant", false)]
+	[InlineData("user", true)]
+	public void ToNative_WithImageContent_ConvertsOnlyOnSupportedOS(string role, bool useUri)
 	{
-		if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
-			return;
-
 		using var image = CreateTestImage();
-		var client = new AppleIntelligenceChatClient();
-		var messages = new List<ChatMessage>
-		{
-			new(ChatRole.User,
-			[
-				new TextContent("Describe this image."),
-				new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = image },
-			]),
-		};
+		AIContent content = useUri
+			? new UriContent("file:///tmp/image.png", "image/png") { RawRepresentation = image }
+			: new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = image };
+		var message = new ChatMessage(new ChatRole(role), [new TextContent("Hello"), content]);
+		var supportsImages = OperatingSystem.IsIOSVersionAtLeast(27) ||
+			OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
+			OperatingSystem.IsMacOSVersionAtLeast(27);
 
-		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
-		Assert.Contains("Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.", error.Message);
+		var native = Assert.Single(AppleIntelligenceChatClient.ToNative([message], null));
+
+		Assert.Contains(native.Contents, item => item is TextContentNative text && text.Text == "Hello");
+		Assert.Equal(supportsImages, native.Contents.Any(item => item is ImageContentNative));
 	}
 
 	[Fact]
-	public async Task GetStreamingResponseAsync_WithImageOnOlderOS_ReportsUnsupported()
+	public void ToNative_WithHttpImageUri_IgnoresOnOlderOSOrReportsInvalidSupportedInput()
 	{
-		if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
-			return;
+		var message = new ChatMessage(ChatRole.User,
+			[new TextContent("Hello"), new UriContent("https://example.com/x.png", "image/png")]);
+		var supportsImages = OperatingSystem.IsIOSVersionAtLeast(27) ||
+			OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
+			OperatingSystem.IsMacOSVersionAtLeast(27);
 
-		using var image = CreateTestImage();
-		var client = new AppleIntelligenceChatClient();
-		var messages = new List<ChatMessage>
+		if (supportsImages)
 		{
-			new(ChatRole.User,
-			[
-				new TextContent("Describe this image."),
-				new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = image },
-			]),
-		};
-
-		var error = await Assert.ThrowsAsync<NSErrorException>(async () =>
+			Assert.Throws<NotSupportedException>(() => AppleIntelligenceChatClient.ToNative([message], null));
+		}
+		else
 		{
-			await foreach (var _ in client.GetStreamingResponseAsync(messages))
-			{
-			}
-		});
-		Assert.Contains("Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.", error.Message);
-	}
-
-	[Fact]
-	public async Task GetResponseAsync_WithImageInAssistantHistoryOnOlderOS_ReportsUnsupported()
-	{
-		if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
-			return;
-
-		using var image = CreateTestImage();
-		var client = new AppleIntelligenceChatClient();
-		var messages = new List<ChatMessage>
-		{
-			new(ChatRole.User, "What is in this image?"),
-			new(ChatRole.Assistant,
-			[
-				new TextContent("Here is the image."),
-				new DataContent(new byte[] { 0 }, "image/png") { RawRepresentation = image },
-			]),
-			new(ChatRole.User, "What color was it?"),
-		};
-
-		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
-		Assert.Contains("Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.", error.Message);
-	}
-
-	[Fact]
-	public async Task GetResponseAsync_WithImageFileOnOlderOS_ReportsUnsupported()
-	{
-		if (OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27))
-			return;
-
-		var client = new AppleIntelligenceChatClient();
-		var messages = new List<ChatMessage>
-		{
-			new(ChatRole.User,
-			[
-				new TextContent("Describe this image."),
-				new UriContent("file:///tmp/image.png", "image/png"),
-			]),
-		};
-
-		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
-		Assert.Contains("Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.", error.Message);
-	}
-
-	[Fact]
-	public async Task GetResponseAsync_WithHttpImageUri_ThrowsBeforeModel()
-	{
-		var client = new AppleIntelligenceChatClient();
-		var messages = new List<ChatMessage>
-		{
-			new(ChatRole.User,
-			[
-				new TextContent("Describe this image."),
-				new UriContent("https://example.com/x.png", "image/png"),
-			]),
-		};
-
-		// Conversion runs before any native model call, so this fails fast without a model.
-		await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(messages));
+			var native = Assert.Single(AppleIntelligenceChatClient.ToNative([message], null));
+			Assert.IsType<TextContentNative>(Assert.Single(native.Contents));
+		}
 	}
 
 	[Fact]

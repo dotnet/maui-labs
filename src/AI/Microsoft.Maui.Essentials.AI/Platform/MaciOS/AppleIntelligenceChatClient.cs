@@ -256,11 +256,16 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		// Nothing to dispose.
 	}
 
-	private static ChatMessageNative[] ToNative(IEnumerable<ChatMessage> messages, ChatOptions? options)
+	internal static ChatMessageNative[] ToNative(IEnumerable<ChatMessage> messages, ChatOptions? options)
 	{
 		ArgumentNullException.ThrowIfNull(messages);
 
-		var messagesList = messages.ToList();
+		// Match the OpenAI adapters: unknown roles do not contribute to the request.
+		var messagesList = messages.Where(message =>
+			message.Role == ChatRole.System ||
+			message.Role == ChatRole.User ||
+			message.Role == ChatRole.Assistant ||
+			message.Role == ChatRole.Tool).ToList();
 
 		// Build a callId → name lookup from FunctionCallContent so FunctionResultContent can reference the tool name
 		var callIdToName = new Dictionary<string, string>();
@@ -379,12 +384,27 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			_ => throw new ArgumentException($"Unsupported content type: {content.GetType().Name}", nameof(content))
 		};
 
-	private static ChatMessageNative ToNative(ChatMessage message, Dictionary<string, string>? callIdToName = null) =>
-		new()
+	private static ChatMessageNative ToNative(ChatMessage message, Dictionary<string, string>? callIdToName = null)
+	{
+		AIContentNative[] contents = [.. message.Contents
+			.Where(content => content switch
+			{
+				FunctionCallContent => message.Role == ChatRole.Assistant,
+				FunctionResultContent => message.Role == ChatRole.Tool,
+				_ => message.Role != ChatRole.Tool
+			})
+			.SelectMany(content => ToNative(content, callIdToName))];
+
+		// Unknown-only user content becomes empty text, rather than dropping the user turn.
+		if (contents.Length == 0 && message.Role == ChatRole.User)
+			contents = [new TextContentNative(string.Empty)];
+
+		return new()
 		{
 			Role = ToNative(message.Role),
-			Contents = [.. message.Contents.SelectMany(c => ToNative(c, callIdToName))]
+			Contents = contents
 		};
+	}
 
 	private static ChatRoleNative ToNative(ChatRole role)
 	{
@@ -468,13 +488,11 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			TextContent textContent when textContent.Text is not null => [new TextContentNative(textContent.Text)],
 			TextContent => Array.Empty<AIContentNative>(),
 
-			// Image content (analyzed by the model on 27.0+; the native layer throws below that).
-			DataContent data when IsImage(data.MediaType) => [ToNative(data)],
-			UriContent uri when IsImage(uri.MediaType) => [ToNative(uri)],
+			// Only forward images when the native image API is available.
+			DataContent data when SupportsImageInput && IsImage(data.MediaType) => [ToNative(data)],
+			UriContent uri when SupportsImageInput && IsImage(uri.MediaType) => [ToNative(uri)],
 
-			// Function call/result content from prior tool-calling turns is converted to native types.
-			// The native Swift layer gracefully skips these when building the Transcript, since Apple's
-			// LanguageModelSession manages tool call state internally.
+			// Preserve prior tool activity through the native transcript's tool entries.
 			FunctionCallContent functionCall => [new FunctionCallContentNative(
 				functionCall.CallId ?? string.Empty,
 				functionCall.Name,
@@ -496,9 +514,14 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				})],
 #pragma warning restore IL3050, IL2026
 
-			// Throw for unsupported content types
-			_ => throw new ArgumentException($"The content type '{content.GetType().FullName}' is not supported by Apple Intelligence chat APIs.", nameof(content))
+			// Match the OpenAI adapters by ignoring unrecognized content.
+			_ => []
 		};
+
+	private static bool SupportsImageInput =>
+		OperatingSystem.IsIOSVersionAtLeast(27) ||
+		OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
+		OperatingSystem.IsMacOSVersionAtLeast(27);
 
 	private static NSNumber? ToNative(int? value) =>
 		value.HasValue ? NSNumber.FromInt32(value.Value) : null;
