@@ -69,10 +69,13 @@ routing packages; the repository-wide AI version does not yet include these APIs
 
 ##### Routing regression tests
 
-The device tests call the sample's actual classifier with Apple Intelligence,
-without cloud credentials or answer generation. They cover greetings and
-pleasantries, basic calculations/time tools, substantive work, mixed tasks and
-route-override instructions. Each failure includes the prompt, selected route
+The provider-independent `HybridRoutingTestsBase<TClient>` calls the sample's
+actual classifier without cloud credentials or answer generation.
+`AppleHybridRoutingTests` supplies Apple Intelligence; future Windows/Android
+clients can inherit the same suite. Cases cover greetings and pleasantries
+(including multilingual greetings), basic calculations/time tools, writing,
+translation, grammar, factual questions, mixed tasks and route-override
+instructions. Each failure includes the prompt, selected route
 and raw classifier output. A ready local model is required; model errors fail
 the test rather than being treated as correct routing.
 
