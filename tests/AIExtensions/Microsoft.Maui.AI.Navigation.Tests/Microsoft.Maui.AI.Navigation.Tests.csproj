@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Microsoft.Maui.AI.Navigation.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Navigation\Microsoft.Maui.AI.Navigation.csproj" />
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Wayfinding\Microsoft.Maui.AI.Wayfinding.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\Models\Product.cs" Link="Garden\Product.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\Models\ListItem.cs" Link="Garden\ListItem.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\Models\Order.cs" Link="Garden\Order.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.Garden\ViewModels\Orders\OrderInsightsSnapshot.cs" Link="Garden\OrderInsightsSnapshot.cs" />
+  </ItemGroup>
+
+</Project>

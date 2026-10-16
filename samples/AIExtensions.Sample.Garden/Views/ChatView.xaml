@@ -174,14 +174,16 @@
                            FontFamily="FluentFilled"
                            FontSize="{StaticResource FontSizeHero}"
                            TextColor="{StaticResource Primary}"
-                           HorizontalOptions="Center" />
+                           HorizontalOptions="Center"
+                           SemanticProperties.Description="" />
                     <Label Grid.Row="1"
-                           Text="Welcome to Sage, your personal garden shopper"
+                           Text="Welcome to Sage, your in-app guide"
                            FontSize="{StaticResource FontSizeTitle}"
                            FontAttributes="Bold"
-                           HorizontalTextAlignment="Center" />
+                           HorizontalTextAlignment="Center"
+                           SemanticProperties.HeadingLevel="Level1" />
                     <Label Grid.Row="2"
-                           Text="Tap a chip below to get started, or browse the catalog. The assistant can use these tools:"
+                           Text="Ask where anything is, how to reach it, what a visible control does, or have Sage open the right screen."
                            FontSize="{StaticResource FontSizeBody}"
                            HorizontalTextAlignment="Center"
                            LineBreakMode="WordWrap"
@@ -302,7 +304,7 @@
                     <Entry AutomationId="ChatInput"
                            Text="{Binding InputText}"
                            IsEnabled="{Binding IsNotBusy}"
-                           Placeholder="Ask about products..."
+                           Placeholder="Ask Sage to find or open anything..."
                            ReturnType="Send"
                            ReturnCommand="{Binding SendCommand}"
                            FontSize="{StaticResource FontSizeBody}"
@@ -319,7 +321,8 @@
                         FontSize="{StaticResource FontSizeBody}"
                         CornerRadius="20"
                         Padding="16,8"
-                        VerticalOptions="Center" />
+                        VerticalOptions="Center"
+                        SemanticProperties.Hint="Sends your message to the assistant" />
             </Grid>
         </VerticalStackLayout>
 
@@ -347,7 +350,8 @@
                         FontSize="{StaticResource FontSizeBody}"
                         CornerRadius="8"
                         Padding="16,8"
-                        VerticalOptions="Center" />
+                        VerticalOptions="Center"
+                        SemanticProperties.Hint="Approves the pending action" />
                 <Button Grid.Column="2"
                         Text="Reject"
                         AutomationId="RejectButton"
@@ -357,7 +361,8 @@
                         FontSize="{StaticResource FontSizeBody}"
                         CornerRadius="8"
                         Padding="16,8"
-                        VerticalOptions="Center" />
+                        VerticalOptions="Center"
+                        SemanticProperties.Hint="Rejects the pending action" />
             </Grid>
         </Border>
 

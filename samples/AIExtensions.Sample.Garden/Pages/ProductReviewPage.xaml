@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:indexer="clr-namespace:Microsoft.Maui.AI.Indexer;assembly=Microsoft.Maui.AI.Indexer"
+             xmlns:views="clr-namespace:AIExtensions.Sample.Garden.Views"
              xmlns:vm="clr-namespace:AIExtensions.Sample.Garden.ViewModels"
              x:Class="AIExtensions.Sample.Garden.Pages.ProductReviewPage"
              x:DataType="vm:ProductReviewViewModel"
@@ -11,6 +13,7 @@
              BackgroundColor="{StaticResource Primary}">
 
     <Grid RowDefinitions="Auto,*"
+          ColumnDefinitions="*,Auto"
           BackgroundColor="{AppThemeBinding Light={StaticResource ModalBackgroundLight}, Dark={StaticResource ModalBackgroundDark}}">
         <!-- Header -->
         <Border Grid.Row="0"
@@ -26,12 +29,15 @@
                         BackgroundColor="Transparent"
                         TextColor="{StaticResource White}"
                         VerticalOptions="Center"
-                        Command="{Binding CancelCommand}" />
+                        Command="{Binding CancelCommand}"
+                        SemanticProperties.Description="Cancel"
+                        SemanticProperties.Hint="Cancels the review and returns to product details" />
                 <Label Grid.Column="1"
                        Text="Write Review"
                        FontSize="{StaticResource FontSizeTitle}" FontAttributes="Bold"
                        TextColor="{StaticResource White}"
-                       VerticalOptions="Center" />
+                       VerticalOptions="Center"
+                       SemanticProperties.HeadingLevel="Level1" />
             </Grid>
         </Border>
 
@@ -49,11 +55,14 @@
                 <VerticalStackLayout Spacing="6">
                     <Label Text="Rating"
                            FontSize="{StaticResource FontSizeBody}"
-                           FontAttributes="Bold" />
+                           FontAttributes="Bold"
+                           SemanticProperties.HeadingLevel="Level2" />
                     <Slider Minimum="1" Maximum="5"
                             Value="{Binding Rating}"
                             MinimumTrackColor="{StaticResource Primary}"
-                            ThumbColor="{StaticResource Primary}" />
+                            ThumbColor="{StaticResource Primary}"
+                            SemanticProperties.Description="Rating"
+                            SemanticProperties.Hint="Slide to select 1 to 5 stars" />
                     <Label FontSize="{StaticResource FontSizeSubtitle}"
                            HorizontalTextAlignment="Center"
                            TextColor="#E5A100">
@@ -69,7 +78,8 @@
                 <VerticalStackLayout Spacing="6">
                     <Label Text="Comment (optional)"
                            FontSize="{StaticResource FontSizeBody}"
-                           FontAttributes="Bold" />
+                           FontAttributes="Bold"
+                           SemanticProperties.HeadingLevel="Level2" />
                     <Border BackgroundColor="{AppThemeBinding Light={StaticResource InputBackgroundLight}, Dark={StaticResource InputBackgroundDark}}"
                             Stroke="{AppThemeBinding Light={StaticResource InputStrokeLight}, Dark={StaticResource InputStrokeDark}}"
                             StrokeThickness="1"
@@ -78,7 +88,8 @@
                         <Editor Text="{Binding Comment}"
                                 Placeholder="Share your experience..."
                                 HeightRequest="120"
-                                AutoSize="TextChanges" />
+                                AutoSize="TextChanges"
+                                SemanticProperties.Hint="Optional comments about your experience with this product" />
                     </Border>
                 </VerticalStackLayout>
 
@@ -88,10 +99,14 @@
                         TextColor="{StaticResource White}"
                         FontAttributes="Bold"
                         CornerRadius="12"
-                        Command="{Binding SubmitCommand}" />
+                        Command="{Binding SubmitCommand}"
+                        SemanticProperties.Hint="Submits your review for this product" />
 
             </VerticalStackLayout>
         </ScrollView>
+        <views:ChatSidebar Grid.Column="1"
+                           Grid.RowSpan="2"
+                           indexer:IndexingProperties.ExcludeWithChildren="True" />
     </Grid>
 
 </ContentPage>

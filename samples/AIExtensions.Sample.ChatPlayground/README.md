@@ -42,6 +42,27 @@ Generate images from text or edit a source image with a configured Azure provide
 Chat, Embeddings, and Images each have their own tab and services. Replay
 works without credentials or a model.
 
+### App wayfinding
+
+The playground tabs are hosted in Shell and indexed by
+`Microsoft.Maui.AI.Wayfinding`. Live clients that support tool calling
+automatically receive read-only app search/current-screen tools and explicit
+navigation tools.
+
+Try these in Chat:
+
+- `Where can I edit an original image?` — explains where the dedicated Images
+  feature is without moving.
+- `Take me to the Images page.` — switches to the Images tab.
+- `Where can I import and search a document?` — finds the Embeddings tab and
+  its visible import controls.
+- `What can I do on this screen?` — answers from the live Chat page controls.
+
+The conversation and recording remain in the singleton chat service when the
+user changes tabs. The specialized Garden sample remains the deeper
+parameterized-route and rendered-chart scenario while those domain pages are
+not part of the general playground.
+
 ## Build and run
 
 Install the repo's pinned .NET 10 SDK, the matching MAUI workload, and Xcode 27
