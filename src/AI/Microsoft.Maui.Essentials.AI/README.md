@@ -8,17 +8,7 @@ are not specified.
 
 > **Experimental:** this package ships as a preview. APIs may change.
 
-## Install
-
 Requires .NET 10 and the MAUI workload.
-
-| Package | Purpose |
-|---------|---------|
-| `Microsoft.Maui.Essentials.AI` | Platform-native chat and embeddings through M.E.AI abstractions |
-
-```sh
-dotnet add package Microsoft.Maui.Essentials.AI --prerelease
-```
 
 ## Configure chat
 
@@ -223,11 +213,3 @@ Response IDs and finish reasons are recorded only when supplied by the provider.
 For Apple tool logs, supply an `ILoggerFactory`: Debug records lifecycle events;
 Trace includes arguments/results. Callbacks retain the request's execution
 context and any active trace/span, including across async tool code.
-
-## Examples and source
-
-- [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
-- [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
-- [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
-- [Windows integration](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md)
-- [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)
