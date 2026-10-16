@@ -22,6 +22,10 @@ public sealed class WindowsAIChatClient : IChatClient
 
 	private const int InvalidArgumentHResult = unchecked((int)0x80070057);
 
+	private const string PromptTooLargeMessage =
+		"The prompt is larger than the Windows AI language model's context window. " +
+		"Shorten the conversation or start a new one.";
+
 	/// <summary>Lazily-initialized task that creates the underlying <see cref="LanguageModel"/>.</summary>
 	private readonly Lazy<Task<LanguageModel>> _modelTask;
 
@@ -93,58 +97,22 @@ public sealed class WindowsAIChatClient : IChatClient
 
 		var modelOptions = ConvertToLanguageModelOptions(options);
 
-		// Use StreamingResponseHandler without a chunker — the Windows AI API
-		// already provides incremental deltas via the Progress callback.
-		var handler = new StreamingResponseHandler(DefaultModelId);
-
-		// Structured generation has no LanguageModelContext overload, so the system prompt
-		// is folded into the prompt text.
 		var jsonSchema = GetConstraintSchema(options);
 		var model = await _modelTask.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-		LanguageModelContext? context = null;
-		Action cancel;
-		try
-		{
-			if (jsonSchema is not null)
-			{
-				var structuredPrompt = string.IsNullOrEmpty(systemPrompt)
-					? prompt
-					: $"{systemPrompt}{Environment.NewLine}{Environment.NewLine}{prompt}";
+		var updates = StreamResponseAsync(
+			(handler, token) => jsonSchema is not null
+				? GenerateStructuredResponseAsync(model, systemPrompt, prompt, jsonSchema, modelOptions, handler, token)
+				: GenerateTextResponseAsync(model, systemPrompt, prompt, modelOptions, handler, token),
+			cancellationToken);
 
-				(cancel, context) = await StartOperationAsync(
-					() => StartStructuredGeneration(model, structuredPrompt, jsonSchema, modelOptions, handler, cancellationToken),
-					cancellationToken).ConfigureAwait(false);
-			}
-			else
-			{
-				(cancel, context) = await StartOperationAsync(
-					() => StartTextGeneration(model, systemPrompt, prompt, modelOptions, handler, cancellationToken),
-					cancellationToken).ConfigureAwait(false);
-			}
-
-			var registration = cancellationToken.Register(cancel);
-			try
-			{
-				await foreach (var update in handler.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-				{
-					yield return update;
-				}
-			}
-			finally
-			{
-				cancel();
-				registration.Dispose();
-			}
-		}
-		finally
+		await foreach (var update in updates.ConfigureAwait(false))
 		{
-			handler.Complete();
-			context?.Dispose();
+			yield return update;
 		}
 	}
 
-	private static (Action Cancel, LanguageModelContext? Context) StartTextGeneration(
+	private static async Task GenerateTextResponseAsync(
 		LanguageModel model,
 		string systemPrompt,
 		string prompt,
@@ -152,102 +120,134 @@ public sealed class WindowsAIChatClient : IChatClient
 		StreamingResponseHandler handler,
 		CancellationToken cancellationToken)
 	{
-		var context = string.IsNullOrEmpty(systemPrompt)
+		using var context = string.IsNullOrEmpty(systemPrompt)
 			? model.CreateContext()
 			: model.CreateContext(systemPrompt, new ContentFilterOptions());
-		try
+
+		// Context creation may have blocked while the consumer cancelled or left.
+		cancellationToken.ThrowIfCancellationRequested();
+
+		var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
+
+		// The worker owns the context through completion or cancellation of the operation.
+		await ForwardResponseAsync(operation, handler, cancellationToken, result =>
 		{
-			var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
-			WireUp(operation, handler, cancellationToken, result =>
-				GetResponseText(result.Status, result.Text, result.ExtendedError, string.IsNullOrEmpty(prompt)));
-			return (operation.Cancel, context);
-		}
-		catch
-		{
-			context.Dispose();
-			throw;
-		}
+			var status = result.Status;
+			var text = result.Text;
+			var extendedError = result.ExtendedError;
+
+			return status switch
+			{
+				LanguageModelResponseStatus.Complete => text,
+
+				// Native empty prompts report E_INVALIDARG rather than an empty completion.
+				LanguageModelResponseStatus.Error when string.IsNullOrEmpty(prompt) &&
+					(extendedError is null ||
+					 extendedError is ArgumentException && extendedError.HResult == InvalidArgumentHResult) => text,
+
+				LanguageModelResponseStatus.PromptLargerThanContext =>
+					throw new InvalidOperationException(PromptTooLargeMessage, extendedError),
+
+				_ => throw new InvalidOperationException($"Response generation failed: {status}", extendedError)
+			};
+		}).ConfigureAwait(false);
 	}
 
-	private static (Action Cancel, LanguageModelContext? Context) StartStructuredGeneration(
+	private static async Task GenerateStructuredResponseAsync(
 		LanguageModel model,
+		string systemPrompt,
 		string prompt,
 		string jsonSchema,
 		LanguageModelOptions modelOptions,
 		StreamingResponseHandler handler,
 		CancellationToken cancellationToken)
 	{
-		var operation = model.GenerateStructuredJsonResponseAsync(prompt, jsonSchema, modelOptions);
-		WireUp(operation, handler, cancellationToken, static result =>
-			GetStructuredResponseText(result.Status, result.Text, result.ExtendedError));
-		return (operation.Cancel, null);
+		// Structured generation has no context overload, so include the system prompt here.
+		var structuredPrompt = string.IsNullOrEmpty(systemPrompt)
+			? prompt
+			: $"{systemPrompt}{Environment.NewLine}{Environment.NewLine}{prompt}";
+
+		var operation = model.GenerateStructuredJsonResponseAsync(structuredPrompt, jsonSchema, modelOptions);
+
+		await ForwardResponseAsync(operation, handler, cancellationToken, static result =>
+		{
+			var status = result.Status;
+			var text = result.Text;
+			var extendedError = result.ExtendedError;
+
+			return status switch
+			{
+				GenerateStructuredJsonResponseStatus.Complete => text,
+
+				GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
+					throw new InvalidOperationException(PromptTooLargeMessage, extendedError),
+
+				_ => throw new InvalidOperationException($"Structured response generation failed: {status}", extendedError)
+			};
+		}).ConfigureAwait(false);
 	}
 
-	internal static string? GetResponseText(
-		LanguageModelResponseStatus status,
-		string? text,
-		Exception? extendedError,
-		bool isEmptyPrompt) => status switch
+	internal static async IAsyncEnumerable<ChatResponseUpdate> StreamResponseAsync(
+		Func<StreamingResponseHandler, CancellationToken, Task> generate,
+		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
-		LanguageModelResponseStatus.Complete => text,
-		// Native empty prompts report E_INVALIDARG rather than an empty completion.
-		LanguageModelResponseStatus.Error when isEmptyPrompt &&
-			(extendedError is null ||
-			 extendedError is ArgumentException && extendedError.HResult == InvalidArgumentHResult) => text,
-		LanguageModelResponseStatus.PromptLargerThanContext =>
-			throw CreatePromptTooLargeException(extendedError),
-		_ => throw new InvalidOperationException($"Response generation failed: {status}", extendedError)
-	};
+		var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+		var handler = new StreamingResponseHandler(DefaultModelId);
 
-	internal static string? GetStructuredResponseText(
-		GenerateStructuredJsonResponseStatus status,
-		string? text,
-		Exception? extendedError) => status switch
-	{
-		GenerateStructuredJsonResponseStatus.Complete => text,
-		GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
-			throw CreatePromptTooLargeException(extendedError),
-		_ => throw new InvalidOperationException($"Structured response generation failed: {status}", extendedError)
-	};
-
-	private static InvalidOperationException CreatePromptTooLargeException(Exception? extendedError) =>
-		new(
-			"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
-			extendedError);
-
-	private static async Task<(Action Cancel, LanguageModelContext? Context)> StartOperationAsync(
-		Func<(Action Cancel, LanguageModelContext? Context)> start,
-		CancellationToken cancellationToken)
-	{
 		// WinRT entry points can block before returning their async operation. Keep that
-		// synchronous work off the caller's UI thread and let cancellation release the caller.
-		var startTask = Task.Run(start, cancellationToken);
+		// work off the caller's thread; cancellation must not wait for it to return.
+		var producer = Task.Run(async () =>
+		{
+			try
+			{
+				source.Token.ThrowIfCancellationRequested();
+				await generate(handler, source.Token).ConfigureAwait(false);
+			}
+			catch (Exception ex)
+			{
+				handler.CompleteWithError(ex);
+				throw;
+			}
+			finally
+			{
+				handler.Complete();
+			}
+		});
+
 		try
 		{
-			return await startTask.WaitAsync(cancellationToken).ConfigureAwait(false);
-		}
-		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-		{
-			_ = startTask.ContinueWith(task =>
+			await foreach (var update in handler.ReadAllAsync(cancellationToken).ConfigureAwait(false))
 			{
-				if (task.IsCompletedSuccessfully)
+				yield return update;
+			}
+		}
+		finally
+		{
+			try
+			{
+				// Early iterator disposal must cancel native work, just like caller cancellation.
+				source.Cancel();
+			}
+			finally
+			{
+				// Stop buffering progress if native cancellation has not finished yet.
+				handler.Complete();
+
+				// Do not wait for blocked native work or dispose the token it still needs.
+				// Observe any late faults even though the consumer may no longer be reading.
+				_ = producer.ContinueWith(task =>
 				{
 					try
 					{
-						task.Result.Cancel();
+						if (task.IsFaulted)
+							System.Diagnostics.Trace.TraceError($"Windows AI generation failed: {task.Exception}");
 					}
 					finally
 					{
-						task.Result.Context?.Dispose();
+						source.Dispose();
 					}
-				}
-				else if (task.IsFaulted)
-				{
-					System.Diagnostics.Trace.TraceError(
-						$"Windows AI generation failed after cancellation: {task.Exception}");
-				}
-			}, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
-			throw;
+				}, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+			}
 		}
 	}
 
@@ -257,7 +257,7 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// </summary>
 	/// <param name="operation">The WinRT operation to observe.</param>
 	/// <param name="handler">The pipeline to feed.</param>
-	/// <param name="cancellationToken">The token reported when the operation is cancelled.</param>
+	/// <param name="cancellationToken">The token used to cancel the native operation.</param>
 	/// <param name="readResult">
 	/// Validates the completed result and returns the response text, throwing when the status is not
 	/// a success. It is always called, so the status is checked either way, but the text it returns
@@ -268,7 +268,7 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// <see cref="IAsyncOperationWithProgress{TResult, TProgress}"/> with a <see cref="string"/>
 	/// progress type, but their result types differ, so this is generic over the result.
 	/// </remarks>
-	private static void WireUp<TResult>(
+	internal static async Task ForwardResponseAsync<TResult>(
 		IAsyncOperationWithProgress<TResult, string> operation,
 		StreamingResponseHandler handler,
 		CancellationToken cancellationToken,
@@ -285,35 +285,13 @@ public sealed class WindowsAIChatClient : IChatClient
 			}
 		};
 
-		operation.Completed = (op, status) =>
-		{
-			if (status == AsyncStatus.Completed)
-			{
-				try
-				{
-					// If progress was already reported, only inspect the final status.
-					var text = readResult(op.GetResults());
+		// AsTask without IProgress preserves the synchronous callback above.
+		var result = await operation.AsTask(cancellationToken).ConfigureAwait(false);
 
-					if (!reportedProgress)
-						handler.ProcessContent(text);
-				}
-				catch (Exception ex)
-				{
-					handler.CompleteWithError(ex);
-					return;
-				}
-
-				handler.Complete();
-			}
-			else if (status == AsyncStatus.Error)
-			{
-				handler.CompleteWithError(op.ErrorCode);
-			}
-			else if (status == AsyncStatus.Canceled)
-			{
-				handler.CompleteWithError(new OperationCanceledException(cancellationToken));
-			}
-		};
+		// Always validate the final status, but do not duplicate text already streamed.
+		var text = readResult(result);
+		if (!reportedProgress)
+			handler.ProcessContent(text);
 	}
 
 	/// <summary>
