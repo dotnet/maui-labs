@@ -39,19 +39,126 @@ public class UpdateCommandTests
 		Assert.False(UpdateCommand.IsGlobalInstall(shim, Path.GetTempPath(), home));
 	}
 
+	static readonly string[] WindowsInputValues =
+	[
+		"normal", "two words", "ordinary's apostrophe",
+		"\u2018; Write-Output INJECTED; #", "\u2019; Write-Output INJECTED; #",
+		"\u201a; Write-Output INJECTED; #", "\u201b; Write-Output INJECTED; #",
+		"semicolon;value", "back`tick", "$(Write-Output INJECTED)", "line one\r\nline two"
+	];
+
+	const string WindowsPathValue = "two words ' \u2018\u2019\u201a\u201b ; ` $(Write-Output INJECTED)";
+
 	[Fact]
-	public void WindowsScript_QuotesInputsAndWaitsBeforeInvokingSdk()
+	public void WindowsUpdateStartInfo_KeepsInputsOutOfScript()
 	{
-		var script = UpdateCommand.WindowsScript(123, @"C:\SDK's folder\dotnet.exe",
-			UpdateCommand.Arguments(true), @"C:\project's folder", @"C:\log's folder\update.log");
-		Assert.Contains("'C:\\SDK''s folder\\dotnet.exe'", script);
-		Assert.Contains("'C:\\project''s folder'", script);
-		Assert.Contains("WaitForExit(60000)", script);
-		Assert.Contains("SDK_EXIT=$code", script);
-		Assert.Contains("*>> $log", script);
-		Assert.DoesNotContain(" *> $log", script);
-		Assert.True(script.IndexOf("WaitForExit", StringComparison.Ordinal) < script.IndexOf("& '", StringComparison.Ordinal));
-		Assert.DoesNotContain("[Console]", script);
+		var dotnet = $@"C:\SDK {WindowsPathValue}\dotnet.exe";
+		var directory = $@"C:\project {WindowsPathValue}";
+		var log = $@"C:\logs {WindowsPathValue}\update.log";
+		var start = UpdateCommand.WindowsUpdateStartInfo(123, dotnet, WindowsInputValues, directory, log);
+		var script = Encoding.Unicode.GetString(Convert.FromBase64String(start.ArgumentList[^1]));
+
+		Assert.Equal(UpdateCommand.WindowsScript, script);
+		Assert.Equal(["-NoProfile", "-NonInteractive", "-EncodedCommand"], start.ArgumentList.Take(3));
+		Assert.False(start.UseShellExecute);
+		Assert.True(start.CreateNoWindow);
+		Assert.Equal("123", start.Environment["MAUI_CLI_UPDATE_PARENT_ID"]);
+		Assert.Equal(dotnet, start.Environment["MAUI_CLI_UPDATE_DOTNET"]);
+		Assert.Equal(directory, start.Environment["MAUI_CLI_UPDATE_WORKING_DIRECTORY"]);
+		Assert.Equal(log, start.Environment["MAUI_CLI_UPDATE_LOG"]);
+		Assert.Equal("0", start.Environment["MAUI_CLI_UPDATE_SHOW_COMPLETION"]);
+		Assert.Equal(WindowsInputValues, JsonSerializer.Deserialize<string[]>(start.Environment["MAUI_CLI_UPDATE_ARGUMENTS"]!));
+	}
+
+	[Fact]
+	public async Task WindowsScript_InputDataIsNotInterpreted()
+	{
+		if (!OperatingSystem.IsWindows())
+			return;
+
+		var root = Path.Combine(Path.GetTempPath(), $"maui-update-{Guid.NewGuid():N}");
+		var directory = Path.Combine(root, $"project {WindowsPathValue}");
+		Directory.CreateDirectory(directory);
+		try
+		{
+			var log = Path.Combine(root, $"log {WindowsPathValue}.txt");
+			var capture = Path.Combine(root, "capture.json");
+			var dotnet = $@"C:\SDK {WindowsPathValue}\dotnet.exe";
+			var start = UpdateCommand.WindowsUpdateStartInfo(int.MaxValue, dotnet, WindowsInputValues, directory, log);
+			start.Environment["MAUI_TEST_UPDATE_CAPTURE"] = capture;
+			var script = Encoding.Unicode.GetString(Convert.FromBase64String(start.ArgumentList[^1]));
+			const string probe = """
+				$ErrorActionPreference = 'Stop'
+				$ProgressPreference = 'SilentlyContinue'
+				Set-Item -LiteralPath ('Function:\' + $env:MAUI_CLI_UPDATE_DOTNET) -Value {
+				    $result = [pscustomobject]@{
+				        Arguments = @($args)
+				        WorkingDirectory = (Get-Location).Path
+				        Command = $MyInvocation.MyCommand.Name
+				        PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+				    }
+				    [IO.File]::WriteAllText($env:MAUI_TEST_UPDATE_CAPTURE, (ConvertTo-Json -InputObject $result -Depth 5))
+				    Write-Output 'SDK output'
+				    $global:LASTEXITCODE = 0
+				}
+				""";
+			start.ArgumentList[^1] = Convert.ToBase64String(Encoding.Unicode.GetBytes(probe + Environment.NewLine + script));
+
+			var (exitCode, terminal) = await RunWindowsUpdaterAsync(start);
+
+			Assert.Equal(0, exitCode);
+			Assert.Empty(terminal);
+			using var json = JsonDocument.Parse(await File.ReadAllTextAsync(capture));
+			var result = json.RootElement;
+			Assert.Equal(WindowsInputValues, result.GetProperty("Arguments").EnumerateArray().Select(arg => arg.GetString()));
+			Assert.Equal(directory, result.GetProperty("WorkingDirectory").GetString());
+			Assert.Equal(dotnet, result.GetProperty("Command").GetString());
+			Assert.StartsWith("5.1.", result.GetProperty("PowerShellVersion").GetString());
+			var contents = await File.ReadAllTextAsync(log);
+			Assert.Contains("SDK output", contents);
+			Assert.Contains("SDK_EXIT=0", contents);
+			Assert.DoesNotContain("INJECTED", contents);
+		}
+		finally
+		{
+			Directory.Delete(root, recursive: true);
+		}
+	}
+
+	[Fact]
+	public async Task WindowsScript_NativeProcessReceivesUnchangedArguments()
+	{
+		if (!OperatingSystem.IsWindows())
+			return;
+
+		var directory = Path.Combine(Path.GetTempPath(), $"maui-update-{Guid.NewGuid():N}");
+		Directory.CreateDirectory(directory);
+		try
+		{
+			var capture = Path.Combine(directory, "capture.json");
+			var probe = Path.Combine(directory, "sdk-probe.ps1");
+			await File.WriteAllTextAsync(probe, """
+				[IO.File]::WriteAllText($env:MAUI_TEST_UPDATE_CAPTURE, (ConvertTo-Json -InputObject @($args)))
+				Write-Output 'SDK output'
+				exit 0
+				""");
+			var start = UpdateCommand.WindowsUpdateStartInfo(int.MaxValue, WindowsPowerShellPath,
+				["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", probe,
+					.. WindowsInputValues],
+				directory, Path.Combine(directory, "update.log"));
+			start.Environment["MAUI_TEST_UPDATE_CAPTURE"] = capture;
+
+			var (exitCode, terminal) = await RunWindowsUpdaterAsync(start);
+
+			Assert.Equal(0, exitCode);
+			Assert.Empty(terminal);
+			Assert.Equal(WindowsInputValues,
+				JsonSerializer.Deserialize<string[]>(await File.ReadAllTextAsync(capture)));
+		}
+		finally
+		{
+			Directory.Delete(directory, recursive: true);
+		}
 	}
 
 	[Theory]
@@ -70,37 +177,15 @@ public class UpdateCommandTests
 		{
 			var log = Path.Combine(directory, "update.log");
 			await File.WriteAllTextAsync(log, "Update header" + Environment.NewLine);
-			var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-				"WindowsPowerShell", "v1.0", "powershell.exe");
-			var script = UpdateCommand.WindowsScript(int.MaxValue, powershell,
+			var start = UpdateCommand.WindowsUpdateStartInfo(int.MaxValue, WindowsPowerShellPath,
 				["-NoProfile", "-NonInteractive", "-Command", $"Write-Output 'SDK output'; exit {sdkExit}"],
 				directory, log, interactive);
-			var start = new ProcessStartInfo(powershell)
-			{
-				UseShellExecute = false,
-				RedirectStandardOutput = true,
-				RedirectStandardError = true,
-				CreateNoWindow = true
-			};
-			foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-EncodedCommand",
-				Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) })
-				start.ArgumentList.Add(arg);
-			using var process = Process.Start(start)!;
-			var stdout = process.StandardOutput.ReadToEndAsync();
-			var stderr = process.StandardError.ReadToEndAsync();
-			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-			try
-			{
-				await process.WaitForExitAsync(timeout.Token);
-			}
-			catch (OperationCanceledException)
-			{
-				process.Kill(entireProcessTree: true);
-				throw;
-			}
+			Assert.Equal(!interactive, start.CreateNoWindow);
+			Assert.Equal(interactive ? "1" : "0", start.Environment["MAUI_CLI_UPDATE_SHOW_COMPLETION"]);
 
-			Assert.Equal(sdkExit, process.ExitCode);
-			var terminal = await stdout + await stderr;
+			var (exitCode, terminal) = await RunWindowsUpdaterAsync(start);
+
+			Assert.Equal(sdkExit, exitCode);
 			if (interactive)
 			{
 				Assert.Contains("Updating MAUI CLI...", terminal);
@@ -123,6 +208,83 @@ public class UpdateCommandTests
 		{
 			Directory.Delete(directory, recursive: true);
 		}
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task WindowsScript_WaitsForParentBeforeInvokingSdk(bool parentExited)
+	{
+		if (!OperatingSystem.IsWindows())
+			return;
+
+		var directory = Path.Combine(Path.GetTempPath(), $"maui-update-{Guid.NewGuid():N}");
+		Directory.CreateDirectory(directory);
+		try
+		{
+			var log = Path.Combine(directory, "update.log");
+			var start = UpdateCommand.WindowsUpdateStartInfo(123, WindowsPowerShellPath,
+				["-NoProfile", "-NonInteractive", "-Command", "Write-Output 'SDK output'; exit 0"],
+				directory, log);
+			start.Environment["MAUI_TEST_PARENT_EXITED"] = parentExited ? "1" : "0";
+			const string probe = """
+				function Get-Process {
+				    param($Id, $ErrorAction)
+				    if ($Id -ne 123) { throw 'Incorrect parent process ID.' }
+				    $parent = New-Object PSObject
+				    Add-Member -InputObject $parent -MemberType ScriptMethod -Name WaitForExit -Value {
+				        param($milliseconds)
+				        if ($milliseconds -ne 60000) { throw 'Incorrect parent wait timeout.' }
+				        return $env:MAUI_TEST_PARENT_EXITED -eq '1'
+				    }
+				    return $parent
+				}
+				""";
+			var script = Encoding.Unicode.GetString(Convert.FromBase64String(start.ArgumentList[^1]));
+			start.ArgumentList[^1] = Convert.ToBase64String(Encoding.Unicode.GetBytes(probe + Environment.NewLine + script));
+
+			var (exitCode, terminal) = await RunWindowsUpdaterAsync(start);
+
+			Assert.Equal(parentExited ? 0 : 1, exitCode);
+			Assert.Empty(terminal);
+			var contents = await File.ReadAllTextAsync(log);
+			Assert.Contains(parentExited ? "SDK_EXIT=0" : "SDK_EXIT=1", contents);
+			if (parentExited)
+				Assert.Contains("SDK output", contents);
+			else
+			{
+				Assert.Contains("Timed out waiting for MAUI CLI to exit.", contents);
+				Assert.DoesNotContain("SDK output", contents);
+			}
+		}
+		finally
+		{
+			Directory.Delete(directory, recursive: true);
+		}
+	}
+
+	static string WindowsPowerShellPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+		"WindowsPowerShell", "v1.0", "powershell.exe");
+
+	static async Task<(int ExitCode, string Terminal)> RunWindowsUpdaterAsync(ProcessStartInfo start)
+	{
+		start.RedirectStandardOutput = true;
+		start.RedirectStandardError = true;
+		start.CreateNoWindow = true;
+		using var process = Process.Start(start)!;
+		var stdout = process.StandardOutput.ReadToEndAsync();
+		var stderr = process.StandardError.ReadToEndAsync();
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+		try
+		{
+			await process.WaitForExitAsync(timeout.Token);
+		}
+		catch (OperationCanceledException)
+		{
+			process.Kill(entireProcessTree: true);
+			throw;
+		}
+		return (process.ExitCode, await stdout + await stderr);
 	}
 
 	[Fact]

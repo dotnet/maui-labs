@@ -3,8 +3,10 @@
 
 using System.CommandLine;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Services;
 using Microsoft.Maui.Cli.Utils;
@@ -102,28 +104,26 @@ internal static class UpdateCommand
 		return command;
 	}
 
-	internal static string WindowsScript(int parentId, string dotnet, string[] args, string workingDirectory, string log,
-		bool showCompletion = false)
-	{
-		static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
-		return $$"""
+	internal const string WindowsScript = """
 			$ErrorActionPreference = 'Stop'
 			$ProgressPreference = 'SilentlyContinue'
-			$log = {{Quote(log)}}
+			$log = $env:MAUI_CLI_UPDATE_LOG
 			function Write-UpdateStatus([string] $message) {
-			    {{(showCompletion ? """
-			    try { [Console]::Error.WriteLine($message) }
-			    catch [System.IO.IOException], [System.ObjectDisposedException] { Add-Content -LiteralPath $log -Value 'Terminal closed; see this log for update results.' }
-			    """ : "")}}
+			    if ($env:MAUI_CLI_UPDATE_SHOW_COMPLETION -eq '1') {
+			        try { [Console]::Error.WriteLine($message) }
+			        catch [System.IO.IOException], [System.ObjectDisposedException] { Add-Content -LiteralPath $log -Value 'Terminal closed; see this log for update results.' }
+			    }
 			}
 			try {
-			    $parent = Get-Process -Id {{parentId}} -ErrorAction SilentlyContinue
+			    $parent = Get-Process -Id $env:MAUI_CLI_UPDATE_PARENT_ID -ErrorAction SilentlyContinue
 			    if ($parent -and !$parent.WaitForExit(60000)) { throw 'Timed out waiting for MAUI CLI to exit.' }
-			    Set-Location -LiteralPath {{Quote(workingDirectory)}}
+			    Set-Location -LiteralPath $env:MAUI_CLI_UPDATE_WORKING_DIRECTORY
+			    $dotnet = $env:MAUI_CLI_UPDATE_DOTNET
+			    [string[]] $updateArgs = ConvertFrom-Json -InputObject $env:MAUI_CLI_UPDATE_ARGUMENTS
 			    Write-UpdateStatus 'Updating MAUI CLI...'
 			    $ErrorActionPreference = 'Continue'
 			    $global:LASTEXITCODE = 1
-			    & {{Quote(dotnet)}} {{string.Join(" ", args.Select(Quote))}} *>> $log
+			    & $dotnet @updateArgs *>> $log
 			    $code = $LASTEXITCODE
 			    $ErrorActionPreference = 'Stop'
 			    Add-Content -LiteralPath $log -Value "SDK_EXIT=$code"
@@ -140,6 +140,25 @@ internal static class UpdateCommand
 			    exit 1
 			}
 			""";
+
+	internal static ProcessStartInfo WindowsUpdateStartInfo(int parentId, string dotnet, string[] args,
+		string workingDirectory, string log, bool showCompletion = false)
+	{
+		var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+			"WindowsPowerShell", "v1.0", "powershell.exe"))
+		{
+			UseShellExecute = false,
+			CreateNoWindow = !showCompletion
+		};
+		foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(WindowsScript)) })
+			start.ArgumentList.Add(arg);
+		start.Environment["MAUI_CLI_UPDATE_PARENT_ID"] = parentId.ToString(CultureInfo.InvariantCulture);
+		start.Environment["MAUI_CLI_UPDATE_DOTNET"] = dotnet;
+		start.Environment["MAUI_CLI_UPDATE_ARGUMENTS"] = JsonSerializer.Serialize(args, MauiCliJsonContext.Default.StringArray);
+		start.Environment["MAUI_CLI_UPDATE_WORKING_DIRECTORY"] = workingDirectory;
+		start.Environment["MAUI_CLI_UPDATE_LOG"] = log;
+		start.Environment["MAUI_CLI_UPDATE_SHOW_COMPLETION"] = showCompletion ? "1" : "0";
+		return start;
 	}
 
 	static string StartWindowsUpdate(string[] args, bool showCompletion)
@@ -149,15 +168,7 @@ internal static class UpdateCommand
 		var log = Path.Combine(state, $"update-{Guid.NewGuid():N}.log");
 		var dotnet = ProcessRunner.GetCommandPath("dotnet")
 			?? throw new InvalidOperationException("The .NET SDK is required to update MAUI CLI. Install an SDK and retry.");
-		var script = WindowsScript(Environment.ProcessId, dotnet, args, Environment.CurrentDirectory, log, showCompletion);
-		var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-			"WindowsPowerShell", "v1.0", "powershell.exe"))
-		{
-			UseShellExecute = false,
-			CreateNoWindow = !showCompletion
-		};
-		foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) })
-			start.ArgumentList.Add(arg);
+		var start = WindowsUpdateStartInfo(Environment.ProcessId, dotnet, args, Environment.CurrentDirectory, log, showCompletion);
 		File.WriteAllText(log, $"Update started by MAUI CLI {CurrentVersion}.{Environment.NewLine}");
 		using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the SDK updater.");
 		if (process.WaitForExit(200))
