@@ -26,59 +26,35 @@ The header's **Logs** button toggles the local, bounded diagnostics sidebar
 by trace, including existing tool-invocation lifecycle logs from MEAI and Apple.
 Hybrid adds a Debug entry with only the selected route, not the classifier output.
 Apple's native tool callbacks retain the originating request's trace/span.
-Chat and embeddings emit spans, while the pinned MEAI version
-provides image logging only. Model and usage data appear only when emitted
+Chat and embeddings emit spans; image generation uses logging.
+Model and usage data appear only when emitted
 by the provider. Trace payload logging and sensitive telemetry capture are
 disabled; exceptions may still contain sensitive data. Nothing is exported.
 
 #### Hybrid chat
 
 On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses an enabled Apple
-Intelligence model to classify **only the last user message** in one local call
-per request. Routing is model-decided, not cached or deterministic; terse
-follow-ups have no earlier context for classification. Cloud is the default;
-local is reserved for obvious greetings, device time lookups and single basic
-calculations with no other work. Writing, summaries, explanations and uncertainty
-go to cloud, even when the requested answer is short. A brief greeting in verse
-is also accepted as local. Decisions are best-effort,
-not a security boundary. It is registered only
-when both Apple and an Azure chat deployment are available. Missing or blank
-user text bypasses classification. Unexpected classifier output defaults to cloud;
-classifier failures propagate.
+Intelligence model to choose between local and Azure chat. Both providers must
+be configured. Greetings, device time lookups and basic calculations usually
+stay local; most other work goes to cloud. Only the last user message is
+classified, so follow-ups that depend on earlier context may route differently.
+Hybrid supports tools, but not images, reasoning summaries or image generation.
 
-Hybrid uses the shared keyed Apple/Azure pipelines, including their tool
-middleware, and records only the outer answer interaction.
-The classifier uses
-its own short rule list and options, never caller tools or instructions, and
-returns only `local` or `cloud` without JSON or an explanation.
-The selected provider receives the original full messages (including tool
-history and provider content), instructions, tools and options without cleaning,
-summarization or redaction. Message enumerables must be repeatable. Cloud routes
-send this automatically without per-turn approval; do not send secrets or data
-that must stay on-device. Hybrid advertises tools but not images, reasoning
-summaries or image generation, since those are not shared capabilities.
+The selected provider receives the full conversation, instructions and settings.
+Cloud handoff is automatic, without redaction or per-turn approval. **Do not send
+secrets or data that must stay on-device.** Routing is best-effort, not a privacy
+boundary. Classifier errors propagate rather than sending the request to cloud.
 
-For cloud routes, built-in `OrderedFailoverChatClient` tries cloud, then local
-if cloud fails before any streaming update (even metadata). Caller cancellation,
-failures after output and local failures propagate. Recovery may repeat tools
-already executed by a failed non-streaming cloud attempt; use idempotent tools.
-Leaf `ConfigureOptionsChatClient` wrappers isolate options and
-stop-sequence lists, not messages. Built-in diagnostics expose classification
-and answer attempts under the outer trace, with sensitive telemetry disabled.
-Only this sample and its linked-source host/device tests use the newer AI
-routing packages; the repository-wide AI version does not yet include these APIs.
+If cloud fails before any streaming update, Hybrid can fall back to local.
+Cancellation and failures after output propagate. A failed non-streaming attempt
+may already have called tools; use idempotent tools. Recordings contain one
+answer interaction; the Logs sidebar shows classification and answer attempts.
 
 ##### Routing regression tests
 
-The provider-independent `HybridRoutingTestsBase<TClient>` calls the sample's
-actual classifier without cloud credentials or answer generation.
-`AppleHybridRoutingTests` supplies Apple Intelligence; future Windows/Android
-clients can inherit the same suite. Cases cover greetings and pleasantries
-(including multilingual greetings), basic calculations/time tools, writing,
-translation, grammar, factual questions, mixed tasks and route-override
-instructions. Each failure includes the prompt, selected route
-and raw classifier output. A ready local model is required; model errors fail
-the test rather than being treated as correct routing.
+`HybridRoutingTestsBase<TClient>` tests the sample's classifier with a real
+provider. The Apple subclass requires a ready on-device model, not Azure
+credentials. Cases cover simple tasks, substantive work and mixed requests.
 
 ```sh
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/ \
@@ -86,10 +62,9 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/ \
   --filter 'FullyQualifiedName~HybridRoutingTests' --logger trx
 ```
 
-After a build, add `--no-build --no-restore` to rerun against the same binary.
-Rebuild after changing the prompt. These tests are marked `RequiresModel=true`
-and excluded from model-free CI; a passing run is not a guarantee of routing
-accuracy on other model/OS versions.
+Add `--no-build --no-restore` to repeat a run without rebuilding. Rebuild after
+changing the prompt. These tests are marked `RequiresModel=true` and excluded
+from model-free CI.
 
 ### Embeddings
 

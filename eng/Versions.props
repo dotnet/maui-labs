@@ -24,21 +24,22 @@
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
-    <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsDependencyInjectionVersion>10.0.13</MicrosoftExtensionsDependencyInjectionVersion>
     <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
-    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsHostingAbstractionsVersion>10.0.13</MicrosoftExtensionsHostingAbstractionsVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.13</MicrosoftExtensionsLoggingAbstractionsVersion>
     <MicrosoftExtensionsLoggingConsoleVersion>10.0.5</MicrosoftExtensionsLoggingConsoleVersion>
     <MicrosoftExtensionsLoggingVersion>10.0.5</MicrosoftExtensionsLoggingVersion>
     <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
     <MicrosoftExtensionsConfigurationJsonVersion>10.0.5</MicrosoftExtensionsConfigurationJsonVersion>
     <MicrosoftExtensionsConfigurationUserSecretsVersion>10.0.5</MicrosoftExtensionsConfigurationUserSecretsVersion>
-    <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
+    <SystemTextJsonVersion>10.0.13</SystemTextJsonVersion>
   </PropertyGroup>
   <PropertyGroup Label="AI">
-    <MicrosoftExtensionsAIVersion>10.4.1</MicrosoftExtensionsAIVersion>
-    <MicrosoftExtensionsAIOpenAIVersion>10.4.1</MicrosoftExtensionsAIOpenAIVersion>
+    <MicrosoftExtensionsAIVersion>10.11.0</MicrosoftExtensionsAIVersion>
+    <MicrosoftExtensionsAIOpenAIVersion>$(MicrosoftExtensionsAIVersion)</MicrosoftExtensionsAIOpenAIVersion>
     <AzureAIOpenAIVersion>2.1.0</AzureAIOpenAIVersion>
   </PropertyGroup>
   <PropertyGroup Label="Roslyn">
@@ -86,7 +87,7 @@
     <EssentialsAIPreReleaseVersionLabel>preview</EssentialsAIPreReleaseVersionLabel>
     <EssentialsAIPreviewVersionIteration>7</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
-    <MicrosoftExtensionsAIAbstractionsVersion>10.4.1</MicrosoftExtensionsAIAbstractionsVersion>
+    <MicrosoftExtensionsAIAbstractionsVersion>$(MicrosoftExtensionsAIVersion)</MicrosoftExtensionsAIAbstractionsVersion>
     <!-- Microsoft Agents AI (sample only) -->
     <MicrosoftAgentsAIVersion>1.0.0-rc2</MicrosoftAgentsAIVersion>
     <MicrosoftAgentsAIWorkflowsVersion>1.0.0-rc2</MicrosoftAgentsAIWorkflowsVersion>

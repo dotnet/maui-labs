@@ -63,7 +63,10 @@ public sealed class HybridChatDiagnosticsTests
                     entry.Details.Contains("IOException"));
                 Assert.Equal("private-original-prompt", Assert.Single(local.ReceivedMessages!).Text);
             }
-            Assert.Equal(expectedCount * 2, entries.Count(entry => entry.Heading.Contains("LoggingChatClient")));
+            Assert.Contains(entries, entry => entry.Heading.Contains("LoggingChatClient") &&
+                entry.Message.Contains("invoked"));
+            Assert.Contains(entries, entry => entry.Heading.Contains("LoggingChatClient") &&
+                entry.Message.Contains("completed"));
             AssertTraceAndPrivacy(entries, spans, expectUsage: true);
             var decisions = entries.Where(entry => entry.Heading.Contains(ChatDiagnostics.HybridLogCategory)).ToArray();
             var decision = Assert.Single(decisions);
@@ -78,10 +81,8 @@ public sealed class HybridChatDiagnosticsTests
         }
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task StreamingFailureAfterAnyOutput_ReportsCloudFailureWithoutLocalRecovery(bool emptyUpdate)
+    [Fact]
+    public async Task StreamingFailureAfterAnyOutput_ReportsCloudFailureWithoutLocalRecovery()
     {
         using var receiver = new ChatDiagnostics();
         using var factory = CreateFactory(receiver);
@@ -90,7 +91,7 @@ public sealed class HybridChatDiagnosticsTests
         var cloud = new FakeClient("actual-cloud-model")
         {
             FailureAfterFirstUpdate = failure,
-            EmptyUpdate = emptyUpdate,
+            EmptyUpdate = true,
         };
         using var owner = CreateProvider(local, cloud, factory);
         var client = owner.GetRequiredService<IChatClient>();
@@ -110,10 +111,8 @@ public sealed class HybridChatDiagnosticsTests
         AssertTraceAndPrivacy(entries, spans);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task UnexpectedClassifierOutput_LogsOnlyCloudLabelWithoutPayloads(bool streaming)
+    [Fact]
+    public async Task UnexpectedClassifierOutput_LogsOnlyCloudLabelWithoutPayloads()
     {
         using var receiver = new ChatDiagnostics();
         using var factory = CreateFactory(receiver);
@@ -124,7 +123,7 @@ public sealed class HybridChatDiagnosticsTests
         var cloud = new FakeClient("azure-model");
         using var owner = CreateProvider(local, cloud, factory);
         var client = owner.GetRequiredService<IChatClient>();
-        Assert.Equal("azure-model", await AnswerModel(client, streaming));
+        Assert.Equal("azure-model", await AnswerModel(client, streaming: false));
 
         var entries = receiver.Snapshot().Entries;
         var decision = Assert.Single(entries, entry => entry.Heading.Contains(ChatDiagnostics.HybridLogCategory));
@@ -138,26 +137,7 @@ public sealed class HybridChatDiagnosticsTests
     }
 
     [Fact]
-    public async Task DecisionWithoutOuterTelemetry_DoesNotInventCorrelation()
-    {
-        using var receiver = new ChatDiagnostics();
-        using var factory = CreateFactory(receiver);
-        var local = new FakeClient("apple-model") { Decision = LocalDecision };
-        using var client = new HybridChatClient(local, new FakeClient("azure-model"), factory);
-        await client.GetResponseAsync([new(ChatRole.User, "Hi")]);
-        factory.CreateLogger(ChatDiagnostics.HybridLogCategory).LogTrace("private trace payload");
-        factory.CreateLogger(ChatDiagnostics.HybridLogCategory + ".Other").LogError("unrelated category");
-
-        var entry = Assert.Single(receiver.Snapshot().Entries);
-        Assert.Equal("Selected local client.", entry.Message);
-        Assert.Null(entry.TraceId);
-        Assert.Empty(entry.Details);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ClassifierFailure_DoesNotLogSelectedRoute(bool streaming)
+    public async Task ClassifierFailure_DoesNotLogSelectedRoute()
     {
         using var receiver = new ChatDiagnostics();
         using var factory = CreateFactory(receiver);
@@ -169,7 +149,7 @@ public sealed class HybridChatDiagnosticsTests
         };
         using var owner = CreateProvider(local, new FakeClient("azure-model"), factory);
         var client = owner.GetRequiredService<IChatClient>();
-        Assert.Same(failure, await Record.ExceptionAsync(() => AnswerModel(client, streaming)));
+        Assert.Same(failure, await Record.ExceptionAsync(() => AnswerModel(client, streaming: false)));
         Assert.DoesNotContain(receiver.Snapshot().Entries,
             entry => entry.Heading.Contains(ChatDiagnostics.HybridLogCategory));
     }

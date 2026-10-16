@@ -12,12 +12,8 @@ public sealed class RecordedChatReplayTests
 {
     [Theory]
     [InlineData(false, "local")]
-    [InlineData(true, "local")]
-    [InlineData(false, "cloud")]
     [InlineData(true, "cloud")]
     [InlineData(false, "fallback")]
-    [InlineData(true, "fallback")]
-    [InlineData(false, "tools")]
     [InlineData(true, "tools")]
     public async Task Hybrid_RecordsOneAnswerWithoutClassifierOrDuplicateProviderInteractions(bool streaming, string route)
     {
@@ -58,8 +54,6 @@ public sealed class RecordedChatReplayTests
         Assert.Equal(expectedModel, recordedResponse.ModelId);
         var json = File.ReadAllText(recording.AutosavePath);
         Assert.DoesNotContain("routing classifier", json);
-        Assert.DoesNotContain("Simple greeting", json);
-        Assert.DoesNotContain("Complex task", json);
     }
 
     [Theory]

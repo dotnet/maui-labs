@@ -130,11 +130,10 @@ and metrics. Fully enumerate streaming responses to capture final usage.
 Streaming also produces time-to-first-chunk and time-per-output-chunk metrics.
 Prompts and responses are excluded by the explicit sensitive-data setting.
 
-With the repository's pinned M.E.AI 10.4.1, input/output tokens are span tags
-and `gen_ai.client.token.usage` measurements; cached input is also a span tag
-(`gen_ai.usage.cache_read.input_tokens`). Total and reasoning counts remain
-available on `UsageDetails`, but do not have separate built-in span tags or
-metrics. On OS 26, request timing and model metadata remain available without
+The MEAI middleware records input/output tokens as span tags and
+`gen_ai.client.token.usage` measurements. Cached input and reasoning counts are
+also span tags; total tokens remain available on `UsageDetails`.
+On OS 26, request timing and model metadata remain available without
 token usage. Provider-specific response IDs and finish reasons are emitted
 only when the provider supplies them.
 
