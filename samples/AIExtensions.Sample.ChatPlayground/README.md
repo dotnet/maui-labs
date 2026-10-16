@@ -8,26 +8,21 @@ are not specified yet.
 
 ## What you can try
 
-| Tab | Features | Providers |
-|-----|----------|-----------|
-| Chat | Text, streaming, structured JSON, optional tools and image input | Apple Intelligence (iOS/Mac Catalyst), Windows AI, Azure OpenAI, offline Replay |
-| Embeddings | Import documents, index them, and search | Apple NaturalLanguage (iOS/Mac Catalyst), Azure OpenAI |
-| Images | Generate images or edit a source image | Azure OpenAI |
+Each tab has its own providers and capabilities. Image input in Chat is distinct
+from generating or editing an image in Images.
 
-### Providers
+### Chat
 
-| Provider | Availability | Capabilities and setup |
-|----------|--------------|------------------------|
-| Apple Intelligence | iOS / Mac Catalyst 26+ on supported hardware | Text, streaming, structured JSON, and tools. Image input requires OS 27 and a ready vision model. NaturalLanguage embeddings require the language asset. |
-| Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Text, streaming, and schema-constrained JSON. Requires MSIX packaging and model access; no tools, image input, or embeddings. |
-| Android on-device (coming soon) | Not available yet | Provider details, capabilities, and requirements are not specified. |
-| Azure OpenAI | All sample platforms with configured deployments | Responses API chat, tools, image input, and reasoning summaries; embeddings and image generation use their own deployments. |
-| Replay | All sample platforms | Recorded conversations without credentials or a running model. |
+| Provider | Text | Image input | Tools | Structured JSON |
+|----------|------|-------------|-------|-----------------|
+| Apple Intelligence | iOS / Mac Catalyst 26+ on supported hardware | OS 27+ with a ready vision model | Supported | Supported |
+| Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Not supported | Not supported | Supported |
+| Android on-device (coming soon) | Not specified | Not specified | Not specified | Not specified |
+| Azure OpenAI | Configured Responses API deployment | Supported by compatible deployments | Supported by compatible deployments | Supported by compatible deployments |
+| Replay | Recorded responses | No new image input | Recorded activity, no execution | Recorded responses |
 
-The available Apple and Windows chat providers do not generate images or fall
-back to Azure. Structured responses stream only when the selected provider emits
-incremental updates.
-Each tab has its own services and only exposes supported features.
+Native chat does not fall back to Azure. Structured responses stream only when
+the selected provider emits incremental updates.
 
 Chat displays the model ID reported by the provider, including during replay.
 It auto-saves the current recording locally. **New** replaces that recording;
@@ -37,6 +32,36 @@ continue a conversation. Features are shown only when the selected provider
 supports them. Uncheck unneeded tools or choose **None** to disable tool calls.
 Switching providers preserves your Structured JSON preference, but providers
 that opt out receive plain-text requests and their responses display as text.
+
+### Embeddings
+
+The Embeddings tab generates text vectors, indexes imported documents, and
+searches their content.
+
+| Provider | Text vectors | Document indexing | Semantic search |
+|----------|--------------|-------------------|-----------------|
+| Apple NaturalLanguage | Supported with the language asset | Supported | Supported |
+| Azure OpenAI | Configured embedding deployment | Supported | Supported |
+| Windows on-device | Not supported | Not supported | Not supported |
+| Android on-device | Not specified | Not specified | Not specified |
+
+### Image generation
+
+The Images tab currently uses Azure OpenAI for image generation and source-image
+editing. Native provider status is separate:
+
+| Provider | Image generation |
+|----------|------------------|
+| Apple on-device | Not supported |
+| Windows on-device | Coming soon |
+| Android on-device | Not specified |
+| Azure OpenAI | Supported by the configured image deployment |
+
+Android on-device entries are placeholders, not promises of specific features
+or requirements. Available tabs only expose features implemented by their
+selected provider.
+
+## Diagnostics
 
 The local, bounded diagnostics sidebar starts collapsed on Chat, Embeddings,
 and Images. The header's **Logs** button toggles it without stopping diagnostic

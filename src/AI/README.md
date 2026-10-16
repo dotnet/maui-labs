@@ -2,9 +2,14 @@
 
 On-device AI through `Microsoft.Extensions.AI`, with Apple and Windows providers
 and Android integration **coming soon**.
-Apple Intelligence and Windows AI provide text chat, native streaming updates,
-and schema-constrained JSON; Apple NaturalLanguage provides embeddings.
-This contributor README covers building and testing both implementations.
+Feature areas are documented separately:
+
+- **Chat:** text, image input, tools, and structured JSON, with per-provider capabilities.
+- **Embeddings:** text-vector generation and related operations, independently of chat.
+- **Image generation:** not provided on Apple; Windows is coming soon and Android
+  support is not specified.
+
+This contributor README covers building and testing the available implementations.
 Android provider details, capabilities, and requirements are placeholders for
 separate work and are not specified here.
 

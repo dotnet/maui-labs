@@ -9,17 +9,18 @@ service is required.
 
 > **Experimental:** this package ships as a preview. APIs may change.
 
-## Providers and capabilities
+## Provider availability
 
-| Provider | Chat platforms | Tool calling | Image input | Embeddings |
-|----------|----------------|--------------|-------------|------------|
-| Apple Intelligence | iOS / Mac Catalyst / macOS 26+ | Supported | OS 27+ with a ready vision model | Apple NaturalLanguage |
-| Windows AI | Windows 11 24H2+ on a supported Copilot+ PC | Not supported | Not supported | Not supported |
-| Android (coming soon) | Provider not available yet | Not specified | Not specified | Not specified |
+| Platform | On-device integration |
+|----------|-----------------------|
+| Apple | Apple Intelligence and NaturalLanguage |
+| Windows | Windows AI |
+| Android | Coming soon; provider details are not specified |
 
 Android is a placeholder: its provider details, capabilities, and requirements
-are not specified here. The available Apple and Windows chat clients do not
-generate images. Models must be enabled and available on a supported device.
+are not specified here. Chat, embeddings, and image generation are separate
+capabilities; image input to a chat client does not imply image generation.
+Models must be enabled and available on a supported device.
 
 ## Install
 
@@ -33,7 +34,7 @@ Requires .NET 10 and the MAUI workload.
 dotnet add package Microsoft.Maui.Essentials.AI --prerelease
 ```
 
-## Configure a provider
+## Configure chat
 
 | Provider | Setup |
 |----------|-------|
@@ -73,6 +74,12 @@ Platform setup details:
 and [Windows packaging, SDK selection, and access](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md).
 
 ## Chat
+
+| Provider | Text | Image input | Tools | Structured JSON |
+|----------|------|-------------|-------|-----------------|
+| Apple Intelligence | Supported on Apple OS 26+ | OS 27+ with a ready vision model | Supported | Supported |
+| Windows AI | Supported on Windows 11 24H2+ with supported hardware | Not supported | Not supported | Supported |
+| Android (coming soon) | Not specified | Not specified | Not specified | Not specified |
 
 Use the injected `IChatClient` (`chat` below) in the same way for either provider:
 
@@ -131,9 +138,9 @@ aggregate the stream and read `ChatResponse.Usage`; accumulate per-request
 counts with `UsageDetails.Add` for conversation totals. Usage is `null` on
 Apple OS 26 and Windows; the package does not estimate token counts.
 
-## Provider-specific capabilities
+### Tool calling
 
-### Apple tool calling
+Available with Apple Intelligence; the Windows chat provider rejects tool options.
 
 Supply `AIFunction` tools through standard `ChatOptions`. The native client
 invokes them and returns their results to the model:
@@ -154,7 +161,7 @@ var response = await chat.GetResponseAsync("What's the weather in Boston?", opti
 This example returns fixed demonstration data. Set `ChatOptions.ToolMode` to `ChatToolMode.None` to
 disable tools for a request.
 
-### Apple image input
+### Image input
 
 Image input requires Apple OS 27 and a ready vision-capable model:
 
@@ -173,15 +180,38 @@ bytes for recording and cross-platform use. Local `file://` image `UriContent`
 is supported; remote URLs are rejected rather than fetched silently.
 On Apple OS 26, the client is text-only and image requests throw an explicit error.
 
-### Apple embeddings
+## Embeddings
+
+Embeddings convert text to floating-point vectors through `IEmbeddingGenerator`.
+They are independent of the chat provider.
+
+| Provider | Text vectors | Multiple text inputs | Image embeddings |
+|----------|--------------|----------------------|------------------|
+| Apple NaturalLanguage | Supported | Supported | Not supported |
+| Windows | Not supported | Not supported | Not supported |
+| Android | Not specified | Not specified | Not specified |
 
 ```csharp
-var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
+using var generator = new NLEmbeddingGenerator();
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
 
-The corresponding NaturalLanguage model asset must be installed on the device.
-The Windows provider does not implement `IEmbeddingGenerator`.
+The default Apple generator uses English sentence embeddings. Select another
+supported language with the `NLLanguage` constructor or wrap an existing
+`NLEmbedding` instance. The corresponding model asset must be installed.
+
+## Image generation
+
+Image generation is a separate feature, not chat image input or tool calling.
+
+| Platform | Native image generation |
+|----------|-------------------------|
+| Apple | Not supported |
+| Windows | Coming soon |
+| Android | Not specified |
+
+No native image-generation implementation is included in this version.
+The Windows work is separate; Android support and features are not specified.
 
 ## Diagnostics
 

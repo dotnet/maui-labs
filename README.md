@@ -140,9 +140,14 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 On-device AI through `Microsoft.Extensions.AI`, with Apple and Windows providers
 and Android integration **coming soon**. Android capabilities and requirements
 are not specified yet.
-Apple Intelligence and Windows AI provide text chat, native streaming updates,
-and schema-constrained JSON. Apple platforms also support native tool calling,
-image input, and NaturalLanguage embeddings where available.
+
+- **Chat:** Apple Intelligence and Windows AI provide text, native streaming
+  updates, and structured JSON. Apple also supports tools and image input where available.
+- **Embeddings:** Apple NaturalLanguage generates text vectors. Windows is not
+  supported; Android capabilities are not specified.
+- **Image generation:** not provided on Apple; Windows is coming soon.
+  Android support is not specified.
+
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
 
 | Package | Description |
