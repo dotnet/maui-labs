@@ -7,13 +7,13 @@ public class LinuxScheme
     public LinuxScheme(string protocol)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(protocol);
-        _isSupported = new Lazy<bool>(() => HasHandler(protocol));
+        _hasHandler = new Lazy<bool>(() => HasProtocolHandler(protocol));
     }
 
-    readonly Lazy<bool> _isSupported;
-    public bool IsSupported => _isSupported.Value;
+    readonly Lazy<bool> _hasHandler;
+    public bool HasHandler => _hasHandler.Value;
 
-    bool HasHandler(string protocol)
+    bool HasProtocolHandler(string protocol)
     {
         if (protocol is "sms" or "tel")
             protocol = $"x-scheme-handler/{protocol}";

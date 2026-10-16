@@ -196,14 +196,14 @@ class CommunicationPage : ContentPage
             Spacing = 6,
             Children =
             {
-                CreateStatusRow("Email", ((Essentials.Communication.LinuxEmail) Email.Default).IsSupported),
+                CreateStatusRow("Email", Email.Default.IsComposeSupported, Email.Default is Essentials.Communication.LinuxEmail email && email.HasHandler ? "(Eml supported)" : "(Eml not available)"),
                 CreateStatusRow("SMS", Sms.Default.IsComposeSupported),
                 CreateStatusRow("PhoneDialer", PhoneDialer.Default.IsSupported),
             }
         };
     }
 
-    static View CreateStatusRow(string name, bool supported)
+    static View CreateStatusRow(string name, bool supported, string? info = null)
     {
         return new HorizontalStackLayout
         {
@@ -221,8 +221,7 @@ class CommunicationPage : ContentPage
                 new Label
                 {
                     Text = 
-                    name == "Email" ? supported ? "Eml supported" : "Eml not available" :
-                    supported ? "Supported" : "Not available",
+                    supported ? "Supported" + " " + info : "Not available",
                     TextColor = Colors.Gray,
                     FontSize = 13
                 }

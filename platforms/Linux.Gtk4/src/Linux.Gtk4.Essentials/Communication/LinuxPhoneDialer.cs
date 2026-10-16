@@ -8,12 +8,14 @@ public class LinuxPhoneDialer : LinuxCommunication, IPhoneDialer
     {
     }
 
+    public bool IsSupported => HasHandler;
+
     public void Open(string number)
     {
         if (!IsSupported)
             throw new FeatureNotSupportedException("Phone dialer is not available on this Linux system.");
 
         ArgumentException.ThrowIfNullOrWhiteSpace(number);
-        Launch("tel:" + PhoneNumberNormalizer.Normalize(number, nameof(number)));
+        _ = LaunchAsync("tel:" + PhoneNumberNormalizer.Normalize(number, nameof(number)));
     }
 }

@@ -27,7 +27,7 @@ public class LinuxEmail : LinuxCommunication, IEmail
     {
         var needsEml = RequiresEml(message);
 
-        if (needsEml && !IsSupported)
+        if (needsEml && !HasHandler)
             throw new FeatureNotSupportedException(EmlHandlerRequiredMessage);
 
         CleanupStaleEmlFiles();
@@ -36,7 +36,7 @@ public class LinuxEmail : LinuxCommunication, IEmail
         if (needsEml) uri = await WriteTempEmlAsync(uri);
         try
         {
-            Launch(uri);
+           await LaunchAsync(uri);
         }
         catch
         {
@@ -254,120 +254,125 @@ public static class LinuxEmailExtensions
     {
         var builder = new StringBuilder();
         var boundary = $"----=_NextPart_{Guid.NewGuid():N}";
-        var altBoundary = $"{boundary}_alt";
 
-        // === HEADERS SECTION ===        
+        var hasAttachments = message.Attachments?.Count > 0;
+        var hasBody = !string.IsNullOrEmpty(message.Body);
+        var bodyType = message.BodyFormat == EmailBodyFormat.Html ? "text/html" : "text/plain";
+
+        // Strip CR/LF so user data can never inject extra headers
+        static string Clean(string s) => s.Replace("\r", "").Replace("\n", "");
+
+        // === HEADERS SECTION ===
         if (message.To?.Count > 0)
-            builder.AppendCrLf($"To: {string.Join(",", message.To)}");
+            builder.AppendCrLf($"To: {Clean(string.Join(",", message.To))}");
 
         if (message.Cc?.Count > 0)
-            builder.AppendCrLf($"Cc: {string.Join(",", message.Cc)}");
+            builder.AppendCrLf($"Cc: {Clean(string.Join(",", message.Cc))}");
 
         if (message.Bcc?.Count > 0)
-            builder.AppendCrLf($"Bcc: {string.Join(",", message.Bcc)}");
+            builder.AppendCrLf($"Bcc: {Clean(string.Join(",", message.Bcc))}");
 
         if (!string.IsNullOrWhiteSpace(message.Subject))
-            builder.AppendCrLf($"Subject: {EncodeSubject(message.Subject)}");
+            builder.AppendCrLf($"Subject: {EncodeSubject(Clean(message.Subject))}");
 
         builder.AppendCrLf($"Date: {DateTimeOffset.UtcNow.ToString("ddd, dd MMM yyyy HH:mm:ss '+0000'", CultureInfo.InvariantCulture)}");
         builder.AppendCrLf("MIME-Version: 1.0");
         builder.AppendCrLf("X-Unsent: 1");
 
-        // Set Content-Type based on message structure
-        if (message.BodyFormat == EmailBodyFormat.Html || message.Attachments?.Count > 0)
+        if (hasAttachments)
         {
             builder.AppendCrLf($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
         }
         else
         {
-            builder.AppendCrLf($"Content-Type: text/plain; charset=utf-8");
+            // Single-part message: all of its headers belong here, before the blank line
+            builder.AppendCrLf($"Content-Type: {bodyType}; charset=utf-8");
+            if (hasBody)
+                builder.AppendCrLf("Content-Transfer-Encoding: quoted-printable");
         }
 
-        // IMPORTANT: Empty line separating headers from body
+        // Empty line separating headers from body
         builder.AppendCrLf();
 
-        // === BODY SECTION (starts after the empty line) ===
-        if (message.BodyFormat == EmailBodyFormat.Html || message.Attachments?.Count > 0)
+        // === BODY SECTION ===
+        if (hasAttachments)
         {
-            // Start multipart message
-            builder.AppendCrLf($"This is a multipart message in MIME format.");
+            builder.AppendCrLf("This is a multipart message in MIME format.");
+
+            // Body part: always emitted, even when the body is empty (attachment-only messages)
             builder.AppendCrLf($"--{boundary}");
-
-            // Body part with alternative views
-            builder.AppendCrLf($"Content-Type: multipart/alternative; boundary=\"{altBoundary}\"");
+            builder.AppendCrLf($"Content-Type: {bodyType}; charset=utf-8");
+            builder.AppendCrLf("Content-Transfer-Encoding: quoted-printable");
             builder.AppendCrLf();
-
-            // Plain text version (if not HTML or if explicitly provided)
-            if (!string.IsNullOrEmpty(message.Body))
-            {
-                var encoding = message.BodyFormat == EmailBodyFormat.PlainText ?
-                    "text/plain" : "text/html";
-
-                builder.AppendCrLf($"--{altBoundary}");
-                builder.AppendCrLf($"Content-Type: {encoding}; charset=utf-8");
-                builder.AppendCrLf($"Content-Transfer-Encoding: quoted-printable");
-                builder.AppendCrLf();
-                builder.AppendCrLf(EncodeQuotedPrintable(message.Body));
-                builder.AppendCrLf();
-                builder.AppendCrLf();
-            }
-            builder.AppendCrLf($"--{altBoundary}--");
+            builder.AppendCrLf(hasBody ? EncodeQuotedPrintable(message.Body!) : string.Empty);
             builder.AppendCrLf();
 
             // Attachments
-            foreach (var attachment in message.Attachments ?? [])
-            {
-                using var stream = new FileStream(attachment.FullPath, FileMode.Open, FileAccess.Read);
-                await AppendAttachement(attachment.ContentType, stream);
-
-                async Task AppendAttachement(string contentType, Stream stream)
-                {
-                    builder.AppendCrLf($"--{boundary}");
-                    builder.AppendCrLf($"Content-Type: {contentType}; name=\"{attachment.FileName}\"");
-                    builder.AppendCrLf($"Content-Transfer-Encoding: base64");
-                    builder.AppendCrLf($"Content-Disposition: attachment; filename=\"{attachment.FileName}\"");
-                    builder.AppendCrLf();
-
-                    using var base64Stream = new CryptoStream(stream, new ToBase64Transform(), CryptoStreamMode.Read);
-
-                    var buffer = new byte[4096];
-                    var lineLength = 0;
-                    int bytesRead;
-
-                    while ((bytesRead = await base64Stream.ReadAsync(buffer)) > 0)
-                    {
-                        for (var i = 0; i < bytesRead; i++)
-                        {
-                            builder.Append((char)buffer[i]);
-
-                            if (++lineLength == 76)
-                            {
-                                builder.AppendCrLf();
-                                lineLength = 0;
-                            }
-                        }
-                    }
-
-                    if (lineLength > 0)
-                        builder.AppendCrLf();
-
-                    builder.AppendCrLf();
-                }
-            }
+            foreach (var attachment in message.Attachments!)
+                await AppendAttachmentAsync(builder, boundary, attachment);
 
             // End of multipart message
             builder.AppendCrLf($"--{boundary}--");
         }
-        else if (!string.IsNullOrEmpty(message.Body))
+        else if (hasBody)
         {
-            // Simple text message
-            builder.AppendCrLf("Content-Transfer-Encoding: quoted-printable");
-            builder.AppendCrLf();
-            builder.AppendCrLf(EncodeQuotedPrintable(message.Body));
+            builder.AppendCrLf(EncodeQuotedPrintable(message.Body!));
             builder.AppendCrLf();
         }
 
         return builder.ToString();
+    }
+
+    static async Task AppendAttachmentAsync(StringBuilder builder, string boundary, EmailAttachment attachment)
+    {
+        var contentType = ContentTypeResolver.ResolveContentType(attachment);
+
+        await using var file = new FileStream(
+            attachment.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+
+        builder.AppendCrLf($"--{boundary}");
+        builder.AppendCrLf($"Content-Type: {contentType}; {MimeParam("name", attachment.FileName)}");
+        builder.AppendCrLf("Content-Transfer-Encoding: base64");
+        builder.AppendCrLf($"Content-Disposition: attachment; {MimeParam("filename", attachment.FileName)}");
+        builder.AppendCrLf();
+
+        await using var base64Stream = new CryptoStream(file, new ToBase64Transform(), CryptoStreamMode.Read);
+
+        var buffer = new byte[4096];
+        var lineLength = 0;
+        int bytesRead;
+
+        while ((bytesRead = await base64Stream.ReadAsync(buffer)) > 0)
+        {
+            for (var i = 0; i < bytesRead; i++)
+            {
+                builder.Append((char)buffer[i]);
+
+                if (++lineLength == 76)
+                {
+                    builder.AppendCrLf();
+                    lineLength = 0;
+                }
+            }
+        }
+
+        if (lineLength > 0)
+            builder.AppendCrLf();
+
+        builder.AppendCrLf();
+    }
+
+    static string MimeParam(string name, string value)
+    {
+        value = value.Replace("\r", "").Replace("\n", "");
+
+        static string Quote(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+        if (value.All(c => c is >= ' ' and < (char)0x7f))
+            return $"{name}=\"{Quote(value)}\"";
+
+        var fallback = new string(value.Select(c => c is >= ' ' and < (char)0x7f ? c : '_').ToArray());
+        return $"{name}=\"{Quote(fallback)}\"; {name}*=UTF-8''{Uri.EscapeDataString(value)}";
     }
 
     /// <summary>
