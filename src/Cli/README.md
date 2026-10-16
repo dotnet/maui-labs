@@ -18,6 +18,56 @@ A command-line tool for .NET MAUI development environment setup and device manag
 dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```
 
+### Updating the CLI
+
+```bash
+maui update --self
+maui update --self --prerelease
+maui update --self --dry-run
+```
+
+The `--self` flag explicitly targets the CLI. Bare `maui update` displays
+guidance without updating anything; project updates are not implemented by
+this command.
+
+Self-update supports the default **global .NET tool** installation only, not
+local tool manifests, custom `--tool-path` installs, or source builds.
+Preview installations automatically include prereleases; stable installations
+require `--prerelease` to include them. The SDK chooses the latest eligible
+version; the command does not request downgrades.
+
+Updates preserve the current directory's normal SDK selection (`global.json`)
+and NuGet configuration. An installed .NET SDK is required; missing SDKs,
+unreachable feeds, and permissions failures must be resolved before retrying.
+No feeds or configuration files are changed.
+
+On Windows, the running tool cannot uninstall its own loaded package.
+`maui update --self` starts a one-shot PowerShell handoff that waits for this process
+to exit before running the SDK updater. In an interactive terminal, the updater
+prints progress and a final completion or failure message in the same terminal.
+The shell prompt may return before these messages appear. **Started is not
+completed**: wait for the completion message before running the CLI again.
+The printed log path also records SDK output and `SDK_EXIT=0` on success if
+you miss the terminal message. Keep the terminal open until completion;
+closing it may interrupt the updater. A nonzero `SDK_EXIT` indicates failure. The updater waits at most one
+minute for the original process to exit. On macOS/Linux the command waits for
+the SDK and reports its result directly.
+
+Existing `--json`, `--ci`, `--verbose`, and `--dry-run` flags apply. JSON reports
+`started` with a log path for the Windows handoff, not a successful completed
+installation; its exit code confirms handoff only. Dry-run invokes no updater
+and performs no network checks or state writes. JSON, CI, and redirected
+invocations receive no delayed terminal messages; use the log for completion.
+
+Ordinary interactive commands can show an update notice after successful
+completion. The first eligible invocation each UTC day checks the public NuGet
+package index in-process, with a two-second timeout; later invocations use a
+small user cache. Failed attempts are cached too. There is **no daemon or
+notification subprocess**. Checks are suppressed in CI, JSON, redirected
+output, help, dry-run, and protocol/server commands. Set
+`MAUI_CLI_NO_UPDATE_CHECK=1` to disable checks and notices. Notifications use
+public package metadata; actual updates still use your configured feeds.
+
 ### 2. Check your environment
 
 ```bash

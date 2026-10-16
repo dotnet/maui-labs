@@ -33,6 +33,7 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 - **AI-powered development bootstrap** (`maui ai init`) — install MAUI Copilot skills, DevFlow skills, Copilot agents, and MCP configuration for the current project
 - **MAUI Go** (`maui go`) — create, serve, and upgrade single-file Comet Go projects for rapid prototyping
 - **Version info** (`maui version`)
+- **Self-update** (`maui update --self`) with daily interactive update notices
 - **Global options** — `--json` for CI pipelines, `--verbose`, `--dry-run`, `--ci`
 
 | Package | Description |

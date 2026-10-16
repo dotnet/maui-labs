@@ -75,4 +75,5 @@ namespace Microsoft.Maui.Cli.Output;
 [JsonSerializable(typeof(SimulatorScreenshotResult))]
 [JsonSerializable(typeof(SimulatorRecordingStartedResult))]
 [JsonSerializable(typeof(SimulatorRecordingResult))]
+[JsonSerializable(typeof(CliUpdateResult))]
 internal sealed partial class MauiCliJsonContext : JsonSerializerContext;
