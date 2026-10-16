@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             x:Class="AIExtensions.Sample.ChatPlayground.DocumentComposer"
+             x:DataType="local:DocumentPlaygroundViewModel">
+    <Border Style="{StaticResource ComposerPanel}">
+        <VerticalStackLayout Spacing="8">
+            <local:AttachmentPreview IsVisible="{Binding HasDocument}" PreviewSource="{Binding SelectedPreview}"
+                                     PreviewAspect="AspectFit" FileName="{Binding SelectedName}"
+                                     RemoveCommand="{Binding RemoveDocumentAction}" RemoveDescription="Remove selected document"
+                                     NameAutomationId="DocumentSelectedName" RemoveAutomationId="DocumentRemoveButton" />
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <ImageButton Source="add.png" Style="{StaticResource AttachmentButton}" IsEnabled="{Binding IsIdle}"
+                             SemanticProperties.Description="Add a document"
+                             AutomationId="DocumentAddButton">
+                    <local:PopupMenu.Content>
+                        <VerticalStackLayout Spacing="8" x:DataType="local:DocumentPlaygroundViewModel">
+                            <Label Text="ADD DOCUMENT" Style="{StaticResource SectionHeading}" />
+                            <Button Text="Choose PDF or image" ImageSource="folder.png"
+                                    Command="{Binding ChooseDocument}" AutomationId="DocumentChooseButton" />
+                            <Button Text="Use sample PDF" ImageSource="folder.png"
+                                    Command="{Binding UseSamplePdf}" AutomationId="DocumentSamplePdfButton" />
+                            <Button Text="Use sample image" ImageSource="sampleimage.png"
+                                    Command="{Binding UseSampleImage}" AutomationId="DocumentSampleImageButton" />
+                        </VerticalStackLayout>
+                    </local:PopupMenu.Content>
+                </ImageButton>
+                <Label Grid.Column="1" Text="Add a PDF or image to process" Style="{StaticResource MutedLabel}"
+                       MinimumHeightRequest="44" VerticalTextAlignment="Center" />
+                <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44" VerticalOptions="End">
+                    <ImageButton Source="send.png" Command="{Binding ReadDocument}"
+                                 IsVisible="{Binding IsIdle}" Style="{StaticResource AttachmentButton}"
+                                 SemanticProperties.Description="{Binding OperationLabel}" ToolTipProperties.Text="{Binding OperationLabel}"
+                                 AutomationId="DocumentReadButton" />
+                    <ImageButton Source="stop.png" Command="{Binding CancelReading}" IsVisible="{Binding IsBusy}"
+                                 Style="{StaticResource CancelActionButton}"
+                                 SemanticProperties.Description="Cancel document reading" AutomationId="DocumentCancelButton" />
+                </Grid>
+            </Grid>
+            <Label Text="Processing uploads the entire document to the selected Azure provider. Charges may apply; no automatic cloud fallback."
+                   IsVisible="{Binding IsCloudSelected}" Style="{StaticResource MutedLabel}" FontSize="12"
+                   AutomationId="DocumentCloudDisclosure" />
+        </VerticalStackLayout>
+    </Border>
+</ContentView>

@@ -1,0 +1,187 @@
+{
+  "repository": "dotnet/extensions",
+  "pullRequest": 7588,
+  "commit": "1fc95b5b77b48e085b49cf25fd1b3e4797825fa9",
+  "files": [
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DelegatingDocumentExtractionClient.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DelegatingDocumentExtractionClient.cs",
+      "gitBlob": "5415cd9f79351c459dd8398cab25588c83ddd597",
+      "sha256": "419ea13f54dcda0af392c4f44b05f070151a117001a263bc1abda1ed6c8a2ba3"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionClientExtensions.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionClientExtensions.cs",
+      "gitBlob": "af847d84302db457e9d183f22022712fc3184708",
+      "sha256": "dcba152914235ef49e334ed717380e7003b0cd1851d1d8fe70b3154461bfe7d8"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionDocumentBuilder.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionDocumentBuilder.cs",
+      "gitBlob": "46f0d9207c0c4a54d3010bfa4e40f15fec9e8357",
+      "sha256": "dea61d1e3923cf32a6d9e6328474daee67a1297ce097451e1cef482c9ec52d48"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionEvidence.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionEvidence.cs",
+      "gitBlob": "94673f5fd7a4c8c5f08604962c7ed74a7a59e74b",
+      "sha256": "901b18215cb1c17a16903b29c42a33712bb87abfe7e7af87e8663f2f22f8411d"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionObservation.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionObservation.cs",
+      "gitBlob": "329423693ea8f61fd97668201b85e52dc836ace3",
+      "sha256": "5f7376e2e744e1dd085b82b70c19657ea556d09c8c5ad65f4ccbb89fab5400db"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionOptions.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionOptions.cs",
+      "gitBlob": "0ee0cdc9c9f05992715cd99a0f44cec9a0880284",
+      "sha256": "19285792380dec47ab49f6598fe0a678079bb2b52f690cecfd872a125ff665f4"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionPage.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionPage.cs",
+      "gitBlob": "ab3ef76563db07a094175d6a790d33b1be952b23",
+      "sha256": "403853b241882c36e67644f79c2748be5178bce8617a2438656ff87814476670"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionPageResultExtensions.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionPageResultExtensions.cs",
+      "gitBlob": "4299beaeb372a10a641593373510aa901dff9a19",
+      "sha256": "c7b4ebf29ae7060800db23ace247a55856ec0399b6fa3eb84080d49dd1e33a97"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionResult.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionResult.cs",
+      "gitBlob": "eb6a66d1175f82d670a6754ad9ede720006b3ba4",
+      "sha256": "72b03d551c574c6e4096064b7d2ca6936a16e250e6b2523b4875fe2facc7829b"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionTableCell.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/DocumentExtractionTableCell.cs",
+      "gitBlob": "4c69105be3b35f5f8f0cf2a151b0db376c7beca4",
+      "sha256": "b03991abf03e1d98f8fbdbbd5a394a006833d95fee6aac7668e43dc6e8b97aff"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/IDocumentExtractionClient.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/IDocumentExtractionClient.cs",
+      "gitBlob": "e1a1776d68fa017fe435be5304cae55153cf0b67",
+      "sha256": "665001eb9a2cad7975cf366ec3d828aa2a22311aef6b5c06ca83a29ae10ff96f"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/Microsoft.Extensions.DocumentExtraction.Abstractions.csproj",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/Microsoft.Extensions.DocumentExtraction.Abstractions.csproj",
+      "gitBlob": "50bf5391e9ce149ae8546bb736b2ba9b84c83dcb",
+      "sha256": "23a6402661d7743dfbab54ebc714180016e51f96192c30f2f2365e79e6f3cf55"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/Microsoft.Extensions.DocumentExtraction.Abstractions.json",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/Microsoft.Extensions.DocumentExtraction.Abstractions.json",
+      "gitBlob": "cd54cf124bbd97cd891dd5ef4dc3c6ff972a95e2",
+      "sha256": "b360832bc495317b598628bd522a5ced6fe5963b2ff635e5c77111a6991188aa"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction.Abstractions/README.md",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction.Abstractions/README.md",
+      "gitBlob": "e59237a339d72d0b0d253440347d94e67b221408",
+      "sha256": "0901f7b21cbda75a7878856cd8ba1f77eff85e33e7444cb222276203ad220df9"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction/DocumentExtractionClientBuilder.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction/DocumentExtractionClientBuilder.cs",
+      "gitBlob": "94f67a21db8d0d950ea725fe548cedd7c985bb2e",
+      "sha256": "295c37c240f0645dfc6aa84c472a79cf2bb06cfa8a52aa6d7a172b4ba14241ef"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction/DocumentExtractionClientBuilderServiceCollectionExtensions.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction/DocumentExtractionClientBuilderServiceCollectionExtensions.cs",
+      "gitBlob": "7c30c788985e9e61fc8c446baf6a77b2171faf18",
+      "sha256": "eb0dc68a97adb62c4cd397909aa8407070dd6e5345a4f9893557cc091488ec38"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction/EmptyServiceProvider.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction/EmptyServiceProvider.cs",
+      "gitBlob": "6154953bceb8228463f213ee4ee2a687032cc09e",
+      "sha256": "3fe931dbac0f4e8d3c2d1af9a49fca511cec8b6852a6ef3a11e8df9dc0f19bb0"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction/LoggingDocumentExtractionClient.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction/LoggingDocumentExtractionClient.cs",
+      "gitBlob": "6cab1cff398e709e879419d3eafa43ec5d8ddbb8",
+      "sha256": "29106fae45cb94c82d3a07d8ba4b15b02958cec399545e458f4dfe63faea9422"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction/LoggingDocumentExtractionClientBuilderExtensions.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction/LoggingDocumentExtractionClientBuilderExtensions.cs",
+      "gitBlob": "0ef6b5bf7db12c99d36578360b7f017b7827b068",
+      "sha256": "9bd9b862134563d8911178c6ca74e77fd4329d6dcb117506c2f1ef9ea6101487"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction/Microsoft.Extensions.DocumentExtraction.csproj",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction/Microsoft.Extensions.DocumentExtraction.csproj",
+      "gitBlob": "0cf3e9c4dbbb583a995fda9d902be837159cb301",
+      "sha256": "b77f80af50d3f07a863a5620d0c6aa12e175dbb38d3142c763d8e043d11b43e7"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction/Microsoft.Extensions.DocumentExtraction.json",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction/Microsoft.Extensions.DocumentExtraction.json",
+      "gitBlob": "7392d64c7598fcfd5ff993a6fc3963da7b500044",
+      "sha256": "add4b31ec90e56ab23e4a9fe4036802a061d9a38ab70acb58a9502b667433a5c"
+    },
+    {
+      "path": "Microsoft.Extensions.DocumentExtraction/README.md",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.DocumentExtraction/README.md",
+      "gitBlob": "23c94aaa35f8ecc966bd8d435b291378848537f5",
+      "sha256": "84ba16dbd0c29965b989fae07b2d399d06d6e9ca0326f7d4910c37e73edcf804"
+    },
+    {
+      "path": "Microsoft.Extensions.Documents.Abstractions/Document.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.Documents.Abstractions/Document.cs",
+      "gitBlob": "8e5855b709ade85d616bebafd05cb553cfb3e8fa",
+      "sha256": "e2640f9b0397ac462a353d58d963eb1346544bda0a2f9dee0d281817a6701a38"
+    },
+    {
+      "path": "Microsoft.Extensions.Documents.Abstractions/DocumentAnnotations.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.Documents.Abstractions/DocumentAnnotations.cs",
+      "gitBlob": "16df6e31c80039e3ead7d1e8ad0593a7542e83a4",
+      "sha256": "a8705ec67d730a4a13ec0be513db5a78db6f6b42852a388fd35b83fafcb7daa7"
+    },
+    {
+      "path": "Microsoft.Extensions.Documents.Abstractions/DocumentElement.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.Documents.Abstractions/DocumentElement.cs",
+      "gitBlob": "a310821756d2e03dd8ffcd6d6136606bfa38740a",
+      "sha256": "92ca30e484aeba8b30de53c2663e4958b406dbf4736f4991d4ef4b60100b9410"
+    },
+    {
+      "path": "Microsoft.Extensions.Documents.Abstractions/DocumentReferences.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.Documents.Abstractions/DocumentReferences.cs",
+      "gitBlob": "28628a9ebd515c835a87db6b0c76855c68ca344a",
+      "sha256": "39a53c4ace93df0c3c10707a15d8671545885a3d91508304716fefdbdf24f823"
+    },
+    {
+      "path": "Microsoft.Extensions.Documents.Abstractions/DocumentTable.cs",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.Documents.Abstractions/DocumentTable.cs",
+      "gitBlob": "0763404aaf6daae7d5ef9a97973ac85f147379bd",
+      "sha256": "2d6a6e79e5e812ddbe8b22f9e2ae2a1eae7612fe89f3162fbe92087c3b378def"
+    },
+    {
+      "path": "Microsoft.Extensions.Documents.Abstractions/Microsoft.Extensions.Documents.Abstractions.csproj",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.Documents.Abstractions/Microsoft.Extensions.Documents.Abstractions.csproj",
+      "gitBlob": "68b47151c67bbd1d3835de9161a5f34dff45691d",
+      "sha256": "326f25e526eb4f6225e3915a0424154a6e999e78c271ead8cdc96e5dbcb63d4d"
+    },
+    {
+      "path": "Microsoft.Extensions.Documents.Abstractions/Microsoft.Extensions.Documents.Abstractions.json",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.Documents.Abstractions/Microsoft.Extensions.Documents.Abstractions.json",
+      "gitBlob": "1da02b75371906af91b3c1276278c8c019c3aa5b",
+      "sha256": "f54444ecb744276562f2e95df7419ac3613d4b36186ebc683ceda0735c01dd7b"
+    },
+    {
+      "path": "Microsoft.Extensions.Documents.Abstractions/README.md",
+      "upstreamPath": "src/Libraries/Microsoft.Extensions.Documents.Abstractions/README.md",
+      "gitBlob": "c76345f601f5f748c7622e9bf586d1bbf03838ff",
+      "sha256": "6842597ef3b058037f27b2172ace5c107f3d225f1be553e354de2cbc95110fd0"
+    }
+  ]
+}

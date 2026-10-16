@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Local build adapter. Every upstream artifact, including its project file, is preserved unchanged in Upstream. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Microsoft.Extensions.DocumentExtraction.Abstractions</AssemblyName>
+    <RootNamespace>Microsoft.Extensions.DocumentExtraction</RootNamespace>
+    <PackageId>Microsoft.Extensions.DocumentExtraction.Abstractions</PackageId>
+    <Description>Provider observations, layout and source output over shared Documents.</Description>
+    <NoWarn>$(NoWarn);MEDE0001;EXTEXP0019</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <IsShipping>false</IsShipping>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Extensions.Documents.Abstractions\Microsoft.Extensions.Documents.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Diagnostics.CodeAnalysis.ExperimentalAttribute">
+      <_Parameter1>MEDE0001</_Parameter1>
+      <_Parameter2>UrlFormat = "https://aka.ms/dotnet-extensions-warnings/{0}"</_Parameter2>
+      <_Parameter2_IsLiteral>true</_Parameter2_IsLiteral>
+    </AssemblyAttribute>
+    <Compile Include="..\DocumentExtraction\Upstream\Microsoft.Extensions.DocumentExtraction.Abstractions\*.cs"
+             Link="Upstream\%(Filename)%(Extension)" />
+    <!-- Local shims for upstream's internal Microsoft.Shared.* helpers (see src/Libraries/Shared). -->
+    <Compile Include="..\Shared\Diagnostics\Throw.cs" Link="Shared\Diagnostics\Throw.cs" />
+  </ItemGroup>
+
+</Project>

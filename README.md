@@ -137,12 +137,18 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 
 ### Essentials.AI
 
-On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, wraps Apple Intelligence (Foundation Models) for chat completion with streaming and tool calling, and Apple NaturalLanguage APIs for on-device embeddings.
+On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` and
+experimental document-extraction abstractions. On Apple platforms, wraps Apple
+Intelligence for chat, NaturalLanguage for embeddings, Vision for structured
+document recognition, and PDFKit for explicit per-page PDF rendering.
 
 - **`IChatClient`** backed by Apple Intelligence on iOS, macOS, and Mac Catalyst
 - **Streaming infrastructure** — progressive JSON deserialization of LLM responses
 - **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
 - **Tool calling** — function-calling support for on-device models
+- **Document API prototype** — `RecognizeDocumentsRequest` mapped only to supported proposal fields: titles, paragraphs, tables,
+  nested cells/spans, geometry, and page streaming. Lists/barcodes/entities are not forced into custom normalized types or metadata.
+- **PDF page extraction** — internal PDFKit rendering shared by the native client and ingestion reader
 
 | Package | Description |
 |---------|-------------|
@@ -228,8 +234,11 @@ For live app inspection and host setup, see the
 [MAUI DevFlow Inspector guide](docs/DevFlow/inspector.md).
 
 For AI Extensions usage and samples, see [`src/AIExtensions/README.md`](src/AIExtensions/README.md),
-the [`IChatClient` playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for live
-requests, portable recording/replay, and archived-chat search, and the
+the [cross-platform AI playground](samples/AIExtensions.Sample.ChatPlayground/README.md) for
+chat, embeddings, images, and document comparison across local Apple Vision,
+Foundry Mistral document OCR and Azure Document Intelligence, plus
+portable recording/replay and document search,
+and the
 [`Garden` sample](samples/AIExtensions.Sample.Garden/README.md).
 
 ## Support
