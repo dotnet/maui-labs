@@ -591,7 +591,6 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/webview/source", () => Results.Content(MockAgentResponses.WebViewSource, "text/html"));
         app.MapGet("/api/v1/webview/dom", () => Results.Content("""{"root":{"tag":"html"}}""", "application/json"));
         app.MapGet("/api/v1/webview/dom/query", () => Results.Content("""{"matches":[{"tag":"div","id":"app"}]}""", "application/json"));
-        app.MapGet("/api/v1/webview/network", () => Results.Content("""{"entries":[]}""", "application/json"));
         app.MapGet("/api/v1/webview/console", () => Results.Content("""{"entries":[]}""", "application/json"));
         app.MapGet("/api/v1/webview/screenshot", () => Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
 

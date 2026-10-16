@@ -398,7 +398,6 @@ public partial class DevFlowAgentService
         _server.MapPost("/api/v1/webview/input/click", request => ExecuteUiMutationAsync(request, HandleWebViewInputClick));
         _server.MapPost("/api/v1/webview/input/fill", request => ExecuteUiMutationAsync(request, HandleWebViewInputFill));
         _server.MapPost("/api/v1/webview/input/text", request => ExecuteUiMutationAsync(request, HandleWebViewInputText));
-        _server.MapGet("/api/v1/webview/network", HandleWebViewNetwork);
         _server.MapGet("/api/v1/webview/console", HandleWebViewConsole);
         _server.MapGet("/api/v1/webview/screenshot", HandleWebViewScreenshot);
 
@@ -2216,9 +2215,6 @@ public partial class DevFlowAgentService
             return HttpResponse.Error($"DOM query failed: {ex.Message}");
         }
     }
-
-    protected Task<HttpResponse> HandleWebViewNetwork(HttpRequest request)
-        => HandleNetworkList(request);
 
     protected Task<HttpResponse> HandleWebViewConsole(HttpRequest request)
     {
