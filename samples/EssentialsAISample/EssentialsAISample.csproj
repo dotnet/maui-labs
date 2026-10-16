@@ -68,6 +68,11 @@
     <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
   </ItemGroup>
 
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <!-- The AI package needs the modular SDK rather than MAUI's older implicit 1.8 version. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion)" />
+  </ItemGroup>
+
   <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' ">
     <PropertyGroup>
       <UserSecretsFilePath Condition=" '$(OS)' == 'Windows_NT' ">

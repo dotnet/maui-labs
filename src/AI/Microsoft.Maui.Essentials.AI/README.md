@@ -43,6 +43,8 @@ supported hardware and an MSIX package declaring `systemAIModels`; stable Phi
 Silica runtime access also requires Microsoft's Limited Access Feature approval.
 See the [Windows integration guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md).
 Windows chat accepts text and structured JSON, not tools or image input.
+The Windows app must select a compatible Windows App SDK explicitly rather
+than retaining MAUI 10's default 1.8 dependency graph; see the guide for versions.
 
 ## Chat
 

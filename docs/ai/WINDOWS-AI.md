@@ -20,18 +20,25 @@ Build Windows targets on Windows; the SDK's packaging tools cannot run on macOS.
 
 ## Library and development-app dependencies
 
-The shipping library uses stable APIs. The Playground and device-test apps
-explicitly select an experimental runtime for development:
+The library directly references only the stable AI package. The Playground and
+device-test apps override only the umbrella SDK; NuGet resolves its newer AI,
+Foundation, and InteractiveExperiences dependencies automatically:
 
 | Package | Library | Playground and device tests |
 |---------|---------|-----------------------------|
 | `Microsoft.WindowsAppSDK` | Not referenced | `2.5.4-experimental` |
-| `Microsoft.WindowsAppSDK.AI` | `2.4.4` | `2.5.4-experimental` |
-| `Microsoft.WindowsAppSDK.Foundation` | `2.3.12` | `2.3.13-experimental` |
+| `Microsoft.WindowsAppSDK.AI` | `2.4.4` | `2.5.4-experimental` (transitive) |
+| `Microsoft.WindowsAppSDK.Foundation` | `2.3.9` (transitive) | `2.3.13-experimental` (transitive) |
+| `Microsoft.WindowsAppSDK.InteractiveExperiences` | `2.1.3` (transitive) | `2.1.10-experimental` (transitive) |
 
 The stable AI baseline supports every chat API used by the library and lets
 development apps select the experimental package without a NuGet downgrade.
-The apps bundle the native runtime with `SelfContained` and
+Select a compatible umbrella SDK explicitly in the Windows app: MAUI 10's
+default 1.8 SDK has exact dependencies that conflict with these newer AI packages.
+The older Essentials AI sample selects stable SDK `2.5.1`; the Playground and
+device tests select `2.5.4-experimental`. The library does not pin the SDK globally.
+
+The Playground and device-test apps bundle the native runtime with `SelfContained` and
 `WindowsAppSDKSelfContained`; BuildTools.WinApp enables packaged `dotnet run`.
 These sample settings are not a production access grant.
 
@@ -57,7 +64,10 @@ A JSON format without a schema uses ordinary generation.
 
 Streaming forwards native progress. If the native API returns only a completed
 result, the client emits that result rather than inventing partial updates.
-Structured JSON may therefore arrive all at once even when streaming is selected.
+The Windows API documents partial JSON progress, but the current runtime has
+also returned long, valid JSON with no progress callbacks. This is tracked in
+[WindowsAppSDK #6872](https://github.com/microsoft/WindowsAppSDK/issues/6872);
+it is not an intentional UI buffer or simulated streaming.
 
 ## Limitations
 
@@ -65,7 +75,8 @@ Structured JSON may therefore arrive all at once even when streaming is selected
 - `MaxOutputTokens` is checked for a positive value but is not a native output limit.
 - Prompts exceeding the context window fail; history is not silently truncated.
 - Native generation can stall. Cancellation releases the waiting caller but
-  does not guarantee recovery of the native model.
+  does not guarantee recovery of the native model. See
+  [WindowsAppSDK #6871](https://github.com/microsoft/WindowsAppSDK/issues/6871).
 
 ## Device tests
 
@@ -76,6 +87,8 @@ run the schema transformation tests without making model requests:
 dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 --filter "FullyQualifiedName~WindowsAIChatClientJsonSchemaTests.GetConstraintSchema" --logger trx
 ```
 
-The remaining Windows chat tests require an available on-device model.
+Model-dependent cases are tagged `RequiresModel=true`. To exclude them, pass
+`--filter "RequiresModel!=true"`. The streaming/schema cases verify valid
+assembled responses; they do not guarantee multiple native progress callbacks.
 For interactive testing and setup, see the
 [Chat Playground README](../../samples/AIExtensions.Sample.ChatPlayground/README.md).
