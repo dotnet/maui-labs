@@ -86,7 +86,7 @@ jobs:
           & .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net10.0\playwright.ps1 install chromium
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run real Inspector layout regressions without a native agent
+      - name: Run real Inspector browser regressions without a native agent
         shell: pwsh
         run: |
           dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj `
@@ -97,11 +97,70 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$trx = Get-Content artifacts\TestResults\InspectorBrowser\layout-browser.trx
           $results = @($trx.TestRun.Results.UnitTestResult)
-          if ($results.Count -ne 15 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
-            throw 'All 15 existing and regression browser tests must execute and pass; skips are not allowed.'
+          if ($results.Count -ne 18 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+            throw 'All 18 existing and regression browser tests must execute and pass; skips are not allowed.'
           }
 
-      - name: Upload browser runtime evidence
+      - name: Repeat Inspector synchronization regressions on Windows
+        shell: pwsh
+        run: |
+          for ($iteration = 1; $iteration -le 5; $iteration++) {
+            dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj `
+              --configuration Release --no-build --no-restore `
+              --filter "FullyQualifiedName~ReadOnlyPropertyFilterRemainsUsable|FullyQualifiedName~NetworkTabRefreshesAutomaticallyAndKeepsDetailOpen" `
+              --logger "console;verbosity=normal" --logger "trx;LogFileName=synchronization-$iteration.trx" `
+              --results-directory artifacts\TestResults\InspectorBrowser
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\synchronization-$iteration.trx"
+            $results = @($trx.TestRun.Results.UnitTestResult)
+            if ($results.Count -ne 3 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+              throw "All three synchronization regressions must execute and pass on iteration $iteration."
+            }
+          }
+
+      - name: Repeat portable client retry regressions on both Windows runtimes
+        shell: pwsh
+        run: |
+          $project = 'src\DevFlow\Microsoft.Maui.DevFlow.Client.Tests\Microsoft.Maui.DevFlow.Client.Tests.csproj'
+          dotnet build $project --configuration Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($framework in @('net472', 'net10.0')) {
+            for ($iteration = 1; $iteration -le 5; $iteration++) {
+              $logName = "client-retry-$framework-$iteration.trx"
+              dotnet test $project --configuration Release --framework $framework --no-build --no-restore `
+                --filter "FullyQualifiedName~AgentClientRetryTests" `
+                --logger "console;verbosity=normal" --logger "trx;LogFileName=$logName" `
+                --results-directory artifacts\TestResults\InspectorBrowser
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\$logName"
+              $results = @($trx.TestRun.Results.UnitTestResult)
+              if ($results.Count -ne 20 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+                throw "All 20 retry regressions must execute and pass on $framework iteration $iteration."
+              }
+            }
+          }
+
+      - name: Repeat Windows profiling fixture regressions
+        shell: pwsh
+        run: |
+          $project = 'src\Cli\Microsoft.Maui.Cli.UnitTests\Microsoft.Maui.Cli.UnitTests.csproj'
+          dotnet build $project --configuration Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          for ($iteration = 1; $iteration -le 5; $iteration++) {
+            $logName = "profile-fixtures-$iteration.trx"
+            dotnet test $project --configuration Release --no-build --no-restore `
+              --filter "FullyQualifiedName~ProfileCommandTests.GetTargetFrameworks_|FullyQualifiedName~ConfigureDnxStartInfo_" `
+              --logger "console;verbosity=normal" --logger "trx;LogFileName=$logName" `
+              --results-directory artifacts\TestResults\InspectorBrowser
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\$logName"
+            $results = @($trx.TestRun.Results.UnitTestResult)
+            if ($results.Count -ne 8 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+              throw "All eight profiling fixture regressions must pass on iteration $iteration."
+            }
+          }
+
+      - name: Upload browser and fixture runtime evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:

@@ -1268,7 +1268,7 @@ public class ProfileCommandTests
 	public void GetTargetFrameworks_ParsesSingleTargetFramework()
 	{
 		var csprojContent = """
-			<Project Sdk="Microsoft.NET.Sdk">
+			<Project>
 			  <PropertyGroup>
 			    <TargetFramework>net10.0-android</TargetFramework>
 			  </PropertyGroup>
@@ -1283,7 +1283,7 @@ public class ProfileCommandTests
 	public void GetTargetFrameworks_ParsesMultipleTargetFrameworks()
 	{
 		var csprojContent = """
-			<Project Sdk="Microsoft.NET.Sdk">
+			<Project>
 			  <PropertyGroup>
 			    <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
 			  </PropertyGroup>
@@ -1301,7 +1301,7 @@ public class ProfileCommandTests
 	public void GetTargetFrameworks_IgnoresMSBuildVariableExpressions()
 	{
 		var csprojContent = """
-			<Project Sdk="Microsoft.NET.Sdk">
+			<Project>
 			  <PropertyGroup>
 			    <TargetFrameworks>net10.0-android;$(AdditionalFrameworks)</TargetFrameworks>
 			  </PropertyGroup>
@@ -1310,6 +1310,26 @@ public class ProfileCommandTests
 		using var tempProject = TempProjectFile(csprojContent);
 		var frameworks = MauiProjectResolver.GetTargetFrameworks(tempProject.Path);
 		Assert.All(frameworks, f => Assert.DoesNotContain("$(", f, StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public void GetTargetFrameworks_EvaluatesImportedProperties()
+	{
+		using var tempProject = TempProjectFile("""
+			<Project>
+			  <Import Project="Frameworks.props" />
+			</Project>
+			""");
+		File.WriteAllText(Path.Combine(Path.GetDirectoryName(tempProject.Path)!, "Frameworks.props"), """
+			<Project>
+			  <PropertyGroup>
+			    <TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+			  </PropertyGroup>
+			</Project>
+			""");
+
+		Assert.Equal(["net10.0-android", "net10.0-ios"],
+			MauiProjectResolver.GetTargetFrameworks(tempProject.Path));
 	}
 
 	[Fact]
@@ -2198,7 +2218,11 @@ public class ProfileCommandTests
 				RedirectStandardOutput = true,
 				RedirectStandardError = true
 			};
-			foreach (var arg in new[] { "build", helperProject, "--nologo", "--configuration", "Release", "--output", outputDirectory })
+			foreach (var arg in new[]
+			{
+				"build", helperProject, "--nologo", "--configuration", "Release", "--output", outputDirectory,
+				"--disable-build-servers", "-nodeReuse:false", "-p:UseSharedCompilation=false"
+			})
 				buildStartInfo.ArgumentList.Add(arg);
 
 			using (var buildProcess = Process.Start(buildStartInfo)!)
@@ -2245,7 +2269,20 @@ public class ProfileCommandTests
 		}
 		finally
 		{
-			Directory.Delete(tempDirectory, recursive: true);
+			// Windows can briefly retain an executable's image mapping after process exit.
+			// Retry only cleanup of this owned fixture; never rerun the build or assertion.
+			for (var attempt = 0; ; attempt++)
+			{
+				try
+				{
+					Directory.Delete(tempDirectory, recursive: true);
+					break;
+				}
+				catch (Exception ex) when (attempt < 4 && ex is IOException or UnauthorizedAccessException)
+				{
+					await Task.Delay(TimeSpan.FromMilliseconds(50 * (attempt + 1)));
+				}
+			}
 		}
 	}
 
