@@ -371,8 +371,8 @@ public static class LinuxEmailExtensions
         if (value.All(c => c is >= ' ' and < (char)0x7f))
             return $"{name}=\"{Quote(value)}\"";
 
-        var fallback = new string(value.Select(c => c is >= ' ' and < (char)0x7f ? c : '_').ToArray());
-        return $"{name}=\"{Quote(fallback)}\"; {name}*=UTF-8''{Uri.EscapeDataString(value)}";
+        // Non-ASCII: RFC 2231 extended parameter only
+        return $"{name}*=UTF-8''{Uri.EscapeDataString(value)}";
     }
 
     /// <summary>
