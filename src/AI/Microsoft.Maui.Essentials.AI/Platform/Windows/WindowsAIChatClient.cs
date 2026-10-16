@@ -112,44 +112,15 @@ public sealed class WindowsAIChatClient : IChatClient
 					? prompt
 					: $"{systemPrompt}{Environment.NewLine}{Environment.NewLine}{prompt}";
 
-				(cancel, context) = await StartOperationAsync(() =>
-				{
-					var operation = model.GenerateStructuredJsonResponseAsync(
-						structuredPrompt, jsonSchema, modelOptions);
-					WireUp(operation, handler, cancellationToken, static result => result.Status switch
-					{
-						GenerateStructuredJsonResponseStatus.Complete => result.Text,
-						GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
-							throw new InvalidOperationException(
-								"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
-								result.ExtendedError),
-						_ => throw new InvalidOperationException(
-							$"Structured response generation failed: {result.Status}", result.ExtendedError)
-					});
-					return ((Action)operation.Cancel, (LanguageModelContext?)null);
-				}, cancellationToken).ConfigureAwait(false);
+				(cancel, context) = await StartOperationAsync(
+					() => StartStructuredGeneration(model, structuredPrompt, jsonSchema, modelOptions, handler, cancellationToken),
+					cancellationToken).ConfigureAwait(false);
 			}
 			else
 			{
-				(cancel, context) = await StartOperationAsync(() =>
-				{
-					var createdContext = string.IsNullOrEmpty(systemPrompt)
-						? model.CreateContext()
-						: model.CreateContext(systemPrompt, new ContentFilterOptions());
-					try
-					{
-						var operation = model.GenerateResponseAsync(createdContext, prompt, modelOptions);
-
-						WireUp(operation, handler, cancellationToken, result =>
-							GetResponseText(result.Status, result.Text, result.ExtendedError, string.IsNullOrEmpty(prompt)));
-						return ((Action)operation.Cancel, createdContext);
-					}
-					catch
-					{
-						createdContext.Dispose();
-						throw;
-					}
-				}, cancellationToken).ConfigureAwait(false);
+				(cancel, context) = await StartOperationAsync(
+					() => StartTextGeneration(model, systemPrompt, prompt, modelOptions, handler, cancellationToken),
+					cancellationToken).ConfigureAwait(false);
 			}
 
 			var registration = cancellationToken.Register(cancel);
@@ -160,7 +131,6 @@ public sealed class WindowsAIChatClient : IChatClient
 					yield return update;
 				}
 			}
-
 			finally
 			{
 				cancel();
@@ -172,6 +142,45 @@ public sealed class WindowsAIChatClient : IChatClient
 			handler.Complete();
 			context?.Dispose();
 		}
+	}
+
+	private static (Action Cancel, LanguageModelContext? Context) StartTextGeneration(
+		LanguageModel model,
+		string systemPrompt,
+		string prompt,
+		LanguageModelOptions modelOptions,
+		StreamingResponseHandler handler,
+		CancellationToken cancellationToken)
+	{
+		var context = string.IsNullOrEmpty(systemPrompt)
+			? model.CreateContext()
+			: model.CreateContext(systemPrompt, new ContentFilterOptions());
+		try
+		{
+			var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
+			WireUp(operation, handler, cancellationToken, result =>
+				GetResponseText(result.Status, result.Text, result.ExtendedError, string.IsNullOrEmpty(prompt)));
+			return (operation.Cancel, context);
+		}
+		catch
+		{
+			context.Dispose();
+			throw;
+		}
+	}
+
+	private static (Action Cancel, LanguageModelContext? Context) StartStructuredGeneration(
+		LanguageModel model,
+		string prompt,
+		string jsonSchema,
+		LanguageModelOptions modelOptions,
+		StreamingResponseHandler handler,
+		CancellationToken cancellationToken)
+	{
+		var operation = model.GenerateStructuredJsonResponseAsync(prompt, jsonSchema, modelOptions);
+		WireUp(operation, handler, cancellationToken, static result =>
+			GetStructuredResponseText(result.Status, result.Text, result.ExtendedError));
+		return (operation.Cancel, null);
 	}
 
 	internal static string? GetResponseText(
@@ -186,11 +195,25 @@ public sealed class WindowsAIChatClient : IChatClient
 			(extendedError is null ||
 			 extendedError is ArgumentException && extendedError.HResult == InvalidArgumentHResult) => text,
 		LanguageModelResponseStatus.PromptLargerThanContext =>
-			throw new InvalidOperationException(
-				"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
-				extendedError),
+			throw CreatePromptTooLargeException(extendedError),
 		_ => throw new InvalidOperationException($"Response generation failed: {status}", extendedError)
 	};
+
+	internal static string? GetStructuredResponseText(
+		GenerateStructuredJsonResponseStatus status,
+		string? text,
+		Exception? extendedError) => status switch
+	{
+		GenerateStructuredJsonResponseStatus.Complete => text,
+		GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
+			throw CreatePromptTooLargeException(extendedError),
+		_ => throw new InvalidOperationException($"Structured response generation failed: {status}", extendedError)
+	};
+
+	private static InvalidOperationException CreatePromptTooLargeException(Exception? extendedError) =>
+		new(
+			"The prompt is larger than the Windows AI language model's context window. Shorten the conversation or start a new one.",
+			extendedError);
 
 	private static async Task<(Action Cancel, LanguageModelContext? Context)> StartOperationAsync(
 		Func<(Action Cancel, LanguageModelContext? Context)> start,

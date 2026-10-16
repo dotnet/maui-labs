@@ -103,6 +103,42 @@ public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<
 public class WindowsAIChatClientValidationTests
 {
 	[Theory]
+	[InlineData(GenerateStructuredJsonResponseStatus.Error)]
+	[InlineData((GenerateStructuredJsonResponseStatus)int.MaxValue)]
+	public void GetStructuredResponseText_NativeFailure_ThrowsWithStatusAndExtendedError(GenerateStructuredJsonResponseStatus status)
+	{
+		var cause = new InvalidOperationException("Native failure");
+
+		var error = Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetStructuredResponseText(status, "Partial response", cause));
+
+		Assert.Contains(status.ToString(), error.Message, StringComparison.Ordinal);
+		Assert.Same(cause, error.InnerException);
+	}
+
+	[Theory]
+	[InlineData("Native JSON")]
+	[InlineData(null)]
+	public void GetStructuredResponseText_Complete_ReturnsNativeText(string? text)
+	{
+		Assert.Equal(text, WindowsAIChatClient.GetStructuredResponseText(
+			GenerateStructuredJsonResponseStatus.Complete, text, null));
+	}
+
+	[Fact]
+	public void GetStructuredResponseText_PromptLargerThanContext_ExplainsLimitAndPreservesExtendedError()
+	{
+		var cause = new InvalidOperationException("Native context limit");
+
+		var error = Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetStructuredResponseText(
+				GenerateStructuredJsonResponseStatus.PromptLargerThanContext, "", cause));
+
+		Assert.Contains("context window", error.Message, StringComparison.Ordinal);
+		Assert.Same(cause, error.InnerException);
+	}
+
+	[Theory]
 	[InlineData(LanguageModelResponseStatus.Error)]
 	[InlineData(LanguageModelResponseStatus.BlockedByPolicy)]
 	[InlineData(LanguageModelResponseStatus.PromptBlockedByContentModeration)]
