@@ -102,6 +102,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 	{
 		var client = new T();
@@ -126,6 +127,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetStreamingResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 	{
 		var client = new T();

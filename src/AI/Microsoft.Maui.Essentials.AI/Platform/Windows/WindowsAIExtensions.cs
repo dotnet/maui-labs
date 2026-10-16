@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using Microsoft.Maui.Essentials.AI;
 using Microsoft.Windows.AI.Text;
 
@@ -7,6 +8,7 @@ namespace Microsoft.Extensions.AI;
 /// Provides extension methods for converting Windows AI types
 /// to Microsoft.Extensions.AI abstractions.
 /// </summary>
+[SupportedOSPlatform("windows10.0.26100.0")]
 public static class WindowsAIExtensions
 {
 	/// <summary>

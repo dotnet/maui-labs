@@ -156,7 +156,31 @@ public class WindowsAIChatClientValidationTests
 		Assert.Contains("text only", error.Message, StringComparison.Ordinal);
 	}
 
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task GetResponseAsync_WithSerializedToolHistory_RejectsImagesBeforeModelSetup(bool functionCall)
+	{
+		using var client = new WindowsAIChatClient();
+		using var result = JsonDocument.Parse("""{"temperature":23}""");
+		AIContent historyContent = functionCall
+			? new FunctionCallContent("call-1", "GetWeather", new Dictionary<string, object?> { ["city"] = "Paris" })
+			: new FunctionResultContent("call-1", result.RootElement);
+		var messages = new ChatMessage[]
+		{
+			new(functionCall ? ChatRole.Assistant : ChatRole.Tool, [historyContent]),
+			new(ChatRole.User, [new DataContent(new byte[] { 0 }, "image/png")]),
+		};
+
+		// The history must serialize before image validation rejects this request.
+		// No native model is needed, including when JSON reflection is disabled.
+		var error = await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(messages));
+
+		Assert.Contains("text only", error.Message, StringComparison.Ordinal);
+	}
+
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithOnlyNullTextContent_DoesNotThrow()
 	{
 		var client = new WindowsAIChatClient();
@@ -179,6 +203,7 @@ public class WindowsAIChatClientValidationTests
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithOrphanedFunctionResult_DoesNotThrow()
 	{
 		var client = new WindowsAIChatClient();
@@ -196,6 +221,7 @@ public class WindowsAIChatClientValidationTests
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithFunctionCallEmptyName_DoesNotThrow()
 	{
 		var client = new WindowsAIChatClient();
@@ -212,6 +238,7 @@ public class WindowsAIChatClientValidationTests
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithInstructions_Succeeds()
 	{
 		var client = new WindowsAIChatClient();

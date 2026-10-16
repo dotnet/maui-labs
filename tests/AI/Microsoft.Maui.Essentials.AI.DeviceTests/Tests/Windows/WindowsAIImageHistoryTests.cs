@@ -8,6 +8,7 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public class WindowsAIImageHistoryTests
 {
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_ImageGenerationHistory_KeepsToolActivityWithoutDecodingImage()
 	{
 		using var client = new WindowsAIChatClient();

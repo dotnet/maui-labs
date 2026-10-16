@@ -417,7 +417,7 @@ public sealed class WindowsAIChatClient : IChatClient
 				{
 #pragma warning disable IL3050, IL2026
 					var argsJson = functionCall.Arguments is not null
-						? System.Text.Json.JsonSerializer.Serialize(functionCall.Arguments)
+						? System.Text.Json.JsonSerializer.Serialize(functionCall.Arguments, AIJsonUtilities.DefaultOptions)
 						: "{}";
 					promptParts.Add($"{rolePrefix}[Tool call: {functionCall.Name}({argsJson})]");
 #pragma warning restore IL3050, IL2026
@@ -428,7 +428,7 @@ public sealed class WindowsAIChatClient : IChatClient
 					var resultStr = functionResult.Result switch
 					{
 						string s => s,
-						not null => System.Text.Json.JsonSerializer.Serialize(functionResult.Result),
+						not null => System.Text.Json.JsonSerializer.Serialize(functionResult.Result, AIJsonUtilities.DefaultOptions),
 						_ => "{}"
 					};
 #pragma warning restore IL3050, IL2026
