@@ -72,7 +72,16 @@ var message = new ChatMessage(ChatRole.User,
 var response = await _chat.GetResponseAsync([message]);
 ```
 
-On Apple, a `CGImage` (or `UIImage` on iOS/Mac Catalyst, `NSImage` on macOS) can be passed through without re-decoding by setting `RawRepresentation` on the `DataContent`; retain valid encoded bytes for recording and cross-platform consumers. Local `file://` `UriContent` is supported, while remote image URLs are rejected rather than fetched silently. Image prompting requires runtime OS 27 and a vision-capable, ready Apple Intelligence model; on 26 the client remains text-only and an image request throws an explicit error. Image *generation* is not provided by this Apple chat client.
+Image input requires Apple OS 27+ and a ready, vision-capable Apple Intelligence
+model. Native inputs can use `DataContent.RawRepresentation` or image
+`UriContent.RawRepresentation` with `CGImage`, `CoreImage.CIImage`,
+`CoreVideo.CVPixelBuffer`, `UIImage` (iOS/Mac Catalyst), or `NSImage` (macOS).
+Local `file://` images are supported; remote image URLs are not downloaded.
+This client analyzes images; it does not generate them.
+
+Keep native sources valid until submission and do not mutate pixel-buffer storage
+during inference. See the [image-input guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
+for native ownership, orientation, and portable output details.
 
 ### Token usage
 

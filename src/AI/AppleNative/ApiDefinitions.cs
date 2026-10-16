@@ -3,6 +3,8 @@
 using System;
 using System.Threading.Tasks;
 using CoreGraphics;
+using CoreImage;
+using CoreVideo;
 using Foundation;
 using ImageIO;
 using ObjCRuntime;
@@ -297,6 +299,18 @@ interface TextContentNative
 [Internal]
 interface ImageContentNative
 {
+	[NullAllowed, Export("ciImage", ArgumentSemantic.Strong)]
+	CIImage CiImage { get; set; }
+
+	[NullAllowed, Export("pixelBuffer")]
+	CVPixelBuffer PixelBuffer { get; set; }
+
+	[Export("initWithCiImage:orientationValue:label:")]
+	NativeHandle Constructor(CIImage ciImage, [NullAllowed, BindAs(typeof(CGImagePropertyOrientation?))] NSNumber orientation, [NullAllowed] string label);
+
+	[Export("initWithPixelBuffer:orientationValue:label:")]
+	NativeHandle Constructor(CVPixelBuffer pixelBuffer, [NullAllowed, BindAs(typeof(CGImagePropertyOrientation?))] NSNumber orientation, [NullAllowed] string label);
+
 	// @property (nonatomic, strong) CGImageRef _Nullable cgImage;
 	[NullAllowed, Export("cgImage")]
 	CGImage CgImage { get; set; }

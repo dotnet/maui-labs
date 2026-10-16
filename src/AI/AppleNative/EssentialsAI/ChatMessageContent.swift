@@ -1,5 +1,7 @@
 import Foundation
 import CoreGraphics
+import CoreImage
+import CoreVideo
 import ImageIO
 import FoundationModels
 
@@ -46,6 +48,9 @@ public class FunctionResultContentNative: AIContentNative {
 public class ImageContentNative: AIContentNative {
     /// Native image handle (fast path, zero-copy).
     @objc public var cgImage: CGImage?
+    /// Strong references keep lazy Core Image sources and pixel-buffer storage alive.
+    @objc public var ciImage: CIImage?
+    @objc public var pixelBuffer: CVPixelBuffer?
     /// Encoded image bytes (png/jpeg/…), decoded to a CGImage on demand.
     @objc public var data: Data?
     /// File URL pointing at an image on disk.
@@ -57,6 +62,20 @@ public class ImageContentNative: AIContentNative {
 
     @objc public init(cgImage: CGImage, orientationValue: NSNumber?, label: String?) {
         self.cgImage = cgImage
+        self.orientationValue = orientationValue
+        self.label = label
+        super.init()
+    }
+
+    @objc public init(ciImage: CIImage, orientationValue: NSNumber?, label: String?) {
+        self.ciImage = ciImage
+        self.orientationValue = orientationValue
+        self.label = label
+        super.init()
+    }
+
+    @objc public init(pixelBuffer: CVPixelBuffer, orientationValue: NSNumber?, label: String?) {
+        self.pixelBuffer = pixelBuffer
         self.orientationValue = orientationValue
         self.label = label
         super.init()
@@ -107,7 +126,7 @@ public class ImageContentNative: AIContentNative {
     }
 }
 
-@available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *)
 extension ImageContentNative {
     /// Builds a FoundationModels prompt attachment. Throws if there is no usable payload.
     func toAttachment() throws -> Attachment<ImageAttachmentContent> {
@@ -115,6 +134,10 @@ extension ImageContentNative {
         var attachment: Attachment<ImageAttachmentContent>
         if let cgImage {
             attachment = Attachment(cgImage, orientation: orientation)
+        } else if let ciImage {
+            attachment = Attachment(ciImage, orientation: orientation)
+        } else if let pixelBuffer {
+            attachment = Attachment(pixelBuffer, orientation: orientation)
         } else if let imageURL {
             attachment = Attachment(imageURL: imageURL, orientation: orientation)
         } else if let cg = resolvedCGImage() {
@@ -131,6 +154,12 @@ extension ImageContentNative {
     /// Builds a transcript-history image attachment (for prior turns).
     func toTranscriptAttachment() throws -> Transcript.Attachment {
         let orientation = try resolvedOrientation()
+        if let ciImage {
+            return .image(Transcript.ImageAttachment(ciImage, orientation: orientation))
+        }
+        if let pixelBuffer {
+            return .image(Transcript.ImageAttachment(pixelBuffer, orientation: orientation))
+        }
         if let imageURL {
             return .image(Transcript.ImageAttachment(imageURL: imageURL, orientation: orientation))
         }
