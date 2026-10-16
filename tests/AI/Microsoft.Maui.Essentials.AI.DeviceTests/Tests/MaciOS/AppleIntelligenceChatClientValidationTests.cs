@@ -118,6 +118,7 @@ public class AppleIntelligenceChatClientValidationTests
 
 		Assert.NotNull(nativeOptions);
 		Assert.Null(nativeOptions.Tools);
+		Assert.False(nativeOptions.RequireAnyTool);
 	}
 
 	[Fact]
@@ -134,6 +135,7 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.NotNull(nativeOptions);
 		Assert.NotNull(nativeOptions.Tools);
 		Assert.Single(nativeOptions.Tools!);
+		Assert.False(nativeOptions.RequireAnyTool);
 	}
 
 	/// <summary>

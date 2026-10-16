@@ -148,6 +148,9 @@ interface ChatMessageNative
 [Internal]
 interface ChatOptionsNative
 {
+	[Export("requireAnyTool")]
+	bool RequireAnyTool { get; set; }
+
 	// @property (nonatomic, strong) NSNumber * _Nullable topK;
 	[NullAllowed, Export("topK", ArgumentSemantic.Strong)]
 	NSNumber TopK { get; set; }
