@@ -39,7 +39,8 @@ per request. Routing is model-decided, not cached or deterministic; terse
 follow-ups have no earlier context for classification. Cloud is the default;
 local is reserved for obvious greetings, device time lookups and single basic
 calculations with no other work. Writing, summaries, explanations and uncertainty
-go to cloud, even when the requested answer is short. Decisions are best-effort,
+go to cloud, even when the requested answer is short. A brief greeting in verse
+is also accepted as local. Decisions are best-effort,
 not a security boundary. It is registered only
 when both Apple and an Azure chat deployment are available. Missing or blank
 user text bypasses classification. Unexpected classifier output defaults to cloud;

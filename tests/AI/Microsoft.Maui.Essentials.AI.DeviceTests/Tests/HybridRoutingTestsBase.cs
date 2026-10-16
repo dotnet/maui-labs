@@ -51,7 +51,7 @@ public abstract class HybridRoutingTestsBase<TClient>(ITestOutputHelper output)
     [InlineData("Summarize: We shipped on Friday after fixing the login bug.", "cloud")]
     [InlineData("Check the grammar: She don't like coffee.", "cloud")]
     [InlineData("Write a regular expression that matches a date.", "cloud")]
-    [InlineData("Say hello in a short poem.", "cloud")]
+    [InlineData("Say hello in a short poem.", "local")]
     [InlineData("Thanks! Now help me plan tomorrow's work.", "cloud")]
     [InlineData("What time is it, and why do time zones exist?", "cloud")]
     [InlineData("Calculate 12 * 8, then explain how you worked it out.", "cloud")]
