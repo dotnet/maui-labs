@@ -38,11 +38,9 @@ The existing Android target does not imply an available on-device provider.
 
 ### Apple
 
-```sh
-# macOS: native Swift bindings and managed projects
-dotnet build src/AI/EssentialsAI.slnf
+Build the project directly; its native Swift bridge is built with it:
 
-# Apple 27 reference packs, with Xcode 27 and matching workloads installed
+```sh
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
   -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
@@ -60,26 +58,35 @@ Build the Windows implementation without the Apple native build:
 dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj -f net10.0-windows10.0.19041.0
 ```
 
-Full solution builds require Apple native artifacts built on macOS.
+See the [Windows integration guide](../../docs/ai/WINDOWS-AI.md) for app packaging,
+runtime selection, and model access.
+
+### Full product build
+
+To build all product projects instead of one target:
+
+```sh
+dotnet build src/AI/EssentialsAI.slnf
+```
+
+This is an alternative, not a prerequisite for project-level builds.
+Full builds on Windows require Apple native artifacts built on macOS.
 The prebuilt path activates with `CI=true` or `TF_BUILD=true`; those flags do not
 supply the artifacts. CI downloads them before packing/signing on Windows. See
 [ci-essentialsai.yml](../../.github/workflows/ci-essentialsai.yml) and the
 [official pipeline](../../eng/pipelines/devflow-official.yml) for the artifact flow.
-
-See the [Windows integration guide](../../docs/ai/WINDOWS-AI.md) for app packaging,
-runtime selection, and model access.
 
 ## Tests and implementation
 
 Portable tests live in `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests`:
 
 ```sh
-dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj \
-  -p:TargetFrameworks=net10.0 -p:IsTestProject=true
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj
 ```
 
-The overrides keep the build portable and enable Arcade's test infrastructure
-for this existing test project without building the Apple targets.
+This restores and builds the test project and its references automatically.
+Optionally add `-p:TargetFrameworks=net10.0` to limit the referenced library's
+multi-target restore to the portable framework.
 Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
 Apple or Windows device/runtime and model availability; portable tests do not run a model.
