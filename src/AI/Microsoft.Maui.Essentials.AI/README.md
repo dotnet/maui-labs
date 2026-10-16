@@ -80,35 +80,27 @@ await foreach (var update in chat.GetStreamingResponseAsync("Suggest a walking r
 
 ### Structured JSON
 
-Supply the response schema in `ChatOptions`:
+Use `GetResponseAsync<T>` to generate the schema and deserialize the response.
+Descriptions on the record and its properties guide the model:
 
 ```csharp
-using System.Text.Json;
+using System.ComponentModel;
 
-using var schema = JsonDocument.Parse("""
-    {
-      "type": "object",
-      "properties": {
-        "answer": {
-          "type": "string"
-        }
-      },
-      "required": ["answer"],
-      "additionalProperties": false
-    }
-    """);
-var options = new ChatOptions
-{
-    ResponseFormat = ChatResponseFormat.ForJsonSchema(schema.RootElement),
-};
+var response = await chat.GetResponseAsync<TripSuggestion>(
+    "Suggest a day trip near Seattle.");
 
-var response = await chat.GetResponseAsync("Suggest a day trip destination.", options);
-using var json = JsonDocument.Parse(response.Text);
-Console.WriteLine(json.RootElement.GetProperty("answer").GetString());
+Console.WriteLine($"{response.Result.Destination}: {response.Result.Reason}");
+
+[Description("A day trip recommendation.")]
+public sealed record TripSuggestion(
+    [property: Description("The destination name.")] string Destination,
+    [property: Description("A short reason to visit.")] string Reason);
 ```
 
 Native schema constraints apply. Structured responses may arrive as one final
 update if the provider emits no incremental progress.
+For trimmed/AOT apps, supply source-generated JSON serializer options for the
+response type.
 
 ### Usage metadata
 
@@ -135,16 +127,17 @@ Apple Intelligence executes `AIFunction` tools supplied in `ChatOptions`.
 The Windows provider rejects tool options.
 
 ```csharp
+using System.ComponentModel;
+
 var options = new ChatOptions
 {
-    Tools =
-    [
-        AIFunctionFactory.Create(
-            (string city) => $"Weather for {city}: sunny.",
-            name: "GetWeather"),
-    ],
+    Tools = [AIFunctionFactory.Create(GetWeather, name: nameof(GetWeather))],
 };
 var response = await chat.GetResponseAsync("What's the weather in Boston?", options);
+
+[Description("Get the demonstration weather for a city.")]
+static string GetWeather(
+    [Description("The city to check.")] string city) => $"{city}: sunny.";
 ```
 
 This tool returns fixed demonstration data. Set `ToolMode = ChatToolMode.None`
