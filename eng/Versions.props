@@ -98,6 +98,7 @@
     <MicrosoftWindowsAppSDKVersion>2.5.1</MicrosoftWindowsAppSDKVersion>
     <MicrosoftWindowsAppSDKAIVersion>2.4.4</MicrosoftWindowsAppSDKAIVersion>
     <MicrosoftWindowsAppSDKFoundationVersion>2.3.12</MicrosoftWindowsAppSDKFoundationVersion>
+    <MicrosoftWindowsAppSDKInteractiveExperiencesVersion>2.1.9</MicrosoftWindowsAppSDKInteractiveExperiencesVersion>
     <!-- Windows AI development apps opt into the experimental runtime without changing library dependencies. -->
     <MicrosoftWindowsAppSDKVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKVersion_Experimental>
     <MicrosoftWindowsAppSDKAIVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKAIVersion_Experimental>

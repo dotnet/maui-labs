@@ -41,6 +41,8 @@
   <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
     <SelfContained>true</SelfContained>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- The experimental SDK's generated XAML metadata references experimental chart/table providers. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS8305</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

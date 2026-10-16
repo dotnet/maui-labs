@@ -45,6 +45,8 @@
   <ItemGroup Condition=" $(TargetFramework.Contains('-windows')) ">
     <PackageReference Include="Microsoft.WindowsAppSDK.AI" VersionOverride="$(MicrosoftWindowsAppSDKAIVersion)" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+    <!-- Foundation's minimum 2.1.8 is unavailable on the proxy feed. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" VersionOverride="$(MicrosoftWindowsAppSDKInteractiveExperiencesVersion)" />
   </ItemGroup>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">
