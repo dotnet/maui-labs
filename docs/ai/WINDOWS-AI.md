@@ -38,10 +38,11 @@ default 1.8 SDK has exact dependencies that conflict with these newer AI package
 All three Windows app heads select `2.5.4-experimental`. The library does not pin
 the SDK globally.
 
-The apps bundle the native runtime with `SelfContained` and
-`WindowsAppSDKSelfContained`. The Playground and device tests are MSIX-packaged;
-BuildTools.WinApp enables their packaged `dotnet run`. The older Essentials AI
-sample retains its unpackaged setup and does not register a Windows AI provider.
+The Playground and device tests bundle the native runtime with `SelfContained`
+and `WindowsAppSDKSelfContained`; BuildTools.WinApp enables their packaged
+`dotnet run`. The older Essentials AI sample only selects the compatible SDK
+so it compiles. Its unpackaged runtime setup, cloud services, and tool-based
+workflows are unchanged; native Windows AI integration is deferred.
 These sample settings are not a production access grant.
 
 ## Behavior
