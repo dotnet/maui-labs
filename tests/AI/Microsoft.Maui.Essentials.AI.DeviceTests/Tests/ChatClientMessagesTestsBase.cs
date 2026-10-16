@@ -22,6 +22,29 @@ public abstract class ChatClientMessagesTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithOnlyNullTextContent_DoesNotThrow()
+	{
+		using var client = new T();
+		var msg = new ChatMessage(ChatRole.User, [new TextContent(null)]);
+		var messages = new List<ChatMessage> { msg };
+
+		var response = await client.GetResponseAsync(messages);
+		Assert.NotNull(response);
+	}
+
+	[Fact]
+	public virtual async Task GetResponseAsync_WithUnsupportedContentType()
+	{
+		using var client = new T();
+		var msg = new ChatMessage(ChatRole.User, [new UnsupportedContentForTesting()]);
+		var messages = new List<ChatMessage> { msg };
+
+		await Assert.ThrowsAsync<ArgumentException>(
+			() => client.GetResponseAsync(messages));
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithSystemMessage_AcceptsSystemRole()
 	{
 		var client = new T();
@@ -187,4 +210,6 @@ public abstract class ChatClientMessagesTestsBase<T>
 			// Process updates
 		}
 	}
+
+	protected sealed class UnsupportedContentForTesting : AIContent;
 }

@@ -1,6 +1,7 @@
 #if ENABLE_OPENAI_CLIENT
 
 using Microsoft.Extensions.AI;
+using Xunit;
 using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
@@ -34,6 +35,20 @@ public class OpenAIChatClientInstantiationTests : ChatClientInstantiationTestsBa
 }
 public class OpenAIChatClientMessagesTests : ChatClientMessagesTestsBase<OpenAIChatClient>
 {
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public override async Task GetResponseAsync_WithUnsupportedContentType()
+	{
+		using var client = new OpenAIChatClient();
+		// The OpenAI adapter explicitly ignores unrecognized content instead of rejecting it.
+		var message = new ChatMessage(ChatRole.User,
+			[new TextContent("Say hello"), new UnsupportedContentForTesting()]);
+
+		var response = await client.GetResponseAsync([message]);
+
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
+	}
 }
 public class OpenAIChatClientOptionsTests : ChatClientOptionsTestsBase<OpenAIChatClient>
 {

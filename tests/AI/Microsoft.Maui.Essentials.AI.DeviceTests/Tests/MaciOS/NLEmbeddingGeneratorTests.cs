@@ -14,15 +14,6 @@ public class NLEmbeddingGeneratorConcurrencyTests : EmbeddingGeneratorConcurrenc
 public class NLEmbeddingGeneratorDisposalTests : EmbeddingGeneratorDisposalTestsBase<NLEmbeddingGenerator>
 {
 	[Fact]
-	public void Dispose_WithOwnedEmbedding_DisposesEmbedding()
-	{
-		// When using default constructor, generator owns the embedding
-		var generator = new NLEmbeddingGenerator();
-		generator.Dispose();
-		// No exception means success
-	}
-
-	[Fact]
 	public void Dispose_WithProvidedEmbedding_DoesNotDisposeEmbedding()
 	{
 		var embedding = NLEmbedding.GetSentenceEmbedding(NLLanguage.English);

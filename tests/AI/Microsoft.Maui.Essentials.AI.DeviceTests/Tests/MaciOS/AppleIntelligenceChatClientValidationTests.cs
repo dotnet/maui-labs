@@ -160,38 +160,6 @@ public class AppleIntelligenceChatClientValidationTests
 	}
 
 	/// <summary>
-	/// Verifies that messages with TextContent(null) are handled gracefully.
-	/// In M.E.AI 10.3.0+, TextContent(null) defaults to empty text which
-	/// passes through content filtering to the native API without throwing.
-	/// </summary>
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithOnlyNullTextContent_DoesNotThrow()
-	{
-		var client = new AppleIntelligenceChatClient();
-		var msg = new ChatMessage(ChatRole.User, [new TextContent(null)]);
-		var messages = new List<ChatMessage> { msg };
-
-		var response = await client.GetResponseAsync(messages);
-		Assert.NotNull(response);
-	}
-
-	/// <summary>
-	/// Verifies that messages with unsupported content types
-	/// throw ArgumentException with a descriptive message.
-	/// </summary>
-	[Fact]
-	public async Task GetResponseAsync_WithUnsupportedContentType_ThrowsArgumentException()
-	{
-		var client = new AppleIntelligenceChatClient();
-		var msg = new ChatMessage(ChatRole.User, [new UnsupportedContentForTesting()]);
-		var messages = new List<ChatMessage> { msg };
-
-		await Assert.ThrowsAsync<ArgumentException>(
-			() => client.GetResponseAsync(messages));
-	}
-
-	/// <summary>
 	/// Verifies that FunctionResultContent with a CallId that doesn't match any prior
 	/// FunctionCallContent is handled gracefully (empty tool name, no exception).
 	/// </summary>
@@ -268,49 +236,10 @@ public class AppleIntelligenceChatClientValidationTests
 	}
 
 	/// <summary>
-	/// Verifies that ChatOptions.Instructions is accepted and the response succeeds.
-	/// The Instructions string is prepended as a system message internally.
-	/// </summary>
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithInstructions_Succeeds()
-	{
-		var client = new AppleIntelligenceChatClient();
-		var messages = new List<ChatMessage>
-		{
-			new(ChatRole.User, "Hello")
-		};
-		var options = new ChatOptions
-		{
-			Instructions = "You are a helpful assistant."
-		};
-
-		var response = await client.GetResponseAsync(messages, options);
-		Assert.NotNull(response);
-		Assert.NotEmpty(response.Messages);
-	}
-
-	/// <summary>
-	/// Verifies that GetService with null serviceType throws ArgumentNullException.
-	/// </summary>
-	[Fact]
-	public void GetService_WithNullServiceType_ThrowsArgumentNullException()
-	{
-		var client = new AppleIntelligenceChatClient();
-
-		Assert.Throws<ArgumentNullException>(() =>
-			((IChatClient)client).GetService(null!, null));
-	}
-
-	/// <summary>
 	/// A custom AITool subclass that is NOT an AIFunction, used to test validation.
 	/// </summary>
 	private sealed class UnsupportedToolForTesting : AITool;
 
-	/// <summary>
-	/// A custom AIContent subclass that is not supported by Apple Intelligence.
-	/// </summary>
-	private sealed class UnsupportedContentForTesting : AIContent;
 }
 
 #endif

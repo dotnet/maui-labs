@@ -26,6 +26,25 @@ public abstract class ChatClientOptionsTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithInstructions_Succeeds()
+	{
+		using var client = new T();
+		var messages = new List<ChatMessage>
+		{
+			new(ChatRole.User, "Hello")
+		};
+		var options = new ChatOptions
+		{
+			Instructions = "You are a helpful assistant."
+		};
+
+		var response = await client.GetResponseAsync(messages, options);
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithChatOptions_AcceptsValidOptions()
 	{
 		var client = new T();

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
@@ -28,6 +29,10 @@ public class WindowsAIChatClientResponseTests : ChatClientResponseTestsBase<Wind
 }
 public class WindowsAIChatClientStreamingTests : ChatClientStreamingTestsBase<WindowsAIChatClient>
 {
+}
+public class WindowsAIChatClientUsageTests(ITestOutputHelper output) : ChatClientUsageTestsBase<WindowsAIChatClient>(output)
+{
+	protected override bool IsUsageAvailable => false;
 }
 // Structured output is handled natively by WindowsAIChatClient via
 // LanguageModel.GenerateStructuredJsonResponseAsync, so no wrapper is needed.
@@ -181,29 +186,6 @@ public class WindowsAIChatClientValidationTests
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithOnlyNullTextContent_DoesNotThrow()
-	{
-		var client = new WindowsAIChatClient();
-		var msg = new ChatMessage(ChatRole.User, [new TextContent(null)]);
-		var messages = new List<ChatMessage> { msg };
-
-		var response = await client.GetResponseAsync(messages);
-		Assert.NotNull(response);
-	}
-
-	[Fact]
-	public async Task GetResponseAsync_WithUnsupportedContentType_ThrowsArgumentException()
-	{
-		var client = new WindowsAIChatClient();
-		var msg = new ChatMessage(ChatRole.User, [new UnsupportedContentForTesting()]);
-		var messages = new List<ChatMessage> { msg };
-
-		await Assert.ThrowsAsync<ArgumentException>(
-			() => client.GetResponseAsync(messages));
-	}
-
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithOrphanedFunctionResult_DoesNotThrow()
 	{
 		var client = new WindowsAIChatClient();
@@ -237,37 +219,7 @@ public class WindowsAIChatClientValidationTests
 		Assert.NotNull(response);
 	}
 
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithInstructions_Succeeds()
-	{
-		var client = new WindowsAIChatClient();
-		var messages = new List<ChatMessage>
-		{
-			new(ChatRole.User, "Hello")
-		};
-		var options = new ChatOptions
-		{
-			Instructions = "You are a helpful assistant."
-		};
-
-		var response = await client.GetResponseAsync(messages, options);
-		Assert.NotNull(response);
-		Assert.NotEmpty(response.Messages);
-	}
-
-	[Fact]
-	public void GetService_WithNullServiceType_ThrowsArgumentNullException()
-	{
-		var client = new WindowsAIChatClient();
-
-		Assert.Throws<ArgumentNullException>(() =>
-			((IChatClient)client).GetService(null!, null));
-	}
-
 	private sealed class UnsupportedToolForTesting : AITool;
-
-	private sealed class UnsupportedContentForTesting : AIContent;
 }
 
 #endif
