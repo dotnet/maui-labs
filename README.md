@@ -137,10 +137,10 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 
 ### Essentials.AI
 
-On-device chat and embeddings through `Microsoft.Extensions.AI`, backed by Apple
-Intelligence and NaturalLanguage on Apple platforms. Windows AI adds on-device
-text chat and schema-constrained JSON on supported Windows systems. Chat forwards
-native streaming updates; tool calling, image input, and embeddings remain Apple-only.
+On-device AI for Apple and Windows apps through `Microsoft.Extensions.AI`.
+Apple Intelligence and Windows AI provide text chat, native streaming updates,
+and schema-constrained JSON. Apple platforms also support native tool calling,
+image input, and NaturalLanguage embeddings where available.
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
 
 | Package | Description |

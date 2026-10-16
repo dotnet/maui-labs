@@ -1,7 +1,9 @@
 # Essentials.AI
 
-On-device chat and embeddings for .NET MAUI through `Microsoft.Extensions.AI`.
-This is the contributor README; see the package documentation below for consumer APIs.
+On-device AI for Apple and Windows apps through `Microsoft.Extensions.AI`.
+Apple Intelligence and Windows AI provide text chat, native streaming updates,
+and schema-constrained JSON; Apple NaturalLanguage provides embeddings.
+This contributor README covers building and testing both implementations.
 
 > **Experimental:** packages ship as previews; APIs may change.
 
@@ -19,13 +21,20 @@ compares providers interactively.
 ## Build
 
 Use the .NET 10 SDK pinned in the repository's `global.json` and matching
-MAUI workloads. Apple native bindings require Xcode.
+MAUI workloads.
+
+| Provider | Implementation | Native build requirements |
+|----------|----------------|---------------------------|
+| Apple Intelligence | `Platform/MaciOS` and the Swift bridge | macOS and Xcode; Xcode 27 for the OS 27 bridge |
+| Windows AI | `Platform/Windows` and Windows App SDK | Windows and the SDK's Windows build tools |
 
 The library always targets `net10.0` and Android. Apple targets are added on
 non-Linux hosts, using either the default reference packs or the OS 27 packs
 when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
 the portable `net10.0` target or native macOS app target.
+
+### Apple
 
 ```sh
 # macOS: native Swift bindings and managed projects
@@ -42,18 +51,23 @@ install or select Xcode. When Xcode 27 is the default, no `DEVELOPER_DIR` overri
 is needed. For normal Apple 26.x reference packs with Xcode 27, the native CI job
 passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode version check.
 
-Full solution builds on Windows require prebuilt Apple native artifacts.
+### Windows
+
+Build the Windows implementation without the Apple native build:
+
+```powershell
+dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj -f net10.0-windows10.0.19041.0
+```
+
+Full solution builds on Windows also require prebuilt Apple native artifacts.
 The prebuilt-artifact path activates only with `CI=true` or `TF_BUILD=true`;
 setting a flag alone does not supply the artifacts. CI builds them on macOS
 before packing/signing on Windows. See
 [ci-essentialsai.yml](../../.github/workflows/ci-essentialsai.yml) and the
 [official pipeline](../../eng/pipelines/devflow-official.yml) for the artifact flow.
 
-To build only the Windows chat library:
-
-```powershell
-dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj -f net10.0-windows10.0.19041.0
-```
+See the [Windows integration guide](../../docs/ai/WINDOWS-AI.md) for app packaging,
+runtime selection, and model access.
 
 ## Tests and implementation
 
@@ -70,13 +84,11 @@ Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
 Apple or Windows device/runtime and model availability; portable tests do not run a model.
 
-- `AppleNative/EssentialsAI/`: Swift bridge and binding definitions, producing `.xcframework` bundles.
-- `Microsoft.Maui.Essentials.AI/Platform/`: platform clients and streaming helpers.
+- `Microsoft.Maui.Essentials.AI/Platform/MaciOS/`: Apple chat and embedding clients.
+- `Microsoft.Maui.Essentials.AI/Platform/Windows/`: Windows chat client and model readiness.
+- `AppleNative/EssentialsAI/` and `AppleBindings.targets`: Swift bridge, bindings, and `.xcframework` packaging.
 - `JsonStreamChunker`, `PlainTextStreamChunker`, and `StreamingResponseHandler`: cumulative-response deltas and streaming updates.
-- `AppleBindings.targets`: native artifact build and packaging.
 
 Further design documentation:
 [Apple image input](../../docs/ai/apple-foundation-models-image-input.md) and
 [JSON stream chunking](../../docs/ai/json-stream-chunker-design.md).
-For Windows packaging, runtime selection and model access, see
-[Windows integration](../../docs/ai/WINDOWS-AI.md).
