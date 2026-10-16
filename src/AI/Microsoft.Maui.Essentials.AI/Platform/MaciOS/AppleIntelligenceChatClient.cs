@@ -163,7 +163,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 					switch (update.UpdateType)
 					{
 						case ResponseUpdateTypeNative.Content:
-							handler.ProcessContent(update.Text);
+							handler.ProcessContent(update.Text, update.MessageId);
 							break;
 						case ResponseUpdateTypeNative.ToolCall:
 							handler.ProcessToolCall(update.ToolCallId, update.ToolCallName, update.ToolCallArguments);
@@ -323,11 +323,12 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				ReasoningTokenCount = usage.ReasoningTokenCount
 			};
 
-	private static ChatMessage FromNative(ChatMessageNative nativeMessage)
+	internal static ChatMessage FromNative(ChatMessageNative nativeMessage)
 	{
 		var message = new ChatMessage
 		{
-			Role = FromNative(nativeMessage.Role)
+			Role = FromNative(nativeMessage.Role),
+			MessageId = nativeMessage.MessageId
 		};
 
 		if (nativeMessage.Contents is not null)
@@ -379,10 +380,11 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			_ => throw new ArgumentException($"Unsupported content type: {content.GetType().Name}", nameof(content))
 		};
 
-	private static ChatMessageNative ToNative(ChatMessage message, Dictionary<string, string>? callIdToName = null) =>
+	internal static ChatMessageNative ToNative(ChatMessage message, Dictionary<string, string>? callIdToName = null) =>
 		new()
 		{
 			Role = ToNative(message.Role),
+			MessageId = message.MessageId,
 			Contents = [.. message.Contents.SelectMany(c => ToNative(c, callIdToName))]
 		};
 

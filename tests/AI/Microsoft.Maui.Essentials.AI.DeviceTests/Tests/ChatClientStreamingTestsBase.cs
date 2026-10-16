@@ -11,6 +11,61 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public abstract class ChatClientStreamingTestsBase<T>
 	where T : class, IChatClient, new()
 {
+	protected virtual bool SupportsStreamingMessageIds => true;
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetStreamingResponseAsync_PreservesMessageIds_ThroughAggregation(bool json)
+	{
+		using var client = new T();
+		using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+		var options = new ChatOptions
+		{
+			ResponseFormat = json
+				? ChatResponseFormat.ForJsonSchema<ChatClientJsonSchemaTestsBase<T>.SimpleResponse>()
+				: null
+		};
+		var ids = new HashSet<string>(StringComparer.Ordinal);
+		for (var request = 0; request < 2; request++)
+		{
+			var input = new ChatMessage(ChatRole.User, "Say hello in a message field with three short sentences.")
+			{
+				MessageId = "caller-input-message"
+			};
+			var updates = new List<ChatResponseUpdate>();
+			await foreach (var update in client.GetStreamingResponseAsync([input], options, timeout.Token))
+				updates.Add(update);
+
+			var textUpdates = updates.Where(u => !string.IsNullOrEmpty(u.Text)).ToList();
+			Assert.NotEmpty(textUpdates);
+			var answer = Assert.Single(updates.ToChatResponse().Messages,
+				m => m.Role == ChatRole.Assistant && !string.IsNullOrWhiteSpace(m.Text));
+			Assert.Equal(string.Concat(textUpdates.Select(u => u.Text)), answer.Text);
+			if (SupportsStreamingMessageIds)
+			{
+				Assert.All(textUpdates, u => Assert.False(string.IsNullOrWhiteSpace(u.MessageId)));
+				var id = Assert.IsType<string>(Assert.Single(textUpdates.Select(u => u.MessageId).Distinct()));
+				Assert.Equal(id, answer.MessageId);
+				Assert.NotEqual(input.MessageId, id);
+				Assert.True(ids.Add(id), "Each request must have its own native response identity.");
+			}
+			else
+			{
+				Assert.All(textUpdates, u => Assert.Null(u.MessageId));
+				Assert.Null(answer.MessageId);
+			}
+			if (json)
+			{
+				var parsed = System.Text.Json.JsonSerializer.Deserialize<ChatClientJsonSchemaTestsBase<T>.SimpleResponse>(
+					answer.Text, System.Text.Json.JsonSerializerOptions.Web);
+				Assert.NotNull(parsed);
+				Assert.False(string.IsNullOrWhiteSpace(parsed.Message));
+			}
+		}
+	}
+
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_EveryUpdateIncludesSameModelId()

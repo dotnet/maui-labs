@@ -17,8 +17,10 @@ namespace Microsoft.Maui.Essentials.AI;
 internal sealed class StreamingResponseHandler
 {
 	private readonly Channel<ChatResponseUpdate> _channel;
-	private readonly StreamChunkerBase? _chunker;
+	private StreamChunkerBase? _chunker;
+	private readonly Dictionary<string, StreamChunkerBase>? _chunkersById;
 	private readonly string? _modelId;
+	private string? _messageId;
 
 	/// <summary>
 	/// Creates a handler that passes content through directly (no chunking).
@@ -39,6 +41,8 @@ internal sealed class StreamingResponseHandler
 	public StreamingResponseHandler(StreamChunkerBase chunker, string? modelId = null) : this()
 	{
 		_chunker = chunker;
+		if (chunker is PlainTextStreamChunker or JsonStreamChunker)
+			_chunkersById = new(StringComparer.Ordinal);
 		_modelId = modelId;
 	}
 
@@ -47,41 +51,45 @@ internal sealed class StreamingResponseHandler
 	/// If a chunker is configured, <paramref name="text"/> should be the cumulative response.
 	/// If no chunker, <paramref name="text"/> should be the incremental delta.
 	/// </summary>
-	public void ProcessContent(string? text)
+	public void ProcessContent(string? text, string? messageId = null)
 	{
 		if (text is null)
 			return;
 
-		var delta = _chunker is not null ? _chunker.Process(text) : text;
-		if (!string.IsNullOrEmpty(delta))
+		if (_messageId is not null && messageId is not null && _messageId != messageId &&
+			_chunkersById is null)
 		{
-			_channel.Writer.TryWrite(new ChatResponseUpdate
-			{
-				Role = ChatRole.Assistant,
-				ModelId = _modelId,
-				Contents = { new TextContent(delta) }
-			});
+			FlushContent();
+			_chunker?.Reset();
 		}
+		if (messageId is not null)
+		{
+			if (_chunkersById is not null)
+			{
+				if (!_chunkersById.TryGetValue(messageId, out var chunker))
+				{
+					chunker = _messageId is null ? _chunker! : CreateChunker();
+					_chunkersById.Add(messageId, chunker);
+				}
+				_chunker = chunker;
+			}
+			_messageId = messageId;
+		}
+
+		var delta = _chunker is not null ? _chunker.Process(text) : text;
+		WriteContent(delta, _messageId);
 	}
 
 	/// <summary>
-	/// Processes a tool call update. Flushes any pending content first.
+	/// Processes a tool call update without closing a known response that may resume.
 	/// </summary>
 	public void ProcessToolCall(string? toolCallId, string? toolCallName, string? toolCallArguments)
 	{
-		if (_chunker is not null)
+		if (_chunker is not null && (_chunkersById is null || _messageId is null))
 		{
-			var pendingContent = _chunker.Flush();
-			if (!string.IsNullOrEmpty(pendingContent))
-			{
-				_channel.Writer.TryWrite(new ChatResponseUpdate
-				{
-					Role = ChatRole.Assistant,
-					ModelId = _modelId,
-					Contents = { new TextContent(pendingContent) }
-				});
-			}
+			FlushContent();
 			_chunker.Reset();
+			_messageId = null;
 		}
 
 		var args = toolCallArguments is null
@@ -116,19 +124,16 @@ internal sealed class StreamingResponseHandler
 	/// </summary>
 	public void Complete(UsageDetails? usage = null)
 	{
-		if (_chunker is not null)
+		if (_chunkersById is not null)
 		{
-			var finalChunk = _chunker.Flush();
-			if (!string.IsNullOrEmpty(finalChunk))
-			{
-				_channel.Writer.TryWrite(new ChatResponseUpdate
-				{
-					Role = ChatRole.Assistant,
-					ModelId = _modelId,
-					Contents = { new TextContent(finalChunk) }
-				});
-			}
+			// Closing JSON at a tool/identity boundary would prevent later growth.
+			foreach (var (id, chunker) in _chunkersById)
+				WriteContent(chunker.Flush(), id);
+			if (_messageId is null)
+				FlushContent();
 		}
+		else
+			FlushContent();
 
 		if (usage is not null)
 		{
@@ -140,6 +145,29 @@ internal sealed class StreamingResponseHandler
 		}
 
 		_channel.Writer.TryComplete();
+	}
+
+	private StreamChunkerBase CreateChunker()
+		=> _chunker is JsonStreamChunker ? new JsonStreamChunker() : new PlainTextStreamChunker();
+
+	private void FlushContent()
+	{
+		if (_chunker is not null)
+			WriteContent(_chunker.Flush(), _messageId);
+	}
+
+	private void WriteContent(string? text, string? messageId)
+	{
+		if (!string.IsNullOrEmpty(text))
+		{
+			_channel.Writer.TryWrite(new ChatResponseUpdate
+			{
+				Role = ChatRole.Assistant,
+				ModelId = _modelId,
+				MessageId = messageId,
+				Contents = { new TextContent(text) }
+			});
+		}
 	}
 
 	/// <summary>
