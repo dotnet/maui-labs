@@ -71,6 +71,7 @@ export function renderShell(inspectorUrl, appName, bridgeId, agentId = "", gener
       // Capabilities the canvas contributes: save recordings, receive the human's selection (so the
       // agent can answer about "the selected element"), and push that selection to Copilot as context.
       const capabilities = bridgeId ? ['saveRecording', 'selection', 'copilot', 'copilotContext', 'attachData'] : [];
+      frame.sandbox.add('allow-downloads');
       // Relay a control action to the canvas server (which updates the agent-facing selection store).
       function postControl(payload, cb) {
         try {

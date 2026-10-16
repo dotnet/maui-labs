@@ -178,6 +178,15 @@ jobs:
           /p:VersionSuffix=$CI_PACKAGE_VERSION_SUFFIX
           ${{ inputs.build-arguments }}
 
+      # Keep VSTest's restore and runtime configuration separate from Arcade's Release outputs.
+      - name: Test workflow attachments with JSON reflection disabled
+        if: inputs.project-name == 'cli' && !inputs.test-only
+        run: >
+          dotnet test src/Cli/Microsoft.Maui.Cli.UnitTests/Microsoft.Maui.Cli.UnitTests.csproj
+          -c Debug
+          -p:JsonSerializerIsReflectionEnabledByDefault=false
+          --filter "FullyQualifiedName~FlowMarkdownTests|FullyQualifiedName~EvidenceCaptureTests.BuildAsync_RedactsStructuredFlowValuesBeforeAttachingWorkflow"
+
       - name: Run targeted platform tests
         if: inputs.test-only
         shell: pwsh

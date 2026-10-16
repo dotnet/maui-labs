@@ -462,6 +462,16 @@ For Inspector reconnect behavior, control handoff, and XAML workspace recovery, 
 | Windows | ✅ | Android SDK, JDK, and emulator commands |
 | Linux | ✅ | Android commands |
 
+## DevFlow evidence
+
+Use **Evidence** in the Inspector toolbar or `maui devflow evidence preview` to review
+a redacted, read-only snapshot before capturing it. Bundles include target environment
+observations and explicit gaps, structural UI data, layout findings, bounded logs, and
+network summaries. Screenshots and workflow text require separate opt-in.
+
+See [Evidence bundles](../../docs/DevFlow/evidence.md) for capture/report commands,
+privacy limits, and the distinction between a snapshot and a replay environment contract.
+
 ## Development
 
 DevFlow command registration, argument validation, presentation, exit codes, and batch
