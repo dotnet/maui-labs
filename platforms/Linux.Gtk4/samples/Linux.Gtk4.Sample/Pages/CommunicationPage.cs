@@ -1,6 +1,7 @@
 ﻿using Microsoft.Maui.ApplicationModel.Communication;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Communication;
 using Microsoft.Maui.Storage;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Sample.Pages;
@@ -249,6 +250,13 @@ class CommunicationPage : ContentPage
 
             await Email.Default.ComposeAsync(message);
         }
+        catch (LauncherExitException ex)
+        {
+            await DisplayAlertAsync("Error",
+                string.Join(Environment.NewLine,
+                $"Launcher reported an error ({ex.ExitCode})",
+                $"A mail client may still have opened the message.", ex.Message), "OK");
+        }
         catch (FeatureNotSupportedException ex)
         {
             await DisplayAlertAsync("Not Supported", ex.Message, "OK");
@@ -272,6 +280,13 @@ class CommunicationPage : ContentPage
             };
 
             await Email.Default.ComposeAsync(message);
+        }
+        catch (LauncherExitException ex)
+        {
+            await DisplayAlertAsync("Error",
+                string.Join(Environment.NewLine,
+                $"Launcher reported an error ({ex.ExitCode})",
+                $"A mail client may still have opened the message.", ex.Message), "OK");
         }
         catch (FeatureNotSupportedException ex)
         {
@@ -305,6 +320,13 @@ class CommunicationPage : ContentPage
             };
 
             await Email.Default.ComposeAsync(message);
+        }
+        catch (LauncherExitException ex)
+        {
+            await DisplayAlertAsync("Error",
+                string.Join(Environment.NewLine,
+                $"Launcher reported an error ({ex.ExitCode})",
+                $"A mail client may still have opened the message.", ex.Message), "OK");
         }
         catch (FeatureNotSupportedException ex)
         {

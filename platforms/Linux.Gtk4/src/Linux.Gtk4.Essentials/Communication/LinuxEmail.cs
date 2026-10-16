@@ -38,15 +38,6 @@ public class LinuxEmail : LinuxCommunication, IEmail
         {
             Launch(uri);
         }
-        catch (LauncherExitException)
-        {
-            // Ambiguous: a handler may already have opened the file (this happens on WSL).
-        }
-        catch
-        {
-            if (needsEml) TryDelete(uri);
-            throw;
-        }
         finally
         {
             if (needsEml) ScheduleTempFileCleanup(uri);
