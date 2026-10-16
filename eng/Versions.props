@@ -96,7 +96,6 @@
     <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
     <!-- Stable library baseline; development apps override the umbrella SDK only. -->
     <MicrosoftWindowsAppSDKAIVersion>2.4.4</MicrosoftWindowsAppSDKAIVersion>
-    <MicrosoftWindowsAppSDKVersion>2.5.1</MicrosoftWindowsAppSDKVersion>
     <MicrosoftWindowsAppSDKVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKVersion_Experimental>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>

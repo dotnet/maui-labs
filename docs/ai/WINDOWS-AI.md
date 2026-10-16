@@ -20,11 +20,11 @@ Build Windows targets on Windows; the SDK's packaging tools cannot run on macOS.
 
 ## Library and development-app dependencies
 
-The library directly references only the stable AI package. The Playground and
-device-test apps override only the umbrella SDK; NuGet resolves its newer AI,
+The library directly references only the stable AI package. The Windows sample
+and device-test apps override only the umbrella SDK; NuGet resolves its newer AI,
 Foundation, and InteractiveExperiences dependencies automatically:
 
-| Package | Library | Playground and device tests |
+| Package | Library | Windows samples and device tests |
 |---------|---------|-----------------------------|
 | `Microsoft.WindowsAppSDK` | Not referenced | `2.5.4-experimental` |
 | `Microsoft.WindowsAppSDK.AI` | `2.4.4` | `2.5.4-experimental` (transitive) |
@@ -35,11 +35,13 @@ The stable AI baseline supports every chat API used by the library and lets
 development apps select the experimental package without a NuGet downgrade.
 Select a compatible umbrella SDK explicitly in the Windows app: MAUI 10's
 default 1.8 SDK has exact dependencies that conflict with these newer AI packages.
-The older Essentials AI sample selects stable SDK `2.5.1`; the Playground and
-device tests select `2.5.4-experimental`. The library does not pin the SDK globally.
+All three Windows app heads select `2.5.4-experimental`. The library does not pin
+the SDK globally.
 
-The Playground and device-test apps bundle the native runtime with `SelfContained` and
-`WindowsAppSDKSelfContained`; BuildTools.WinApp enables packaged `dotnet run`.
+The apps bundle the native runtime with `SelfContained` and
+`WindowsAppSDKSelfContained`. The Playground and device tests are MSIX-packaged;
+BuildTools.WinApp enables their packaged `dotnet run`. The older Essentials AI
+sample retains its unpackaged setup and does not register a Windows AI provider.
 These sample settings are not a production access grant.
 
 ## Behavior

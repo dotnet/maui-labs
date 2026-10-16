@@ -26,6 +26,13 @@
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
 
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- The experimental SDK generates metadata for evaluation-only chart/table providers. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS8305</WarningsNotAsErrors>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <!-- Microsoft Agent Framework -->
@@ -69,8 +76,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <!-- The AI package needs the modular SDK rather than MAUI's older implicit 1.8 version. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion)" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion_Experimental)" />
   </ItemGroup>
 
   <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' ">
