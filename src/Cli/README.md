@@ -41,6 +41,12 @@ and NuGet configuration. An installed .NET SDK is required; missing SDKs,
 unreachable feeds, and permissions failures must be resolved before retrying.
 No feeds or configuration files are changed.
 
+Only run self-update from a trusted directory: repository-local `NuGet.config`
+files can select feeds and influence the CLI package installed by the SDK.
+To avoid a repository's configuration, run the command from a trusted directory
+outside that repository. Public update notices do not validate or override the
+feeds used for installation.
+
 On Windows, the running tool cannot uninstall its own loaded package.
 `maui update --self` starts a one-shot PowerShell handoff that waits for this process
 to exit before running the SDK updater. In an interactive terminal, the updater
@@ -60,8 +66,9 @@ and performs no network checks or state writes. JSON, CI, and redirected
 invocations receive no delayed terminal messages; use the log for completion.
 
 Ordinary interactive commands can show an update notice after successful
-completion. The first eligible invocation each UTC day checks the public NuGet
-package index in-process, with a two-second timeout; later invocations use a
+completion. The first eligible invocation each UTC day checks listed versions on
+NuGet.org through its version autocomplete service in-process, with a two-second
+timeout covering service discovery and version retrieval; later invocations use a
 small user cache. Failed attempts are cached too. There is **no daemon or
 notification subprocess**. Checks are suppressed in CI, JSON, redirected
 output, help, dry-run, and protocol/server commands. Set

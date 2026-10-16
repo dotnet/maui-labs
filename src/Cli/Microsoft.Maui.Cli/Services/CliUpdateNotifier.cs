@@ -8,7 +8,7 @@ namespace Microsoft.Maui.Cli.Services;
 
 internal sealed class CliUpdateNotifier
 {
-	internal const string FeedUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.maui.cli/index.json";
+	internal const string FeedUrl = "https://api.nuget.org/v3/index.json";
 	static readonly HttpClient SharedClient = new();
 	readonly HttpClient _httpClient;
 	readonly Func<DateTimeOffset> _clock;
@@ -19,7 +19,7 @@ internal sealed class CliUpdateNotifier
 		_httpClient = httpClient ?? SharedClient;
 		_clock = clock ?? (() => DateTimeOffset.UtcNow);
 		_cachePath = cachePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-			".maui", "cli-update-check.json");
+			".maui", "cli-update-check-v2.json");
 	}
 
 	// Eligibility, opt-out, and printing the returned notice belong to the caller.
@@ -54,13 +54,14 @@ internal sealed class CliUpdateNotifier
 				// Persist before contacting NuGet so offline invocations do not hammer the feed.
 				WriteCache(cache);
 				using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-				using var response = await _httpClient.GetAsync(FeedUrl, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+				var versionsUrl = await GetVersionsUrlAsync(timeout.Token);
+				using var response = await _httpClient.GetAsync(versionsUrl, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
 				response.EnsureSuccessStatusCode();
 				using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
 				using var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token);
 				if (document.RootElement.ValueKind != JsonValueKind.Object ||
-					!document.RootElement.TryGetProperty("versions", out var versions) || versions.ValueKind != JsonValueKind.Array)
-					throw new JsonException("The CLI update feed did not contain a versions array.");
+					!document.RootElement.TryGetProperty("data", out var versions) || versions.ValueKind != JsonValueKind.Array)
+					throw new JsonException("The CLI update feed did not contain a version data array.");
 
 				string? latest = null;
 				foreach (var element in versions.EnumerateArray())
@@ -87,6 +88,31 @@ internal sealed class CliUpdateNotifier
 			Report(exception, verbose);
 			return Notice(cache, currentVersion, now);
 		}
+	}
+
+	async Task<string> GetVersionsUrlAsync(CancellationToken cancellationToken)
+	{
+		using var response = await _httpClient.GetAsync(FeedUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+		response.EnsureSuccessStatusCode();
+		using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+		using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+		if (document.RootElement.ValueKind != JsonValueKind.Object ||
+			!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
+			throw new JsonException("The NuGet service index did not contain resources.");
+		foreach (var resource in resources.EnumerateArray())
+		{
+			if (resource.ValueKind != JsonValueKind.Object ||
+				!resource.TryGetProperty("@type", out var type) || type.ValueKind != JsonValueKind.String ||
+				type.GetString() is not ("SearchAutocompleteService" or "SearchAutocompleteService/3.0.0-beta" or "SearchAutocompleteService/3.0.0-rc" or "SearchAutocompleteService/3.5.0") ||
+				!resource.TryGetProperty("@id", out var id) || id.ValueKind != JsonValueKind.String)
+				continue;
+			if (!Uri.TryCreate(id.GetString(), UriKind.Absolute, out var endpoint) || endpoint.Scheme != Uri.UriSchemeHttps)
+				throw new JsonException("The NuGet version service requires an absolute HTTPS endpoint.");
+			// Autocomplete excludes unlisted versions; the flat-container index does not.
+			return endpoint.AbsoluteUri + (endpoint.Query.Length == 0 ? "?" : "&") +
+				"id=Microsoft.Maui.Cli&prerelease=true&semVerLevel=2.0.0";
+		}
+		throw new JsonException("The NuGet service index did not advertise version autocomplete.");
 	}
 
 	Cache? ReadCache(bool verbose)
