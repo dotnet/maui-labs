@@ -10,7 +10,7 @@ not specified.
 
 | Package | Consumer documentation |
 |---------|------------------------|
-| `Microsoft.Maui.Essentials.AI` | [Install and use the package](Microsoft.Maui.Essentials.AI/README.md) |
+| `Microsoft.Maui.Essentials.AI` | [API usage and platform setup](Microsoft.Maui.Essentials.AI/README.md) |
 
 The package README documents **Chat**, **Embeddings**, and **Image generation**
 separately, with capability tables and usage examples.
@@ -122,7 +122,8 @@ on a host with Apple Intelligence enabled, prefix the command with
 `ESSENTIALSAI_LIVE_TESTS=1`.
 
 - `Microsoft.Maui.Essentials.AI/Platform/MaciOS/`: Apple chat and embedding clients.
-- `Microsoft.Maui.Essentials.AI/Platform/Windows/`: Windows chat client and model readiness.
+- `Microsoft.Maui.Essentials.AI/Platform/Windows/`: Windows chat, image generation,
+  image encoding, and model readiness.
 - `AppleNative/EssentialsAI/` and `AppleBindings.targets`: Swift bridge, bindings, and `.xcframework` packaging.
 - `JsonStreamChunker`, `PlainTextStreamChunker`, and `StreamingResponseHandler`: cumulative-response deltas and streaming updates.
 
