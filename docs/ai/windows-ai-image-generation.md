@@ -52,6 +52,7 @@ output. Source images must be encoded bytes in `DataContent`. Masks, multiple
 source images, requested sizes, and hosted URI output are rejected.
 Unsupported output formats fail before model setup.
 
-Native `Generate*` calls are synchronous and cannot be interrupted mid-call.
+Inference runs on a worker thread. Native `Generate*` calls are synchronous;
+cancellation takes effect after a running call finishes, not mid-call.
 The [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md)
 exposes the Windows image provider alongside Azure.

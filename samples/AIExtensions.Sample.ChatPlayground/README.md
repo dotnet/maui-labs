@@ -51,9 +51,10 @@ Chat image input does not imply image-generation support.
 | Android on-device | Not supported |
 | Azure OpenAI | Supported by the configured image deployment |
 
-Windows may download a large optional model on first use. Select PNG or JPEG;
-WebP is unsupported. Use at most one source image; masks and requested output
-sizes are unsupported. Generation cannot be interrupted mid-call.
+For the Windows provider, first use may download a large optional model. Select
+PNG or JPEG and the provider-default size; WebP, masks, and requested sizes are
+unsupported. Use at most one source image. Windows generation cannot be
+interrupted mid-call.
 
 ## Diagnostics
 
