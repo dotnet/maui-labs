@@ -176,7 +176,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var options = new ChatOptions
 		{
 			ResponseFormat = ChatResponseFormat.ForJsonSchema<SimpleResponse>(jsonOptions),
-			Temperature = 0.5f
+			Temperature = 0.5f,
+			Reasoning = new() { Effort = ReasoningEffort.None }
 		};
 
 		var response = await client.GetResponseAsync(messages, options);
@@ -291,7 +292,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var message = new ChatMessage(ChatRole.User, "What is the weather in Boston? Respond with location, temperature in fahrenheit, and condition.");
 		var options = new ChatOptions
 		{
-			Temperature = 0.5f
+			Temperature = 0.5f,
+			Reasoning = new() { Effort = ReasoningEffort.None }
 		};
 
 		var response = await client.GetResponseAsync<WeatherResponse>(message, options);

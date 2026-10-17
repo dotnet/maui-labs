@@ -91,6 +91,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 		var options = new ChatOptions
 		{
 			Temperature = 0.7f,
+			Reasoning = new() { Effort = ReasoningEffort.None },
 			MaxOutputTokens = 100,
 			TopK = 10,
 			Seed = 42
@@ -127,7 +128,8 @@ public abstract class ChatClientOptionsTestsBase<T>
 
 		var options = new ChatOptions
 		{
-			Temperature = 2.0f
+			Temperature = 2.0f,
+			Reasoning = new() { Effort = ReasoningEffort.None }
 		};
 
 		await client.GetResponseAsync(messages, options);
@@ -177,6 +179,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 		var options = new ChatOptions
 		{
 			Temperature = 0.7f,
+			Reasoning = new() { Effort = ReasoningEffort.None },
 			MaxOutputTokens = 100,
 			TopK = 10,
 			Seed = 42

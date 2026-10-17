@@ -101,8 +101,9 @@ Custom roles are ignored, following the Azure/OpenAI adapters.
 For live cloud baselines, configure the device project's user secrets:
 `AI:ApiKey`, `AI:Endpoint` (Azure `/openai/v1/`), `AI:DeploymentName`, and
 `AI:EmbeddingDeploymentName`. Build in Debug with `-p:EnableOpenAIClient=true`
-and select the `OpenAIChatClient` tests. These make real requests; sampling-option
-support depends on the configured model. Conflicting instructions have no shared
+and select the `OpenAIChatClient` tests. These make real requests; temperature
+tests explicitly disable reasoning, so the model must support that combination.
+Conflicting instructions have no shared
 last-wins guarantee.
 
 - `Microsoft.Maui.Essentials.AI/Platform/MaciOS/`: Apple chat and embedding clients.
