@@ -41,8 +41,8 @@ Generate text vectors, index imported documents, and search their content.
 
 ### Image generation
 
-Generate or edit images using Windows AI or a configured Azure OpenAI deployment. Chat image
-input does not imply image-generation support.
+Generate or edit images using Windows AI or a configured Azure OpenAI deployment.
+Chat image input does not imply image-generation support.
 
 | Provider | Image generation |
 |----------|------------------|
@@ -52,7 +52,8 @@ input does not imply image-generation support.
 | Azure OpenAI | Supported by the configured image deployment |
 
 Windows may download a large optional model on first use. Select PNG or JPEG;
-WebP is unsupported.
+WebP is unsupported. Use at most one source image; masks and requested output
+sizes are unsupported. Generation cannot be interrupted mid-call.
 
 ## Diagnostics
 

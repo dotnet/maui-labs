@@ -216,8 +216,9 @@ Image generation is separate from chat image input and tool calling.
 | Windows | Experimental text-to-image and single-image edits |
 | Android | Not supported |
 
-Use `WindowsAIImageGenerator` as an `IImageGenerator` in a packaged Windows app
-with the matching experimental SDK:
+Use `WindowsAIImageGenerator` as an `IImageGenerator` in a packaged Windows app.
+It requires the experimental SDK listed in the
+[Windows image generation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-image-generation.md#requirements-and-dependencies).
 
 ```csharp
 using var generator = new WindowsAIImageGenerator();
@@ -229,8 +230,7 @@ Acknowledge `MEAI001` where using the experimental M.E.AI image API. Requests
 accept zero or one source image and return encoded bytes (PNG by default);
 masks and multiple source images are unsupported. First use may download a
 large optional model. Native inference is synchronous and cannot be interrupted
-mid-call. See the [Windows image generation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-image-generation.md)
-for formats, options, and dependencies.
+mid-call. See [formats and options](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-image-generation.md#usage-and-options).
 
 ## Diagnostics
 

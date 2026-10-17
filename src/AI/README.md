@@ -1,7 +1,8 @@
 # Essentials.AI contributor guide
 
 Build, test, and contribute to `Microsoft.Maui.Essentials.AI`, which provides
-on-device chat and embeddings through `Microsoft.Extensions.AI`.
+on-device chat, embeddings, and experimental Windows image generation through
+`Microsoft.Extensions.AI`.
 
 > **Experimental:** packages ship as previews; APIs may change.
 
@@ -13,6 +14,7 @@ on-device chat and embeddings through `Microsoft.Extensions.AI`.
 | [Chat provider implementation guide](../../docs/ai/local-chat-provider.md) | Shared provider rules and reviewed platform implementation targets |
 | [Apple Foundation Models](../../docs/ai/apple-foundation-models.md) | Apple toolchain, availability, images, native bridge, and validation |
 | [Windows AI language models](../../docs/ai/windows-ai-language-models.md) | Windows packaging, dependencies, model setup, and validation |
+| [Windows image generation](../../docs/ai/windows-ai-image-generation.md) | Experimental image dependencies, formats, and options |
 | [Gemini Nano Android](../../docs/ai/gemini-nano-android.md) | Android binding, AICore readiness, download, and validation |
 | [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md) | Interactive provider comparison and diagnostics |
 
@@ -24,7 +26,7 @@ hardware.
 
 | Package | Purpose |
 |---------|---------|
-| `Microsoft.Maui.Essentials.AI` | Apple, Windows, and Android on-device chat, plus Apple text embeddings |
+| `Microsoft.Maui.Essentials.AI` | Apple, Windows, and Android on-device chat, Apple text embeddings, and experimental Windows image generation |
 
 For installation and a quick start, see the [package README](Microsoft.Maui.Essentials.AI/README.md).
 
@@ -189,7 +191,8 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
 - `AppleNative/EssentialsAI/PlainTextDeltas.swift` and
   `StructuredJsonDeltas.swift` — native append-only streaming conversion.
 - `Microsoft.Maui.Essentials.AI/Platform/Windows/` — Windows chat, explicit
-  readiness, WinRT streaming, and request ownership.
+  chat readiness, WinRT streaming, request ownership, image generation, and
+  image encoding.
 - `Microsoft.Maui.Essentials.AI/Platform/StreamingResponseHandler.cs` —
   managed streaming update transport.
 - `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Tests/` — shared
