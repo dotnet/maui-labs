@@ -101,13 +101,16 @@ public sealed class WindowsAIImageGenerator : IImageGenerator
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 
-				var generatorOptions = ConvertToImageGenerationOptions(options, i);
-				var result = Generate(generator, request.Prompt, sources, generatorOptions);
+				// ImageGenerator is agile; synchronous inference must not run on a warm caller's UI thread.
+				var result = await Task.Run(() =>
+					Generate(generator, request.Prompt, sources, ConvertToImageGenerationOptions(options, i)),
+					cancellationToken).ConfigureAwait(false);
 
 				if (result.Status is not WindowsImageGeneratorResultStatus.Success)
 					throw new InvalidOperationException($"Image generation failed: {result.Status}", result.ExtendedError);
 
 				using var image = result.Image;
+				cancellationToken.ThrowIfCancellationRequested();
 				var bytes = await WindowsAIImageBuffers.EncodeAsync(image, mediaType).ConfigureAwait(false);
 
 				contents.Add(new DataContent(bytes, mediaType));

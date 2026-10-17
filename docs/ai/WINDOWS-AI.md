@@ -41,7 +41,9 @@ Consuming Windows apps must also select a compatible runtime. With Central
 Package Management, use this Windows-only reference:
 
 ```xml
-<PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="2.5.4-experimental" />
+<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+  <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="2.5.4-experimental" />
+</ItemGroup>
 ```
 
 The Playground and device tests bundle the native runtime with `SelfContained`
@@ -103,7 +105,8 @@ output. Source images must be encoded bytes in `DataContent`. Masks, multiple so
 requested sizes, and hosted URI output are rejected. Unsupported output formats
 fail before model setup.
 
-Native `Generate*` calls are synchronous and cannot be interrupted mid-call.
+Inference runs on a worker thread. Native `Generate*` calls are synchronous;
+cancellation takes effect after a running call finishes, not mid-call.
 The Playground exposes the Windows provider alongside Azure.
 
 ## Device tests
