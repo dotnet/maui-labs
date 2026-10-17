@@ -178,6 +178,21 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
   -p:EnableOpenAIClient=true --filter "FullyQualifiedName~OpenAIChatClient" --logger trx
 ```
 
+#### Image generation
+
+Image suites test raw `IImageGenerator` contracts separately from the sample's
+request/response handling. Device tests source-link `ImageGenerationService` and
+its models from the Playground; portable sample tests cover normalization,
+ownership, cancellation, and error propagation without a model.
+Windows binds generation and single-image edits. For a live Azure image baseline,
+set `AI:ImageDeploymentName` and build with `-p:EnableOpenAIImageTests=true`.
+Use `-p:EnableOpenAIImageEditTests=true` instead for an edit-capable deployment;
+it includes both suites. These opt-ins are independent of chat/embedding tests
+and make real, billable requests; a build alone does not validate compatibility.
+Allow long-running image requests in the device runner (`--data-timeout 900`
+when invoking DeviceRunners directly); its default 30-second inactivity limit
+can disconnect before generation completes.
+
 ## Architecture
 
 - `Microsoft.Maui.Essentials.AI/Platform/MaciOS/` — managed Apple chat and

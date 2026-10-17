@@ -16,7 +16,7 @@
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <RuntimeIdentifiers Condition="$(TargetFramework.Contains('-android'))">android-arm64;android-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
-    <NoWarn>$(NoWarn);MAUIAI0001;CA1416;XCODE_27_0_PREVIEW</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;MEAI001;CA1416;XCODE_27_0_PREVIEW</NoWarn>
     <UserSecretsId>808cc184-141a-409e-addd-565c973dbce6</UserSecretsId>
     <!-- Required for DeviceRunners dotnet test integration -->
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
@@ -28,6 +28,15 @@
   <!-- Opt in with -p:EnableOpenAIClient=true or -p:EnableOpenAITests=true. -->
   <PropertyGroup Condition="'$(EnableOpenAIClient)' == 'true' or '$(EnableOpenAITests)' == 'true'">
     <DefineConstants>$(DefineConstants);ENABLE_OPENAI_CLIENT</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Image tests are separate from the chat/embedding baseline and require AI:ImageDeploymentName.
+       EnableOpenAIImageEditTests also opts into generation tests; use it only with an edit-capable deployment. -->
+  <PropertyGroup Condition="'$(EnableOpenAIImageTests)' == 'true' or '$(EnableOpenAIImageEditTests)' == 'true'">
+    <DefineConstants>$(DefineConstants);ENABLE_OPENAI_IMAGE_TESTS</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(EnableOpenAIImageEditTests)' == 'true'">
+    <DefineConstants>$(DefineConstants);ENABLE_OPENAI_IMAGE_EDIT_TESTS</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -81,7 +90,19 @@
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(EnableOpenAIClient)' == 'true' or '$(EnableOpenAITests)' == 'true'">
+  <ItemGroup>
+    <!-- Exercise the sample's portable request/response path, not a test copy or its MAUI DI registrations. -->
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\ImageGenerationService.cs"
+             Link="Sample\ImageGenerationService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Images\Services\GeneratedImage.cs"
+             Link="Sample\GeneratedImage.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\ImageAttachment.cs"
+             Link="Sample\ImageAttachment.cs" />
+    <EmbeddedResource Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_sample.png"
+                      LogicalName="Microsoft.Maui.Essentials.AI.DeviceTests.ImageInput.png" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableOpenAIClient)' == 'true' or '$(EnableOpenAITests)' == 'true' or '$(EnableOpenAIImageTests)' == 'true' or '$(EnableOpenAIImageEditTests)' == 'true'">
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
     <PackageReference Include="OpenAI" />
   </ItemGroup>
