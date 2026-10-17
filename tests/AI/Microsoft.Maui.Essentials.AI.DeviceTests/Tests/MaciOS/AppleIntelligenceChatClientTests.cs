@@ -83,6 +83,7 @@ public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBas
 
 public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsBase<AppleIntelligenceChatClient>
 {
+	// Apple's fixed on-device model ignores ModelId overrides; cloud aliases and resolved snapshot IDs have different semantics.
 	[Theory]
 	[InlineData(null)]
 	[InlineData("caller-supplied-model")]
@@ -104,6 +105,7 @@ public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsB
 
 public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTestsBase<AppleIntelligenceChatClient>
 {
+	// Apple's fixed on-device model ID must label every update despite caller overrides; cloud model resolution can differ.
 	[Theory]
 	[InlineData(null)]
 	[InlineData("caller-supplied-model")]
@@ -145,6 +147,7 @@ public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
 		}
 	}
 
+	// Apple OS 27's native usage mapping promises cached/reasoning counts; other providers may omit these optional fields.
 	protected override void AssertProviderUsage(UsageDetails usage)
 	{
 		Assert.NotNull(usage.CachedInputTokenCount);
@@ -154,18 +157,21 @@ public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
 
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>
 {
-	[Fact(Skip = "Apple Intelligence requires a JSON schema for structured responses, so this test is not applicable.")]
+	// Apple requires a native generation schema even for JSON mode; replace the shared acceptance check with actual rejection.
+	[Fact]
 	public override Task GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 	{
-		return base.GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow();
+		return GetResponseAsync_WithJsonFormatWithoutSchema_ThrowsInvalidOperationException();
 	}
 
-	[Fact(Skip = "Apple Intelligence requires a JSON schema for structured responses, so this test is not applicable.")]
+	// Apple's streaming generation also requires a native schema; cloud and Windows can accept schema-free JSON mode.
+	[Fact]
 	public override Task GetStreamingResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 	{
-		return base.GetStreamingResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow();
+		return GetStreamingResponseAsync_WithJsonFormatWithoutSchema_ThrowsInvalidOperationException();
 	}
 
+	// Apple's schema-free JSON rejection and diagnostic differ from providers that implement unconstrained JSON mode.
 	[Fact]
 	public async Task GetResponseAsync_WithJsonFormatWithoutSchema_ThrowsInvalidOperationException()
 	{
@@ -185,6 +191,7 @@ public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTe
 		Assert.Contains("JSON schema", exception.Message, StringComparison.OrdinalIgnoreCase);
 	}
 
+	// Apple's native streaming entry point rejects schema-free JSON before producing any updates; this is not universal.
 	[Fact]
 	public async Task GetStreamingResponseAsync_WithJsonFormatWithoutSchema_ThrowsInvalidOperationException()
 	{

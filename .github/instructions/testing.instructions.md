@@ -104,6 +104,8 @@ Use descriptive names that communicate the scenario:
   unavailable token usage through the suite's existing capability hooks.
 - Keep native SDK, marshalling, OS-version, and provider-policy checks platform-specific.
   Do not turn one provider's tolerance or error format into a universal contract.
+- Each provider-only test must explain why it cannot be shared, naming the native
+  API, implementation detail, or provider policy it verifies.
 - Preserve assertions and `RequiresModel` traits when moving tests. Unsupported features
   must remain explicit, not silently skipped or treated as successful no-ops.
 - Establish Azure/OpenAI compatibility with live cloud tests, not compilation alone.

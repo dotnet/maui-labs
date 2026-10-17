@@ -7,6 +7,7 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
 public class WindowsAIImageHistoryTests
 {
+	// Windows's text-only prompt adapter drops image-generation markers; image/tool-capable providers may preserve them.
 	[Fact]
 	public void ConvertToPrompt_ImageGenerationHistory_DoesNotInventToolActivity()
 	{

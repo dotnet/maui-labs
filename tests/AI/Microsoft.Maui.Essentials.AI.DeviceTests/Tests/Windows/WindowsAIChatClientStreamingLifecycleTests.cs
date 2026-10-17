@@ -10,6 +10,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 {
 	private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
+	// Exercises the WinRT IAsyncOperationWithProgress bridge's handler identity, synchronous deltas, and final-result deduplication.
 	[Fact]
 	public async Task ForwardResponseAsync_Progress_IsSynchronousAndOrderedWithoutFinalDuplication()
 	{
@@ -35,6 +36,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		Assert.False(await updates.MoveNextAsync());
 	}
 
+	// Windows's WinRT bridge synthesizes a delta from GetResults when native progress has supplied no text.
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
@@ -56,6 +58,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		Assert.Equal(ChatRole.Assistant, update.Role);
 	}
 
+	// Windows validates the final WinRT result after progress; this asserts the bridge preserves that exact exception chain.
 	[Fact]
 	public async Task StreamResponseAsync_FinalResultValidationAfterProgress_PreservesError()
 	{
@@ -77,6 +80,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		Assert.Same(nativeError, error.InnerException);
 	}
 
+	// The WinRT AsyncStatus.Error bridge must preserve the native operation's exception instance.
 	[Fact]
 	public async Task StreamResponseAsync_NativeError_PreservesException()
 	{
@@ -90,6 +94,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		Assert.Same(cause, error);
 	}
 
+	// Inspects IAsyncOperationWithProgress.Cancel and token propagation inside Windows's WinRT-to-Task bridge.
 	[Fact]
 	public async Task ForwardResponseAsync_Cancellation_CancelsNativeOperationWithSameToken()
 	{
@@ -105,6 +110,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		Assert.Equal(source.Token, error.CancellationToken);
 	}
 
+	// Inspects Windows's worker token and WinRT Cancel callback; the shared streaming API cannot expose these internals.
 	[Fact]
 	public async Task StreamResponseAsync_EarlyDisposal_CancelsNativeOperationAndCleansUp()
 	{
@@ -144,6 +150,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		}
 	}
 
+	// Windows closes its progress channel before a blocked synchronous native producer returns; this inspects that channel directly.
 	[Fact]
 	public async Task StreamResponseAsync_EarlyDisposal_ClosesProgressBeforeBlockedProducerFinishes()
 	{
@@ -187,6 +194,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		}
 	}
 
+	// Windows can block while starting a WinRT operation; cancellation must also reach an operation attached after startup resumes.
 	[Fact]
 	public async Task StreamResponseAsync_CancellationDuringSynchronousStartup_CancelsLateOperationAndCleansUp()
 	{
@@ -232,6 +240,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		await operation.CancelRequested.Task.WaitAsync(Timeout);
 	}
 
+	// Asserts Windows's Trace error message for a native startup failure arriving after its progress reader was canceled.
 	[Fact]
 	public async Task StreamResponseAsync_LateStartupFailure_IsTracedAfterCancellation()
 	{

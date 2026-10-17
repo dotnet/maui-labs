@@ -12,6 +12,7 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 /// </summary>
 public class AppleIntelligenceChatClientValidationTests
 {
+	// Inspects Apple's StrictSchemaTransformCache: native structured output requires even optional CLR fields to be required.
 	[Fact]
 	public void ResponseSchema_WithOptionalProperties_RequiresAllNativeFields()
 	{
@@ -36,6 +37,7 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.False(schema.Value.GetProperty("additionalProperties").GetBoolean());
 	}
 
+	// Apple's native strict-schema path forces all optional fields across repeated requests; JSON Schema generally permits omission.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_AndStreaming_WithRequiredNativeSchema_ReturnAllFields()
@@ -105,6 +107,7 @@ public class AppleIntelligenceChatClientValidationTests
 		Mixed,
 	}
 
+	// Inspects Apple's native tool-registration list and its ToolMode.None short-circuit before AIFunction validation.
 	[Fact]
 	public void ToNative_ToolModeNone_DoesNotRegisterTools()
 	{
@@ -120,6 +123,7 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.Null(nativeOptions.Tools);
 	}
 
+	// Inspects Apple's native callback registration list; cloud clients use request tool envelopes instead.
 	[Fact]
 	public void ToNative_ToolModeAuto_RegistersTools()
 	{
@@ -139,6 +143,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// <summary>
 	/// Verifies that passing a non-AIFunction tool (e.g., a custom AITool subclass)
 	/// throws NotSupportedException with a descriptive message listing the unsupported types.
+	/// Apple native callback registration requires AIFunction; its diagnostic type listing is not a cloud error contract.
 	/// </summary>
 	[Fact]
 	public async Task GetResponseAsync_WithNonAIFunctionTool_ThrowsNotSupportedException()
@@ -162,6 +167,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// <summary>
 	/// Verifies that FunctionResultContent with a CallId that doesn't match any prior
 	/// FunctionCallContent is handled gracefully (empty tool name, no exception).
+	/// Apple converts orphaned results to empty native tool names; cloud tool protocols may reject this history.
 	/// </summary>
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
@@ -185,7 +191,8 @@ public class AppleIntelligenceChatClientValidationTests
 
 	/// <summary>
 	/// Verifies that FunctionResultContent with a CallId not matching any FunctionCallContent
-	/// is handled gracefully (empty tool name, no exception). This covers the null CallId path too.
+	/// is handled gracefully (empty tool name, no exception).
+	/// Apple's native empty-name fallback is provider policy; cloud tool protocols may reject an unmatched call ID.
 	/// </summary>
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
@@ -216,6 +223,7 @@ public class AppleIntelligenceChatClientValidationTests
 	/// with an empty string, and subsequent FunctionResultContent for that CallId
 	/// gets the empty name. This is the closest we can test to null since
 	/// FunctionCallContent validates name is not null in its constructor.
+	/// Apple's native name lookup tolerates empty names; cloud function schemas need not accept them.
 	/// </summary>
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]

@@ -26,6 +26,7 @@ public class AppleIntelligenceChatClientImageTests
 		return context.ToImage()!;
 	}
 
+	// Tests the Apple image marshaller's MIME dispatch helper, not a public IChatClient content contract.
 	[Fact]
 	public void IsImage_DetectsImageMediaTypes()
 	{
@@ -35,6 +36,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.False(AppleIntelligenceChatClient.IsImage(null));
 	}
 
+	// Inspects NSData and MIME fields on Apple's ImageContentNative; other providers have different image envelopes.
 	[Fact]
 	public void ToNative_DataContentImage_CarriesBytesAndMediaType()
 	{
@@ -49,6 +51,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Null(native.CgImage);
 	}
 
+	// Exercises ImageIO EXIF extraction and CGImage pixel normalization during Apple's encoded-image round trip.
 	[Fact]
 	public void ToNative_EncodedImage_PreservesExifOrientation()
 	{
@@ -73,6 +76,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Null(AppleIntelligenceChatClient.ToNative(portable).Orientation);
 	}
 
+	// Apple's CGImage RawRepresentation bypasses NSData allocation; zero-copy native handles are not portable.
 	[Fact]
 	public void ToNative_DataContentWithNativeHandle_UsesZeroCopyFastPath()
 	{
@@ -87,6 +91,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Null(native.Orientation);
 	}
 
+	// UIImage orientation must map to CGImagePropertyOrientation on Apple's native-handle fast path.
 	[Fact]
 	public void ToNative_DataContentWithUIImage_UsesNativeImage()
 	{
@@ -101,6 +106,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Equal(CGImagePropertyOrientation.Right, native.Orientation);
 	}
 
+	// UIImage-backed UriContent uses Apple's handle/orientation path instead of URL loading.
 	[Fact]
 	public void ToNative_UriContentWithUIImage_PreservesOrientation()
 	{
@@ -115,6 +121,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Equal(CGImagePropertyOrientation.LeftMirrored, native.Orientation);
 	}
 
+	// Asserts NSUrl marshalling into ImageContentNative.ImageUrl, a field absent from cloud and Windows adapters.
 	[Fact]
 	public void ToNative_FileUri_ProducesImageUrl()
 	{
@@ -126,6 +133,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.EndsWith("example.png", native.ImageUrl!.Path!);
 	}
 
+	// Apple's native image marshaller rejects remote URLs; providers that fetch image URLs have a different policy.
 	[Fact]
 	public void ToNative_HttpUri_ThrowsNotSupported()
 	{
@@ -134,6 +142,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Throws<NotSupportedException>(() => AppleIntelligenceChatClient.ToNative(content));
 	}
 
+	// Converts Apple's ImageContentNative/CGImage to PNG while retaining a native handle; other providers cannot expose CGImage.
 	[Fact]
 	public void FromNative_CGImage_ProducesDecodablePng()
 	{
@@ -151,6 +160,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.NotNull(data.RawRepresentation);
 	}
 
+	// Invalid CGImagePropertyOrientation values are an Apple EXIF-marshalling error, not a common chat error shape.
 	[Theory]
 	[InlineData(0)]
 	[InlineData(9)]
@@ -163,6 +173,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Contains("Unsupported EXIF orientation", error.Message);
 	}
 
+	// Verifies CGImage dimensions survive Apple's private native-image conversion round trip.
 	[Fact]
 	public void RoundTrip_CGImage_SurvivesConversion()
 	{
@@ -181,6 +192,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Equal((nint)3, decoded.Height);
 	}
 
+	// Apple's ImageIO/CGImage conversion must normalize both PNG pixels and retained native pixels for EXIF orientation.
 	[Theory]
 	[InlineData(CGImagePropertyOrientation.UpMirrored, 2, 3)]
 	[InlineData(CGImagePropertyOrientation.Right, 3, 2)]
@@ -203,6 +215,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Equal((nint)height, decoded.Height);
 	}
 
+	// Tests NSUrl-backed ImageContentNative orientation normalization into CGImage pixels and PNG.
 	[Fact]
 	public void FromNative_OrientedFile_NormalizesPixels()
 	{
@@ -230,6 +243,7 @@ public class AppleIntelligenceChatClientImageTests
 		}
 	}
 
+	// A native ImageContentNative with no NSData/CGImage/NSUrl must fail Apple's image marshalling validation.
 	[Fact]
 	public void FromNative_EmptyImage_Throws()
 	{
@@ -241,6 +255,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Throws<InvalidDataException>(() => AppleIntelligenceChatClient.FromNative(native));
 	}
 
+	// Apple role-aware conversion exposes ImageContentNative only on OS 27; OS 26 deliberately ignores image input.
 	[Theory]
 	[InlineData("user", false)]
 	[InlineData("assistant", false)]
@@ -262,6 +277,7 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Equal(supportsImages, native.Contents.Any(item => item is ImageContentNative));
 	}
 
+	// Apple OS 26 ignores images, while OS 27 runs native URL validation and must preserve unsupported-HTTP errors.
 	[Fact]
 	public void ToNative_WithHttpImageUri_IgnoresOnOlderOSOrReportsInvalidSupportedInput()
 	{
@@ -282,6 +298,7 @@ public class AppleIntelligenceChatClientImageTests
 		}
 	}
 
+	// Requires Apple's OS 27 vision model and CGImage RawRepresentation; Windows is text-only and cloud uses encoded images.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithImageAttachment_ReturnsDescription()

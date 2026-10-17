@@ -20,6 +20,7 @@ public class WindowsAIChatClientInstantiationTests : ChatClientInstantiationTest
 }
 public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<WindowsAIChatClient>
 {
+	// Windows LanguageModel takes one instruction string; exact hoisting order and history identity are adapter details.
 	[Theory]
 	[InlineData(null)]
 	[InlineData("")]
@@ -54,6 +55,7 @@ public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<Wind
 		Assert.Equal(ChatRole.System, messages[0].Role);
 	}
 
+	// Windows normalization drops whitespace-only system text rather than passing an empty native instruction.
 	[Fact]
 	public void NormalizeChatMessages_WithBlankInstructions_DoesNotCreateSystemPrompt()
 	{
@@ -83,6 +85,7 @@ public class WindowsAIChatClientUsageTests(ITestOutputHelper output) : ChatClien
 // LanguageModel.GenerateStructuredJsonResponseAsync, so no wrapper is needed.
 public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<WindowsAIChatClient>
 {
+	// Windows LanguageModel constraints require recursive strictification; this inspects the native schema, not public JSON output.
 	[Fact]
 	public void GetConstraintSchema_OptionalNestedProperties_RequiresAllNativeFields()
 	{
@@ -130,6 +133,7 @@ public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<
 			.Select(value => value.GetString()));
 	}
 
+	// GetConstraintSchema selects Windows ordinary versus constrained generation; other providers use different dispatch paths.
 	[Fact]
 	public void GetConstraintSchema_WithoutSchema_UsesOrdinaryGeneration()
 	{
@@ -151,6 +155,7 @@ public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<
 }
 public class WindowsAIChatClientValidationTests
 {
+	// Windows LanguageModel rejects every tool request; tool-capable providers need not reject this same way.
 	[Fact]
 	public async Task GetResponseAsync_WithNonAIFunctionTool_ThrowsNotSupportedException()
 	{
@@ -168,6 +173,7 @@ public class WindowsAIChatClientValidationTests
 			() => client.GetResponseAsync(messages, options));
 	}
 
+	// Windows has no tool execution API and must reject even valid AIFunctions, unlike Apple and cloud clients.
 	[Fact]
 	public async Task GetResponseAsync_WithAIFunctionTool_ThrowsInsteadOfIgnoringIt()
 	{
@@ -183,6 +189,7 @@ public class WindowsAIChatClientValidationTests
 		Assert.Contains("does not support tool calling", error.Message, StringComparison.Ordinal);
 	}
 
+	// Windows LanguageModel cannot honor ToolMode even without a tool list; this is not a shared tool-capable contract.
 	[Fact]
 	public async Task GetResponseAsync_WithToolMode_ThrowsInsteadOfIgnoringIt()
 	{
@@ -193,6 +200,7 @@ public class WindowsAIChatClientValidationTests
 			client.GetResponseAsync([new ChatMessage(ChatRole.User, "Hello")], options));
 	}
 
+	// Windows replays tool history as named pretty-JSON text, not native tool messages; exact formatting is adapter-specific.
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]
@@ -218,6 +226,7 @@ public class WindowsAIChatClientValidationTests
 		Assert.Equal(expected, WindowsAIChatClient.ConvertToPrompt(messages));
 	}
 
+	// Windows's text replay resolves result call IDs to function names; native/cloud tool envelopes do not use this format.
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
@@ -243,6 +252,7 @@ public class WindowsAIChatClientValidationTests
 			WindowsAIChatClient.ConvertToPrompt(messages));
 	}
 
+	// Windows's text replay JSON-encodes scalar results and labels unmatched IDs; cloud history may reject unmatched results.
 	[Theory]
 	[InlineData(null, "null")]
 	[InlineData("Sunny", "\"Sunny\"")]
@@ -255,6 +265,7 @@ public class WindowsAIChatClientValidationTests
 			WindowsAIChatClient.ConvertToPrompt([message]));
 	}
 
+	// Windows treats orphaned results as text context; cloud tool protocols can reject this malformed history.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithOrphanedFunctionResult_DoesNotThrow()
@@ -273,6 +284,7 @@ public class WindowsAIChatClientValidationTests
 		Assert.NotNull(response);
 	}
 
+	// Windows tolerates empty function names in text replay; native/cloud tool protocols need not accept them.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithFunctionCallEmptyName_DoesNotThrow()
