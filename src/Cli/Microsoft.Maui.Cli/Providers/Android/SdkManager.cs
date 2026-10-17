@@ -8,7 +8,6 @@ using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
 using XatSdkManager = Xamarin.Android.Tools.SdkManager;
-using XatSdkPackage = Xamarin.Android.Tools.SdkPackage;
 
 namespace Microsoft.Maui.Cli.Providers.Android;
 
@@ -74,44 +73,6 @@ public partial class SdkManager : IDisposable
 	public bool IsAvailable => !string.IsNullOrEmpty(SdkManagerPath);
 
 	public void Dispose() => _sdkManager.Dispose();
-
-	public async Task<List<SdkPackage>> GetInstalledPackagesAsync(CancellationToken cancellationToken = default)
-	{
-		SyncPaths();
-		try
-		{
-			var (installed, _) = await _sdkManager.ListAsync(cancellationToken);
-			return installed.Select(MapToMauiPackage).ToList();
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Trace.WriteLine($"SDK GetInstalledPackagesAsync failed: {ex.Message}");
-			return new List<SdkPackage>();
-		}
-	}
-
-	public async Task<List<SdkPackage>> GetAvailablePackagesAsync(CancellationToken cancellationToken = default)
-	{
-		SyncPaths();
-		try
-		{
-			var (_, available) = await _sdkManager.ListAsync(cancellationToken);
-			return available.Select(MapToMauiPackage).ToList();
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Trace.WriteLine($"SDK GetAvailablePackagesAsync failed: {ex.Message}");
-			return new List<SdkPackage>();
-		}
-	}
-
-	static SdkPackage MapToMauiPackage(XatSdkPackage pkg) => new()
-	{
-		Path = pkg.Path,
-		Version = pkg.Version,
-		Description = pkg.Description,
-		IsInstalled = pkg.IsInstalled
-	};
 
 	public async Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses = false,
 		CancellationToken cancellationToken = default)
@@ -501,13 +462,15 @@ public partial class SdkManager : IDisposable
 		await _sdkManager.BootstrapAsync(targetPath, bootstrapProgress, cancellationToken);
 	}
 
-	void EnsureAvailable()
+	string EnsureAvailable()
 	{
-		if (!IsAvailable)
+		var sdkManagerPath = SdkManagerPath;
+		if (string.IsNullOrEmpty(sdkManagerPath))
 			throw MauiToolException.AutoFixable(
 				ErrorCodes.AndroidSdkManagerNotFound,
 				"SDK Manager not found. Run 'maui android install' first.",
 				"maui android install");
+		return sdkManagerPath;
 	}
 
 	/// <summary>

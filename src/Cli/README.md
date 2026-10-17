@@ -221,6 +221,14 @@ maui android emulator create --name MyEmulator
 maui android emulator start --name MyEmulator
 ```
 
+SDK package listing supports both the legacy `sdkmanager` table and the Android
+CLI table produced by Command-line Tools 23. JSON retains
+semicolon-separated package IDs, including dotted API levels such as
+`platforms;android-37.0`. Installed Command-line Tools omitted by the inventory
+are detected from their executable and `source.properties` revision.
+Inventory execution or parsing failures return an error rather than an empty
+successful package list.
+
 ### 6. Set up Apple development (macOS only)
 
 ```bash
