@@ -16,11 +16,8 @@ public class WebViewOperationsTests
     [InlineData("""{"result":{"result":{"value":null}}}""", "")]
     [InlineData("""{"result":{"result":{"value":{"answer":42}}}}""", "{\n  \"answer\": 42\n}")]
     [InlineData("""{"result":{"result":{"value":[1,2]}}}""", "[\n  1,\n  2\n]")]
-    [InlineData("""{"result":{"exceptionDetails":{"text":"ReferenceError"}}}""", "Error: ReferenceError")]
-    [InlineData("""{"result":{"exceptionDetails":{}}}""", "Error: Unknown error")]
     [InlineData("""{"result":{"value":"raw chobitsu"}}""", "raw chobitsu")]
     [InlineData("""{"result":{"value":null}}""", "")]
-    [InlineData("""{"error":{"message":"CDP unavailable"}}""", """{"error":{"message":"CDP unavailable"}}""")]
     [InlineData("""{"result":{"result":{"type":"undefined"}}}""", """{"result":{"result":{"type":"undefined"}}}""")]
     public async Task EvaluateAsync_ResponseShapes_PreserveExistingDecoding(string response, string expected)
     {
@@ -38,6 +35,23 @@ public class WebViewOperationsTests
         Assert.Equal("Runtime.evaluate", body.RootElement.GetProperty("method").GetString());
         Assert.Equal("fixtureExpression", body.RootElement.GetProperty("params").GetProperty("expression").GetString());
         Assert.True(body.RootElement.GetProperty("params").GetProperty("returnByValue").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("""{"result":{"exceptionDetails":{"text":"ReferenceError"}}}""", "ReferenceError")]
+    [InlineData("""{"result":{"exceptionDetails":{}}}""", "Runtime.evaluate' threw: {}")]
+    [InlineData("""{"error":{"message":"CDP unavailable"}}""", "CDP unavailable")]
+    public async Task EvaluateAsync_FailedResponse_ThrowsWithoutReplayingExpression(string response, string expected)
+    {
+        await using var server = new MockAgentServer { WebViewEvaluateResponse = response };
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new WebViewOperations(client).EvaluateAsync("fixtureExpression", "Right"));
+
+        Assert.Contains(expected, error.Message);
+        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
     }
 
     [Fact]
