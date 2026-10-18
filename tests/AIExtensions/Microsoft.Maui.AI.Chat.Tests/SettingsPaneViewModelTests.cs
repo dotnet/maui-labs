@@ -163,6 +163,32 @@ public sealed class SettingsPaneViewModelTests
                 name.ToLowerInvariant(), name, $"{name} ready",
                 IsReplay: isReplay, SupportsToolCalling: !isReplay));
 
+    [Fact]
+    public void CreateChatOptions_GeminiDescriptor_DisablesToolsReasoningAndStructuredOutput()
+    {
+        using var client = new DescribedChatClient(
+            new StubChatClient(),
+            new ChatClientDescriptor(
+                "gemini-nano-chat", "Gemini Nano", "The first request confirms availability.",
+                SupportsImageInput: true, SupportsToolCalling: false, SupportsStructuredOutput: false));
+        var settings = new SettingsPaneViewModel([client]) { UseStructuredJson = true };
+
+        var options = settings.CreateChatOptions([]);
+
+        Assert.Same(client, settings.SelectedClient);
+        Assert.Same(ChatToolMode.None, options.ToolMode);
+        Assert.Null(options.Tools);
+        Assert.Null(options.AllowMultipleToolCalls);
+        Assert.Null(options.Reasoning);
+        Assert.Null(options.ResponseFormat);
+        Assert.True(settings.UseStructuredJson);
+        Assert.True(settings.SelectedDescriptor!.SupportsImageInput);
+        Assert.False(settings.SelectedDescriptor.SupportsReasoningSummary);
+        Assert.False(settings.SelectedDescriptor.SupportsImageGeneration);
+        Assert.False(settings.SelectedDescriptor.SupportsStructuredOutput);
+        Assert.Contains("first request", settings.ClientStatus);
+    }
+
     private sealed class StubChatClient : IChatClient
     {
         public Task<ChatResponse> GetResponseAsync(

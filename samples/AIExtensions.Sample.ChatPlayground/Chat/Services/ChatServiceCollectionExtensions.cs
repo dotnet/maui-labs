@@ -1,11 +1,14 @@
 using System.ClientModel;
+using System.Runtime.Versioning;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 
 #if IOS || MACCATALYST || WINDOWS
-using System.Runtime.Versioning;
+using Microsoft.Maui.Essentials.AI;
+#endif
+#if ANDROID
 using Microsoft.Maui.Essentials.AI;
 #endif
 
@@ -36,6 +39,10 @@ internal static class ChatServiceCollectionExtensions
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
             services.AddSingleton<IChatClient>(CreateAppleChatClient);
+#endif
+#if ANDROID
+        if (OperatingSystem.IsAndroidVersionAtLeast(26))
+            services.AddSingleton<IChatClient>(CreateGeminiChatClient);
 #endif
 
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
@@ -77,6 +84,27 @@ internal static class ChatServiceCollectionExtensions
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+#endif
+
+#if ANDROID
+    [SupportedOSPlatform("android26.0")]
+    private static IChatClient CreateGeminiChatClient(IServiceProvider serviceProvider) =>
+        new GeminiNanoChatClient()
+            .AsBuilder()
+            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
+            .UseDescriptor(new ChatClientDescriptor(
+                "gemini-nano-chat",
+                "Gemini Nano",
+                "Gemini Nano includes the supplied conversation in each text/image request. " +
+                    "No tools or structured JSON. System instructions require Nano V3+. The first request confirms model availability.",
+                SupportsImageInput: true,
+                SupportsReasoningSummary: false,
+                SupportsImageGeneration: false,
+                SupportsToolCalling: false,
+                SupportsStructuredOutput: false))
+            .UsePlaygroundTelemetry()
+            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif
 
