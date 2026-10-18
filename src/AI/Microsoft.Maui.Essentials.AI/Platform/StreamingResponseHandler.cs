@@ -10,9 +10,10 @@ namespace Microsoft.Maui.Essentials.AI;
 /// </summary>
 /// <remarks>
 /// When a <see cref="StreamChunkerBase"/> is provided, <see cref="ProcessContent"/> expects
-/// cumulative snapshots and the chunker computes deltas (used by Apple Intelligence).
+/// cumulative snapshots and the chunker computes deltas (used by Apple Intelligence plain text).
 /// When no chunker is provided, <see cref="ProcessContent"/> expects pre-chunked deltas
-/// and passes them through directly for providers that already emit incremental deltas.
+/// and passes them through directly for providers that already emit incremental deltas
+/// (Apple Intelligence structured JSON).
 /// </remarks>
 internal sealed class StreamingResponseHandler
 {

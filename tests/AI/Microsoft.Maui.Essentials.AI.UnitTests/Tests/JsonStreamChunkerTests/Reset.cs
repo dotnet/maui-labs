@@ -16,8 +16,8 @@ public partial class JsonStreamChunkerTests
 		{
 			var chunker = new JsonStreamChunker();
 
-			// Process partial JSON
-			chunker.Process("{\"name\":\"Alice\"");
+			// A complete snapshot leaves its streamed string open.
+			chunker.Process("{\"name\":\"Alice\"}");
 
 			// Reset
 			chunker.Reset();
@@ -46,7 +46,7 @@ public partial class JsonStreamChunkerTests
 		{
 			var chunker = new JsonStreamChunker();
 
-			chunker.Process("{\"a\":\"b\"");
+			chunker.Process("{\"a\":\"b\"}");
 			chunker.Reset();
 			chunker.Reset();
 			chunker.Reset();
@@ -61,7 +61,7 @@ public partial class JsonStreamChunkerTests
 		{
 			var chunker = new JsonStreamChunker();
 
-			chunker.Process("{\"name\":\"Alice\"");
+			chunker.Process("{\"name\":\"Alice\"}");
 			chunker.Reset();
 
 			// After reset, flush should not carry over old state
@@ -117,7 +117,7 @@ public partial class JsonStreamChunkerTests
 			var chunker = new JsonStreamChunker();
 
 			// Start processing with a partial string value
-			chunker.Process("{\"message\":\"This is a long mess");
+			chunker.Process("{\"message\":\"This is a long mess\"}");
 
 			// Reset mid-string
 			chunker.Reset();

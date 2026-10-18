@@ -64,9 +64,27 @@ Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
 Apple device/runtime and model availability; portable tests do not run a model.
 
+The Swift bridge has model-free tests for options, schema decoding, and
+structured JSON deltas. Run them with Xcode 27 selected:
+
+```sh
+swift test --package-path src/AI/AppleNative
+
+# Opt in to live Foundation Models tests on a supported, model-ready device
+ESSENTIALSAI_LIVE_TESTS=1 swift test --package-path src/AI/AppleNative
+```
+
+Shared device-test bases cover Apple and the opt-in Azure/OpenAI backend.
+Cloud deployments and credentials come from configuration/user secrets, not
+hardcoded model names.
+
 - `AppleNative/EssentialsAI/`: Swift bridge and binding definitions, producing `.xcframework` bundles.
 - `Microsoft.Maui.Essentials.AI/Platform/`: platform clients and streaming helpers.
-- `JsonStreamChunker`, `PlainTextStreamChunker`, and `StreamingResponseHandler`: cumulative-response deltas and streaming updates.
+- Apple structured JSON streams use native deltas derived from Foundation Models'
+  completion metadata. Plain text still uses `PlainTextStreamChunker`;
+  `JsonStreamChunker` remains a provider-neutral fallback for cumulative JSON snapshots.
+- Apple sampling validation, image handling, and tool-history semantics are
+  documented in the [package README](Microsoft.Maui.Essentials.AI/README.md).
 - `AppleBindings.targets`: native artifact build and packaging.
 
 Further design documentation:

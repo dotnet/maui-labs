@@ -1,0 +1,28 @@
+{"label": "label"}
+{"label": "label test"}
+{"label": "label test"}
+{"label": "label test"}
+{"details": {}, "label": "label test"}
+{"label": "label test", "details": {"enabled": false}}
+{"details": {"enabled": false, "text": ""}, "label": "label test"}
+{"label": "label test", "details": {"text": "all", "enabled": false}}
+{"details": {"text": "all done", "enabled": false}, "label": "label test"}
+{"label": "label test", "details": {"text": "all done", "enabled": false}}
+{"details": {"text": "all done", "enabled": false}, "values": [], "label": "label test"}
+{"label": "label test", "values": [1], "details": {"text": "all done", "enabled": false}}
+{"label": "label test", "details": {"text": "all done", "enabled": false}, "values": [10]}
+{"label": "label test", "details": {"enabled": false, "text": "all done"}, "values": [10, 2]}
+{"label": "label test", "details": {"text": "all done", "enabled": false}, "values": [10, 20]}
+{"details": {"enabled": false, "text": "all done"}, "values": [10, 20, 30], "label": "label test"}
+{"values": [10, 20, 30], "label": "label test", "details": {"enabled": false, "text": "all done"}}
+{"values": [10, 20, 30], "label": "label test", "details": {"enabled": false, "text": "all done"}}
+{"label": "label test", "amount": -12, "details": {"enabled": false, "text": "all done"}, "values": [10, 20, 30]}
+{"label": "label test", "amount": -12, "details": {"enabled": false, "text": "all done"}, "values": [10, 20, 30]}
+{"label": "label test", "values": [10, 20, 30], "amount": -12.7, "details": {"enabled": false, "text": "all done"}}
+{"values": [10, 20, 30], "label": "label test", "amount": -12.75, "details": {"enabled": false, "text": "all done"}}
+{"values": [10, 20, 30], "label": "label test", "amount": -12.75, "details": {"enabled": false, "text": "all done"}}
+{"values": [10, 20, 30], "details": {"text": "all done", "enabled": false}, "ready": true, "amount": -12.75, "label": "label test"}
+{"values": [10, 20, 30], "details": {"text": "all done", "enabled": false}, "ready": true, "amount": -12.75, "label": "label test"}
+{"values": [10, 20, 30], "details": {"text": "all done", "enabled": false}, "ready": true, "amount": -12.75, "label": "label test"}
+{"values": [10, 20, 30], "details": {"text": "all done", "enabled": false}, "ready": true, "amount": -12.75, "label": "label test"}
+{"values": [10, 20, 30], "details": {"text": "all done", "enabled": false}, "ready": true, "amount": -12.75, "label": "label test"}

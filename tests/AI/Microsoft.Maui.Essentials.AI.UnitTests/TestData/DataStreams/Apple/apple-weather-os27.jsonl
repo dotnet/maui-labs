@@ -1,0 +1,13 @@
+{"condition": ""}
+{"condition": "sunny"}
+{"condition": "sunny"}
+{"condition": "sunny", "location": ""}
+{"condition": "sunny", "location": ""}
+{"location": "Boston", "condition": "sunny"}
+{"location": "Boston", "condition": "sunny"}
+{"condition": "sunny", "temperature": 6, "location": "Boston"}
+{"condition": "sunny", "temperature": 68, "location": "Boston"}
+{"condition": "sunny", "temperature": 68, "location": "Boston"}
+{"condition": "sunny", "temperature": 68, "location": "Boston"}
+{"condition": "sunny", "temperature": 68, "location": "Boston"}
+{"condition": "sunny", "location": "Boston", "temperature": 68}

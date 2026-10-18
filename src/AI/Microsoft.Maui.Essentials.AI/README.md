@@ -11,8 +11,8 @@ No cloud service is required.
 | Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
 |----------|---------------------|-------------|-----------------------------------|
 | iOS / Mac Catalyst / macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | Apple NaturalLanguage |
-| Windows | Not supported | Not supported | Not supported |
-| Android | Not supported | Not supported | Not supported |
+| Windows | Coming soon (not available) | Not supported | Not supported |
+| Android | Coming soon (not available) | Not supported | Not supported |
 
 The Apple chat client does not generate images. On-device models must be
 enabled and available on a supported device.
@@ -54,6 +54,19 @@ await foreach (var update in chat.GetStreamingResponseAsync("Suggest a walking r
 
 Structured responses stream only when the native provider emits partial
 updates; otherwise a completed response can arrive as one update.
+Apple structured JSON deltas are computed natively using Foundation Models'
+completion metadata. Plain text uses cumulative snapshots with managed delta
+chunking; the managed JSON chunker remains a provider-neutral fallback.
+
+### Apple options
+
+`Temperature` and `TopP` must be finite values between 0 and 1; `TopK` and
+`MaxOutputTokens` must be greater than zero when specified. `TopK` takes
+precedence over `TopP`; a `Seed` applies to random sampling. A seed alone uses
+probability threshold 1, while omitting all three preserves the native sampling
+default. Temperature is passed separately to the native generation options.
+Sampling behavior is provider-specific, not a universal contract for other
+`IChatClient` implementations.
 
 ### Apple tools
 
@@ -76,6 +89,10 @@ var response = await chat.GetResponseAsync("What's the weather in Boston?", opti
 This example returns fixed demonstration data. Set `ChatOptions.ToolMode` to `ChatToolMode.None` to
 disable tools for a request.
 
+Conversation history preserves assistant function calls and tool results in
+the native transcript. Each tool result must match a preceding assistant
+function call by call ID; unmatched results are rejected.
+
 ### Apple image input
 
 Image input requires Apple OS 27 and a ready vision-capable model:
@@ -91,9 +108,10 @@ var response = await chat.GetResponseAsync([message]);
 
 For native images, set `RawRepresentation` on the `DataContent` to a `CGImage`,
 `UIImage` (iOS/Mac Catalyst), or `NSImage` (macOS), while retaining valid encoded
-bytes for recording and cross-platform use. Local `file://` image `UriContent`
-is supported; remote URLs are rejected rather than fetched silently.
-On Apple OS 26, the client is text-only and image requests throw an explicit error.
+bytes for recording and cross-platform use. On OS 27+, local `file://` image
+`UriContent` is supported; remote URLs are rejected rather than fetched silently.
+On Apple OS 26, the client is text-only: image content is omitted, while text
+content is retained. On OS 27+, image analysis requires a ready vision model.
 
 ### Token usage
 
@@ -153,6 +171,11 @@ var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking
 The corresponding NaturalLanguage model asset must be installed on the device.
 
 ## Examples and source
+
+The native Swift bridge includes model-free options, schema, and structured
+streaming tests (`swift test --package-path src/AI/AppleNative`, with Xcode 27).
+Live Foundation Models tests are opt-in: prefix that command with
+`ESSENTIALSAI_LIVE_TESTS=1` on supported hardware with the model ready.
 
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)

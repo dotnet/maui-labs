@@ -84,22 +84,29 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                let responseStream = session.streamResponse(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                // Keep the schema in the prompt as well as the grammar so nested fields retain their meaning.
+                let responseStream = session.streamResponse(to: prompt, schema: jsonSchema, options: genOptions)
 
-                for try await response in responseStream {
-                    try Task.checkCancellation()
-                    let text = response.content.jsonString
-                    guard !text.isEmpty else { continue }
+                // Native completion metadata yields append-only JSON deltas; the state is local to this response.
+                var deltas = StructuredJsonDeltas()
+                let emit: (String) -> Void = { delta in
+                    guard !delta.isEmpty else { return }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
-                        log("[\(methodName)] Streaming update: \(text)")
+                        log("[\(methodName)] Streaming update: \(delta)")
                     }
 #endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
+                    let update = ResponseUpdateNative(updateType: .content, text: delta)
                     cq?.async { onUpdate(update) } ?? onUpdate(update)
                 }
 
+                for try await snapshot in responseStream {
+                    try Task.checkCancellation()
+                    emit(try deltas.process(snapshot.rawContent))
+                }
+
                 let response = try await responseStream.collect()
+                emit(try deltas.process(response.rawContent, final: true))
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.jsonString.count)")
@@ -198,7 +205,7 @@ public class ChatClientNative: NSObject {
 
             let response = try await {
                 if let jsonSchema = schema {
-                    let inner = try await session.respond(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                    let inner = try await session.respond(to: prompt, schema: jsonSchema, options: genOptions)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
                         log("[\(methodName)] Response received, content length: \(inner.content.jsonString.count)")
@@ -283,17 +290,7 @@ public class ChatClientNative: NSObject {
             return nil
         }()
 
-        // Map options into GenerationOptions
-        let genOptions = GenerationOptions(
-            samplingMode: {
-                if let topK = options?.topK?.intValue {
-                    return .random(top: topK, seed: options?.seed?.uint64Value)
-                }
-                return .greedy
-            }(),
-            temperature: options?.temperature?.doubleValue,
-            maximumResponseTokens: options?.maxOutputTokens?.intValue
-        )
+        let genOptions = options?.toGenerationOptions() ?? GenerationOptions()
 
         let session = LanguageModelSession(model: model, tools: tools, transcript: transcript)
 
@@ -629,6 +626,7 @@ public class ChatClientNative: NSObject {
     private func formatOptionsDetailed(_ options: ChatOptionsNative) -> String {
         var parts: [String] = []
         if let topK = options.topK { parts.append("topK=\(topK)") }
+        if let topP = options.topP { parts.append("topP=\(topP)") }
         if let temp = options.temperature { parts.append("temperature=\(temp)") }
         if let maxTokens = options.maxOutputTokens { parts.append("maxOutputTokens=\(maxTokens)") }
         if let seed = options.seed { parts.append("seed=\(seed)") }

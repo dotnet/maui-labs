@@ -152,6 +152,9 @@ interface ChatOptionsNative
 	[NullAllowed, Export("topK", ArgumentSemantic.Strong)]
 	NSNumber TopK { get; set; }
 
+	[NullAllowed, Export("topP", ArgumentSemantic.Strong)]
+	NSNumber TopP { get; set; }
+
 	// @property (nonatomic, strong) NSNumber * _Nullable seed;
 	[NullAllowed, Export("seed", ArgumentSemantic.Strong)]
 	NSNumber Seed { get; set; }

@@ -23,14 +23,14 @@ public partial class JsonStreamingRoundtripTests
 			{
 				"{\"name\":\"Matthew",
 				" Leibowitz",
-				"\",\"age\":32",
-				"}"
+				"\"",
+				",\"age\":32}"
 			};
 			var expectedModels = new SimpleModel?[]
 			{
 				new SimpleModel { Name = "Matthew" },
 				new SimpleModel { Name = "Matthew Leibowitz" },
-				new SimpleModel { Name = "Matthew Leibowitz", Age = 32 },
+				new SimpleModel { Name = "Matthew Leibowitz" },
 				new SimpleModel { Name = "Matthew Leibowitz", Age = 32 }
 			};
 
@@ -94,11 +94,11 @@ public partial class JsonStreamingRoundtripTests
 			};
 			// Note: With 2 strings in first line, both go to pending (cannot determine which is partial)
 			// The deserializer may return an empty object from incomplete JSON
-			// Second line shows neither changed, so both are closed, plus new "active" property
+			// The new sibling closes the strings; the provisional scalar waits for flush.
 			var expectedModels = new SimpleModel?[]
 			{
 				new SimpleModel { }, // First chunk: two pending strings, returns empty model
-				new SimpleModel { Name = "A", Description = "B", Active = true }, // Second line resolves pending + adds active
+				new SimpleModel { Name = "A", Description = "B" }, // Scalar remains deferred
 				new SimpleModel { Name = "A", Description = "B", Active = true } // Flush
 			};
 
@@ -141,8 +141,8 @@ public partial class JsonStreamingRoundtripTests
 			};
 			var expectedModels = new SimpleModel?[]
 			{
-				new SimpleModel { Age = 25 },
-				new SimpleModel { Age = 25, Name = "John" },
+				new SimpleModel { },
+				new SimpleModel { Name = "John" },
 				new SimpleModel { Age = 25, Name = "John" }
 			};
 
@@ -163,8 +163,8 @@ public partial class JsonStreamingRoundtripTests
 			};
 			var expectedModels = new SimpleModel?[]
 			{
-				new SimpleModel { Active = true },
-				new SimpleModel { Active = true, Name = "Active User" },
+				new SimpleModel { },
+				new SimpleModel { Name = "Active User" },
 				new SimpleModel { Active = true, Name = "Active User" }
 			};
 
@@ -173,6 +173,34 @@ public partial class JsonStreamingRoundtripTests
 			Assert.Equal(expectedModels.Length, models.Count);
 			for (int i = 0; i < expectedModels.Length; i++)
 				Assert.Equivalent(expectedModels[i], models[i]);
+		}
+
+		[Theory]
+		[InlineData("""{"age":10,"name":"A long"}""", """{"age":20,"name":"A long response"}""", 20, null)]
+		[InlineData("""{"active":true,"name":"A long"}""", """{"active":false,"name":"A long response"}""", null, false)]
+		public void Roundtrip_ProvisionalScalarChanges_StreamsStringAndFinalizesLatestScalar(
+			string first, string final, int? expectedAge, bool? expectedActive)
+		{
+			var (chunks, models) = ProcessLinesWithChunks<SimpleModel>(new[] { first, first, final, final });
+
+			Assert.Equal("""{"name":"A long""", chunks[0]);
+			Assert.Equal("", chunks[1]);
+			Assert.Equal(" response", chunks[2]);
+			Assert.Equal("", chunks[3]);
+			Assert.All(models.Take(4), model =>
+			{
+				Assert.NotNull(model);
+				Assert.Null(model.Age);
+				Assert.Null(model.Active);
+			});
+			Assert.Equal("A long", models[0]!.Name);
+			Assert.Equal("A long response", models[2]!.Name);
+			Assert.Equivalent(new SimpleModel
+			{
+				Name = "A long response",
+				Age = expectedAge,
+				Active = expectedActive
+			}, models[^1]);
 		}
 	}
 }
