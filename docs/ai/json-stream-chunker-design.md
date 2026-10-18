@@ -7,6 +7,8 @@ We have an AI model that receives progressive JSON internally but outputs comple
 **Input**: JSONL file where each line is a complete JSON object representing progressive construction  
 **Output**: Chunks that when concatenated produce valid JSON structurally equivalent to the final line
 
+Malformed snapshots throw `JsonException`; non-object roots throw `NotSupportedException`.
+
 ### Real-World Example (from serengeti-itinerary-1.jsonl)
 
 ```
@@ -23,15 +25,17 @@ Line 4:  {"days": [{"activities": [{"type": "Sightseeing", "description": "Embar
 3. Empty strings `""` appear and then grow ("title": "" → "title": "Morning Game Drive")
 4. Arrays grow (activities: [] → activities: [{...}])
 5. New properties appear (description appears in line 4)
-6. Only ONE string changes per chunk (confirmed by data analysis)
+6. Duplicate snapshots are plateaus: any value may resume changing afterward
 
 ## Key Constraints
 
 1. **Must stream output** - Cannot wait until the end to emit
 2. **1-2 chunk delay OK** - For disambiguation when multiple growable items appear
 3. **Property order varies** - Must track by path, not position
-4. **Objects only grow** - Properties never removed, values only get longer/deeper
-5. **Only one value changes per chunk** - Confirmed by analysis of all test data
+4. **Emitted output is append-only** - Strings must extend their emitted prefix; emitted containers retain their shape
+5. **Every value may be provisional** - Numbers, booleans, and null are deferred; uncommitted values may change kind
+
+No platform-specific completion metadata is required. Object scalars wait for `Flush()` or their enclosing container to close; an array's last scalar waits until the next item or `Flush()`. Strings still stream incrementally. Sibling/parent progression remains a completion heuristic for growables, not proof for arbitrary revisions. Replacing an emitted string prefix, scalar, or closed container cannot be represented by append-only JSON and throws `NotSupportedException` rather than silently losing content.
 
 ## API Design
 
@@ -114,7 +118,7 @@ Analysis of all 4 test JSONL files revealed:
 | Empty object `{}` | Occasional | Gets populated in later chunk |
 | Non-string primitives | 0 in test data | All values are strings in these examples |
 
-**Key insight**: The "only one value changes per chunk" assumption holds in all test data (where values include strings, arrays, and objects).
+These historical fixtures contain only growable values. They do not establish an immutable-scalar or single-changing-value contract for other producers.
 
 ---
 
@@ -148,17 +152,17 @@ days[1] appeared at parent level (days array)
 → Close days[0], then emit new array item
 ```
 
-### Rule 3: Unchanged Rule
-If the open string's value is unchanged from the previous chunk, it is complete.
+### Rule 3: Plateau Rule
+An unchanged snapshot does not complete an open or pending value.
+If the open string plateaus while another pending string/container grows, the streaming frontier moves to that value. A scalar revision alone is not streamable growth.
 
 **Example:**
 ```
 Previous: {"name": "Matthew"}
-Current:  {"name": "Matthew", "age": 30}
+Current:  {"name": "Matthew"}
 
 "name" value unchanged
-→ "name" is COMPLETE
-(Note: Sibling rule would also apply here)
+→ Emit nothing and keep "name" open; a later snapshot may extend it
 ```
 
 ### Rule 4: Pending Rule
@@ -169,7 +173,7 @@ If 2+ new **growable** items appear at the same parent level in the same chunk, 
 - Arrays: Can grow (items added)
 - Objects: Can grow (properties added)
 
-Numbers, bools, and null are NOT growable - they are always complete.
+Numbers, booleans, and null may change too, but cannot generally stream as token fragments (`6` → `-2`, `true` → `false`). Defer their latest values instead of committing provisional tokens.
 
 **Example 1 - Multiple strings:**
 ```
@@ -193,9 +197,9 @@ Total: 2 growable items at same level - which one will grow?
 → Add activities (array) to _pendingContainers
 → Emit NOTHING for either yet
 → Wait for next chunk to see which changes:
-  - If subtitle value changes → subtitle is active, activities was complete
-  - If activities gets children → activities is active, subtitle was complete
-  - If both unchanged → both were complete
+  - If subtitle value changes → subtitle can stream; activities remains pending
+  - If activities gets children → activities can stream; subtitle remains pending
+  - If both unchanged → both remain pending
 ```
 
 ---
@@ -289,7 +293,8 @@ For each chunk:
    - Emit root structure opening "{"
    - Process all containers depth-first via EmitStructure()
    - For each container, count its direct GROWABLE children (strings, arrays, objects):
-     - If 0 growable values at this level: emit all non-growables (numbers, bools, null), continue to nested containers
+     - Defer all scalar properties (numbers, booleans, null), retaining their latest values
+     - If 0 growable values at this level: wait for more content or Flush()
      - If 1 growable value at this level:
        - If string: emit property open (no closing quote), set _openStringPath
        - If container (array/object): emit opening bracket, push to _openStructures, recurse into children
@@ -303,7 +308,7 @@ For each chunk:
    a. Step A - Handle open string (if _openStringPath is set):
       - Check for new siblings at same level
       - Check for new content at parent level
-      - If new sibling OR parent-level change:
+      - If new sibling, parent-level change, or another growable advances while this string plateaus:
           → Emit extension (if value changed)
           → Emit closing quote
           → Set _openStringPath = null
@@ -311,12 +316,14 @@ For each chunk:
           → Emit extension
           → Keep open (might still grow)
       - Else (value same):
-          → Emit closing quote
-          → Set _openStringPath = null
+          → Emit nothing; keep the string open
 
-   b. Step B - Resolve pending (if _pendingStrings or _pendingContainers not empty):
-      - For strings: Categorize as COMPLETE (unchanged) vs CHANGED
-      - For containers: Categorize as COMPLETE (no new children) vs CHANGED (got children)
+   b. Process new content in already-open subtrees (Step C below) before resolving pending siblings:
+      - Pending siblings may close ancestors, so finish their current nested growth first
+
+   c. Step B - Resolve previously pending values (only when no string remains open):
+      - For strings/containers: Categorize as COMPLETE (structural progression) vs CHANGED
+      - Unchanged pending values remain deferred; changes also include descendant value changes
         - Detection: count paths with prefix in prev vs curr state
       - Emit all COMPLETE items first (sorted by path for consistency):
         - Strings: emit with closing quote
@@ -326,7 +333,7 @@ For each chunk:
         - Container: emit opening bracket, push to _openStructures, recurse into children
       - After setting active string, check for new siblings → if found, close immediately
 
-   c. Step C - Process new content:
+   Step C - New-content traversal used in (b):
       - For objects: iterate properties, categorize as existing vs new
         - Existing non-strings: recurse into them
         - New properties: categorize by growable type
@@ -503,8 +510,8 @@ IF _pendingStrings OR _pendingContainers is not empty:
     │           → Recursively process children of this container
     │       
     │       IF total CHANGED has 2+:
-    │           This should never happen per "only one value changes per chunk" invariant
-    │           Log warning and treat all as complete
+    │           Retain their latest values in pending state
+    │           Wait for disambiguation or Flush()
     │
     └─► IF _openStringPath was just set:
             Check for new siblings at same level (in current, not in previous)
@@ -560,10 +567,9 @@ Output: "type":"Sightseeing","title":"Morning Game Drive"
 
 For each new path in current that wasn't in previous:
     │
-    ├─► IF value is NON-GROWABLE (number, bool, null):
-    │       needsComma = any sibling already in _emittedPaths
-    │       Emit complete: [,]"path":value
-    │       Add path to _emittedPaths
+    ├─► IF value is a SCALAR (number, bool, null):
+    │       Retain the latest value in pending state
+    │       Emit only when its container closes or at Flush()
     │
     └─► IF value is GROWABLE (string, object, array):
             Group all new GROWABLE items BY PARENT (siblings only):
@@ -969,7 +975,7 @@ When checking if a container at path P is "complete" vs "still active":
 1. Find all current paths that START WITH P (all descendants)
 2. Find all previous paths that START WITH P
 3. If ANY descendant value changed → container is still active
-4. Only if ALL descendants are unchanged → container is complete
+4. If ALL descendants are unchanged → keep pending; a plateau is not completion
 
 **Why this matters for pending:**
 When we have pending containers (e.g., a string and an array both appeared):
@@ -1019,14 +1025,14 @@ Current:  {"count": 5, "a": {"x": "hello"}, "b": "world"}
 - Second (`b`) goes to pending even though it's alone at its level
 - Next chunk resolves: whichever changed is active (per invariant, at most one changes)
 
-### All pending strings complete (none changed)
+### All pending strings pause (none changed)
 ```
 Line N: Two strings added to pending
 Line N+1: Both strings have same values (unchanged)
 ```
-- Both are COMPLETE
-- Emit both with closing quotes
-- No _openStringPath is set
+- Both remain pending
+- Emit nothing for them
+- A later snapshot may resume either string
 - Continue to Step C for new content
 
 ---
@@ -1037,8 +1043,7 @@ Line N+1: Both strings have same values (unchanged)
 
 1. **Sibling Rule**: New property at same level
 2. **Parent Rule**: New content at higher level
-3. **Unchanged Rule**: Value same as previous chunk
-4. **Finalize**: End of stream
+3. **Finalize**: End of stream (unchanged snapshots do not close strings)
 
 ### When to use pending?
 
@@ -1078,7 +1083,7 @@ Example: If open string is at `days[0].activities[0].description`:
 1. **At most ONE growable value is open** at any time (never two)
 2. **Pending items (strings and containers) are NEVER emitted** until resolved in next chunk
 3. **Extension = current[emitted.Length..]** - strings only grow, never shrink
-4. **Order: Step A (open) → Step B (pending) → Step C (new)** - always this order
+4. **Order: open string → new content → previously pending values** - nested growth precedes ancestor-closing siblings
 5. **2+ new growable items at same parent = pending** - never guess which is active
 6. **New sibling = complete** - AI moved on horizontally
 7. **Parent-level change = complete** - AI moved on vertically
@@ -1086,9 +1091,9 @@ Example: If open string is at `days[0].activities[0].description`:
 9. **Containers stay open** until sibling/parent change or finalize
 10. **Empty containers are valid** - `{}` and `[]` can get populated later
 11. **Comma before sibling** - check _emittedPaths to know if comma needed
-12. **At most ONE value changes per chunk** - if Step B finds 2+ changed (strings or containers), that's an error
+12. **Several values may change per chunk** - ambiguous growables remain pending; never interrupt an active string just to resolve a pending sibling
 13. **Growable types: strings, arrays, objects** - all can grow and need pending logic
-14. **Non-growable types: numbers, bools, null** - always complete immediately
+14. **Provisional scalars: numbers, bools, null** - retain their latest values until structural closure or Flush()
 15. **Nested changes propagate up** - if ANY descendant of a container changes, the container is still active
 16. **Complete containers emit all content** - when a pending container is resolved as complete, emit its full content (opening bracket, all children recursively, closing bracket)
 17. **Structure closing is level-aware** - use `CloseStructuresDownTo` to close structures when emitting at a different tree level
@@ -1155,7 +1160,7 @@ The implementation handles the first chunk differently from subsequent chunks:
 
 ### Subsequent Chunks (ProcessSubsequentChunk)
 - Has previous state for comparison
-- Follows the Step A → Step B → Step C order
+- Extends open subtrees before pending siblings can close their ancestors
 - Uses `ProcessNewContent` to find and emit new properties/items
 - Can detect siblings and parent-level changes
 

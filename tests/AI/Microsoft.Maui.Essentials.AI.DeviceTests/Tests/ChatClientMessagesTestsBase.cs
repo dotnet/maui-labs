@@ -22,14 +22,16 @@ public abstract class ChatClientMessagesTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithOnlyNullTextContent_DoesNotThrow()
+	public async Task GetResponseAsync_WithOnlyNullTextContent_PreservesFollowingUserTurn()
 	{
 		using var client = new T();
 		var msg = new ChatMessage(ChatRole.User, [new TextContent(null)]);
-		var messages = new List<ChatMessage> { msg };
+		// Keep inference meaningful; a model's policy for a completely empty prompt is not a conversion contract.
+		var messages = new List<ChatMessage> { msg, new(ChatRole.User, "Reply with exactly HELLO.") };
 
 		var response = await client.GetResponseAsync(messages);
 		Assert.NotNull(response);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Fact]
@@ -49,16 +51,17 @@ public abstract class ChatClientMessagesTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithOnlyUnsupportedContent_AcceptsEmptyContent()
+	public async Task GetResponseAsync_WithOnlyUnsupportedContent_PreservesFollowingUserTurn()
 	{
 		using var client = new T();
 		var msg = new ChatMessage(ChatRole.User, [new UnsupportedContentForTesting()]);
-		var messages = new List<ChatMessage> { msg };
+		var messages = new List<ChatMessage> { msg, new(ChatRole.User, "Reply with exactly HELLO.") };
 
 		var response = await client.GetResponseAsync(messages);
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Messages);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Fact]
@@ -297,9 +300,11 @@ public abstract class ChatClientMessagesTestsBase<T>
 		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 
-	[Fact]
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithFunctionHistory_PreservesUserText()
+	public async Task GetResponseAsync_WithFunctionHistory_PreservesUserText(bool streaming)
 	{
 		using var client = new T();
 		ChatMessage[] messages =
@@ -311,15 +316,19 @@ public abstract class ChatClientMessagesTestsBase<T>
 			new(ChatRole.User, "Reply with exactly HELLO and nothing else.")
 		];
 
-		var response = await client.GetResponseAsync(messages);
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages).ToChatResponseAsync()
+			: await client.GetResponseAsync(messages);
 
 		Assert.NotNull(response);
 		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 
-	[Fact]
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithFunctionHistory_RetainsToolResultContext()
+	public async Task GetResponseAsync_WithFunctionHistory_RetainsToolResultContext(bool streaming)
 	{
 		using var client = new T();
 		ChatMessage[] messages =
@@ -332,7 +341,9 @@ public abstract class ChatClientMessagesTestsBase<T>
 			new(ChatRole.User, "What city and temperature did the tool return? Answer briefly.")
 		];
 
-		var response = await client.GetResponseAsync(messages);
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages).ToChatResponseAsync()
+			: await client.GetResponseAsync(messages);
 
 		Assert.NotNull(response);
 		Assert.Contains("Paris", response.Text, StringComparison.OrdinalIgnoreCase);

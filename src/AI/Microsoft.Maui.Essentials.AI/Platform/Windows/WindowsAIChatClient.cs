@@ -132,26 +132,7 @@ public sealed class WindowsAIChatClient : IChatClient
 
 		// The worker owns the context through completion or cancellation of the operation.
 		await ForwardResponseAsync(operation, handler, cancellationToken, result =>
-		{
-			var status = result.Status;
-			var text = result.Text;
-			var extendedError = result.ExtendedError;
-
-			return status switch
-			{
-				LanguageModelResponseStatus.Complete => text,
-
-				// Native empty prompts report E_INVALIDARG rather than an empty completion.
-				LanguageModelResponseStatus.Error when string.IsNullOrEmpty(prompt) &&
-					(extendedError is null ||
-					 extendedError is ArgumentException && extendedError.HResult == InvalidArgumentHResult) => text,
-
-				LanguageModelResponseStatus.PromptLargerThanContext =>
-					throw new InvalidOperationException(PromptTooLargeMessage, extendedError),
-
-				_ => throw new InvalidOperationException($"Response generation failed: {status}", extendedError)
-			};
-		}).ConfigureAwait(false);
+			GetResponseText(result.Status, result.Text, result.ExtendedError, string.IsNullOrEmpty(prompt))).ConfigureAwait(false);
 	}
 
 	private static async Task GenerateStructuredResponseAsync(
@@ -171,22 +152,35 @@ public sealed class WindowsAIChatClient : IChatClient
 		var operation = model.GenerateStructuredJsonResponseAsync(structuredPrompt, jsonSchema, modelOptions);
 
 		await ForwardResponseAsync(operation, handler, cancellationToken, static result =>
-		{
-			var status = result.Status;
-			var text = result.Text;
-			var extendedError = result.ExtendedError;
-
-			return status switch
-			{
-				GenerateStructuredJsonResponseStatus.Complete => text,
-
-				GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
-					throw new InvalidOperationException(PromptTooLargeMessage, extendedError),
-
-				_ => throw new InvalidOperationException($"Structured response generation failed: {status}", extendedError)
-			};
-		}).ConfigureAwait(false);
+			GetStructuredResponseText(result.Status, result.Text, result.ExtendedError)).ConfigureAwait(false);
 	}
+
+	internal static string? GetResponseText(
+		LanguageModelResponseStatus status, string? text, Exception? extendedError, bool isEmptyPrompt) =>
+		status switch
+		{
+			LanguageModelResponseStatus.Complete => text,
+
+			// Native empty prompts report E_INVALIDARG rather than an empty completion.
+			LanguageModelResponseStatus.Error when isEmptyPrompt &&
+				(extendedError is null ||
+				 extendedError is ArgumentException && extendedError.HResult == InvalidArgumentHResult) => text,
+
+			LanguageModelResponseStatus.PromptLargerThanContext =>
+				throw new InvalidOperationException(PromptTooLargeMessage, extendedError),
+
+			_ => throw new InvalidOperationException($"Response generation failed: {status}", extendedError)
+		};
+
+	internal static string? GetStructuredResponseText(
+		GenerateStructuredJsonResponseStatus status, string? text, Exception? extendedError) =>
+		status switch
+		{
+			GenerateStructuredJsonResponseStatus.Complete => text,
+			GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
+				throw new InvalidOperationException(PromptTooLargeMessage, extendedError),
+			_ => throw new InvalidOperationException($"Structured response generation failed: {status}", extendedError)
+		};
 
 	internal static async IAsyncEnumerable<ChatResponseUpdate> StreamResponseAsync(
 		Func<StreamingResponseHandler, CancellationToken, Task> generate,

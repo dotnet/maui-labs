@@ -5,12 +5,15 @@ using NaturalLanguage;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
+
 public class NLEmbeddingGeneratorCancellationTests : EmbeddingGeneratorCancellationTestsBase<NLEmbeddingGenerator>
 {
 }
+
 public class NLEmbeddingGeneratorConcurrencyTests : EmbeddingGeneratorConcurrencyTestsBase<NLEmbeddingGenerator>
 {
 }
+
 public class NLEmbeddingGeneratorDisposalTests : EmbeddingGeneratorDisposalTestsBase<NLEmbeddingGenerator>
 {
 	// A caller-provided NLEmbedding is borrowed; the shared generator interface has no native-resource ownership contract.
@@ -41,9 +44,11 @@ public class NLEmbeddingGeneratorDisposalTests : EmbeddingGeneratorDisposalTests
 		Assert.IsType<NLEmbeddingGenerator>(generator);
 	}
 }
+
 public class NLEmbeddingGeneratorGenerateTests : EmbeddingGeneratorGenerateTestsBase<NLEmbeddingGenerator>
 {
 }
+
 public class NLEmbeddingGeneratorGetServiceTests : EmbeddingGeneratorGetServiceTestsBase<NLEmbeddingGenerator>
 {
 	protected override string ExpectedProviderName => "apple";
@@ -59,6 +64,7 @@ public class NLEmbeddingGeneratorGetServiceTests : EmbeddingGeneratorGetServiceT
 		Assert.NotNull(embedding);
 	}
 }
+
 public class NLEmbeddingGeneratorInstantiationTests : EmbeddingGeneratorInstantiationTestsBase<NLEmbeddingGenerator>
 {
 	// Exercises the NLLanguage constructor rather than the shared parameterless generator constructor.
@@ -87,6 +93,7 @@ public class NLEmbeddingGeneratorInstantiationTests : EmbeddingGeneratorInstanti
 		Assert.Throws<ArgumentNullException>(() => new NLEmbeddingGenerator((NLEmbedding)null!));
 	}
 }
+
 public class NLEmbeddingGeneratorSimilarityTests : EmbeddingGeneratorSimilarityTestsBase<NLEmbeddingGenerator>
 {
 }

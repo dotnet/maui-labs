@@ -2,6 +2,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
+using Microsoft.Windows.AI.Text;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -10,14 +11,17 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public class WindowsAIChatClientCancellationTests : ChatClientCancellationTestsBase<WindowsAIChatClient>
 {
 }
+
 public class WindowsAIChatClientGetServiceTests : ChatClientGetServiceTestsBase<WindowsAIChatClient>
 {
 	protected override string ExpectedProviderName => "windows";
 	protected override string ExpectedDefaultModelId => "windows-ai-language-model";
 }
+
 public class WindowsAIChatClientInstantiationTests : ChatClientInstantiationTestsBase<WindowsAIChatClient>
 {
 }
+
 public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<WindowsAIChatClient>
 {
 	// Windows LanguageModel takes one instruction string; exact hoisting order and history identity are adapter details.
@@ -68,19 +72,24 @@ public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<Wind
 		Assert.Same(user, Assert.Single(history));
 	}
 }
+
 public class WindowsAIChatClientOptionsTests : ChatClientOptionsTestsBase<WindowsAIChatClient>
 {
 }
+
 public class WindowsAIChatClientResponseTests : ChatClientResponseTestsBase<WindowsAIChatClient>
 {
 }
+
 public class WindowsAIChatClientStreamingTests : ChatClientStreamingTestsBase<WindowsAIChatClient>
 {
 }
+
 public class WindowsAIChatClientUsageTests(ITestOutputHelper output) : ChatClientUsageTestsBase<WindowsAIChatClient>(output)
 {
 	protected override bool IsUsageAvailable => false;
 }
+
 // Structured output is handled natively by WindowsAIChatClient via
 // LanguageModel.GenerateStructuredJsonResponseAsync, so no wrapper is needed.
 public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<WindowsAIChatClient>
@@ -153,8 +162,88 @@ public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<
 		Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
 	}
 }
+
 public class WindowsAIChatClientValidationTests
 {
+	// Native Windows status codes must not turn policy failures or partial responses into successful chat completions.
+	[Theory]
+	[InlineData(LanguageModelResponseStatus.Error)]
+	[InlineData(LanguageModelResponseStatus.BlockedByPolicy)]
+	[InlineData(LanguageModelResponseStatus.PromptBlockedByContentModeration)]
+	[InlineData(LanguageModelResponseStatus.ResponseBlockedByContentModeration)]
+	[InlineData(LanguageModelResponseStatus.UnsupportedLanguage)]
+	[InlineData(LanguageModelResponseStatus.LanguageMismatch)]
+	[InlineData((LanguageModelResponseStatus)int.MaxValue)]
+	public void GetResponseText_NativeFailure_PreservesStatusAndCause(LanguageModelResponseStatus status)
+	{
+		var cause = new InvalidOperationException("Native failure");
+		var error = Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetResponseText(status, "Partial response", cause, isEmptyPrompt: false));
+
+		Assert.Contains(status.ToString(), error.Message, StringComparison.Ordinal);
+		Assert.Same(cause, error.InnerException);
+	}
+
+	// E_INVALIDARG is a Windows empty-prompt quirk, not a general permission to ignore native errors.
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void GetResponseText_EmptyPrompt_OnlyToleratesInvalidArgument(bool hasExtendedError)
+	{
+		Assert.Equal("", WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.Error, "", hasExtendedError ? new ArgumentException() : null, isEmptyPrompt: true));
+
+		Assert.Throws<InvalidOperationException>(() => WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.Error, "", new ArgumentException(), isEmptyPrompt: false));
+		Assert.Throws<InvalidOperationException>(() => WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.BlockedByPolicy, "", null, isEmptyPrompt: true));
+		Assert.Throws<InvalidOperationException>(() => WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.Error, "", new InvalidOperationException(), isEmptyPrompt: true));
+	}
+
+	// Windows constrained generation has distinct native status codes and must preserve failure details too.
+	[Theory]
+	[InlineData(GenerateStructuredJsonResponseStatus.Error)]
+	[InlineData((GenerateStructuredJsonResponseStatus)int.MaxValue)]
+	public void GetStructuredResponseText_NativeFailure_PreservesStatusAndCause(GenerateStructuredJsonResponseStatus status)
+	{
+		var cause = new InvalidOperationException("Native failure");
+		var error = Assert.Throws<InvalidOperationException>(() =>
+			WindowsAIChatClient.GetStructuredResponseText(status, "Partial JSON", cause));
+
+		Assert.Contains(status.ToString(), error.Message, StringComparison.Ordinal);
+		Assert.Same(cause, error.InnerException);
+	}
+
+	// Context overflow is a Windows native result, not a managed cancellation or successful truncated response.
+	[Fact]
+	public void ResponseStatus_ContextOverflow_ExplainsLimit()
+	{
+		var cause = new InvalidOperationException("Native overflow");
+		var textError = Assert.Throws<InvalidOperationException>(() => WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.PromptLargerThanContext, "", cause, isEmptyPrompt: false));
+		var jsonError = Assert.Throws<InvalidOperationException>(() => WindowsAIChatClient.GetStructuredResponseText(
+			GenerateStructuredJsonResponseStatus.PromptLargerThanContext, "", cause));
+
+		Assert.Contains("context window", textError.Message, StringComparison.Ordinal);
+		Assert.Contains("context window", jsonError.Message, StringComparison.Ordinal);
+		Assert.Same(cause, textError.InnerException);
+		Assert.Same(cause, jsonError.InnerException);
+	}
+
+	// Success statuses must pass native text through without duplicating or rewriting it.
+	[Theory]
+	[InlineData(null)]
+	[InlineData("")]
+	[InlineData("Hello")]
+	public void ResponseStatus_Complete_PreservesText(string? text)
+	{
+		Assert.Equal(text, WindowsAIChatClient.GetResponseText(
+			LanguageModelResponseStatus.Complete, text, null, isEmptyPrompt: false));
+		Assert.Equal(text, WindowsAIChatClient.GetStructuredResponseText(
+			GenerateStructuredJsonResponseStatus.Complete, text, null));
+	}
+
 	// Windows LanguageModel rejects every tool request; tool-capable providers need not reject this same way.
 	[Fact]
 	public async Task GetResponseAsync_WithNonAIFunctionTool_ThrowsNotSupportedException()

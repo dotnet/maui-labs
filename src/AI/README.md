@@ -91,20 +91,34 @@ Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
 Apple or Windows device/runtime and model availability; portable tests do not run a model.
 
-Shared chat suites cover unknown content/roles and combined, multiple, or interleaved
-system instructions. Apple and Windows convert message content they support and
-ignore content they cannot map. Windows replays recorded function calls/results
-as named JSON text blocks for context, without emulating tool execution;
-image-generation history is ignored.
-Custom roles are ignored, following the Azure/OpenAI adapters.
+Shared chat suites provide the OpenAI baseline for message conversion,
+instructions, streaming, structured output, cancellation, and usage.
+Apple and Windows bind to applicable suites; future Android coverage should use
+the same bases. Native API and OS-version checks remain provider-specific.
 
 For live cloud baselines, configure the device project's user secrets:
 `AI:ApiKey`, `AI:Endpoint` (Azure `/openai/v1/`), `AI:DeploymentName`, and
 `AI:EmbeddingDeploymentName`. Build in Debug with `-p:EnableOpenAIClient=true`
-and select the `OpenAIChatClient` tests. These make real requests; temperature
-tests explicitly disable reasoning, so the model must support that combination.
-Conflicting instructions have no shared
-last-wins guarantee.
+and select the `OpenAIChatClient` tests. These make real requests against
+`gpt-6-luna`; sampling tests disable reasoning when setting temperature.
+Conflicting instructions have no shared last-wins guarantee.
+
+| Provider | Provider-specific tests |
+|----------|-------------------------|
+| Apple Intelligence | .NET device tests in `Tests/MaciOS`; Swift bridge tests below run independently of .NET. |
+| Windows AI | Status handling, streaming lifecycle, and history conversion in `Tests/Windows`; native execution requires Windows. |
+| Android (coming soon) | No provider-specific suite yet. |
+
+Run native Swift tests on macOS 26+ with Xcode 27 (also run in CI):
+
+```sh
+swift test --package-path src/AI/AppleNative
+```
+
+These compile the production Swift bridge and test sampling, schema conversion,
+and native error callbacks. To also exercise real model generation and streaming
+on a host with Apple Intelligence enabled, prefix the command with
+`ESSENTIALSAI_LIVE_TESTS=1`.
 
 - `Microsoft.Maui.Essentials.AI/Platform/MaciOS/`: Apple chat and embedding clients.
 - `Microsoft.Maui.Essentials.AI/Platform/Windows/`: Windows chat client and model readiness.

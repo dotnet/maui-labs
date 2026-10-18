@@ -13,6 +13,7 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 /// The conversion tests are model-free (they exercise only the managed ↔ native marshalling)
 /// and run in CI; the end-to-end description test requires an on-device model.
 /// </summary>
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientImageTests
 {
 	static CGImage CreateTestImage(int width = 2, int height = 2)
@@ -255,12 +256,12 @@ public class AppleIntelligenceChatClientImageTests
 		Assert.Throws<InvalidDataException>(() => AppleIntelligenceChatClient.FromNative(native));
 	}
 
-	// Apple role-aware conversion exposes ImageContentNative only on OS 27; OS 26 deliberately ignores image input.
+	// Apple maps images only where native image APIs exist, preserving text when images cannot be mapped.
 	[Theory]
 	[InlineData("user", false)]
 	[InlineData("assistant", false)]
 	[InlineData("user", true)]
-	public void ToNative_WithImageContent_ConvertsOnlyOnSupportedOS(string role, bool useUri)
+	public void ToNative_WithImageContent_ConvertsOrIgnoresUnsupportedContent(string role, bool useUri)
 	{
 		using var image = CreateTestImage();
 		AIContent content = useUri
@@ -272,30 +273,54 @@ public class AppleIntelligenceChatClientImageTests
 			OperatingSystem.IsMacOSVersionAtLeast(27);
 
 		var native = Assert.Single(AppleIntelligenceChatClient.ToNative([message], null));
-
 		Assert.Contains(native.Contents, item => item is TextContentNative text && text.Text == "Hello");
-		Assert.Equal(supportsImages, native.Contents.Any(item => item is ImageContentNative));
+		Assert.Equal(supportsImages ? 1 : 0, native.Contents.OfType<ImageContentNative>().Count());
 	}
 
-	// Apple OS 26 ignores images, while OS 27 runs native URL validation and must preserve unsupported-HTTP errors.
+	// Once image input is supported, invalid URL payloads remain errors rather than unsupported-content no-ops.
 	[Fact]
-	public void ToNative_WithHttpImageUri_IgnoresOnOlderOSOrReportsInvalidSupportedInput()
+	public void ToNative_WithHttpImageUri_IgnoresUnavailableImagesOrRejectsUnsupportedUrl()
 	{
 		var message = new ChatMessage(ChatRole.User,
 			[new TextContent("Hello"), new UriContent("https://example.com/x.png", "image/png")]);
-		var supportsImages = OperatingSystem.IsIOSVersionAtLeast(27) ||
-			OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
-			OperatingSystem.IsMacOSVersionAtLeast(27);
 
-		if (supportsImages)
-		{
+		if (OperatingSystem.IsIOSVersionAtLeast(27) ||
+			OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
+			OperatingSystem.IsMacOSVersionAtLeast(27))
 			Assert.Throws<NotSupportedException>(() => AppleIntelligenceChatClient.ToNative([message], null));
-		}
 		else
-		{
-			var native = Assert.Single(AppleIntelligenceChatClient.ToNative([message], null));
-			Assert.IsType<TextContentNative>(Assert.Single(native.Contents));
-		}
+			Assert.IsType<TextContentNative>(Assert.Single(
+				Assert.Single(AppleIntelligenceChatClient.ToNative([message], null)).Contents));
+	}
+
+	// OS 26 conversion omits unsupported images without dropping user text or assistant history.
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(true, true)]
+	public void ToNative_WithImageOnOlderOS_PreservesText(bool assistantHistory, bool useUri)
+	{
+		if (OperatingSystem.IsIOSVersionAtLeast(27) ||
+			OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
+			OperatingSystem.IsMacOSVersionAtLeast(27))
+			return;
+
+		AIContent content = useUri
+			? new UriContent("file:///image.png", "image/png")
+			: new DataContent(new byte[] { 0 }, "image/png");
+		ChatMessage[] messages = assistantHistory
+			? [new(ChatRole.User, "Describe this image."),
+				new(ChatRole.Assistant, [new TextContent("An image."), content]),
+				new(ChatRole.User, "What color was it?")]
+			: [new(ChatRole.User, [new TextContent("Describe this image."), content])];
+
+		var native = AppleIntelligenceChatClient.ToNative(messages, null);
+		Assert.Equal(messages.Length, native.Length);
+		Assert.All(native, message =>
+			Assert.IsType<TextContentNative>(Assert.Single(message.Contents)));
+		Assert.Equal(assistantHistory ? "What color was it?" : "Describe this image.",
+			Assert.IsType<TextContentNative>(native[^1].Contents[0]).Text);
 	}
 
 	// Requires Apple's OS 27 vision model and CGImage RawRepresentation; Windows is text-only and cloud uses encoded images.

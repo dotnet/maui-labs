@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientToolCallLoggingTests
 {
 	// Apple's native tool callbacks must restore the chat Activity across awaits and correlate its adapter-owned log entries.

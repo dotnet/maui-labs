@@ -56,7 +56,9 @@ public abstract class ChatClientOptionsTestsBase<T>
 		const string firstInstruction = "The first word is ALPHA.";
 		var options = new ChatOptions
 		{
-			Instructions = useOptionsInstructions ? firstInstruction : null
+			Instructions = useOptionsInstructions ? firstInstruction : null,
+			Temperature = 0,
+			Reasoning = new() { Effort = ReasoningEffort.None }
 		};
 		var messages = new List<ChatMessage>();
 		if (!useOptionsInstructions)
@@ -118,7 +120,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
+	public virtual async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>

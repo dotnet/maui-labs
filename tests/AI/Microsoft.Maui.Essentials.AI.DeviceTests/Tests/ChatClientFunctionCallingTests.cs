@@ -11,8 +11,8 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public abstract class ChatClientFunctionCallingTestsBase<T>
 	where T : class, IChatClient, new()
 {
-	protected virtual IChatClient EnableFunctionCalling(T client, Action<ChatOptions>? configureOptions = null) =>
-		configureOptions is null ? client : client.AsBuilder().ConfigureOptions(configureOptions).Build();
+	// Native clients own their tool loop; external invocation adapters override this to configure each round trip.
+	protected virtual IChatClient EnableFunctionCalling(T client, Action<ChatOptions>? configureOptions = null) => client;
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
@@ -66,6 +66,20 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		Assert.True(functionWasCalled, "Function should have been called");
 		Assert.NotNull(capturedLocation);
 		Assert.Contains("Seattle", capturedLocation, StringComparison.OrdinalIgnoreCase);
+
+		var calls = response.Messages
+			.Where(message => message.Role == ChatRole.Assistant)
+			.SelectMany(message => message.Contents.OfType<FunctionCallContent>())
+			.Where(call => call.Name == weatherTool.Name)
+			.ToArray();
+		Assert.NotEmpty(calls);
+		var results = response.Messages
+			.Where(message => message.Role == ChatRole.Tool)
+			.SelectMany(message => message.Contents.OfType<FunctionResultContent>());
+		Assert.Contains(results, result =>
+			calls.Any(call => call.CallId == result.CallId) &&
+			result.Result?.ToString()?.Contains("Sunny", StringComparison.Ordinal) == true &&
+			result.Result?.ToString()?.Contains(capturedLocation, StringComparison.OrdinalIgnoreCase) == true);
 	}
 
 	[Fact]
@@ -296,11 +310,10 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			currentIndex++;
 		}
 
-		if (toolCallIndex.HasValue && toolResultIndex.HasValue)
-		{
-			Assert.True(toolCallIndex < toolResultIndex,
-				"FunctionCallContent should be streamed before FunctionResultContent");
-		}
+		Assert.NotNull(toolCallIndex);
+		Assert.NotNull(toolResultIndex);
+		Assert.True(toolCallIndex < toolResultIndex,
+			"FunctionCallContent should be streamed before FunctionResultContent");
 	}
 
 	[Fact]
@@ -444,7 +457,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			name: "GetWeather",
 			description: "Gets the weather forecast for a specific date. Requires the date in YYYY-MM-DD format.");
 
-		// Require each dependent step on its provider round trip; Auto may legitimately stop after the time result.
+		// External invocation adapters require each step; native clients exercise automatic chaining from the prompt.
 		var client = EnableFunctionCalling(new T(), requestOptions =>
 			requestOptions.ToolMode = timeCallCount == 0 ? ChatToolMode.RequireSpecific(timeTool.Name)
 				: weatherCallCount == 0 ? ChatToolMode.RequireSpecific(weatherTool.Name)
@@ -527,7 +540,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			name: "GetWeather",
 			description: "Gets the weather forecast for a specific date. Requires the date in YYYY-MM-DD format.");
 
-		// Keep streaming's automatic invocation loop under the same required-step setup as the non-streaming test.
+		// Apply the same provider-specific round-trip policy as the non-streaming test.
 		var client = EnableFunctionCalling(new T(), requestOptions =>
 			requestOptions.ToolMode = timeCallCount == 0 ? ChatToolMode.RequireSpecific(timeTool.Name)
 				: weatherCallCount == 0 ? ChatToolMode.RequireSpecific(weatherTool.Name)

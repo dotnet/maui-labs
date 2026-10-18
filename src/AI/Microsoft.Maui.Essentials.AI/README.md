@@ -92,6 +92,16 @@ update if the provider emits no incremental progress.
 For trimmed/AOT apps, supply source-generated JSON serializer options for the
 response type.
 
+### Sampling
+
+Omitted options use native defaults; supported options vary by provider.
+
+| Provider | Sampling options |
+|----------|------------------|
+| Apple Intelligence | Finite `Temperature` and `TopP` in **0...1**; positive `TopK`. `TopK` takes precedence over `TopP`; `Seed` applies to random sampling. |
+| Windows AI | Forwards `Temperature`, `TopK`, and `TopP` to the native SDK. `Seed` is not supported. |
+| Android (coming soon) | Options and ranges are not specified yet. |
+
 ### Usage metadata
 
 Read usage when the selected provider supplies it:
@@ -105,16 +115,22 @@ Console.WriteLine($"Reasoning: {response.Usage?.ReasoningTokenCount}");
 Console.WriteLine($"Total: {response.Usage?.TotalTokenCount}");
 ```
 
-Apple usage requires OS 27 and a native bridge built with Xcode 27+. Streaming
-then includes a final `UsageContent` update. Use `ToChatResponseAsync()` to
-aggregate the stream and read `ChatResponse.Usage`; accumulate per-request
+| Provider | Usage metadata |
+|----------|----------------|
+| Apple Intelligence | OS 27+ with a native bridge built with Xcode 27+. Streaming includes a final `UsageContent` update. |
+| Windows AI | Not available; usage is `null`. |
+| Android (coming soon) | Not specified yet. |
+
+Use `ToChatResponseAsync()` to aggregate the stream and read
+`ChatResponse.Usage`; accumulate per-request
 counts with `UsageDetails.Add` for conversation totals. Usage is `null` on
-Apple OS 26 and Windows; the package does not estimate token counts.
+Apple OS 26; the package does not estimate token counts.
 
 ### Tool calling
 
 Apple Intelligence executes `AIFunction` tools supplied in `ChatOptions`.
-The Windows provider rejects tool options.
+The Windows provider rejects tool options. Android tool support is not
+specified yet.
 
 ```csharp
 using System.ComponentModel;
@@ -132,10 +148,14 @@ static string GetWeather(
 
 This tool returns fixed demonstration data. Set `ToolMode = ChatToolMode.None`
 to disable tools for a request.
+When replaying Apple tool history, each result must reference a preceding
+assistant function call; unmatched result IDs throw `ArgumentException`.
 
 ### Image input
 
-Image input requires Apple OS 27 and a ready vision-capable model:
+Image input is available on Apple OS 27 with a ready vision-capable model.
+Windows does not support image input; Android support is not specified yet.
+For Apple:
 
 ```csharp
 var message = new ChatMessage(ChatRole.User,
@@ -150,7 +170,7 @@ For native images, set `RawRepresentation` on the `DataContent` to a `CGImage`,
 `UIImage` (iOS/Mac Catalyst), or `NSImage` (macOS), while retaining valid encoded
 bytes for recording and cross-platform use. Local `file://` image `UriContent`
 is supported; remote URLs are rejected rather than fetched silently.
-Apple OS 26 ignores image content. Windows ignores non-text message content.
+Apple OS 26 and Windows omit image content while preserving supported text.
 Unsupported message content is omitted, not replaced with synthetic descriptions;
 errors processing supported content are still reported.
 
@@ -212,6 +232,8 @@ available on `UsageDetails`, without separate built-in span tags or metrics.
 Apple OS 26 and Windows provide timings and model metadata without token usage.
 Response IDs and finish reasons are recorded only when supplied by the provider.
 
-For Apple tool logs, supply an `ILoggerFactory`: Debug records lifecycle events;
-Trace includes arguments/results. Callbacks retain the request's execution
-context and any active trace/span, including across async tool code.
+| Provider | Additional diagnostics |
+|----------|------------------------|
+| Apple Intelligence | Pass an `ILoggerFactory` for tool lifecycle logs at Debug, or arguments/results at Trace. Callbacks preserve the request's trace context. |
+| Windows AI | Uses the shared chat telemetry above; native generation failures surface as exceptions. |
+| Android (coming soon) | Provider-specific diagnostics are not specified yet. |

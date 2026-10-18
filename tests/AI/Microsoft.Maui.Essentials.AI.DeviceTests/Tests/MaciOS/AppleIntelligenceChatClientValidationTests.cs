@@ -10,8 +10,26 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 /// Tests for AppleIntelligenceChatClient edge cases in message conversion,
 /// tool validation, and error handling paths.
 /// </summary>
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientValidationTests
 {
+	// Apple's transcript retains empty user turns as text segments; inference policy is tested separately.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void ToNative_WithOnlyUnconvertibleUserContent_RetainsEmptyTurn(bool nullText)
+	{
+		AIContent content = nullText ? new TextContent(null) : new UnrecognizedContent();
+
+		var message = Assert.Single(AppleIntelligenceChatClient.ToNative(
+			[new ChatMessage(ChatRole.User, [content])], null));
+
+		Assert.Equal(ChatRoleNative.User, message.Role);
+		Assert.Equal(string.Empty, Assert.IsType<TextContentNative>(Assert.Single(message.Contents)).Text);
+	}
+
+	private sealed class UnrecognizedContent : AIContent;
+
 	// Inspects Apple's StrictSchemaTransformCache: native structured output requires even optional CLR fields to be required.
 	[Fact]
 	public void ResponseSchema_WithOptionalProperties_RequiresAllNativeFields()
@@ -164,16 +182,13 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.Contains("UnsupportedToolForTesting", ex.Message, StringComparison.Ordinal);
 	}
 
-	/// <summary>
-	/// Verifies that FunctionResultContent with a CallId that doesn't match any prior
-	/// FunctionCallContent is handled gracefully (empty tool name, no exception).
-	/// Apple converts orphaned results to empty native tool names; cloud tool protocols may reject this history.
-	/// </summary>
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithOrphanedFunctionResult_DoesNotThrow()
+	// Apple's native transcript rejects orphaned tool outputs; fail deterministically before invoking the model.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task GetResponseAsync_WithOrphanedFunctionResult_ThrowsArgumentException(bool streaming)
 	{
-		var client = new AppleIntelligenceChatClient();
+		using var client = new AppleIntelligenceChatClient();
 		var messages = new List<ChatMessage>
 		{
 			new(ChatRole.User, "What's the weather?"),
@@ -184,38 +199,151 @@ public class AppleIntelligenceChatClientValidationTests
 			new(ChatRole.User, "Tell me more")
 		};
 
-		// Should not throw — orphaned FunctionResultContent gets empty tool name
-		var response = await client.GetResponseAsync(messages);
-		Assert.NotNull(response);
+		var error = await Assert.ThrowsAsync<ArgumentException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync(messages).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync(messages);
+		});
+		Assert.Equal("messages", error.ParamName);
+		Assert.Contains("call-999", error.Message, StringComparison.Ordinal);
+		Assert.Contains("preceding assistant function call", error.Message, StringComparison.Ordinal);
 	}
 
-	/// <summary>
-	/// Verifies that FunctionResultContent with a CallId not matching any FunctionCallContent
-	/// is handled gracefully (empty tool name, no exception).
-	/// Apple's native empty-name fallback is provider policy; cloud tool protocols may reject an unmatched call ID.
-	/// </summary>
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithFunctionResultOrphanedCallId_DoesNotThrow()
+	// Only preceding assistant calls belong to Apple's tool transcript, not discarded calls in other roles or future calls.
+	[Theory]
+	[InlineData("user", false, false)]
+	[InlineData("user", false, true)]
+	[InlineData("system", false, false)]
+	[InlineData("system", false, true)]
+	[InlineData("tool", false, false)]
+	[InlineData("tool", false, true)]
+	[InlineData("custom", false, false)]
+	[InlineData("custom", false, true)]
+	[InlineData("assistant", true, false)]
+	[InlineData("assistant", true, true)]
+	public async Task GetResponseAsync_WithResultWithoutPrecedingAssistantCall_Throws(string callRole, bool callAfterResult, bool streaming)
 	{
-		var client = new AppleIntelligenceChatClient();
+		using var client = new AppleIntelligenceChatClient();
+		var call = new ChatMessage(new ChatRole(callRole), [new FunctionCallContent("call-1", "GetWeather")]);
+		var result = new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "Sunny")]);
+		ChatMessage[] messages = callAfterResult
+			? [result, call, new(ChatRole.User, "Hello")]
+			: [call, result, new(ChatRole.User, "Hello")];
 
-		// Build a FunctionResultContent with a CallId that has no matching FunctionCallContent
-		var orphanResult = new FunctionResultContent("orphan-call-id", "Sunny result");
-
-		var messages = new List<ChatMessage>
+		var error = await Assert.ThrowsAsync<ArgumentException>(async () =>
 		{
-			new(ChatRole.User, "What's the weather?"),
-			new(ChatRole.Assistant, [new FunctionCallContent("call-1", "GetWeather")]),
-			new(ChatRole.Tool, [new FunctionResultContent("call-1", "Sunny")]),
-			// Orphaned result — callId doesn't match any prior FunctionCallContent
-			new(ChatRole.Tool, [orphanResult]),
-			new(ChatRole.User, "Tell me more")
-		};
+			if (streaming)
+				await client.GetStreamingResponseAsync(messages).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync(messages);
+		});
+		Assert.Equal("messages", error.ParamName);
+		Assert.Contains("call-1", error.Message, StringComparison.Ordinal);
+	}
 
-		// Should not throw — orphaned FunctionResultContent gets empty tool name
-		var response = await client.GetResponseAsync(messages);
-		Assert.NotNull(response);
+	// Apple's result marshaller must resolve valid calls in encounter order without accepting names from ignored roles.
+	[Fact]
+	public void ToNative_WithValidFunctionHistory_PreservesCallNamesAndResults()
+	{
+		ChatMessage[] messages =
+		[
+			new(ChatRole.Assistant, [new FunctionCallContent("call-1", "GetWeather")]),
+			new(ChatRole.User, [new FunctionCallContent("call-1", "IgnoredUserCall")]),
+			new(ChatRole.Tool, [new FunctionResultContent("call-1", "Sunny")]),
+			new(ChatRole.Assistant, [new FunctionCallContent("call-2", "GetTime")]),
+			new(ChatRole.Tool, [new FunctionResultContent("call-2", "Noon")]),
+			new(ChatRole.User, "Summarize.")
+		];
+
+		var native = AppleIntelligenceChatClient.ToNative(messages, null);
+		var results = native.SelectMany(message => message.Contents).OfType<FunctionResultContentNative>().ToArray();
+
+		Assert.Collection(results,
+			result =>
+			{
+				Assert.Equal("call-1", result.CallId);
+				Assert.Equal("GetWeather", result.Name);
+				Assert.Equal("Sunny", result.Result);
+			},
+			result =>
+			{
+				Assert.Equal("call-2", result.CallId);
+				Assert.Equal("GetTime", result.Name);
+				Assert.Equal("Noon", result.Result);
+			});
+	}
+
+	public static IEnumerable<object[]> InvalidSamplingOptions()
+	{
+		(string Name, float Value)[] cases =
+		[
+			(nameof(ChatOptions.TopK), 0), (nameof(ChatOptions.TopK), -1),
+			(nameof(ChatOptions.TopP), -0.1f), (nameof(ChatOptions.TopP), 1.1f),
+			(nameof(ChatOptions.TopP), float.NaN), (nameof(ChatOptions.TopP), float.PositiveInfinity),
+			(nameof(ChatOptions.TopP), float.NegativeInfinity),
+			(nameof(ChatOptions.Temperature), -0.1f), (nameof(ChatOptions.Temperature), 1.1f),
+			(nameof(ChatOptions.Temperature), 2f), (nameof(ChatOptions.Temperature), float.NaN),
+			(nameof(ChatOptions.Temperature), float.PositiveInfinity),
+			(nameof(ChatOptions.Temperature), float.NegativeInfinity)
+		];
+		foreach (var (name, value) in cases)
+		{
+			yield return [name, value, false];
+			yield return [name, value, true];
+		}
+	}
+
+	// Invalid Apple sampling parameters can trap in Swift; both APIs must reject them before any native generation.
+	[Theory]
+	[MemberData(nameof(InvalidSamplingOptions))]
+	public async Task GetResponseAsync_WithInvalidSamplingOption_ThrowsBeforeInference(string name, float value, bool streaming)
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var options = new ChatOptions();
+		if (name == nameof(ChatOptions.TopK))
+			options.TopK = (int)value;
+		else if (name == nameof(ChatOptions.TopP))
+			options.TopP = value;
+		else
+			options.Temperature = value;
+
+		var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "Hello")], options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync([new ChatMessage(ChatRole.User, "Hello")], options);
+		});
+		Assert.Contains(name, error.Message, StringComparison.Ordinal);
+	}
+
+	// These are Apple's boxed native sampling fields; Swift's deterministic mapping tests verify the resulting GenerationOptions.
+	[Theory]
+	[InlineData(null, null, null, null)]
+	[InlineData(null, null, null, 0.7f)]
+	[InlineData(null, null, 42L, null)]
+	[InlineData(null, 0.75f, 42L, 0f)]
+	[InlineData(10, null, 42L, 1f)]
+	[InlineData(10, 0.75f, 42L, 0.5f)]
+	[InlineData(null, 0f, null, null)]
+	[InlineData(null, 1f, null, null)]
+	public void ToNative_WithValidSamplingOptions_PreservesValues(int? topK, float? topP, long? seed, float? temperature)
+	{
+		var native = new AppleIntelligenceChatClient().ToNative(new ChatOptions
+		{
+			TopK = topK,
+			TopP = topP,
+			Seed = seed,
+			Temperature = temperature
+		}, default);
+
+		Assert.NotNull(native);
+		Assert.Equal(topK, native.TopK?.Int32Value);
+		Assert.Equal((double?)topP, native.TopP?.DoubleValue);
+		Assert.Equal(seed, native.Seed?.Int64Value);
+		Assert.Equal((double?)temperature, native.Temperature?.DoubleValue);
 	}
 
 	/// <summary>

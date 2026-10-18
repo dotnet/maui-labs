@@ -5,30 +5,53 @@ using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
+// These classes share the device's single on-device model; competing suites can exhaust generation timeouts.
+[CollectionDefinition(nameof(AppleIntelligenceCollection), DisableParallelization = true)]
+public class AppleIntelligenceCollection
+{
+}
+
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientCancellationTests : ChatClientCancellationTestsBase<AppleIntelligenceChatClient>
 {
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<AppleIntelligenceChatClient>
 {
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientGetServiceTests : ChatClientGetServiceTestsBase<AppleIntelligenceChatClient>
 {
 	protected override string ExpectedProviderName => "apple";
 	protected override string ExpectedDefaultModelId => "apple-intelligence";
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientInstantiationTests : ChatClientInstantiationTestsBase<AppleIntelligenceChatClient>
 {
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsBase<AppleIntelligenceChatClient>
 {
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBase<AppleIntelligenceChatClient>
 {
+	// Apple's native temperature range is 0...1, unlike OpenAI's 0...2.
+	[Fact]
+	public override async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+			client.GetResponseAsync([new ChatMessage(ChatRole.User, "Hello")],
+				new ChatOptions { Temperature = 2.0f }));
+		Assert.Contains("Temperature", error.Message, StringComparison.Ordinal);
+	}
+
 	/// <summary>
 	/// Apple Intelligence requires a JSON schema for structured responses.
 	/// Unlike the base test, this expects an InvalidOperationException when using ChatResponseFormat.Json without a schema.
@@ -81,6 +104,7 @@ public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBas
 	}
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsBase<AppleIntelligenceChatClient>
 {
 	// Apple's fixed on-device model ignores ModelId overrides; cloud aliases and resolved snapshot IDs have different semantics.
@@ -103,6 +127,7 @@ public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsB
 	}
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTestsBase<AppleIntelligenceChatClient>
 {
 	// Apple's fixed on-device model ID must label every update despite caller overrides; cloud model resolution can differ.
@@ -130,6 +155,7 @@ public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTest
 	}
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
 	: ChatClientUsageTestsBase<AppleIntelligenceChatClient>(output)
 {
@@ -155,6 +181,7 @@ public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
 	}
 }
 
+[Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>
 {
 	// Apple requires a native generation schema even for JSON mode; replace the shared acceptance check with actual rejection.

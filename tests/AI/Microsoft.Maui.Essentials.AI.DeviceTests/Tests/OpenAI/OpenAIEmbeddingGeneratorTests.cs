@@ -12,18 +12,23 @@ public class OpenAIEmbeddingGenerator : DelegatingEmbeddingGenerator<string, Emb
 	{
 	}
 }
+
 public class OpenAIEmbeddingGeneratorCancellationTests : EmbeddingGeneratorCancellationTestsBase<OpenAIEmbeddingGenerator>
 {
 }
+
 public class OpenAIEmbeddingGeneratorConcurrencyTests : EmbeddingGeneratorConcurrencyTestsBase<OpenAIEmbeddingGenerator>
 {
 }
+
 public class OpenAIEmbeddingGeneratorDisposalTests : EmbeddingGeneratorDisposalTestsBase<OpenAIEmbeddingGenerator>
 {
 }
+
 public class OpenAIEmbeddingGeneratorGenerateTests : EmbeddingGeneratorGenerateTestsBase<OpenAIEmbeddingGenerator>
 {
 }
+
 public class OpenAIEmbeddingGeneratorGetServiceTests : EmbeddingGeneratorGetServiceTestsBase<OpenAIEmbeddingGenerator>
 {
 	protected override string ExpectedProviderName => "openai";
@@ -31,9 +36,11 @@ public class OpenAIEmbeddingGeneratorGetServiceTests : EmbeddingGeneratorGetServ
 		IPlatformApplication.Current!.Services.GetRequiredService<IConfiguration>()["AI:EmbeddingDeploymentName"]
 			?? throw new InvalidOperationException("AI:EmbeddingDeploymentName is required by the OpenAI test fixture.");
 }
+
 public class OpenAIEmbeddingGeneratorInstantiationTests : EmbeddingGeneratorInstantiationTestsBase<OpenAIEmbeddingGenerator>
 {
 }
+
 public class OpenAIEmbeddingGeneratorSimilarityTests : EmbeddingGeneratorSimilarityTestsBase<OpenAIEmbeddingGenerator>
 {
 }

@@ -74,11 +74,13 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var client = new T();
 		var messages = new List<ChatMessage>
 		{
-			new(ChatRole.User, "What is the weather in Boston? Respond with location, temperature in fahrenheit, and condition.")
+			new(ChatRole.User, "Return location Boston, temperature 68, and condition sunny.")
 		};
 		var options = new ChatOptions
 		{
-			ResponseFormat = ChatResponseFormat.ForJsonSchema<WeatherResponse>()
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<WeatherResponse>(),
+			Temperature = 0,
+			Reasoning = new() { Effort = ReasoningEffort.None }
 		};
 
 		var textBuilder = new System.Text.StringBuilder();
@@ -97,8 +99,11 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		Assert.False(string.IsNullOrEmpty(completeText), "Should receive streaming response");
 
 		// Verify the complete response is valid JSON
-		var weatherResponse = JsonSerializer.Deserialize<WeatherResponse>(completeText);
+		var weatherResponse = JsonSerializer.Deserialize<WeatherResponse>(completeText, JsonSerializerOptions.Web);
 		Assert.NotNull(weatherResponse);
+		Assert.Equal("Boston", weatherResponse.Location, ignoreCase: true);
+		Assert.Equal(68, weatherResponse.Temperature);
+		Assert.Equal("sunny", weatherResponse.Condition, ignoreCase: true);
 	}
 
 	[Fact]
@@ -198,11 +203,13 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var messages = new List<ChatMessage>
 		{
 			new(ChatRole.System, "You are a travel assistant. Always respond with structured itinerary data."),
-			new(ChatRole.User, "Plan a 1-day trip to Seattle with 2 activities.")
+			new(ChatRole.User, "Plan a 1-day trip to Seattle with exactly 2 activities. Use at most six words for each activity description.")
 		};
 		var options = new ChatOptions
 		{
-			ResponseFormat = ChatResponseFormat.ForJsonSchema<TripItinerary>()
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<TripItinerary>(),
+			Temperature = 0,
+			Reasoning = new() { Effort = ReasoningEffort.None }
 		};
 
 		var response = await client.GetResponseAsync(messages, options);
@@ -211,8 +218,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		Assert.NotNull(response.Text);
 
 		var itinerary = JsonSerializer.Deserialize<TripItinerary>(response.Text, JsonSerializerOptions.Web);
-		Assert.NotNull(itinerary);
-		Assert.NotNull(itinerary.Destination);
+		AssertItinerary(itinerary);
 	}
 
 	[Fact]
@@ -274,14 +280,33 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var messages = new List<ChatMessage>
 		{
 			new(ChatRole.System, "You are a travel assistant. Always respond with structured itinerary data."),
-			new(ChatRole.User, "Plan a 1-day trip to Seattle with 2 activities.")
+			new(ChatRole.User, "Plan a 1-day trip to Seattle with exactly 2 activities. Use at most six words for each activity description.")
 		};
 
-		var response = await client.GetResponseAsync<TripItinerary>(messages);
+		var options = new ChatOptions
+		{
+			Temperature = 0,
+			Reasoning = new() { Effort = ReasoningEffort.None }
+		};
+		var response = await client.GetResponseAsync<TripItinerary>(messages, options);
 
 		Assert.NotNull(response);
-		Assert.NotNull(response.Result);
-		Assert.NotNull(response.Result.Destination);
+		AssertItinerary(response.Result);
+	}
+
+	private static void AssertItinerary(TripItinerary? itinerary)
+	{
+		Assert.NotNull(itinerary);
+		Assert.Contains("Seattle", itinerary.Destination, StringComparison.OrdinalIgnoreCase);
+		Assert.Equal(1, itinerary.Days);
+		Assert.NotNull(itinerary.Activities);
+		Assert.Equal(2, itinerary.Activities.Length);
+		Assert.All(itinerary.Activities, activity =>
+		{
+			Assert.False(string.IsNullOrWhiteSpace(activity.Name));
+			Assert.False(string.IsNullOrWhiteSpace(activity.Description));
+			Assert.False(string.IsNullOrWhiteSpace(activity.Time));
+		});
 	}
 
 	[Fact]

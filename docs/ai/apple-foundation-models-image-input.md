@@ -13,8 +13,9 @@ inference requires iOS, Mac Catalyst, or macOS **27+**, a ready on-device
 model, and `SystemLanguageModel.default.capabilities.contains(.vision)`.
 Text chat still works on supported OS 26 devices. `ImageContentNative` itself
 only uses older Foundation/CoreGraphics/ImageIO APIs, so it can be constructed
-on OS 26; Swift's `#available` checks prevent calls to the OS 27 Foundation
-Models image APIs and return an explicit error for image requests. The
+on OS 26; the managed request converter omits image content on that OS,
+preserving supported text just as the Windows adapter does.
+Swift's `#available` checks also protect the native entry points. The
 playground advertises image input only on OS 27+.
 
 CI uses Xcode 27 and .NET workload `10.0.401`. With Xcode 27 selected as the
@@ -34,8 +35,9 @@ combination; the command above targets 27.0 and needs no such override.
 Put a `DataContent` with an `image/*` media type in `ChatMessage.Contents`,
 alongside the text prompt. A `UriContent` pointing to a local `file://` URL
 also works. Remote `http(s)` image URLs are **not** downloaded; they throw
-`NotSupportedException`. Unsupported media types are rejected, not
-interpreted as images.
+`NotSupportedException`. Unrecognized media types are ignored, not interpreted
+as images. Recognized images with invalid payloads or unavailable vision
+capabilities fail explicitly rather than becoming text-only requests.
 
 ```csharp
 using Microsoft.Extensions.AI;
@@ -89,8 +91,10 @@ M.E.AI `DataContent` with portable PNG bytes and a native `CGImage` handle.
 When an attachment has EXIF orientation, its pixels are normalized before
 returning either representation so recordings and subsequent requests agree.
 
-Unsupported content and unavailable image APIs produce explicit errors. On OS
-27, a request containing images also checks the model's `.vision` capability.
+Unknown content follows the shared adapter tolerance policy and is ignored.
+Images are omitted when the OS image APIs are unavailable. Invalid image payloads
+on supported systems produce errors. On OS 27, a request containing images also
+checks the model's `.vision` capability.
 This bridge does **not** implement `IImageGenerator` or Apple Image Playground;
 the Chat Playground's Azure image generation is a separate feature. Apple and
 Azure chat use the same existing `Microsoft.Extensions.AI` logging and
@@ -106,7 +110,7 @@ transcript-history conversion. If the model is unavailable or lacks vision,
 the request fails rather than silently falling back to Azure.
 
 The Mac Catalyst device-test project includes model-free conversion and
-validation tests, including OS 26 rejection cases:
+validation tests, including OS 26 unsupported-content cases:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
@@ -114,22 +118,16 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
   --filter 'FullyQualifiedName~AppleIntelligenceChatClientImageTests&RequiresModel!=true'
 ```
 
-The `RequiresModel=true` test sends a real image to the model and is excluded
-from CI; it passed on a macOS 27.0.1 host with a ready model. The playground
-also returned image-specific descriptions and answered a streamed follow-up
-from image-bearing history on that host. Model readiness varies by device;
-the missing-vision error still requires a device whose model lacks `.vision`.
-Compiling against the Xcode 27 SDK does not force the OS 26 availability
-branch: `#available` checks the OS at runtime. The four older-OS image
-rejection tests passed on an iOS 26.5 simulator using binaries built against
-the 27 SDK:
+The `RequiresModel=true` test sends a real image and requires a ready vision model;
+CI excludes it. Availability checks use the runtime OS, not the SDK version.
+Run the older-OS conversion tests on an iOS 26 simulator:
 
 ```bash
 # Boot an iOS 26 simulator first; use its UDID in place of <simulator-udid>.
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
   -f net10.0-ios27.0 -p:UseXcode27Preview=true \
   -p:DeviceRunnersDevice=<simulator-udid> \
-  --filter 'FullyQualifiedName~OnOlderOS_ReportsUnsupported' --logger trx
+  --filter 'FullyQualifiedName~WithImageOnOlderOS_PreservesText' --logger trx
 ```
 
 ## API references

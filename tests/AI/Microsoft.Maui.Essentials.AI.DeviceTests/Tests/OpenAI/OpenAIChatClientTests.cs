@@ -15,9 +15,11 @@ public class OpenAIChatClient : DelegatingChatClient
 	{
 	}
 }
+
 public class OpenAIChatClientCancellationTests : ChatClientCancellationTestsBase<OpenAIChatClient>
 {
 }
+
 public class OpenAIChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<OpenAIChatClient>
 {
 	protected override IChatClient EnableFunctionCalling(OpenAIChatClient client, Action<ChatOptions>? configureOptions = null)
@@ -29,6 +31,7 @@ public class OpenAIChatClientFunctionCallingTestsBase : ChatClientFunctionCallin
 		return builder.Build();
 	}
 }
+
 public class OpenAIChatClientGetServiceTests : ChatClientGetServiceTestsBase<OpenAIChatClient>
 {
 	protected override string ExpectedProviderName => "openai";
@@ -36,9 +39,11 @@ public class OpenAIChatClientGetServiceTests : ChatClientGetServiceTestsBase<Ope
 		IPlatformApplication.Current!.Services.GetRequiredService<IConfiguration>()["AI:DeploymentName"]
 			?? throw new InvalidOperationException("AI:DeploymentName is required by the OpenAI test fixture.");
 }
+
 public class OpenAIChatClientInstantiationTests : ChatClientInstantiationTestsBase<OpenAIChatClient>
 {
 }
+
 public class OpenAIChatClientMessagesTests : ChatClientMessagesTestsBase<OpenAIChatClient>
 {
 	// Azure/OpenAI rejects empty input with ClientResultException HTTP 400, not the native clients' ArgumentException.
@@ -55,18 +60,23 @@ public class OpenAIChatClientMessagesTests : ChatClientMessagesTestsBase<OpenAIC
 		Assert.Contains("input", error.Message, StringComparison.OrdinalIgnoreCase);
 	}
 }
+
 public class OpenAIChatClientOptionsTests : ChatClientOptionsTestsBase<OpenAIChatClient>
 {
 }
+
 public class OpenAIChatClientResponseTests : ChatClientResponseTestsBase<OpenAIChatClient>
 {
 }
+
 public class OpenAIChatClientStreamingTests : ChatClientStreamingTestsBase<OpenAIChatClient>
 {
 }
+
 public class OpenAIChatClientUsageTests(ITestOutputHelper output) : ChatClientUsageTestsBase<OpenAIChatClient>(output)
 {
 }
+
 public class OpenAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<OpenAIChatClient>
 {
 }

@@ -1,0 +1,105 @@
+{
+  "capturedAt" : "2026-10-17T23:58:12Z",
+  "finalSnapshot" : "Each file ends with the authoritative responseStream.collect() content.",
+  "maximumResponseTokens" : 1024,
+  "os" : "Version 27.0.1 (Build 26A434)",
+  "recordings" : [
+    {
+      "file" : "apple-weather-os27.jsonl",
+      "prompt" : "Return location Boston, temperature 68, and condition sunny.",
+      "schema" : {
+        "properties" : {
+          "condition" : {
+            "type" : "string"
+          },
+          "location" : {
+            "type" : "string"
+          },
+          "temperature" : {
+            "type" : "integer"
+          }
+        },
+        "required" : [
+          "location",
+          "temperature",
+          "condition"
+        ],
+        "title" : "Weather",
+        "type" : "object"
+      },
+      "snapshotCount" : 13
+    },
+    {
+      "file" : "apple-mixed-values-os27.jsonl",
+      "prompt" : "Return label test, ready true, amount -12.75, values [10, 20, 30], and details with text all done and enabled false.",
+      "schema" : {
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "details" : {
+            "properties" : {
+              "enabled" : {
+                "type" : "boolean"
+              },
+              "text" : {
+                "type" : "string"
+              }
+            },
+            "required" : [
+              "text",
+              "enabled"
+            ],
+            "title" : "Details",
+            "type" : "object"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "ready" : {
+            "type" : "boolean"
+          },
+          "values" : {
+            "items" : {
+              "type" : "number"
+            },
+            "type" : "array"
+          }
+        },
+        "required" : [
+          "label",
+          "ready",
+          "amount",
+          "values",
+          "details"
+        ],
+        "title" : "Measurements",
+        "type" : "object"
+      },
+      "snapshotCount" : 28
+    },
+    {
+      "file" : "apple-long-string-os27.jsonl",
+      "prompt" : "Explain how rainbows form in about 100 words in message. Set wordCount to 100.",
+      "schema" : {
+        "properties" : {
+          "message" : {
+            "type" : "string"
+          },
+          "wordCount" : {
+            "type" : "integer"
+          }
+        },
+        "required" : [
+          "message",
+          "wordCount"
+        ],
+        "title" : "Explanation",
+        "type" : "object"
+      },
+      "snapshotCount" : 109
+    }
+  ],
+  "source" : "FoundationModels.LanguageModelSession.streamResponse",
+  "temperature" : 0
+}
