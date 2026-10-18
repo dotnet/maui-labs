@@ -51,10 +51,6 @@ before packing/signing on Windows. See
 
 ## Tests and implementation
 
-All local providers must follow the capability profiles and conformance requirements
-in the [Provider implementation specification](../../docs/ai/local-chat-provider-implementation.md).
-Declare native limitations explicitly and bind every applicable shared test suite.
-
 Portable tests live in `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests`:
 
 ```sh

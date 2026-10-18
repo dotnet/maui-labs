@@ -99,9 +99,6 @@ Use descriptive names that communicate the scenario:
 
 ### Shared AI Backend Coverage
 
-- Follow the [local chat provider implementation specification](../../docs/ai/local-chat-provider-implementation.md).
-  New local providers must declare a capability profile, bind every applicable shared
-  suite, and document/test provider-only deviations rather than silently weakening contracts.
 - Put backend-neutral chat and embedding contracts in the existing generic test bases.
 - Bind each backend to every applicable shared suite; declare differences such as
   unavailable token usage through the suite's existing capability hooks.

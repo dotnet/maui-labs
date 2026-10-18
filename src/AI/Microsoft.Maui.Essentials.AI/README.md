@@ -180,5 +180,4 @@ Live Foundation Models tests are opt-in: prefix that command with
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
-- [Provider semantics and implementation specification](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider-implementation.md)
 - [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)
