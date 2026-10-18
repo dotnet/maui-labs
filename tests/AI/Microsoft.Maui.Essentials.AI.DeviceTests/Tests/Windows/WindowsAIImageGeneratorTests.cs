@@ -12,7 +12,7 @@ public class WindowsAIImageGeneratorTests : ImageGeneratorTestsBase
 {
 	protected override IImageGenerator CreateImageGenerator() => new WindowsAIImageGenerator();
 
-	// Windows Generate* is synchronous; verify cached-model inference yields to the UI cancellation action.
+	// Windows Generate* is synchronous; a background-posted UI callback must run during warm inference.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GenerateAsync_WarmUiCaller_CanDispatchCancellation()
@@ -22,22 +22,32 @@ public class WindowsAIImageGeneratorTests : ImageGeneratorTestsBase
 		await generator.GenerateAsync(
 			new ImageGenerationRequest(ImageGeneratorTestData.Prompt), cancellationToken: timeout.Token);
 
-		var dispatchDuration = TimeSpan.Zero;
 		await MainThread.InvokeOnMainThreadAsync(async () =>
 		{
 			using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
-			var watch = System.Diagnostics.Stopwatch.StartNew();
-			var pending = generator.GenerateAsync(
+			Task<ImageGenerationResponse>? pending = null;
+			var heartbeat = Task.Run(async () =>
+			{
+				await Task.Delay(TimeSpan.FromMilliseconds(250));
+				var watch = System.Diagnostics.Stopwatch.StartNew();
+				return await MainThread.InvokeOnMainThreadAsync(() =>
+				{
+					var observation = (Latency: watch.Elapsed, WasPending: pending is { IsCompleted: false });
+					cancellation.Cancel();
+					return observation;
+				});
+			});
+			pending = generator.GenerateAsync(
 				new ImageGenerationRequest(ImageGeneratorTestData.Prompt), cancellationToken: cancellation.Token);
-			dispatchDuration = watch.Elapsed;
-			MainThread.BeginInvokeOnMainThread(cancellation.Cancel);
 
-			// Await native completion before disposing the generator, even if the UI dispatch was too slow.
-			await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+			// Observe both tasks before assertions/disposal, even if the UI was blocked until inference finished.
+			var error = await Record.ExceptionAsync(() => pending);
+			var observation = await heartbeat;
+			Assert.True(observation.WasPending, "The UI callback did not run while generation was pending.");
+			Assert.True(observation.Latency < TimeSpan.FromSeconds(1),
+				$"The background-posted callback waited {observation.Latency} for the UI thread.");
+			Assert.IsAssignableFrom<OperationCanceledException>(error);
 		});
-
-		Assert.True(dispatchDuration < TimeSpan.FromSeconds(1),
-			$"Starting a warm request blocked the UI for {dispatchDuration}.");
 	}
 }
 
