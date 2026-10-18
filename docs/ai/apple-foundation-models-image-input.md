@@ -133,6 +133,7 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
 
 ## API references
 
+- [Local chat provider implementation specification](local-chat-provider-implementation.md)
 - [Foundation Models](https://developer.apple.com/documentation/foundationmodels)
 - [Analyzing images with multimodal prompting](https://developer.apple.com/documentation/foundationmodels/analyzing-images-with-multimodal-prompting)
 - [`Attachment`](https://developer.apple.com/documentation/foundationmodels/attachment)

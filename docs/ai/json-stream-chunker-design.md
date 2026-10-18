@@ -6,6 +6,9 @@
 > stable across snapshots. This chunker remains an internal, provider-neutral fallback for sources
 > that only provide complete JSON snapshots without completion metadata.
 
+Provider-level delta, revision, final-status, and usage rules are defined in the
+[Local chat provider implementation specification](local-chat-provider-implementation.md#8-streaming-and-usage).
+
 ## Problem Statement
 
 We have an AI model that receives progressive JSON internally but outputs complete, valid JSON objects each time. The property order may vary between chunks. We need to convert these complete JSON objects back into streaming chunks that, when concatenated, produce valid JSON matching the final output.
