@@ -7,8 +7,9 @@ API. It does not imply that every provider supports tools, images, JSON, or usag
 
 **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** have their
 [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) meanings. A documented gap is
-not a conformance waiver: deviations MUST identify the native constraint,
-semantic loss, observable behavior, and covering tests or unresolved work.
+not a conformance waiver: deviations MUST identify the native constraint or
+declared profile decision, semantic loss, observable behavior, and covering tests
+or unresolved work.
 
 ## 1. Authority and decisions
 
@@ -118,9 +119,11 @@ and schema transformation rules require nonmutation.
 The default OpenAI-compatible content profile omits unknown roles and
 unrecognized/unmappable content, retaining neighboring supported content and an
 empty User turn when nothing maps. Null text MUST NOT become the literal
-`"null"`. A stricter provider MUST explicitly declare and test its rejection
-policy; rejection is not equivalent to the default tolerance profile. Known
-instruction roles follow section 3, not unknown-role handling.
+`"null"`. A documented strict content profile MAY reject unmappable roles/content
+instead of default omission; it still MUST satisfy known instruction-role
+handling in section 3 and the malformed-supported-content rules below. This is
+a conforming profile choice when declared and tested, not default tolerance.
+An undeclared deviation remains a gap.
 
 Malformed **supported** content MUST produce an explicit error, not be silently
 treated as unsupported. Availability-dependent omission, such as images on an
@@ -153,12 +156,14 @@ again. Native execution MUST propagate request cancellation and required
 invocation services/context. Tool call/result ordering MUST survive streaming
 and aggregation; a Tool result is not Assistant answer text.
 
-`ChatToolMode.None` MUST disable execution/registration even when definitions
-are supplied. Required or named selection MUST be honored or explicitly
-rejected, not silently treated as Auto. Unsupported requests for tool calling
-MUST fail explicitly. `AllowMultipleToolCalls` MUST be documented as honored,
-advisory, or unsupported. Unused definitions with None need a consistent tested
-policy, not accidental invocation.
+With `ChatToolMode.None`, definitions and selection hints MUST NOT register or
+execute tools. Providers SHOULD ignore inactive definitions; a provider MAY
+reject them only as a declared and tested stricter option profile, not as a
+native impossibility. `AllowMultipleToolCalls` under None likewise MUST NOT
+cause execution. Otherwise, required or named selection MUST be honored or
+explicitly rejected, not silently treated as Auto. Unsupported requests for tool
+calling MUST fail explicitly. `AllowMultipleToolCalls` MUST be documented as
+honored, advisory, or unsupported.
 
 A declared textual replay fallback MAY serialize calls/results without native
 tool entries, but MUST retain both names and call IDs where supplied and document
@@ -190,9 +195,12 @@ preserving omission semantics or providing complete JSON Schema support.
 Each provider MUST publish mapped options, valid ranges, native defaults,
 ignored/advisory fields, unsupported guarantees, and conflict precedence.
 Null fields SHOULD preserve native defaults rather than force an arbitrary
-sampling mode. Invalid nonfinite/out-of-range values MUST be rejected before
-native invocation; adapters MUST NOT silently clamp or wrap signed values into
-unsigned/native ranges.
+sampling mode. Invalid nonfinite values and values outside known applicable
+native ranges MUST be rejected before generation starts; validation MAY be
+delegated to a native request builder. Unknown/model-dependent ranges MUST NOT
+be invented. Checked conversions MUST prevent wraparound; adapters MUST NOT
+silently clamp values. If a native API validates only during generation, the
+provider MUST document and test that explicit exception.
 
 Temperature, nucleus/top-k sampling, seed, reasoning, stop conditions, and token
 limits are native/model-specific. There is no universal temperature range,
@@ -200,9 +208,13 @@ reasoning setting, deterministic-seed promise, or equivalence between a validate
 token count and an enforced native output limit. Required capabilities MUST be
 honored, rejected, or explicitly exposed as a weaker/advisory profile.
 
-Metadata and responses MUST identify the actual selected/executed model using
-a stable identifier, not echo an unselected caller `ModelId`. A provider with
-one fixed model MUST document ignored/rejected model overrides.
+`ChatClientMetadata` MUST identify the provider and its truthful default/configured
+model when known; it MUST NOT guess an absent resolved runtime ID. Responses and
+updates MUST use the actual executed model ID when supplied by the native API,
+otherwise a documented stable family/default ID or null. Synchronous `GetService`
+MUST NOT require model creation or readiness to supply metadata. Implementations
+MUST NOT echo an unselected caller `ModelId`. A provider with one fixed model MUST
+document ignored/rejected model overrides.
 `GetService` SHOULD return metadata and the matching client/native service where
 appropriate; unsupported types/keys MUST return null rather than unrelated
 objects. Fixed local identity is not a claim about a cloud deployment's resolved
@@ -213,8 +225,10 @@ snapshot identifier.
 Text updates MUST be append-only deltas within each message/content stream.
 Cumulative native snapshots MUST be normalized exactly once; native deltas MUST
 NOT be differenced again. Repeated snapshots MUST NOT duplicate text. If a
-producer revises an emitted prefix, use authoritative completion metadata,
-buffer until stable, or fail explicitly; resetting and resending text is invalid.
+producer revises an emitted prefix, buffer until stable or fail explicitly.
+Authoritative completion metadata MAY be exposed additionally, but MUST NOT be
+claimed to correct already emitted text unless a separately declared consumer
+protocol supports correction. Resetting and resending text is invalid.
 The [JSON chunker design](json-stream-chunker-design.md) describes one fallback,
 not a requirement to replace a native delta protocol.
 
@@ -228,8 +242,9 @@ uses role/ID changes to create messages.
 
 Metadata-only updates are valid; implementations MUST NOT assume every update
 contains answer text. Local providers SHOULD label every update with the stable
-model ID. A single completed update is valid when native progress is unavailable;
-providers MUST NOT fabricate progress or split completed text to simulate it.
+model ID when known, following section 7. A single completed update is valid when
+native progress is unavailable; providers MUST NOT fabricate progress or split
+completed text to simulate it.
 Final native status/errors MUST be checked even after progress; final text MUST
 NOT be appended a second time.
 
@@ -241,11 +256,13 @@ Independent generations are not expected to produce identical text or usage.
 
 ## 9. Cancellation, failures, ownership, and privacy
 
-Request cancellation, enumerator cancellation, and early stream disposal MUST
-be connected to native work. Cancellation MUST NOT become an empty successful
-response. Adapters MUST keep callbacks and request context alive until native
-completion/termination, release owned resources safely, and observe late faults
-even if the consumer has left.
+Request and enumerator cancellation MUST be connected to native work. Early
+stream disposal MUST request native cancellation and keep owned callback/request
+resources alive until native termination, even if public disposal returns earlier
+under a documented policy. Caller completion is not proof of native abort.
+Cancellation MUST NOT become an empty successful response. Adapters MUST keep
+callbacks and request context alive until native completion/termination, release
+owned resources safely, and observe late faults even if the consumer has left.
 
 Validation, model readiness, context-limit, schema/decode, tool, and final native
 status failures MUST be explicit. Providers MUST NOT turn malformed native success
@@ -272,9 +289,11 @@ telemetry middleware and preserve native callback trace context where supported.
 
 Providers MUST bind every applicable [shared chat suite][shared-tests] and declare
 capability differences through explicit hooks/overrides, preserving assertions
-and `RequiresModel` traits. Provider-only tests MUST name the native policy or
-API that prevents sharing. Prefer model-free conversion/protocol tests for
-backend-neutral rules; add native/live tests for behavior those tests cannot prove.
+and `RequiresModel` traits. Unsupported capabilities MUST bind/test applicable
+rejection cases; they do not require successful-capability suites. Provider-only
+tests MUST name the native policy, API, or declared profile choice that prevents
+sharing. Prefer model-free conversion/protocol tests for backend-neutral rules;
+add native/live tests for behavior those tests cannot prove.
 
 | Area | Required evidence for applicable capabilities |
 |------|-----------------------------------------------|
@@ -305,7 +324,7 @@ existing implementations already satisfy every rule.
 |------------------|-------------------|-------------------------|
 | Apple / exact native history | [Managed conversion][apple-managed] prepends options as a System message; existing System messages stay interleaved. [Swift][apple-native] maps them to `Transcript.instructions`; the final effective prompt must be User. Native tools, schema-constrained JSON, OS 27 vision/usage, and native JSON deltas are distinct capabilities. | Developer is currently ignored. Required/named tool mode is not enforced (only None versus registration). [Tool schema parse failures][apple-tools] substitute a string schema. A null/empty native success becomes an empty Assistant response. These are gaps, not recommended fallback policies. |
 | Windows / single instruction slot plus prompt-only history | [Normalization][windows-snapshot] collects nonblank options first, then System messages in encounter order and removes them from converted history. Text history/tool replay is flattened; execution requests reject; usage is absent. Structured generation embeds instructions in its prompt rather than a native system context. | Good shared baseline coverage is not complete conformance. Developer is omitted; separators use `Environment.NewLine` rather than fixed LF. Textual tool replay does not retain both name and call ID. Token-limit enforcement, structured progress/final status, and schema/option limitations remain explicitly provider-specific. |
-| Android Gemini Nano / single instruction slot plus weaker history | [Managed conversion][android-managed] prepends options as a System DTO; [Kotlin][android-native] hoists all System parts in encounter order using `\n\n` and removes them from conversation contents. Tools/JSON reject; native streaming, usage and cancellation have dedicated lifecycle handling. | Blank instruction chunks are not filtered; Developer/custom/Tool roles and unknown content reject rather than use the default tolerance profile. Empty messages reject even with options instructions. None plus definitions needs alignment; applicable shared Messages/Options/JSON/Function/Cancellation/Usage suite binding is incomplete. Native model/hardware inference gaps remain. |
+| Android Gemini Nano / single instruction slot plus weaker history | [Managed conversion][android-managed] prepends options as a System DTO; [Kotlin][android-native] hoists all System text parts in encounter order using `\n\n` and removes them from conversation contents. It binds shared Response/Streaming/GetService/Instantiation suites and native lifecycle tests. Unsupported JSON/function capabilities have separate rejection tests. | Blank instruction chunks are not filtered; fragments within one System message become `A\n\nB`, not `AB`. Raw native role matching is case-sensitive; Developer/custom/Tool roles and unknown content reject, with the strict profile still needing declaration and binding. Empty messages reject even with options instructions. None plus definitions is a strict-policy gap/change goal, not a native impossibility. Applicable shared Messages/Options/Cancellation/Usage bindings are incomplete; successful JSON/function capability suites are not required. Native model/hardware inference gaps remain. |
 
 Apple's ordered [Transcript][apple-transcript] mapping MAY remain preferable to
 single-slot hoisting when OS/model evidence confirms its instruction semantics.
