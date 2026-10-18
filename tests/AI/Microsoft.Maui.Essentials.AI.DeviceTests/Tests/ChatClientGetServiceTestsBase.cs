@@ -22,6 +22,15 @@ public abstract class ChatClientGetServiceTestsBase<T>
 	protected abstract string ExpectedDefaultModelId { get; }
 
 	[Fact]
+	public void GetService_WithNullServiceType_ThrowsArgumentNullException()
+	{
+		using var client = new T();
+
+		Assert.Throws<ArgumentNullException>(() =>
+			((IChatClient)client).GetService(null!, null));
+	}
+
+	[Fact]
 	public void GetService_ReturnsMetadataWithCorrectProviderAndModel()
 	{
 		var client = new T();

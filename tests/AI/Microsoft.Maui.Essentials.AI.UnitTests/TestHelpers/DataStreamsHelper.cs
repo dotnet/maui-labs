@@ -32,6 +32,11 @@ public static class DataStreamsHelper
 		}
 	}
 
+	public static IEnumerable<object[]> JsonlStreams =>
+		Directory.GetFiles(Path.Combine("TestData", "DataStreams"), "*.jsonl", SearchOption.AllDirectories)
+			.OrderBy(path => path, StringComparer.Ordinal)
+			.Select(path => new object[] { Path.GetFileName(path), path });
+
 	public static IEnumerable<object[]> TxtItineraries
 	{
 		get

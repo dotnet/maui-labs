@@ -97,6 +97,20 @@ Use descriptive names that communicate the scenario:
 - `MethodName_Condition_ExpectedResult` — e.g., `ParseVersion_InvalidInput_ThrowsArgumentException`
 - Or descriptive `[Fact]` — e.g., `Should_return_all_connected_agents_when_multiple_registered`
 
+### Shared AI Backend Coverage
+
+- Put backend-neutral chat and embedding contracts in the existing generic test bases.
+- Bind each backend to every applicable shared suite; declare differences such as
+  unavailable token usage through the suite's existing capability hooks.
+- Keep native SDK, marshalling, OS-version, and provider-policy checks platform-specific.
+  Do not turn one provider's tolerance or error format into a universal contract.
+- Each provider-only test must explain why it cannot be shared, naming the native
+  API, implementation detail, or provider policy it verifies.
+- Preserve assertions and `RequiresModel` traits when moving tests. Unsupported features
+  must remain explicit, not silently skipped or treated as successful no-ops.
+- Establish Azure/OpenAI compatibility with live cloud tests, not compilation alone.
+  Model-specific sampling support and conflict precedence are not universal contracts.
+
 ### What to Test
 
 - **Do test**: Public API methods, edge cases, error handling, serialization/deserialization

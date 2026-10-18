@@ -103,9 +103,9 @@ public partial class JsonStreamChunkerTests
 		}
 
 		[Fact]
-		public void Process_NonStringTypes_EmittedImmediately()
+		public void Process_NonStringTypes_ProducesValidJson()
 		{
-			// Numbers, booleans, null should be emitted immediately
+			// Scalar values are finalized by Flush, not assumed immutable in a snapshot.
 			var chunker = new JsonStreamChunker();
 
 			var chunks = new List<string>();

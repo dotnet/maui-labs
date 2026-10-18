@@ -26,6 +26,11 @@
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
 
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <!-- The experimental SDK generates metadata for evaluation-only chart/table providers. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS8305</WarningsNotAsErrors>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <!-- Microsoft Agent Framework -->
@@ -66,6 +71,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion_Experimental)" />
   </ItemGroup>
 
   <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' ">
