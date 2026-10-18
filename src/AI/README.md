@@ -10,7 +10,7 @@ not specified.
 
 | Package | Consumer documentation |
 |---------|------------------------|
-| `Microsoft.Maui.Essentials.AI` | [Install and use the package](Microsoft.Maui.Essentials.AI/README.md) |
+| `Microsoft.Maui.Essentials.AI` | [API usage and platform setup](Microsoft.Maui.Essentials.AI/README.md) |
 
 The package README documents **Chat**, **Embeddings**, and **Image generation**
 separately, with capability tables and usage examples.
@@ -121,8 +121,22 @@ and native error callbacks. To also exercise real model generation and streaming
 on a host with Apple Intelligence enabled, prefix the command with
 `ESSENTIALSAI_LIVE_TESTS=1`.
 
+Image suites test raw `IImageGenerator` contracts separately from the sample's
+request/response handling. Device tests source-link `ImageGenerationService` and
+its models from the Playground; portable sample tests cover normalization,
+ownership, cancellation, and error propagation without a model.
+Windows binds generation and single-image edits. For a live Azure image baseline,
+set `AI:ImageDeploymentName` and build with `-p:EnableOpenAIImageTests=true`.
+Use `-p:EnableOpenAIImageEditTests=true` instead for an edit-capable deployment;
+it includes both suites. These opt-ins are independent of chat/embedding tests
+and make real, billable requests; a build alone does not validate compatibility.
+Allow long-running image requests in the device runner (`--data-timeout 900`
+when invoking DeviceRunners directly); its default 30-second inactivity limit
+can disconnect before generation completes.
+
 - `Microsoft.Maui.Essentials.AI/Platform/MaciOS/`: Apple chat and embedding clients.
-- `Microsoft.Maui.Essentials.AI/Platform/Windows/`: Windows chat client and model readiness.
+- `Microsoft.Maui.Essentials.AI/Platform/Windows/`: Windows chat, image generation,
+  image encoding, and model readiness.
 - `AppleNative/EssentialsAI/` and `AppleBindings.targets`: Swift bridge, bindings, and `.xcframework` packaging.
 - `JsonStreamChunker`, `PlainTextStreamChunker`, and `StreamingResponseHandler`: cumulative-response deltas and streaming updates.
 
