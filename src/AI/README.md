@@ -99,8 +99,9 @@ the same bases. Native API and OS-version checks remain provider-specific.
 For live cloud baselines, configure the device project's user secrets:
 `AI:ApiKey`, `AI:Endpoint` (Azure `/openai/v1/`), `AI:DeploymentName`, and
 `AI:EmbeddingDeploymentName`. Build in Debug with `-p:EnableOpenAIClient=true`
-and select the `OpenAIChatClient` tests. These make real requests against
-`gpt-6-luna`; sampling tests disable reasoning when setting temperature.
+and select the `OpenAIChatClient` tests. These make real requests against the
+configured deployment. Sampling tests disable reasoning when setting temperature,
+so use a model that supports that combination.
 Conflicting instructions have no shared last-wins guarantee.
 
 | Provider | Provider-specific tests |
