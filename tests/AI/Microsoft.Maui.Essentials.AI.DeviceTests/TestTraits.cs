@@ -9,8 +9,8 @@ public static class TestTraits
 	public const string True = "true";
 
 	/// <summary>
-	/// Indicates the test requires a language model to be available on the device.
-	/// Tests with this trait are excluded on CI runners that lack model support.
+	/// Indicates the test requires an AI model, either on the device or at a configured cloud endpoint.
+	/// Tests with this trait are excluded on CI runners that lack the required model support.
 	/// </summary>
 	public const string RequiresModel = "RequiresModel";
 }

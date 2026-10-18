@@ -27,31 +27,118 @@ public sealed class ImageGenerationServiceTests
     [Fact]
     public async Task GenerateAsync_WithOriginalAndOptions_PassesThemToGenerator()
     {
+        using var cancellation = new CancellationTokenSource();
         var original = new ImageAttachment("input.png", "image/png", [3, 4]);
         var settings = CreateSettings();
         settings.SelectedSize = settings.ImageSizes.Single(size => size.Size == new Size(1024, 1024));
         settings.SelectedMediaType = "image/jpeg";
         var options = settings.CreateOptions()!;
         var imageUri = new Uri("https://example.test/image.png");
-        var generator = new TestImageGenerator((request, receivedOptions, _) =>
+        var generator = new TestImageGenerator((request, receivedOptions, token) =>
         {
             Assert.Equal("edit this image", request.Prompt);
             var input = Assert.IsType<DataContent>(Assert.Single(request.OriginalImages!));
             Assert.Equal(original.Bytes, input.Data.ToArray());
             Assert.Equal("image/png", input.MediaType);
             Assert.Same(options, receivedOptions);
+            Assert.Equal(cancellation.Token, token);
             return Task.FromResult(new ImageGenerationResponse(
                 [new DataContent(new byte[] { 5, 6 }, "image/png"), new UriContent(imageUri, "image/png")]));
         });
 
         var images = await new ImageGenerationService().GenerateAsync(
-            generator, " edit this image ", original, options);
+            generator, " edit this image ", original, options, cancellation.Token);
 
         Assert.Equal(2, images.Count);
         Assert.Equal(new byte[] { 5, 6 }, images[0].Bytes);
         Assert.Equal("image/png", images[0].MediaType);
         Assert.Equal(imageUri, images[1].Uri);
         Assert.Equal(1, generator.CallCount);
+        Assert.Equal(0, generator.DisposeCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_NormalizesDataAndUrisWithoutTakingOwnershipOfGenerator()
+    {
+        byte[] providerBytes = [1, 2, 3];
+        var uri = new Uri("https://example.test/generated.png");
+        var generator = new TestImageGenerator((request, options, _) =>
+        {
+            Assert.Equal("a robot", request.Prompt);
+            Assert.True(request.OriginalImages is null || !request.OriginalImages.Any());
+            Assert.Null(options);
+            return Task.FromResult(new ImageGenerationResponse(
+                [new TextContent("Revised prompt"), new DataContent(providerBytes, "image/png"),
+                 new UriContent(uri, "image/png")]));
+        });
+        var service = new ImageGenerationService();
+
+        var images = await service.GenerateAsync(generator, " a robot ", null);
+        providerBytes[0] = 99;
+        await service.GenerateAsync(generator, "a robot", null);
+
+        Assert.Equal(2, images.Count);
+        Assert.Equal(new byte[] { 1, 2, 3 }, images[0].Bytes);
+        Assert.NotSame(providerBytes, images[0].Bytes);
+        Assert.Null(images[0].Uri);
+        Assert.Equal("image/png", images[0].MediaType);
+        Assert.Null(images[1].Bytes);
+        Assert.Equal(uri, images[1].Uri);
+        Assert.Equal("image/png", images[1].MediaType);
+        Assert.Equal(2, generator.CallCount);
+        Assert.Equal(0, generator.DisposeCount);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \t\r\n")]
+    public async Task GenerateAsync_InvalidPrompt_DoesNotCallOrDisposeGenerator(string? prompt)
+    {
+        var generator = new TestImageGenerator((_, _, _) =>
+            throw new InvalidOperationException("The provider should not be invoked."));
+
+        await Assert.ThrowsAnyAsync<ArgumentException>(() =>
+            new ImageGenerationService().GenerateAsync(generator, prompt!, null));
+
+        Assert.Equal(0, generator.CallCount);
+        Assert.Equal(0, generator.DisposeCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_NullGenerator_ThrowsArgumentNullException()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            new ImageGenerationService().GenerateAsync(null!, "a robot", null));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ProviderFailure_PropagatesWithoutDisposingGenerator()
+    {
+        var expected = new NotSupportedException("The configured provider does not support this operation.");
+        var generator = new TestImageGenerator((_, _, _) =>
+            Task.FromException<ImageGenerationResponse>(expected));
+
+        var actual = await Assert.ThrowsAsync<NotSupportedException>(() =>
+            new ImageGenerationService().GenerateAsync(generator, "a robot", null));
+
+        Assert.Same(expected, actual);
+        Assert.Equal(1, generator.CallCount);
+        Assert.Equal(0, generator.DisposeCount);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_InvalidOutputAfterValidImage_DoesNotReturnPartialSuccess()
+    {
+        var generator = new TestImageGenerator((_, _, _) =>
+            Task.FromResult(new ImageGenerationResponse(
+                [new DataContent(new byte[] { 1 }, "image/png"),
+                 new UriContent(new Uri("https://example.test/not-an-image"), "text/plain")])));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new ImageGenerationService().GenerateAsync(generator, "a robot", null));
+
+        Assert.Equal(0, generator.DisposeCount);
     }
 
     [Fact]
@@ -125,6 +212,9 @@ public sealed class ImageGenerationServiceTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             new ImageGenerationService().GenerateAsync(
                 generator, "a robot", null, cancellationToken: cancellation.Token));
+
+        Assert.Equal(1, generator.CallCount);
+        Assert.Equal(0, generator.DisposeCount);
     }
 
     private static ImageSettingsViewModel CreateSettings() =>
@@ -138,6 +228,7 @@ public sealed class ImageGenerationServiceTests
         : IImageGenerator
     {
         public int CallCount { get; private set; }
+        public int DisposeCount { get; private set; }
 
         public Task<ImageGenerationResponse> GenerateAsync(
             ImageGenerationRequest request, ImageGenerationOptions? options = null,
@@ -148,7 +239,7 @@ public sealed class ImageGenerationServiceTests
         }
 
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
-        public void Dispose() { }
+        public void Dispose() => DisposeCount++;
     }
 }
 #pragma warning restore MEAI001
