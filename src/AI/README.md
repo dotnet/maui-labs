@@ -1,8 +1,6 @@
 # Essentials.AI
 
-Build and test the Apple and Windows implementations of Essentials.AI.
-Android integration is **coming soon**; its capabilities and requirements are
-not specified.
+Build and test the Apple, Windows, and Android implementations of Essentials.AI.
 
 > **Experimental:** packages ship as previews; APIs may change.
 
@@ -27,14 +25,13 @@ MAUI workloads.
 |----------|----------------|---------------------------|
 | Apple Intelligence | `Platform/MaciOS` and the Swift bridge | macOS and Xcode; Xcode 27 for the OS 27 bridge |
 | Windows AI | `Platform/Windows` and Windows App SDK | Windows and the SDK's Windows build tools |
-| Android (coming soon) | Provider not available yet | Not specified |
+| Gemini Nano | `Platform/Android` and the Kotlin bridge | Java 17+ and the Android SDK |
 
 The library always targets `net10.0` and Android. Apple targets are added on
 non-Linux hosts, using either the default reference packs or the OS 27 packs
 when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
 The Chat Playground and device tests use the same platform conditions, without
 the portable `net10.0` target or native macOS app target.
-The existing Android target does not imply an available on-device provider.
 
 ### Apple
 
@@ -97,8 +94,8 @@ Apple or Windows device/runtime and model availability; portable tests do not ru
 
 Shared chat suites provide the OpenAI baseline for message conversion,
 instructions, streaming, structured output, cancellation, and usage.
-Apple and Windows bind to applicable suites; future Android coverage should use
-the same bases. Native API and OS-version checks remain provider-specific.
+Providers bind to applicable suites. Native API and OS-version checks remain
+provider-specific.
 
 For live cloud baselines, configure the device project's user secrets:
 `AI:ApiKey`, `AI:Endpoint` (Azure `/openai/v1/`), `AI:DeploymentName`, and
@@ -111,7 +108,7 @@ Conflicting instructions have no shared last-wins guarantee.
 |----------|-------------------------|
 | Apple Intelligence | .NET device tests in `Tests/MaciOS`; Swift bridge tests below run independently of .NET. |
 | Windows AI | Status handling, streaming lifecycle, and history conversion in `Tests/Windows`; native execution requires Windows. |
-| Android (coming soon) | No provider-specific suite yet. |
+| Gemini Nano | .NET mapping/option tests in `Tests/Android`; Kotlin request and lifecycle tests run during the native build. Live inference requires a provisioned physical device. |
 
 Run native Swift tests on macOS 26+ with Xcode 27 (also run in CI):
 

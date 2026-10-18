@@ -2,9 +2,7 @@
 
 On-device chat and embeddings through
 [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions),
-using Apple and Windows native models without a cloud service.
-Android integration is **coming soon**; its capabilities and requirements
-are not specified.
+using Apple, Windows, and Android native models without a cloud service.
 
 > **Experimental:** this package ships as a preview. APIs may change.
 
@@ -16,7 +14,7 @@ Requires .NET 10 and the MAUI workload.
 |----------|-------|
 | Apple Intelligence | Enable Apple Intelligence on supported hardware with Apple OS 26+. Image input and usage metadata require OS 27+ and the corresponding native bridge. |
 | Windows AI | Windows 11 24H2+ on supported Copilot+ hardware, an MSIX package declaring `systemAIModels`, and a compatible Windows App SDK. Stable Phi Silica access requires Microsoft's Limited Access Feature approval. |
-| Android (coming soon) | Provider setup is not available yet. |
+| Gemini Nano | Android API 26+ on a supported physical device with a ready AICore model and locked bootloader. |
 
 Register a supported chat provider with dependency injection:
 
@@ -33,6 +31,11 @@ builder.Services.AddSingleton<IChatClient>(_ =>
     {
         return new AppleIntelligenceChatClient();
     }
+#elif ANDROID
+    if (OperatingSystem.IsAndroidVersionAtLeast(26))
+    {
+        return new GeminiNanoChatClient();
+    }
 #elif WINDOWS
     if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
     {
@@ -40,7 +43,7 @@ builder.Services.AddSingleton<IChatClient>(_ =>
     }
 #endif
 
-    throw new PlatformNotSupportedException("On-device chat requires a supported Apple or Windows system.");
+    throw new PlatformNotSupportedException("On-device chat requires a supported system.");
 });
 ```
 
@@ -48,15 +51,19 @@ Platform setup details:
 [Apple image input and model readiness](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
 and [Windows packaging, SDK selection, and access](https://github.com/dotnet/maui-labs/blob/main/docs/ai/WINDOWS-AI.md).
 
+Android apps with an API 24 minimum must guard Gemini registration and apply the
+[native manifest configuration](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#android-minimum-and-model-availability).
+Emulators cannot run Gemini inference.
+
 ## Chat
 
 | Provider | Text | Image input | Tools | Structured JSON |
 |----------|------|-------------|-------|-----------------|
 | Apple Intelligence | Supported | OS 27+ with a ready vision model | Supported | Supported |
 | Windows AI | Supported | Not supported | Not supported | Supported |
-| Android (coming soon) | Not specified | Not specified | Not specified | Not specified |
+| Gemini Nano | Supported | In-memory images | Not supported | Not supported |
 
-Use the injected `IChatClient` (`chat`) for either provider:
+Use the injected `IChatClient` (`chat`) for any provider:
 
 ```csharp
 var response = await chat.GetResponseAsync("Plan a day trip to Tokyo");
@@ -100,7 +107,11 @@ Omitted options use native defaults; supported options vary by provider.
 |----------|------------------|
 | Apple Intelligence | Finite `Temperature` and `TopP` in **0...1**; positive `TopK`. `TopK` takes precedence over `TopP`; `Seed` applies to random sampling. |
 | Windows AI | Forwards `Temperature`, `TopK`, and `TopP` to the native SDK. `Seed` is not supported. |
-| Android (coming soon) | Options and ranges are not specified yet. |
+| Gemini Nano | Forwards `Temperature`, `TopK`, `Seed` (32-bit), and `MaxOutputTokens` to ML Kit's builder. Native validation applies. |
+
+Gemini system instructions require Nano V3+. Full thinking output uses
+`Reasoning = new() { Output = ReasoningOutput.Full }` and requires Nano V4+;
+effort levels and summaries are unsupported.
 
 ### Usage metadata
 
@@ -119,7 +130,7 @@ Console.WriteLine($"Total: {response.Usage?.TotalTokenCount}");
 |----------|----------------|
 | Apple Intelligence | OS 27+ with a native bridge built with Xcode 27+. Streaming includes a final `UsageContent` update. |
 | Windows AI | Not available; usage is `null`. |
-| Android (coming soon) | Not specified yet. |
+| Gemini Nano | Input tokens counted by ML Kit before generation; other counts remain unset. Final streaming updates include input usage. |
 
 Use `ToChatResponseAsync()` to aggregate the stream and read
 `ChatResponse.Usage`; accumulate per-request
@@ -129,8 +140,7 @@ Apple OS 26; the package does not estimate token counts.
 ### Tool calling
 
 Apple Intelligence executes `AIFunction` tools supplied in `ChatOptions`.
-The Windows provider rejects tool options. Android tool support is not
-specified yet.
+The Windows and Android providers reject tool options.
 
 ```csharp
 using System.ComponentModel;
@@ -153,9 +163,9 @@ assistant function call; unmatched result IDs throw `ArgumentException`.
 
 ### Image input
 
-Image input is available on Apple OS 27 with a ready vision-capable model.
-Windows does not support image input; Android support is not specified yet.
-For Apple:
+Image input is available on Apple OS 27 with a ready vision-capable model and
+on supported Gemini Nano devices. Windows does not support image input.
+Both image-capable clients accept encoded bytes:
 
 ```csharp
 var message = new ChatMessage(ChatRole.User,
@@ -166,7 +176,8 @@ var message = new ChatMessage(ChatRole.User,
 var response = await chat.GetResponseAsync([message]);
 ```
 
-For native images, set `RawRepresentation` on the `DataContent` to a `CGImage`,
+Android requires in-memory `DataContent`; image `UriContent` is unsupported.
+For Apple-native images, set `RawRepresentation` on the `DataContent` to a `CGImage`,
 `UIImage` (iOS/Mac Catalyst), or `NSImage` (macOS), while retaining valid encoded
 bytes for recording and cross-platform use. Local `file://` image `UriContent`
 is supported; remote URLs are rejected rather than fetched silently.
@@ -182,7 +193,7 @@ Generate floating-point text vectors through `IEmbeddingGenerator`:
 |----------|--------------|----------------------|------------------|
 | Apple NaturalLanguage | Supported | Supported | Not supported |
 | Windows | Not supported | Not supported | Not supported |
-| Android | Not specified | Not specified | Not specified |
+| Android | Not supported | Not supported | Not supported |
 
 ```csharp
 using var generator = new NLEmbeddingGenerator();
@@ -201,13 +212,13 @@ Image generation is separate from chat image input and tool calling.
 |----------|-------------------------|
 | Apple | Not supported |
 | Windows | Coming soon |
-| Android | Not specified |
+| Android | Not supported |
 
 Native image generation is not implemented in this version.
 
 ## Diagnostics
 
-Reference `Microsoft.Extensions.AI` to add telemetry to either chat provider:
+Reference `Microsoft.Extensions.AI` to add telemetry to any chat provider:
 
 ```csharp
 var instrumentedChat = chat.AsBuilder()
@@ -236,4 +247,4 @@ Response IDs and finish reasons are recorded only when supplied by the provider.
 |----------|------------------------|
 | Apple Intelligence | Pass an `ILoggerFactory` for tool lifecycle logs at Debug, or arguments/results at Trace. Callbacks preserve the request's trace context. |
 | Windows AI | Uses the shared chat telemetry above; native generation failures surface as exceptions. |
-| Android (coming soon) | Provider-specific diagnostics are not specified yet. |
+| Gemini Nano | Standard M.E.AI logging and telemetry middleware; input token usage only. |
