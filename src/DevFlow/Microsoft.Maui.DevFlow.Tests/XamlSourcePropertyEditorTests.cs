@@ -11,6 +11,28 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
         "maui-devflow-source-edit-tests",
         Guid.NewGuid().ToString("N"));
 
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    public async Task PersistAsync_OldOrInvalidHash_RequiresRebuildWithoutWriting(int length)
+    {
+        var (sourcePath, xaml) = await CreateProjectAsync("""
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
+                <Label Text="Original" />
+            </ContentPage>
+            """);
+        var element = CreateElement(sourcePath, xaml, "<Label");
+        element.SourceHash = length == 16
+            ? XamlSourcePropertyEditor.ComputeSourceHash(xaml)[..16]
+            : new string(length == 32 ? 'g' : 'a', length);
+
+        var result = await CreateEditor(sourcePath).PersistAsync(element, "Text", "Changed");
+
+        Assert.Equal(XamlSourceEditStatus.SourceUnavailable, result.Status);
+        Assert.Contains("Rebuild", result.Error);
+        Assert.Equal(xaml, await File.ReadAllTextAsync(sourcePath));
+    }
+
     [Fact]
     public async Task PersistAsync_DirectLiteral_ReplacesOnlyValueAndPreservesUtf8Bom()
     {

@@ -24,6 +24,11 @@ full project path, framework, platform, app name, and non-empty session identity
 Legacy registrations without session metadata require an explicit choice after the process
 changes; they can still reconnect to the same registered process.
 
+New agent IDs use 32 lowercase hex characters from SHA-256. IDs are assigned by
+the running broker, not stored as app identities. An agent uses the ID returned
+by its broker, including an older broker's shorter ID. Restart the broker and
+reconnect the app to use the longer IDs.
+
 VS Code keeps selection and Data context per Inspector panel. Activating another Inspector
 restores its own context, including an empty selection; background panels cannot overwrite it.
 
@@ -69,3 +74,17 @@ Live property editing remains runtime-only until **Apply to XAML** is selected. 
 [source-editing restrictions](inspector-internals.md#apply-property-values-to-xaml) still apply:
 only supported existing direct-literal attributes can be written, and stale or ambiguous source
 locations are rejected.
+
+New XAML source hashes use the first 16 bytes of SHA-256 of the UTF-8 source text,
+as 32 lowercase hex characters. The agent, CLI source editor, and VS Code host
+use the same format. Rebuild the app with the current DevFlow agent before
+**Apply to XAML** if its metadata still has a 16-character hash. The CLI does not
+write source files using that older metadata. VS Code treats it as stale.
+
+New layout finding and suppression hashes also retain 32 hex characters per
+hash component. Existing 16-character suppression keys, including disambiguated
+finding IDs, still match their original prefixes. New policy entries use the
+longer keys. The Inspector can remove an existing shorter project suppression
+without adding a second entry. Policy reads and writes take both the old and
+new named locks, in that order, so an older CLI cannot write the same policy
+at the same time.

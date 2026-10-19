@@ -177,6 +177,13 @@ new commits. See the automation contract for pipeline examples and limitations.
 
 Skills retain their existing owner metadata (`.skill-version` or DevFlow state). Agent/project MCP ownership uses `.maui/ai-assets.json` under the project root; user MCP ownership is separate under the user's `.maui`. Registries record identity, origin, and managed-content hashes, not raw credentials/configuration. These are mutable local installation records; consider excluding them from version control. Commands do not silently change `.gitignore`.
 
+New DevFlow skill workspace IDs and custom-path target keys use 32 lowercase hex
+characters from SHA-256. Existing shorter state directories, target keys, and lock
+files stay in use so installed skills keep their ownership records. If both old
+and new state locations exist, the CLI stops instead of merging or replacing
+records. Resolve that conflict before continuing. Do not use an older CLI to
+manage a target first created with the longer state keys.
+
 **Breaking changes from earlier versions of this unmerged PR:** use `add skill <name>` instead of `add <name>`; `-y` now means yes, not force; adding skills no longer configures MCP; selectors no longer expand bundled groups or target another kind; list defaults to all asset kinds; update never installs missing recommendations; JSON output uses the typed result envelope instead of the earlier command-specific arrays/records. No hook/canvas commands or executable stubs are provided.
 
 Skill replacement stages downloads and restores the previous directory on ordinary write failures. It is not crash-atomic: interruption between directory renames can leave `<skill>.<id>.bak` alongside the skills directory. If the skill directory is missing, inspect that backup and rename it back before retrying. Concurrent installations into the same destination are not supported. Path/symlink checks are not handle-based isolation against concurrent filesystem changes; use trusted, locally controlled destinations. Repository-hosted Copilot agents are currently single-file assets; writes across multiple assets are not one transaction.
@@ -315,6 +322,14 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui go create` | Create a new MAUI Go single-file project |
 | `maui go serve` | Start the dev server with hot reload |
 | `maui go upgrade` | Graduate a Go project to a full MAUI project |
+
+`maui go upgrade` keeps the existing ASCII name rules for generated application IDs.
+If the directory name has no ASCII letters or digits, a new ID uses `com.cometgo.app`
+followed by the first 32 lowercase hex characters of SHA-256 of the UTF-8 directory name.
+An explicit `#:property ApplicationId=...` remains unchanged.
+For these directory names, upgrade refuses to overwrite an existing `.csproj`, even with
+`--force`. Keep the existing project and its `ApplicationId` to preserve the app identity,
+including IDs generated with the previous eight-character fallback.
 
 Run `maui <command> --help` for detailed options on any command.
 

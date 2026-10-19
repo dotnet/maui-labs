@@ -134,7 +134,7 @@ internal sealed class XamlSourcePropertyEditor
         {
             return new(
                 XamlSourceEditStatus.SourceUnavailable,
-                "This element does not have writable Debug XAML source metadata.");
+                "This element does not have writable Debug XAML source metadata. Rebuild the app with the current DevFlow agent.");
         }
 
         var pathValidation = ValidateSourcePath(element.SourceFile!);
@@ -251,7 +251,7 @@ internal sealed class XamlSourcePropertyEditor
     }
 
     internal static string ComputeSourceHash(string text)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)), 0, 8).ToLowerInvariant();
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)), 0, 16).ToLowerInvariant();
 
     internal static bool IsSupportedPropertyName(string propertyName)
         => IsValidPropertyName(propertyName) && SupportedPropertyNames.Contains(propertyName);
@@ -670,7 +670,7 @@ internal sealed class XamlSourcePropertyEditor
     }
 
     private static bool IsValidSourceHash(string? sourceHash)
-        => sourceHash is { Length: 16 } && sourceHash.All(Uri.IsHexDigit);
+        => sourceHash is { Length: 32 } && sourceHash.All(Uri.IsHexDigit);
 
     private static LiteralAttributeEdit TryReplaceLiteralAttribute(
         string buildSource,

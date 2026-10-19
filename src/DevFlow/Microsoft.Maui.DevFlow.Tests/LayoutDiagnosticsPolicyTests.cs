@@ -4,6 +4,71 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class LayoutDiagnosticsPolicyTests
 {
+    [Theory]
+    [InlineData(24)]
+    [InlineData(32)]
+    public void UpdateProjectPolicy_OldAndNewMutexNames_ExcludeConcurrentWriters(int hashLength)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "maui-devflow-policy-lock-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var config = Path.Combine(root, ".mauidevflow");
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(config).ToUpperInvariant())))[..32];
+        try
+        {
+            using var mutex = new Mutex(false, $"MauiDevFlow.LayoutPolicy.{hash[..hashLength]}");
+            Assert.True(mutex.WaitOne(TimeSpan.FromSeconds(5)));
+            using var started = new ManualResetEventSlim();
+            Exception? error = null;
+            var writer = new Thread(() =>
+            {
+                started.Set();
+                try
+                {
+                    LayoutDiagnosticsPolicyLoader.UpdateProjectPolicy(root, _ => { });
+                }
+                catch (Exception ex)
+                {
+                    error = ex;
+                }
+            });
+            writer.Start();
+            try
+            {
+                Assert.True(started.Wait(TimeSpan.FromSeconds(5)));
+                Assert.False(writer.Join(TimeSpan.FromMilliseconds(200)));
+                Assert.False(File.Exists(config));
+            }
+            finally
+            {
+                mutex.ReleaseMutex();
+                Assert.True(writer.Join(TimeSpan.FromSeconds(10)));
+            }
+            Assert.Null(error);
+            Assert.True(File.Exists(config));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("0123456789abcdef", "0123456789abcdef0123456789abcdef", true)]
+    [InlineData("0123456789ABCDEF", "0123456789abcdef0123456789abcdef", true)]
+    [InlineData("0123456789abcdef-abcdef0123456789", "0123456789abcdef0123456789abcdef-abcdef0123456789abcdef0123456789", true)]
+    [InlineData("0123456789abcdef-abcdef0123456789-2", "0123456789abcdef0123456789abcdef-abcdef0123456789abcdef0123456789-2", true)]
+    [InlineData("0123456789abcdef-abcdef0123456789-2", "0123456789abcdef0123456789abcdef-abcdef0123456789abcdef0123456789-3", false)]
+    [InlineData("0123456789abcde", "0123456789abcdef0123456789abcdef", false)]
+    [InlineData("0123456789abcdef0000000000000000", "0123456789abcdef0123456789abcdef", false)]
+    [InlineData("old-key", "old-key-with-suffix", false)]
+    public void MatchesFingerprint_OnlyAcceptsExactOrLegacyFormats(string expected, string actual, bool matches)
+    {
+        Assert.Equal(matches, LayoutDiagnosticsSuppressionMatcher.Matches(
+            new() { Fingerprint = expected },
+            new() { Id = actual, SuppressionKey = actual }));
+    }
+
     [Fact]
     public void Load_ProjectConfig_ReadsLayoutSuppressions()
     {

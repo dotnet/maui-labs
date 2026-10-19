@@ -1539,15 +1539,13 @@ public sealed class InspectorServer : IDisposable
                     {
                         var exactProjectMatches = projectPolicy.Suppressions
                             .Where(suppression =>
-                                suppression.Fingerprint?.Equals(
-                                    suppressionKey,
-                                    StringComparison.OrdinalIgnoreCase) == true)
+                                LayoutDiagnosticsSuppressionMatcher.MatchesFingerprint(
+                                    suppression.Fingerprint, suppressionKey))
                             .ToList();
                         var broadProjectMatches = projectPolicy.Suppressions
                             .Where(suppression =>
-                                suppression.Fingerprint?.Equals(
-                                    suppressionKey,
-                                    StringComparison.OrdinalIgnoreCase) != true
+                                !LayoutDiagnosticsSuppressionMatcher.MatchesFingerprint(
+                                    suppression.Fingerprint, suppressionKey)
                                 && LayoutDiagnosticsSuppressionMatcher.Matches(
                                     suppression,
                                     finding))
@@ -1568,9 +1566,8 @@ public sealed class InspectorServer : IDisposable
                         }
 
                         projectPolicy.Suppressions.RemoveAll(suppression =>
-                            suppression.Fingerprint?.Equals(
-                                suppressionKey,
-                                StringComparison.OrdinalIgnoreCase) == true);
+                            LayoutDiagnosticsSuppressionMatcher.MatchesFingerprint(
+                                suppression.Fingerprint, suppressionKey));
                     });
             }
             catch (LayoutSuppressionConflictException ex)
@@ -1597,9 +1594,8 @@ public sealed class InspectorServer : IDisposable
                 projectPolicy =>
                 {
                     if (projectPolicy.Suppressions.Any(suppression =>
-                        suppression.Fingerprint?.Equals(
-                            suppressionKey,
-                            StringComparison.OrdinalIgnoreCase) == true))
+                        LayoutDiagnosticsSuppressionMatcher.MatchesFingerprint(
+                            suppression.Fingerprint, suppressionKey)))
                     {
                         return;
                     }
