@@ -166,13 +166,45 @@ Do not call its native `Free()` method after passing it to `Gsk.Transform.Transl
 the handle still owns the allocation and will free it again during finalization.
 This applies to layout-position points as well as anchor points.
 
-### Essentials (21 of 36 services)
+### Essentials (20 of 36 services)
 
 | Status | Services |
 |--------|----------|
-| ✅ **Done** (21) | AppInfo, AppActions, Battery (UPower), Browser (`xdg-open`), Clipboard (`Gdk.Clipboard`), Connectivity (NetworkManager), DeviceDisplay, DeviceInfo, Email (`xdg-open mailto:`), FilePicker (`Gtk.FileDialog`), FileSystem (XDG dirs), Launcher, Map, MediaPicker, Preferences (JSON), Screenshot, SecureStorage, SemanticScreenReader (AT-SPI), Share (XDG Portal), TextToSpeech (`espeak-ng`), VersionTracking |
+| ✅ **Done** (20) | AppInfo, AppActions, Battery (UPower), Browser (`xdg-open`), Clipboard (`Gdk.Clipboard`), Connectivity (NetworkManager), DeviceDisplay, DeviceInfo, Email (`xdg-open mailto:`), FilePicker (`Gtk.FileDialog`), FileSystem (XDG dirs), Launcher, Map, MediaPicker, Preferences (JSON), Screenshot, SemanticScreenReader (AT-SPI), Share (XDG Portal), TextToSpeech (`espeak-ng`), VersionTracking |
 | ⚠️ **Partial** (2) | Geolocation (GeoClue — basic location only), WebAuthenticator (basic OAuth via system browser) |
 | ❌ **Stub** (13) | Accelerometer, Barometer, Compass, Contacts, Flashlight, Geocoding, Gyroscope, HapticFeedback, Magnetometer, OrientationSensor, PhoneDialer, SMS, Vibration — sensors and phone-specific APIs not applicable to desktop Linux |
+| ❌ **Unsupported** (1) | SecureStorage — all storage operations throw `PlatformNotSupportedException` |
+
+**Behavior change:** Linux SecureStorage no longer uses libsecret or encrypted files.
+`GetAsync`, `SetAsync`, `Remove`, `RemoveAll`, and `LinuxSecureStorage.Backend`
+throw `PlatformNotSupportedException` immediately. The public type, method signatures,
+and service registration remain available. `Dispose` has no effect. Existing secrets
+and files are not read, migrated, or deleted.
+
+#### Use your own ISecureStorage implementation
+
+An app can supply its own `Microsoft.Maui.Storage.ISecureStorage` implementation.
+In the Linux app's `MauiProgram.cs`, register it before calling
+`AddLinuxGtk4Essentials()` and before `builder.Build()`:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
+using Microsoft.Maui.Storage;
+
+// MySecureStorage is an ISecureStorage implementation supplied by your app.
+builder.Services.AddSingleton<ISecureStorage, MySecureStorage>();
+builder.AddLinuxGtk4Essentials();
+```
+
+`AddLinuxGtk4Essentials()` keeps an existing `ISecureStorage` registration.
+When the app is built, it also sets `SecureStorage.Default` to that service.
+Both injected `ISecureStorage` instances and calls such as
+`SecureStorage.GetAsync("api_token")` then use your implementation.
+
+Your implementation must provide `GetAsync`, `SetAsync`, `Remove`, and `RemoveAll`,
+and use a suitable secure storage service. Do not store secrets in plain text or
+store an encryption key beside the encrypted data.
 
 ### Implementation Parity
 
@@ -196,7 +228,7 @@ This applies to layout-position points as well as anchor points.
 | Base View Properties | 100% | Opacity, visibility, transforms, shadow, clip, automation |
 | FormattedText | 100% | All Span properties via Pango markup |
 | MenuBar | 100% | MenuBarItem, MenuFlyoutItem, popover menus — integrated into Window and NavigationPage handlers |
-| Essentials | 64% | 21 done + 2 partial of 36 total; 13 stubs (sensors/phone N/A on desktop) |
+| Essentials | 61% | 20 done + 2 partial of 36 total; 13 stubs (sensors/phone N/A on desktop), 1 unsupported |
 
 ## Prerequisites
 
