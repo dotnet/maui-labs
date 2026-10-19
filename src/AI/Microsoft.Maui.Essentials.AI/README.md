@@ -153,6 +153,35 @@ callbacks preserve the originating .NET execution context, so their logs and
 async tool code inherit any active chat trace/span, including one created by
 `UseOpenTelemetry`. The client does not invent correlation when no span exists.
 
+### Corrected document extraction experiment
+
+This checkout evaluates [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at
+`1fc95b5b77b48e085b49cf25fd1b3e4797825fa9`. The complete original shared Documents and Extraction sources are file-linked verbatim.
+The prototype library and copied projects are non-shipping/non-packable until API and provider acceptance.
+
+On iOS/Mac Catalyst/macOS 26+, the native `RecognizeDocumentsRequest` client uses the actual proposed provider operation and core finalizer:
+
+```csharp
+using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Maui.Essentials.AI;
+
+using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+await using var input = File.OpenRead("receipt.pdf");
+using var result = await client.ExtractAsync(input, "receipt", "application/pdf",
+    new DocumentExtractionOptions { CaptureRawOutput = true });
+Console.WriteLine(result.Document.ToMarkdown());
+```
+
+Dispose the result to release registered response-body artifacts. The input remains caller-owned.
+The corrected model preserves source-frame geometry, confidence, merged cells, supplied structured values and explicit operation-scoped
+raw availability. Unknown native facts remain unknown; no figure crops, model identity or calibrated scores are invented.
+Native objects and original response bodies are different representations, and raw capture can be disabled per operation.
+The concrete `AppleVisionRecognizeDocumentsReader` is a local DataIngestion projection over the same finalized document.
+
+See [adoption details](../../../docs/ai/document-extraction-corrected-api.md) and
+[remaining feature gaps](../../../docs/ai/apple-document-extraction-gaps.md). Existing Chat/Embeddings documentation above remains
+separate from the non-shipping document experiment.
+
 ## Requirements
 
 - .NET 10
