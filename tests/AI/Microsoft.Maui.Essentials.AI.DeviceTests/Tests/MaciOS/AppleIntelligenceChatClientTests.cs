@@ -1,5 +1,6 @@
 #if IOS || MACCATALYST
 using System.Text.Json;
+using Foundation;
 using Microsoft.Extensions.AI;
 using Xunit;
 using Xunit.Abstractions;
@@ -37,6 +38,24 @@ public class AppleIntelligenceChatClientInstantiationTests : ChatClientInstantia
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsBase<AppleIntelligenceChatClient>
 {
+	// The Foundation Models bridge uses the last message as its new Prompt, which must be User.
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public override async Task GetResponseAsync_WithTrailingSystemMessage_AppliesInstruction()
+	{
+		using var client = new AppleIntelligenceChatClient();
+		ChatMessage[] messages =
+		[
+			new(ChatRole.User, "Remember the word PINEAPPLE."),
+			new(ChatRole.System, "Reply with exactly TRAILING_SYSTEM.")
+		];
+
+		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
+
+		Assert.Equal(nameof(ChatClientNative), error.Error.Domain);
+		Assert.Equal((nint)ChatClientError.InvalidRole, error.Error.Code);
+		Assert.Contains("Only user messages can be prompts.", error.Error.LocalizedDescription, StringComparison.Ordinal);
+	}
 }
 
 [Collection(nameof(AppleIntelligenceCollection))]

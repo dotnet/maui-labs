@@ -121,6 +121,24 @@ public abstract class ChatClientMessagesTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public virtual async Task GetResponseAsync_WithTrailingSystemMessage_AppliesInstruction()
+	{
+		using var client = new T();
+		ChatMessage[] messages =
+		[
+			new(ChatRole.User, "Remember the word PINEAPPLE."),
+			new(ChatRole.System, "Reply with exactly TRAILING_SYSTEM.")
+		];
+
+		var response = await client.GetResponseAsync(messages);
+
+		Assert.NotNull(response);
+		Assert.Contains(response.Messages, message => message.Role == ChatRole.Assistant);
+		Assert.Equal("TRAILING_SYSTEM", response.Text.Trim());
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithConversationHistory_AcceptsMultipleMessages()
 	{
 		var client = new T();
