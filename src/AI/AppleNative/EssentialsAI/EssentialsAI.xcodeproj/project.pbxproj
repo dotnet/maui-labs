@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		34865F102FDB000000000001 /* TranscriptResponseProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34865F102FDB000000000002 /* TranscriptResponseProjection.swift */; };
 		340019332EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019302EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift */; };
 		340019342EDF4D6800DAB0A3 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019292EDF4D6800DAB0A3 /* ChatMessage.swift */; };
 		340019352EDF4D6800DAB0A3 /* ToolNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340019322EDF4D6800DAB0A3 /* ToolNative.swift */; };
@@ -22,6 +23,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		34865F102FDB000000000002 /* TranscriptResponseProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptResponseProjection.swift; sourceTree = "<group>"; };
 		340019272EDF4D6800DAB0A3 /* Cancellation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cancellation.swift; sourceTree = "<group>"; };
 		340019282EDF4D6800DAB0A3 /* ChatClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatClient.swift; sourceTree = "<group>"; };
 		340019292EDF4D6800DAB0A3 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
@@ -55,6 +57,7 @@
 				34279CA02EC421CC00583050 /* FoundationModels.framework */,
 				340019272EDF4D6800DAB0A3 /* Cancellation.swift */,
 				340019282EDF4D6800DAB0A3 /* ChatClient.swift */,
+				34865F102FDB000000000002 /* TranscriptResponseProjection.swift */,
 				340019292EDF4D6800DAB0A3 /* ChatMessage.swift */,
 				3400192A2EDF4D6800DAB0A3 /* ChatMessageContent.swift */,
 				3400192B2EDF4D6800DAB0A3 /* ChatOptions.swift */,
@@ -159,6 +162,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				34865F102FDB000000000001 /* TranscriptResponseProjection.swift in Sources */,
 				340019332EDF4D6800DAB0A3 /* JsonSchemaDecoder.swift in Sources */,
 				340019342EDF4D6800DAB0A3 /* ChatMessage.swift in Sources */,
 				340019352EDF4D6800DAB0A3 /* ToolNative.swift in Sources */,

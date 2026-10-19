@@ -76,6 +76,17 @@ public class ChatClientNative: NSObject {
             )
 
         return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+            var projection = TranscriptResponseProjection()
+            let emitContent: (String, String?) -> Void = { text, messageId in
+                guard !text.isEmpty else { return }
+#if APPLE_INTELLIGENCE_LOGGING_ENABLED
+                if let log = AppleIntelligenceLogger.log {
+                    log("[\(methodName)] Streaming update: \(text)")
+                }
+#endif
+                let update = ResponseUpdateNative(updateType: .content, text: text, messageId: messageId)
+                cq?.async { onUpdate(update) } ?? onUpdate(update)
+            }
 
             if let jsonSchema = schema {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -88,18 +99,21 @@ public class ChatClientNative: NSObject {
 
                 for try await response in responseStream {
                     try Task.checkCancellation()
-                    let text = response.content.jsonString
-                    guard !text.isEmpty else { continue }
-#if APPLE_INTELLIGENCE_LOGGING_ENABLED
-                    if let log = AppleIntelligenceLogger.log {
-                        log("[\(methodName)] Streaming update: \(text)")
+                    if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *) {
+                        for content in projection.project(response.transcriptEntries) {
+                            emitContent(content.text, content.messageId)
+                        }
+                    } else {
+                        emitContent(response.content.jsonString, nil)
                     }
-#endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
                 }
 
                 let response = try await responseStream.collect()
+                if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *) {
+                    for content in projection.project(response.transcriptEntries) {
+                        emitContent(content.text, content.messageId)
+                    }
+                }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.jsonString.count)")
@@ -117,18 +131,21 @@ public class ChatClientNative: NSObject {
 
                 for try await response in responseStream {
                     try Task.checkCancellation()
-                    let text = response.content
-                    guard !text.isEmpty else { continue }
-#if APPLE_INTELLIGENCE_LOGGING_ENABLED
-                    if let log = AppleIntelligenceLogger.log {
-                        log("[\(methodName)] Streaming update: \(text)")
+                    if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *) {
+                        for content in projection.project(response.transcriptEntries) {
+                            emitContent(content.text, content.messageId)
+                        }
+                    } else {
+                        emitContent(response.content, nil)
                     }
-#endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
                 }
 
                 let response = try await responseStream.collect()
+                if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *) {
+                    for content in projection.project(response.transcriptEntries) {
+                        emitContent(content.text, content.messageId)
+                    }
+                }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.count)")
@@ -457,7 +474,9 @@ public class ChatClientNative: NSObject {
 
     private func toUserEntry(_ message: ChatMessageNative) throws -> Transcript.Entry {
         let segments = try message.contents.map(self.toSegment)
-        return .prompt(Transcript.Prompt(segments: segments))
+        var prompt = Transcript.Prompt(segments: segments)
+        if let id = message.messageId { prompt.id = id }
+        return .prompt(prompt)
     }
 
     private func toAssistantEntries(_ message: ChatMessageNative) throws -> [Transcript.Entry] {
@@ -498,12 +517,27 @@ public class ChatClientNative: NSObject {
         if !pendingToolCalls.isEmpty {
             entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
         }
+        // A mixed assistant message can split into several entries; one ID cannot identify all of them.
+        if entries.count == 1, let id = message.messageId {
+            switch entries[0] {
+            case .response(var response):
+                response.id = id
+                entries[0] = .response(response)
+            case .toolCalls(var calls):
+                calls.id = id
+                entries[0] = .toolCalls(calls)
+            default:
+                break
+            }
+        }
         return entries
     }
 
     private func toSystemEntry(_ message: ChatMessageNative) throws -> Transcript.Entry {
         let segments = try message.contents.map(self.toSegment)
-        return .instructions(Transcript.Instructions(segments: segments, toolDefinitions: []))
+        var instructions = Transcript.Instructions(segments: segments, toolDefinitions: [])
+        if let id = message.messageId { instructions.id = id }
+        return .instructions(instructions)
     }
 
     private func toToolEntries(_ message: ChatMessageNative) throws -> [Transcript.Entry] {
@@ -522,30 +556,35 @@ public class ChatClientNative: NSObject {
         switch entry {
         case .prompt(let prompt):
             let message = ChatMessageNative()
+            message.messageId = entry.id
             message.role = .user
             message.contents = prompt.segments.compactMap(fromTranscriptSegment)
             return message
 
         case .response(let response):
             let message = ChatMessageNative()
+            message.messageId = entry.id
             message.role = .assistant
             message.contents = response.segments.compactMap(fromTranscriptSegment)
             return message
 
         case .instructions(let instructions):
             let message = ChatMessageNative()
+            message.messageId = entry.id
             message.role = .system
             message.contents = instructions.segments.compactMap(fromTranscriptSegment)
             return message
 
         case .toolCalls(let toolCalls):
             let message = ChatMessageNative()
+            message.messageId = entry.id
             message.role = .assistant
             message.contents = toolCalls.map(fromToolCall)
             return message
 
         case .toolOutput(let toolOutput):
             let message = ChatMessageNative()
+            message.messageId = entry.id
             message.role = .tool
             message.contents = fromToolOutput(toolOutput)
             return message

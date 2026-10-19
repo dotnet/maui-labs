@@ -138,6 +138,18 @@ metrics. On OS 26, request timing and model metadata remain available without
 token usage. Provider-specific response IDs and finish reasons are emitted
 only when the provider supplies them.
 
+### Message IDs
+
+Use `ChatMessage.MessageId` and `ChatResponseUpdate.MessageId` to correlate
+native responses with their streaming chunks. Response message IDs are available
+on Apple OS 26+; streaming text message IDs require OS 27+. IDs are `null` when
+unavailable and on tool callbacks, whose call IDs identify tool invocations
+rather than messages.
+
+An aggregated `ChatResponse` can contain multiple message fragments with the
+same ID; concatenate their text by ID to reconstruct that message. Streaming
+output is append-only and cannot retract previously emitted text.
+
 ### Embeddings for semantic search
 
 ```csharp

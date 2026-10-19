@@ -104,6 +104,9 @@ public class AppleIntelligenceChatClientResponseTests : ChatClientResponseTestsB
 
 public class AppleIntelligenceChatClientStreamingTests : ChatClientStreamingTestsBase<AppleIntelligenceChatClient>
 {
+	protected override bool SupportsStreamingMessageIds =>
+		OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27);
+
 	[Theory]
 	[InlineData(null)]
 	[InlineData("caller-supplied-model")]
