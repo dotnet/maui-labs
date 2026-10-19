@@ -226,6 +226,8 @@ CLI table produced by Command-line Tools 23. JSON retains
 semicolon-separated package IDs, including dotted API levels such as
 `platforms;android-37.0`. Installed Command-line Tools omitted by the inventory
 are detected from their executable and `source.properties` revision.
+Listed revisions are preserved when `source.properties` or its revision is
+missing; unlisted tools without revision metadata keep an unknown version.
 Inventory execution or parsing failures return an error rather than an empty
 successful package list.
 

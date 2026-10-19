@@ -82,11 +82,20 @@ public class SdkManagerPackageTests : IDisposable
             package.Version == "23.0" && package.IsInstalled);
     }
 
-    [Fact]
-    public async Task GetInstalledPackagesAsync_UnlistedToolsWithoutRevision_DoesNotInferSupportedVersion()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Pkg.Path=cmdline-tools;latest\n")]
+    [InlineData("Pkg.Revision=\r\nPkg.Path=cmdline-tools;latest\r\n")]
+    [InlineData("Pkg.Revision= \t \r\n")]
+    public async Task GetInstalledPackagesAsync_UnlistedToolsWithoutRevision_DoesNotInferSupportedVersion(string? properties)
     {
         using var manager = CreateManager("Installed packages:\nAvailable Packages:\n");
-        File.Delete(Path.Combine(_sdkPath, "cmdline-tools", "latest", "source.properties"));
+        var propertiesPath = Path.Combine(_sdkPath, "cmdline-tools", "latest", "source.properties");
+        if (properties is null)
+            File.Delete(propertiesPath);
+        else
+            File.WriteAllText(propertiesPath, properties);
 
         var installed = await manager.GetInstalledPackagesAsync();
 
@@ -97,12 +106,19 @@ public class SdkManagerPackageTests : IDisposable
 
     [Theory]
     [InlineData("Pkg.Revision=21.0\r\n", "21.0")]
-    [InlineData("Pkg.Revision=\r\nPkg.Path=cmdline-tools;latest\r\n", "")]
-    [InlineData("Pkg.Path=cmdline-tools;latest\n", "")]
-    public async Task GetInstalledPackagesAsync_ListedTools_UsesExecutableRevisionMetadata(string properties, string expectedVersion)
+    [InlineData("Pkg.Revision=\r\nPkg.Path=cmdline-tools;latest\r\n", "23.0.0")]
+    [InlineData("Pkg.Revision= \t \r\n", "23.0.0")]
+    [InlineData("Pkg.Path=cmdline-tools;latest\n", "23.0.0")]
+    [InlineData("", "23.0.0")]
+    [InlineData(null, "23.0.0")]
+    public async Task GetInstalledPackagesAsync_ListedTools_UsesMetadataRevisionWithInventoryFallback(string? properties, string expectedVersion)
     {
         using var manager = CreateManager("Installed packages:\n  cmdline-tools/latest  23.0.0  Android SDK Command-line Tools\n");
-        File.WriteAllText(Path.Combine(_sdkPath, "cmdline-tools", "latest", "source.properties"), properties);
+        var propertiesPath = Path.Combine(_sdkPath, "cmdline-tools", "latest", "source.properties");
+        if (properties is null)
+            File.Delete(propertiesPath);
+        else
+            File.WriteAllText(propertiesPath, properties);
 
         var installed = await manager.GetInstalledPackagesAsync();
 

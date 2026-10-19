@@ -161,7 +161,8 @@ public partial class SdkManager
             var installedIndex = installed.FindIndex(package => string.Equals(package.Path, packagePath, StringComparison.OrdinalIgnoreCase));
             if (installedIndex >= 0)
             {
-                installed[installedIndex] = installed[installedIndex] with { Version = revision };
+                if (revision.Length > 0)
+                    installed[installedIndex] = installed[installedIndex] with { Version = revision };
                 continue;
             }
             installed.Add(new SdkPackage
