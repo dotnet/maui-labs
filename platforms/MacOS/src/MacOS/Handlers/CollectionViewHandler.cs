@@ -62,6 +62,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     bool _isReloading;
     nfloat _lastMeasurementConstraint = -1;
     bool _lastMeasurementWasHorizontal;
+    bool _measureContent;
 
     // Threshold: render items this far beyond the visible rect
     static readonly nfloat OverScanPixels = 200;
@@ -109,6 +110,33 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
     void OnScrollToRequested(object? sender, ScrollToRequestEventArgs args)
         => HandleScrollTo(args);
+
+    public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
+    {
+        var size = base.GetDesiredSize(widthConstraint, heightConstraint);
+        var isHorizontal = GetOrientation(VirtualView.ItemsLayout) == ItemsLayoutOrientation.Horizontal;
+        var view = (IView)VirtualView;
+        var explicitSize = isHorizontal ? view.Width : view.Height;
+        _measureContent = double.IsPositiveInfinity(isHorizontal ? widthConstraint : heightConstraint)
+            && !(double.IsFinite(explicitSize) && explicitSize >= 0);
+        if (!_measureContent || _flatItems.Count == 0 || _itemsContainer == null)
+            return size;
+
+        // NSScrollView has no intrinsic content size. In a parent ScrollView,
+        // report our document extent instead of its zero native fitting size.
+        var rect = new Rect(0, 0,
+            double.IsFinite(widthConstraint) ? Math.Max(0, widthConstraint) : size.Width,
+            double.IsFinite(heightConstraint) ? Math.Max(0, heightConstraint) : size.Height);
+        InvalidateMeasurementsForConstraintChange(rect);
+        CalculatePositions(rect);
+        var extent = (double)_flatItems.Max(info => info.Position + info.Size);
+        var minimum = isHorizontal ? view.MinimumWidth : view.MinimumHeight;
+        var maximum = isHorizontal ? view.MaximumWidth : view.MaximumHeight;
+        extent = Math.Max(extent, double.IsFinite(minimum) && minimum >= 0 ? minimum : 0);
+        if (double.IsFinite(maximum) && maximum >= 0)
+            extent = Math.Min(extent, maximum);
+        return isHorizontal ? new Size(extent, size.Height) : new Size(size.Width, extent);
+    }
 
     public override void PlatformArrange(Rect rect)
     {
@@ -456,6 +484,8 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             }
             // Items shrank — more items may now fit in the viewport; re-run once
             UpdateVisibleItems(viewportOverride);
+            if (_measureContent)
+                ((IView)VirtualView).InvalidateMeasure();
         }
     }
 
@@ -991,6 +1021,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         try
         {
             ReloadItemsCore();
+            ((IView)VirtualView).InvalidateMeasure();
         }
         finally
         {
