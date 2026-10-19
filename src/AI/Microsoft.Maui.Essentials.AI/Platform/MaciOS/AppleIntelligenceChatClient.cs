@@ -412,8 +412,20 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			throw new ArgumentOutOfRangeException(nameof(options), "The MaxOutputTokens option must be greater than zero.");
 		}
 
+		var requireAny = options.ToolMode == ChatToolMode.RequireAny;
+		if (requireAny)
+		{
+			if (!(OperatingSystem.IsIOSVersionAtLeast(27) ||
+				OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
+				OperatingSystem.IsMacOSVersionAtLeast(27)))
+				throw new NotSupportedException("RequireAny requires iOS, Mac Catalyst, or macOS 27.0 or later.");
+			if (options.Tools is not { Count: > 0 })
+				throw new ArgumentException("RequireAny requires at least one AIFunction tool.", nameof(options));
+		}
+
 		return new ChatOptionsNative
 		{
+			RequireAnyTool = requireAny,
 			TopK = ToNative(options.TopK),
 			Seed = ToNative(options.Seed),
 			Temperature = ToNative(options.Temperature),

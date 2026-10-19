@@ -295,7 +295,19 @@ public class ChatClientNative: NSObject {
             maximumResponseTokens: options?.maxOutputTokens?.intValue
         )
 
-        let session = LanguageModelSession(model: model, tools: tools, transcript: transcript)
+        let session: LanguageModelSession
+        if options?.requireAnyTool == true {
+            if #available(iOS 27.0, macOS 27.0, macCatalyst 27.0, visionOS 27.0, *) {
+                guard !tools.isEmpty else {
+                    throw NSError.chatError(.invalidContent, description: "RequireAny requires at least one tool.")
+                }
+                session = LanguageModelSession(profile: RequireAnyToolProfile(tools: tools), history: transcript)
+            } else {
+                throw NSError.chatError(.invalidContent, description: "RequireAny requires iOS, Mac Catalyst, or macOS 27.0 or later.")
+            }
+        } else {
+            session = LanguageModelSession(model: model, tools: tools, transcript: transcript)
+        }
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -381,7 +393,11 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                cq?.async { onComplete(nil, error.toNSError()) } ?? onComplete(nil, error.toNSError())
+                // Foundation Models can wrap a cancelled tool in ToolCallError.
+                let completionError = Task.isCancelled
+                    ? NSError.chatError(.cancelled, description: "Request was cancelled.")
+                    : error.toNSError()
+                cq?.async { onComplete(nil, completionError) } ?? onComplete(nil, completionError)
             }
         }
 
@@ -691,6 +707,11 @@ extension Error {
             )
 
         case let error as LanguageModelSession.ToolCallError:
+            let underlyingError = error.underlyingError.toNSError()
+            if underlyingError.domain == "ChatClientNative",
+               underlyingError.code == ChatClientError.cancelled.rawValue {
+                return underlyingError
+            }
             return NSError(
                 domain: "ChatClientNative",
                 code: 0,

@@ -145,6 +145,20 @@ var generator = new NLEmbeddingGenerator(NLEmbeddingType.Sentence);
 var embeddings = await generator.GenerateAsync(["sunset beach", "mountain hiking"]);
 ```
 
+### Tool calling
+
+Supply `AIFunction` tools through `ChatOptions.Tools` and select a `ChatOptions.ToolMode`:
+
+| Mode | Behavior |
+|------|----------|
+| `ChatToolMode.Auto` | The model chooses whether to call a tool. |
+| `ChatToolMode.None` | No tools are available to the model. |
+| `ChatToolMode.RequireAny` | At least one tool call is required before the final answer. |
+
+RequireAny requires iOS, Mac Catalyst, or macOS 27+ and at least one supplied
+`AIFunction`. On OS 26 it throws `NotSupportedException`; missing tools on OS 27+
+throw `ArgumentException`.
+
 ### Tool diagnostics
 
 Pass an `ILoggerFactory` to `AppleIntelligenceChatClient` to receive existing

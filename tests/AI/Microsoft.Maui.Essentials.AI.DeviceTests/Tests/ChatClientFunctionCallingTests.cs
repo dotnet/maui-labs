@@ -12,6 +12,120 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	protected virtual IChatClient EnableFunctionCalling(T client) => client;
+	protected virtual bool SupportsRequireAny => true;
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task RequireAny_InvokesActualToolThenReturnsAnswer_FreshForEachRequest(bool streaming)
+	{
+		using var client = EnableFunctionCalling(new T());
+		using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+		var invocations = 0;
+		var options = new ChatOptions
+		{
+			ToolMode = ChatToolMode.RequireAny,
+			Tools = [AIFunctionFactory.Create(() =>
+			{
+				Interlocked.Increment(ref invocations);
+				return "blue";
+			}, "get_favorite_color", "Returns the user's favorite color.")]
+		};
+		ChatMessage[] messages = [new(ChatRole.User,
+			"Say hello briefly. If you use a tool, include its answer in your final sentence.")];
+
+		async Task<ChatResponse> ReadResponseAsync()
+		{
+			if (!streaming)
+				return await client.GetResponseAsync(messages, options, timeout.Token);
+			var updates = new List<ChatResponseUpdate>();
+			await foreach (var update in client.GetStreamingResponseAsync(messages, options, timeout.Token))
+				updates.Add(update);
+			var callIndex = updates.FindIndex(u => u.Contents.OfType<FunctionCallContent>().Any());
+			var resultIndex = updates.FindIndex(u => u.Contents.OfType<FunctionResultContent>().Any());
+			Assert.True(callIndex >= 0, "The stream must expose the required tool call.");
+			Assert.True(resultIndex > callIndex, "The tool result must follow its call.");
+			Assert.Contains(updates.Skip(resultIndex + 1),
+				u => u.Role == ChatRole.Assistant && !string.IsNullOrWhiteSpace(u.Text));
+			return updates.ToChatResponse();
+		}
+
+		if (!SupportsRequireAny)
+		{
+			await Assert.ThrowsAsync<NotSupportedException>(ReadResponseAsync);
+			Assert.Equal(0, invocations);
+			return;
+		}
+		for (var request = 0; request < 2; request++)
+		{
+			var before = Volatile.Read(ref invocations);
+			var response = await ReadResponseAsync();
+			Assert.NotEmpty(response.Messages);
+			Assert.Equal(ChatRole.Assistant, response.Messages[^1].Role);
+			Assert.False(string.IsNullOrWhiteSpace(response.Messages[^1].Text));
+			Assert.False(string.IsNullOrWhiteSpace(response.ModelId));
+			Assert.NotNull(response.Usage);
+			Assert.True(response.Usage.InputTokenCount > 0);
+			Assert.True(response.Usage.OutputTokenCount > 0);
+			Assert.True(Volatile.Read(ref invocations) > before,
+				"RequireAny must execute a tool in each request, not just emit a planned call.");
+		}
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task RequireAny_CancelDuringTool_ThrowsOperationCanceledException(bool streaming)
+	{
+		using var client = EnableFunctionCalling(new T());
+		using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+		using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+		var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var options = new ChatOptions
+		{
+			ToolMode = ChatToolMode.RequireAny,
+			Tools = [AIFunctionFactory.Create(async (CancellationToken cancellationToken) =>
+			{
+				entered.TrySetResult();
+				try
+				{
+					await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+					return "unreachable";
+				}
+				finally
+				{
+					exited.TrySetResult();
+				}
+			}, "get_favorite_color", "Returns the user's favorite color.")]
+		};
+		ChatMessage[] messages = [new(ChatRole.User, "Say hello briefly.")];
+		async Task ReadResponseAsync()
+		{
+			if (!streaming)
+				await client.GetResponseAsync(messages, options, cancellation.Token);
+			else
+				await foreach (var _ in client.GetStreamingResponseAsync(messages, options, cancellation.Token)) { }
+		}
+		var request = ReadResponseAsync();
+		if (!SupportsRequireAny)
+		{
+			await Assert.ThrowsAsync<NotSupportedException>(() => request);
+			Assert.False(entered.Task.IsCompleted);
+			return;
+		}
+
+		if (await Task.WhenAny(entered.Task, request).WaitAsync(timeout.Token) == request)
+		{
+			await request;
+			Assert.True(entered.Task.IsCompleted, "The request completed without entering the required tool.");
+		}
+		cancellation.Cancel();
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+		await exited.Task.WaitAsync(timeout.Token);
+	}
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
