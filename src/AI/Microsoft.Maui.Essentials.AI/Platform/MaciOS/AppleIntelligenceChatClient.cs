@@ -144,12 +144,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		var nativeOptions = ToNative(options, cancellationToken);
 		cancellationToken.ThrowIfCancellationRequested();
 		var native = new ChatClientNative();
-		// Structured responses arrive as JSON deltas computed natively from Foundation Models'
-		// GeneratedContent completion metadata, so they pass through without chunking.
-		// Plain text arrives as cumulative snapshots and still needs the managed chunker.
-		var handler = nativeOptions?.ResponseJsonSchema is null
-			? new StreamingResponseHandler(new PlainTextStreamChunker(), DefaultModelId)
-			: new StreamingResponseHandler(DefaultModelId);
+		// The Swift bridge converts both plain-text snapshots and structured content into
+		// append-only deltas before crossing the native boundary.
+		var handler = new StreamingResponseHandler(DefaultModelId);
 
 		// Set up cancellation registration before invoking native to avoid race
 		CancellationTokenNative? nativeToken = null;

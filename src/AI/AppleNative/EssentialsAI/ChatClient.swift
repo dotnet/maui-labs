@@ -121,21 +121,25 @@ public class ChatClientNative: NSObject {
 #endif
 
                 let responseStream = session.streamResponse(to: prompt, options: genOptions)
-
-                for try await response in responseStream {
-                    try Task.checkCancellation()
-                    let text = response.content
-                    guard !text.isEmpty else { continue }
+                var deltas = PlainTextDeltas()
+                let emit: (String) -> Void = { delta in
+                    guard !delta.isEmpty else { return }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
-                        log("[\(methodName)] Streaming update: \(text)")
+                        log("[\(methodName)] Streaming update: \(delta)")
                     }
 #endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
+                    let update = ResponseUpdateNative(updateType: .content, text: delta)
                     cq?.async { onUpdate(update) } ?? onUpdate(update)
                 }
 
+                for try await response in responseStream {
+                    try Task.checkCancellation()
+                    emit(try deltas.process(response.content))
+                }
+
                 let response = try await responseStream.collect()
+                emit(try deltas.process(response.content))
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.count)")

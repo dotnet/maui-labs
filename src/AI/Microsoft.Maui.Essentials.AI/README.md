@@ -54,9 +54,9 @@ await foreach (var update in chat.GetStreamingResponseAsync("Suggest a walking r
 
 Structured responses stream only when the native provider emits partial
 updates; otherwise a completed response can arrive as one update.
-Apple structured JSON deltas are computed natively using Foundation Models'
-completion metadata. Plain text uses cumulative snapshots with managed delta
-chunking; the managed JSON chunker remains a provider-neutral fallback.
+The Apple Swift bridge converts Foundation Models' cumulative plain-text
+snapshots and structured completion metadata into append-only deltas before
+crossing into managed code.
 
 ### Apple options
 
@@ -172,8 +172,9 @@ The corresponding NaturalLanguage model asset must be installed on the device.
 
 ## Examples and source
 
-The native Swift bridge includes model-free options, schema, and structured
-streaming tests (`swift test --package-path src/AI/AppleNative`, with Xcode 27).
+The native Swift bridge includes model-free options, schema, plain-text delta,
+and structured streaming tests (`swift test --package-path src/AI/AppleNative`,
+with Xcode 27).
 Live Foundation Models tests are opt-in: prefix that command with
 `ESSENTIALSAI_LIVE_TESTS=1` on supported hardware with the model ready.
 
