@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Attributes;
+using Microsoft.Maui.AI.Wayfinding;
 
 namespace AIExtensions.Sample.Garden.ViewModels;
 
@@ -22,29 +23,33 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     ///   <item><b>Static class</b> — ProductCatalog: tools on a plain static class.</item>
     ///   <item><b>Instance class</b> — CurrentCart: tools on a DI-registered instance.</item>
     ///   <item><b>Interface</b> — IOrderArchive: tools declared on the interface.</item>
-    ///   <item><b>ViewModel</b> — MainViewModel: navigation tools on a singleton VM.</item>
     ///   <item><b>Transient view-model</b> — CatalogViewModel: stateless action tools that write through to singleton services.</item>
     /// </list>
     /// </summary>
     [AIToolSource(typeof(ProductCatalog))]
     [AIToolSource(typeof(CurrentCart))]
     [AIToolSource(typeof(IOrderArchive))]
-    [AIToolSource(typeof(MainViewModel))]
     [AIToolSource(typeof(CartViewModel))]
     [AIToolSource(typeof(CatalogViewModel))]
     [AIToolSource(typeof(ReviewStore))]
     private partial class GardenShopTools : AIToolContext { }
 
     private readonly IChatClient _chatClient;
+    private readonly MauiWayfindingOptions _wayfindingOptions;
     private List<ChatMessage> _history = [];
     private ToolApprovalRequestContent? _pendingApproval;
     private CancellationTokenSource _cts = new();
 
-    public ChatViewModel(IServiceProvider rootProvider, IChatClient innerChatClient)
+    public ChatViewModel(
+        IServiceProvider rootProvider,
+        IChatClient innerChatClient,
+        MauiWayfindingOptions wayfindingOptions)
     {
         _chatClient = new ChatClientBuilder(innerChatClient)
+            .UseMauiWayfinding()
             .UseFunctionInvocation()
             .Build(rootProvider);
+        _wayfindingOptions = wayfindingOptions;
 
         WeakReferenceMessenger.Default.Register(this);
 
@@ -60,13 +65,15 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
     public IReadOnlyList<string> SuggestionPrompts { get; } =
     [
+        "Where can I write a review?",
+        "Take me to the page where I can review basil seeds",
+        "Where are my past orders?",
+        "What is this field for?",
+        "How do I get back to the catalog?",
+        "What do these charts show?",
         "Add 5 packs of tomato seeds and a trowel",
-        "Show me the basil seeds",
         "Build me a starter bundle",
-        "Switch cart display mode",
         "Checkout my shopping list",
-        "Go to my past orders",
-        "Rate the tomato seeds 5 stars",
     ];
 
     [ObservableProperty]
@@ -89,42 +96,13 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
 
     public void StartNewSession()
     {
-        try { _cts.Cancel(); } catch { /* best effort */ }
+        _cts.Cancel();
         _cts.Dispose();
         _cts = new CancellationTokenSource();
 
         _history =
         [
-            new(ChatRole.System,
-                """
-                You are a helpful garden-shop assistant. Help the user browse seeds, soil,
-                tools, and equipment, manage their cart, and review past orders.
-
-                IMPORTANT RULES:
-                - Always use tools to perform actions. Never assume you know the cart state
-                  from previous messages — call show_list to check.
-                - Use search_products to discover items by name or category.
-                - Use recommend_bundle when the user asks for a starter kit, gift set, or curated bundle idea.
-                - When the user says "check out", call checkout_list (which requires approval).
-                - After checkout clears the cart, the cart is EMPTY. If the user asks to add
-                  items again, always call add_to_list — do not say items are already there.
-
-                NAVIGATION:
-                - Use navigate_to_page("catalog") to browse the product catalog.
-                - Use navigate_to_page("orders") to see past orders.
-                - Use navigate_to_page("cart") to view the cart.
-                - Use dismiss_page() to close a modal and return to chat.
-
-                CART DISPLAY:
-                - Use set_cart_mode("normal") or set_cart_mode("compact") to change the cart view.
-
-                REVIEWS:
-                - Use submit_review to add a product review with a rating and comment.
-                - Use get_product_reviews to see reviews for a specific product.
-                - Use list_reviews to see all reviews.
-
-                Be concise and friendly.
-                """)
+            new(ChatRole.System, BuildSystemPrompt())
         ];
 
         Messages.Clear();
@@ -230,7 +208,7 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
                                         new System.Text.Json.JsonSerializerOptions { WriteIndented = true })
                                 };
                             }
-                            catch
+                            catch (NotSupportedException)
                             {
                                 resultText = result.Result?.ToString() ?? "";
                             }
@@ -307,8 +285,34 @@ public sealed partial class ChatViewModel : ObservableObject, IRecipient<StartNe
     private void RefreshAvailableTools()
     {
         AvailableTools.Clear();
-        var tools = GardenShopTools.Default.Tools;
+        var tools = GardenShopTools.Default.Tools
+            .Concat(MauiWayfindingChatClientBuilderExtensions.GetTools(_wayfindingOptions))
+            .GroupBy(tool => tool.Name, StringComparer.Ordinal)
+            .Select(group => group.First());
         foreach (var tool in tools.OrderBy(t => t.Name))
             AvailableTools.Add(new ToolInfoViewModel(tool.Name, tool.Description ?? ""));
     }
+
+    private static string BuildSystemPrompt() =>
+        """
+        You are Sage, the friendly wayfinding and shopping assistant inside this garden-shop
+        app. Help users discover what the app can do, understand the screen in front of them,
+        reach deep features, browse products, manage their cart and orders, and read or write
+        reviews. Be concise, friendly, and tool-driven.
+
+        ## Shopping actions
+
+        - Catalog: `list_all_products`, `search_products`, `get_product`
+        - Cart: `show_list`, `add_to_list`, `change_qty`, `remove_from_list`,
+          `cancel_list`, `get_cart_mode`, `set_cart_mode`
+        - Checkout/orders: `checkout_list`, `list_past_orders`, `find_order`, `reorder`,
+          `clear_past_orders`
+        - Recommendations: `recommend_bundle`
+        - Reviews: `list_reviews`, `get_product_reviews`, `submit_review`
+
+        Use action tools when the user asks Sage to perform a shopping operation. Call
+        `show_list` before describing cart contents. `recommend_bundle` suggests items but
+        does not add them. After `checkout_list`, the cart is empty. Ask for approval when a
+        tool requires it.
+        """;
 }

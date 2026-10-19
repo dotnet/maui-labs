@@ -2,6 +2,7 @@ using System.ClientModel;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Wayfinding;
 using OpenAI;
 
 #if IOS || MACCATALYST
@@ -56,8 +57,9 @@ internal static class ChatServiceCollectionExtensions
                 SupportsToolCalling: true))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .UseMauiWayfinding()
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
-            .Build();
+            .Build(serviceProvider);
 #endif
 
     private static IChatClient CreateAzureChatClient(IServiceProvider serviceProvider, AISettings settings)
@@ -89,7 +91,10 @@ internal static class ChatServiceCollectionExtensions
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>());
         if (imageGenerator is not null)
             builder.UseImageGenerationPreservingInputs(imageGenerator);
-        return builder.UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>()).Build();
+        return builder
+            .UseMauiWayfinding()
+            .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build(serviceProvider);
     }
 
     private static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>

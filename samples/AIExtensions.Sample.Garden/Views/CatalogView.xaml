@@ -21,7 +21,8 @@
                        FontSize="{StaticResource FontSizeTitle}"
                        FontAttributes="Bold"
                        Padding="16,16,16,6"
-                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}" />
+                       TextColor="{AppThemeBinding Light={StaticResource TextAccentLight}, Dark={StaticResource TextAccentDark}}"
+                       SemanticProperties.HeadingLevel="Level2" />
             </DataTemplate>
         </CollectionView.GroupHeaderTemplate>
 
@@ -48,7 +49,8 @@
                                    FontSize="32"
                                    TextColor="{StaticResource Primary}"
                                    HorizontalOptions="Center"
-                                   VerticalOptions="Center" />
+                                   VerticalOptions="Center"
+                                   SemanticProperties.Description="" />
                         </Border>
                         <Grid Grid.Column="1" RowDefinitions="*,Auto" RowSpacing="4">
                             <Label Text="{Binding Name}"
@@ -69,7 +71,8 @@
                                         CornerRadius="8"
                                         VerticalOptions="Center"
                                         Clicked="OnProductDetailClicked"
-                                        CommandParameter="{Binding Sku}" />
+                                        CommandParameter="{Binding Sku}"
+                                        SemanticProperties.Hint="Opens product details" />
                                 <Button Grid.Column="2"
                                         Text="Add to Cart"
                                         FontSize="{StaticResource FontSizeCaption}"
@@ -79,7 +82,8 @@
                                         CornerRadius="8"
                                         VerticalOptions="Center"
                                         Command="{Binding Source={RelativeSource AncestorType={x:Type vm:CatalogViewModel}}, Path=AddToCartCommand}"
-                                        CommandParameter="{Binding Sku}" />
+                                        CommandParameter="{Binding Sku}"
+                                        SemanticProperties.Hint="Adds this product to your cart" />
                             </Grid>
                         </Grid>
                     </Grid>
