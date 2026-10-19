@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using CoreGraphics;
 using CoreImage;
+using CoreVideo;
 using ImageIO;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -542,20 +543,15 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		{
 			case CGImage cg:
 				return new ImageContentNative(cg, default, null);
+			case CIImage ci:
+				return new ImageContentNative(ci, default, null);
+			case CVPixelBuffer buffer:
+				return new ImageContentNative(buffer, default, null);
 #if IOS || MACCATALYST
 			case UIKit.UIImage ui when ui.CGImage is { } cg:
-				return new ImageContentNative(cg, ui.Orientation switch
-				{
-					UIKit.UIImageOrientation.Up => CGImagePropertyOrientation.Up,
-					UIKit.UIImageOrientation.UpMirrored => CGImagePropertyOrientation.UpMirrored,
-					UIKit.UIImageOrientation.Down => CGImagePropertyOrientation.Down,
-					UIKit.UIImageOrientation.DownMirrored => CGImagePropertyOrientation.DownMirrored,
-					UIKit.UIImageOrientation.LeftMirrored => CGImagePropertyOrientation.LeftMirrored,
-					UIKit.UIImageOrientation.Right => CGImagePropertyOrientation.Right,
-					UIKit.UIImageOrientation.RightMirrored => CGImagePropertyOrientation.RightMirrored,
-					UIKit.UIImageOrientation.Left => CGImagePropertyOrientation.Left,
-					_ => throw new ArgumentOutOfRangeException(nameof(representation), "Unsupported UIImage orientation.")
-				}, null);
+				return new ImageContentNative(cg, ToNativeOrientation(ui.Orientation), null);
+			case UIKit.UIImage ui when ui.CIImage is { } ci:
+				return new ImageContentNative(ci, ToNativeOrientation(ui.Orientation), null);
 #elif MACOS
 			case AppKit.NSImage ns when ToCGImage(ns) is { } cg:
 				return new ImageContentNative(cg, default, null);
@@ -564,6 +560,22 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				return null;
 		}
 	}
+
+#if IOS || MACCATALYST
+	private static CGImagePropertyOrientation ToNativeOrientation(UIKit.UIImageOrientation orientation) =>
+		orientation switch
+		{
+			UIKit.UIImageOrientation.Up => CGImagePropertyOrientation.Up,
+			UIKit.UIImageOrientation.UpMirrored => CGImagePropertyOrientation.UpMirrored,
+			UIKit.UIImageOrientation.Down => CGImagePropertyOrientation.Down,
+			UIKit.UIImageOrientation.DownMirrored => CGImagePropertyOrientation.DownMirrored,
+			UIKit.UIImageOrientation.LeftMirrored => CGImagePropertyOrientation.LeftMirrored,
+			UIKit.UIImageOrientation.Right => CGImagePropertyOrientation.Right,
+			UIKit.UIImageOrientation.RightMirrored => CGImagePropertyOrientation.RightMirrored,
+			UIKit.UIImageOrientation.Left => CGImagePropertyOrientation.Left,
+			_ => throw new ArgumentOutOfRangeException(nameof(orientation), "Unsupported UIImage orientation.")
+		};
+#endif
 
 	internal static AIContent FromNative(ImageContentNative image)
 	{
@@ -593,11 +605,26 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		if (image.CgImage is { } cg)
 			return new DataContent(EncodePng(cg), "image/png") { RawRepresentation = cg };
 
+		if (image.CiImage is not null || image.PixelBuffer is not null)
+		{
+			// Portable output needs encoded pixels; input uses direct native attachments.
+			var rendered = DecodeImage(image);
+			return new DataContent(EncodePng(rendered), "image/png") { RawRepresentation = rendered };
+		}
+
 		throw new InvalidDataException("The native image attachment has no image payload or file URL.");
 	}
 
 	private static CGImage DecodeImage(ImageContentNative image)
 	{
+		if (image.CiImage is not null || image.PixelBuffer is not null)
+		{
+			using var bufferImage = image.CiImage is null ? CIImage.FromImageBuffer(image.PixelBuffer!) : null;
+			var ciImage = image.CiImage ?? bufferImage!;
+			using var context = new CIContext();
+			return context.CreateCGImage(ciImage, ciImage.Extent)
+				?? throw new InvalidDataException("Failed to render the native image.");
+		}
 		using var source = image.Data is { } data
 			? CGImageSource.FromData(data)
 			: image.ImageUrl is { IsFileUrl: true } url
