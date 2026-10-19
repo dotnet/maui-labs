@@ -74,6 +74,20 @@ var response = await _chat.GetResponseAsync([message]);
 
 On Apple, a `CGImage` (or `UIImage` on iOS/Mac Catalyst, `NSImage` on macOS) can be passed through without re-decoding by setting `RawRepresentation` on the `DataContent`; retain valid encoded bytes for recording and cross-platform consumers. Local `file://` `UriContent` is supported, while remote image URLs are rejected rather than fetched silently. Image prompting requires runtime OS 27 and a vision-capable, ready Apple Intelligence model; on 26 the client remains text-only and an image request throws an explicit error. Image *generation* is not provided by this Apple chat client.
 
+### Sampling options on Apple 26+
+
+```csharp
+var response = await _chat.GetResponseAsync("Suggest a short greeting.",
+    new ChatOptions { TopP = 0.9f, Temperature = 0.5f, Seed = 42, MaxOutputTokens = 64 });
+```
+
+`TopP` uses nucleus sampling and `TopK` uses top-k sampling. With neither a
+filter nor `Temperature`/`Seed`, the default stays greedy. Temperature or seed
+alone enables unrestricted random sampling. `TopP` must be finite in `[0, 1]`,
+temperature finite and nonnegative, and `TopK`/`MaxOutputTokens` positive.
+Setting **both** `TopK` and `TopP` throws `ArgumentException` before native
+generation: the Apple adapter selects one Foundation Models sampling mode.
+
 ### Token usage
 
 Token usage requires the native Swift bridge to be built with Xcode 27 or
