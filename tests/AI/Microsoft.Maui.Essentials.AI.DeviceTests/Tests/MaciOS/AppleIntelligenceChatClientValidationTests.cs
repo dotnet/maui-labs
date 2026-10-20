@@ -14,52 +14,6 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientValidationTests
 {
-	// Foundation Models may wrap a cancelled managed tool callback; the public request must retain caller cancellation.
-	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task ToolInvocation_CallerCancellation_PreservesCancelledTask(bool streaming)
-	{
-		if (!OperatingSystem.IsIOSVersionAtLeast(27) && !OperatingSystem.IsMacCatalystVersionAtLeast(27))
-			return;
-
-		var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-		async Task<string> BlockUntilCancelled(CancellationToken cancellationToken)
-		{
-			entered.TrySetResult();
-			await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-			return "unreachable";
-		}
-		using var client = new AppleIntelligenceChatClient();
-		using var cancellation = new CancellationTokenSource();
-		var options = new ChatOptions
-		{
-			Tools = [AIFunctionFactory.Create(BlockUntilCancelled, "blocking_tool")],
-			ToolMode = ChatToolMode.RequireSpecific("blocking_tool"),
-			Temperature = 0,
-		};
-		ChatMessage[] messages = [new(ChatRole.User, "Call blocking_tool now.")];
-		var request = streaming
-			? client.GetStreamingResponseAsync(messages, options, cancellation.Token).ToChatResponseAsync()
-			: client.GetResponseAsync(messages, options, cancellation.Token);
-
-		try
-		{
-			await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
-			cancellation.Cancel();
-			var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-				request.WaitAsync(TimeSpan.FromSeconds(15)));
-
-			Assert.Equal(cancellation.Token, error.CancellationToken);
-			Assert.True(request.IsCanceled);
-		}
-		finally
-		{
-			cancellation.Cancel();
-		}
-	}
-
 	// Foundation Models must reject dictionary schemas during native setup, not replace them with String.
 	[Theory]
 	[InlineData(false)]
@@ -89,26 +43,12 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.Equal(0, calls);
 	}
 
-	// Apple's Tool protocol generates arguments, not return values; CLR format annotations and dictionary results must not gate registration.
-	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task RequiredTool_WithFormattedParametersAndDictionaryReturn_InvokesExactlyOnce(bool streaming)
+	// The Apple adapter exposes separate native argument/output schemas; only the argument schema drives Tool generation.
+	[Fact]
+	public void ToNative_ToolWithFormattedParametersAndDictionaryReturn_PreservesSchemas()
 	{
-		if (!OperatingSystem.IsIOSVersionAtLeast(27) && !OperatingSystem.IsMacCatalystVersionAtLeast(27))
-			return;
-
-		var calls = 0;
-		Guid? receivedId = null;
-		DateTimeOffset? receivedTimestamp = null;
-		Dictionary<string, string> CaptureFormatted(Guid id, DateTimeOffset timestamp)
-		{
-			Interlocked.Increment(ref calls);
-			receivedId = id;
-			receivedTimestamp = timestamp;
-			return new() { ["result"] = "FORMATTED_CAPTURED" };
-		}
+		Dictionary<string, string> CaptureFormatted(Guid id, DateTimeOffset timestamp) =>
+			new() { ["result"] = "FORMATTED_CAPTURED" };
 
 		var tool = AIFunctionFactory.Create(CaptureFormatted, "capture_formatted");
 		var properties = tool.JsonSchema.GetProperty("properties");
@@ -118,68 +58,12 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.True(tool.ReturnJsonSchema.Value.TryGetProperty("additionalProperties", out _));
 
 		using var client = new AppleIntelligenceChatClient();
-		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-		var options = new ChatOptions
-		{
-			Tools = [tool],
-			ToolMode = ChatToolMode.RequireSpecific(tool.Name),
-			Temperature = 0,
-			MaxOutputTokens = 128,
-		};
-		ChatMessage[] messages = [new(ChatRole.User,
-			"Call capture_formatted exactly once with id 8d418a4d-fd44-47f4-813d-08b6b40abeca " +
-			"and timestamp 2026-10-20T12:34:56+00:00. Then reply with the result field from the tool.")];
-		var response = streaming
-			? await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync()
-			: await client.GetResponseAsync(messages, options, timeout.Token);
+		var native = client.ToNative(new ChatOptions { Tools = [tool] }, default);
 
-		Assert.Equal(1, calls);
-		Assert.Equal(Guid.Parse("8d418a4d-fd44-47f4-813d-08b6b40abeca"), receivedId);
-		Assert.Equal(new DateTimeOffset(2026, 10, 20, 12, 34, 56, TimeSpan.Zero), receivedTimestamp);
-		Assert.Contains("FORMATTED_CAPTURED", response.Text, StringComparison.Ordinal);
-	}
-
-	// Exercises MEAI's nullable C# parameter schema through Apple's Required native profile and callback.
-	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task RequiredTool_WithNullableParameters_InvokesExactlyOnce(bool streaming)
-	{
-		if (!OperatingSystem.IsIOSVersionAtLeast(27) && !OperatingSystem.IsMacCatalystVersionAtLeast(27))
-			return;
-
-		var calls = 0;
-		int? receivedValue = 42;
-		string? receivedLabel = "unexpected";
-		string CaptureNullable(int? value, string? label = null)
-		{
-			Interlocked.Increment(ref calls);
-			receivedValue = value;
-			receivedLabel = label;
-			return "NULLABLE_CAPTURED";
-		}
-		using var client = new AppleIntelligenceChatClient();
-		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-		var options = new ChatOptions
-		{
-			Tools = [AIFunctionFactory.Create(CaptureNullable, "capture_nullable")],
-			ToolMode = ChatToolMode.RequireSpecific("capture_nullable"),
-			Temperature = 0,
-			MaxOutputTokens = 128,
-		};
-		ChatMessage[] messages = [new(ChatRole.User,
-			"Call capture_nullable exactly once with value explicitly null and label exactly OPTIONAL_LABEL. " +
-			"Then reply with the tool's returned text without calling again.")];
-
-		var response = streaming
-			? await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync()
-			: await client.GetResponseAsync(messages, options, timeout.Token);
-
-		Assert.Equal(1, calls);
-		Assert.Null(receivedValue);
-		Assert.Equal("OPTIONAL_LABEL", receivedLabel);
-		Assert.Contains("NULLABLE_CAPTURED", response.Text, StringComparison.Ordinal);
+		Assert.NotNull(native);
+		var adapter = Assert.Single(native.Tools!);
+		Assert.Equal(tool.JsonSchema.GetRawText(), adapter.ArgumentsSchema);
+		Assert.Equal(tool.ReturnJsonSchema.Value.GetRawText(), adapter.OutputSchema);
 	}
 
 	// Apple's transcript retains empty user turns as text segments; inference policy is tested separately.

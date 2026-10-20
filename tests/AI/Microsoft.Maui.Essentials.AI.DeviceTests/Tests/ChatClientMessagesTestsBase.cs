@@ -13,6 +13,41 @@ public abstract class ChatClientMessagesTestsBase<T>
 {
 	protected virtual bool RejectsUnsupportedMedia => true;
 
+	protected virtual bool SupportsBinaryMedia(string mediaType) => false;
+
+	protected abstract bool RequiresPrompt { get; }
+
+	protected virtual void AssertMissingPromptError(ArgumentException error) { }
+
+	// Opt in to a rejection contract, not an assertion that every other content/role combination is supported.
+	protected abstract bool RejectsUnsupportedStandardContent(string kind, ChatRole role);
+
+	[Theory]
+	[InlineData("system", false)]
+	[InlineData("system", true)]
+	[InlineData("instructions", false)]
+	[InlineData("instructions", true)]
+	public async Task InstructionsOnly_WhenPromptRequired_Rejects(string scenario, bool streaming)
+	{
+		if (!RequiresPrompt)
+			return;
+
+		using var client = new T();
+		ChatMessage[] messages = scenario == "system"
+			? [new(ChatRole.System, "Instructions only")]
+			: [];
+		var options = new ChatOptions { Instructions = "Follow these instructions." };
+
+		var error = await Assert.ThrowsAsync<ArgumentException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync(messages, options);
+		});
+		AssertMissingPromptError(error);
+	}
+
 	[Fact]
 	public virtual async Task GetResponseAsync_WithEmptyMessages_ThrowsException()
 	{
@@ -121,29 +156,126 @@ public abstract class ChatClientMessagesTestsBase<T>
 	[InlineData("text/plain", false)]
 	[InlineData("application/octet-stream", false)]
 	[InlineData("audio/ogg", false)]
+	[InlineData("application/pdf", false)]
 	[InlineData("text/plain", true)]
 	[InlineData("application/pdf", true)]
+	[InlineData("audio/ogg", true)]
+	[InlineData("application/octet-stream", true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithKnownContentAndUnsupportedMedia_AppliesProviderPolicy(string mediaType, bool useUri)
+	public Task GetResponseAsync_WithKnownContentAndUnsupportedMedia_AppliesProviderPolicy(string mediaType, bool useUri)
+		=> VerifyUnsupportedMediaPolicyAsync(mediaType, useUri);
+
+	[Theory]
+	[InlineData("application/pdf", false)]
+	[InlineData("application/pdf", true)]
+	[InlineData("audio/ogg", false)]
+	[InlineData("audio/ogg", true)]
+	[InlineData("text/plain", false)]
+	[InlineData("text/plain", true)]
+	[InlineData("application/octet-stream", false)]
+	[InlineData("application/octet-stream", true)]
+	public async Task UnsupportedMedia_RejectsInsteadOfOmitting(string mediaType, bool useUri)
 	{
+		if (!RejectsUnsupportedMedia)
+			return;
+
+		await VerifyUnsupportedMediaPolicyAsync(mediaType, useUri);
+	}
+
+	private async Task VerifyUnsupportedMediaPolicyAsync(string mediaType, bool useUri)
+	{
+		// Supported binary media use valid payloads in the dedicated binary-content vectors.
+		if (!useUri && SupportsBinaryMedia(mediaType))
+			return;
+
 		using var client = new T();
 		AIContent content = useUri
 			? new UriContent("https://example.invalid/baseline.txt", mediaType)
 			: new DataContent("Unrecognized baseline payload"u8.ToArray(), mediaType);
-		var message = new ChatMessage(ChatRole.User,
-			[new TextContent("Reply with exactly HELLO and nothing else."), content]);
-
-		if (RejectsUnsupportedMedia)
+		foreach (var role in new[] { ChatRole.System, ChatRole.User, ChatRole.Assistant })
 		{
-			await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync([message]));
-			await Assert.ThrowsAsync<NotSupportedException>(() =>
-				client.GetStreamingResponseAsync([message]).ToChatResponseAsync());
-			return;
+			ChatMessage[] messages =
+			[
+				new(role, [new TextContent("before"), content, new TextContent("after")]),
+				new(ChatRole.User, "Reply with exactly HELLO and nothing else.")
+			];
+			foreach (var streaming in new[] { false, true })
+			{
+				if (RejectsUnsupportedMedia)
+				{
+					var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+					{
+						if (streaming)
+							await client.GetStreamingResponseAsync(messages).ToChatResponseAsync();
+						else
+							await client.GetResponseAsync(messages);
+					});
+					Assert.Contains(mediaType, error.Message, StringComparison.Ordinal);
+				}
+				else
+				{
+					var response = streaming
+						? await client.GetStreamingResponseAsync(messages).ToChatResponseAsync()
+						: await client.GetResponseAsync(messages);
+					Assert.NotNull(response);
+					Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
+				}
+			}
 		}
+	}
 
-		var response = await client.GetResponseAsync([message]);
-		Assert.NotNull(response);
-		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
+	[Theory]
+	[InlineData("hosted-file")]
+	[InlineData("hosted-vector-store")]
+	[InlineData("reasoning")]
+	[InlineData("usage")]
+	[InlineData("error")]
+	[InlineData("code-call")]
+	[InlineData("code-result")]
+	[InlineData("image-call")]
+	[InlineData("image-result")]
+	[InlineData("web-call")]
+	[InlineData("web-result")]
+	[InlineData("mcp-call")]
+	[InlineData("mcp-result")]
+	[InlineData("approval-request")]
+	[InlineData("approval-response")]
+	public async Task UnsupportedStandardContent_RejectsInEveryRoleBeforeInference(string kind)
+	{
+#pragma warning disable MEAI001 // Standard MEAI content remains recognized even when its class is experimental.
+		AIContent content = kind switch
+		{
+			"hosted-file" => new HostedFileContent("file-1"),
+			"hosted-vector-store" => new HostedVectorStoreContent("store-1"),
+			"reasoning" => new TextReasoningContent("reasoning"),
+			"usage" => new UsageContent(),
+			"error" => new ErrorContent("error"),
+			"code-call" => new CodeInterpreterToolCallContent("call-1"),
+			"code-result" => new CodeInterpreterToolResultContent("call-1"),
+			"image-call" => new ImageGenerationToolCallContent("call-1"),
+			"image-result" => new ImageGenerationToolResultContent("call-1"),
+			"web-call" => new WebSearchToolCallContent("call-1"),
+			"web-result" => new WebSearchToolResultContent("call-1"),
+			"mcp-call" => new McpServerToolCallContent("call-1", "server", "tool"),
+			"mcp-result" => new McpServerToolResultContent("call-1"),
+			"approval-request" => new ToolApprovalRequestContent("request-1", new FunctionCallContent("call-1", "sample")),
+			_ => new ToolApprovalResponseContent("request-1", true, new FunctionCallContent("call-1", "sample"))
+		};
+#pragma warning restore MEAI001
+		using var client = new T();
+		foreach (var role in new[] { ChatRole.System, ChatRole.User, ChatRole.Assistant, ChatRole.Tool })
+		{
+			if (!RejectsUnsupportedStandardContent(kind, role))
+				continue;
+
+			ChatMessage[] messages = [new(role, [new UnsupportedContentForTesting(), content]),
+				new(ChatRole.User, "Hello")];
+			var error = await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(messages));
+			Assert.Contains(content.GetType().Name, error.Message, StringComparison.Ordinal);
+			error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetStreamingResponseAsync(messages).ToChatResponseAsync());
+			Assert.Contains(content.GetType().Name, error.Message, StringComparison.Ordinal);
+		}
 	}
 
 	[Fact]

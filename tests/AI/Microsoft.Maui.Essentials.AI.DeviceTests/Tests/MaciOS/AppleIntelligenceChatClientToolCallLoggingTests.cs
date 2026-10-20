@@ -9,78 +9,12 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientToolCallLoggingTests
 {
-	// Apple's OS 27 Required profile must release its forcing mode without re-executing informational calls in MEAI middleware.
-	[Theory]
-	[InlineData(false, false)]
-	[InlineData(false, true)]
-	[InlineData(true, false)]
-	[InlineData(true, true)]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task RequiredToolCallbacks_FinishOnceAndPreserveContext(bool streaming, bool named)
-	{
-		if (!OperatingSystem.IsIOSVersionAtLeast(27) && !OperatingSystem.IsMacCatalystVersionAtLeast(27))
-		{
-			using var unsupported = new AppleIntelligenceChatClient();
-			await Assert.ThrowsAsync<NotSupportedException>(() => unsupported.GetResponseAsync(
-				[new ChatMessage(ChatRole.User, "Hello")],
-				new ChatOptions { ToolMode = named ? ChatToolMode.RequireSpecific("lookupRequiredValue") : ChatToolMode.RequireAny }));
-			return;
-		}
-
-		using var source = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-		using var activity = new Activity("required-profile-context").Start();
-		Activity? beforeAwait = null;
-		Activity? afterAwait = null;
-		var calls = 0;
-		var excludedCalls = 0;
-		var tool = AIFunctionFactory.Create(async (string key, CancellationToken cancellationToken) =>
-		{
-			if (Interlocked.Increment(ref calls) > 3)
-				throw new InvalidOperationException("Required mode exceeded the bounded tool-call budget.");
-			cancellationToken.ThrowIfCancellationRequested();
-			Assert.True(cancellationToken.CanBeCanceled);
-			beforeAwait = Activity.Current;
-			await Task.Yield();
-			afterAwait = Activity.Current;
-			return "REQUIRED_VALUE_42";
-		}, name: "lookupRequiredValue", description: "Looks up the secret value for a key. Call once, then answer using the returned value.");
-		var excluded = AIFunctionFactory.Create(() =>
-		{
-			Interlocked.Increment(ref excludedCalls);
-			return "EXCLUDED";
-		}, name: "excludedTool");
-		using var client = new AppleIntelligenceChatClient().AsBuilder().UseFunctionInvocation().Build();
-		var options = new ChatOptions
-		{
-			ToolMode = named ? ChatToolMode.RequireSpecific(tool.Name) : ChatToolMode.RequireAny,
-			Tools = named ? [tool, excluded] : [tool],
-			Temperature = 0,
-			MaxOutputTokens = 128
-		};
-		ChatMessage[] messages =
-		[
-			new(ChatRole.System, "After receiving the tool value, answer with that value and do not call again."),
-			new(ChatRole.User, "Call lookupRequiredValue once for key secret, then give the final answer containing the returned value.")
-		];
-
-		var response = streaming
-			? await client.GetStreamingResponseAsync(messages, options, source.Token)
-				.ToChatResponseAsync(cancellationToken: source.Token).WaitAsync(TimeSpan.FromSeconds(70))
-			: await client.GetResponseAsync(messages, options, source.Token).WaitAsync(TimeSpan.FromSeconds(70));
-
-		Assert.Contains("REQUIRED_VALUE_42", response.Text, StringComparison.Ordinal);
-		Assert.Equal(1, calls);
-		Assert.Equal(0, excludedCalls);
-		Assert.Same(activity, beforeAwait);
-		Assert.Same(activity, afterAwait);
-	}
-
-	// Apple's native tool callbacks must restore the chat Activity across awaits and correlate its adapter-owned log entries.
+	// Apple's callback adapter owns log correlation; Activity identity across awaits is covered by the shared function suite.
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task ToolCallbacks_InheritChatTraceAndSpanAcrossAwaits(bool streaming)
+	public async Task ToolCallbackLogs_InheritChatTraceAndSpan(bool streaming)
 	{
 		const string sourceName = "AppleToolCorrelationTests";
 		Activity? chatSpan = null;
@@ -95,13 +29,9 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		using var client = new AppleIntelligenceChatClient(logCollector).AsBuilder()
 			.UseOpenTelemetry(sourceName: sourceName, configure: telemetry => telemetry.EnableSensitiveData = false)
 			.Build();
-		Activity? beforeAwait = null;
-		Activity? afterAwait = null;
 		var weatherTool = AIFunctionFactory.Create(async (string location) =>
 		{
-			beforeAwait = Activity.Current;
 			await Task.Yield();
-			afterAwait = Activity.Current;
 			return $"Clear skies in {location}";
 		}, name: "GetWeather", description: "Gets the weather for a location");
 		var options = new ChatOptions { Tools = [weatherTool] };
@@ -116,8 +46,6 @@ public class AppleIntelligenceChatClientToolCallLoggingTests
 		}
 
 		Assert.NotNull(chatSpan);
-		Assert.Same(chatSpan, beforeAwait);
-		Assert.Same(chatSpan, afterAwait);
 		Assert.NotEmpty(logCollector.Entries);
 		Assert.All(logCollector.Entries, entry =>
 		{

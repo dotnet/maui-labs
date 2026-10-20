@@ -21,6 +21,9 @@ public class AppleIntelligenceChatClientCancellationTests : ChatClientCancellati
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<AppleIntelligenceChatClient>
 {
+	// Foundation Models exposes explicit Required tool modes starting in OS 27.
+	protected override bool SupportsRequiredToolMode =>
+		OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27);
 }
 
 [Collection(nameof(AppleIntelligenceCollection))]
@@ -38,6 +41,17 @@ public class AppleIntelligenceChatClientInstantiationTests : ChatClientInstantia
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsBase<AppleIntelligenceChatClient>
 {
+	// Foundation Models needs a current prompt and cannot map the standard non-text/non-image content in this matrix.
+	protected override bool RequiresPrompt => true;
+	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) => true;
+
+	// Foundation Models requires the final User message as its current Prompt.
+	protected override void AssertMissingPromptError(ArgumentException error)
+	{
+		Assert.Equal("messages", error.ParamName);
+		Assert.Contains("last User message", error.Message, StringComparison.Ordinal);
+	}
+
 	// Foundation Models image support requires both OS 27 and the current native model's vision capability.
 	[Theory]
 	[InlineData("image/png", false)]
@@ -90,6 +104,10 @@ public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsB
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBase<AppleIntelligenceChatClient>
 {
+	// Foundation Models reconstructs each foreground session from supplied history, with no resumable server state.
+	protected override bool RejectsStatefulConversationOptions => true;
+
+	// Foundation Models requires an explicit native schema rather than schema-free JSON mode.
 	[Fact]
 	public override async Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat()
 	{
@@ -100,6 +118,7 @@ public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBas
 		Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
 	}
 
+	// The native streaming path also has no schema-free JSON mode.
 	[Fact]
 	public override async Task GetStreamingResponseAsync_WithResponseFormat_AcceptsJsonFormat()
 	{

@@ -11,6 +11,44 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public abstract class ChatClientOptionsTestsBase<T>
 	where T : class, IChatClient, new()
 {
+	protected abstract bool RejectsStatefulConversationOptions { get; }
+
+#pragma warning disable MEAI001 // Exercise the pinned MEAI continuation/background options.
+	[Theory]
+	[InlineData(nameof(ChatOptions.ContinuationToken), false)]
+	[InlineData(nameof(ChatOptions.ContinuationToken), true)]
+	[InlineData(nameof(ChatOptions.ConversationId), false)]
+	[InlineData(nameof(ChatOptions.ConversationId), true)]
+	[InlineData(nameof(ChatOptions.AllowBackgroundResponses), false)]
+	[InlineData(nameof(ChatOptions.AllowBackgroundResponses), true)]
+	public async Task UnsupportedConversationOptions_RejectBeforeInference(string optionName, bool streaming)
+	{
+		// Providers with server-side state need real identifiers; fabricated tokens do not test their supported paths.
+		if (!RejectsStatefulConversationOptions)
+			return;
+
+		var options = new ChatOptions();
+		if (optionName == nameof(ChatOptions.ContinuationToken))
+			options.ContinuationToken = new TestContinuationToken();
+		else if (optionName == nameof(ChatOptions.ConversationId))
+			options.ConversationId = "";
+		else
+			options.AllowBackgroundResponses = true;
+		using var client = new T();
+
+		var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync([new(ChatRole.User, "Hello")], options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync([new(ChatRole.User, "Hello")], options);
+		});
+		Assert.Contains(optionName, error.Message, StringComparison.Ordinal);
+	}
+
+	private sealed class TestContinuationToken : ResponseContinuationToken;
+#pragma warning restore MEAI001
+
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_AcceptsNullOptions()

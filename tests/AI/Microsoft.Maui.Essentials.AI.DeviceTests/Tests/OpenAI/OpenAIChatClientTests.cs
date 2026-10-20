@@ -22,6 +22,8 @@ public class OpenAIChatClientCancellationTests : ChatClientCancellationTestsBase
 
 public class OpenAIChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<OpenAIChatClient>
 {
+	protected override bool SupportsRequiredToolMode => true;
+
 	protected override IChatClient EnableFunctionCalling(OpenAIChatClient client, Action<ChatOptions>? configureOptions = null)
 	{
 		var builder = client.AsBuilder().UseFunctionInvocation();
@@ -49,6 +51,16 @@ public class OpenAIChatClientMessagesTests : ChatClientMessagesTestsBase<OpenAIC
 	// The OpenAI baseline adapter may forward or omit non-image media; native providers must explicitly reject unsupported media.
 	protected override bool RejectsUnsupportedMedia => false;
 
+	// OpenAI consumes PDF input; its supported payload is covered by the shared binary-content tests.
+	protected override bool SupportsBinaryMedia(string mediaType) => mediaType == "application/pdf";
+
+	// Responses accepts instructions as input items; it does not require a separate current User prompt.
+	protected override bool RequiresPrompt => false;
+
+	// Responses may forward hosted items or omit response metadata. This opts out of local fail-fast rejection,
+	// not into claiming Azure supports every recognized kind in every role (which requires live endpoint coverage).
+	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) => false;
+
 	// Azure/OpenAI rejects empty input with ClientResultException HTTP 400, not the native clients' ArgumentException.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
@@ -66,6 +78,8 @@ public class OpenAIChatClientMessagesTests : ChatClientMessagesTestsBase<OpenAIC
 
 public class OpenAIChatClientOptionsTests : ChatClientOptionsTestsBase<OpenAIChatClient>
 {
+	// Responses supports server-side conversations and continuation/background operations.
+	protected override bool RejectsStatefulConversationOptions => false;
 }
 
 public class OpenAIChatClientResponseTests : ChatClientResponseTestsBase<OpenAIChatClient>
