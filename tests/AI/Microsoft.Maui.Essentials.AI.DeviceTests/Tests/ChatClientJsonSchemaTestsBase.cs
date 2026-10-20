@@ -128,13 +128,11 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var client = new T();
 		var messages = new List<ChatMessage>
 		{
-			new(ChatRole.User, "Return only the JSON object {\"greeting\":\"hello\"}. Do not include Markdown fences or explanation.")
+			new(ChatRole.User, "Generate a JSON object with a 'greeting' field containing 'hello'")
 		};
 		var options = new ChatOptions
 		{
-			ResponseFormat = ChatResponseFormat.Json,
-			Temperature = 0,
-			Reasoning = new() { Effort = ReasoningEffort.None }
+			ResponseFormat = ChatResponseFormat.Json
 		};
 
 		var response = await client.GetResponseAsync(messages, options);
@@ -150,7 +148,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithTypedPromptFallback_UsesSchemaFreeJson()
+	public virtual async Task GetResponseAsync_WithTypedPromptFallback_UsesSchemaFreeJson()
 	{
 		using var client = new T();
 		var response = await client.GetResponseAsync<SimpleResponse>(
@@ -167,13 +165,11 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var client = new T();
 		var messages = new List<ChatMessage>
 		{
-			new(ChatRole.User, "Return only the JSON object {\"greeting\":\"hello\"}. Do not include Markdown fences or explanation.")
+			new(ChatRole.User, "Generate a JSON object with a 'greeting' field containing 'hello'")
 		};
 		var options = new ChatOptions
 		{
-			ResponseFormat = ChatResponseFormat.Json,
-			Temperature = 0,
-			Reasoning = new() { Effort = ReasoningEffort.None }
+			ResponseFormat = ChatResponseFormat.Json
 		};
 
 		var textBuilder = new System.Text.StringBuilder();

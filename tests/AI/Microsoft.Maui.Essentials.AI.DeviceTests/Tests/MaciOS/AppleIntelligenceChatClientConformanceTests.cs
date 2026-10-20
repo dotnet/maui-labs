@@ -215,17 +215,16 @@ public class AppleIntelligenceChatClientConformanceTests
 		Assert.Contains("Seed", error.Message, StringComparison.Ordinal);
 	}
 
-	// Only a supplied schema selects Foundation Models constrained generation.
+	// Foundation Models has no schema-free JSON generation mode.
 	[Fact]
-	public void ToNative_SchemaFreeJson_UsesOrdinaryGeneration()
+	public void ToNative_SchemaFreeJson_RejectsBeforeGeneration()
 	{
-		var native = new AppleIntelligenceChatClient().ToNative(new ChatOptions
+		var error = Assert.Throws<NotSupportedException>(() => new AppleIntelligenceChatClient().ToNative(new ChatOptions
 		{
 			ResponseFormat = ChatResponseFormat.Json
-		}, default);
+		}, default));
 
-		Assert.NotNull(native);
-		Assert.Null(native.ResponseJsonSchema);
+		Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
 	}
 
 	// Apple OS 26 lacks explicit required modes; validate both runtime branches without needing either model.

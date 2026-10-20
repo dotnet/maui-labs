@@ -596,6 +596,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				(NSString?)jsonSchema.GetRawText(),
 			ChatResponseFormatJson jsonFormat when jsonFormat.Schema is not null =>
 				throw new InvalidOperationException("Failed to transform JSON schema for Apple Intelligence chat API."),
+			ChatResponseFormatJson =>
+				throw new NotSupportedException("Apple Intelligence structured output requires an explicit JSON schema. Schema-free JSON and typed prompt fallback are not supported."),
 			_ => null
 		};
 

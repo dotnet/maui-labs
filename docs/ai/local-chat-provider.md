@@ -319,7 +319,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 **Essentials.AI rule**
 
 - Honor a supplied JSON schema natively or reject it; never silently downgrade it to prompt instructions.
-- Treat schema-free `ChatResponseFormat.Json` as best effort so MEAI's caller-selected `GetResponseAsync<T>(useJsonSchemaResponseFormat: false)` prompt fallback can run.
+- Support JSON only with an explicit schema. Reject schema-free `ChatResponseFormat.Json` and `GetResponseAsync<T>(useJsonSchemaResponseFormat: false)` before generation; never prompt-strengthen, strip fences, repair output, or parse ordinary text into JSON.
 - Reject unsupported schema shapes clearly.
 
 **Essentials.AI implementation**

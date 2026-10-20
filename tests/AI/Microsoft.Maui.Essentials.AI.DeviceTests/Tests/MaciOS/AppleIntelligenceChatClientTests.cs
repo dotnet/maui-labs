@@ -45,20 +45,21 @@ public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsB
 	[InlineData("application/pdf", false)]
 	[InlineData("application/pdf", true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public override async Task GetResponseAsync_WithBinaryContentAndText_ConvertsOrIgnoresContent(string mediaType, bool streaming)
+	public override async Task GetResponseAsync_WithBinaryContentAndText_AppliesProviderPolicy(string mediaType, bool streaming)
 	{
 		var os27 = OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27);
 		if (mediaType != "image/png" ||
 			(os27 && (await AppleIntelligenceChatClient.GetModelStatusAsync()).Capabilities?.Contains(ChatModelCapability.ImageInput) == true))
 		{
-			await base.GetResponseAsync_WithBinaryContentAndText_ConvertsOrIgnoresContent(mediaType, streaming);
+			await base.GetResponseAsync_WithBinaryContentAndText_AppliesProviderPolicy(mediaType, streaming);
 			return;
 		}
 
 		using var client = new AppleIntelligenceChatClient();
 		var error = await Assert.ThrowsAnyAsync<Exception>(async () =>
 		{
-			ChatMessage[] messages = [new(ChatRole.User, [new DataContent(new byte[] { 0 }, mediaType)])];
+			ChatMessage[] messages = [new(ChatRole.User, [new DataContent(
+				Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"), mediaType)])];
 			if (streaming) await client.GetStreamingResponseAsync(messages).ToChatResponseAsync();
 			else await client.GetResponseAsync(messages);
 		});
@@ -219,6 +220,42 @@ public class AppleIntelligenceChatClientUsageTests(ITestOutputHelper output)
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<AppleIntelligenceChatClient>
 {
+	// Foundation Models requires an explicit schema; ordinary text generation is not a JSON mode.
+	[Fact]
+	public override async Task GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+			client.GetResponseAsync([new(ChatRole.User, "Return JSON.")],
+				new ChatOptions { ResponseFormat = ChatResponseFormat.Json }));
+
+		Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+	}
+
+	// Streaming cannot guarantee JSON without a native schema either.
+	[Fact]
+	public override async Task GetStreamingResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+			client.GetStreamingResponseAsync([new(ChatRole.User, "Return JSON.")],
+				new ChatOptions { ResponseFormat = ChatResponseFormat.Json }).ToChatResponseAsync());
+
+		Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+	}
+
+	// MEAI's opt-in prompt fallback requests schema-free JSON, which this native provider cannot honor.
+	[Fact]
+	public override async Task GetResponseAsync_WithTypedPromptFallback_UsesSchemaFreeJson()
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+			client.GetResponseAsync<SimpleResponse>(
+				[new ChatMessage(ChatRole.User, "Return hello in the message field.")],
+				useJsonSchemaResponseFormat: false));
+
+		Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+	}
 }
 
 #endif
