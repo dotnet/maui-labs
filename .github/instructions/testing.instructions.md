@@ -97,6 +97,27 @@ Use descriptive names that communicate the scenario:
 - `MethodName_Condition_ExpectedResult` — e.g., `ParseVersion_InvalidInput_ThrowsArgumentException`
 - Or descriptive `[Fact]` — e.g., `Should_return_all_connected_agents_when_multiple_registered`
 
+### Shared AI Backend Coverage
+
+- Use `docs/ai/local-chat-provider.md` as the provider-neutral contract. Put common
+  chat and embedding behavior in the existing generic test bases.
+- Bind applicable suites using capability hooks; keep native SDK, marshalling,
+  OS-version, numeric ranges, and provider error-policy tests platform-specific.
+- Preserve existing assertions and `RequiresModel` traits. New fail-fast rejection
+  tests need no model; inference tests still require the trait.
+- Conservative virtual defaults keep legacy Apple and cloud bindings compiling.
+  `SupportsRequiredToolMode` and JSON-suite `RequiresExplicitJsonSchema` use null
+  for an unmigrated binding, not support. New bindings must choose true or false.
+- Required=false asserts rejection; structured-output=false asserts rejection.
+  Rejection hooks opt into validation, not support for all other combinations.
+  Explicitly bind media/role, prompt, stateful/background, Activity, and cancellation
+  policies; never silently skip an unsupported feature without a capability hook.
+- Usage defaults preserve full-count assertions. `IsUsageAvailable=false` asserts
+  absent usage; `IsOutputUsageAvailable=false` asserts input-only usage with absent
+  output/total counts. Telemetry must match only the supplied token counts.
+- Host controls verify the shared harness, not provider implementations. Establish
+  Azure/OpenAI compatibility with live cloud tests, not compilation alone.
+
 ### What to Test
 
 - **Do test**: Public API methods, edge cases, error handling, serialization/deserialization

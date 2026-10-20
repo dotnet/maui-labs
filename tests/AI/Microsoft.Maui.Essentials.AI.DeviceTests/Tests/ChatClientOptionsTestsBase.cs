@@ -11,6 +11,58 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public abstract class ChatClientOptionsTestsBase<T>
 	where T : class, IChatClient, new()
 {
+	protected virtual bool RejectsStatefulConversationOptions => false;
+	protected virtual bool RequiresExplicitJsonSchema => false;
+
+#pragma warning disable MEAI001 // Exercise the pinned MEAI continuation/background options.
+	[Theory]
+	[InlineData(nameof(ChatOptions.ContinuationToken), false)]
+	[InlineData(nameof(ChatOptions.ContinuationToken), true)]
+	[InlineData(nameof(ChatOptions.ConversationId), false)]
+	[InlineData(nameof(ChatOptions.ConversationId), true)]
+	[InlineData(nameof(ChatOptions.AllowBackgroundResponses), false)]
+	[InlineData(nameof(ChatOptions.AllowBackgroundResponses), true)]
+	public async Task UnsupportedConversationOptions_RejectBeforeInference(string optionName, bool streaming)
+	{
+		// Stateful providers need real identifiers; fabricated tokens do not test their supported paths.
+		if (!RejectsStatefulConversationOptions)
+			return;
+
+		var options = new ChatOptions();
+		if (optionName == nameof(ChatOptions.ContinuationToken))
+			options.ContinuationToken = new TestContinuationToken();
+		else if (optionName == nameof(ChatOptions.ConversationId))
+			options.ConversationId = "";
+		else
+			options.AllowBackgroundResponses = true;
+		using var client = new T();
+
+		var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync([new(ChatRole.User, "Hello")], options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync([new(ChatRole.User, "Hello")], options);
+		});
+		Assert.Contains(optionName, error.Message, StringComparison.Ordinal);
+	}
+
+	private sealed class TestContinuationToken : ResponseContinuationToken;
+#pragma warning restore MEAI001
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithInstructions_Succeeds()
+	{
+		using var client = new T();
+		var response = await client.GetResponseAsync(
+			[new(ChatRole.User, "Hello")],
+			new ChatOptions { Instructions = "You are a helpful assistant." });
+
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
+	}
+
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_AcceptsNullOptions()
@@ -45,6 +97,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat()
 	{
 		var client = new T();
@@ -57,12 +110,20 @@ public abstract class ChatClientOptionsTestsBase<T>
 			ResponseFormat = ChatResponseFormat.Json
 		};
 
+		if (RequiresExplicitJsonSchema)
+		{
+			var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetResponseAsync(messages, options));
+			Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+			return;
+		}
+
 		await client.GetResponseAsync(messages, options);
 	}
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
+	public virtual async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -79,7 +140,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_WithZeroMaxTokens_ThrowsException()
+	public virtual async Task GetResponseAsync_WithZeroMaxTokens_ThrowsException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -134,6 +195,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetStreamingResponseAsync_WithResponseFormat_AcceptsJsonFormat()
 	{
 		var client = new T();
@@ -145,6 +207,14 @@ public abstract class ChatClientOptionsTestsBase<T>
 		{
 			ResponseFormat = ChatResponseFormat.Json
 		};
+
+		if (RequiresExplicitJsonSchema)
+		{
+			var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync());
+			Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+			return;
+		}
 
 		await foreach (var update in client.GetStreamingResponseAsync(messages, options))
 		{

@@ -12,6 +12,18 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public abstract class ChatClientJsonSchemaTestsBase<T>
 	where T : class, IChatClient, new()
 {
+	protected virtual bool SupportsStructuredOutput => true;
+	// Null preserves legacy bindings, including their existing schema-free JSON overrides.
+	protected virtual bool? RequiresExplicitJsonSchema => null;
+
+	private async Task<bool> VerifySchemaSupportAsync(Func<Task> generate)
+	{
+		if (SupportsStructuredOutput)
+			return true;
+		await Assert.ThrowsAsync<NotSupportedException>(generate);
+		return false;
+	}
+
 	// Record types for testing JSON schema responses
 	public record WeatherResponse(string Location, int Temperature, string Condition);
 	public record SimpleResponse(string Message);
@@ -32,6 +44,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			ResponseFormat = ChatResponseFormat.ForJsonSchema<WeatherResponse>()
 		};
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync(messages, options)))
+			return;
 		var response = await client.GetResponseAsync(messages, options);
 
 		Assert.NotNull(response);
@@ -57,6 +71,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			ResponseFormat = ChatResponseFormat.ForJsonSchema<SimpleResponse>()
 		};
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync(messages, options)))
+			return;
 		var response = await client.GetResponseAsync(messages, options);
 
 		Assert.NotNull(response);
@@ -82,6 +98,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		};
 
 		var textBuilder = new System.Text.StringBuilder();
+		if (!await VerifySchemaSupportAsync(() => client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync()))
+			return;
 		await foreach (var update in client.GetStreamingResponseAsync(messages, options))
 		{
 			foreach (var content in update.Contents)
@@ -102,6 +120,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 	{
 		var client = new T();
@@ -113,6 +132,15 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		{
 			ResponseFormat = ChatResponseFormat.Json
 		};
+
+		if (RequiresExplicitJsonSchema is true || !SupportsStructuredOutput)
+		{
+			var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetResponseAsync(messages, options));
+			if (RequiresExplicitJsonSchema is true)
+				Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+			return;
+		}
 
 		var response = await client.GetResponseAsync(messages, options);
 
@@ -126,6 +154,33 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public virtual async Task GetResponseAsync_WithTypedPromptFallback_UsesSchemaFreeJson()
+	{
+		if (RequiresExplicitJsonSchema is null && SupportsStructuredOutput)
+			return;
+
+		using var client = new T();
+		if (RequiresExplicitJsonSchema is true || !SupportsStructuredOutput)
+		{
+			var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetResponseAsync<SimpleResponse>(
+					[new ChatMessage(ChatRole.User, "Return exactly hello in the message field.")],
+					useJsonSchemaResponseFormat: false));
+			if (RequiresExplicitJsonSchema is true)
+				Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+			return;
+		}
+
+		var response = await client.GetResponseAsync<SimpleResponse>(
+			[new ChatMessage(ChatRole.User, "Return exactly hello in the message field.")],
+			useJsonSchemaResponseFormat: false);
+
+		Assert.Equal("hello", response.Result.Message, ignoreCase: true);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetStreamingResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
 	{
 		var client = new T();
@@ -137,6 +192,15 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		{
 			ResponseFormat = ChatResponseFormat.Json
 		};
+
+		if (RequiresExplicitJsonSchema is true || !SupportsStructuredOutput)
+		{
+			var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync());
+			if (RequiresExplicitJsonSchema is true)
+				Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+			return;
+		}
 
 		var textBuilder = new System.Text.StringBuilder();
 
@@ -177,6 +241,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			Temperature = 0.5f
 		};
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync(messages, options)))
+			return;
 		var response = await client.GetResponseAsync(messages, options);
 
 		Assert.NotNull(response);
@@ -202,6 +268,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			ResponseFormat = ChatResponseFormat.ForJsonSchema<TripItinerary>()
 		};
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync(messages, options)))
+			return;
 		var response = await client.GetResponseAsync(messages, options);
 
 		Assert.NotNull(response);
@@ -242,6 +310,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var client = new T();
 		var message = new ChatMessage(ChatRole.User, "What is the weather in Seattle? Respond with location, temperature in fahrenheit, and condition.");
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync<WeatherResponse>(message)))
+			return;
 		var response = await client.GetResponseAsync<WeatherResponse>(message);
 
 		Assert.NotNull(response);
@@ -256,6 +326,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		var client = new T();
 		var message = new ChatMessage(ChatRole.User, "Say hello in a message field.");
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync<SimpleResponse>(message)))
+			return;
 		var response = await client.GetResponseAsync<SimpleResponse>(message);
 
 		Assert.NotNull(response);
@@ -274,6 +346,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			new(ChatRole.User, "Plan a 1-day trip to Seattle with 2 activities.")
 		};
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync<TripItinerary>(messages)))
+			return;
 		var response = await client.GetResponseAsync<TripItinerary>(messages);
 
 		Assert.NotNull(response);
@@ -292,6 +366,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			Temperature = 0.5f
 		};
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync<WeatherResponse>(message, options)))
+			return;
 		var response = await client.GetResponseAsync<WeatherResponse>(message, options);
 
 		Assert.NotNull(response);
@@ -309,6 +385,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			new(ChatRole.User, "What is the weather in Chicago? Respond with location, temperature in fahrenheit, and condition.")
 		};
 
+		if (!await VerifySchemaSupportAsync(() => client.GetResponseAsync<WeatherResponse>(messages)))
+			return;
 		var response = await client.GetResponseAsync<WeatherResponse>(messages);
 
 		Assert.NotNull(response);

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -11,7 +12,286 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public abstract class ChatClientFunctionCallingTestsBase<T>
 	where T : class, IChatClient, new()
 {
-	protected virtual IChatClient EnableFunctionCalling(T client) => client;
+	// External invocation adapters configure each round trip inside the invocation loop.
+	protected virtual IChatClient EnableFunctionCalling(T client, Action<ChatOptions>? configureOptions = null) => client;
+
+	// Null leaves legacy bindings unchanged; false tests explicit rejection, true tests invocation.
+	protected virtual bool? SupportsRequiredToolMode => null;
+	protected virtual bool PreservesToolActivityContext => false;
+	protected virtual bool PreservesToolCancellation => false;
+	protected virtual void ConfigureFunctionCallingOptions(ChatOptions options) { }
+
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task RequiredToolCallbacks_FinishOnceAndPreserveContext(bool streaming, bool named)
+	{
+		if (SupportsRequiredToolMode is null)
+			return;
+
+		using var source = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+		using var activity = new Activity("required-profile-context").Start();
+		Activity? beforeAwait = null;
+		Activity? afterAwait = null;
+		var calls = 0;
+		var excludedCalls = 0;
+		var tool = AIFunctionFactory.Create(async (string key, CancellationToken cancellationToken) =>
+		{
+			if (Interlocked.Increment(ref calls) > 3)
+				throw new InvalidOperationException("Required mode exceeded the bounded tool-call budget.");
+			cancellationToken.ThrowIfCancellationRequested();
+			Assert.True(cancellationToken.CanBeCanceled);
+			beforeAwait = Activity.Current;
+			await Task.Yield();
+			afterAwait = Activity.Current;
+			return "REQUIRED_VALUE_42";
+		}, name: "lookupRequiredValue", description: "Looks up the secret value for a key. Call once, then answer using the returned value.");
+		var excluded = AIFunctionFactory.Create(() =>
+		{
+			Interlocked.Increment(ref excludedCalls);
+			return "EXCLUDED";
+		}, name: "excludedTool");
+		var mode = named ? ChatToolMode.RequireSpecific(tool.Name) : ChatToolMode.RequireAny;
+		using var client = EnableFunctionCalling(new T(), requestOptions =>
+			requestOptions.ToolMode = calls == 0 ? mode : ChatToolMode.Auto)
+			.AsBuilder().UseFunctionInvocation().Build();
+		var options = new ChatOptions
+		{
+			ToolMode = mode,
+			Tools = named ? [tool, excluded] : [tool],
+			AllowMultipleToolCalls = false,
+			Temperature = 0,
+			MaxOutputTokens = 128
+		};
+		ConfigureFunctionCallingOptions(options);
+		ChatMessage[] messages =
+		[
+			new(ChatRole.System, "After receiving the tool value, answer with that value and do not call again."),
+			new(ChatRole.User, "Call lookupRequiredValue once for key secret, then give the final answer containing the returned value.")
+		];
+
+		var response = await GetRequiredToolResponseAsync(client, messages, options, streaming, source.Token);
+
+		Assert.Equal(SupportsRequiredToolMode is true ? 1 : 0, calls);
+		Assert.Equal(0, excludedCalls);
+		if (response is null)
+			return;
+		Assert.Contains("REQUIRED_VALUE_42", response.Text, StringComparison.Ordinal);
+		if (PreservesToolActivityContext)
+		{
+			Assert.Same(activity, beforeAwait);
+			Assert.Same(activity, afterAwait);
+		}
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolInvocation_CallerCancellation_PreservesCancelledTask(bool streaming)
+	{
+		if (SupportsRequiredToolMode is not true || !PreservesToolCancellation)
+			return;
+
+		var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		async Task<string> BlockUntilCancelled(CancellationToken cancellationToken)
+		{
+			entered.TrySetResult();
+			await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+			return "unreachable";
+		}
+		using var client = EnableFunctionCalling(new T());
+		using var cancellation = new CancellationTokenSource();
+		var options = new ChatOptions
+		{
+			Tools = [AIFunctionFactory.Create(BlockUntilCancelled, "blocking_tool")],
+			ToolMode = ChatToolMode.RequireSpecific("blocking_tool"),
+			Temperature = 0,
+		};
+		ConfigureFunctionCallingOptions(options);
+		ChatMessage[] messages = [new(ChatRole.User, "Call blocking_tool now.")];
+		var request = streaming
+			? client.GetStreamingResponseAsync(messages, options, cancellation.Token)
+				.ToChatResponseAsync(cancellationToken: cancellation.Token)
+			: client.GetResponseAsync(messages, options, cancellation.Token);
+
+		try
+		{
+			await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+			cancellation.Cancel();
+			var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+				request.WaitAsync(TimeSpan.FromSeconds(15)));
+
+			Assert.Equal(cancellation.Token, error.CancellationToken);
+			Assert.True(request.IsCanceled);
+		}
+		finally
+		{
+			cancellation.Cancel();
+		}
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolCallbacks_InheritChatTraceAndSpanAcrossAwaits(bool streaming)
+	{
+		if (!PreservesToolActivityContext)
+			return;
+
+		var sourceName = $"{GetType().Name}.{nameof(ToolCallbacks_InheritChatTraceAndSpanAcrossAwaits)}.{streaming}";
+		Activity? chatSpan = null;
+		using var listener = new ActivityListener
+		{
+			ShouldListenTo = source => source.Name == sourceName,
+			Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+			ActivityStopped = activity => chatSpan = activity,
+		};
+		ActivitySource.AddActivityListener(listener);
+		using var client = EnableFunctionCalling(new T()).AsBuilder()
+			.UseOpenTelemetry(sourceName: sourceName, configure: telemetry => telemetry.EnableSensitiveData = false)
+			.Build();
+		Activity? beforeAwait = null;
+		Activity? afterAwait = null;
+		var weatherTool = AIFunctionFactory.Create(async (string location) =>
+		{
+			beforeAwait = Activity.Current;
+			await Task.Yield();
+			afterAwait = Activity.Current;
+			return $"Clear skies in {location}";
+		}, name: "GetWeather", description: "Gets the weather for a location");
+		var options = new ChatOptions { Tools = [weatherTool] };
+		ChatMessage[] messages = [new(ChatRole.User, "Use GetWeather to get the weather in Seattle.")];
+		if (streaming)
+		{
+			await foreach (var _ in client.GetStreamingResponseAsync(messages, options)) { }
+		}
+		else
+		{
+			await client.GetResponseAsync(messages, options);
+		}
+
+		Assert.NotNull(chatSpan);
+		Assert.Same(chatSpan, beforeAwait);
+		Assert.Same(chatSpan, afterAwait);
+	}
+
+	private async Task<ChatResponse?> GetRequiredToolResponseAsync(
+		IChatClient client, ChatMessage[] messages, ChatOptions options, bool streaming, CancellationToken cancellationToken)
+	{
+		Task<ChatResponse> SendAsync() => (streaming
+			? client.GetStreamingResponseAsync(messages, options, cancellationToken)
+				.ToChatResponseAsync(cancellationToken: cancellationToken)
+			: client.GetResponseAsync(messages, options, cancellationToken)).WaitAsync(TimeSpan.FromSeconds(70));
+
+		if (SupportsRequiredToolMode is false)
+		{
+			await Assert.ThrowsAsync<NotSupportedException>(SendAsync);
+			return null;
+		}
+
+		var response = await SendAsync();
+		Assert.NotNull(response);
+		return response;
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task RequiredTool_WithFormattedParametersAndDictionaryReturn_InvokesExactlyOnce(bool streaming)
+	{
+		if (SupportsRequiredToolMode is null)
+			return;
+
+		var calls = 0;
+		Guid? receivedId = null;
+		DateTimeOffset? receivedTimestamp = null;
+		Dictionary<string, string> CaptureFormatted(Guid id, DateTimeOffset timestamp)
+		{
+			Interlocked.Increment(ref calls);
+			receivedId = id;
+			receivedTimestamp = timestamp;
+			return new() { ["result"] = "FORMATTED_CAPTURED" };
+		}
+
+		var tool = AIFunctionFactory.Create(CaptureFormatted, "capture_formatted");
+		var mode = ChatToolMode.RequireSpecific(tool.Name);
+		using var client = EnableFunctionCalling(new T(), requestOptions =>
+			requestOptions.ToolMode = calls == 0 ? mode : ChatToolMode.Auto);
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+		var options = new ChatOptions
+		{
+			Tools = [tool],
+			ToolMode = mode,
+			AllowMultipleToolCalls = false,
+			Temperature = 0,
+			MaxOutputTokens = 128,
+		};
+		ConfigureFunctionCallingOptions(options);
+		ChatMessage[] messages = [new(ChatRole.User,
+			"Call capture_formatted exactly once with id 8d418a4d-fd44-47f4-813d-08b6b40abeca " +
+			"and timestamp 2026-10-20T12:34:56+00:00. Then reply with the result field from the tool.")];
+		var response = await GetRequiredToolResponseAsync(client, messages, options, streaming, timeout.Token);
+
+		Assert.Equal(SupportsRequiredToolMode is true ? 1 : 0, calls);
+		if (response is null)
+			return;
+		Assert.Equal(Guid.Parse("8d418a4d-fd44-47f4-813d-08b6b40abeca"), receivedId);
+		Assert.Equal(new DateTimeOffset(2026, 10, 20, 12, 34, 56, TimeSpan.Zero), receivedTimestamp);
+		Assert.Contains("FORMATTED_CAPTURED", response.Text, StringComparison.Ordinal);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task RequiredTool_WithNullableParameters_InvokesExactlyOnce(bool streaming)
+	{
+		if (SupportsRequiredToolMode is null)
+			return;
+
+		var calls = 0;
+		int? receivedValue = 42;
+		string? receivedLabel = "unexpected";
+		string CaptureNullable(int? value, string? label = null)
+		{
+			Interlocked.Increment(ref calls);
+			receivedValue = value;
+			receivedLabel = label;
+			return "NULLABLE_CAPTURED";
+		}
+		var tool = AIFunctionFactory.Create(CaptureNullable, "capture_nullable");
+		var mode = ChatToolMode.RequireSpecific(tool.Name);
+		using var client = EnableFunctionCalling(new T(), requestOptions =>
+			requestOptions.ToolMode = calls == 0 ? mode : ChatToolMode.Auto);
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+		var options = new ChatOptions
+		{
+			Tools = [tool],
+			ToolMode = mode,
+			AllowMultipleToolCalls = false,
+			Temperature = 0,
+			MaxOutputTokens = 128,
+		};
+		ConfigureFunctionCallingOptions(options);
+		ChatMessage[] messages = [new(ChatRole.User,
+			"Call capture_nullable exactly once with value explicitly null and label exactly OPTIONAL_LABEL. " +
+			"Then reply with the tool's returned text without calling again.")];
+
+		var response = await GetRequiredToolResponseAsync(client, messages, options, streaming, timeout.Token);
+
+		Assert.Equal(SupportsRequiredToolMode is true ? 1 : 0, calls);
+		if (response is null)
+			return;
+		Assert.Null(receivedValue);
+		Assert.Equal("OPTIONAL_LABEL", receivedLabel);
+		Assert.Contains("NULLABLE_CAPTURED", response.Text, StringComparison.Ordinal);
+	}
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
