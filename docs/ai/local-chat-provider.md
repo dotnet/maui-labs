@@ -73,6 +73,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 
 - Expose provider-specific helpers for native availability and capabilities when the platform supplies them.
 - Return a shared status shape containing availability, an optional provider-native reason, and effective MEAI-facing capabilities.
+- `ChatModelStatus` is a sealed immutable class with reference identity; compare its properties explicitly when comparing snapshots.
 - Map native states to the most appropriate shared availability value without losing the provider reason.
 - Treat reported capabilities as immutable, best-effort guidance; generation remains authoritative.
 - Refresh status rather than caching it.

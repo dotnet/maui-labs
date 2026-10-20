@@ -15,13 +15,6 @@
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.TokenUsage = 5 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.ToolCalling = 3 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus
-[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.<Clone>$() -> Microsoft.Maui.Essentials.AI.ChatModelStatus!
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.Availability.get -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.Capabilities.get -> System.Collections.Generic.IReadOnlyCollection<Microsoft.Maui.Essentials.AI.ChatModelCapability>?
-[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.Equals(Microsoft.Maui.Essentials.AI.ChatModelStatus? other) -> bool
 [MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.UnavailableReason.get -> string?
-[MAUIAI0001]override Microsoft.Maui.Essentials.AI.ChatModelStatus.Equals(object? obj) -> bool
-[MAUIAI0001]override Microsoft.Maui.Essentials.AI.ChatModelStatus.GetHashCode() -> int
-[MAUIAI0001]override Microsoft.Maui.Essentials.AI.ChatModelStatus.ToString() -> string!
-[MAUIAI0001]static Microsoft.Maui.Essentials.AI.ChatModelStatus.operator !=(Microsoft.Maui.Essentials.AI.ChatModelStatus? left, Microsoft.Maui.Essentials.AI.ChatModelStatus? right) -> bool
-[MAUIAI0001]static Microsoft.Maui.Essentials.AI.ChatModelStatus.operator ==(Microsoft.Maui.Essentials.AI.ChatModelStatus? left, Microsoft.Maui.Essentials.AI.ChatModelStatus? right) -> bool

@@ -143,6 +143,44 @@ public class ChatModelStatusTests
 	}
 
 	[Fact]
+	public void Status_DoesNotExposeGeneratedRecordMembers()
+	{
+		Assert.False(typeof(IEquatable<ChatModelStatus>).IsAssignableFrom(typeof(ChatModelStatus)));
+		var methods = typeof(ChatModelStatus).GetMethods(
+			System.Reflection.BindingFlags.Public |
+			System.Reflection.BindingFlags.Instance |
+			System.Reflection.BindingFlags.Static |
+			System.Reflection.BindingFlags.DeclaredOnly);
+
+		Assert.Equal(
+			["get_Availability", "get_Capabilities", "get_UnavailableReason"],
+			methods.Select(method => method.Name).OrderBy(name => name));
+	}
+
+	[Theory]
+	[InlineData(-1)]
+	[InlineData(0)]
+	[InlineData(1)]
+	public void Status_EquivalentSnapshotsUseReferenceIdentity(int capabilityCount)
+	{
+		ChatModelCapability[]? capabilities = capabilityCount switch
+		{
+			-1 => null,
+			0 => [],
+			_ => [ChatModelCapability.Text],
+		};
+		var first = new ChatModelStatus(ChatModelAvailability.Available, null, capabilities);
+		var second = new ChatModelStatus(ChatModelAvailability.Available, null, capabilities);
+
+		Assert.Equal(first.Availability, second.Availability);
+		Assert.Equal(first.UnavailableReason, second.UnavailableReason);
+		Assert.Equal(first.Capabilities, second.Capabilities);
+		Assert.False(first.Equals(second));
+		Assert.False(first == second);
+		Assert.True(first.Equals(first));
+	}
+
+	[Fact]
 	public void Status_HasNoPublicConstructorsOrPropertySetters()
 	{
 		Assert.True(typeof(ChatModelStatus).IsSealed);

@@ -1,7 +1,8 @@
 namespace Microsoft.Maui.Essentials.AI;
 
-/// <summary>A current model-status snapshot containing availability and effective provider capabilities.</summary>
-public sealed record ChatModelStatus
+/// <summary>An immutable model-status snapshot containing availability and effective provider capabilities.</summary>
+/// <remarks>Snapshots use reference identity, not value equality.</remarks>
+public sealed class ChatModelStatus
 {
 	internal ChatModelStatus(
 		ChatModelAvailability availability,
