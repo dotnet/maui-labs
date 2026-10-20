@@ -1,6 +1,5 @@
 package com.microsoft.maui.essentials.ai
 
-import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.common.StreamingCallback
 import com.google.mlkit.genai.prompt.Content
@@ -18,35 +17,44 @@ class GeminiNanoNativeClient {
         createModel = { Generation.getClient() },
         closeModel = { it.close() },
         infer = { model, request, streaming, callback ->
+            requireAvailable(model.checkStatus())
             val nativeRequest = request.toNative(
                 model::isSystemPromptAvailable,
                 model::isThinkingModeAvailable,
             )
-            val status = model.checkStatus()
-            if (status != FeatureStatus.AVAILABLE) {
-                val preparation = when (status) {
-                    FeatureStatus.DOWNLOADABLE, FeatureStatus.DOWNLOADING ->
-                        " Download Gemini Nano through AICore before retrying."
-                    else -> " This device must support Gemini Nano and have the latest AICore configuration."
-                }
-                error("Gemini Nano is not ready for inference. Current status: $status.$preparation")
-            }
-
             val modelName = model.getBaseModelName()
             val tokenCount = model.countTokens(nativeRequest).totalTokens
+            val accumulator = NativeStreamAccumulator(callback, modelName)
             val generated = if (streaming) {
                 model.generateContent(nativeRequest, object : StreamingCallback {
-                    override fun onNewText(additionalText: String) = callback.onText(additionalText, modelName)
-                    override fun onNewThought(additionalThought: String) = callback.onThought(additionalThought, modelName)
+                    override fun onNewText(additionalText: String) = accumulator.onText(additionalText)
+                    override fun onNewThought(additionalThought: String) = accumulator.onThought(additionalThought)
                 })
             } else {
                 model.generateContent(nativeRequest)
             }
 
-            generated.toNativeResponse(modelName, tokenCount)
+            generated.toNativeResponse(modelName, tokenCount).also {
+                if (streaming) accumulator.finish(it)
+            }
         },
         mapError = ::toNativeError,
     )
+
+    private val modelOperations = NativeModelOperations(
+        createModel = { Generation.getClient() },
+        closeModel = { it.close() },
+        checkStatus = { it.checkStatus() },
+        thinkingAvailable = { it.isThinkingModeAvailable() },
+        download = { it.download() },
+        mapError = ::toNativeError,
+    )
+
+    fun checkStatus(callback: NativeModelCallback): NativeCancellation =
+        modelOperations.execute(false, callback)
+
+    fun prepareModel(callback: NativeModelCallback): NativeCancellation =
+        modelOperations.execute(true, callback)
 
     fun generate(
         request: NativeChatRequest,
@@ -55,7 +63,10 @@ class GeminiNanoNativeClient {
     ): NativeCancellation = operations.generate(request, streaming, callback)
 
     fun close() {
-        runBlocking { operations.close() }
+        runBlocking {
+            operations.close()
+            modelOperations.close()
+        }
     }
 
     private fun toNativeError(exception: Throwable): NativeChatError = when (exception) {
@@ -86,7 +97,7 @@ class GeminiNanoNativeClient {
         return NativeChatResponse(
             candidate.text,
             thoughtProcess.map { it.text }.toTypedArray(),
-            candidate.finishReason ?: FINISH_OTHER,
+            candidate.finishReason ?: FINISH_UNSPECIFIED,
             modelName,
             inputTokens,
         )
@@ -99,20 +110,31 @@ internal suspend fun NativeChatRequest.toNative(
 ): GenerateContentRequest {
     val instructions = mutableListOf<String>()
     val contents = mutableListOf<Content>()
-    val hasAssistantHistory = messages.any { it.role == "assistant" }
+    val hasAssistantHistory = messages.any {
+        it.role.equals("assistant", ignoreCase = true) || it.role.equals("tool", ignoreCase = true)
+    }
     messages.forEach { message ->
-        when (message.role) {
-            "system" -> message.parts.forEach { part ->
-                require(part.kind == CONTENT_TEXT) {
-                    "Gemini Nano system instructions support text only."
+        val role = message.role.lowercase()
+        when (role) {
+            "system" -> {
+                val instruction = message.parts.joinToString("") { part ->
+                    require(part.kind == CONTENT_TEXT) {
+                        "Gemini Nano system instructions support text only."
+                    }
+                    part.text.orEmpty()
                 }
-                instructions.add(part.text.orEmpty())
+                if (instruction.isNotBlank()) instructions.add(instruction)
             }
-            "user", "assistant" -> {
+            "user", "assistant", "tool" -> {
                 val builder = Content.builder()
                 if (hasAssistantHistory) {
-                    builder.addPart(TextPart(if (message.role == "user") "User:\n" else "Assistant:\n"))
+                    builder.addPart(TextPart(when (role) {
+                        "user" -> "User:\n"
+                        "assistant" -> "Assistant:\n"
+                        else -> "Tool:\n"
+                    }))
                 }
+                if (message.parts.isEmpty()) builder.addPart(TextPart(""))
                 message.parts.forEach { part ->
                     when (part.kind) {
                         CONTENT_TEXT -> builder.addPart(TextPart(part.text.orEmpty()))
@@ -125,12 +147,14 @@ internal suspend fun NativeChatRequest.toNative(
                 if (hasAssistantHistory) builder.addPart(TextPart("\n\n"))
                 contents.add(builder.build())
             }
-            else -> error(
-                "Gemini Nano does not support chat role '${message.role}'."
-            )
+            else -> Unit
         }
     }
-    require(contents.isNotEmpty()) { "At least one user or assistant message is required." }
+    require(messages.any {
+        it.role.equals("user", ignoreCase = true) || it.role.equals("assistant", ignoreCase = true)
+    }) {
+        "At least one user or assistant message is required."
+    }
 
     val builder = GenerateContentRequest.Builder(contents)
     if (instructions.isNotEmpty()) {

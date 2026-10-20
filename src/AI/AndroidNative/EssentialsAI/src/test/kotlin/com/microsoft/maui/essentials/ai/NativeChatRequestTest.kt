@@ -46,6 +46,24 @@ class NativeChatRequestTest {
     }
 
     @Test
+    fun caseVariantStandardRolesRetainInstructionsAndToolHistory() = runBlocking {
+        val result = request(
+            message("SYSTEM", "Be concise."),
+            message("ASSISTANT", "Earlier answer."),
+            message("TOOL", """{"type":"function_result","callId":"call-1","result":"ok"}"""),
+            message("USER", "Continue."),
+        ).toNative({ true }, { false })
+
+        assertEquals("Be concise.", result.systemInstruction!!.textString)
+        val prompt = result.contents.flatMap { it.parts }
+            .joinToString("") { (it as TextPart).textString }
+        assertTrue(prompt.contains("Assistant:\nEarlier answer."))
+        assertTrue(prompt.contains("Tool:\n"))
+        assertTrue(prompt.contains("\"callId\":\"call-1\""))
+        assertTrue(prompt.endsWith("User:\nContinue.\n\n"))
+    }
+
+    @Test
     fun prependedOptionsInstructionsAndSystemPartsKeepTheirOrder() = runBlocking {
         val result = request(
             message("system", "options instructions"),
@@ -54,7 +72,7 @@ class NativeChatRequestTest {
             message("system", "last system"),
         ).toNative({ true }, { false })
 
-        assertEquals("options instructions\n\nfirst system\n\nsecond part\n\nlast system",
+        assertEquals("options instructions\n\nfirst systemsecond part\n\nlast system",
             result.systemInstruction!!.textString)
         assertEquals("hello", (result.contents.single().parts.single() as TextPart).textString)
     }
@@ -82,17 +100,28 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun toolAndCustomRolesAreRejectedEvenInEmptyHistoryEntries() = runBlocking {
-        for (role in listOf("tool", "custom")) {
-            for (parts in listOf(emptyArray(), arrayOf(NativeContentPart(CONTENT_TEXT, "history", null)))) {
-                val error = runCatching {
-                    request(message("user", "hello"), NativeChatMessage(role, parts), message("user", "next"))
-                        .toNative({ true }, { true })
-                }.exceptionOrNull()
-                assertTrue(error is IllegalStateException)
-                assertTrue(error!!.message!!.contains("chat role '$role'"))
-            }
-        }
+    fun toolHistoryIsTextualAndUnknownRolesAreIgnored() = runBlocking {
+        val result = request(message("user", "hello"),
+            message("assistant", """{"type":"function_call","callId":"1","name":"sample","arguments":{}}"""),
+            message("tool", """{"type":"function_result","callId":"1","result":"ok"}"""),
+            message("custom", "ignored"), message("developer", "ignored"),
+            message("user", "next")).toNative({ true }, { true })
+        val prompt = result.contents.flatMap { it.parts }.joinToString("") { (it as TextPart).textString }
+        assertEquals("User:\nhello\n\nAssistant:\n" +
+            """{"type":"function_call","callId":"1","name":"sample","arguments":{}}""" +
+            "\n\nTool:\n" + """{"type":"function_result","callId":"1","result":"ok"}""" +
+            "\n\nUser:\nnext\n\n", prompt)
+    }
+
+    @Test
+    fun blankSystemChunksAreOmittedButBlankConversationTurnsRemain() = runBlocking {
+        val result = request(message("system", " \n", "\t"), message("system"),
+            message("user"), message("assistant", ""), message("user", "next"))
+            .toNative({ error("No instructions remain.") }, { false })
+        assertNull(result.systemInstruction)
+        assertEquals(3, result.contents.size)
+        assertEquals("User:\n\n\nAssistant:\n\n\nUser:\nnext\n\n",
+            result.contents.flatMap { it.parts }.joinToString("") { (it as TextPart).textString })
     }
 
     @Test

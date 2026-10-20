@@ -4,7 +4,7 @@ import kotlinx.coroutines.Job
 
 internal const val CONTENT_TEXT = 0
 internal const val CONTENT_IMAGE = 1
-internal const val FINISH_OTHER = -100
+internal const val FINISH_UNSPECIFIED = Int.MIN_VALUE
 
 class NativeContentPart(
     val kind: Int,
@@ -43,6 +43,17 @@ class NativeChatError(
     val code: Int,
     val retryDelayMilliseconds: Long?,
 )
+
+class NativeModelStatus(
+    val status: Int,
+    val reason: String?,
+    val thinkingAvailable: Boolean,
+)
+
+interface NativeModelCallback {
+    fun onComplete(status: NativeModelStatus)
+    fun onError(error: NativeChatError)
+}
 
 interface NativeChatCallback {
     fun onText(text: String, modelName: String)

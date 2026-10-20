@@ -2,7 +2,6 @@
   "solution": {
     "path": "../../MauiLabs.slnx",
     "projects": [
-      "samples\\AIExtensions.Sample.ChatPlayground\\AIExtensions.Sample.ChatPlayground.csproj",
       "samples\\EssentialsAISample\\EssentialsAISample.csproj",
       "src\\AI\\Microsoft.Maui.Essentials.AI\\Microsoft.Maui.Essentials.AI.csproj",
       "tests\\AI\\Microsoft.Maui.Essentials.AI.Benchmarks\\Microsoft.Maui.Essentials.AI.Benchmarks.csproj",

@@ -11,27 +11,42 @@ For installation and supported features, see the
 ## Request mapping
 
 C# maps MEAI roles, ordered text/image content, and options to internal native
-DTOs. It prepends `ChatOptions.Instructions` as a system message, following the
-Apple adapter's convention. Unsupported content/options fail rather than being
-silently discarded.
+DTOs. The [shared provider contract](local-chat-provider.md) defines content,
+option, tool, state, and structured-output policies.
 
 Kotlin constructs the Google request:
 
-- System-message text is joined in order and passed as native
+- Nonblank system-message text is concatenated within each message and joined
+  with two LF characters between messages, options first, then passed as native
   `SystemInstruction`, after checking `isSystemPromptAvailable()`.
-- A single user prompt is passed through unchanged. With assistant history,
-  user/assistant messages receive ordinary `User:`/`Assistant:` text labels and
+- A single user prompt is passed through unchanged. With assistant/tool history,
+  messages receive ordinary `User:`/`Assistant:`/`Tool:` text labels and
   are included in order. Text and image parts remain interleaved; images are not
   replaced with text placeholders.
 - Temperature, TopK, Seed, and MaxOutputTokens map to the native builder.
-  C# checks Seed's 32-bit representability; Google's builder validates native
-  numeric constraints.
+  C# checks known ranges and Seed's 32-bit representability; Google's builder
+  also validates native numeric constraints.
 - `Reasoning.Output = ReasoningOutput.Full` enables thinking after checking
   `isThinkingModeAvailable()`. Effort levels and summaries have no native mapping.
 
 There is no client-held conversation state. Callers supply the conversation on
-each request. JSON response formats, tool content/options, and custom roles
-remain unsupported.
+each request. Custom content and unknown roles (including `developer`) are
+omitted; recognized unsupported content is rejected.
+
+Tool replay uses one JSON object per content item, in encounter order:
+
+```json
+{"type":"function_call","callId":"id","name":"actual-tool-name","arguments":{"x":1}}
+{"type":"function_result","callId":"id","result":{"value":2}}
+```
+
+No separators are inserted between content fragments within a message. Results
+carry no invented function name. This is prompt history, not a native call or
+an execution request. None/Auto tool modes omit registration; Required rejects.
+Replay accepts JSON values (`JsonElement`/`JsonDocument`, primitives, string-keyed
+dictionaries, and sequences) without reflection. Convert custom result objects
+to `JsonElement` using the caller's serializer context before replaying them in
+trimmed/AOT apps; unsupported object representations reject clearly.
 
 ## Request lifetime and callbacks
 
@@ -42,10 +57,37 @@ joins the outstanding work.
 Native streaming callbacks enter a per-request queue. Text/thought updates
 carry the model name obtained before generation. Model cleanup and admitted
 progress callbacks finish before terminal completion releases the managed JNI
-callback. The C# adapter converts these events to `ChatResponseUpdate` values.
+callback. The returned candidate is reconciled with accumulated additional-text
+deltas: equal emits nothing, an extension emits only its suffix, and divergence
+faults the stream. The C# adapter converts events to `ChatResponseUpdate` values.
 
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
+Unavailable IDs, timestamps, and other usage counts remain null.
+
+## Explicit preparation
+
+```csharp
+var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
+if (status.Availability == ChatModelAvailability.NotReady)
+    await GeminiNanoChatClient.PrepareModelAsync(cancellationToken);
+```
+
+Only the explicit awaited preparation call can initiate a download. AVAILABLE
+returns without downloading; DOWNLOADABLE collects ML Kit's actual
+`DownloadStarted`, `DownloadProgress`, `DownloadCompleted`, and `DownloadFailed`
+Flow values until terminal completion/failure. DOWNLOADING polls status every
+250 ms with cancellable asynchronous delay, without initiating another download
+to join existing work. If it returns to DOWNLOADABLE, preparation may start the
+now-needed download. UNAVAILABLE and unknown values reject preparation.
+
+Status is never cached. DOWNLOADABLE/DOWNLOADING map to NotReady. ML Kit's
+UNAVAILABLE means either unsupported hardware **or** missing AICore configuration;
+without more evidence it maps to Unknown, preserving that native reason. Only a
+successful runtime `isThinkingModeAvailable` check advertises Reasoning.
+Preparation cancellation stops this call's Flow collection; it does not promise
+to cancel an AICore download shared with other apps. Generation checks status
+again and rejects non-AVAILABLE states without ever preparing or downloading.
 
 ## Android minimum and model availability
 
@@ -118,8 +160,17 @@ cd src/AI/AndroidNative/EssentialsAI
 
 `NativeChatRequestTest` checks the Google request shape and capability errors.
 `NativeChatOperationsTest` uses fake models to exercise concurrency,
-cancellation, callback ordering, and cleanup. Managed tests cover DTO mapping
-and playground behavior.
+cancellation, callback ordering, and cleanup. `NativeModelOperationsTest` uses
+injectable status/download functions and real ML Kit status subclasses for
+preparation, polling, failure, cancellation, and lifetime tests without AICore.
+`NativeStreamAccumulatorTest` covers final-candidate reconciliation. Android
+binds the shared messages, options, response, streaming, cancellation, usage,
+GetService, and schema suites; provider-only tests cover interop/native policy.
+
+EssentialsAI CI builds Chat Playground in a separate Android-only job. It is not
+in the cross-platform shipping solution: the generic sample's pre-existing
+Windows WinRT/AOT observable-field migration is not part of Gemini integration.
+Portable playground tests remain in that solution. No AOT warnings are suppressed.
 
 These tests do not establish successful model execution. A provisioned supported
 physical device is needed to validate inference, conversation quality, image

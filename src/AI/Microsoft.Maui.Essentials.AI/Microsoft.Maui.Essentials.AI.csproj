@@ -17,6 +17,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="$(TargetFramework.Contains('-android'))">
     <NoWarn>$(NoWarn);BG8605;BG8606</NoWarn>
+    <AndroidResourceDesignerClassModifier>internal</AndroidResourceDesignerClassModifier>
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->

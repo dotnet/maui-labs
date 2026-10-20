@@ -12,10 +12,11 @@ No cloud service is required.
 |----------|---------------------|-------------|-----------------------------------|
 | iOS / Mac Catalyst / macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | Apple NaturalLanguage |
 | Windows | Not supported | Not supported | Not supported |
-| Android | Not supported | Not supported | Not supported |
+| Android API 26+ | Gemini Nano on a supported AICore device | In-memory images | Not supported |
 
 The Apple chat client does not generate images. On-device models must be
-enabled and available on a supported device.
+enabled and available on a supported device. Gemini Nano model assets must be
+prepared explicitly; ordinary chat requests never initiate a download.
 
 ## Install and use
 
@@ -29,14 +30,37 @@ Requires .NET 10 and the MAUI workload.
 dotnet add package Microsoft.Maui.Essentials.AI --prerelease
 ```
 
-Register the Apple client in a supported iOS, macOS, or Mac Catalyst app:
+Register the appropriate client on a supported platform:
 
 ```csharp
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
 
-builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
+#if IOS || MACCATALYST || MACOS
+if (OperatingSystem.IsIOSVersionAtLeast(26) ||
+    OperatingSystem.IsMacCatalystVersionAtLeast(26) ||
+    OperatingSystem.IsMacOSVersionAtLeast(26))
+{
+    builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
+}
+#elif ANDROID
+if (OperatingSystem.IsAndroidVersionAtLeast(26))
+    builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+#endif
 ```
+
+On Android, prepare model assets only after an explicit app or user decision:
+
+```csharp
+var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
+if (status.Availability == ChatModelAvailability.NotReady)
+    await GeminiNanoChatClient.PrepareModelAsync(cancellationToken);
+```
+
+Gemini Nano supports text, in-memory images, streaming, and input-token usage.
+It rejects structured output and required tool invocation; Auto tool definitions
+are ignored and historical calls/results are replayed as text. Query model status
+for effective capabilities, but each request rechecks readiness.
 
 ## Chat
 
@@ -198,6 +222,7 @@ The corresponding NaturalLanguage model asset must be installed on the device.
 ## Examples and source
 
 - [Local chat provider contract](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) (shared design target; not a platform support guarantee)
+- [Gemini Nano Android](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md)
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
