@@ -46,6 +46,9 @@ public class OpenAIChatClientInstantiationTests : ChatClientInstantiationTestsBa
 
 public class OpenAIChatClientMessagesTests : ChatClientMessagesTestsBase<OpenAIChatClient>
 {
+	// The OpenAI baseline adapter may forward or omit non-image media; native providers must explicitly reject unsupported media.
+	protected override bool RejectsUnsupportedMedia => false;
+
 	// Azure/OpenAI rejects empty input with ClientResultException HTTP 400, not the native clients' ArgumentException.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]

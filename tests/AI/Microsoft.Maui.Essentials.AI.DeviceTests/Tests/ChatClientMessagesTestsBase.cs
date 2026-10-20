@@ -11,6 +11,8 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 public abstract class ChatClientMessagesTestsBase<T>
 	where T : class, IChatClient, new()
 {
+	protected virtual bool RejectsUnsupportedMedia => true;
+
 	[Fact]
 	public virtual async Task GetResponseAsync_WithEmptyMessages_ThrowsException()
 	{
@@ -34,30 +36,39 @@ public abstract class ChatClientMessagesTestsBase<T>
 		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 
-	[Fact]
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithUnsupportedContentAlongsideText_IgnoresUnsupportedContent()
+	public async Task GetResponseAsync_WithUnknownContentAlongsideText_OmitsOnlyUnknownItems(bool streaming)
 	{
 		using var client = new T();
 		var message = new ChatMessage(ChatRole.User,
-			[new TextContent("Reply with only the word HELLO."), new UnsupportedContentForTesting()]);
+			[new UnsupportedContentForTesting(), new TextContent("Reply with only the word HELLO."),
+				new UnsupportedContentForTesting()]);
 
-		var response = await client.GetResponseAsync([message]);
+		var response = streaming
+			? await client.GetStreamingResponseAsync([message]).ToChatResponseAsync()
+			: await client.GetResponseAsync([message]);
 
 		Assert.NotNull(response);
 		Assert.NotEmpty(response.Messages);
 		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 
-	[Fact]
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithOnlyUnsupportedContent_PreservesFollowingUserTurn()
+	public async Task GetResponseAsync_WithOnlyUnknownContent_PreservesFollowingUserTurn(bool streaming)
 	{
 		using var client = new T();
 		var msg = new ChatMessage(ChatRole.User, [new UnsupportedContentForTesting()]);
 		var messages = new List<ChatMessage> { msg, new(ChatRole.User, "Reply with exactly HELLO.") };
 
-		var response = await client.GetResponseAsync(messages);
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages).ToChatResponseAsync()
+			: await client.GetResponseAsync(messages);
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Messages);
@@ -113,7 +124,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	[InlineData("text/plain", true)]
 	[InlineData("application/pdf", true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithUnrecognizedMediaType_IgnoresContent(string mediaType, bool useUri)
+	public async Task GetResponseAsync_WithKnownContentAndUnsupportedMedia_AppliesProviderPolicy(string mediaType, bool useUri)
 	{
 		using var client = new T();
 		AIContent content = useUri
@@ -122,8 +133,15 @@ public abstract class ChatClientMessagesTestsBase<T>
 		var message = new ChatMessage(ChatRole.User,
 			[new TextContent("Reply with exactly HELLO and nothing else."), content]);
 
-		var response = await client.GetResponseAsync([message]);
+		if (RejectsUnsupportedMedia)
+		{
+			await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync([message]));
+			await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetStreamingResponseAsync([message]).ToChatResponseAsync());
+			return;
+		}
 
+		var response = await client.GetResponseAsync([message]);
 		Assert.NotNull(response);
 		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
@@ -320,7 +338,7 @@ public abstract class ChatClientMessagesTestsBase<T>
 	[InlineData("application/pdf", false)]
 	[InlineData("application/pdf", true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public virtual async Task GetResponseAsync_WithBinaryContentAndText_ConvertsOrIgnoresContent(string mediaType, bool streaming)
+	public virtual async Task GetResponseAsync_WithBinaryContentAndText_AppliesProviderPolicy(string mediaType, bool streaming)
 	{
 		var base64 = mediaType == "image/png"
 			? "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAEnQAABJ0Ad5mH3gAAACJSURBVHhe5cgxAQAADMOg+je9CYgEDh623dkSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmYXlhqOHSNEsP9wAAAABJRU5ErkJggg=="
@@ -332,6 +350,18 @@ public abstract class ChatClientMessagesTestsBase<T>
 		};
 		var message = new ChatMessage(ChatRole.User,
 			[content, new TextContent("Reply with exactly HELLO and nothing else.")]);
+
+		if (mediaType != "image/png" && RejectsUnsupportedMedia)
+		{
+			await Assert.ThrowsAsync<NotSupportedException>(async () =>
+			{
+				if (streaming)
+					await client.GetStreamingResponseAsync([message]).ToChatResponseAsync();
+				else
+					await client.GetResponseAsync([message]);
+			});
+			return;
+		}
 
 		var response = streaming
 			? await client.GetStreamingResponseAsync([message]).ToChatResponseAsync()

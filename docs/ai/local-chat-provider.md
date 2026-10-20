@@ -233,17 +233,17 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 
 **Essentials.AI rule**
 
-- Omit only unrecognized content; preserve recognized content and its order.
+- Omit unknown/custom `AIContent` items individually; map standard MEAI content in order.
 - If no recognized content remains, apply the blank-message rule for that role.
-- Reject recognized content when the current OS/model cannot support it.
+- Reject recognized content with a clear `NotSupportedException` when its role, media type, representation, or OS/model capability is unsupported; never silently drop it.
 - Preserve tool calls and results in history as content, even when native tool registration is unavailable.
 - Honor or reject required capabilities such as structured output and Required tool invocation; optional Auto tool registration follows the tool-mode policy below.
-- Reject malformed recognized content.
+- Reject malformed or empty payloads for supported media with `ArgumentException`.
 - Enable conditional features only after runtime OS/model capability checks, with no silent cloud fallback.
 
 **Essentials.AI implementation**
 
-- **Apple:** omit unrecognized content; reject image input unless the runtime is OS 27+ and the model reports vision support; preserve tool history; apply the Tools and Structured output rules.
+- **Apple:** omit unknown/custom content; support text and images in System/User/Assistant, calls in Assistant, and results in Tool. Reject other standard content and media, including PDF/audio and hosted files. Image input requires OS 27+ and model vision support; preserve tool history; apply the Tools and Structured output rules.
 - **Windows:** To be determined.
 - **Android:** To be determined.
 

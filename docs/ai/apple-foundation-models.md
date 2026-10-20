@@ -76,13 +76,21 @@ var response = await chat.GetResponseAsync([message]);
 
 Supported representations include:
 
-- encoded `DataContent` with an `image/*` media type;
+- encoded `DataContent` with an ImageIO-supported `image/*` media type;
 - local `file://` `UriContent`;
 - `CGImage`, `UIImage`, or `NSImage` in `RawRepresentation`, while retaining
   encoded bytes for recording and cross-provider use.
 
-Remote HTTP image URLs are not downloaded. Invalid payloads, unsupported OS
-versions, or unavailable vision capability fail explicitly.
+Remote HTTP image URLs and unsupported `RawRepresentation` types are rejected
+with `NotSupportedException`, as are PDF/audio media and hosted files. Empty or
+undecodable image bytes and missing/invalid local image files fail with
+`ArgumentException`. Unsupported OS versions or unavailable vision capability
+also fail explicitly.
+
+Unknown/custom `AIContent` items are omitted individually; unknown-only turns
+follow the blank-message rules. Standard MEAI content is never silently dropped:
+System/User/Assistant accept text and images, Assistant also accepts function
+calls, and Tool accepts only function results.
 
 The native bridge preserves text/image ordering in the current prompt and in
 prior transcript entries. Image-bearing history uses native transcript

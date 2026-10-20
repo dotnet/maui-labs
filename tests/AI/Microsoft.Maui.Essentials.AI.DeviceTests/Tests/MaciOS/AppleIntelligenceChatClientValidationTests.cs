@@ -293,14 +293,8 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.Contains("preceding assistant function call", error.Message, StringComparison.Ordinal);
 	}
 
-	// Only preceding assistant calls belong to Apple's tool transcript, not discarded calls in other roles or future calls.
+	// Only preceding assistant calls belong to Apple's tool transcript, not ignored unknown roles or future calls.
 	[Theory]
-	[InlineData("user", false, false)]
-	[InlineData("user", false, true)]
-	[InlineData("system", false, false)]
-	[InlineData("system", false, true)]
-	[InlineData("tool", false, false)]
-	[InlineData("tool", false, true)]
 	[InlineData("custom", false, false)]
 	[InlineData("custom", false, true)]
 	[InlineData("assistant", true, false)]
@@ -331,15 +325,20 @@ public class AppleIntelligenceChatClientValidationTests
 	{
 		ChatMessage[] messages =
 		[
-			new(ChatRole.Assistant, [new FunctionCallContent("call-1", "GetWeather")]),
-			new(ChatRole.User, [new FunctionCallContent("call-1", "IgnoredUserCall")]),
-			new(ChatRole.Tool, [new FunctionResultContent("call-1", "Sunny")]),
+			new(ChatRole.Assistant, [new TextContent("before"), new UnrecognizedContent(),
+				new FunctionCallContent("call-1", "GetWeather"), new TextContent("after")]),
+			new(new ChatRole("custom"), [new FunctionCallContent("call-1", "IgnoredCustomCall")]),
+			new(ChatRole.Tool, [new UnrecognizedContent(), new FunctionResultContent("call-1", "Sunny")]),
 			new(ChatRole.Assistant, [new FunctionCallContent("call-2", "GetTime")]),
 			new(ChatRole.Tool, [new FunctionResultContent("call-2", "Noon")]),
 			new(ChatRole.User, "Summarize.")
 		];
 
 		var native = AppleIntelligenceChatClient.ToNative(messages, null);
+		Assert.Collection(native[0].Contents,
+			content => Assert.Equal("before", Assert.IsType<TextContentNative>(content).Text),
+			content => Assert.Equal("GetWeather", Assert.IsType<FunctionCallContentNative>(content).Name),
+			content => Assert.Equal("after", Assert.IsType<TextContentNative>(content).Text));
 		var results = native.SelectMany(message => message.Contents).OfType<FunctionResultContentNative>().ToArray();
 
 		Assert.Collection(results,

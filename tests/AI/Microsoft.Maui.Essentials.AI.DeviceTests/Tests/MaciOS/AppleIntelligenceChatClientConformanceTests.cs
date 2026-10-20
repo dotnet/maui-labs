@@ -42,6 +42,161 @@ public class AppleIntelligenceChatClientConformanceTests
 		Assert.Equal("", Assert.IsType<TextContentNative>(Assert.Single(message.Contents)).Text);
 	}
 
+	// Apple's inline transcript must omit custom items individually, without replacing or reordering supported chunks.
+	[Theory]
+	[InlineData("system")]
+	[InlineData("user")]
+	[InlineData("assistant")]
+	public void ToNative_MixedUnknownAndText_PreservesSupportedOrder(string role)
+	{
+		var native = Assert.Single(AppleIntelligenceChatClient.ToNative(
+			[new(new ChatRole(role), [new UnrecognizedContent(), new TextContent("first"),
+				new UnrecognizedContent(), new TextContent("second"), new UnrecognizedContent()])], null));
+
+		Assert.Collection(native.Contents,
+			content => Assert.Equal("first", Assert.IsType<TextContentNative>(content).Text),
+			content => Assert.Equal("second", Assert.IsType<TextContentNative>(content).Text));
+	}
+
+	// Apple has no blank Tool transcript entry; custom-only Tool turns retain the existing empty-tool omission policy.
+	[Fact]
+	public void ToNative_UnknownOnlyTool_OmitsEmptyToolTurn()
+	{
+		var native = Assert.Single(AppleIntelligenceChatClient.ToNative(
+			[new(ChatRole.Tool, [new UnrecognizedContent()]), new(ChatRole.User, "Hello")], null));
+
+		Assert.Equal(ChatRoleNative.User, native.Role);
+	}
+
+	// Foundation Models accepts calls only in assistant history, results only in Tool, and no standalone Tool text/images.
+	[Theory]
+	[InlineData("system", "call")]
+	[InlineData("user", "call")]
+	[InlineData("tool", "call")]
+	[InlineData("system", "result")]
+	[InlineData("user", "result")]
+	[InlineData("assistant", "result")]
+	[InlineData("tool", "text")]
+	[InlineData("tool", "data")]
+	[InlineData("tool", "uri")]
+	public async Task InvalidContentRole_RejectsBeforeInference(string role, string kind)
+	{
+		AIContent content = kind switch
+		{
+			"call" => new FunctionCallContent("call-1", "sample"),
+			"result" => new FunctionResultContent("call-1", "result"),
+			"text" => new TextContent("text"),
+			"data" => new DataContent(new byte[] { 0 }, "image/png"),
+			_ => new UriContent("file:///image.png", "image/png")
+		};
+		using var client = new AppleIntelligenceChatClient();
+		ChatMessage[] messages = [new(new ChatRole(role), [new UnrecognizedContent(), content]),
+			new(ChatRole.User, "Hello")];
+
+		foreach (var streaming in new[] { false, true })
+		{
+			var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+			{
+				if (streaming)
+					await client.GetStreamingResponseAsync(messages).ToChatResponseAsync();
+				else
+					await client.GetResponseAsync(messages);
+			});
+			Assert.Contains(content.GetType().Name, error.Message, StringComparison.Ordinal);
+			Assert.Contains(role, error.Message, StringComparison.Ordinal);
+		}
+	}
+
+	// Standard MEAI classes unsupported by Foundation Models are not custom extensions that may be omitted.
+	[Theory]
+	[InlineData("hosted-file")]
+	[InlineData("hosted-vector-store")]
+	[InlineData("reasoning")]
+	[InlineData("usage")]
+	[InlineData("error")]
+	[InlineData("code-call")]
+	[InlineData("code-result")]
+	[InlineData("image-call")]
+	[InlineData("image-result")]
+	[InlineData("web-call")]
+	[InlineData("web-result")]
+	[InlineData("mcp-call")]
+	[InlineData("mcp-result")]
+	[InlineData("approval-request")]
+	[InlineData("approval-response")]
+	public async Task UnsupportedStandardContent_RejectsInEveryRoleBeforeInference(string kind)
+	{
+#pragma warning disable MEAI001 // Exercise standard MEAI content even when the class is experimental.
+		AIContent content = kind switch
+		{
+			"hosted-file" => new HostedFileContent("file-1"),
+			"hosted-vector-store" => new HostedVectorStoreContent("store-1"),
+			"reasoning" => new TextReasoningContent("reasoning"),
+			"usage" => new UsageContent(),
+			"error" => new ErrorContent("error"),
+			"code-call" => new CodeInterpreterToolCallContent("call-1"),
+			"code-result" => new CodeInterpreterToolResultContent("call-1"),
+			"image-call" => new ImageGenerationToolCallContent("call-1"),
+			"image-result" => new ImageGenerationToolResultContent("call-1"),
+			"web-call" => new WebSearchToolCallContent("call-1"),
+			"web-result" => new WebSearchToolResultContent("call-1"),
+			"mcp-call" => new McpServerToolCallContent("call-1", "server", "tool"),
+			"mcp-result" => new McpServerToolResultContent("call-1"),
+			"approval-request" => new ToolApprovalRequestContent("request-1", new FunctionCallContent("call-1", "sample")),
+			_ => new ToolApprovalResponseContent("request-1", true, new FunctionCallContent("call-1", "sample"))
+		};
+#pragma warning restore MEAI001
+		using var client = new AppleIntelligenceChatClient();
+		foreach (var role in new[] { ChatRole.System, ChatRole.User, ChatRole.Assistant, ChatRole.Tool })
+		{
+			ChatMessage[] messages = [new(role, [new UnrecognizedContent(), content]), new(ChatRole.User, "Hello")];
+			var error = await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(messages));
+			Assert.Contains(content.GetType().Name, error.Message, StringComparison.Ordinal);
+			error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetStreamingResponseAsync(messages).ToChatResponseAsync());
+			Assert.Contains(content.GetType().Name, error.Message, StringComparison.Ordinal);
+		}
+	}
+
+	// Apple's DataContent/UriContent mapping is image-only, regardless of surrounding valid text or the native model state.
+	[Theory]
+	[InlineData("application/pdf", false)]
+	[InlineData("application/pdf", true)]
+	[InlineData("audio/ogg", false)]
+	[InlineData("audio/ogg", true)]
+	[InlineData("text/plain", false)]
+	[InlineData("text/plain", true)]
+	[InlineData("application/octet-stream", false)]
+	[InlineData("application/octet-stream", true)]
+	public async Task UnsupportedMedia_RejectsInsteadOfOmitting(string mediaType, bool useUri)
+	{
+		AIContent content = useUri
+			? new UriContent("https://example.invalid/content", mediaType)
+			: new DataContent(new byte[] { 0 }, mediaType);
+		using var client = new AppleIntelligenceChatClient();
+		foreach (var role in new[] { ChatRole.System, ChatRole.User, ChatRole.Assistant })
+		{
+			ChatMessage[] messages = [new(role, [new TextContent("before"), content, new TextContent("after")]),
+				new(ChatRole.User, "Hello")];
+			var error = await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(messages));
+			Assert.Contains(mediaType, error.Message, StringComparison.Ordinal);
+			error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+				client.GetStreamingResponseAsync(messages).ToChatResponseAsync());
+			Assert.Contains(mediaType, error.Message, StringComparison.Ordinal);
+		}
+	}
+
+	// Unknown roles are discarded before Apple's content validation, even when their standard content would be unsupported.
+	[Fact]
+	public void ToNative_UnknownRoleWithUnsupportedContent_RemainsIgnored()
+	{
+		var native = Assert.Single(AppleIntelligenceChatClient.ToNative(
+			[new(new ChatRole("custom"), [new HostedFileContent("file-1")]), new(ChatRole.User, "Hello")], null));
+
+		Assert.Equal(ChatRoleNative.User, native.Role);
+		Assert.Equal("Hello", Assert.IsType<TextContentNative>(Assert.Single(native.Contents)).Text);
+	}
+
 	// NSNumber.Int64Value must not wrap negative MEAI seeds to Swift UInt64.
 	[Theory]
 	[InlineData(false)]

@@ -464,22 +464,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	private static ChatMessageNative ToNative(ChatMessage message, Dictionary<string, string> callIdToName)
 	{
-		if (message.Role == ChatRole.Tool && message.Contents.Any(content => content switch
-		{
-			DataContent data => IsImage(data.MediaType),
-			UriContent uri => IsImage(uri.MediaType),
-			_ => false
-		}))
-			throw new NotSupportedException("Apple Intelligence tool history does not support image attachments outside FunctionResultContent.");
-
 		AIContentNative[] contents = [.. message.Contents
-			.Where(content => content switch
-			{
-				FunctionCallContent => message.Role == ChatRole.Assistant,
-				FunctionResultContent => message.Role == ChatRole.Tool,
-				_ => message.Role != ChatRole.Tool
-			})
-			.SelectMany(content => ToNative(content, callIdToName))];
+			.SelectMany(content => ToNative(content, message.Role, callIdToName))];
 
 		// Empty and unknown-only inline turns still occupy a place in the native transcript.
 		if (contents.Length == 0 && (message.Role == ChatRole.User ||
@@ -613,8 +599,15 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			_ => null
 		};
 
-	private static IEnumerable<AIContentNative> ToNative(AIContent content, Dictionary<string, string> callIdToName) =>
-		content switch
+	private static IEnumerable<AIContentNative> ToNative(AIContent content, ChatRole role, Dictionary<string, string> callIdToName)
+	{
+		if ((content is FunctionCallContent && role != ChatRole.Assistant) ||
+			(content is FunctionResultContent && role != ChatRole.Tool) ||
+			(role == ChatRole.Tool && content is TextContent or DataContent or UriContent))
+			throw new NotSupportedException(
+				$"Apple Intelligence does not support {content.GetType().Name} in the '{role}' role.");
+
+		return content switch
 		{
 			// Apple Intelligence performs better when each text content chunk is separated
 			TextContent textContent when textContent.Text is not null => [new TextContentNative(textContent.Text)],
@@ -622,6 +615,10 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 			DataContent data when IsImage(data.MediaType) => [ToNativeImageInput(data)],
 			UriContent uri when IsImage(uri.MediaType) => [ToNativeImageInput(uri)],
+			DataContent data => throw new NotSupportedException(
+				$"Apple Intelligence does not support DataContent with media type '{data.MediaType}'. Only image input is supported."),
+			UriContent uri => throw new NotSupportedException(
+				$"Apple Intelligence does not support UriContent with media type '{uri.MediaType}'. Only image input is supported."),
 
 			// Preserve prior tool activity through the native transcript's tool entries.
 			FunctionCallContent functionCall => [new FunctionCallContentNative(
@@ -644,9 +641,12 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				})],
 #pragma warning restore IL3050, IL2026
 
-			// Match the OpenAI adapters by ignoring unrecognized content.
+			// Standard MEAI content is not an optional custom extension.
+			_ when content.GetType().Assembly == typeof(AIContent).Assembly =>
+				throw new NotSupportedException($"Apple Intelligence does not support {content.GetType().Name}."),
 			_ => []
 		};
+	}
 
 	private static ImageContentNative ToNativeImageInput(AIContent content)
 	{
@@ -681,25 +681,67 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 	internal static ImageContentNative ToNative(DataContent data)
 	{
+		if (!IsImage(data.MediaType))
+			throw new NotSupportedException($"Apple Intelligence does not support image input with media type '{data.MediaType}'.");
+
 		if (ToNativeImage(data.RawRepresentation) is { } native)
 			return native;
 
-		// Byte fallback: the Swift shim decodes the bytes to a CGImage.
-		var bytes = data.Data.ToArray();
-		return new ImageContentNative(NSData.FromArray(bytes), data.MediaType ?? "image/png", default, null);
+		ValidateEncodedImageMediaType(data.MediaType);
+
+		byte[] bytes;
+		try
+		{
+			bytes = data.Data.ToArray();
+		}
+		catch (FormatException ex)
+		{
+			throw new ArgumentException("The image DataContent payload is malformed.", nameof(data), ex);
+		}
+
+		using var nativeData = NSData.FromArray(bytes);
+		using var source = CGImageSource.FromData(nativeData);
+		using var image = source?.CreateImage(0, new CGImageOptions());
+		if (image is null)
+			throw new ArgumentException("The image DataContent payload is empty or malformed.", nameof(data));
+
+		return new ImageContentNative(nativeData, data.MediaType, default, null);
 	}
 
 	internal static ImageContentNative ToNative(UriContent uri)
 	{
+		if (!IsImage(uri.MediaType))
+			throw new NotSupportedException($"Apple Intelligence does not support image input with media type '{uri.MediaType}'.");
+
 		if (ToNativeImage(uri.RawRepresentation) is { } native)
 			return native;
 
+		ValidateEncodedImageMediaType(uri.MediaType);
+
+		if (!uri.Uri.IsAbsoluteUri)
+			throw new ArgumentException("The image UriContent must contain a valid absolute URI.", nameof(uri));
+
 		if (uri.Uri.IsFile)
-			return new ImageContentNative(NSUrl.FromFilename(uri.Uri.LocalPath), default, null);
+		{
+			using var url = NSUrl.FromFilename(uri.Uri.LocalPath);
+			using var source = CGImageSource.FromUrl(url);
+			using var image = source?.CreateImage(0, new CGImageOptions());
+			if (image is null)
+				throw new ArgumentException("The image UriContent file payload is missing, empty, or malformed.", nameof(uri));
+			return new ImageContentNative(url, default, null);
+		}
 
 		throw new NotSupportedException(
 			"Apple Intelligence image prompts require in-memory DataContent or a file:// UriContent. " +
 			"Remote http(s) image URLs are not downloaded automatically.");
+	}
+
+	private static void ValidateEncodedImageMediaType(string mediaType)
+	{
+		using var type = UniformTypeIdentifiers.UTType.CreateFromMimeType(
+			mediaType.Split(';')[0].Trim().ToLowerInvariant(), UniformTypeIdentifiers.UTTypes.Image);
+		if (type is null || !CGImageSource.TypeIdentifiers.Contains(type.Identifier))
+			throw new NotSupportedException($"Apple Intelligence cannot decode image media type '{mediaType}'.");
 	}
 
 	private static ImageContentNative? ToNativeImage(object? representation)
@@ -722,12 +764,19 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 					UIKit.UIImageOrientation.Left => CGImagePropertyOrientation.Left,
 					_ => throw new ArgumentOutOfRangeException(nameof(representation), "Unsupported UIImage orientation.")
 				}, null);
+			case UIKit.UIImage:
+				throw new ArgumentException("The UIImage representation has no usable image payload.", nameof(representation));
 #elif MACOS
 			case AppKit.NSImage ns when ToCGImage(ns) is { } cg:
 				return new ImageContentNative(cg, default, null);
+			case AppKit.NSImage:
+				throw new ArgumentException("The NSImage representation has no usable image payload.", nameof(representation));
 #endif
-			default:
+			case null:
 				return null;
+			default:
+				throw new NotSupportedException(
+					$"Apple Intelligence does not support the image RawRepresentation type '{representation.GetType().Name}'.");
 		}
 	}
 
