@@ -165,9 +165,9 @@ final class ChatClientTests: XCTestCase {
         guard try LiveTests.requireModel() else { return }
         let prompt = "Return a greeting of hello and a count of 68."
         let schema = """
-        {"type":"object","title":"Greeting","properties":{
-          "greeting":{"type":"string"},"count":{"type":"integer"}
-        },"required":["greeting","count"]}
+        {"type":"object","title":"AppleSchema0","properties":{
+          "count":{"type":"integer"},"greeting":{"type":"string"}
+        },"required":["count","greeting"],"additionalProperties":false}
         """
 
         for streaming in [false, true] {

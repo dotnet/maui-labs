@@ -128,9 +128,7 @@ final class PlainTextStreamingLiveTests: XCTestCase {
     private final class WeatherTool: NSObject, AIToolNative, @unchecked Sendable {
         let name = "lookupWeather"
         let desc = "Returns the current weather for a location."
-        let argumentsSchema =
-            #"{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}"#
-        let outputSchema = #"{"type":"string"}"#
+        let argumentsSchema = LiveTests.locationParametersSchema
 
         func call(arguments: String) async throws -> String {
             "The requested location is sunny and 21 degrees Celsius."

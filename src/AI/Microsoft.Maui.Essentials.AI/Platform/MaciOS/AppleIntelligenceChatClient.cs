@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using CoreGraphics;
 using CoreImage;
 using ImageIO;
@@ -111,29 +110,6 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	/// </summary>
 	private ChatClientMetadata? _metadata;
 
-	internal static AIJsonSchemaTransformCache StrictSchemaTransformCache { get; } =
-		new(new()
-		{
-			DisallowAdditionalProperties = true,
-			ConvertBooleanSchemas = true,
-			MoveDefaultKeywordToDescription = true,
-			RequireAllProperties = true,
-			TransformSchemaNode = (ctx, node) =>
-			{
-				// Handle objects
-				if (node is JsonObject obj && obj.TryGetPropertyValue("type", out var typeNode) && typeNode?.GetValue<string>() == "object")
-				{
-					// All objects need a title
-					if (!obj.ContainsKey("title"))
-					{
-						obj["title"] = Guid.NewGuid().ToString("N");
-					}
-				}
-
-				return node;
-			},
-		});
-
 	/// <inheritdoc />
 	public Task<ChatResponse> GetResponseAsync(
 		IEnumerable<ChatMessage> messages,
@@ -173,7 +149,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				{
 					try
 					{
-						handler.Complete(FromNativeChatResponse(response));
+						handler.Complete(ValidateStructuredResponse(
+							FromNativeChatResponse(response), nativeOptions?.ResponseJsonSchema));
 					}
 					catch (Exception ex)
 					{
@@ -256,7 +233,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				{
 					try
 					{
-						handler.Complete(FromNativeChatResponse(finalResult).Usage);
+						handler.Complete(ValidateStructuredResponse(
+							FromNativeChatResponse(finalResult), nativeOptions?.ResponseJsonSchema).Usage);
 					}
 					catch (Exception ex)
 					{
@@ -405,6 +383,16 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			ModelId = DefaultModelId,
 			Usage = FromNativeUsage(response.Usage)
 		};
+	}
+
+	internal static ChatResponse ValidateStructuredResponse(ChatResponse response, NSString? canonicalSchema)
+	{
+		if (canonicalSchema is not null)
+		{
+			var finalText = response.Messages.LastOrDefault(message => message.Role == ChatRole.Assistant)?.Text ?? string.Empty;
+			AppleJsonSchemaCompiler.ValidateOutput((string)canonicalSchema, finalText);
+		}
+		return response;
 	}
 
 	private static UsageDetails? FromNativeUsage(UsageDetailsNative? usage) =>
@@ -605,10 +593,8 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	private static NSString? ToNative(ChatResponseFormat? format) =>
 		format switch
 		{
-			ChatResponseFormatJson { Schema: not null } jsonFormat when StrictSchemaTransformCache.GetOrCreateTransformedSchema(jsonFormat) is { } jsonSchema =>
-				(NSString?)jsonSchema.GetRawText(),
-			ChatResponseFormatJson jsonFormat when jsonFormat.Schema is not null =>
-				throw new InvalidOperationException("Failed to transform JSON schema for Apple Intelligence chat API."),
+			ChatResponseFormatJson { Schema: { } schema } =>
+				(NSString?)AppleJsonSchemaCompiler.Shared.Compile(schema, AppleJsonSchemaMode.Response),
 			ChatResponseFormatJson =>
 				throw new NotSupportedException("Apple Intelligence structured output requires an explicit JSON schema. Schema-free JSON and typed prompt fallback are not supported."),
 			_ => null
@@ -860,14 +846,25 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	{
 		// Swift invokes tools on native threads without the managed request context.
 		private readonly NativeCallbackContext _requestContext = new();
+		private readonly string _argumentsSchema = CompileArguments(function);
+
+		private static string CompileArguments(AIFunction function)
+		{
+			try
+			{
+				return AppleJsonSchemaCompiler.Shared.Compile(function.JsonSchema, AppleJsonSchemaMode.Tool);
+			}
+			catch (Exception error) when (error is AppleJsonSchemaException or JsonException)
+			{
+				throw new NotSupportedException($"Tool '{function.Name}' arguments schema cannot be represented: {error.Message}", error);
+			}
+		}
 
 		public override string Name => function.Name;
 
 		public override string Desc => function.Description;
 
-		public override string ArgumentsSchema => function.JsonSchema.GetRawText();
-
-		public override string OutputSchema => function.ReturnJsonSchema?.GetRawText() ?? "{\"type\":\"string\"}";
+		public override string ArgumentsSchema => _argumentsSchema;
 
 #pragma warning disable IL3050, IL2026 // DefaultJsonTypeInfoResolver is only used when reflection-based serialization is enabled
 		public override async void CallWithArguments(NSString arguments, AIToolCompletionHandler completionHandler)
@@ -882,6 +879,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				ArgumentNullException.ThrowIfNull(arguments);
 
 				var argsString = (string)arguments;
+				AppleJsonSchemaCompiler.ValidateOutput(_argumentsSchema, argsString, $"Tool '{function.Name}' arguments");
 
 				// Log before invocation — matches FunctionInvokingChatClient pattern
 				if (logger.IsEnabled(LogLevel.Trace))
