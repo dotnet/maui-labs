@@ -236,13 +236,6 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 	}
 
 	[Fact]
-	public void FunctionSampling_LeavesReasoningUnsetUnlessBindingOptsIn()
-	{
-		var options = new DefaultFunctionOptionsBinding().CreateOptions();
-		Assert.Null(options.Reasoning);
-	}
-
-	[Fact]
 	public async Task Usage_InputOnlyCountsDriveTelemetry()
 	{
 		var binding = new UsageBinding(output);
@@ -255,23 +248,12 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 		protected override bool? SupportsRequiredToolMode => true;
 		protected override bool PreservesToolActivityContext => true;
 		protected override bool PreservesToolCancellation => true;
-		protected override bool SupportsReasoningEffortNone => true;
 		protected override IChatClient EnableFunctionCalling(ToolControlClient client, Action<ChatOptions>? configureOptions = null)
 		{
 			var builder = client.AsBuilder().UseFunctionInvocation();
 			if (configureOptions is not null)
 				builder.ConfigureOptions(configureOptions);
 			return builder.Build();
-		}
-	}
-
-	private sealed class DefaultFunctionOptionsBinding : ChatClientFunctionCallingTestsBase<ControlClient>
-	{
-		public ChatOptions CreateOptions()
-		{
-			var options = new ChatOptions { Temperature = 0 };
-			ConfigureFunctionCallingOptions(options);
-			return options;
 		}
 	}
 
@@ -316,7 +298,6 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 	private sealed class SupportedSchemaBinding : ChatClientJsonSchemaTestsBase<StructuredControlClient>
 	{
 		protected override bool? RequiresExplicitJsonSchema => false;
-		protected override bool SupportsReasoningEffortNone => true;
 	}
 
 	private sealed class OmittedMediaBinding : ChatClientMessagesTestsBase<PermissiveMediaControlClient>;

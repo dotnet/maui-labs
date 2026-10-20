@@ -104,10 +104,8 @@ public abstract class ChatClientOptionsTestsBase<T>
 		const string firstInstruction = "The first word is ALPHA.";
 		var options = new ChatOptions
 		{
-			Instructions = useOptionsInstructions ? firstInstruction : null,
-			Temperature = 0
+			Instructions = useOptionsInstructions ? firstInstruction : null
 		};
-		ConfigureSamplingOptions(options);
 		var messages = new List<ChatMessage>();
 		if (!useOptionsInstructions)
 			messages.Add(new(ChatRole.System, firstInstruction));
@@ -151,12 +149,10 @@ public abstract class ChatClientOptionsTestsBase<T>
 		};
 		var options = new ChatOptions
 		{
-			Temperature = 0.7f,
 			MaxOutputTokens = 100,
 			TopK = 10,
 			Seed = 42
 		};
-		ConfigureSamplingOptions(options);
 
 		await client.GetResponseAsync(messages, options);
 	}
@@ -243,12 +239,10 @@ public abstract class ChatClientOptionsTestsBase<T>
 		};
 		var options = new ChatOptions
 		{
-			Temperature = 0.7f,
 			MaxOutputTokens = 100,
 			TopK = 10,
 			Seed = 42
 		};
-		ConfigureSamplingOptions(options);
 
 		await foreach (var update in client.GetStreamingResponseAsync(messages, options))
 		{

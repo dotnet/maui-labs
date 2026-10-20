@@ -16,13 +16,6 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	protected virtual bool SupportsStructuredOutput => true;
 	// Null preserves legacy bindings, including their existing schema-free JSON overrides.
 	protected virtual bool? RequiresExplicitJsonSchema => null;
-	protected virtual bool SupportsReasoningEffortNone => false;
-
-	private void ConfigureSamplingOptions(ChatOptions options)
-	{
-		if (SupportsReasoningEffortNone && options.Temperature is not null)
-			options.Reasoning = new() { Effort = ReasoningEffort.None };
-	}
 
 	// Record types for testing JSON schema responses
 	public record WeatherResponse(string Location, int Temperature, string Condition);
@@ -59,8 +52,6 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		using var client = new T();
 		ChatMessage[] messages = [new(ChatRole.User, "Return structured data.")];
 		var options = new ChatOptions();
-		if (scenario is "custom-options" or "typed-options")
-			options.Temperature = 0.5f;
 		if (!scenario.StartsWith("typed-", StringComparison.Ordinal))
 		{
 			options.ResponseFormat = scenario switch
@@ -138,10 +129,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		};
 		var options = new ChatOptions
 		{
-			ResponseFormat = ChatResponseFormat.ForJsonSchema<WeatherResponse>(),
-			Temperature = 0
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<WeatherResponse>()
 		};
-		ConfigureSamplingOptions(options);
 
 		var response = await client.GetResponseAsync(messages, options);
 
@@ -200,10 +189,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		};
 		var options = new ChatOptions
 		{
-			ResponseFormat = ChatResponseFormat.ForJsonSchema<WeatherResponse>(),
-			Temperature = 0
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<WeatherResponse>()
 		};
-		ConfigureSamplingOptions(options);
 
 		var textBuilder = new System.Text.StringBuilder();
 		await foreach (var update in client.GetStreamingResponseAsync(messages, options))
@@ -327,10 +314,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 		var options = new ChatOptions
 		{
-			ResponseFormat = ChatResponseFormat.ForJsonSchema<SimpleResponse>(jsonOptions),
-			Temperature = 0.5f
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<SimpleResponse>(jsonOptions)
 		};
-		ConfigureSamplingOptions(options);
 
 		var response = await client.GetResponseAsync(messages, options);
 
@@ -358,10 +343,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		};
 		var options = new ChatOptions
 		{
-			ResponseFormat = ChatResponseFormat.ForJsonSchema<TripItinerary>(),
-			Temperature = 0
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<TripItinerary>()
 		};
-		ConfigureSamplingOptions(options);
 
 		var response = await client.GetResponseAsync(messages, options);
 
@@ -445,9 +428,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			new(ChatRole.User, ItineraryPrompt)
 		};
 
-		var options = new ChatOptions { Temperature = 0 };
-		ConfigureSamplingOptions(options);
-		var response = await client.GetResponseAsync<TripItinerary>(messages, options);
+		var response = await client.GetResponseAsync<TripItinerary>(messages);
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Result);
@@ -485,13 +466,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 		var client = new T();
 		var message = new ChatMessage(ChatRole.User, "Return location Boston, temperature 68, and condition sunny.");
-		var options = new ChatOptions
-		{
-			Temperature = 0.5f
-		};
-		ConfigureSamplingOptions(options);
-
-		var response = await client.GetResponseAsync<WeatherResponse>(message, options);
+		var response = await client.GetResponseAsync<WeatherResponse>(message);
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Result);

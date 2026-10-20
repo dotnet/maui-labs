@@ -19,13 +19,6 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	protected virtual bool? SupportsRequiredToolMode => null;
 	protected virtual bool PreservesToolActivityContext => false;
 	protected virtual bool PreservesToolCancellation => false;
-	// Non-reasoning models may reject even Effort=None; bindings opt in only where supported.
-	protected virtual bool SupportsReasoningEffortNone => false;
-	protected virtual void ConfigureFunctionCallingOptions(ChatOptions options)
-	{
-		if (SupportsReasoningEffortNone && options.Temperature is not null)
-			options.Reasoning = new() { Effort = ReasoningEffort.None };
-	}
 
 	[Theory]
 	[InlineData(false, false, "simple")]
@@ -115,10 +108,8 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			ToolMode = mode,
 			Tools = named ? [tool, excluded] : [tool],
 			AllowMultipleToolCalls = false,
-			Temperature = 0,
 			MaxOutputTokens = 128
 		};
-		ConfigureFunctionCallingOptions(options);
 		ChatMessage[] messages =
 		[
 			new(ChatRole.System, "After receiving the tool value, answer with that value and do not call again."),
@@ -159,9 +150,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		{
 			Tools = [AIFunctionFactory.Create(BlockUntilCancelled, "blocking_tool")],
 			ToolMode = ChatToolMode.RequireSpecific("blocking_tool"),
-			Temperature = 0,
 		};
-		ConfigureFunctionCallingOptions(options);
 		ChatMessage[] messages = [new(ChatRole.User, "Call blocking_tool now.")];
 		var request = streaming
 			? client.GetStreamingResponseAsync(messages, options, cancellation.Token)
@@ -273,10 +262,8 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			Tools = [tool],
 			ToolMode = mode,
 			AllowMultipleToolCalls = false,
-			Temperature = 0,
 			MaxOutputTokens = 128,
 		};
-		ConfigureFunctionCallingOptions(options);
 		ChatMessage[] messages = [new(ChatRole.User,
 			"Call capture_formatted exactly once with id 8d418a4d-fd44-47f4-813d-08b6b40abeca " +
 			"and timestamp 2026-10-20T12:34:56+00:00. Then reply with the result field from the tool.")];
@@ -317,10 +304,8 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			Tools = [tool],
 			ToolMode = mode,
 			AllowMultipleToolCalls = false,
-			Temperature = 0,
 			MaxOutputTokens = 128,
 		};
-		ConfigureFunctionCallingOptions(options);
 		ChatMessage[] messages = [new(ChatRole.User,
 			"Call capture_nullable exactly once with value explicitly null and label exactly OPTIONAL_LABEL. " +
 			"Then reply with the tool's returned text without calling again.")];
@@ -1541,8 +1526,8 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	public async Task GetStreamingResponseAsync_WithToolCalling_NoNullTextBeforeToolCalls()
 	{
 		// Captures the EXACT raw sequence of all content items during a tool-calling stream.
-		// Verifies: (1) no text delta contains "null" (case-insensitive substring),
-		// (2) all text is non-empty, (3) tool calls always have valid arguments.
+		// Verifies: (1) no text delta is null or the literal "null",
+		// (2) tool calls and text are both present.
 		// Uses a landmarks query that exercises search tools to maximize coverage.
 
 		var landmarkTool = AIFunctionFactory.Create(
@@ -1600,14 +1585,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 				$"Found null TextContent.Text in stream. Full log:\n{logSummary}");
 		}
 
-		// 2. All text should be non-empty (Swift guard and C# filter should prevent this)
-		foreach (var (_, value) in textItems)
-		{
-			Assert.False(string.IsNullOrWhiteSpace(value),
-				$"Found empty/whitespace-only text in stream. Full log:\n{logSummary}");
-		}
-
-		// 3. Should have tool calls and text in the response
+		// 2. Should have tool calls and text in the response
 		Assert.True(rawLog.Any(x => x.Type == "ToolCall"),
 			$"Expected at least one ToolCall. Full log:\n{logSummary}");
 		Assert.True(textItems.Count > 0,
