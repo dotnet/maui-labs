@@ -726,7 +726,17 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			name: "GetWeather",
 			description: "Gets the weather forecast for a specific date. Requires the date in YYYY-MM-DD format.");
 
-		var client = EnableFunctionCalling(new T());
+		var client = EnableFunctionCalling(new T(), requestOptions =>
+		{
+			if (SupportsRequiredToolMode is true)
+			{
+				requestOptions.ToolMode = timeCallCount == 0
+					? ChatToolMode.RequireSpecific(timeTool.Name)
+					: weatherCallCount == 0
+						? ChatToolMode.RequireSpecific(weatherTool.Name)
+						: ChatToolMode.Auto;
+			}
+		});
 		var messages = new List<ChatMessage>
 		{
 			new(ChatRole.User, "What's the weather like today?")
@@ -735,6 +745,8 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		{
 			Tools = [timeTool, weatherTool]
 		};
+		if (SupportsRequiredToolMode is true)
+			options.ToolMode = ChatToolMode.RequireSpecific(timeTool.Name);
 
 		var response = await client.GetResponseAsync(messages, options);
 
@@ -799,7 +811,17 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			name: "GetWeather",
 			description: "Gets the weather forecast for a specific date. Requires the date in YYYY-MM-DD format.");
 
-		var client = EnableFunctionCalling(new T());
+		var client = EnableFunctionCalling(new T(), requestOptions =>
+		{
+			if (SupportsRequiredToolMode is true)
+			{
+				requestOptions.ToolMode = timeCallCount == 0
+					? ChatToolMode.RequireSpecific(timeTool.Name)
+					: weatherCallCount == 0
+						? ChatToolMode.RequireSpecific(weatherTool.Name)
+						: ChatToolMode.Auto;
+			}
+		});
 		var messages = new List<ChatMessage>
 		{
 			new(ChatRole.User, "What's the weather like today?")
@@ -808,6 +830,8 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		{
 			Tools = [timeTool, weatherTool]
 		};
+		if (SupportsRequiredToolMode is true)
+			options.ToolMode = ChatToolMode.RequireSpecific(timeTool.Name);
 
 		bool foundTimeCall = false;
 		bool foundWeatherCall = false;
@@ -1526,26 +1550,41 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	public async Task GetStreamingResponseAsync_WithToolCalling_NoNullTextBeforeToolCalls()
 	{
 		// Captures the EXACT raw sequence of all content items during a tool-calling stream.
-		// Verifies: (1) no text delta is null or the literal "null",
-		// (2) tool calls and text are both present.
+		// Verifies that null artifacts do not leak around tool calls while preserving
+		// provider-native whitespace formatting.
 		// Uses a landmarks query that exercises search tools to maximize coverage.
 
+		var landmarkCalls = 0;
 		var landmarkTool = AIFunctionFactory.Create(
-			(string query) => """
-			[
-				{"name": "Table Mountain", "country": "South Africa"},
-				{"name": "Victoria Falls", "country": "Zimbabwe"},
-				{"name": "Pyramids of Giza", "country": "Egypt"}
-			]
-			""",
+			(string query) =>
+			{
+				landmarkCalls++;
+				return """
+					[
+						{"name": "Table Mountain", "country": "South Africa"},
+						{"name": "Victoria Falls", "country": "Zimbabwe"},
+						{"name": "Pyramids of Giza", "country": "Egypt"}
+					]
+					""";
+			},
 			name: "SearchLandmarks",
 			description: "Searches for landmarks and points of interest by query");
 
-		var client = EnableFunctionCalling(new T());
+		var client = EnableFunctionCalling(new T(), requestOptions =>
+		{
+			if (SupportsRequiredToolMode is true)
+			{
+				requestOptions.ToolMode = landmarkCalls == 0
+					? ChatToolMode.RequireSpecific(landmarkTool.Name)
+					: ChatToolMode.Auto;
+			}
+		});
 		var options = new ChatOptions
 		{
 			Tools = [landmarkTool]
 		};
+		if (SupportsRequiredToolMode is true)
+			options.ToolMode = ChatToolMode.RequireSpecific(landmarkTool.Name);
 
 		// Capture every single content item with its exact value
 		var rawLog = new List<(string Type, string Value)>();
@@ -1573,23 +1612,25 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			}
 		}
 
-		var logSummary = string.Join("\n", rawLog.Select((item, i) => $"  [{i}] {item.Type}: {item.Value}"));
+		AssertToolCallStreamContent(rawLog);
+	}
 
-		// 1. No text should be the literal "null" or contain "null" as a value artifact
+	protected static void AssertToolCallStreamContent(IReadOnlyCollection<(string Type, string Value)> rawLog)
+	{
+		var logSummary = string.Join("\n", rawLog.Select((item, i) => $"  [{i}] {item.Type}: {item.Value}"));
 		var textItems = rawLog.Where(x => x.Type == "Text").ToList();
 		foreach (var (_, value) in textItems)
 		{
-			Assert.False(string.Equals(value, "null", StringComparison.OrdinalIgnoreCase),
+			Assert.False(string.Equals(value.Trim(), "null", StringComparison.OrdinalIgnoreCase),
 				$"Found literal 'null' text in stream. Full log:\n{logSummary}");
 			Assert.False(string.Equals(value, "<null>", StringComparison.Ordinal),
 				$"Found null TextContent.Text in stream. Full log:\n{logSummary}");
 		}
 
-		// 2. Should have tool calls and text in the response
 		Assert.True(rawLog.Any(x => x.Type == "ToolCall"),
 			$"Expected at least one ToolCall. Full log:\n{logSummary}");
-		Assert.True(textItems.Count > 0,
-			$"Expected at least one Text item. Full log:\n{logSummary}");
+		Assert.True(textItems.Any(x => !string.IsNullOrWhiteSpace(x.Value)),
+			$"Expected meaningful final text content. Full log:\n{logSummary}");
 	}
 
 	[Fact]
@@ -1604,24 +1645,39 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		// then processes each update exactly as ChatViewModel does, recording what happens to the
 		// simulated "thinking bubble".
 
+		var landmarkCalls = 0;
 		var landmarkTool = AIFunctionFactory.Create(
-			(string query) => """
-			[
-				{"name": "Table Mountain", "country": "South Africa"},
-				{"name": "Victoria Falls", "country": "Zimbabwe"},
-				{"name": "Pyramids of Giza", "country": "Egypt"}
-			]
-			""",
+			(string query) =>
+			{
+				landmarkCalls++;
+				return """
+					[
+						{"name": "Table Mountain", "country": "South Africa"},
+						{"name": "Victoria Falls", "country": "Zimbabwe"},
+						{"name": "Pyramids of Giza", "country": "Egypt"}
+					]
+					""";
+			},
 			name: "SearchLandmarks",
 			description: "Searches for landmarks and points of interest by query");
 
 		// Set up the pipeline: AppleClient → FunctionInvokingChatClient
 		// InformationalOnly=true on FunctionCallContent prevents FICC from invoking them
-		var rawClient = EnableFunctionCalling(new T());
+		var rawClient = EnableFunctionCalling(new T(), requestOptions =>
+		{
+			if (SupportsRequiredToolMode is true)
+			{
+				requestOptions.ToolMode = landmarkCalls == 0
+					? ChatToolMode.RequireSpecific(landmarkTool.Name)
+					: ChatToolMode.Auto;
+			}
+		});
 		var ficc = new FunctionInvokingChatClient(rawClient);
 		var pipeline = ficc;
 
 		var options = new ChatOptions { Tools = [landmarkTool] };
+		if (SupportsRequiredToolMode is true)
+			options.ToolMode = ChatToolMode.RequireSpecific(landmarkTool.Name);
 
 		// === Simulate ChatViewModel state machine ===
 		string thinkingText = "Thinking...";

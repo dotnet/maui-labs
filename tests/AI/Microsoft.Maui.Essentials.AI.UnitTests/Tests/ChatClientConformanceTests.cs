@@ -44,6 +44,31 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 	}
 
 	[Fact]
+	public void ToolStreamValidation_AcceptsWhitespaceButRejectsNullArtifacts()
+	{
+		var binding = new ToolBinding();
+		binding.AssertToolStream(
+		[
+			("Text", "\n  "),
+			("ToolCall", "SearchLandmarks(call-1)"),
+			("Text", "Here are the landmarks.")
+		]);
+
+		Assert.ThrowsAny<Exception>(() => binding.AssertToolStream(
+		[
+			("Text", " null "),
+			("ToolCall", "SearchLandmarks(call-1)"),
+			("Text", "Here are the landmarks.")
+		]));
+		Assert.ThrowsAny<Exception>(() => binding.AssertToolStream(
+		[
+			("Text", "<null>"),
+			("ToolCall", "SearchLandmarks(call-1)"),
+			("Text", "Here are the landmarks.")
+		]));
+	}
+
+	[Fact]
 	public void Metadata_ExercisesSharedHooks()
 	{
 		var binding = new MetadataBinding();
@@ -255,6 +280,9 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 				builder.ConfigureOptions(configureOptions);
 			return builder.Build();
 		}
+
+		public void AssertToolStream(IReadOnlyCollection<(string Type, string Value)> rawLog) =>
+			AssertToolCallStreamContent(rawLog);
 	}
 
 	private sealed class RejectedToolBinding : ChatClientFunctionCallingTestsBase<ControlClient>
