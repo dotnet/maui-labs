@@ -50,10 +50,17 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 		binding.AssertToolStream(
 		[
 			("Text", "\n  "),
+			(nameof(TextReasoningContent), ""),
 			("ToolCall", "SearchLandmarks(call-1)"),
 			("Text", "Here are the landmarks.")
 		]);
 
+		Assert.ThrowsAny<Exception>(() => binding.AssertToolStream(
+		[
+			("Text", ""),
+			("ToolCall", "SearchLandmarks(call-1)"),
+			("Text", "Here are the landmarks.")
+		]));
 		Assert.ThrowsAny<Exception>(() => binding.AssertToolStream(
 		[
 			("Text", " null "),
@@ -272,6 +279,7 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 	{
 		protected override bool? SupportsRequiredToolMode => true;
 		protected override bool SupportsDeterministicChainedToolCalls => true;
+		protected override bool SupportsBaselineSamplingOptions => true;
 		protected override bool PreservesToolActivityContext => true;
 		protected override bool PreservesToolCancellation => true;
 		protected override IChatClient EnableFunctionCalling(ToolControlClient client, Action<ChatOptions>? configureOptions = null)
@@ -327,6 +335,7 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 	private sealed class SupportedSchemaBinding : ChatClientJsonSchemaTestsBase<StructuredControlClient>
 	{
 		protected override bool? RequiresExplicitJsonSchema => false;
+		protected override bool SupportsBaselineSamplingOptions => true;
 	}
 
 	private sealed class OmittedMediaBinding : ChatClientMessagesTestsBase<PermissiveMediaControlClient>;

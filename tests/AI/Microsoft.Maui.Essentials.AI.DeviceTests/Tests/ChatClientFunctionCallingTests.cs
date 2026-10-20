@@ -18,8 +18,18 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	// Null leaves legacy bindings unchanged; false tests explicit rejection, true tests invocation.
 	protected virtual bool? SupportsRequiredToolMode => null;
 	protected virtual bool SupportsDeterministicChainedToolCalls => false;
+	protected virtual bool SupportsBaselineSamplingOptions => false;
 	protected virtual bool PreservesToolActivityContext => false;
 	protected virtual bool PreservesToolCancellation => false;
+
+	private void ConfigureBaselineSamplingOptions(ChatOptions options)
+	{
+		if (!SupportsBaselineSamplingOptions)
+			return;
+
+		options.Temperature = 0;
+		options.Reasoning = new() { Effort = ReasoningEffort.None };
+	}
 
 	[Theory]
 	[InlineData(false, false, "simple")]
@@ -111,6 +121,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			AllowMultipleToolCalls = false,
 			MaxOutputTokens = 128
 		};
+		ConfigureBaselineSamplingOptions(options);
 		ChatMessage[] messages =
 		[
 			new(ChatRole.System, "After receiving the tool value, answer with that value and do not call again."),
@@ -152,6 +163,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			Tools = [AIFunctionFactory.Create(BlockUntilCancelled, "blocking_tool")],
 			ToolMode = ChatToolMode.RequireSpecific("blocking_tool"),
 		};
+		ConfigureBaselineSamplingOptions(options);
 		ChatMessage[] messages = [new(ChatRole.User, "Call blocking_tool now.")];
 		var request = streaming
 			? client.GetStreamingResponseAsync(messages, options, cancellation.Token)
@@ -265,6 +277,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			AllowMultipleToolCalls = false,
 			MaxOutputTokens = 128,
 		};
+		ConfigureBaselineSamplingOptions(options);
 		ChatMessage[] messages = [new(ChatRole.User,
 			"Call capture_formatted exactly once with id 8d418a4d-fd44-47f4-813d-08b6b40abeca " +
 			"and timestamp 2026-10-20T12:34:56+00:00. Then reply with the result field from the tool.")];
@@ -307,6 +320,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			AllowMultipleToolCalls = false,
 			MaxOutputTokens = 128,
 		};
+		ConfigureBaselineSamplingOptions(options);
 		ChatMessage[] messages = [new(ChatRole.User,
 			"Call capture_nullable exactly once with value explicitly null and label exactly OPTIONAL_LABEL. " +
 			"Then reply with the tool's returned text without calling again.")];
@@ -317,6 +331,25 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		Assert.Null(receivedValue);
 		Assert.Equal("OPTIONAL_LABEL", receivedLabel);
 		Assert.Contains("NULLABLE_CAPTURED", response.Text, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithToolAndDefaultClient_CompletesSuccessfully()
+	{
+		var client = EnableFunctionCalling(new T());
+
+		var weatherTool = AIFunctionFactory.Create(
+			(string location) => $"Clear skies, 72°F in {location}",
+			name: "GetWeather",
+			description: "Gets the weather for a location");
+
+		var options = new ChatOptions { Tools = [weatherTool] };
+		var response = await client.GetResponseAsync(
+			[new ChatMessage(ChatRole.User, "What's the weather in Seattle?")], options);
+
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
 	}
 
 	[Fact]
@@ -352,6 +385,20 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		Assert.True(functionWasCalled, "Function should have been called");
 		Assert.NotNull(capturedLocation);
 		Assert.Contains("Seattle", capturedLocation, StringComparison.OrdinalIgnoreCase);
+
+		var calls = response.Messages
+			.Where(message => message.Role == ChatRole.Assistant)
+			.SelectMany(message => message.Contents.OfType<FunctionCallContent>())
+			.Where(call => call.Name == weatherTool.Name)
+			.ToArray();
+		Assert.NotEmpty(calls);
+		var results = response.Messages
+			.Where(message => message.Role == ChatRole.Tool)
+			.SelectMany(message => message.Contents.OfType<FunctionResultContent>());
+		Assert.Contains(results, result =>
+			calls.Any(call => call.CallId == result.CallId) &&
+			result.Result?.ToString()?.Contains("Sunny", StringComparison.Ordinal) == true &&
+			result.Result?.ToString()?.Contains(capturedLocation, StringComparison.OrdinalIgnoreCase) == true);
 	}
 
 	[Fact]
@@ -582,11 +629,10 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			currentIndex++;
 		}
 
-		if (toolCallIndex.HasValue && toolResultIndex.HasValue)
-		{
-			Assert.True(toolCallIndex < toolResultIndex,
-				"FunctionCallContent should be streamed before FunctionResultContent");
-		}
+		Assert.NotNull(toolCallIndex);
+		Assert.NotNull(toolResultIndex);
+		Assert.True(toolCallIndex < toolResultIndex,
+			"FunctionCallContent should be streamed before FunctionResultContent");
 	}
 
 	[Fact]
@@ -710,11 +756,14 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		int timeCallCount = 0;
 		int weatherCallCount = 0;
 		string? capturedDate = null;
+		var invocationOrder = new List<string>();
+		var configuredModes = new List<ChatToolMode?>();
 
 		var timeTool = AIFunctionFactory.Create(
 			() =>
 			{
 				timeCallCount++;
+				invocationOrder.Add("GetCurrentTime");
 				return "2025-12-02 12:00:00";
 			},
 			name: "GetCurrentTime",
@@ -724,6 +773,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			(string date) =>
 			{
 				weatherCallCount++;
+				invocationOrder.Add("GetWeather");
 				capturedDate = date;
 				return $"{{\"date\":\"{date}\",\"condition\":\"sunny\",\"temperature\":72,\"humidity\":45}}";
 			},
@@ -734,20 +784,24 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		{
 			if (SupportsRequiredToolMode is true)
 			{
-				requestOptions.ToolMode = timeCallCount == 0
+				ChatToolMode mode = timeCallCount == 0
 					? ChatToolMode.RequireSpecific(timeTool.Name)
 					: weatherCallCount == 0
 						? ChatToolMode.RequireSpecific(weatherTool.Name)
 						: ChatToolMode.Auto;
+				requestOptions.ToolMode = mode;
+				configuredModes.Add(mode);
 			}
 		});
 		var messages = new List<ChatMessage>
 		{
+			new(ChatRole.System, "Call GetCurrentTime first, then pass its date to GetWeather."),
 			new(ChatRole.User, "What's the weather like today?")
 		};
 		var options = new ChatOptions
 		{
-			Tools = [timeTool, weatherTool]
+			Tools = [timeTool, weatherTool],
+			AllowMultipleToolCalls = false,
 		};
 		if (SupportsRequiredToolMode is true)
 			options.ToolMode = ChatToolMode.RequireSpecific(timeTool.Name);
@@ -759,10 +813,13 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		// Verify both functions were called
 		Assert.True(timeCallCount > 0, "GetCurrentTime should have been called");
 		Assert.True(weatherCallCount > 0, "GetWeather should have been called");
+		Assert.True(invocationOrder.IndexOf("GetCurrentTime") < invocationOrder.IndexOf("GetWeather"),
+			"GetCurrentTime must run before the dependent GetWeather call");
 
 		// Verify the date was passed from time to weather
 		Assert.NotNull(capturedDate);
 		Assert.Contains("2025-12-02", capturedDate, StringComparison.OrdinalIgnoreCase);
+		Assert.IsType<AutoChatToolMode>(configuredModes[^1]);
 
 		// Verify transcript entries contain all the messages
 		Assert.NotNull(response.Messages);
@@ -798,11 +855,14 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		int timeCallCount = 0;
 		int weatherCallCount = 0;
 		string? capturedDate = null;
+		var invocationOrder = new List<string>();
+		var configuredModes = new List<ChatToolMode?>();
 
 		var timeTool = AIFunctionFactory.Create(
 			() =>
 			{
 				timeCallCount++;
+				invocationOrder.Add("GetCurrentTime");
 				return "2025-12-02 12:00:00";
 			},
 			name: "GetCurrentTime",
@@ -812,6 +872,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			(string date) =>
 			{
 				weatherCallCount++;
+				invocationOrder.Add("GetWeather");
 				capturedDate = date;
 				return $"{{\"date\":\"{date}\",\"condition\":\"cloudy\",\"temperature\":68,\"humidity\":55}}";
 			},
@@ -822,20 +883,24 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		{
 			if (SupportsRequiredToolMode is true)
 			{
-				requestOptions.ToolMode = timeCallCount == 0
+				ChatToolMode mode = timeCallCount == 0
 					? ChatToolMode.RequireSpecific(timeTool.Name)
 					: weatherCallCount == 0
 						? ChatToolMode.RequireSpecific(weatherTool.Name)
 						: ChatToolMode.Auto;
+				requestOptions.ToolMode = mode;
+				configuredModes.Add(mode);
 			}
 		});
 		var messages = new List<ChatMessage>
 		{
+			new(ChatRole.System, "Call GetCurrentTime first, then pass its date to GetWeather."),
 			new(ChatRole.User, "What's the weather like today?")
 		};
 		var options = new ChatOptions
 		{
-			Tools = [timeTool, weatherTool]
+			Tools = [timeTool, weatherTool],
+			AllowMultipleToolCalls = false,
 		};
 		if (SupportsRequiredToolMode is true)
 			options.ToolMode = ChatToolMode.RequireSpecific(timeTool.Name);
@@ -871,6 +936,11 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		Assert.True(updates.Count > 0, "Should receive streaming updates");
 		Assert.True(timeCallCount > 0, "GetCurrentTime should have been called");
 		Assert.True(weatherCallCount > 0, "GetWeather should have been called");
+		Assert.True(invocationOrder.IndexOf("GetCurrentTime") < invocationOrder.IndexOf("GetWeather"),
+			"GetCurrentTime must run before the dependent GetWeather call");
+		Assert.NotNull(capturedDate);
+		Assert.Contains("2025-12-02", capturedDate, StringComparison.OrdinalIgnoreCase);
+		Assert.IsType<AutoChatToolMode>(configuredModes[^1]);
 		Assert.True(foundTimeCall, "Should stream FunctionCallContent for GetCurrentTime");
 		Assert.True(foundWeatherCall, "Should stream FunctionCallContent for GetWeather");
 		Assert.True(foundToolResult, "Should stream FunctionResultContent");
@@ -1603,10 +1673,18 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			{
 				switch (content)
 				{
+					case TextReasoningContent reasoning:
+						rawLog.Add((nameof(TextReasoningContent), reasoning.Text ?? "<null>"));
+						break;
 					case TextContent tc:
 						rawLog.Add(("Text", tc.Text ?? "<null>"));
 						break;
 					case FunctionCallContent fc:
+						Assert.Equal(landmarkTool.Name, fc.Name);
+						Assert.False(string.IsNullOrWhiteSpace(fc.CallId));
+						Assert.NotNull(fc.Arguments);
+						Assert.True(fc.Arguments.TryGetValue("query", out var query));
+						Assert.False(string.IsNullOrWhiteSpace(query?.ToString()));
 						rawLog.Add(("ToolCall", $"{fc.Name}({fc.CallId}): {fc.Arguments}"));
 						break;
 					case FunctionResultContent fr:
@@ -1620,6 +1698,10 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		}
 
 		AssertToolCallStreamContent(rawLog);
+		Assert.True(landmarkCalls > 0, $"SearchLandmarks must actually execute. Full log:\n{string.Join("\n", rawLog)}");
+		Assert.True(rawLog.FindIndex(x => x.Type == "ToolResult") >
+			rawLog.FindIndex(x => x.Type == "ToolCall"),
+			$"Expected a tool result after its call. Full log:\n{string.Join("\n", rawLog)}");
 	}
 
 	protected static void AssertToolCallStreamContent(IReadOnlyCollection<(string Type, string Value)> rawLog)
@@ -1632,12 +1714,16 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 				$"Found literal 'null' text in stream. Full log:\n{logSummary}");
 			Assert.False(string.Equals(value, "<null>", StringComparison.Ordinal),
 				$"Found null TextContent.Text in stream. Full log:\n{logSummary}");
+			Assert.False(string.IsNullOrEmpty(value),
+				$"Found empty answer-text delta in stream. Full log:\n{logSummary}");
 		}
 
 		Assert.True(rawLog.Any(x => x.Type == "ToolCall"),
 			$"Expected at least one ToolCall. Full log:\n{logSummary}");
-		Assert.True(textItems.Any(x => !string.IsNullOrWhiteSpace(x.Value)),
-			$"Expected meaningful final text content. Full log:\n{logSummary}");
+		Assert.False(string.IsNullOrWhiteSpace(string.Concat(textItems.Select(item => item.Value))),
+			$"Expected a non-whitespace answer, not just reasoning metadata or whitespace fragments. Full log:\n{logSummary}");
+		Assert.True(textItems.Count > 0,
+			$"Expected at least one Text item. Full log:\n{logSummary}");
 	}
 
 	[Fact]
@@ -1704,6 +1790,9 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			{
 				switch (content)
 				{
+					case TextReasoningContent:
+						stateLog.Add("REASONING METADATA (not an answer bubble)");
+						break;
 					case TextContent tc when !string.IsNullOrEmpty(tc.Text):
 						if (!toolCallSeen)
 						{
@@ -1780,6 +1869,11 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		// 2. Should have seen tool calls (the model should use the tool for this query)
 		Assert.True(toolCallSeen,
 			$"Expected tool calls for 'what are landmarks in africa' query.\nFull state log:\n{fullLog}");
+		Assert.True(landmarkCalls > 0, $"SearchLandmarks must actually execute.\nFull state log:\n{fullLog}");
+		Assert.False(thinkingInMessages, $"Thinking bubble must be removed.\nFull state log:\n{fullLog}");
+		Assert.Null(assistantText);
+		Assert.False(assistantIsThinking);
+		Assert.Contains(stateLog, entry => entry.StartsWith("POST-TOOL TEXT: ", StringComparison.Ordinal));
 
 		// 3. If ANY pre-tool text arrived, log it as a finding (this is what the user sees)
 		// This is informational — the fix (always remove) handles it, but we want to KNOW if it happens

@@ -16,6 +16,16 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	protected virtual bool SupportsStructuredOutput => true;
 	// Null preserves legacy bindings, including their existing schema-free JSON overrides.
 	protected virtual bool? RequiresExplicitJsonSchema => null;
+	protected virtual bool SupportsBaselineSamplingOptions => false;
+
+	private void ConfigureBaselineSamplingOptions(ChatOptions options, float temperature)
+	{
+		if (!SupportsBaselineSamplingOptions)
+			return;
+
+		options.Temperature = temperature;
+		options.Reasoning = new() { Effort = ReasoningEffort.None };
+	}
 
 	// Record types for testing JSON schema responses
 	public record WeatherResponse(string Location, int Temperature, string Condition);
@@ -52,6 +62,8 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		using var client = new T();
 		ChatMessage[] messages = [new(ChatRole.User, "Return structured data.")];
 		var options = new ChatOptions();
+		if (scenario is "custom-options" or "typed-options")
+			ConfigureBaselineSamplingOptions(options, 0.5f);
 		if (!scenario.StartsWith("typed-", StringComparison.Ordinal))
 		{
 			options.ResponseFormat = scenario switch
@@ -140,6 +152,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		// Verify the response can be parsed as the expected type
 		var weatherResponse = JsonSerializer.Deserialize<WeatherResponse>(response.Text, JsonSerializerOptions.Web);
 		Assert.NotNull(weatherResponse);
+		Assert.NotNull(weatherResponse.Location);
 		Assert.Equal("Seattle", weatherResponse.Location, ignoreCase: true);
 		Assert.Equal(72, weatherResponse.Temperature);
 		Assert.Equal("sunny", weatherResponse.Condition, ignoreCase: true);
@@ -191,6 +204,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		{
 			ResponseFormat = ChatResponseFormat.ForJsonSchema<WeatherResponse>()
 		};
+		ConfigureBaselineSamplingOptions(options, 0);
 
 		var textBuilder = new System.Text.StringBuilder();
 		await foreach (var update in client.GetStreamingResponseAsync(messages, options))
@@ -316,6 +330,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		{
 			ResponseFormat = ChatResponseFormat.ForJsonSchema<SimpleResponse>(jsonOptions)
 		};
+		ConfigureBaselineSamplingOptions(options, 0.5f);
 
 		var response = await client.GetResponseAsync(messages, options);
 
@@ -345,6 +360,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 		{
 			ResponseFormat = ChatResponseFormat.ForJsonSchema<TripItinerary>()
 		};
+		ConfigureBaselineSamplingOptions(options, 0);
 
 		var response = await client.GetResponseAsync(messages, options);
 
@@ -392,6 +408,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Result);
+		Assert.NotNull(response.Result.Location);
 		Assert.Equal("Seattle", response.Result.Location, ignoreCase: true);
 		Assert.Equal(72, response.Result.Temperature);
 		Assert.Equal("sunny", response.Result.Condition, ignoreCase: true);
@@ -411,6 +428,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Result);
+		Assert.NotNull(response.Result.Message);
 		Assert.Equal("hello", response.Result.Message, ignoreCase: true);
 	}
 
@@ -428,7 +446,9 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 			new(ChatRole.User, ItineraryPrompt)
 		};
 
-		var response = await client.GetResponseAsync<TripItinerary>(messages);
+		var options = new ChatOptions();
+		ConfigureBaselineSamplingOptions(options, 0);
+		var response = await client.GetResponseAsync<TripItinerary>(messages, options);
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Result);
@@ -466,10 +486,13 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 		var client = new T();
 		var message = new ChatMessage(ChatRole.User, "Return location Boston, temperature 68, and condition sunny.");
-		var response = await client.GetResponseAsync<WeatherResponse>(message);
+		var options = new ChatOptions { MaxOutputTokens = 128 };
+		ConfigureBaselineSamplingOptions(options, 0.5f);
+		var response = await client.GetResponseAsync<WeatherResponse>(message, options);
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Result);
+		Assert.NotNull(response.Result.Location);
 		Assert.Equal("Boston", response.Result.Location, ignoreCase: true);
 		Assert.Equal(68, response.Result.Temperature);
 		Assert.Equal("sunny", response.Result.Condition, ignoreCase: true);
@@ -492,6 +515,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 
 		Assert.NotNull(response);
 		Assert.NotNull(response.Result);
+		Assert.NotNull(response.Result.Location);
 		Assert.Equal("Chicago", response.Result.Location, ignoreCase: true);
 		Assert.Equal(65, response.Result.Temperature);
 		Assert.Equal("cloudy", response.Result.Condition, ignoreCase: true);
