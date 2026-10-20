@@ -82,7 +82,7 @@ public class AppleIntelligenceChatClientValidationTests
 			MaxOutputTokens = 128,
 		};
 		ChatMessage[] messages = [new(ChatRole.User,
-			"Call capture_nullable exactly once with value explicitly null and label null or omitted. " +
+			"Call capture_nullable exactly once with value explicitly null and label exactly OPTIONAL_LABEL. " +
 			"Then reply with the tool's returned text without calling again.")];
 
 		var response = streaming
@@ -91,7 +91,7 @@ public class AppleIntelligenceChatClientValidationTests
 
 		Assert.Equal(1, calls);
 		Assert.Null(receivedValue);
-		Assert.Null(receivedLabel);
+		Assert.Equal("OPTIONAL_LABEL", receivedLabel);
 		Assert.Contains("NULLABLE_CAPTURED", response.Text, StringComparison.Ordinal);
 	}
 
