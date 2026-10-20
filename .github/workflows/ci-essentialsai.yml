@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/AI/**'
       - 'tests/AI/**'
+      - 'tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/**'
       - 'samples/EssentialsAISample/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
       - 'eng/**'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'src/AI/**'
       - 'tests/AI/**'
+      - 'tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/**'
       - 'samples/EssentialsAISample/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
       - 'eng/**'

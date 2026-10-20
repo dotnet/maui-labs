@@ -70,5 +70,6 @@ Apple device/runtime and model availability; portable tests do not run a model.
 - `AppleBindings.targets`: native artifact build and packaging.
 
 Further design documentation:
+[Local chat provider contract](../../docs/ai/local-chat-provider.md),
 [Apple image input](../../docs/ai/apple-foundation-models-image-input.md) and
 [JSON stream chunking](../../docs/ai/json-stream-chunker-design.md).

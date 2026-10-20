@@ -154,6 +154,7 @@ The corresponding NaturalLanguage model asset must be installed on the device.
 
 ## Examples and source
 
+- [Local chat provider contract](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) (shared design target; not a platform support guarantee)
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
