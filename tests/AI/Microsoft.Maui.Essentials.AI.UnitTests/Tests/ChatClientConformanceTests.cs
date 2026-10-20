@@ -422,12 +422,13 @@ public class ChatClientConformanceTests(ITestOutputHelper output)
 					.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Single().Result);
 				text = $"{result["city"]} {result["temperatureCelsius"]}";
 			}
-			else if (lastUserText.Contains("first and second words", StringComparison.Ordinal))
+			else if (lastUserText.Contains("slot-one", StringComparison.Ordinal) &&
+				lastUserText.Contains("slot-two", StringComparison.Ordinal))
 			{
 				var instructions = options?.Instructions + " " + string.Join(" ",
 					history.Where(message => message.Role == ChatRole.System).Select(message => message.Text));
-				text = (instructions.Contains("The first word is ALPHA.", StringComparison.Ordinal) ? "ALPHA " : "") +
-					(instructions.Contains("The second word is BETA.", StringComparison.Ordinal) ? "BETA" : "");
+				text = (instructions.Contains("ALPHA", StringComparison.Ordinal) ? "ALPHA " : "") +
+					(instructions.Contains("BETA", StringComparison.Ordinal) ? "BETA" : "");
 			}
 			return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, text))
 			{

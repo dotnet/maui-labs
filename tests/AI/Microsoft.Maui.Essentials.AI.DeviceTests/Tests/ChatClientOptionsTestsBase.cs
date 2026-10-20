@@ -101,7 +101,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 		bool useOptionsInstructions, bool systemInMiddle)
 	{
 		using var client = new T();
-		const string firstInstruction = "The first word is ALPHA.";
+		const string firstInstruction = "Store ALPHA as the value of slot-one.";
 		var options = new ChatOptions
 		{
 			Instructions = useOptionsInstructions ? firstInstruction : null
@@ -111,11 +111,12 @@ public abstract class ChatClientOptionsTestsBase<T>
 			messages.Add(new(ChatRole.System, firstInstruction));
 		if (systemInMiddle)
 		{
-			messages.Add(new(ChatRole.User, "Hello."));
-			messages.Add(new(ChatRole.Assistant, "Hello."));
+			messages.Add(new(ChatRole.User, "Acknowledge receipt of the instructions."));
+			messages.Add(new(ChatRole.Assistant, "Acknowledged."));
 		}
-		messages.Add(new(ChatRole.System, "The second word is BETA."));
-		messages.Add(new(ChatRole.User, "What are the first and second words? Reply with both words only."));
+		messages.Add(new(ChatRole.System, "Store BETA as the value of slot-two."));
+		messages.Add(new(ChatRole.User,
+			"Reply with the value of slot-one followed by the value of slot-two, in that order, and no other text."));
 
 		var response = await client.GetResponseAsync(messages, options);
 
