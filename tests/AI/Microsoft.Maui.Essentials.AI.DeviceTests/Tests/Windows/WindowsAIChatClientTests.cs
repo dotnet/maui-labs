@@ -24,6 +24,16 @@ public class WindowsAIChatClientInstantiationTests : ChatClientInstantiationTest
 
 public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<WindowsAIChatClient>
 {
+	protected override bool RequiresPrompt => true;
+	protected override bool RejectsUnsupportedMedia => true;
+	protected override bool RejectsUnsupportedStandardContent(string kind, ChatRole role) => true;
+	protected override bool RejectsMisplacedFunctionContent(ChatRole role, bool isCall) =>
+		isCall ? role != ChatRole.Assistant : role != ChatRole.Tool;
+	protected override bool SupportsTrailingSystemInstruction => true;
+
+	protected override void AssertMissingPromptError(ArgumentException error) =>
+		Assert.Contains("User or Assistant", error.Message, StringComparison.Ordinal);
+
 	// Windows LanguageModel preserves instruction semantics but may normalize identifier casing/separators.
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
@@ -64,24 +74,6 @@ public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<Wind
 			else
 				await client.GetResponseAsync(messages);
 		});
-	}
-
-	// All standard media representations are unsupported by the Windows text-only API.
-	[Theory]
-	[InlineData("text/plain", false)]
-	[InlineData("application/octet-stream", false)]
-	[InlineData("audio/ogg", false)]
-	[InlineData("text/plain", true)]
-	[InlineData("application/pdf", true)]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public override async Task GetResponseAsync_WithUnrecognizedMediaType_IgnoresContent(string mediaType, bool useUri)
-	{
-		using var client = new WindowsAIChatClient();
-		AIContent content = useUri
-			? new UriContent("https://example.invalid/input", mediaType)
-			: new DataContent(new byte[] { 1 }, mediaType);
-		await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(
-			[new(ChatRole.User, [new TextContent("Hello"), content])]));
 	}
 
 	// Windows LanguageModel takes one instruction string; exact hoisting order and history identity are adapter details.
@@ -135,24 +127,9 @@ public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<Wind
 
 public class WindowsAIChatClientOptionsTests : ChatClientOptionsTestsBase<WindowsAIChatClient>
 {
-	// Windows requires native schema constraints; plain JSON mode cannot guarantee JSON.
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public override async Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat()
-	{
-		using var client = new WindowsAIChatClient();
-		await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(
-			[new(ChatRole.User, "Hello")], new ChatOptions { ResponseFormat = ChatResponseFormat.Json }));
-	}
-
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public override async Task GetStreamingResponseAsync_WithResponseFormat_AcceptsJsonFormat()
-	{
-		using var client = new WindowsAIChatClient();
-		await Assert.ThrowsAsync<NotSupportedException>(() => client.GetStreamingResponseAsync(
-			[new(ChatRole.User, "Hello")], new ChatOptions { ResponseFormat = ChatResponseFormat.Json }).ToChatResponseAsync());
-	}
+	protected override bool RejectsStatefulConversationOptions => true;
+	protected override bool RequiresExplicitJsonSchema => true;
+	protected override bool SupportsReasoningEffortNone => true;
 
 	// LanguageModelOptions has no MaxOutputTokens equivalent; even invalid values are ignored.
 	[Fact]
@@ -180,33 +157,8 @@ public class WindowsAIChatClientUsageTests(ITestOutputHelper output) : ChatClien
 // LanguageModel.GenerateStructuredJsonResponseAsync, so no wrapper is needed.
 public class WindowsAIChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<WindowsAIChatClient>
 {
-	// Windows never routes schema-free formats or MEAI typed prompt fallback to text generation.
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public override async Task GetResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
-	{
-		using var client = new WindowsAIChatClient();
-		await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync(
-			[new(ChatRole.User, "Hello")], new ChatOptions { ResponseFormat = ChatResponseFormat.Json }));
-	}
-
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public override async Task GetStreamingResponseAsync_WithJsonFormatWithoutSchema_DoesNotThrow()
-	{
-		using var client = new WindowsAIChatClient();
-		await Assert.ThrowsAsync<NotSupportedException>(() => client.GetStreamingResponseAsync(
-			[new(ChatRole.User, "Hello")], new ChatOptions { ResponseFormat = ChatResponseFormat.Json }).ToChatResponseAsync());
-	}
-
-	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public override async Task GetResponseAsync_WithTypedPromptFallback_UsesSchemaFreeJson()
-	{
-		using var client = new WindowsAIChatClient();
-		await Assert.ThrowsAsync<NotSupportedException>(() => client.GetResponseAsync<SimpleResponse>(
-			[new ChatMessage(ChatRole.User, "Hello")], useJsonSchemaResponseFormat: false));
-	}
+	protected override bool? RequiresExplicitJsonSchema => true;
+	protected override bool SupportsReasoningEffortNone => true;
 
 	// Windows LanguageModel constraints require recursive strictification; this inspects the native schema, not public JSON output.
 	[Fact]
