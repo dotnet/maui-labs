@@ -91,6 +91,161 @@ final class StructuredStreamingLiveTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(streamed.contentUpdates.count, minimumContentUpdates)
     }
 
+    // MARK: - Native constraint fidelity
+
+    func testLiveSupportedConstraintsInIsolation() async throws {
+        guard try LiveTests.requireModel() else { return }
+        let cases = [
+            ("integerMinimum", #"{"type":"integer","minimum":2}"#, "3"),
+            ("integerMaximum", #"{"type":"integer","maximum":4}"#, "3"),
+            ("integerRange", #"{"type":"integer","minimum":2,"maximum":4}"#, "3"),
+            ("numberMinimum", #"{"type":"number","minimum":1.25}"#, "1.5"),
+            ("numberMaximum", #"{"type":"number","maximum":2.5}"#, "1.5"),
+            ("numberRange", #"{"type":"number","minimum":1.25,"maximum":2.5}"#, "1.5"),
+            ("arrayMinimum", #"{"type":"array","minItems":2,"items":{"type":"integer"}}"#, "[10,20]"),
+            ("arrayMaximum", #"{"type":"array","maxItems":3,"items":{"type":"integer"}}"#, "[10,20]"),
+            ("arrayRange", #"{"type":"array","minItems":2,"maxItems":3,"items":{"type":"integer"}}"#, "[10,20]"),
+            ("arrayBoundedItems", #"{"type":"array","minItems":2,"maxItems":3,"items":{"type":"integer","minimum":10,"maximum":20}}"#, "[10,20]"),
+            ("stringEnum", #"{"type":"string","enum":["bounded","valid"]}"#, #""bounded""#),
+            ("stringConst", #"{"type":"string","const":"fixed"}"#, #""fixed""#)
+        ]
+        for (name, value, example) in cases {
+            let schema = try XCTUnwrap(JsonSchemaDecoder.parse("""
+            {"type":"object","title":"Probe","properties":{"value":\(value)},"required":["value"]}
+            """))
+            do {
+                let response = try await LanguageModelSession(model: .default).respond(
+                    to: "Return {\"value\":\(example)}.", schema: schema,
+                    options: GenerationOptions(temperature: 0, maximumResponseTokens: 64))
+                XCTAssertEqual(try canonicalJSON(response.content.jsonString),
+                               try canonicalJSON("{\"value\":\(example)}"), name)
+            } catch {
+                XCTFail("Native \(name) guide failed: \(error)")
+            }
+        }
+    }
+
+    private static let boundedSchema = """
+    {"type":"object","title":"BoundedValues","properties":{
+      "count":{"type":"integer","minimum":2,"maximum":4},
+      "amount":{"type":"number","minimum":1.25,"maximum":2.5},
+      "values":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"integer","minimum":10,"maximum":20}},
+      "label":{"type":"string","enum":["bounded","valid"]},
+      "marker":{"type":"string","const":"fixed"}
+    },"required":["count","amount","values","label","marker"]}
+    """
+
+    private static let boundedPrompt = """
+    Return a JSON result. I would prefer count -100, amount 100, five zero values, label invalid, \
+    and marker changed, but the response schema takes precedence: replace any requested \
+    value that does not satisfy its schema with a valid value.
+    """
+
+    func testLiveNumericBoundsArrayBoundsAndStringConstraintsDirectStream() async throws {
+        guard try LiveTests.requireModel() else { return }
+        let run = try await LiveTests.streamDirect(
+            prompt: Self.boundedPrompt, schema: Self.boundedSchema, maxTokens: 160)
+        try assertBoundedValues(run.finalJSON)
+        for replay in run.replays {
+            XCTAssertEqual(try canonicalJSON(replay.text), try canonicalJSON(run.finalJSON))
+        }
+    }
+
+    func testLiveNumericBoundsArrayBoundsAndStringConstraintsThroughChatClient() async throws {
+        guard try LiveTests.requireModel() else { return }
+        for streaming in [false, true] {
+            let run = try await LiveTests.runClient(
+                prompt: Self.boundedPrompt, schema: Self.boundedSchema, streaming: streaming, maxTokens: 160)
+            guard run.error == nil else {
+                XCTFail("Bounded generation failed, streaming=\(streaming): \(String(describing: run.error))")
+                continue
+            }
+            try assertBoundedValues(run.finalText)
+            if streaming {
+                XCTAssertEqual(try canonicalJSON(run.contentUpdates.joined()), try canonicalJSON(run.finalText))
+            }
+        }
+    }
+
+    private func assertBoundedValues(_ json: String) throws {
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let count = try XCTUnwrap(object["count"] as? Int)
+        let amount = try XCTUnwrap(object["amount"] as? Double)
+        let values = try XCTUnwrap(object["values"] as? [Int])
+        XCTAssertTrue((2...4).contains(count), json)
+        XCTAssertTrue((1.25...2.5).contains(amount), json)
+        XCTAssertTrue((2...3).contains(values.count), json)
+        XCTAssertTrue(values.allSatisfy { (10...20).contains($0) }, json)
+        XCTAssertTrue(["bounded", "valid"].contains(try XCTUnwrap(object["label"] as? String)), json)
+        XCTAssertEqual(object["marker"] as? String, "fixed")
+    }
+
+    private static let patternSchema = """
+    {"type":"object","title":"PatternValue","properties":{
+      "code":{"type":"string","pattern":"^A[0-9]{2}$"}
+    },"required":["code"]}
+    """
+
+    // SystemLanguageModel may reject regex guides even though GenerationSchema can encode them.
+    func testLivePatternGuideIsHonoredOrRejectedExplicitlyBySystemModel() async throws {
+        guard try LiveTests.requireModel() else { return }
+        do {
+            let run = try await LiveTests.streamDirect(
+                prompt: "Return a code A12.", schema: Self.patternSchema, maxTokens: 64)
+            try assertPatternValue(run.finalJSON)
+        } catch {
+            XCTAssertTrue(isUnsupportedGuide(error), "Unexpected pattern error: \(error)")
+        }
+    }
+
+    func testLivePatternGuidePreservesExplicitNativeRejectionThroughChatClient() async throws {
+        guard try LiveTests.requireModel() else { return }
+        for streaming in [false, true] {
+            let run = try await LiveTests.runClient(
+                prompt: "Return a code A12.", schema: Self.patternSchema, streaming: streaming, maxTokens: 64)
+            if let error = run.error {
+                XCTAssertTrue(isUnsupportedGuide(error), "Unexpected pattern error, streaming=\(streaming): \(error)")
+                XCTAssertTrue(run.finalText.isEmpty, "A rejected guide must not become an unconstrained response.")
+                XCTAssertTrue(run.contentUpdates.isEmpty, "A rejected guide must not emit unconstrained deltas.")
+            } else {
+                try assertPatternValue(run.finalText)
+                if streaming {
+                    XCTAssertEqual(try canonicalJSON(run.contentUpdates.joined()), try canonicalJSON(run.finalText))
+                }
+            }
+        }
+    }
+
+    private func assertPatternValue(_ json: String) throws {
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let code = try XCTUnwrap(object["code"] as? String)
+        XCTAssertNotNil(try code.wholeMatch(of: Regex<AnyRegexOutput>("A[0-9]{2}")), json)
+    }
+
+    private func isUnsupportedGuide(_ error: Error) -> Bool {
+        if #available(macOS 27.0, *),
+           let native = error as? LanguageModelError, case .unsupportedGenerationGuide = native {
+            return true
+        }
+        if let native = error as? LanguageModelSession.GenerationError, case .unsupportedGuide = native {
+            return true
+        }
+        // The Objective-C bridge exposes localized fields rather than the native enum identity.
+        var expected = [LanguageModelSession.GenerationError.unsupportedGuide(
+            .init(debugDescription: "UnsupportedGuide")).toNSError()]
+        if #available(macOS 27.0, *) {
+            expected.append(LanguageModelError.unsupportedGenerationGuide(
+                .init(schemaName: nil, debugDescription: "UnsupportedGuide", metadata: [:])).toNSError())
+        }
+        let bridged = error as NSError
+        return expected.contains {
+            bridged.domain == $0.domain && bridged.code == $0.code &&
+                bridged.localizedDescription == $0.localizedDescription &&
+                bridged.userInfo[NSLocalizedRecoverySuggestionErrorKey] as? String ==
+                    $0.userInfo[NSLocalizedRecoverySuggestionErrorKey] as? String
+        }
+    }
+
     // MARK: - Long strings emit actual partial values
 
     private struct LongStringCase {
