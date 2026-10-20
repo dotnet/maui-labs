@@ -26,6 +26,63 @@ public abstract class ChatClientOptionsTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithInstructions_Succeeds()
+	{
+		using var client = new T();
+		var messages = new List<ChatMessage>
+		{
+			new(ChatRole.User, "Hello")
+		};
+		var options = new ChatOptions
+		{
+			Instructions = "You are a helpful assistant."
+		};
+
+		var response = await client.GetResponseAsync(messages, options);
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
+	}
+
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithComplementarySystemInstructions_PreservesBoth(
+		bool useOptionsInstructions, bool systemInMiddle)
+	{
+		using var client = new T();
+		const string firstInstruction = "The first word is ALPHA.";
+		var options = new ChatOptions
+		{
+			Instructions = useOptionsInstructions ? firstInstruction : null,
+			Temperature = 0,
+			Reasoning = new() { Effort = ReasoningEffort.None }
+		};
+		var messages = new List<ChatMessage>();
+		if (!useOptionsInstructions)
+			messages.Add(new(ChatRole.System, firstInstruction));
+
+		if (systemInMiddle)
+		{
+			messages.Add(new(ChatRole.User, "Hello."));
+			messages.Add(new(ChatRole.Assistant, "Hello."));
+		}
+
+		messages.Add(new(ChatRole.System, "The second word is BETA."));
+		messages.Add(new(ChatRole.User, "What are the first and second words? Reply with both words only."));
+
+		var response = await client.GetResponseAsync(messages, options);
+
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
+		Assert.Contains("ALPHA", response.Text, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("BETA", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_WithChatOptions_AcceptsValidOptions()
 	{
 		var client = new T();
@@ -36,6 +93,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 		var options = new ChatOptions
 		{
 			Temperature = 0.7f,
+			Reasoning = new() { Effort = ReasoningEffort.None },
 			MaxOutputTokens = 100,
 			TopK = 10,
 			Seed = 42
@@ -45,6 +103,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat()
 	{
 		var client = new T();
@@ -62,7 +121,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
+	public virtual async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -72,14 +131,15 @@ public abstract class ChatClientOptionsTestsBase<T>
 
 		var options = new ChatOptions
 		{
-			Temperature = 2.0f
+			Temperature = 2.0f,
+			Reasoning = new() { Effort = ReasoningEffort.None }
 		};
 
 		await client.GetResponseAsync(messages, options);
 	}
 
 	[Fact]
-	public async Task GetResponseAsync_WithZeroMaxTokens_ThrowsException()
+	public virtual async Task GetResponseAsync_WithZeroMaxTokens_ThrowsException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>
@@ -122,6 +182,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 		var options = new ChatOptions
 		{
 			Temperature = 0.7f,
+			Reasoning = new() { Effort = ReasoningEffort.None },
 			MaxOutputTokens = 100,
 			TopK = 10,
 			Seed = 42
@@ -134,6 +195,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 	}
 
 	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetStreamingResponseAsync_WithResponseFormat_AcceptsJsonFormat()
 	{
 		var client = new T();

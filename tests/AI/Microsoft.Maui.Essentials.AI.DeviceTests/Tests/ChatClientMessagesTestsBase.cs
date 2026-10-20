@@ -12,12 +12,120 @@ public abstract class ChatClientMessagesTestsBase<T>
 	where T : class, IChatClient, new()
 {
 	[Fact]
-	public async Task GetResponseAsync_WithEmptyMessages_ThrowsException()
+	public virtual async Task GetResponseAsync_WithEmptyMessages_ThrowsException()
 	{
 		var client = new T();
 		var messages = new List<ChatMessage>();
 
 		await Assert.ThrowsAsync<ArgumentException>(() => client.GetResponseAsync(messages));
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithOnlyNullTextContent_PreservesFollowingUserTurn()
+	{
+		using var client = new T();
+		var msg = new ChatMessage(ChatRole.User, [new TextContent(null)]);
+		// Keep inference meaningful; a model's policy for a completely empty prompt is not a conversion contract.
+		var messages = new List<ChatMessage> { msg, new(ChatRole.User, "Reply with exactly HELLO.") };
+
+		var response = await client.GetResponseAsync(messages);
+		Assert.NotNull(response);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithUnsupportedContentAlongsideText_IgnoresUnsupportedContent()
+	{
+		using var client = new T();
+		var message = new ChatMessage(ChatRole.User,
+			[new TextContent("Reply with only the word HELLO."), new UnsupportedContentForTesting()]);
+
+		var response = await client.GetResponseAsync([message]);
+
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithOnlyUnsupportedContent_PreservesFollowingUserTurn()
+	{
+		using var client = new T();
+		var msg = new ChatMessage(ChatRole.User, [new UnsupportedContentForTesting()]);
+		var messages = new List<ChatMessage> { msg, new(ChatRole.User, "Reply with exactly HELLO.") };
+
+		var response = await client.GetResponseAsync(messages);
+
+		Assert.NotNull(response);
+		Assert.NotNull(response.Messages);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithBlankConversationTurns_PreservesFollowingUserTurn(bool unknownOnly, bool streaming)
+	{
+		using var client = new T();
+		ChatMessage[] messages =
+		[
+			new(ChatRole.System, ""),
+			new(ChatRole.User, unknownOnly ? [new UnsupportedContentForTesting()] : []),
+			new(ChatRole.Assistant, unknownOnly ? [new UnsupportedContentForTesting()] : []),
+			new(ChatRole.User, "Reply with exactly HELLO.")
+		];
+		var options = new ChatOptions { Instructions = " \r\n\t" };
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync()
+			: await client.GetResponseAsync(messages, options);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithUnsupportedRoleAmongValidMessages_IgnoresUnsupportedRole()
+	{
+		using var client = new T();
+		var messages = new List<ChatMessage>
+		{
+			new(new ChatRole("custom"), "The secret word is PAPAYA."),
+			new(ChatRole.User, "What is the secret word? If none was supplied, reply only NONE.")
+		};
+
+		var response = await client.GetResponseAsync(messages);
+
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
+		Assert.Equal("NONE", response.Text.Trim(), ignoreCase: true);
+		Assert.DoesNotContain("PAPAYA", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Theory]
+	[InlineData("text/plain", false)]
+	[InlineData("application/octet-stream", false)]
+	[InlineData("audio/ogg", false)]
+	[InlineData("text/plain", true)]
+	[InlineData("application/pdf", true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithUnrecognizedMediaType_IgnoresContent(string mediaType, bool useUri)
+	{
+		using var client = new T();
+		AIContent content = useUri
+			? new UriContent("https://example.invalid/baseline.txt", mediaType)
+			: new DataContent("Unrecognized baseline payload"u8.ToArray(), mediaType);
+		var message = new ChatMessage(ChatRole.User,
+			[new TextContent("Reply with exactly HELLO and nothing else."), content]);
+
+		var response = await client.GetResponseAsync([message]);
+
+		Assert.NotNull(response);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Fact]
@@ -32,6 +140,24 @@ public abstract class ChatClientMessagesTestsBase<T>
 		};
 
 		await client.GetResponseAsync(messages);
+	}
+
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public virtual async Task GetResponseAsync_WithTrailingSystemMessage_AppliesInstruction()
+	{
+		using var client = new T();
+		ChatMessage[] messages =
+		[
+			new(ChatRole.User, "Remember the word PINEAPPLE."),
+			new(ChatRole.System, "Reply with exactly TRAILING_SYSTEM.")
+		];
+
+		var response = await client.GetResponseAsync(messages);
+
+		Assert.NotNull(response);
+		Assert.Contains(response.Messages, message => message.Role == ChatRole.Assistant);
+		Assert.Equal("TRAILING_SYSTEM", response.Text.Trim());
 	}
 
 	[Fact]
@@ -187,4 +313,83 @@ public abstract class ChatClientMessagesTestsBase<T>
 			// Process updates
 		}
 	}
+
+	[Theory]
+	[InlineData("image/png", false)]
+	[InlineData("image/png", true)]
+	[InlineData("application/pdf", false)]
+	[InlineData("application/pdf", true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public virtual async Task GetResponseAsync_WithBinaryContentAndText_ConvertsOrIgnoresContent(string mediaType, bool streaming)
+	{
+		var base64 = mediaType == "image/png"
+			? "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAEnQAABJ0Ad5mH3gAAACJSURBVHhe5cgxAQAADMOg+je9CYgEDh623dkSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmoUloEpqEJqFJaBKahCahSWgSmoQmYXlhqOHSNEsP9wAAAABJRU5ErkJggg=="
+			: "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAxMDAgMTAwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAzNSA+PgpzdHJlYW0KQlQgL0YxIDEyIFRmIDEwIDUwIFRkIChCTFVFKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDMyNSAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjM5NQolJUVPRgo=";
+		using var client = new T();
+		var content = new DataContent(Convert.FromBase64String(base64), mediaType)
+		{
+			Name = mediaType == "image/png" ? "baseline.png" : "baseline.pdf"
+		};
+		var message = new ChatMessage(ChatRole.User,
+			[content, new TextContent("Reply with exactly HELLO and nothing else.")]);
+
+		var response = streaming
+			? await client.GetStreamingResponseAsync([message]).ToChatResponseAsync()
+			: await client.GetResponseAsync([message]);
+
+		Assert.NotNull(response);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithFunctionHistory_PreservesUserText(bool streaming)
+	{
+		using var client = new T();
+		ChatMessage[] messages =
+		[
+			new(ChatRole.User, "Get the weather in Paris."),
+			new(ChatRole.Assistant, [new FunctionCallContent("call_baseline", "GetWeather",
+				new Dictionary<string, object?> { ["city"] = "Paris" })]),
+			new(ChatRole.Tool, [new FunctionResultContent("call_baseline", "Sunny")]),
+			new(ChatRole.User, "Reply with exactly HELLO and nothing else.")
+		];
+
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages).ToChatResponseAsync()
+			: await client.GetResponseAsync(messages);
+
+		Assert.NotNull(response);
+		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithFunctionHistory_RetainsToolResultContext(bool streaming)
+	{
+		using var client = new T();
+		ChatMessage[] messages =
+		[
+			new(ChatRole.User, "Get the weather."),
+			new(ChatRole.Assistant, [new FunctionCallContent("call_context", "GetWeather",
+				new Dictionary<string, object?> { ["city"] = "Paris" })]),
+			new(ChatRole.Tool, [new FunctionResultContent("call_context",
+				new Dictionary<string, object?> { ["city"] = "Paris", ["temperatureCelsius"] = 23 })]),
+			new(ChatRole.User, "What city and temperature did the tool return? Answer briefly.")
+		];
+
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages).ToChatResponseAsync()
+			: await client.GetResponseAsync(messages);
+
+		Assert.NotNull(response);
+		Assert.Contains("Paris", response.Text, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("23", response.Text, StringComparison.Ordinal);
+	}
+
+	protected sealed class UnsupportedContentForTesting : AIContent;
 }

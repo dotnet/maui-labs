@@ -48,6 +48,53 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		_functionInvocationServices = functionInvocationServices;
 	}
 
+	/// <summary>
+	/// Reads the current availability of <c>SystemLanguageModel.default</c> and the
+	/// effective capabilities exposed by this provider. The result is not cached readiness.
+	/// </summary>
+	/// <param name="cancellationToken">A token that cancels the status request before the native read.</param>
+	/// <returns>The native availability reason and capabilities. Apple provides no make-ready operation.</returns>
+	public static Task<ChatModelStatus> GetModelStatusAsync(CancellationToken cancellationToken = default)
+	{
+		cancellationToken.ThrowIfCancellationRequested();
+		return Task.FromResult(CreateModelStatus(
+			ChatClientNative.GetModelAvailability(),
+			ChatClientNative.GetModelCapabilities() is { } capabilities
+				? (AppleIntelligenceModelCapabilitiesNative?)capabilities.UInt64Value
+				: null));
+	}
+
+	internal static ChatModelStatus CreateModelStatus(
+		string nativeAvailability,
+		AppleIntelligenceModelCapabilitiesNative? nativeCapabilities)
+	{
+		var availability = nativeAvailability switch
+		{
+			AppleIntelligenceModelAvailabilityNative.Available => ChatModelAvailability.Available,
+			AppleIntelligenceModelAvailabilityNative.DeviceNotEligible => ChatModelAvailability.NotSupported,
+			AppleIntelligenceModelAvailabilityNative.AppleIntelligenceNotEnabled => ChatModelAvailability.Disabled,
+			AppleIntelligenceModelAvailabilityNative.ModelNotReady => ChatModelAvailability.NotReady,
+			_ => ChatModelAvailability.Unknown,
+		};
+
+		List<ChatModelCapability> capabilities =
+		[
+			ChatModelCapability.Text, ChatModelCapability.Streaming,
+			ChatModelCapability.StructuredOutput, ChatModelCapability.ToolCalling
+		];
+		if (nativeCapabilities is { } flags)
+		{
+			if ((flags & AppleIntelligenceModelCapabilitiesNative.Vision) != 0)
+				capabilities.Add(ChatModelCapability.ImageInput);
+			capabilities.Add(ChatModelCapability.TokenUsage);
+		}
+
+		return new(
+			availability,
+			availability is ChatModelAvailability.Available ? null : nativeAvailability,
+			capabilities);
+	}
+
 	// static AppleIntelligenceChatClient()
 	// {
 	// 	// Enable native logging for debugging purposes, this is quite verbose.
@@ -144,10 +191,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		var nativeOptions = ToNative(options, cancellationToken);
 		cancellationToken.ThrowIfCancellationRequested();
 		var native = new ChatClientNative();
-		StreamChunkerBase chunker = nativeOptions?.ResponseJsonSchema is not null
-			? new JsonStreamChunker()
-			: new PlainTextStreamChunker();
-		var handler = new StreamingResponseHandler(chunker, DefaultModelId);
+		// The Swift bridge converts both plain-text snapshots and structured content into
+		// append-only deltas before crossing the native boundary.
+		var handler = new StreamingResponseHandler(DefaultModelId);
 
 		// Set up cancellation registration before invoking native to avoid race
 		CancellationTokenNative? nativeToken = null;
@@ -195,7 +241,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				{
 					try
 					{
-						handler.Complete(FromNativeUsage(finalResult?.Usage));
+						handler.Complete(FromNativeChatResponse(finalResult).Usage);
 					}
 					catch (Exception ex)
 					{
@@ -256,50 +302,76 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		// Nothing to dispose.
 	}
 
-	private static ChatMessageNative[] ToNative(IEnumerable<ChatMessage> messages, ChatOptions? options)
+	internal static ChatMessageNative[] ToNative(IEnumerable<ChatMessage> messages, ChatOptions? options)
 	{
 		ArgumentNullException.ThrowIfNull(messages);
 
-		var messagesList = messages.ToList();
+		// Match the OpenAI adapters: unknown roles do not contribute to the request.
+		var messagesList = messages.Where(message =>
+			message.Role == ChatRole.System ||
+			message.Role == ChatRole.User ||
+			message.Role == ChatRole.Assistant ||
+			message.Role == ChatRole.Tool).ToList();
 
-		// Build a callId → name lookup from FunctionCallContent so FunctionResultContent can reference the tool name
 		var callIdToName = new Dictionary<string, string>();
-		foreach (var msg in messagesList)
-		{
-			foreach (var content in msg.Contents.OfType<FunctionCallContent>())
-			{
-				if (content.CallId is not null && content.Name is not null)
-					callIdToName[content.CallId] = content.Name;
-			}
-		}
-
-		var toConvert = options?.Instructions is not null
+		var toConvert = !string.IsNullOrWhiteSpace(options?.Instructions)
 			? messagesList.Prepend(new(ChatRole.System, options.Instructions))
 			: messagesList;
 
-		// Filter out any messages that produce empty native content as a safety net.
-		ChatMessageNative[] nativeMessages = [.. toConvert
-			.Select(m => ToNative(m, callIdToName))
-			.Where(m => m.Contents.Length > 0)];
+		var nativeMessages = new List<ChatMessageNative>();
 
-		if (nativeMessages.Length == 0)
+		// Resolve tool names in encounter order: native tool outputs require an earlier assistant call.
+		foreach (var message in toConvert)
+		{
+			if (message.Role == ChatRole.Assistant)
+			{
+				foreach (var call in message.Contents.OfType<FunctionCallContent>())
+					callIdToName[call.CallId] = call.Name;
+			}
+			else if (message.Role == ChatRole.Tool)
+			{
+				foreach (var result in message.Contents.OfType<FunctionResultContent>())
+				{
+					if (result.CallId is null || !callIdToName.ContainsKey(result.CallId))
+					{
+						throw new ArgumentException(
+							$"Function result '{result.CallId}' must match a preceding assistant function call.",
+							nameof(messages));
+					}
+				}
+			}
+
+			var nativeMessage = ToNative(message, callIdToName);
+			if (nativeMessage.Contents.Length > 0)
+				nativeMessages.Add(nativeMessage);
+		}
+
+		if (nativeMessages.Count == 0)
 		{
 			throw new ArgumentException("No messages with convertible content found. Ensure at least one message contains TextContent, FunctionCallContent, or FunctionResultContent.", nameof(messages));
 		}
 
-		return nativeMessages;
+		return [.. nativeMessages];
 	}
 
-	private static ChatResponse FromNativeChatResponse(ChatResponseNative? response)
+	internal static void ValidateNativeResponse(ChatResponseNative? response)
 	{
 		if (response is null || response.Messages is null || response.Messages.Length == 0)
-		{
-			// Fallback: return empty response
-			return new ChatResponse([new ChatMessage(ChatRole.Assistant, "")]) { ModelId = DefaultModelId };
-		}
+			throw new InvalidOperationException("Apple Intelligence returned a null or empty native response.");
+
+		if (response.Messages.Any(message => message is null || message.Contents is null ||
+			message.Contents.Any(content => content is null)) ||
+			!response.Messages.SelectMany(message => message.Contents)
+				.Any(content => content is not null && content is not TextContentNative { Text: null or "" }))
+			throw new InvalidOperationException("Apple Intelligence returned a malformed or empty native response.");
+	}
+
+	internal static ChatResponse FromNativeChatResponse(ChatResponseNative? response)
+	{
+		ValidateNativeResponse(response);
 
 		// Convert all native messages to ChatMessage objects
-		var messages = response.Messages
+		var messages = response!.Messages
 			.Select(FromNative)
 			.ToList();
 
@@ -379,12 +451,36 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			_ => throw new ArgumentException($"Unsupported content type: {content.GetType().Name}", nameof(content))
 		};
 
-	private static ChatMessageNative ToNative(ChatMessage message, Dictionary<string, string>? callIdToName = null) =>
-		new()
+	private static ChatMessageNative ToNative(ChatMessage message, Dictionary<string, string> callIdToName)
+	{
+		if (message.Role == ChatRole.Tool && message.Contents.Any(content => content switch
+		{
+			DataContent data => IsImage(data.MediaType),
+			UriContent uri => IsImage(uri.MediaType),
+			_ => false
+		}))
+			throw new NotSupportedException("Apple Intelligence tool history does not support image attachments outside FunctionResultContent.");
+
+		AIContentNative[] contents = [.. message.Contents
+			.Where(content => content switch
+			{
+				FunctionCallContent => message.Role == ChatRole.Assistant,
+				FunctionResultContent => message.Role == ChatRole.Tool,
+				_ => message.Role != ChatRole.Tool
+			})
+			.SelectMany(content => ToNative(content, callIdToName))];
+
+		// Empty and unknown-only inline turns still occupy a place in the native transcript.
+		if (contents.Length == 0 && (message.Role == ChatRole.User ||
+			message.Role == ChatRole.Assistant || message.Role == ChatRole.System))
+			contents = [new TextContentNative(string.Empty)];
+
+		return new()
 		{
 			Role = ToNative(message.Role),
-			Contents = [.. message.Contents.SelectMany(c => ToNative(c, callIdToName))]
+			Contents = contents
 		};
+	}
 
 	private static ChatRoleNative ToNative(ChatRole role)
 	{
@@ -401,6 +497,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	}
 
 	internal ChatOptionsNative? ToNative(ChatOptions? options, CancellationToken cancellationToken)
+		=> ToNative(options, cancellationToken, SupportsOS27Features);
+
+	internal ChatOptionsNative? ToNative(ChatOptions? options, CancellationToken cancellationToken, bool supportsOS27)
 	{
 		if (options is null)
 		{
@@ -412,16 +511,51 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			throw new ArgumentOutOfRangeException(nameof(options), "The MaxOutputTokens option must be greater than zero.");
 		}
 
+		if (options.TopK is <= 0)
+			throw new ArgumentOutOfRangeException(nameof(options), "The TopK option must be greater than zero.");
+
+		if (options.TopP is { } topP && (!float.IsFinite(topP) || topP is < 0 or > 1))
+			throw new ArgumentOutOfRangeException(nameof(options), "The TopP option must be finite and between zero and one.");
+
+		if (options.Temperature is { } temperature && (!float.IsFinite(temperature) || temperature is < 0 or > 1))
+			throw new ArgumentOutOfRangeException(nameof(options), "The Temperature option must be finite and between zero and one for Apple Intelligence.");
+
+		if (options.Seed is < 0)
+			throw new ArgumentOutOfRangeException(nameof(options), "The Seed option must be nonnegative.");
+
+		var tools = options.Tools;
+		var toolMode = options.ToolMode;
+		var required = toolMode is not null && toolMode != ChatToolMode.Auto && toolMode != ChatToolMode.None;
+		if (required)
+		{
+			if (!supportsOS27)
+				throw new NotSupportedException("Required tool calling requires Apple OS 27 or later.");
+
+			if (toolMode is RequiredChatToolMode { RequiredFunctionName: { } name })
+			{
+				tools = tools?.Where(tool => tool.Name == name).ToList();
+				if (tools is not { Count: > 0 })
+					throw new ArgumentException($"The required tool '{name}' was not supplied.", nameof(options));
+			}
+
+			if (tools is not { Count: > 0 })
+				throw new ArgumentException("Required tool calling needs at least one tool.", nameof(options));
+		}
+
 		return new ChatOptionsNative
 		{
 			TopK = ToNative(options.TopK),
+			TopP = ToNative(options.TopP),
 			Seed = ToNative(options.Seed),
 			Temperature = ToNative(options.Temperature),
 			MaxOutputTokens = ToNative(options.MaxOutputTokens),
 			ResponseJsonSchema = ToNative(options.ResponseFormat),
+			ToolCallingMode = toolMode == ChatToolMode.None
+				? ToolCallingModeNative.Disallowed
+				: required ? ToolCallingModeNative.Required : ToolCallingModeNative.Allowed,
 			Tools = options.ToolMode == ChatToolMode.None
 				? null
-				: ToNative(options.Tools, cancellationToken, _functionInvocationServices)
+				: ToNative(tools, cancellationToken, _functionInvocationServices)
 		};
 	}
 
@@ -452,29 +586,24 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 	private static NSString? ToNative(ChatResponseFormat? format) =>
 		format switch
 		{
-			ChatResponseFormatJson jsonFormat when StrictSchemaTransformCache.GetOrCreateTransformedSchema(jsonFormat) is { } jsonSchema =>
+			ChatResponseFormatJson { Schema: not null } jsonFormat when StrictSchemaTransformCache.GetOrCreateTransformedSchema(jsonFormat) is { } jsonSchema =>
 				(NSString?)jsonSchema.GetRawText(),
 			ChatResponseFormatJson jsonFormat when jsonFormat.Schema is not null =>
 				throw new InvalidOperationException("Failed to transform JSON schema for Apple Intelligence chat API."),
-			ChatResponseFormatJson =>
-				throw new InvalidOperationException("Apple Intelligence chat API requires a JSON schema for structured responses."),
 			_ => null
 		};
 
-	private static IEnumerable<AIContentNative> ToNative(AIContent content, Dictionary<string, string>? callIdToName = null) =>
+	private static IEnumerable<AIContentNative> ToNative(AIContent content, Dictionary<string, string> callIdToName) =>
 		content switch
 		{
 			// Apple Intelligence performs better when each text content chunk is separated
 			TextContent textContent when textContent.Text is not null => [new TextContentNative(textContent.Text)],
 			TextContent => Array.Empty<AIContentNative>(),
 
-			// Image content (analyzed by the model on 27.0+; the native layer throws below that).
-			DataContent data when IsImage(data.MediaType) => [ToNative(data)],
-			UriContent uri when IsImage(uri.MediaType) => [ToNative(uri)],
+			DataContent data when IsImage(data.MediaType) => [ToNativeImageInput(data)],
+			UriContent uri when IsImage(uri.MediaType) => [ToNativeImageInput(uri)],
 
-			// Function call/result content from prior tool-calling turns is converted to native types.
-			// The native Swift layer gracefully skips these when building the Transcript, since Apple's
-			// LanguageModelSession manages tool call state internally.
+			// Preserve prior tool activity through the native transcript's tool entries.
 			FunctionCallContent functionCall => [new FunctionCallContentNative(
 				functionCall.CallId ?? string.Empty,
 				functionCall.Name,
@@ -482,10 +611,9 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				functionCall.Arguments is not null ? JsonSerializer.Serialize(functionCall.Arguments, AIJsonUtilities.DefaultOptions) : "{}")],
 #pragma warning restore IL3050, IL2026
 
-			FunctionResultContent functionResult => [new FunctionResultContentNative(
-				functionResult.CallId ?? string.Empty,
-				// Look up the tool name from the corresponding FunctionCallContent via callId
-				(functionResult.CallId is not null && callIdToName?.TryGetValue(functionResult.CallId, out var name) == true) ? name : string.Empty,
+			FunctionResultContent { CallId: { } callId } functionResult => [new FunctionResultContentNative(
+				callId,
+				callIdToName[callId],
 #pragma warning disable IL3050, IL2026
 				// If Result is already a string (common when replaying history), pass through to avoid double-serialization
 				functionResult.Result switch
@@ -496,9 +624,27 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 				})],
 #pragma warning restore IL3050, IL2026
 
-			// Throw for unsupported content types
-			_ => throw new ArgumentException($"The content type '{content.GetType().FullName}' is not supported by Apple Intelligence chat APIs.", nameof(content))
+			// Match the OpenAI adapters by ignoring unrecognized content.
+			_ => []
 		};
+
+	private static ImageContentNative ToNativeImageInput(AIContent content)
+	{
+		ValidateImageInput(SupportsOS27Features);
+		return content is DataContent data ? ToNative(data) : ToNative((UriContent)content);
+	}
+
+	internal static void ValidateImageInput(bool supportsOS27)
+	{
+		if (!supportsOS27)
+			throw new NotSupportedException("Apple Intelligence image input requires Apple OS 27 or later.");
+		// The Swift session also checks the current model's vision capability before generation.
+	}
+
+	private static bool SupportsOS27Features =>
+		OperatingSystem.IsIOSVersionAtLeast(27) ||
+		OperatingSystem.IsMacCatalystVersionAtLeast(27) ||
+		OperatingSystem.IsMacOSVersionAtLeast(27);
 
 	private static NSNumber? ToNative(int? value) =>
 		value.HasValue ? NSNumber.FromInt32(value.Value) : null;
