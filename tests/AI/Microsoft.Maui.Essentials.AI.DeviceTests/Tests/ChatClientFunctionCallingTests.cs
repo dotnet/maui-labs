@@ -84,6 +84,10 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task ToolInvocation_CallerCancellation_PreservesCancelledTask(bool streaming)
 	{
+		// Cancellation inside a tool requires a forced invocation; Auto may never enter the callback.
+		if (!SupportsRequiredToolMode)
+			return;
+
 		var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 		async Task<string> BlockUntilCancelled(CancellationToken cancellationToken)
 		{
@@ -96,7 +100,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		var options = new ChatOptions
 		{
 			Tools = [AIFunctionFactory.Create(BlockUntilCancelled, "blocking_tool")],
-			ToolMode = SupportsRequiredToolMode ? ChatToolMode.RequireSpecific("blocking_tool") : ChatToolMode.Auto,
+			ToolMode = ChatToolMode.RequireSpecific("blocking_tool"),
 			Temperature = 0,
 			Reasoning = new() { Effort = ReasoningEffort.None },
 		};
