@@ -179,6 +179,57 @@ public class AppleIntelligenceChatClientConformanceTests
 
 	private sealed class UnsupportedTool : AITool;
 
+#pragma warning disable MEAI001 // Exercise the pinned MEAI continuation/background options so they cannot be silently ignored.
+	// Foundation Models sessions are rebuilt from supplied history; they cannot resume remote/background operations.
+	[Theory]
+	[InlineData(nameof(ChatOptions.ContinuationToken), false)]
+	[InlineData(nameof(ChatOptions.ContinuationToken), true)]
+	[InlineData(nameof(ChatOptions.ConversationId), false)]
+	[InlineData(nameof(ChatOptions.ConversationId), true)]
+	[InlineData(nameof(ChatOptions.AllowBackgroundResponses), false)]
+	[InlineData(nameof(ChatOptions.AllowBackgroundResponses), true)]
+	public async Task UnsupportedConversationOptions_RejectBeforeInference(string optionName, bool streaming)
+	{
+		var options = new ChatOptions();
+		if (optionName == nameof(ChatOptions.ContinuationToken))
+			options.ContinuationToken = new TestContinuationToken();
+		else if (optionName == nameof(ChatOptions.ConversationId))
+			options.ConversationId = "";
+		else
+			options.AllowBackgroundResponses = true;
+		using var client = new AppleIntelligenceChatClient();
+
+		var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync([new(ChatRole.User, "Hello")], options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync([new(ChatRole.User, "Hello")], options);
+		});
+
+		Assert.Contains(optionName, error.Message, StringComparison.Ordinal);
+	}
+
+	// Explicit false and unspecified options both retain ordinary foreground generation.
+	[Theory]
+	[InlineData(null)]
+	[InlineData(false)]
+	public void ToNative_DefaultConversationOptions_PreserveForegroundBehavior(bool? background)
+	{
+		using var client = new AppleIntelligenceChatClient();
+		Assert.Null(client.ToNative(null, default));
+		var native = client.ToNative(new ChatOptions
+		{
+			AllowBackgroundResponses = background
+		}, default);
+
+		Assert.NotNull(native);
+		Assert.Null(native.Tools);
+	}
+
+	private sealed class TestContinuationToken : ResponseContinuationToken;
+#pragma warning restore MEAI001
+
 	public static TheoryData<string, ChatModelAvailability, string?> ModelAvailabilityCases => new()
 	{
 		{

@@ -506,6 +506,15 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			return null;
 		}
 
+		if (options.ContinuationToken is not null)
+			throw new NotSupportedException("Apple Intelligence does not support the ContinuationToken option. Supply the complete conversation as messages.");
+
+		if (options.ConversationId is not null)
+			throw new NotSupportedException("Apple Intelligence does not support the ConversationId option. Supply the complete conversation as messages.");
+
+		if (options.AllowBackgroundResponses is true)
+			throw new NotSupportedException("Apple Intelligence does not support AllowBackgroundResponses=true. Await or stream the response directly.");
+
 		if (options.MaxOutputTokens is <= 0)
 		{
 			throw new ArgumentOutOfRangeException(nameof(options), "The MaxOutputTokens option must be greater than zero.");

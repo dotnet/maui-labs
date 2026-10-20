@@ -129,12 +129,12 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 **Essentials.AI rule**
 
 - Use caller-supplied history when the native provider has no durable conversation state.
-- Ignore unsupported conversation, background, and continuation options.
+- Reject unsupported non-null conversation IDs and continuation tokens, and explicit background requests; preserve null/default foreground behavior.
 - Never silently truncate history; report context-window failures clearly.
 
 **Essentials.AI implementation**
 
-- **Apple:** create a fresh native session from the supplied transcript for each request; ignore conversation/background continuation options; report context overflow.
+- **Apple:** create a fresh native session from the supplied transcript for each request; reject conversation IDs, continuation tokens, and explicit background requests; report context overflow.
 - **Windows:** To be determined.
 - **Android:** To be determined.
 
