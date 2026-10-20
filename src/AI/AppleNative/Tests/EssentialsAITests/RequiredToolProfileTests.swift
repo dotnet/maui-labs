@@ -14,7 +14,7 @@ final class RequiredToolProfileTests: XCTestCase {
 
     func testCounterIsSessionLocalAndRuntimeToolsAreRetained() throws {
         guard #available(macOS 27.0, *) else { return }
-        let tools = [ToolNative(CountingTool(name: "first"), nil, nil),
+        let tools = try [ToolNative(CountingTool(name: "first"), nil, nil),
                      ToolNative(CountingTool(name: "second"), nil, nil)]
         let profile = RequiredToolProfile(model: .default, tools: tools)
         XCTAssertEqual(profile.tools.map(\.name), ["first", "second"])
@@ -100,20 +100,59 @@ final class RequiredToolProfileTests: XCTestCase {
         }
     }
 
+    func testLiveRequiredNullableParameterToolExecutesExactlyOnceForBothAPIs() async throws {
+        guard #available(macOS 27.0, *) else {
+            throw XCTSkip("Required tool profiles need OS 27.")
+        }
+        guard try LiveTests.requireModel() else { return }
+        for streaming in [false, true] {
+            let tool = CountingTool(name: "lookupNullableValue", nullableParameters: true)
+            let run = try await LiveTests.runClient(
+                prompt: """
+                Look up the secret value with lookupNullableValue. There is no numeric value: \
+                pass JSON null for the required value parameter, not zero or a string. \
+                The optional label can be omitted or null. After the tool returns, answer with its \
+                returned secret value and do not call it again.
+                """,
+                streaming: streaming, maxTokens: 128, tools: [tool], toolCallingMode: .required, timeout: 45)
+
+            XCTAssertNil(run.error, "streaming=\(streaming): \(String(describing: run.error))")
+            XCTAssertEqual(tool.callCount, 1, "Required nullable arguments must not cause repeated execution.")
+            XCTAssertEqual(run.toolCalls, [tool.name])
+            XCTAssertEqual(run.toolResults.count, 1)
+            XCTAssertTrue(run.finalText.contains("REQUIRED_VALUE_42"), run.finalText)
+            let arguments = try XCTUnwrap(tool.receivedArguments.first)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(arguments.utf8)) as? [String: Any])
+            XCTAssertTrue(json["value"] is NSNull, "Required nullable value must be present as JSON null: \(arguments)")
+            XCTAssertTrue(json["label"] == nil || json["label"] is NSNull, arguments)
+            if streaming { XCTAssertEqual(run.contentUpdates.joined(), run.finalText) }
+        }
+    }
+
     private final class CountingTool: NSObject, AIToolNative, @unchecked Sendable {
         let name: String
-        let desc = "Looks up the secret value for a key. Call only once, then answer using the returned value."
-        let argumentsSchema = #"{"type":"object","properties":{"key":{"type":"string"}},"required":["key"]}"#
+        let desc: String
+        let argumentsSchema: String
         let outputSchema = #"{"type":"string"}"#
         private let lock = NSLock()
         private var calls = 0
+        private var arguments: [String] = []
 
-        init(name: String) { self.name = name }
+        init(name: String, nullableParameters: Bool = false) {
+            self.name = name
+            desc = nullableParameters
+                ? "Looks up the secret value. Pass null for value when no number is supplied; label is optional. Call only once, then answer using the returned value."
+                : "Looks up the secret value for a key. Call only once, then answer using the returned value."
+            argumentsSchema = nullableParameters
+                ? #"{"type":"object","properties":{"value":{"type":["integer","null"]},"label":{"type":["string","null"]}},"required":["value"]}"#
+                : #"{"type":"object","properties":{"key":{"type":"string"}},"required":["key"]}"#
+        }
 
         var callCount: Int { lock.withLock { calls } }
+        var receivedArguments: [String] { lock.withLock { arguments } }
 
         func call(arguments: String) async throws -> String {
-            let count = lock.withLock { calls += 1; return calls }
+            let count = lock.withLock { calls += 1; self.arguments.append(arguments); return calls }
             guard count <= 3 else {
                 throw NSError(domain: "RequiredToolProfileTests", code: 1,
                               userInfo: [NSLocalizedDescriptionKey: "Required mode exceeded the bounded tool-call budget."])

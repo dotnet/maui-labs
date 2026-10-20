@@ -291,6 +291,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 **Essentials.AI rule**
 
 - Preserve tool names, call IDs, arguments, results, and encounter order.
+- Preserve tool parameter/output types and required versus optional properties; reject unrepresentable schemas clearly during setup, never silently substitute a generic schema.
 - When tools are unsupported, ignore definitions for None and Auto, but reject Required or named Required.
 - Required and named Required must be honored or rejected; never downgrade them to Auto.
 - A provider may execute tools natively or return calls for middleware execution, but each call must execute exactly once with request cancellation and services.

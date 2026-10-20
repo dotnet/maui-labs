@@ -1,4 +1,5 @@
 #if IOS || MACCATALYST
+using Foundation;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.AI;
@@ -13,6 +14,87 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientValidationTests
 {
+	// Foundation Models must reject dictionary schemas during native setup, not replace them with String.
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(true, true)]
+	public async Task ToolSchema_WithDictionary_RejectsBeforeInvocation(bool dictionaryOutput, bool streaming)
+	{
+		var calls = 0;
+		string ReadDictionary(Dictionary<string, string> values)
+		{
+			Interlocked.Increment(ref calls);
+			return "unused";
+		}
+		Dictionary<string, string> ReturnDictionary()
+		{
+			Interlocked.Increment(ref calls);
+			return [];
+		}
+		var tool = dictionaryOutput
+			? AIFunctionFactory.Create(ReturnDictionary, "dictionary_output")
+			: AIFunctionFactory.Create(ReadDictionary, "dictionary_arguments");
+		using var client = new AppleIntelligenceChatClient();
+		var options = new ChatOptions { Tools = [tool] };
+
+		var error = await Assert.ThrowsAsync<NSErrorException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync([new(ChatRole.User, "Hello")], options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync([new(ChatRole.User, "Hello")], options);
+		});
+
+		Assert.Contains(tool.Name, error.Message, StringComparison.Ordinal);
+		Assert.Contains("additionalProperties", error.Message, StringComparison.Ordinal);
+		Assert.Equal(0, calls);
+	}
+
+	// Exercises MEAI's nullable C# parameter schema through Apple's Required native profile and callback.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task RequiredTool_WithNullableParameters_InvokesExactlyOnce(bool streaming)
+	{
+		if (!OperatingSystem.IsIOSVersionAtLeast(27) && !OperatingSystem.IsMacCatalystVersionAtLeast(27))
+			return;
+
+		var calls = 0;
+		int? receivedValue = 42;
+		string? receivedLabel = "unexpected";
+		string CaptureNullable(int? value, string? label = null)
+		{
+			Interlocked.Increment(ref calls);
+			receivedValue = value;
+			receivedLabel = label;
+			return "NULLABLE_CAPTURED";
+		}
+		using var client = new AppleIntelligenceChatClient();
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+		var options = new ChatOptions
+		{
+			Tools = [AIFunctionFactory.Create(CaptureNullable, "capture_nullable")],
+			ToolMode = ChatToolMode.RequireSpecific("capture_nullable"),
+			Temperature = 0,
+			MaxOutputTokens = 128,
+		};
+		ChatMessage[] messages = [new(ChatRole.User,
+			"Call capture_nullable exactly once with value explicitly null and label null or omitted. " +
+			"Then reply with the tool's returned text without calling again.")];
+
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync()
+			: await client.GetResponseAsync(messages, options, timeout.Token);
+
+		Assert.Equal(1, calls);
+		Assert.Null(receivedValue);
+		Assert.Null(receivedLabel);
+		Assert.Contains("NULLABLE_CAPTURED", response.Text, StringComparison.Ordinal);
+	}
+
 	// Apple's transcript retains empty user turns as text segments; inference policy is tested separately.
 	[Theory]
 	[InlineData(false)]

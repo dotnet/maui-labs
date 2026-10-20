@@ -325,8 +325,8 @@ public class ChatClientNative: NSObject {
             try Self.validateImageSupport(hasImages: hasImages, supportsOS27: false, supportsVision: false)
         }
 
-        let tools = options?.toolCallingMode == .disallowed ? [] :
-            options?.tools?.map { ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
+        let tools = try options?.toolCallingMode == .disallowed ? [] :
+            options?.tools?.map { try ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log, let toolList = options?.tools {
