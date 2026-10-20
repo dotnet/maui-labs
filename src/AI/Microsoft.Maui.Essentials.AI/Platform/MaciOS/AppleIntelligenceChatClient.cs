@@ -136,6 +136,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		CancellationToken cancellationToken = default)
 	{
 		var nativeMessages = ToNative(messages, options);
+		ValidateCurrentPrompt(nativeMessages);
 		var nativeOptions = ToNative(options, cancellationToken);
 		cancellationToken.ThrowIfCancellationRequested();
 		var native = new ChatClientNative();
@@ -188,6 +189,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		var nativeMessages = ToNative(messages, options);
+		ValidateCurrentPrompt(nativeMessages);
 		var nativeOptions = ToNative(options, cancellationToken);
 		cancellationToken.ThrowIfCancellationRequested();
 		var native = new ChatClientNative();
@@ -364,6 +366,15 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			!response.Messages.SelectMany(message => message.Contents)
 				.Any(content => content is not null && content is not TextContentNative { Text: null or "" }))
 			throw new InvalidOperationException("Apple Intelligence returned a malformed or empty native response.");
+	}
+
+	private static void ValidateCurrentPrompt(ChatMessageNative[] messages)
+	{
+		if (messages[^1].Role != ChatRoleNative.User)
+			throw new ArgumentException(
+				"Apple Intelligence requires the current prompt to be the last User message. " +
+				"System/instructions-only input and trailing non-User messages are not supported.",
+				nameof(messages));
 	}
 
 	internal static ChatResponse FromNativeChatResponse(ChatResponseNative? response)

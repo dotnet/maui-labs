@@ -156,6 +156,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 **Essentials.AI rule**
 
 - Process `ChatOptions.Instructions` first.
+- When native generation requires User/Assistant prompt content, reject instructions/System-only input before generation; never synthesize a placeholder. Preserve explicitly supplied blank User turns.
 - Preserve System-message order and repeated instructions.
 - If the native API supports ordered instruction entries, preserve the System messages in conversation order.
 - If the native API has one instruction slot, combine options first and then System messages in encounter order, separate the parts with a blank line, and remove those messages from conversation history.
@@ -163,7 +164,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 
 **Essentials.AI implementation**
 
-- **Apple:** prepend options and preserve System messages as ordered transcript instructions. Reject a trailing System message because the native current prompt must be User.
+- **Apple:** prepend options and preserve System messages as ordered transcript instructions. Reject instructions-only input and any trailing non-User message before native generation; the current prompt must be User.
 - **Windows:** To be determined.
 - **Android:** To be determined.
 

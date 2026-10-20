@@ -70,7 +70,6 @@ public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsB
 
 	// The Foundation Models bridge uses the last message as its new Prompt, which must be User.
 	[Fact]
-	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public override async Task GetResponseAsync_WithTrailingSystemMessage_AppliesInstruction()
 	{
 		using var client = new AppleIntelligenceChatClient();
@@ -80,11 +79,10 @@ public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsB
 			new(ChatRole.System, "Reply with exactly TRAILING_SYSTEM.")
 		];
 
-		var error = await Assert.ThrowsAsync<NSErrorException>(() => client.GetResponseAsync(messages));
+		var error = await Assert.ThrowsAsync<ArgumentException>(() => client.GetResponseAsync(messages));
 
-		Assert.Equal(nameof(ChatClientNative), error.Error.Domain);
-		Assert.Equal((nint)ChatClientError.InvalidRole, error.Error.Code);
-		Assert.Contains("Only user messages can be prompts.", error.Error.LocalizedDescription, StringComparison.Ordinal);
+		Assert.Equal("messages", error.ParamName);
+		Assert.Contains("last User message", error.Message, StringComparison.Ordinal);
 	}
 }
 

@@ -230,6 +230,66 @@ public class AppleIntelligenceChatClientConformanceTests
 	private sealed class TestContinuationToken : ResponseContinuationToken;
 #pragma warning restore MEAI001
 
+	// Apple's final transcript message becomes the current Prompt; instructions and prior responses cannot fill that role.
+	[Theory]
+	[InlineData("system", false)]
+	[InlineData("system", true)]
+	[InlineData("instructions", false)]
+	[InlineData("instructions", true)]
+	[InlineData("assistant", false)]
+	[InlineData("assistant", true)]
+	[InlineData("trailing-system", false)]
+	[InlineData("trailing-system", true)]
+	[InlineData("trailing-assistant", false)]
+	[InlineData("trailing-assistant", true)]
+	[InlineData("trailing-tool", false)]
+	[InlineData("trailing-tool", true)]
+	public async Task CurrentPrompt_WithoutFinalUser_RejectsBeforeInference(string scenario, bool streaming)
+	{
+		ChatMessage[] messages = scenario switch
+		{
+			"system" => [new(ChatRole.System, "Instructions only")],
+			"instructions" => [],
+			"assistant" => [new(ChatRole.Assistant, "Prior response")],
+			"trailing-system" => [new(ChatRole.User, "Hello"), new(ChatRole.System, "Instructions")],
+			"trailing-assistant" => [new(ChatRole.User, "Hello"), new(ChatRole.Assistant, "Prior response")],
+			_ => [
+				new(ChatRole.User, "Hello"),
+				new(ChatRole.Assistant, [new FunctionCallContent("call-1", "sample")]),
+				new(ChatRole.Tool, [new FunctionResultContent("call-1", "result")])
+			],
+		};
+		using var client = new AppleIntelligenceChatClient();
+		var options = new ChatOptions { Instructions = "Follow these instructions." };
+
+		var error = await Assert.ThrowsAsync<ArgumentException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync(messages, options);
+		});
+
+		Assert.Equal("messages", error.ParamName);
+		Assert.Contains("last User message", error.Message, StringComparison.Ordinal);
+	}
+
+	// Explicit blank User turns remain actual prompts, not missing content to be replaced by synthetic text.
+	[Theory]
+	[InlineData(null)]
+	[InlineData("")]
+	[InlineData(" \r\n\t")]
+	public void ToNative_ExplicitBlankUser_PreservesCurrentTurn(string? text)
+	{
+		var native = AppleIntelligenceChatClient.ToNative(
+			[new(ChatRole.User, [new TextContent(text)])],
+			new ChatOptions { Instructions = "Instructions" });
+
+		Assert.Equal(2, native.Length);
+		Assert.Equal(ChatRoleNative.User, native[^1].Role);
+		Assert.Equal(text ?? "", Assert.IsType<TextContentNative>(Assert.Single(native[^1].Contents)).Text);
+	}
+
 	public static TheoryData<string, ChatModelAvailability, string?> ModelAvailabilityCases => new()
 	{
 		{
