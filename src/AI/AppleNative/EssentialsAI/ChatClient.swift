@@ -98,6 +98,7 @@ public class ChatClientNative: NSObject {
 
         let methodName = "streamResponse"
         let cq = OperationQueue.current?.underlyingQueue
+        let textDeltas = PlainTextDeltaEmitter()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -121,7 +122,9 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolCall, toolCallId: id, toolCallName: name, toolCallArguments: arguments)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    textDeltas.toolCall {
+                        cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    }
                 },
                 onToolResult: { id, name, result in
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -181,7 +184,6 @@ public class ChatClientNative: NSObject {
 #endif
 
                 let responseStream = session.streamResponse(to: prompt, options: genOptions)
-                var deltas = PlainTextDeltas()
                 let emit: (String) -> Void = { delta in
                     guard !delta.isEmpty else { return }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -195,11 +197,11 @@ public class ChatClientNative: NSObject {
 
                 for try await response in responseStream {
                     try Task.checkCancellation()
-                    emit(try deltas.process(response.content))
+                    try textDeltas.process(response.content, emit: emit)
                 }
 
                 let response = try await responseStream.collect()
-                emit(try deltas.process(response.content))
+                try textDeltas.process(response.content, emit: emit)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.count)")
