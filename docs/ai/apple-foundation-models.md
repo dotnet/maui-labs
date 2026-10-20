@@ -15,7 +15,10 @@ streaming, and error behavior is defined in the
 - The system model reports availability as available, device not eligible,
   Apple Intelligence not enabled, or model not ready.
 - Status reports the provider's effective MEAI-facing capabilities, not every
-  feature reported by the native model.
+  feature reported by the native model. Text/streaming are always advertised;
+  OS 26 retains known structured/tool support, while OS 27 gates structured output,
+  tools, and images on guided-generation, tool-calling, and vision flags.
+  Token usage requires OS 27; reasoning is not advertised until MEAI options map.
 - The provider never silently switches to a cloud model.
 
 ## Toolchain and build

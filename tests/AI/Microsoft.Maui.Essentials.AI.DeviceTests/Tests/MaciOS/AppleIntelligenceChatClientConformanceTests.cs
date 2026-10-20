@@ -491,7 +491,7 @@ public class AppleIntelligenceChatClientConformanceTests
 		Assert.Contains(ChatModelCapability.ToolCalling, status.Capabilities);
 	}
 
-	// Apple's adapter exposes OS26 tools/structured output, adds OS27 token usage/vision, but does not map ReasoningOptions.
+	// OS26 retains known tools/structured support; OS27 discovery gates each conditional capability.
 	[Theory]
 	[InlineData(null)]
 	[InlineData((long)AppleIntelligenceModelCapabilitiesNative.None)]
@@ -514,8 +514,12 @@ public class AppleIntelligenceChatClientConformanceTests
 		var capabilities = Assert.IsAssignableFrom<IReadOnlyCollection<ChatModelCapability>>(status.Capabilities);
 		Assert.Contains(ChatModelCapability.Text, capabilities);
 		Assert.Contains(ChatModelCapability.Streaming, capabilities);
-		Assert.Contains(ChatModelCapability.StructuredOutput, capabilities);
-		Assert.Contains(ChatModelCapability.ToolCalling, capabilities);
+		var structured = nativeCapabilities is null ||
+			(nativeCapabilities.Value & AppleIntelligenceModelCapabilitiesNative.GuidedGeneration) != 0;
+		var tools = nativeCapabilities is null ||
+			(nativeCapabilities.Value & AppleIntelligenceModelCapabilitiesNative.ToolCalling) != 0;
+		Assert.Equal(structured, capabilities.Contains(ChatModelCapability.StructuredOutput));
+		Assert.Equal(tools, capabilities.Contains(ChatModelCapability.ToolCalling));
 		Assert.Equal(nativeCapabilities.HasValue, capabilities.Contains(ChatModelCapability.TokenUsage));
 		Assert.Equal(
 			nativeCapabilities is { } flags &&
@@ -523,7 +527,7 @@ public class AppleIntelligenceChatClientConformanceTests
 			capabilities.Contains(ChatModelCapability.ImageInput));
 		Assert.DoesNotContain(ChatModelCapability.Reasoning, capabilities);
 		Assert.Equal(
-			4 +
+			2 + (structured ? 1 : 0) + (tools ? 1 : 0) +
 			(nativeCapabilities.HasValue ? 1 : 0) +
 			(nativeCapabilities is { } imageFlags &&
 				(imageFlags & AppleIntelligenceModelCapabilitiesNative.Vision) != 0 ? 1 : 0),

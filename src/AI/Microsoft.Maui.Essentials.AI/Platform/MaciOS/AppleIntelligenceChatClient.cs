@@ -79,9 +79,14 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 		List<ChatModelCapability> capabilities =
 		[
-			ChatModelCapability.Text, ChatModelCapability.Streaming,
-			ChatModelCapability.StructuredOutput, ChatModelCapability.ToolCalling
+			ChatModelCapability.Text, ChatModelCapability.Streaming
 		];
+		if (nativeCapabilities is null ||
+			(nativeCapabilities.Value & AppleIntelligenceModelCapabilitiesNative.GuidedGeneration) != 0)
+			capabilities.Add(ChatModelCapability.StructuredOutput);
+		if (nativeCapabilities is null ||
+			(nativeCapabilities.Value & AppleIntelligenceModelCapabilitiesNative.ToolCalling) != 0)
+			capabilities.Add(ChatModelCapability.ToolCalling);
 		if (nativeCapabilities is { } flags)
 		{
 			if ((flags & AppleIntelligenceModelCapabilitiesNative.Vision) != 0)
