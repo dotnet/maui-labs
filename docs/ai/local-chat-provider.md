@@ -650,6 +650,9 @@ evidence of support.
   `ReasoningEffort.None` merely to make unrelated tool, instruction, or schema
   tests deterministic; use precise prompts, Required tool modes, schemas, and
   exact result assertions instead.
+- Preserve baseline deterministic sampling configurations behind explicit
+  capability hooks. Bindings that cannot honor those options leave them unset
+  or override the provider-specific path without removing the shared method.
 - Token counts are optional. Assertions match only supplied values, including
   input-only usage with absent output/total counts.
 - Host controls verify the shared harness, including whitespace acceptance and
