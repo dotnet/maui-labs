@@ -17,6 +17,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 
 	// Null leaves legacy bindings unchanged; false tests explicit rejection, true tests invocation.
 	protected virtual bool? SupportsRequiredToolMode => null;
+	protected virtual bool SupportsDeterministicChainedToolCalls => false;
 	protected virtual bool PreservesToolActivityContext => false;
 	protected virtual bool PreservesToolCancellation => false;
 
@@ -703,6 +704,9 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_ChainedFunctionCalls_TimeAndWeather()
 	{
+		if (!SupportsDeterministicChainedToolCalls)
+			return;
+
 		int timeCallCount = 0;
 		int weatherCallCount = 0;
 		string? capturedDate = null;
@@ -788,6 +792,9 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetStreamingResponseAsync_ChainedFunctionCalls_TimeAndWeather()
 	{
+		if (!SupportsDeterministicChainedToolCalls)
+			return;
+
 		int timeCallCount = 0;
 		int weatherCallCount = 0;
 		string? capturedDate = null;

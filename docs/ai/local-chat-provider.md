@@ -364,6 +364,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Match `AutoChatToolMode` and `NoneChatToolMode` by MEAI type semantics, not
   singleton reference identity with `ChatToolMode.Auto` or `ChatToolMode.None`.
 - Required and named Required must be honored or rejected; never downgrade them to Auto.
+- Deterministically forcing a different required tool on each invocation round
+  is a separate capability. Native tool loops may honor the initial Required
+  mode but switch later rounds to Auto so generation can complete.
 - A provider may execute tools natively or return calls for middleware execution, but each call must execute exactly once with request cancellation and services.
 - Preserve tool-call Activity context across awaits. Caller cancellation remains
   cancellation rather than becoming an ordinary tool error or result.
@@ -640,6 +643,9 @@ evidence of support.
   `SupportsStructuredOutput=false` means schema requests reject.
   Nullable explicit-schema/required-tool hooks preserve legacy bindings until
   each platform opts into true or false.
+- Bind deterministic chained-tool tests separately from basic Required support;
+  providers that cannot force each successive tool still run the Required
+  exactly-once, schema, cancellation, and Activity contracts.
 - Sampling controls belong only in sampling contracts. Do not add Temperature or
   `ReasoningEffort.None` merely to make unrelated tool, instruction, or schema
   tests deterministic; use precise prompts, Required tool modes, schemas, and

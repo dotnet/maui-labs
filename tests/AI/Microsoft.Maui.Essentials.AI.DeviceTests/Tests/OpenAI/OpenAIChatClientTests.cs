@@ -21,6 +21,7 @@ public class OpenAIChatClientCancellationTests : ChatClientCancellationTestsBase
 public class OpenAIChatClientFunctionCallingTestsBase : ChatClientFunctionCallingTestsBase<OpenAIChatClient>
 {
 	protected override bool? SupportsRequiredToolMode => true;
+	protected override bool SupportsDeterministicChainedToolCalls => true;
 	protected override bool PreservesToolActivityContext => true;
 	protected override bool PreservesToolCancellation => true;
 
