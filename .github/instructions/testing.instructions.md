@@ -103,8 +103,13 @@ Use descriptive names that communicate the scenario:
   chat and embedding behavior in the existing generic test bases.
 - Bind applicable suites using capability hooks; keep native SDK, marshalling,
   OS-version, numeric ranges, and provider error-policy tests platform-specific.
+  Every provider-only test must explain the actual native/provider reason its
+  assertion cannot live in a shared test base.
 - Preserve existing assertions and `RequiresModel` traits. New fail-fast rejection
-  tests need no model; inference tests still require the trait.
+  tests need no model; inference tests still require the trait. Put rejection
+  assertions in separate model-free methods on the shared bases, calling the
+  actual bound provider directly. Inference methods return for rejection-only
+  bindings; a scripted host control is not a provider-binding test.
 - Conservative virtual defaults keep legacy Apple and cloud bindings compiling.
   `SupportsRequiredToolMode` and JSON-suite `RequiresExplicitJsonSchema` use null
   for an unmigrated binding, not support. New bindings must choose true or false.
@@ -117,6 +122,9 @@ Use descriptive names that communicate the scenario:
   output/total counts. Telemetry must match only the supplied token counts.
 - Host controls verify the shared harness, not provider implementations. Establish
   Azure/OpenAI compatibility with live cloud tests, not compilation alone.
+- Sampling tests use `ReasoningEffort.None` only when a binding explicitly opts
+  into that option. Keep the default unset: non-reasoning OpenAI models such as
+  GPT-4o reject reasoning options, even when the requested effort is None.
 
 ### What to Test
 

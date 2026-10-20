@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/ci-essentialsai.yml'
       - 'src/AI/**'
       - 'tests/AI/**'
       - 'tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/**'
@@ -18,6 +19,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
     paths:
+      - '.github/workflows/ci-essentialsai.yml'
       - 'src/AI/**'
       - 'tests/AI/**'
       - 'tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/**'

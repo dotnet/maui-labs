@@ -19,7 +19,59 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	protected virtual bool? SupportsRequiredToolMode => null;
 	protected virtual bool PreservesToolActivityContext => false;
 	protected virtual bool PreservesToolCancellation => false;
-	protected virtual void ConfigureFunctionCallingOptions(ChatOptions options) { }
+	// Non-reasoning models may reject even Effort=None; bindings opt in only where supported.
+	protected virtual bool SupportsReasoningEffortNone => false;
+	protected virtual void ConfigureFunctionCallingOptions(ChatOptions options)
+	{
+		if (SupportsReasoningEffortNone && options.Temperature is not null)
+			options.Reasoning = new() { Effort = ReasoningEffort.None };
+	}
+
+	[Theory]
+	[InlineData(false, false, "simple")]
+	[InlineData(false, true, "simple")]
+	[InlineData(true, false, "simple")]
+	[InlineData(true, true, "simple")]
+	[InlineData(false, true, "formatted")]
+	[InlineData(true, true, "formatted")]
+	[InlineData(false, true, "nullable")]
+	[InlineData(true, true, "nullable")]
+	public async Task RequiredToolMode_WhenUnsupported_RejectsBeforeInference(bool streaming, bool named, string schema)
+	{
+		if (SupportsRequiredToolMode is not false)
+			return;
+
+		var calls = 0;
+		string Lookup(string key) { calls++; return "unexpected"; }
+		Dictionary<string, string> Formatted(Guid id, DateTimeOffset timestamp)
+		{
+			calls++;
+			return new() { ["result"] = "unexpected" };
+		}
+		string Nullable(int? value, string? label = null) { calls++; return "unexpected"; }
+		var tool = schema switch
+		{
+			"formatted" => AIFunctionFactory.Create(Formatted, "capture_formatted"),
+			"nullable" => AIFunctionFactory.Create(Nullable, "capture_nullable"),
+			_ => AIFunctionFactory.Create(Lookup, "lookup")
+		};
+		using var client = new T();
+		var options = new ChatOptions
+		{
+			Tools = [tool],
+			ToolMode = named ? ChatToolMode.RequireSpecific(tool.Name) : ChatToolMode.RequireAny
+		};
+		ChatMessage[] messages = [new(ChatRole.User, "Call the tool.")];
+
+		await Assert.ThrowsAsync<NotSupportedException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync(messages, options);
+		});
+		Assert.Equal(0, calls);
+	}
 
 	[Theory]
 	[InlineData(false, false)]
@@ -29,7 +81,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task RequiredToolCallbacks_FinishOnceAndPreserveContext(bool streaming, bool named)
 	{
-		if (SupportsRequiredToolMode is null)
+		if (SupportsRequiredToolMode is not true)
 			return;
 
 		using var source = new CancellationTokenSource(TimeSpan.FromSeconds(60));
@@ -75,10 +127,8 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 
 		var response = await GetRequiredToolResponseAsync(client, messages, options, streaming, source.Token);
 
-		Assert.Equal(SupportsRequiredToolMode is true ? 1 : 0, calls);
+		Assert.Equal(1, calls);
 		Assert.Equal(0, excludedCalls);
-		if (response is null)
-			return;
 		Assert.Contains("REQUIRED_VALUE_42", response.Text, StringComparison.Ordinal);
 		if (PreservesToolActivityContext)
 		{
@@ -180,19 +230,13 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 		Assert.Same(chatSpan, afterAwait);
 	}
 
-	private async Task<ChatResponse?> GetRequiredToolResponseAsync(
+	private static async Task<ChatResponse> GetRequiredToolResponseAsync(
 		IChatClient client, ChatMessage[] messages, ChatOptions options, bool streaming, CancellationToken cancellationToken)
 	{
 		Task<ChatResponse> SendAsync() => (streaming
 			? client.GetStreamingResponseAsync(messages, options, cancellationToken)
 				.ToChatResponseAsync(cancellationToken: cancellationToken)
 			: client.GetResponseAsync(messages, options, cancellationToken)).WaitAsync(TimeSpan.FromSeconds(70));
-
-		if (SupportsRequiredToolMode is false)
-		{
-			await Assert.ThrowsAsync<NotSupportedException>(SendAsync);
-			return null;
-		}
 
 		var response = await SendAsync();
 		Assert.NotNull(response);
@@ -205,7 +249,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task RequiredTool_WithFormattedParametersAndDictionaryReturn_InvokesExactlyOnce(bool streaming)
 	{
-		if (SupportsRequiredToolMode is null)
+		if (SupportsRequiredToolMode is not true)
 			return;
 
 		var calls = 0;
@@ -238,9 +282,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 			"and timestamp 2026-10-20T12:34:56+00:00. Then reply with the result field from the tool.")];
 		var response = await GetRequiredToolResponseAsync(client, messages, options, streaming, timeout.Token);
 
-		Assert.Equal(SupportsRequiredToolMode is true ? 1 : 0, calls);
-		if (response is null)
-			return;
+		Assert.Equal(1, calls);
 		Assert.Equal(Guid.Parse("8d418a4d-fd44-47f4-813d-08b6b40abeca"), receivedId);
 		Assert.Equal(new DateTimeOffset(2026, 10, 20, 12, 34, 56, TimeSpan.Zero), receivedTimestamp);
 		Assert.Contains("FORMATTED_CAPTURED", response.Text, StringComparison.Ordinal);
@@ -252,7 +294,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task RequiredTool_WithNullableParameters_InvokesExactlyOnce(bool streaming)
 	{
-		if (SupportsRequiredToolMode is null)
+		if (SupportsRequiredToolMode is not true)
 			return;
 
 		var calls = 0;
@@ -285,9 +327,7 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 
 		var response = await GetRequiredToolResponseAsync(client, messages, options, streaming, timeout.Token);
 
-		Assert.Equal(SupportsRequiredToolMode is true ? 1 : 0, calls);
-		if (response is null)
-			return;
+		Assert.Equal(1, calls);
 		Assert.Null(receivedValue);
 		Assert.Equal("OPTIONAL_LABEL", receivedLabel);
 		Assert.Contains("NULLABLE_CAPTURED", response.Text, StringComparison.Ordinal);

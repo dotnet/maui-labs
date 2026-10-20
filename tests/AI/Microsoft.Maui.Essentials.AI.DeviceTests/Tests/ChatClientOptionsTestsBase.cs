@@ -13,6 +13,34 @@ public abstract class ChatClientOptionsTestsBase<T>
 {
 	protected virtual bool RejectsStatefulConversationOptions => false;
 	protected virtual bool RequiresExplicitJsonSchema => false;
+	protected virtual bool SupportsReasoningEffortNone => false;
+
+	private void ConfigureSamplingOptions(ChatOptions options)
+	{
+		if (SupportsReasoningEffortNone && options.Temperature is not null)
+			options.Reasoning = new() { Effort = ReasoningEffort.None };
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task SchemaFreeJson_WhenExplicitSchemaRequired_RejectsBeforeInference(bool streaming)
+	{
+		if (!RequiresExplicitJsonSchema)
+			return;
+
+		using var client = new T();
+		var options = new ChatOptions { ResponseFormat = ChatResponseFormat.Json };
+		ChatMessage[] messages = [new(ChatRole.User, "Generate a JSON object.")];
+		var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync(messages, options);
+		});
+		Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+	}
 
 #pragma warning disable MEAI001 // Exercise the pinned MEAI continuation/background options.
 	[Theory]
@@ -63,6 +91,42 @@ public abstract class ChatClientOptionsTestsBase<T>
 		Assert.NotEmpty(response.Messages);
 	}
 
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(true, true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponseAsync_WithComplementarySystemInstructions_PreservesBoth(
+		bool useOptionsInstructions, bool systemInMiddle)
+	{
+		using var client = new T();
+		const string firstInstruction = "The first word is ALPHA.";
+		var options = new ChatOptions
+		{
+			Instructions = useOptionsInstructions ? firstInstruction : null,
+			Temperature = 0
+		};
+		ConfigureSamplingOptions(options);
+		var messages = new List<ChatMessage>();
+		if (!useOptionsInstructions)
+			messages.Add(new(ChatRole.System, firstInstruction));
+		if (systemInMiddle)
+		{
+			messages.Add(new(ChatRole.User, "Hello."));
+			messages.Add(new(ChatRole.Assistant, "Hello."));
+		}
+		messages.Add(new(ChatRole.System, "The second word is BETA."));
+		messages.Add(new(ChatRole.User, "What are the first and second words? Reply with both words only."));
+
+		var response = await client.GetResponseAsync(messages, options);
+
+		Assert.NotNull(response);
+		Assert.NotEmpty(response.Messages);
+		Assert.Contains("ALPHA", response.Text, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("BETA", response.Text, StringComparison.OrdinalIgnoreCase);
+	}
+
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public async Task GetResponseAsync_AcceptsNullOptions()
@@ -92,6 +156,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 			TopK = 10,
 			Seed = 42
 		};
+		ConfigureSamplingOptions(options);
 
 		await client.GetResponseAsync(messages, options);
 	}
@@ -100,6 +165,9 @@ public abstract class ChatClientOptionsTestsBase<T>
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat()
 	{
+		if (RequiresExplicitJsonSchema)
+			return;
+
 		var client = new T();
 		var messages = new List<ChatMessage>
 		{
@@ -109,14 +177,6 @@ public abstract class ChatClientOptionsTestsBase<T>
 		{
 			ResponseFormat = ChatResponseFormat.Json
 		};
-
-		if (RequiresExplicitJsonSchema)
-		{
-			var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
-				client.GetResponseAsync(messages, options));
-			Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
-			return;
-		}
 
 		await client.GetResponseAsync(messages, options);
 	}
@@ -135,6 +195,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 		{
 			Temperature = 2.0f
 		};
+		ConfigureSamplingOptions(options);
 
 		await client.GetResponseAsync(messages, options);
 	}
@@ -187,6 +248,7 @@ public abstract class ChatClientOptionsTestsBase<T>
 			TopK = 10,
 			Seed = 42
 		};
+		ConfigureSamplingOptions(options);
 
 		await foreach (var update in client.GetStreamingResponseAsync(messages, options))
 		{
@@ -198,6 +260,9 @@ public abstract class ChatClientOptionsTestsBase<T>
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
 	public virtual async Task GetStreamingResponseAsync_WithResponseFormat_AcceptsJsonFormat()
 	{
+		if (RequiresExplicitJsonSchema)
+			return;
+
 		var client = new T();
 		var messages = new List<ChatMessage>
 		{
@@ -207,14 +272,6 @@ public abstract class ChatClientOptionsTestsBase<T>
 		{
 			ResponseFormat = ChatResponseFormat.Json
 		};
-
-		if (RequiresExplicitJsonSchema)
-		{
-			var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
-				client.GetStreamingResponseAsync(messages, options).ToChatResponseAsync());
-			Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
-			return;
-		}
 
 		await foreach (var update in client.GetStreamingResponseAsync(messages, options))
 		{

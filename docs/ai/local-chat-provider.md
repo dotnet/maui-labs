@@ -94,6 +94,8 @@ conflict precedence are provider policies, not universal contracts.
 
 - None omits definitions. Auto registration may explicitly degrade to no tools
   when native registration is unavailable because invocation is optional.
+- Match `AutoChatToolMode` and `NoneChatToolMode` by MEAI type semantics, not
+  reference identity with the `ChatToolMode.Auto` and `ChatToolMode.None` singletons.
 - Required and named Required must be honored or rejected, never downgraded to Auto.
 - Preserve parameter/output types and required versus optional properties.
   Reject unrepresentable model-facing schemas rather than substituting a generic schema.
@@ -153,5 +155,11 @@ Shared generic device-test bases contain backend-neutral contracts. Bind
 capability hooks explicitly when adopting a contract, including rejection paths.
 Conservative virtual defaults preserve current providers; an unbound legacy hook
 is not evidence of support. Keep `RequiresModel` traits and existing assertions.
+Required-tool, unsupported structured-output, and explicit-schema rejection
+assertions live in separate model-free methods and call the bound provider
+directly. Positive methods retain `RequiresModel` and return for rejection-only
+bindings. Sampling tests opt into `ReasoningEffort.None` through binding hooks
+only where the provider/model accepts it; leaving that option unset preserves
+compatibility with non-reasoning cloud models.
 Host-side controls can verify the shared harness, but cannot establish live native
 or Azure/OpenAI compatibility.
