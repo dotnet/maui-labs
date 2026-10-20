@@ -16,6 +16,19 @@ public class AppleIntelligenceLogger: NSObject {
 }
 #endif
 
+/// Preserves request-local callback order while retaining the invocation queue as the execution target.
+final class CallbackDispatcher: @unchecked Sendable {
+    private let queue: DispatchQueue
+
+    init(target: DispatchQueue?) {
+        queue = DispatchQueue(label: "Microsoft.Maui.EssentialsAI.Callbacks", target: target)
+    }
+
+    func dispatch(_ callback: @escaping () -> Void) {
+        queue.async(execute: callback)
+    }
+}
+
 /// Known availability values returned through the Objective-C bridge.
 /// Unknown future reasons are still returned as their native string description.
 enum AppleIntelligenceModelAvailabilityNative {
@@ -97,7 +110,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "streamResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let callbacks = CallbackDispatcher(target: OperationQueue.current?.underlyingQueue)
         let textDeltas = PlainTextDeltaEmitter()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -123,7 +136,7 @@ public class ChatClientNative: NSObject {
 
                     let update = ResponseUpdateNative(updateType: .toolCall, toolCallId: id, toolCallName: name, toolCallArguments: arguments)
                     textDeltas.toolCall {
-                        cq?.async { onUpdate(update) } ?? onUpdate(update)
+                        callbacks.dispatch { onUpdate(update) }
                     }
                 },
                 onToolResult: { id, name, result in
@@ -134,11 +147,11 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolResult, toolCallId: id, toolCallName: name, toolCallResult: result)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, callbacks, onComplete) { session, prompt, schema, genOptions in
 
             if let jsonSchema = schema {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -160,7 +173,7 @@ public class ChatClientNative: NSObject {
                     }
 #endif
                     let update = ResponseUpdateNative(updateType: .content, text: delta)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 }
 
                 for try await snapshot in responseStream {
@@ -192,7 +205,7 @@ public class ChatClientNative: NSObject {
                     }
 #endif
                     let update = ResponseUpdateNative(updateType: .content, text: delta)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 }
 
                 for try await response in responseStream {
@@ -223,7 +236,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "getResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let callbacks = CallbackDispatcher(target: OperationQueue.current?.underlyingQueue)
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -247,7 +260,7 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolCall, toolCallId: id, toolCallName: name, toolCallArguments: arguments)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 },
                 onToolResult: { id, name, result in
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -257,11 +270,11 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolResult, toolCallId: id, toolCallName: name, toolCallResult: result)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, callbacks, onComplete) { session, prompt, schema, genOptions in
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
             if let log = AppleIntelligenceLogger.log {
@@ -410,13 +423,12 @@ public class ChatClientNative: NSObject {
         _ messages: [ChatMessageNative],
         _ options: ChatOptionsNative?,
         _ toolWatcher: ToolCallWatcher?,
+        _ callbacks: CallbackDispatcher,
         _ onComplete: @escaping (ChatResponseNative?, NSError?) -> Void,
         operation:
             @escaping (LanguageModelSession, Prompt, GenerationSchema?, GenerationOptions) async throws
             -> (String, ArraySlice<Transcript.Entry>, UsageDetailsNative?)
     ) -> CancellationTokenNative? {
-
-        let cq = OperationQueue.current?.underlyingQueue
 
         guard !messages.isEmpty else {
             let error = NSError.chatError(.emptyMessages, description: "No messages provided.")
@@ -426,7 +438,7 @@ public class ChatClientNative: NSObject {
             }
 #endif
 
-            cq?.async { onComplete(nil, error.toNSError()) } ?? onComplete(nil, error.toNSError())
+            callbacks.dispatch { onComplete(nil, error.toNSError()) }
             return nil
         }
 
@@ -456,7 +468,7 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                cq?.async { onComplete(response, nil) } ?? onComplete(response, nil)
+                callbacks.dispatch { onComplete(response, nil) }
             } catch {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
@@ -465,7 +477,7 @@ public class ChatClientNative: NSObject {
 #endif
 
                 let nativeError = error.toNSError(isCancelled: Task.isCancelled)
-                cq?.async { onComplete(nil, nativeError) } ?? onComplete(nil, nativeError)
+                callbacks.dispatch { onComplete(nil, nativeError) }
             }
         }
 

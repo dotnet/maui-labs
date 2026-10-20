@@ -4,6 +4,45 @@ import XCTest
 @testable import EssentialsAI
 
 final class ChatClientTests: XCTestCase {
+    func testCallbackDispatcherPreservesOrderOnConcurrentOperationQueueTarget() async throws {
+        let targetKey = DispatchSpecificKey<String>()
+        let target = DispatchQueue(label: "CallbackDispatcherTests.Target", attributes: .concurrent)
+        target.setSpecific(key: targetKey, value: "target")
+        let operationQueue = OperationQueue()
+        operationQueue.maxConcurrentOperationCount = 2
+        operationQueue.underlyingQueue = target
+
+        let updateStarted = expectation(description: "Update started")
+        let completionFinished = expectation(description: "Completion finished")
+        let releaseUpdate = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var events: [String] = []
+
+        operationQueue.addOperation {
+            XCTAssertTrue(OperationQueue.current === operationQueue)
+            let dispatcher = CallbackDispatcher(target: OperationQueue.current?.underlyingQueue)
+            dispatcher.dispatch {
+                XCTAssertEqual(DispatchQueue.getSpecific(key: targetKey), "target")
+                updateStarted.fulfill()
+                releaseUpdate.wait()
+                lock.withLock { events.append("update") }
+            }
+            dispatcher.dispatch {
+                XCTAssertEqual(DispatchQueue.getSpecific(key: targetKey), "target")
+                lock.withLock { events.append("completion") }
+                completionFinished.fulfill()
+            }
+        }
+
+        await fulfillment(of: [updateStarted], timeout: 5)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(lock.withLock { events }, [])
+
+        releaseUpdate.signal()
+        await fulfillment(of: [completionFinished], timeout: 5)
+        XCTAssertEqual(lock.withLock { events }, ["update", "completion"])
+    }
+
     func testCancellationMappingPrecedesGenericToolErrors() {
         let cancellation: Error = CancellationError()
         let cancelled = cancellation.toNSError()
