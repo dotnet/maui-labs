@@ -237,7 +237,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - If no recognized content remains, apply the blank-message rule for that role.
 - Reject recognized content when the current OS/model cannot support it.
 - Preserve tool calls and results in history as content, even when native tool registration is unavailable.
-- Honor or reject requested capabilities such as tool registration and structured output; do not silently remove them.
+- Honor or reject required capabilities such as structured output and Required tool invocation; optional Auto tool registration follows the tool-mode policy below.
 - Reject malformed recognized content.
 - Enable conditional features only after runtime OS/model capability checks, with no silent cloud fallback.
 
@@ -293,7 +293,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 
 - Preserve tool names, call IDs, arguments, results, and encounter order.
 - Preserve tool parameter/output types and required versus optional properties; reject unrepresentable schemas clearly during setup, never silently substitute a generic schema.
-- When tools are unsupported, ignore definitions for None and Auto, but reject Required or named Required.
+- None omits tools. Without native tool registration, Auto definitions may explicitly degrade to no tools because invocation is optional; Required and named Required must be honored or rejected.
 - Required and named Required must be honored or rejected; never downgrade them to Auto.
 - A provider may execute tools natively or return calls for middleware execution, but each call must execute exactly once with request cancellation and services.
 
