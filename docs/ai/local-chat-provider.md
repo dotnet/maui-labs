@@ -319,6 +319,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 **Essentials.AI rule**
 
 - Honor a supplied JSON schema natively or reject it; never silently downgrade it to prompt instructions.
+- Map schema constraints with native equivalents; reject unrepresentable constraints rather than silently drop them.
 - Support JSON only with an explicit schema. Reject schema-free `ChatResponseFormat.Json` and `GetResponseAsync<T>(useJsonSchemaResponseFormat: false)` before generation; never prompt-strengthen, strip fences, repair output, or parse ordinary text into JSON.
 - Reject unsupported schema shapes clearly.
 
@@ -371,6 +372,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Preserve order across text, tool calls, tool results, and structured output.
 - Suppress empty updates unless they carry meaningful metadata.
 - Buffer until stable or fail if a native producer revises already emitted content.
+- Reconcile native final content with emitted progress: emit nothing if equal, only the missing suffix if extended, and fail explicitly if divergent.
 
 **Essentials.AI implementation**
 
