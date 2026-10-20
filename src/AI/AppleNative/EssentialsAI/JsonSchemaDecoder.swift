@@ -173,14 +173,14 @@ class JsonSchemaDecoder {
                 "type", "title", "description", "properties", "required", "items",
                 "additionalProperties", "enum", "const", "pattern", "minimum", "maximum",
                 "minItems", "maxItems", "anyOf",
-                "$schema", "$id", "$comment", "$defs", "definitions", "default", "examples"
+                "$schema", "$id", "$comment", "$defs", "definitions", "default", "examples", "format"
             ]
             if let unsupported = keys.subtracting(supported).sorted().first {
                 throw SchemaError(path: "\(path).\(unsupported)",
                                   reason: "'\(unsupported)' is not supported by Foundation Models; inline references and use representable types or simple anyOf branches.")
             }
             constraintKeys = keys.subtracting([
-                "$schema", "$id", "$comment", "$defs", "definitions", "title", "description", "default", "examples"
+                "$schema", "$id", "$comment", "$defs", "definitions", "title", "description", "default", "examples", "format"
             ])
             if keys.contains("additionalProperties"),
                (try? container.decode(Bool.self, forKey: Key(stringValue: "additionalProperties")!)) != false {

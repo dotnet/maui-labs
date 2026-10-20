@@ -125,13 +125,16 @@ options do not override that dynamic mode. See the shared guide for the MEAI mod
 
 ## Native schema mapping
 
-Response and tool schemas preserve nullable values independently of parent
+Response and tool-parameter schemas preserve nullable values independently of parent
 `required` properties. Native guides carry string constants/enums, a scalar ASCII
 regex subset, numeric bounds, and array/item bounds. Unrepresentable constraints,
 references, dictionaries, and compound enum/const-plus-pattern intersections fail
 with schema/property context rather than being dropped. The current system model
 can reject regex guides with `unsupportedGenerationGuide`; that error is propagated
 without substituting another schema.
+JSON Schema `format` is annotation metadata, not a native constraint. Tool return
+schemas are not used for generation and do not gate registration; parameter
+schemas remain strict.
 
 ## Streaming and token usage
 

@@ -446,7 +446,7 @@ final class JsonSchemaDecoderTests: XCTestCase {
     func testUnsupportedConstraintsAreRejectedAtTheirPropertyPaths() {
         let constraints: [(String, String)] = [
             ("exclusiveMinimum", "1"), ("exclusiveMaximum", "10"), ("multipleOf", "2"),
-            ("minLength", "1"), ("maxLength", "10"), ("format", #""email""#),
+            ("minLength", "1"), ("maxLength", "10"),
             ("minProperties", "1"), ("maxProperties", "2"), ("uniqueItems", "true"),
             ("contains", #"{"type":"string"}"#), ("minContains", "1"), ("maxContains", "2"),
             ("prefixItems", #"[{"type":"string"}]"#), ("patternProperties", #"{"x":{"type":"string"}}"#),
@@ -514,23 +514,53 @@ final class JsonSchemaDecoderTests: XCTestCase {
                        path: "$.anyOf[1].minLength", reason: "not supported")
     }
 
-    func testToolNativeRejectsInvalidArgumentsAndOutputInsteadOfSubstitutingString() throws {
-        for role in ["arguments", "output"] {
-            for invalid in ["{", #"{"type":"object","properties":{"value":{"type":"object","additionalProperties":{"type":"string"}}}}"#] {
-                let tool = SchemaTool(argumentsSchema: role == "arguments" ? invalid : #"{"type":"object","properties":{}}"#,
-                                      outputSchema: role == "output" ? invalid : #"{"type":"string"}"#)
-                XCTAssertThrowsError(try ToolNative(tool, nil, nil)) { error in
-                    XCTAssertTrue(error.localizedDescription.contains(tool.name), error.localizedDescription)
-                    XCTAssertTrue(error.localizedDescription.contains("\(role) schema"), error.localizedDescription)
-                    XCTAssertTrue(error.localizedDescription.contains("$"), error.localizedDescription)
-                    if invalid != "{" {
-                        XCTAssertTrue(error.localizedDescription.contains("$.properties.value.additionalProperties"), error.localizedDescription)
-                    }
+    func testFormatAnnotationsDoNotConstrainNativeStringSchemas() throws {
+        for format in ["uuid", "date-time", "date", "time", "uri"] {
+            let schema = try XCTUnwrap(JsonSchemaDecoder.parse("""
+            {"type":"object","properties":{"value":{"type":"string","format":"\(format)"}},"required":["value"]}
+            """))
+            let expected = DynamicGenerationSchema(name: "Object", properties: [
+                .init(name: "value", schema: .init(type: String.self), isOptional: false)
+            ])
+            try assertEqual(schema, GenerationSchema(root: expected, dependencies: []))
+        }
+        XCTAssertNoThrow(try JsonSchemaDecoder.parse("""
+        {"anyOf":[{"type":"string"}],"format":"uuid"}
+        """))
+        guard #available(macOS 26.4, *) else { return }
+        let nullable = try XCTUnwrap(JsonSchemaDecoder.parse("""
+        {"type":["string","null"],"format":"date-time"}
+        """))
+        try assertEqual(nullable, GenerationSchema(root: .init(name: "Object_Union", anyOf: [
+            .init(type: String.self), .null
+        ]), dependencies: []))
+    }
+
+    func testToolNativeRejectsInvalidArgumentsInsteadOfSubstitutingString() throws {
+        for invalid in ["{", #"{"type":"object","properties":{"value":{"type":"object","additionalProperties":{"type":"string"}}}}"#] {
+            let tool = SchemaTool(argumentsSchema: invalid, outputSchema: #"{"type":"string"}"#)
+            XCTAssertThrowsError(try ToolNative(tool, nil, nil)) { error in
+                XCTAssertTrue(error.localizedDescription.contains(tool.name), error.localizedDescription)
+                XCTAssertTrue(error.localizedDescription.contains("arguments schema"), error.localizedDescription)
+                XCTAssertTrue(error.localizedDescription.contains("$"), error.localizedDescription)
+                if invalid != "{" {
+                    XCTAssertTrue(error.localizedDescription.contains("$.properties.value.additionalProperties"), error.localizedDescription)
                 }
             }
         }
-        let valid = try ToolNative(SchemaTool(argumentsSchema: "{}", outputSchema: #"{"type":"integer"}"#), nil, nil)
-        try assertEqual(valid.output, GenerationSchema(root: .init(type: Int.self), dependencies: []))
+    }
+
+    func testToolNativeDoesNotGateRegistrationOnUnusedOutputSchemas() throws {
+        let arguments = #"{"type":"object","properties":{"value":{"type":"string"}},"required":["value"]}"#
+        for output in [
+            "{",
+            #"{"type":"string","format":"date-time"}"#,
+            #"{"type":"object","additionalProperties":{"type":"string"}}"#,
+            #"{"type":["array","null"],"items":{"oneOf":[{"type":"string"},{"type":"integer"}]}}"#
+        ] {
+            let tool = try ToolNative(SchemaTool(argumentsSchema: arguments, outputSchema: output), nil, nil)
+            try assertEqual(tool.parameters, XCTUnwrap(JsonSchemaDecoder.parse(arguments)))
+        }
     }
 
     private final class SchemaTool: NSObject, AIToolNative, @unchecked Sendable {

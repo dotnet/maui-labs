@@ -62,11 +62,9 @@ public class AppleIntelligenceChatClientValidationTests
 
 	// Foundation Models must reject dictionary schemas during native setup, not replace them with String.
 	[Theory]
-	[InlineData(false, false)]
-	[InlineData(false, true)]
-	[InlineData(true, false)]
-	[InlineData(true, true)]
-	public async Task ToolSchema_WithDictionary_RejectsBeforeInvocation(bool dictionaryOutput, bool streaming)
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task ToolSchema_WithDictionaryArguments_RejectsBeforeInvocation(bool streaming)
 	{
 		var calls = 0;
 		string ReadDictionary(Dictionary<string, string> values)
@@ -74,14 +72,7 @@ public class AppleIntelligenceChatClientValidationTests
 			Interlocked.Increment(ref calls);
 			return "unused";
 		}
-		Dictionary<string, string> ReturnDictionary()
-		{
-			Interlocked.Increment(ref calls);
-			return [];
-		}
-		var tool = dictionaryOutput
-			? AIFunctionFactory.Create(ReturnDictionary, "dictionary_output")
-			: AIFunctionFactory.Create(ReadDictionary, "dictionary_arguments");
+		var tool = AIFunctionFactory.Create(ReadDictionary, "dictionary_arguments");
 		using var client = new AppleIntelligenceChatClient();
 		var options = new ChatOptions { Tools = [tool] };
 
@@ -96,6 +87,56 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.Contains(tool.Name, error.Message, StringComparison.Ordinal);
 		Assert.Contains("additionalProperties", error.Message, StringComparison.Ordinal);
 		Assert.Equal(0, calls);
+	}
+
+	// Apple's Tool protocol generates arguments, not return values; CLR format annotations and dictionary results must not gate registration.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task RequiredTool_WithFormattedParametersAndDictionaryReturn_InvokesExactlyOnce(bool streaming)
+	{
+		if (!OperatingSystem.IsIOSVersionAtLeast(27) && !OperatingSystem.IsMacCatalystVersionAtLeast(27))
+			return;
+
+		var calls = 0;
+		Guid? receivedId = null;
+		DateTimeOffset? receivedTimestamp = null;
+		Dictionary<string, string> CaptureFormatted(Guid id, DateTimeOffset timestamp)
+		{
+			Interlocked.Increment(ref calls);
+			receivedId = id;
+			receivedTimestamp = timestamp;
+			return new() { ["result"] = "FORMATTED_CAPTURED" };
+		}
+
+		var tool = AIFunctionFactory.Create(CaptureFormatted, "capture_formatted");
+		var properties = tool.JsonSchema.GetProperty("properties");
+		Assert.Equal("uuid", properties.GetProperty("id").GetProperty("format").GetString());
+		Assert.Equal("date-time", properties.GetProperty("timestamp").GetProperty("format").GetString());
+		Assert.True(tool.ReturnJsonSchema.HasValue);
+		Assert.True(tool.ReturnJsonSchema.Value.TryGetProperty("additionalProperties", out _));
+
+		using var client = new AppleIntelligenceChatClient();
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+		var options = new ChatOptions
+		{
+			Tools = [tool],
+			ToolMode = ChatToolMode.RequireSpecific(tool.Name),
+			Temperature = 0,
+			MaxOutputTokens = 128,
+		};
+		ChatMessage[] messages = [new(ChatRole.User,
+			"Call capture_formatted exactly once with id 8d418a4d-fd44-47f4-813d-08b6b40abeca " +
+			"and timestamp 2026-10-20T12:34:56+00:00. Then reply with the result field from the tool.")];
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync()
+			: await client.GetResponseAsync(messages, options, timeout.Token);
+
+		Assert.Equal(1, calls);
+		Assert.Equal(Guid.Parse("8d418a4d-fd44-47f4-813d-08b6b40abeca"), receivedId);
+		Assert.Equal(new DateTimeOffset(2026, 10, 20, 12, 34, 56, TimeSpan.Zero), receivedTimestamp);
+		Assert.Contains("FORMATTED_CAPTURED", response.Text, StringComparison.Ordinal);
 	}
 
 	// Exercises MEAI's nullable C# parameter schema through Apple's Required native profile and callback.

@@ -9,7 +9,6 @@ final class ToolNative: Tool {
     let name: String
     let description: String
     let parameters: GenerationSchema
-    let output: GenerationSchema
 
     init(
         _ tool: AIToolNative,
@@ -24,7 +23,6 @@ final class ToolNative: Tool {
         self.description = tool.desc
 
         self.parameters = try Self.parseSchema(tool.argumentsSchema, toolName: tool.name, role: "arguments")
-        self.output = try Self.parseSchema(tool.outputSchema, toolName: tool.name, role: "output")
     }
 
     private static func parseSchema(_ json: String, toolName: String, role: String) throws -> GenerationSchema {
