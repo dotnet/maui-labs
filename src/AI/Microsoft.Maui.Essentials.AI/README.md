@@ -11,7 +11,7 @@ No cloud service is required.
 | Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
 |----------|---------------------|-------------|-----------------------------------|
 | iOS / Mac Catalyst / macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | Apple NaturalLanguage |
-| Windows | Not supported | Not supported | Not supported |
+| Windows 11 24H2+ on supported Copilot+ hardware | Windows AI, including structured responses | Not supported | Not supported |
 | Android | Not supported | Not supported | Not supported |
 
 The Apple chat client does not generate images. On-device models must be
@@ -36,6 +36,22 @@ using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
 
 builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
+```
+
+Register the Windows client in a packaged app on a supported Windows system:
+
+```csharp
+builder.Services.AddSingleton<IChatClient>(new WindowsAIChatClient());
+```
+
+Windows requires an MSIX package with the `systemAIModels` capability. Check
+the concrete provider status before enabling chat, and prepare the model only
+through the explicit awaited API:
+
+```csharp
+var status = await WindowsAIChatClient.GetModelStatusAsync();
+if (status.Availability == ChatModelAvailability.NotReady)
+    await WindowsAIChatClient.EnsureReadyAsync(cancellationToken);
 ```
 
 ## Chat
@@ -201,4 +217,5 @@ The corresponding NaturalLanguage model asset must be installed on the device.
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)
+- [Windows AI language models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-language-models.md)
 - [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)

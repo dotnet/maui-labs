@@ -19,7 +19,8 @@ compares providers interactively.
 ## Build
 
 Use the .NET 10 SDK pinned in the repository's `global.json` and matching
-MAUI workloads. Apple native bindings require Xcode.
+MAUI workloads. Apple native bindings require Xcode. Windows targets require
+Windows build and packaging tools.
 
 The library always targets `net10.0` and Android. Apple targets are added on
 non-Linux hosts, using either the default reference packs or the OS 27 packs
@@ -34,6 +35,13 @@ dotnet build src/AI/EssentialsAI.slnf
 # Apple 27 reference packs, with Xcode 27 and matching workloads installed
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
   -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+```
+
+Build the Windows provider on Windows:
+
+```powershell
+dotnet build src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj `
+  -f net10.0-windows10.0.19041.0
 ```
 
 Use the corresponding `ios27.0` or `macos27.0` framework for those platforms.
@@ -62,7 +70,8 @@ The overrides keep the build portable and enable Arcade's test infrastructure
 for this existing test project without building the Apple targets.
 Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
-Apple device/runtime and model availability; portable tests do not run a model.
+Apple or Windows device/runtime and model availability; portable tests do not
+run a model.
 
 Run every model-free provider binding on Mac Catalyst:
 
@@ -98,6 +107,7 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
 ```
 
 - `AppleNative/EssentialsAI/`: Swift bridge and binding definitions, producing `.xcframework` bundles.
+- `Microsoft.Maui.Essentials.AI/Platform/Windows/`: Windows chat client and model readiness.
 - `Microsoft.Maui.Essentials.AI/Platform/`: platform clients and streaming helpers.
 - `JsonStreamChunker`, `PlainTextStreamChunker`, and `StreamingResponseHandler`: cumulative-response deltas and streaming updates.
 - `AppleBindings.targets`: native artifact build and packaging.
@@ -105,4 +115,5 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
 Further design documentation:
 [Local chat provider contract](../../docs/ai/local-chat-provider.md),
 [Apple image input](../../docs/ai/apple-foundation-models-image-input.md) and
-[JSON stream chunking](../../docs/ai/json-stream-chunker-design.md).
+[JSON stream chunking](../../docs/ai/json-stream-chunker-design.md), and
+[Windows AI language models](../../docs/ai/windows-ai-language-models.md).
