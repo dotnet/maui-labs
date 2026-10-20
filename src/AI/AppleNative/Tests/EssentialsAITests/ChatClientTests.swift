@@ -4,6 +4,21 @@ import XCTest
 @testable import EssentialsAI
 
 final class ChatClientTests: XCTestCase {
+    func testCancellationMappingPrecedesGenericToolErrors() {
+        let cancellation: Error = CancellationError()
+        let cancelled = cancellation.toNSError()
+        XCTAssertEqual(cancelled.domain, "ChatClientNative")
+        XCTAssertEqual(cancelled.code, ChatClientError.cancelled.rawValue)
+
+        let wrappedToolError: Error = NSError(domain: "WrappedToolFailure", code: 42)
+        let taskCancelled = wrappedToolError.toNSError(isCancelled: true)
+        XCTAssertEqual(taskCancelled.domain, "ChatClientNative")
+        XCTAssertEqual(taskCancelled.code, ChatClientError.cancelled.rawValue)
+        let ordinary = wrappedToolError.toNSError()
+        XCTAssertEqual(ordinary.domain, "WrappedToolFailure")
+        XCTAssertEqual(ordinary.code, 42)
+    }
+
     func testAvailabilityPreservesEveryNativeReason() {
         XCTAssertEqual(ChatClientNative.availabilityName(.available),
                        AppleIntelligenceModelAvailabilityNative.available)

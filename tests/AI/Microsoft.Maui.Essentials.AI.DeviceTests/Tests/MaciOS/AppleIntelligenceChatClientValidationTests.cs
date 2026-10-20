@@ -14,6 +14,52 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientValidationTests
 {
+	// Foundation Models may wrap a cancelled managed tool callback; the public request must retain caller cancellation.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ToolInvocation_CallerCancellation_PreservesCancelledTask(bool streaming)
+	{
+		if (!OperatingSystem.IsIOSVersionAtLeast(27) && !OperatingSystem.IsMacCatalystVersionAtLeast(27))
+			return;
+
+		var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		async Task<string> BlockUntilCancelled(CancellationToken cancellationToken)
+		{
+			entered.TrySetResult();
+			await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+			return "unreachable";
+		}
+		using var client = new AppleIntelligenceChatClient();
+		using var cancellation = new CancellationTokenSource();
+		var options = new ChatOptions
+		{
+			Tools = [AIFunctionFactory.Create(BlockUntilCancelled, "blocking_tool")],
+			ToolMode = ChatToolMode.RequireSpecific("blocking_tool"),
+			Temperature = 0,
+		};
+		ChatMessage[] messages = [new(ChatRole.User, "Call blocking_tool now.")];
+		var request = streaming
+			? client.GetStreamingResponseAsync(messages, options, cancellation.Token).ToChatResponseAsync()
+			: client.GetResponseAsync(messages, options, cancellation.Token);
+
+		try
+		{
+			await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+			cancellation.Cancel();
+			var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+				request.WaitAsync(TimeSpan.FromSeconds(15)));
+
+			Assert.Equal(cancellation.Token, error.CancellationToken);
+			Assert.True(request.IsCanceled);
+		}
+		finally
+		{
+			cancellation.Cancel();
+		}
+	}
+
 	// Foundation Models must reject dictionary schemas during native setup, not replace them with String.
 	[Theory]
 	[InlineData(false, false)]

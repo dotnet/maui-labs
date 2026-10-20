@@ -464,7 +464,8 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                cq?.async { onComplete(nil, error.toNSError()) } ?? onComplete(nil, error.toNSError())
+                let nativeError = error.toNSError(isCancelled: Task.isCancelled)
+                cq?.async { onComplete(nil, nativeError) } ?? onComplete(nil, nativeError)
             }
         }
 
@@ -787,7 +788,11 @@ extension NSError {
 
 extension Error {
 
-    fileprivate func toNSError() -> NSError {
+    func toNSError(isCancelled: Bool = false) -> NSError {
+        if isCancelled || self is CancellationError {
+            return NSError.chatError(.cancelled, description: "Request was cancelled.")
+        }
+
         switch self
         {
         case let error as LanguageModelSession.GenerationError:
@@ -825,9 +830,6 @@ extension Error {
                     NSLocalizedDescriptionKey: error.localizedDescription,
                 ]
             )
-
-        case is CancellationError:
-            return NSError.chatError(.cancelled, description: "Request was cancelled.")
 
         case let error as NSError:
             return error

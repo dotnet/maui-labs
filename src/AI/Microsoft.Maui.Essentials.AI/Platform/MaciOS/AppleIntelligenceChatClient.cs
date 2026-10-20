@@ -158,7 +158,11 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			onComplete: (response, error) =>
 			{
 				registration.Dispose();
-				if (error is not null)
+				if (cancellationToken.IsCancellationRequested)
+				{
+					handler.CompleteCancelled(cancellationToken);
+				}
+				else if (error is not null)
 				{
 					if (error.Domain == nameof(ChatClientNative) && error.Code == (int)ChatClientError.Cancelled)
 						handler.CompleteCancelled(cancellationToken);
@@ -237,7 +241,11 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			onComplete: (finalResult, error) =>
 			{
 				registration.Dispose();
-				if (error is not null)
+				if (cancellationToken.IsCancellationRequested)
+				{
+					handler.CompleteWithError(new OperationCanceledException(cancellationToken));
+				}
+				else if (error is not null)
 				{
 					if (error.Domain == nameof(ChatClientNative) && error.Code == (int)ChatClientError.Cancelled)
 						handler.CompleteWithError(new OperationCanceledException(cancellationToken));

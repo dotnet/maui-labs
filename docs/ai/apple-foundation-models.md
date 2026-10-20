@@ -114,6 +114,8 @@ Foundation Models invokes registered `AIFunction` tools inside the native
 session. Native callbacks run outside the managed request thread, so the bridge
 captures and restores the managed execution context. Tool execution, logs, and
 child activities remain correlated with the MEAI chat activity across awaits.
+Caller cancellation remains cancellation even when Foundation Models wraps a
+managed tool callback failure.
 
 OS 26 uses the native default tool behavior. OS 27 exposes explicit allowed,
 required, and disallowed modes. Required uses a `LanguageModelSession.DynamicProfile`
@@ -125,7 +127,8 @@ options do not override that dynamic mode. See the shared guide for the MEAI mod
 
 Foundation Models emits cumulative plain-text snapshots. The Swift bridge
 converts them into fail-closed append-only deltas before crossing into managed
-code. Structured generation uses native completion metadata to produce
+code, comparing exact UTF-8 prefixes and resetting the text epoch before each
+tool-call event. Structured generation uses native completion metadata to produce
 append-only JSON deltas.
 
 OS 27 exposes input, output, total, cached-input, and reasoning token counts.
