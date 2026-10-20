@@ -217,14 +217,17 @@ public class AppleIntelligenceChatClientImageTests
 
 	// A recognized UIImage without a CGImage has a malformed supported payload, not an unknown content type.
 	[Fact]
-	public void ToNative_EmptyUIImage_ThrowsArgumentException()
+	public async Task ToNative_EmptyUIImage_ThrowsArgumentException()
 	{
-		using var image = new UIImage();
-		var content = new DataContent(CreatePngBytes(), "image/png") { RawRepresentation = image };
+		await MainThread.InvokeOnMainThreadAsync(() =>
+		{
+			using var image = new UIImage();
+			var content = new DataContent(CreatePngBytes(), "image/png") { RawRepresentation = image };
 
-		var error = Assert.Throws<ArgumentException>(() => AppleIntelligenceChatClient.ToNative(content));
+			var error = Assert.Throws<ArgumentException>(() => AppleIntelligenceChatClient.ToNative(content));
 
-		Assert.Contains("no usable image payload", error.Message, StringComparison.Ordinal);
+			Assert.Contains("no usable image payload", error.Message, StringComparison.Ordinal);
+		});
 	}
 
 	// Apple's file:// input is supported only when ImageIO can decode its payload.
