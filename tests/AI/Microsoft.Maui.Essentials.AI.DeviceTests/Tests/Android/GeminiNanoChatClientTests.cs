@@ -89,7 +89,6 @@ public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase
 {
 	// The adapter deliberately rejects structured output rather than pretending a prompt is a schema guarantee.
 	protected override bool SupportsStructuredOutput => false;
-	protected override bool SupportsReasoningEffortNone => true;
 
 	// ML Kit's untyped Prompt API adapter also rejects schema-free JSON.
 	[Fact]
