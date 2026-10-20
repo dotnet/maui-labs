@@ -77,12 +77,12 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Map native states to the most appropriate shared availability value without losing the provider reason.
 - Treat reported capabilities as immutable, best-effort guidance; generation remains authoritative.
 - Refresh status rather than caching it.
-- Expose an awaited setup or download operation only when the native platform can actively prepare the model.
-- Generation still rechecks availability and reports failures clearly.
+- Generation must recheck availability and fail clearly when the model is not ready; it must never initiate model setup or download.
+- Model preparation, where supported by Windows or a future Android provider, must be an explicit awaited provider API, separate from generation.
 
 **Essentials.AI implementation**
 
-- **Apple:** expose current status and effective capabilities. Apple supplies no operation to make the model ready.
+- **Apple:** expose current status and effective capabilities, with no preparation API because model assets are OS-managed.
 - **Windows:** To be determined.
 - **Android:** To be determined.
 
