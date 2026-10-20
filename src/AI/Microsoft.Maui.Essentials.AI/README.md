@@ -119,6 +119,7 @@ The corresponding model asset must be installed.
 
 - [Chat provider implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) — shared behavior and provider policy.
 - [Apple Foundation Models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models.md) — Apple toolchain, images, availability, bridge mechanics, and validation.
+- [Canonical Apple JSON Schema profile](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-json-schema-profile.md) — supported schemas, optionality, numeric fidelity, and actionable rejections.
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Source and contributor build instructions](https://github.com/dotnet/maui-labs/tree/main/src/AI)

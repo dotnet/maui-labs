@@ -17,9 +17,9 @@ final class StructuredStreamingLiveTests: XCTestCase {
     private static let exactValues = ExactCase(
         prompt: "Return exactly values [123] with no other semantic variation.",
         schema: """
-        {"type":"object","title":"ExactValues","properties":{
+        {"type":"object","title":"AppleSchema0","properties":{
           "values":{"type":"array","items":{"type":"integer"}}
-        },"required":["values"]}
+        },"required":["values"],"additionalProperties":false}
         """,
         expected: #"{"values":[123]}"#)
 
@@ -29,15 +29,15 @@ final class StructuredStreamingLiveTests: XCTestCase {
         {"label":"test","ready":true,"amount":-12.75,"values":[10,20,30],"details":{"text":"all done","enabled":false}}
         """,
         schema: """
-        {"type":"object","title":"ExactMixed","properties":{
+        {"type":"object","title":"AppleSchema0","properties":{
+          "amount":{"type":"number"},
+          "details":{"type":"object","title":"AppleSchema1","properties":{
+            "enabled":{"type":"boolean"},"text":{"type":"string"}
+          },"required":["enabled","text"],"additionalProperties":false},
           "label":{"type":"string"},
           "ready":{"type":"boolean"},
-          "amount":{"type":"number"},
-          "values":{"type":"array","items":{"type":"integer"}},
-          "details":{"type":"object","title":"Details","properties":{
-            "text":{"type":"string"},"enabled":{"type":"boolean"}
-          },"required":["text","enabled"]}
-        },"required":["label","ready","amount","values","details"]}
+          "values":{"type":"array","items":{"type":"integer"}}
+        },"required":["amount","details","label","ready","values"],"additionalProperties":false}
         """,
         expected: #"{"label":"test","ready":true,"amount":-12.75,"values":[10,20,30],"details":{"text":"all done","enabled":false}}"#)
 
@@ -93,6 +93,27 @@ final class StructuredStreamingLiveTests: XCTestCase {
 
     // MARK: - Native constraint fidelity
 
+    // Larger Int64 bounds can encode correctly but round in GeneratedContent JSON; managed
+    // compilation rejects them. Exercise the supported exact-transport endpoints on the model.
+    func testLiveSafeIntegerTransportEndpointsRemainExact() async throws {
+        guard try LiveTests.requireModel() else { return }
+        for value in [-9_007_199_254_740_991, 9_007_199_254_740_991] {
+            let schema = """
+            {"type":"object","title":"AppleSchema0","properties":{
+              "value":{"type":"integer","minimum":\(value),"maximum":\(value)}
+            },"required":["value"],"additionalProperties":false}
+            """
+            for streaming in [false, true] {
+                let run = try await LiveTests.runClient(
+                    prompt: "Return the exact integer \(value) as value.", schema: schema, streaming: streaming, maxTokens: 64)
+                XCTAssertNil(run.error)
+                let result = try JSONDecoder().decode([String: Int].self, from: Data(run.finalText.utf8))
+                XCTAssertEqual(result["value"], value, run.finalText)
+                if streaming { XCTAssertEqual(try canonicalJSON(run.contentUpdates.joined()), try canonicalJSON(run.finalText)) }
+            }
+        }
+    }
+
     func testLiveSupportedConstraintsInIsolation() async throws {
         guard try LiveTests.requireModel() else { return }
         let cases = [
@@ -111,7 +132,7 @@ final class StructuredStreamingLiveTests: XCTestCase {
         ]
         for (name, value, example) in cases {
             let schema = try XCTUnwrap(JsonSchemaDecoder.parse("""
-            {"type":"object","title":"Probe","properties":{"value":\(value)},"required":["value"]}
+            {"type":"object","title":"AppleSchema0","properties":{"value":\(value)},"required":["value"],"additionalProperties":false}
             """))
             do {
                 let response = try await LanguageModelSession(model: .default).respond(
@@ -126,13 +147,13 @@ final class StructuredStreamingLiveTests: XCTestCase {
     }
 
     private static let boundedSchema = """
-    {"type":"object","title":"BoundedValues","properties":{
-      "count":{"type":"integer","minimum":2,"maximum":4},
+    {"type":"object","title":"AppleSchema0","properties":{
       "amount":{"type":"number","minimum":1.25,"maximum":2.5},
-      "values":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"integer","minimum":10,"maximum":20}},
+      "count":{"type":"integer","minimum":2,"maximum":4},
       "label":{"type":"string","enum":["bounded","valid"]},
-      "marker":{"type":"string","const":"fixed"}
-    },"required":["count","amount","values","label","marker"]}
+      "marker":{"type":"string","const":"fixed"},
+      "values":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"integer","minimum":10,"maximum":20}}
+    },"required":["amount","count","label","marker","values"],"additionalProperties":false}
     """
 
     private static let boundedPrompt = """
@@ -180,72 +201,6 @@ final class StructuredStreamingLiveTests: XCTestCase {
         XCTAssertEqual(object["marker"] as? String, "fixed")
     }
 
-    private static let patternSchema = """
-    {"type":"object","title":"PatternValue","properties":{
-      "code":{"type":"string","pattern":"^A[0-9]{2}$"}
-    },"required":["code"]}
-    """
-
-    // SystemLanguageModel may reject regex guides even though GenerationSchema can encode them.
-    func testLivePatternGuideIsHonoredOrRejectedExplicitlyBySystemModel() async throws {
-        guard try LiveTests.requireModel() else { return }
-        do {
-            let run = try await LiveTests.streamDirect(
-                prompt: "Return a code A12.", schema: Self.patternSchema, maxTokens: 64)
-            try assertPatternValue(run.finalJSON)
-        } catch {
-            XCTAssertTrue(isUnsupportedGuide(error), "Unexpected pattern error: \(error)")
-        }
-    }
-
-    func testLivePatternGuidePreservesExplicitNativeRejectionThroughChatClient() async throws {
-        guard try LiveTests.requireModel() else { return }
-        for streaming in [false, true] {
-            let run = try await LiveTests.runClient(
-                prompt: "Return a code A12.", schema: Self.patternSchema, streaming: streaming, maxTokens: 64)
-            if let error = run.error {
-                XCTAssertTrue(isUnsupportedGuide(error), "Unexpected pattern error, streaming=\(streaming): \(error)")
-                XCTAssertTrue(run.finalText.isEmpty, "A rejected guide must not become an unconstrained response.")
-                XCTAssertTrue(run.contentUpdates.isEmpty, "A rejected guide must not emit unconstrained deltas.")
-            } else {
-                try assertPatternValue(run.finalText)
-                if streaming {
-                    XCTAssertEqual(try canonicalJSON(run.contentUpdates.joined()), try canonicalJSON(run.finalText))
-                }
-            }
-        }
-    }
-
-    private func assertPatternValue(_ json: String) throws {
-        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
-        let code = try XCTUnwrap(object["code"] as? String)
-        XCTAssertNotNil(try code.wholeMatch(of: Regex<AnyRegexOutput>("A[0-9]{2}")), json)
-    }
-
-    private func isUnsupportedGuide(_ error: Error) -> Bool {
-        if #available(macOS 27.0, *),
-           let native = error as? LanguageModelError, case .unsupportedGenerationGuide = native {
-            return true
-        }
-        if let native = error as? LanguageModelSession.GenerationError, case .unsupportedGuide = native {
-            return true
-        }
-        // The Objective-C bridge exposes localized fields rather than the native enum identity.
-        var expected = [LanguageModelSession.GenerationError.unsupportedGuide(
-            .init(debugDescription: "UnsupportedGuide")).toNSError()]
-        if #available(macOS 27.0, *) {
-            expected.append(LanguageModelError.unsupportedGenerationGuide(
-                .init(schemaName: nil, debugDescription: "UnsupportedGuide", metadata: [:])).toNSError())
-        }
-        let bridged = error as NSError
-        return expected.contains {
-            bridged.domain == $0.domain && bridged.code == $0.code &&
-                bridged.localizedDescription == $0.localizedDescription &&
-                bridged.userInfo[NSLocalizedRecoverySuggestionErrorKey] as? String ==
-                    $0.userInfo[NSLocalizedRecoverySuggestionErrorKey] as? String
-        }
-    }
-
     // MARK: - Long strings emit actual partial values
 
     private struct LongStringCase {
@@ -260,7 +215,7 @@ final class StructuredStreamingLiveTests: XCTestCase {
         value: { try XCTUnwrap(JSONSerialization.jsonObject(with: Data($0.utf8), options: .fragmentsAllowed) as? String) })
 
     private static let longProperty = LongStringCase(
-        schema: #"{"type":"object","title":"Story","properties":{"text":{"type":"string"}},"required":["text"]}"#,
+        schema: #"{"type":"object","title":"AppleSchema0","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}"#,
         prompt: "Write one long paragraph of at least 120 words about the history of lighthouses in the text property.",
         value: { json in
             let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
@@ -269,9 +224,9 @@ final class StructuredStreamingLiveTests: XCTestCase {
 
     private static let longNested = LongStringCase(
         schema: """
-        {"type":"object","title":"Report","properties":{"sections":{"type":"array","items":{
-          "type":"object","title":"Section","properties":{"title":{"type":"string"},"text":{"type":"string"}},
-          "required":["title","text"]}}},"required":["sections"]}
+        {"type":"object","title":"AppleSchema0","properties":{"sections":{"type":"array","items":{
+          "type":"object","title":"AppleSchema1","properties":{"text":{"type":"string"},"title":{"type":"string"}},
+          "required":["text","title"],"additionalProperties":false}}},"required":["sections"],"additionalProperties":false}
         """,
         prompt: "Write a report with exactly one section titled Lighthouses whose text is one long paragraph of at least 120 words.",
         value: { json in
@@ -353,17 +308,16 @@ final class StructuredStreamingLiveTests: XCTestCase {
     private final class WeatherTool: NSObject, AIToolNative, @unchecked Sendable {
         let name = "lookupWeather"
         let desc = "Looks up the current weather for a location."
-        let argumentsSchema = #"{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}"#
-        let outputSchema = #"{"type":"object","title":"Weather","properties":{"condition":{"type":"string"},"temperatureC":{"type":"integer"}},"required":["condition","temperatureC"]}"#
+        let argumentsSchema = LiveTests.locationParametersSchema
         func call(arguments: String) async throws -> String { #"{"condition":"sunny","temperatureC":21}"# }
     }
 
     func testLiveToolCallThenStructuredResponseStreamsDeltas() async throws {
         guard try LiveTests.requireModel() else { return }
         let schema = """
-        {"type":"object","title":"Report","properties":{
-          "location":{"type":"string"},"condition":{"type":"string"},"temperatureC":{"type":"integer"}
-        },"required":["location","condition","temperatureC"]}
+        {"type":"object","title":"AppleSchema0","properties":{
+          "condition":{"type":"string"},"location":{"type":"string"},"temperatureC":{"type":"integer"}
+        },"required":["condition","location","temperatureC"],"additionalProperties":false}
         """
         let run = try await LiveTests.runClient(
             prompt: "Call lookupWeather for Boston, then report the location, condition and temperature it returned.",

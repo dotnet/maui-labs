@@ -65,9 +65,9 @@ final class RequiredToolProfileTests: XCTestCase {
         }
         guard try LiveTests.requireModel() else { return }
         let schema = """
-        {"type":"object","title":"RequiredResult","properties":{
+        {"type":"object","title":"AppleSchema0","properties":{
           "value":{"type":"string"}
-        },"required":["value"]}
+        },"required":["value"],"additionalProperties":false}
         """
         for streaming in [false, true] {
             for structured in [false, true] {
@@ -133,7 +133,6 @@ final class RequiredToolProfileTests: XCTestCase {
         let name: String
         let desc: String
         let argumentsSchema: String
-        let outputSchema = #"{"type":"string"}"#
         private let lock = NSLock()
         private var calls = 0
         private var arguments: [String] = []
@@ -144,8 +143,8 @@ final class RequiredToolProfileTests: XCTestCase {
                 ? "Looks up the secret value. Pass null for value when no number is supplied; label is optional. Call only once, then answer using the returned value."
                 : "Looks up the secret value for a key. Call only once, then answer using the returned value."
             argumentsSchema = nullableParameters
-                ? #"{"type":"object","properties":{"value":{"type":["integer","null"]},"label":{"type":["string","null"]}},"required":["value"]}"#
-                : #"{"type":"object","properties":{"key":{"type":"string"}},"required":["key"]}"#
+                ? #"{"type":"object","title":"AppleSchema0","properties":{"label":{"title":"AppleSchema1","anyOf":[{"type":"string"},{"type":"null"}]},"value":{"title":"AppleSchema2","anyOf":[{"type":"integer"},{"type":"null"}]}},"required":["value"],"additionalProperties":false}"#
+                : #"{"type":"object","title":"AppleSchema0","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}"#
         }
 
         var callCount: Int { lock.withLock { calls } }

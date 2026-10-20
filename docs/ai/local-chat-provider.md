@@ -325,7 +325,8 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 
 **Essentials.AI implementation**
 
-- **Apple:** use built-in schema-constrained generation.
+- **Apple:** use built-in schema-constrained generation through the
+  [canonical Apple JSON Schema profile](apple-json-schema-profile.md).
 - **Windows:** To be determined.
 - **Android:** To be determined.
 

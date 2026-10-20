@@ -35,6 +35,10 @@ func openStringProgress(in prefix: String) -> (offset: Int, value: String)? {
 }
 
 enum LiveTests {
+    // Swift fixtures enter below the managed compiler and must already use its canonical profile.
+    static let locationParametersSchema =
+        #"{"type":"object","title":"AppleSchema0","properties":{"location":{"type":"string"}},"required":["location"],"additionalProperties":false}"#
+
     /// Returns false (after failing the test) when live tests were requested but the model is unavailable.
     static func requireModel() throws -> Bool {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["ESSENTIALSAI_LIVE_TESTS"] == "1",

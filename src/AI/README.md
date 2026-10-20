@@ -12,6 +12,7 @@ on-device chat and embeddings through `Microsoft.Extensions.AI`.
 | [Package README](Microsoft.Maui.Essentials.AI/README.md) | Consumer installation, setup, examples, and capability tables |
 | [Chat provider implementation guide](../../docs/ai/local-chat-provider.md) | Shared provider rules and Apple implementation targets |
 | [Apple Foundation Models](../../docs/ai/apple-foundation-models.md) | Apple toolchain, availability, images, native bridge, and validation |
+| [Canonical Apple JSON Schema profile](../../docs/ai/apple-json-schema-profile.md) | Managed schema compiler contract and native mapping |
 | [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md) | Interactive provider comparison and diagnostics |
 
 Apple chat is supported on iOS, Mac Catalyst, and macOS 26+ with Apple Intelligence

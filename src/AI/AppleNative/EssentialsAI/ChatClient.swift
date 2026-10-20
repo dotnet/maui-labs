@@ -348,7 +348,6 @@ public class ChatClientNative: NSObject {
             for tool in toolList {
                 log("[\(methodName)] Tool registered: \(tool.name) - \(tool.desc)")
                 log("[\(methodName)] Tool \(tool.name) argumentsSchema: \(tool.argumentsSchema)")
-                log("[\(methodName)] Tool \(tool.name) outputSchema: \(tool.outputSchema)")
             }
         }
 #endif

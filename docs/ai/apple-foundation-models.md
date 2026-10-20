@@ -125,12 +125,20 @@ options do not override that dynamic mode. See the shared guide for the MEAI mod
 
 ## Native schema mapping
 
+The managed compiler normalizes response and tool-parameter schemas into the
+[canonical Apple JSON Schema profile](apple-json-schema-profile.md). C# owns
+JSON Schema policy and source-token validation; Swift maps only the canonical
+profile into native types and verifies actual native guide fidelity.
+
 Response and tool-parameter schemas preserve nullable values independently of parent
-`required` properties. Native guides carry string constants/enums, a scalar ASCII
-regex subset, numeric bounds, and array/item bounds. Unrepresentable constraints,
+`required` properties. Native guides carry string constants/enums, numeric bounds,
+and array/item bounds. JSON Schema regex patterns are rejected: Apple's regex
+guide API does not provide a verified equivalent mapping on the current model.
+Unrepresentable constraints,
 references, dictionaries, and compound enum/const-plus-pattern intersections fail
-with schema/property context rather than being dropped. The current system model
-can reject regex guides with `unsupportedGenerationGuide`; that error is propagated
+with schema/property context rather than being dropped. Completed generated values
+and tool arguments must satisfy the canonical profile; native guide encoding
+alone does not prove enforcement or numeric fidelity. Native errors propagate
 without substituting another schema.
 JSON Schema `format` is annotation metadata, not a native constraint. Tool return
 schemas are not used for generation and do not gate registration; parameter

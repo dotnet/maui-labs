@@ -14,7 +14,7 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientValidationTests
 {
-	// Foundation Models must reject dictionary schemas during native setup, not replace them with String.
+	// Apple's managed profile rejects dictionaries before native setup or invocation, unlike cloud schemas.
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
@@ -30,7 +30,7 @@ public class AppleIntelligenceChatClientValidationTests
 		using var client = new AppleIntelligenceChatClient();
 		var options = new ChatOptions { Tools = [tool] };
 
-		var error = await Assert.ThrowsAsync<NSErrorException>(async () =>
+		var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
 		{
 			if (streaming)
 				await client.GetStreamingResponseAsync([new(ChatRole.User, "Hello")], options).ToChatResponseAsync();
@@ -39,13 +39,13 @@ public class AppleIntelligenceChatClientValidationTests
 		});
 
 		Assert.Contains(tool.Name, error.Message, StringComparison.Ordinal);
-		Assert.Contains("additionalProperties", error.Message, StringComparison.Ordinal);
+		Assert.Contains("$.properties.values.additionalProperties", error.Message, StringComparison.Ordinal);
 		Assert.Equal(0, calls);
 	}
 
-	// The Apple adapter exposes separate native argument/output schemas; only the argument schema drives Tool generation.
+	// Apple's adapter compiles only arguments; a dictionary return schema never drives native Tool generation.
 	[Fact]
-	public void ToNative_ToolWithFormattedParametersAndDictionaryReturn_PreservesSchemas()
+	public void ToNative_ToolWithFormattedParametersAndDictionaryReturn_CompilesOnlyArguments()
 	{
 		Dictionary<string, string> CaptureFormatted(Guid id, DateTimeOffset timestamp) =>
 			new() { ["result"] = "FORMATTED_CAPTURED" };
@@ -62,8 +62,12 @@ public class AppleIntelligenceChatClientValidationTests
 
 		Assert.NotNull(native);
 		var adapter = Assert.Single(native.Tools!);
-		Assert.Equal(tool.JsonSchema.GetRawText(), adapter.ArgumentsSchema);
-		Assert.Equal(tool.ReturnJsonSchema.Value.GetRawText(), adapter.OutputSchema);
+		Assert.Equal(AppleJsonSchemaCompiler.Shared.Compile(tool.JsonSchema, AppleJsonSchemaMode.Tool), adapter.ArgumentsSchema);
+		using var schema = JsonDocument.Parse(adapter.ArgumentsSchema);
+		Assert.Equal("AppleSchema0", schema.RootElement.GetProperty("title").GetString());
+		Assert.False(schema.RootElement.GetProperty("additionalProperties").GetBoolean());
+		Assert.Equal("string", schema.RootElement.GetProperty("properties").GetProperty("id").GetProperty("type").GetString());
+		Assert.DoesNotContain("\"format\"", adapter.ArgumentsSchema, StringComparison.Ordinal);
 	}
 
 	// Apple's transcript retains empty user turns as text segments; inference policy is tested separately.
@@ -83,7 +87,7 @@ public class AppleIntelligenceChatClientValidationTests
 
 	private sealed class UnrecognizedContent : AIContent;
 
-	// Inspects Apple's StrictSchemaTransformCache: native structured output requires even optional CLR fields to be required.
+	// Apple's response profile requires even optional CLR fields; tool schemas deliberately retain omission.
 	[Fact]
 	public void ResponseSchema_WithOptionalProperties_RequiresAllNativeFields()
 	{
@@ -92,12 +96,12 @@ public class AppleIntelligenceChatClientValidationTests
 		Assert.NotNull(format.Schema);
 		Assert.False(format.Schema.Value.TryGetProperty("required", out _));
 
-		var schema = AppleIntelligenceChatClient.StrictSchemaTransformCache.GetOrCreateTransformedSchema(format);
+		using var document = JsonDocument.Parse(AppleJsonSchemaCompiler.Shared.Compile(format.Schema!.Value, AppleJsonSchemaMode.Response));
+		var schema = document.RootElement;
 
-		Assert.NotNull(schema);
-		var properties = schema.Value.GetProperty("properties");
+		var properties = schema.GetProperty("properties");
 		Assert.Equal(4, properties.EnumerateObject().Count());
-		var required = schema.Value.GetProperty("required").EnumerateArray()
+		var required = schema.GetProperty("required").EnumerateArray()
 			.Select(value => value.GetString()).ToArray();
 		Assert.Equal(4, required.Length);
 		foreach (var name in new[] { "summary", "keyPoints", "category", "sentiment" })
@@ -105,7 +109,147 @@ public class AppleIntelligenceChatClientValidationTests
 			Assert.True(properties.TryGetProperty(name, out _));
 			Assert.Contains(name, required);
 		}
-		Assert.False(schema.Value.GetProperty("additionalProperties").GetBoolean());
+		Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
+	}
+
+	// Apple's closed-shape policy must reject the original dictionary response before any native callback.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task ResponseSchema_WithDictionary_RejectsInManagedCode(bool streaming)
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var options = new ChatOptions { ResponseFormat = ChatResponseFormat.ForJsonSchema<Dictionary<string, string>>() };
+		var error = await Assert.ThrowsAsync<AppleJsonSchemaException>(async () =>
+		{
+			if (streaming)
+				await client.GetStreamingResponseAsync([new(ChatRole.User, "Hello")], options).ToChatResponseAsync();
+			else
+				await client.GetResponseAsync([new(ChatRole.User, "Hello")], options);
+		});
+		Assert.Equal("$.additionalProperties", error.Path);
+	}
+
+	// Inspects Apple's native payload, including the MEAI-generated nested nullable and optional parameter contract.
+	[Fact]
+	public void ToNative_MeaiNestedNullableFormattedParameters_UsesCanonicalProfile()
+	{
+		var tool = AIFunctionFactory.Create(CaptureSchemaValues, "capture_schema_values");
+		using var client = new AppleIntelligenceChatClient();
+		var native = client.ToNative(new ChatOptions
+		{
+			Tools = [tool],
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<SchemaResponse>(JsonSerializerOptions.Web)
+		}, default)!;
+		var adapter = Assert.Single(native.Tools!);
+		using var arguments = JsonDocument.Parse(adapter.ArgumentsSchema);
+		Assert.Equal("[\"count\",\"id\",\"nested\",\"timestamp\"]", arguments.RootElement.GetProperty("required").GetRawText());
+		var properties = arguments.RootElement.GetProperty("properties");
+		Assert.Equal("null", properties.GetProperty("label").GetProperty("anyOf")[1].GetProperty("type").GetString());
+		Assert.Equal("null", properties.GetProperty("count").GetProperty("anyOf")[1].GetProperty("type").GetString());
+		Assert.DoesNotContain("\"format\"", adapter.ArgumentsSchema, StringComparison.Ordinal);
+		Assert.DoesNotContain("\"default\"", adapter.ArgumentsSchema, StringComparison.Ordinal);
+		using var response = JsonDocument.Parse((string)native.ResponseJsonSchema!);
+		Assert.Equal("[\"id\",\"nested\",\"timestamp\"]", response.RootElement.GetProperty("required").GetRawText());
+	}
+
+	// Crosses Foundation Models' real managed-to-native profile boundary; nullable native schemas need OS 26.4.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task GetResponse_MeaiNestedNullableFormattedSchema_MapsAndGenerates(bool streaming)
+	{
+		if (!(OperatingSystem.IsIOSVersionAtLeast(26, 4) || OperatingSystem.IsMacCatalystVersionAtLeast(26, 4)))
+			return;
+		using var client = new AppleIntelligenceChatClient();
+		var calls = 0;
+		SchemaResponse Capture(Guid id, DateTimeOffset timestamp, SchemaNested nested, int? count, string? label = null)
+		{
+			Interlocked.Increment(ref calls);
+			return CaptureSchemaValues(id, timestamp, nested, count, label);
+		}
+		var tool = AIFunctionFactory.Create(Capture, "capture_schema_values");
+		var options = new ChatOptions
+		{
+			Tools = [tool],
+			ToolMode = OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27)
+				? ChatToolMode.RequireSpecific(tool.Name) : ChatToolMode.Auto,
+			ResponseFormat = ChatResponseFormat.ForJsonSchema<SchemaResponse>(JsonSerializerOptions.Web),
+			Temperature = 0
+		};
+		const string prompt = """
+			Call capture_schema_values exactly once with id 12345678-1234-1234-1234-123456789abc,
+			timestamp 2026-10-20T12:30:00+00:00, nested {"count":null,"label":"sample"},
+			count null, and omit optional label. Then return its id, timestamp and nested values.
+			""";
+		var response = streaming
+			? await client.GetStreamingResponseAsync([new(ChatRole.User, prompt)], options).ToChatResponseAsync()
+			: await client.GetResponseAsync([new(ChatRole.User, prompt)], options);
+		var value = JsonSerializer.Deserialize<SchemaResponse>(response.Text!, JsonSerializerOptions.Web);
+		Assert.NotNull(value);
+		Assert.Equal(Guid.Parse("12345678-1234-1234-1234-123456789abc"), value.Id);
+		Assert.Equal(DateTimeOffset.Parse("2026-10-20T12:30:00+00:00"), value.Timestamp);
+		Assert.NotNull(value.Nested);
+		Assert.Null(value.Nested.Count);
+		Assert.Equal("sample", value.Nested.Label);
+		Assert.Equal(1, calls);
+	}
+
+	private static SchemaResponse CaptureSchemaValues(Guid id, DateTimeOffset timestamp, SchemaNested nested, int? count, string? label = null) =>
+		new() { Id = id, Timestamp = timestamp, Nested = nested };
+
+	public sealed class SchemaResponse
+	{
+		public Guid Id { get; set; }
+		public DateTimeOffset Timestamp { get; set; }
+		public SchemaNested? Nested { get; set; }
+	}
+
+	public sealed class SchemaNested
+	{
+		public int? Count { get; set; }
+		public string? Label { get; set; }
+	}
+
+	// The Apple bridge verifies authoritative final JSON before either completion handler can report success.
+	[Fact]
+	public void ValidateStructuredResponse_NativeGuideViolation_RejectsFinalValueButNotSchemaFreeText()
+	{
+		using var document = JsonDocument.Parse("""{"type":"number","minimum":1e-200}""");
+		using var schema = new NSString(AppleJsonSchemaCompiler.Shared.Compile(document.RootElement, AppleJsonSchemaMode.Response));
+		var invalid = new ChatResponse(new ChatMessage(ChatRole.Assistant, "0"));
+		var error = Assert.Throws<InvalidDataException>(() => AppleIntelligenceChatClient.ValidateStructuredResponse(invalid, schema));
+		Assert.Contains("$.minimum", error.Message, StringComparison.Ordinal);
+		Assert.Same(invalid, AppleIntelligenceChatClient.ValidateStructuredResponse(invalid, null));
+		var valid = new ChatResponse(new ChatMessage(ChatRole.Assistant, "1e-200"));
+		Assert.Same(valid, AppleIntelligenceChatClient.ValidateStructuredResponse(valid, schema));
+	}
+
+	// Native Tool arguments must satisfy Apple's compiled profile before AIFunction conversion or user code.
+	[Theory]
+	[InlineData("{}")]
+	[InlineData("{\"count\":null}")]
+	[InlineData("{\"count\":1.2}")]
+	[InlineData("{\"count\":1,\"extra\":0}")]
+	public async Task ToolArguments_NativeGuideViolation_DoesNotInvokeFunction(string arguments)
+	{
+		var calls = 0;
+		string Count(int count) { calls++; return "counted"; }
+		var function = AIFunctionFactory.Create(Count, "count_values");
+		using var client = new AppleIntelligenceChatClient();
+		var adapter = Assert.Single(client.ToNative(new ChatOptions { Tools = [function] }, default)!.Tools!);
+		var completion = new TaskCompletionSource<(bool HasResult, string? Error)>(TaskCreationOptions.RunContinuationsAsynchronously);
+		using var payload = new NSString(arguments);
+		adapter.CallWithArguments(payload, (result, error) =>
+		{
+			completion.TrySetResult((result is not null, error?.LocalizedDescription));
+		});
+		var result = await completion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+		Assert.False(result.HasResult);
+		Assert.NotNull(result.Error);
+		Assert.Contains("Tool 'count_values' arguments", result.Error, StringComparison.Ordinal);
+		Assert.Equal(0, calls);
 	}
 
 	// Apple's native strict-schema path forces all optional fields across repeated requests; JSON Schema generally permits omission.
