@@ -36,6 +36,7 @@ jobs:
     with:
       project-path: src/AIExtensions/AIExtensions.Packages.slnf
       project-name: ai-extensions
+      os: '["macos-latest", "windows-2025-vs2026"]'
       run-tests: true
       pack: true
       install-workloads: false
@@ -45,7 +46,7 @@ jobs:
     with:
       project-path: samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj
       project-name: ai-chat-playground
-      os: '["xcode-27", "windows-latest"]'
+      os: '["xcode-27", "windows-2025-vs2026"]'
       run-tests: false
       pack: false
       install-workloads: true

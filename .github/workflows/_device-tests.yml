@@ -81,40 +81,7 @@ jobs:
         if: inputs.install-workloads
         run: dotnet workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
-      - name: Build device tests (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cd "$(dirname "${{ inputs.project-path }}")"
-          dotnet restore "$(basename "${{ inputs.project-path }}")"
-          dotnet build "$(basename "${{ inputs.project-path }}")" -f ${{ inputs.target-framework }} -c Release --no-restore
-
-      - name: Build device tests (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          DEVICE_TEST_PROJECT: ${{ inputs.project-path }}
-          DEVICE_TEST_TFM: ${{ inputs.target-framework }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          dotnet restore $env:DEVICE_TEST_PROJECT
-          dotnet build $env:DEVICE_TEST_PROJECT -f $env:DEVICE_TEST_TFM -c Release --no-restore
-
-      - name: Run device tests (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cd "$(dirname "${{ inputs.project-path }}")"
-          dotnet test "$(basename "${{ inputs.project-path }}")" \
-            -f ${{ inputs.target-framework }} \
-            -c Release \
-            --no-build \
-            --no-restore \
-            --logger trx \
-            --results-directory ${{ github.workspace }}/artifacts/TestResults \
-            ${{ inputs.filter != '' && format('--filter "{0}"', inputs.filter) || '' }} \
-            ${{ inputs.dotnet-args }}
-
-      - name: Run device tests (Windows)
-        if: runner.os == 'Windows'
+      - name: Build and run device tests
         shell: pwsh
         env:
           DEVICE_TEST_PROJECT: ${{ inputs.project-path }}
@@ -123,6 +90,9 @@ jobs:
           DEVICE_TEST_DOTNET_ARGS: ${{ inputs.dotnet-args }}
         run: |
           $ErrorActionPreference = 'Stop'
+          dotnet restore $env:DEVICE_TEST_PROJECT
+          dotnet build $env:DEVICE_TEST_PROJECT -f $env:DEVICE_TEST_TFM -c Release --no-restore
+
           $arguments = @(
             'test', $env:DEVICE_TEST_PROJECT,
             '-f', $env:DEVICE_TEST_TFM,
