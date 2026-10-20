@@ -525,7 +525,7 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 		var tools = options.Tools;
 		var toolMode = options.ToolMode;
-		var required = toolMode is not null && toolMode != ChatToolMode.Auto && toolMode != ChatToolMode.None;
+		var required = toolMode is not null and not AutoChatToolMode and not NoneChatToolMode;
 		if (required)
 		{
 			if (!supportsOS27)
@@ -550,10 +550,10 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 			Temperature = ToNative(options.Temperature),
 			MaxOutputTokens = ToNative(options.MaxOutputTokens),
 			ResponseJsonSchema = ToNative(options.ResponseFormat),
-			ToolCallingMode = toolMode == ChatToolMode.None
+			ToolCallingMode = toolMode is NoneChatToolMode
 				? ToolCallingModeNative.Disallowed
 				: required ? ToolCallingModeNative.Required : ToolCallingModeNative.Allowed,
-			Tools = options.ToolMode == ChatToolMode.None
+			Tools = toolMode is NoneChatToolMode
 				? null
 				: ToNative(tools, cancellationToken, _functionInvocationServices)
 		};

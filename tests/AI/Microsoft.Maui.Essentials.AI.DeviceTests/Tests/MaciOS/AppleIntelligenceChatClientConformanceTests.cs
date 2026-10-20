@@ -139,6 +139,46 @@ public class AppleIntelligenceChatClientConformanceTests
 		}
 	}
 
+	// MEAI modes have public constructors; equivalent modes need not be the shared singleton.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void ToNative_IndependentOptionalModes_UseTypeSemantics(bool os27)
+	{
+		ChatToolMode[] modes = [new AutoChatToolMode(), new NoneChatToolMode()];
+		foreach (var mode in modes)
+		{
+			Assert.NotSame(mode is AutoChatToolMode ? ChatToolMode.Auto : ChatToolMode.None, mode);
+			var options = new ChatOptions
+			{
+				ToolMode = mode,
+				Tools = [AIFunctionFactory.Create(() => "result", "sample")]
+			};
+
+			var native = new AppleIntelligenceChatClient().ToNative(options, default, os27)!;
+
+			Assert.Equal(mode is NoneChatToolMode ? ToolCallingModeNative.Disallowed : ToolCallingModeNative.Allowed,
+				native.ToolCallingMode);
+			Assert.Equal(mode is NoneChatToolMode ? 0 : 1, native.Tools?.Length ?? 0);
+		}
+	}
+
+	// A non-singleton None must omit unsupported tool definitions before Apple's callback validation.
+	[Fact]
+	public void ToNative_IndependentNoneMode_DoesNotValidateIgnoredTools()
+	{
+		var native = new AppleIntelligenceChatClient().ToNative(new ChatOptions
+		{
+			ToolMode = new NoneChatToolMode(),
+			Tools = [new UnsupportedTool()]
+		}, default, supportsOS27: false)!;
+
+		Assert.Null(native.Tools);
+		Assert.Equal(ToolCallingModeNative.Disallowed, native.ToolCallingMode);
+	}
+
+	private sealed class UnsupportedTool : AITool;
+
 	public static TheoryData<string, ChatModelAvailability, string?> ModelAvailabilityCases => new()
 	{
 		{
