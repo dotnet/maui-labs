@@ -81,13 +81,26 @@ jobs:
         if: inputs.install-workloads
         run: dotnet workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
-      - name: Build device tests
+      - name: Build device tests (Unix)
+        if: runner.os != 'Windows'
         run: |
           cd "$(dirname "${{ inputs.project-path }}")"
           dotnet restore "$(basename "${{ inputs.project-path }}")"
           dotnet build "$(basename "${{ inputs.project-path }}")" -f ${{ inputs.target-framework }} -c Release --no-restore
 
-      - name: Run device tests
+      - name: Build device tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          DEVICE_TEST_PROJECT: ${{ inputs.project-path }}
+          DEVICE_TEST_TFM: ${{ inputs.target-framework }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore $env:DEVICE_TEST_PROJECT
+          dotnet build $env:DEVICE_TEST_PROJECT -f $env:DEVICE_TEST_TFM -c Release --no-restore
+
+      - name: Run device tests (Unix)
+        if: runner.os != 'Windows'
         run: |
           cd "$(dirname "${{ inputs.project-path }}")"
           dotnet test "$(basename "${{ inputs.project-path }}")" \
@@ -99,6 +112,36 @@ jobs:
             --results-directory ${{ github.workspace }}/artifacts/TestResults \
             ${{ inputs.filter != '' && format('--filter "{0}"', inputs.filter) || '' }} \
             ${{ inputs.dotnet-args }}
+
+      - name: Run device tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          DEVICE_TEST_PROJECT: ${{ inputs.project-path }}
+          DEVICE_TEST_TFM: ${{ inputs.target-framework }}
+          DEVICE_TEST_FILTER: ${{ inputs.filter }}
+          DEVICE_TEST_DOTNET_ARGS: ${{ inputs.dotnet-args }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $arguments = @(
+            'test', $env:DEVICE_TEST_PROJECT,
+            '-f', $env:DEVICE_TEST_TFM,
+            '-c', 'Release',
+            '--no-build',
+            '--no-restore',
+            '--logger', 'trx',
+            '--results-directory', (Join-Path $env:GITHUB_WORKSPACE 'artifacts/TestResults')
+          )
+          if ($env:DEVICE_TEST_FILTER) {
+            $arguments += @('--filter', $env:DEVICE_TEST_FILTER)
+          }
+          if ($env:DEVICE_TEST_DOTNET_ARGS) {
+            $arguments += $env:DEVICE_TEST_DOTNET_ARGS -split '\s+'
+          }
+          & dotnet @arguments
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Upload test results
         if: always()

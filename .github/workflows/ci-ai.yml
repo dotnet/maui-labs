@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/_build.yml'
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
@@ -17,6 +18,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
     paths:
+      - '.github/workflows/_build.yml'
       - 'src/AIExtensions/**'
       - 'tests/AIExtensions/**'
       - 'samples/AIExtensions.Sample.ChatPlayground/**'
@@ -43,7 +45,7 @@ jobs:
     with:
       project-path: samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj
       project-name: ai-chat-playground
-      os: '["xcode-27"]'
+      os: '["xcode-27", "windows-latest"]'
       run-tests: false
       pack: false
       install-workloads: true
