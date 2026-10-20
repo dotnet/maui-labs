@@ -99,32 +99,11 @@ Use descriptive names that communicate the scenario:
 
 ### Shared AI Backend Coverage
 
-- Use `docs/ai/local-chat-provider.md` as the provider-neutral contract. Put common
-  chat and embedding behavior in the existing generic test bases.
-- Bind applicable suites using capability hooks; keep native SDK, marshalling,
-  OS-version, numeric ranges, and provider error-policy tests platform-specific.
-  Every provider-only test must explain the actual native/provider reason its
-  assertion cannot live in a shared test base.
-- Preserve existing assertions and `RequiresModel` traits. New fail-fast rejection
-  tests need no model; inference tests still require the trait. Put rejection
-  assertions in separate model-free methods on the shared bases, calling the
-  actual bound provider directly. Inference methods return for rejection-only
-  bindings; a scripted host control is not a provider-binding test.
-- Conservative virtual defaults keep legacy Apple and cloud bindings compiling.
-  `SupportsRequiredToolMode` and JSON-suite `RequiresExplicitJsonSchema` use null
-  for an unmigrated binding, not support. New bindings must choose true or false.
-- Required=false asserts rejection; structured-output=false asserts rejection.
-  Rejection hooks opt into validation, not support for all other combinations.
-  Explicitly bind media/role, prompt, stateful/background, Activity, and cancellation
-  policies; never silently skip an unsupported feature without a capability hook.
-- Usage defaults preserve full-count assertions. `IsUsageAvailable=false` asserts
-  absent usage; `IsOutputUsageAvailable=false` asserts input-only usage with absent
-  output/total counts. Telemetry must match only the supplied token counts.
-- Host controls verify the shared harness, not provider implementations. Establish
-  Azure/OpenAI compatibility with live cloud tests, not compilation alone.
-- Sampling tests use `ReasoningEffort.None` only when a binding explicitly opts
-  into that option. Keep the default unset: non-reasoning OpenAI models such as
-  GPT-4o reject reasoning options, even when the requested effort is None.
+The canonical provider-neutral behavior and shared AI testing rules live in
+[`docs/ai/local-chat-provider.md`](../../docs/ai/local-chat-provider.md),
+especially its **Conformance testing** section. Follow that guide for generic
+test placement, capability hooks, model-free rejection paths, usage assertions,
+sampling controls, live provider validation, and provider-only test rationale.
 
 ### What to Test
 

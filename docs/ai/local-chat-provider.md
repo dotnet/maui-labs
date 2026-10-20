@@ -630,34 +630,78 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 
 ## Conformance testing
 
-Shared generic device-test bases contain backend-neutral contracts. Bind
-capability hooks explicitly when adopting a contract, including rejection paths.
-Conservative defaults keep existing providers compiling; an unbound hook is not
-evidence of support.
+### Shared and provider-specific coverage
 
-- Preserve `RequiresModel` on positive inference paths.
+- Put backend-neutral chat and embedding behavior in the existing shared generic
+  test bases.
+- Keep native SDK, marshalling, OS-version, numeric-range, and provider
+  error-policy tests in provider-specific suites.
+- Every provider-only test documents the concrete native/provider reason its
+  assertion cannot live in a shared test base.
+- Preserve existing tests and assertions even when stronger coverage overlaps.
+  A cleanup or consolidation belongs in a separate change.
+
+### Capability hooks
+
+- Bind every applicable shared suite and rejection path through an explicit
+  capability or policy hook. Never silently skip an unsupported feature.
+- Conservative virtual defaults keep existing providers compiling; an unbound
+  hook is not evidence of support.
+- Nullable hooks such as `SupportsRequiredToolMode` and
+  `RequiresExplicitJsonSchema` mean the binding has not adopted that contract.
+  New bindings choose true or false.
+- Required=false means Required and named Required reject.
+  `SupportsStructuredOutput=false` means schema requests reject. A rejection
+  hook opts into that validation contract, not support for unrelated features.
+- Bind prompt requirements, media/role policy, stateful/background behavior,
+  Activity propagation, cancellation, and usage availability independently.
+- Bind deterministic chained-tool tests separately from basic Required support.
+  Providers that cannot force a different tool on every round still run the
+  single Required exactly-once, schema, cancellation, and Activity contracts.
+
+### Model-free rejection and live inference
+
 - Put fail-fast Required-tool, unsupported structured-output, explicit-schema,
   stateful/background, content, and media rejection assertions in separate
-  model-free methods that call the bound provider directly.
-- Required=false means rejection, not a skipped positive test.
-  `SupportsStructuredOutput=false` means schema requests reject.
-  Nullable explicit-schema/required-tool hooks preserve legacy bindings until
-  each platform opts into true or false.
-- Bind deterministic chained-tool tests separately from basic Required support;
-  providers that cannot force each successive tool still run the Required
-  exactly-once, schema, cancellation, and Activity contracts.
-- Sampling controls belong only in sampling contracts. Do not add Temperature or
-  `ReasoningEffort.None` merely to make unrelated tool, instruction, or schema
-  tests deterministic; use precise prompts, Required tool modes, schemas, and
-  exact result assertions instead.
+  model-free methods that call the actual bound provider directly.
+- Preserve `RequiresModel` on positive inference paths. Positive methods return
+  for rejection-only bindings rather than treating rejection as inference
+  success.
+- Keep model-free rejection methods free of `RequiresModel`; the complete device
+  assembly must execute them as well as the live inference cases.
+- A scripted host control verifies the shared harness, not the provider binding.
+  It cannot replace a real native or cloud execution.
+
+### Sampling and deterministic requests
+
+- Sampling controls belong in sampling contracts. For unrelated tool,
+  instruction, or schema behavior, prefer precise prompts, Required tool modes,
+  schemas, and exact result assertions.
 - Preserve baseline deterministic sampling configurations behind explicit
   capability hooks. Bindings that cannot honor those options leave them unset
   or override the provider-specific path without removing the shared method.
-- Token counts are optional. Assertions match only supplied values, including
-  input-only usage with absent output/total counts.
-- Host controls verify the shared harness, including whitespace acceptance and
-  null/literal-`null` rejection, but do not establish live native or cloud
-  compatibility.
-- Provider-only tests document the concrete native SDK, interop, OS gate,
-  numeric range, or provider policy that prevents the assertion from being
-  shared.
+- Set `ReasoningEffort.None` only when a binding explicitly opts into it.
+  Non-reasoning OpenAI models can reject reasoning options even when the
+  requested effort is None.
+
+### Usage and telemetry
+
+- Usage defaults preserve complete-count assertions.
+  `IsUsageAvailable=false` asserts absent usage.
+  `IsOutputUsageAvailable=false` asserts input-only usage with absent output and
+  total counts.
+- Every token count is optional. Assert only values actually supplied by the
+  provider, and require telemetry to match those supplied counts exactly.
+- Fully enumerate streaming operations when validating terminal usage and
+  telemetry.
+
+### Harness controls and provider baselines
+
+- Host controls cover the shared harness, including whitespace acceptance,
+  empty ordinary-text rejection, null/literal-`null` rejection, schema fidelity,
+  and input-only usage.
+- Establish Apple, Windows, Android, and OpenAI compatibility with the actual
+  configured provider suites. Compilation is not runtime validation.
+- Focused filters are diagnostic only. Final validation executes the complete
+  applicable test projects and the complete configured device assembly without
+  filters, and reports discovered, executed, passed, failed, and skipped totals.
