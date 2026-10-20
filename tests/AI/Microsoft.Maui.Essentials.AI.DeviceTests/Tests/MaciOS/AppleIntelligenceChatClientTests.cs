@@ -90,6 +90,26 @@ public class AppleIntelligenceChatClientMessagesTests : ChatClientMessagesTestsB
 [Collection(nameof(AppleIntelligenceCollection))]
 public class AppleIntelligenceChatClientOptionsTests : ChatClientOptionsTestsBase<AppleIntelligenceChatClient>
 {
+	[Fact]
+	public override async Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat()
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+			client.GetResponseAsync([new(ChatRole.User, "Return JSON.")],
+				new ChatOptions { ResponseFormat = ChatResponseFormat.Json }));
+		Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public override async Task GetStreamingResponseAsync_WithResponseFormat_AcceptsJsonFormat()
+	{
+		using var client = new AppleIntelligenceChatClient();
+		var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+			client.GetStreamingResponseAsync([new(ChatRole.User, "Return JSON.")],
+				new ChatOptions { ResponseFormat = ChatResponseFormat.Json }).ToChatResponseAsync());
+		Assert.Contains("explicit JSON schema", error.Message, StringComparison.Ordinal);
+	}
+
 	// Apple's native temperature range is 0...1, unlike OpenAI's 0...2.
 	[Fact]
 	public override async Task GetResponseAsync_WithExtremeTemperature_HandlesGracefully()
