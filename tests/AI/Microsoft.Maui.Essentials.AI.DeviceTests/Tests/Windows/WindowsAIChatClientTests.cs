@@ -62,7 +62,7 @@ public class WindowsAIChatClientMessagesTests : ChatClientMessagesTestsBase<Wind
 	[InlineData("application/pdf", false)]
 	[InlineData("application/pdf", true)]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public override async Task GetResponseAsync_WithBinaryContentAndText_ConvertsOrIgnoresContent(string mediaType, bool streaming)
+	public override async Task GetResponseAsync_WithBinaryContentAndText_AppliesProviderPolicy(string mediaType, bool streaming)
 	{
 		using var client = new WindowsAIChatClient();
 		ChatMessage[] messages = [new(ChatRole.User,
