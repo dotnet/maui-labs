@@ -13,7 +13,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task ProcessToolResult_EmptyString_EmitsWithEmptyResult()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessToolResult("call-1", string.Empty);
 			handler.Complete();
@@ -30,7 +30,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task ProcessToolResult_NullResult_EmitsWithNullResult()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessToolResult("call-1", null);
 			handler.Complete();
@@ -49,7 +49,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task ProcessToolResult_WhitespaceResult_EmitsWithWhitespace()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessToolResult("call-1", "   ");
 			handler.Complete();
@@ -64,7 +64,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task ContentAfterEmptyToolResult_ContinuesNormally()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessToolCall("call-1", "GetWeather", null);
 			handler.ProcessToolResult("call-1", string.Empty);
@@ -82,7 +82,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task MultipleToolResults_MixedEmptyAndPopulated_AllEmitted()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessToolCall("call-1", "GetWeather", null);
 			handler.ProcessToolResult("call-1", "Sunny");
