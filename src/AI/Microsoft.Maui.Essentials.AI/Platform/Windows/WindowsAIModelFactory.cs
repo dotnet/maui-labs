@@ -11,7 +11,7 @@ namespace Microsoft.Maui.Essentials.AI;
 internal static class WindowsAIModelFactory
 {
 	/// <summary>
-	/// Creates a <see cref="LanguageModel"/> instance, ensuring the Windows AI language model is ready.
+	/// Creates a <see cref="LanguageModel"/> instance only when the Windows AI language model is already ready.
 	/// </summary>
 	/// <returns>A ready-to-use <see cref="LanguageModel"/> instance.</returns>
 	/// <exception cref="NotSupportedException">
@@ -19,15 +19,42 @@ internal static class WindowsAIModelFactory
 	/// </exception>
 	public static async Task<LanguageModel> CreateModelAsync()
 	{
-		await EnsureReadyAsync().ConfigureAwait(false);
+		RequireReady(LanguageModel.GetReadyState());
 		return await LanguageModel.CreateAsync()
-			?? throw new InvalidOperationException("Windows AI returned a null language model after setup.");
+			?? throw new InvalidOperationException("Windows AI returned a null language model.");
+	}
+
+	internal static void RequireReady(AIFeatureReadyState state)
+	{
+		if (state != AIFeatureReadyState.Ready)
+			throw new NotSupportedException($"Windows AI language model is not ready: {DescribeReadyState(state)}. Call WindowsAIChatClient.EnsureReadyAsync explicitly to prepare the model.");
 	}
 
 	internal static Task EnsureReadyAsync(CancellationToken cancellationToken = default) =>
 		EnsureReadyAsync(LanguageModel.GetReadyState, async token =>
 		{
-			var result = await LanguageModel.EnsureReadyAsync().AsTask(token).ConfigureAwait(false);
+			var operation = LanguageModel.EnsureReadyAsync();
+			var completion = operation.AsTask();
+			using var registration = token.Register(() =>
+			{
+				try
+				{
+					operation.Cancel();
+				}
+				catch (Exception ex)
+				{
+					System.Diagnostics.Trace.TraceError($"Windows AI preparation cancellation failed: {ex}");
+				}
+			});
+			AIFeatureReadyResult result;
+			try
+			{
+				result = await completion.ConfigureAwait(false);
+			}
+			catch (OperationCanceledException) when (token.IsCancellationRequested)
+			{
+				throw new OperationCanceledException(token);
+			}
 			if (result is null)
 				throw new InvalidOperationException("Windows AI returned a null model setup result.");
 			ValidateReadyResult(result.Status, result.ErrorDisplayText, result.ExtendedError);
@@ -36,7 +63,8 @@ internal static class WindowsAIModelFactory
 	internal static async Task EnsureReadyAsync(
 		Func<AIFeatureReadyState> getReadyState,
 		Func<CancellationToken, Task> ensureReady,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		Action? prepared = null)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		var readyState = getReadyState();
@@ -48,10 +76,12 @@ internal static class WindowsAIModelFactory
 		if (readyState is AIFeatureReadyState.NotReady)
 			await ensureReady(cancellationToken).ConfigureAwait(false);
 
-		cancellationToken.ThrowIfCancellationRequested();
 		var finalState = getReadyState();
 		if (finalState is not AIFeatureReadyState.Ready)
 			throw new NotSupportedException($"Windows AI language model is not available after setup: {DescribeReadyState(finalState)}");
+		if (readyState is AIFeatureReadyState.NotReady)
+			prepared?.Invoke();
+		cancellationToken.ThrowIfCancellationRequested();
 	}
 
 	internal static void ValidateReadyResult(AIFeatureReadyResultState status, string? errorDisplayText, Exception? extendedError)

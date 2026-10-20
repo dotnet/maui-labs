@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Windows.AI;
@@ -26,11 +27,7 @@ public sealed class WindowsAIChatClient : IChatClient
 		"The prompt is larger than the Windows AI language model's context window. " +
 		"Shorten the conversation or start a new one.";
 
-	/// <summary>Lazily-initialized task that creates the underlying <see cref="LanguageModel"/>.</summary>
-	private readonly Lazy<Task<LanguageModel>> _modelTask;
-
-	/// <summary>Whether this instance owns the <see cref="LanguageModel"/> and is responsible for disposing it.</summary>
-	private readonly bool _ownsModel;
+	private readonly WindowsAIModelProvider<LanguageModel> _models;
 
 	/// <summary>
 	/// Lazily-initialized metadata describing the implementation.
@@ -47,12 +44,13 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// Initializes a new instance of the <see cref="WindowsAIChatClient"/> class.
 	/// </summary>
 	/// <remarks>
-	/// The client will create a <see cref="LanguageModel"/> and reuse it for all requests.
+	/// The client creates and disposes a separate <see cref="LanguageModel"/> for each request.
 	/// </remarks>
-	public WindowsAIChatClient()
+	public WindowsAIChatClient() : this(LanguageModel.GetReadyState, WindowsAIModelFactory.CreateModelAsync) { }
+
+	internal WindowsAIChatClient(Func<AIFeatureReadyState> getReadyState, Func<Task<LanguageModel>> createModel)
 	{
-		_modelTask = new(() => Task.Run(WindowsAIModelFactory.CreateModelAsync));
-		_ownsModel = true;
+		_models = new(createModel, getReadyState);
 	}
 
 	/// <summary>
@@ -68,8 +66,7 @@ public sealed class WindowsAIChatClient : IChatClient
 	public WindowsAIChatClient(LanguageModel model)
 	{
 		ArgumentNullException.ThrowIfNull(model);
-		_modelTask = new(() => Task.FromResult(model));
-		_ownsModel = false;
+		_models = new(model, LanguageModel.GetReadyState);
 	}
 
 	/// <summary>Reads current native availability and effective capabilities without caching or downloading.</summary>
@@ -107,6 +104,7 @@ public sealed class WindowsAIChatClient : IChatClient
 		ChatOptions? options = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
+		_models.ThrowIfDisposed();
 		ArgumentNullException.ThrowIfNull(chatMessages);
 		ValidateOptions(options);
 		cancellationToken.ThrowIfCancellationRequested();
@@ -114,18 +112,21 @@ public sealed class WindowsAIChatClient : IChatClient
 		var (systemPrompt, history) = NormalizeChatMessages(chatMessages, options);
 
 		var prompt = ConvertToPrompt(history);
-		if (history.Count == 0 && string.IsNullOrEmpty(systemPrompt))
-			throw new ArgumentException("At least one message with content is required.", nameof(chatMessages));
+		if (!history.Any(message => message.Role == ChatRole.User || message.Role == ChatRole.Assistant))
+			throw new ArgumentException("At least one User or Assistant prompt turn is required; System/instructions-only input is not supported.", nameof(chatMessages));
 
 		var modelOptions = ConvertToLanguageModelOptions(options);
 
 		var jsonSchema = GetConstraintSchema(options);
-		var model = await _modelTask.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
-
 		var updates = StreamResponseAsync(
-			(handler, token) => jsonSchema is not null
-				? GenerateStructuredResponseAsync(model, systemPrompt, prompt, jsonSchema, modelOptions, handler, token)
-				: GenerateTextResponseAsync(model, systemPrompt, prompt, modelOptions, handler, token),
+			async (handler, token) =>
+			{
+				using var lease = await _models.AcquireAsync(token).ConfigureAwait(false);
+				if (jsonSchema is not null)
+					await GenerateStructuredResponseAsync(lease.Model, systemPrompt, prompt, jsonSchema, modelOptions, handler, token).ConfigureAwait(false);
+				else
+					await GenerateTextResponseAsync(lease.Model, systemPrompt, prompt, modelOptions, handler, token).ConfigureAwait(false);
+			},
 			cancellationToken);
 
 		await foreach (var update in updates.ConfigureAwait(false))
@@ -151,7 +152,7 @@ public sealed class WindowsAIChatClient : IChatClient
 
 		var operation = model.GenerateResponseAsync(context, prompt, modelOptions);
 
-		// The worker owns the context through completion or cancellation of the operation.
+		// Caller cancellation stops the reader, not this context's native lifetime.
 		await ForwardResponseAsync(operation, handler, cancellationToken, result =>
 			GetResponseText(result.Status, result.Text, result.ExtendedError)).ConfigureAwait(false);
 	}
@@ -170,6 +171,7 @@ public sealed class WindowsAIChatClient : IChatClient
 			? prompt
 			: $"{systemPrompt}{Environment.NewLine}{Environment.NewLine}{prompt}";
 
+		cancellationToken.ThrowIfCancellationRequested();
 		var operation = model.GenerateStructuredJsonResponseAsync(structuredPrompt, jsonSchema, modelOptions);
 
 		await ForwardResponseAsync(operation, handler, cancellationToken, static result =>
@@ -298,8 +300,7 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// <param name="cancellationToken">The token used to cancel the native operation.</param>
 	/// <param name="readResult">
 	/// Validates the completed result and returns the response text, throwing when the status is not
-	/// a success. It is always called, so the status is checked either way, but the text it returns
-	/// is only emitted when the operation reported no incremental progress.
+	/// a success. The validated final text is reconciled with the progress already emitted.
 	/// </param>
 	/// <remarks>
 	/// Both <c>GenerateResponseAsync</c> and <c>GenerateStructuredJsonResponseAsync</c> return
@@ -312,26 +313,56 @@ public sealed class WindowsAIChatClient : IChatClient
 		CancellationToken cancellationToken,
 		Func<TResult, string?> readResult)
 	{
-		var reportedProgress = false;
+		var gate = new object();
+		var emitted = new StringBuilder();
 
 		operation.Progress = (_, progress) =>
 		{
 			if (!string.IsNullOrEmpty(progress))
 			{
-				reportedProgress = true;
-				handler.ProcessContent(progress);
+				lock (gate)
+				{
+					emitted.Append(progress);
+					handler.ProcessContent(progress);
+				}
 			}
 		};
 
-		// AsTask without IProgress preserves the synchronous callback above.
-		var result = await operation.AsTask(cancellationToken).ConfigureAwait(false);
+		// The token must not complete this await before the actual WinRT terminal callback.
+		var completion = operation.AsTask();
+		using var registration = cancellationToken.Register(() =>
+		{
+			try
+			{
+				operation.Cancel();
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Trace.TraceError($"Windows AI native cancellation failed: {ex}");
+			}
+		});
+		TResult result;
+		try
+		{
+			result = await completion.ConfigureAwait(false);
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			throw new OperationCanceledException(cancellationToken);
+		}
 		if (result is null)
 			throw new InvalidOperationException("Windows AI returned a null native result.");
 
-		// Always validate the final status, but do not duplicate text already streamed.
 		var text = readResult(result);
-		if (!reportedProgress)
-			handler.ProcessContent(text);
+		cancellationToken.ThrowIfCancellationRequested();
+		lock (gate)
+		{
+			var prefix = emitted.ToString();
+			if (text is null || !text.StartsWith(prefix, StringComparison.Ordinal))
+				throw new InvalidOperationException("Windows AI final response diverged from the streamed progress.");
+			if (text.Length > prefix.Length)
+				handler.ProcessContent(text[prefix.Length..]);
+		}
 	}
 
 	/// <summary>
@@ -344,8 +375,10 @@ public sealed class WindowsAIChatClient : IChatClient
 	/// </remarks>
 	internal static string? GetConstraintSchema(ChatOptions? options)
 	{
-		if (options?.ResponseFormat is not ChatResponseFormatJson { Schema: not null } format)
+		if (options?.ResponseFormat is not ChatResponseFormatJson format)
 			return null;
+		if (format.Schema is null)
+			throw new NotSupportedException("Windows AI JSON output requires an explicit JSON schema; schema-free JSON and prompt-only typed fallback are not supported.");
 
 		return SchemaTransformCache.GetOrCreateTransformedSchema(format)?.GetRawText()
 			?? throw new InvalidOperationException("Failed to transform JSON schema for Windows AI structured output.");
@@ -377,22 +410,7 @@ public sealed class WindowsAIChatClient : IChatClient
 	}
 
 	/// <inheritdoc />
-	void IDisposable.Dispose()
-	{
-		if (_ownsModel && _modelTask.IsValueCreated)
-			DisposeWhenReady(_modelTask.Value);
-	}
-
-	private static void DisposeWhenReady<T>(Task<T> task)
-		where T : IDisposable
-	{
-		if (task.IsCompletedSuccessfully)
-			task.Result.Dispose();
-		else
-			task.ContinueWith(
-				t => { if (t.IsCompletedSuccessfully) t.Result.Dispose(); },
-				TaskContinuationOptions.ExecuteSynchronously);
-	}
+	void IDisposable.Dispose() => _models.Dispose();
 
 	internal static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(
 		IEnumerable<ChatMessage> chatMessages,
@@ -487,13 +505,44 @@ public sealed class WindowsAIChatClient : IChatClient
 
 	private static void ValidateContent(ChatMessage message)
 	{
-		if (message.Contents.Any(content => content switch
+		foreach (var content in message.Contents)
 		{
-			DataContent data => data.MediaType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true,
-			UriContent uri => uri.MediaType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true,
-			_ => false
-		}))
-			throw new NotSupportedException("The Windows AI language model does not support image input.");
+			switch (content)
+			{
+				case TextContent:
+					if (message.Role == ChatRole.Tool)
+						throw new NotSupportedException("Windows AI Tool history requires FunctionResultContent, not TextContent.");
+					break;
+				case FunctionCallContent call:
+					if (message.Role != ChatRole.Assistant)
+						throw new NotSupportedException("Windows AI FunctionCallContent is supported only in Assistant history.");
+					if (string.IsNullOrWhiteSpace(call.CallId) || string.IsNullOrWhiteSpace(call.Name))
+						throw new ArgumentException("FunctionCallContent requires a nonempty CallId and Name.", nameof(message));
+					break;
+				case FunctionResultContent result:
+					if (message.Role != ChatRole.Tool)
+						throw new NotSupportedException("Windows AI FunctionResultContent is supported only in Tool history.");
+					if (string.IsNullOrWhiteSpace(result.CallId))
+						throw new ArgumentException("FunctionResultContent requires a nonempty CallId.", nameof(message));
+					break;
+				case DataContent data:
+					if (data.Data.IsEmpty || string.IsNullOrWhiteSpace(data.MediaType))
+						throw new ArgumentException("DataContent requires a nonempty payload and media type.", nameof(message));
+					throw new NotSupportedException($"Windows AI is text-only; DataContent ({data.MediaType}) input is not supported.");
+				case UriContent uri:
+					if (uri.Uri is null || !uri.Uri.IsAbsoluteUri || string.IsNullOrWhiteSpace(uri.MediaType))
+						throw new ArgumentException("UriContent requires an absolute URI and media type.", nameof(message));
+					throw new NotSupportedException($"Windows AI is text-only; UriContent ({uri.MediaType}) input is not supported.");
+				case HostedFileContent file:
+					if (string.IsNullOrWhiteSpace(file.FileId))
+						throw new ArgumentException("HostedFileContent requires a nonempty FileId.", nameof(message));
+					throw new NotSupportedException("Windows AI is text-only; HostedFileContent input is not supported.");
+				default:
+					if (content.GetType().Assembly == typeof(AIContent).Assembly)
+						throw new NotSupportedException($"Windows AI does not support standard MEAI {content.GetType().Name} input.");
+					break;
+			}
+		}
 	}
 
 	internal static LanguageModelOptions ConvertToLanguageModelOptions(ChatOptions? options)
@@ -529,7 +578,14 @@ public sealed class WindowsAIChatClient : IChatClient
 		if (options.TopK is < 0 or > 32064)
 			throw new ArgumentOutOfRangeException(nameof(options), "TopK must be between zero and 32064.");
 
-		if (options.ToolMode is not null && options.ToolMode != ChatToolMode.Auto && options.ToolMode != ChatToolMode.None)
+		if (options.ToolMode is not null and not AutoChatToolMode and not NoneChatToolMode)
 			throw new NotSupportedException("The Windows AI language model does not support tool-calling options through the Windows App SDK.");
+
+		if (options.ConversationId is not null)
+			throw new NotSupportedException("Windows AI does not support ConversationId; supply conversation history as messages.");
+		if (options.ContinuationToken is not null)
+			throw new NotSupportedException("Windows AI does not support ContinuationToken.");
+		if (options.AllowBackgroundResponses == true)
+			throw new NotSupportedException("Windows AI does not support AllowBackgroundResponses.");
 	}
 }

@@ -75,11 +75,21 @@ else if (status.Availability != ChatModelAvailability.Available)
     Console.WriteLine(status.UnavailableReason);
 ```
 
-The default request path can also make the model ready on first use. Native
+Ordinary generation never prepares or downloads the model. Every request reads
+the native ready state and fails with that state unless it is `Ready`.
+`EnsureReadyAsync` is the only preparation/download entry point; it awaits
+setup, validates the native result, and requires the final state to be `Ready`.
+Native
 ready states distinguish unsupported systems, user-disabled AI, missing package
 capability, incompatible hardware, required OS updates, and a model that is
 installed but not ready. Setup and download failures surface with their native
 error details.
+
+The client creates a fresh owned model for every request. Concurrent requests do
+not share native model instances, and a failed or canceled creation does not
+affect later requests. Each owned model is disposed only after its native
+operation terminates. Caller-supplied models are reused and never disposed by the
+client, but requests still require native readiness.
 
 ## Native API characteristics
 
@@ -89,9 +99,28 @@ error details.
   `GenerateStructuredJsonResponseAsync`; that API has no context overload.
 - The current native model does not accept image input or register managed
   tools.
+- Auto and None tool modes are accepted by MEAI type, including independently
+  constructed/deserialized instances. Required and named Required are rejected.
 - Tool calls and results can still be replayed as labelled text history.
 - Native token usage metadata is not exposed, so `TokenUsage` is not advertised.
 - Native streaming progress is forwarded as append-only MEAI updates.
+- The final response must equal or extend the emitted progress. Only a missing
+  suffix is appended; incompatible final text fails explicitly.
+- Cancellation stops the waiting caller promptly and requests native cancellation.
+  Request contexts and model leases remain alive until the native operation's
+  terminal completion callback, even if a stalled operation retains them.
+- `ConversationId`, `ContinuationToken`, and explicit background execution are
+  rejected. Supply conversation history as messages.
+- System/instructions-only requests are rejected; at least one User or Assistant
+  turn is required. Explicitly blank turns retain their role-labelled blank-message
+  behavior, including turns containing only unknown custom content.
+- Text and correctly placed function-call/result history are supported. Standard
+  unsupported MEAI media/representations are rejected rather than silently dropped;
+  malformed or empty recognized payloads are invalid. Unknown custom `AIContent`
+  items may be omitted without losing supported neighboring content.
+- JSON requires an explicit schema. Schema-free `ChatResponseFormat.Json` and
+  `GetResponseAsync<T>(..., useJsonSchemaResponseFormat: false)` are rejected before
+  native work. Ordinary text is not parsed, repaired, or stripped of Markdown fences.
 
 The response model ID `windows-ai-language-model` identifies the stable
 provider surface, not particular installed weights.
@@ -121,7 +150,8 @@ on compatible hardware. The Chat Playground is the interactive validation host.
 
 - Prompts exceeding the context window fail; history is not silently truncated.
 - Native generation can stall. Cancellation releases the waiting caller but
-  does not guarantee native-model recovery:
+  does not guarantee process-level native recovery; a subsequent request can
+  also stall even though the client creates a fresh `LanguageModel`:
   [WindowsAppSDK #6871](https://github.com/microsoft/WindowsAppSDK/issues/6871).
 - Successful structured responses may arrive only as a final result without
   progress callbacks:

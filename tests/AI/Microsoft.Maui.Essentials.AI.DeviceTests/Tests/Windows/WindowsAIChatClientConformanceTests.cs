@@ -3,6 +3,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Windows.AI;
 using Microsoft.Windows.AI.Text;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
@@ -37,8 +38,9 @@ public class WindowsAIChatClientConformanceTests
 	{
 		AIContent image = uri ? new UriContent("https://example.invalid/image.png", "image/png") :
 			new DataContent(new byte[] { 0 }, "IMAGE/PNG");
+		AIContent neighbor = role == "tool" ? new FunctionResultContent("call-1", "Keep") : new TextContent("Keep");
 		var error = Assert.Throws<NotSupportedException>(() =>
-			WindowsAIChatClient.NormalizeChatMessages([new(new ChatRole(role), [new TextContent("Keep"), image])]));
+			WindowsAIChatClient.NormalizeChatMessages([new(new ChatRole(role), [neighbor, image])]));
 		Assert.Contains("image", error.Message, StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -164,18 +166,32 @@ public class WindowsAIChatClientConformanceTests
 	private sealed class UnrecognizedContent : AIContent;
 }
 
-public class WindowsAIModelStatusTests
+public class WindowsAIModelStatusTests(ITestOutputHelper output)
 {
 	// The public helper reads the native state directly; it neither instantiates nor downloads the model.
 	[Fact]
 	public async Task GetModelStatusAsync_MatchesNativeState()
 	{
 		var state = LanguageModel.GetReadyState();
+		output.WriteLine($"Native LanguageModel.GetReadyState(): {state}");
 		var first = await WindowsAIChatClient.GetModelStatusAsync();
 		var second = await WindowsAIChatClient.GetModelStatusAsync();
 		Assert.NotSame(first, second);
 		Assert.Equal(WindowsAIModelFactory.MapAvailability(state), second.Availability);
 		Assert.Equal(state is AIFeatureReadyState.Ready ? null : state.ToString(), second.UnavailableReason);
+	}
+
+	// An already-ready Windows model must not be prepared again.
+	[Fact]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task EnsureReadyAsync_AlreadyReady_PreservesNativeState()
+	{
+		var state = LanguageModel.GetReadyState();
+		output.WriteLine($"Native state before explicit EnsureReadyAsync: {state}");
+		Assert.Equal(AIFeatureReadyState.Ready, state);
+		await WindowsAIChatClient.EnsureReadyAsync();
+		output.WriteLine($"Native state after explicit EnsureReadyAsync: {LanguageModel.GetReadyState()}");
+		Assert.Equal(AIFeatureReadyState.Ready, LanguageModel.GetReadyState());
 	}
 
 	[Fact]

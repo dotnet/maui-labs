@@ -7,9 +7,9 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
 public class WindowsAIImageHistoryTests
 {
-	// Windows omits unrecognized image-generation markers but retains the resulting blank Assistant turn.
+	// Image-generation envelopes are recognized MEAI content, not unknown custom items that Windows may omit.
 	[Fact]
-	public void ConvertToPrompt_ImageGenerationHistory_DoesNotInventToolActivity()
+	public void ConvertToPrompt_ImageGenerationHistory_RejectsUnsupportedRepresentation()
 	{
 #pragma warning disable MEAI001 // The image-generation tool content API is experimental.
 		var history = new ChatMessage[]
@@ -24,10 +24,7 @@ public class WindowsAIImageHistoryTests
 		};
 #pragma warning restore MEAI001
 
-		Assert.Equal(
-			string.Join(Environment.NewLine + Environment.NewLine,
-				"User: Generate an image.", "Assistant: ", "User: What did I request?"),
-			WindowsAIChatClient.ConvertToPrompt(history));
+		Assert.Throws<NotSupportedException>(() => WindowsAIChatClient.ConvertToPrompt(history));
 	}
 }
 #endif

@@ -30,10 +30,104 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		}
 
 		Assert.Same(progress, operation.Progress);
-		operation.Complete("Not another delta");
+		operation.Complete("0123456789");
 		await forward.WaitAsync(Timeout);
 		handler.Complete();
 		Assert.False(await updates.MoveNextAsync());
+	}
+
+	// Windows final results are complete text, not necessarily identical to progress already reported.
+	[Theory]
+	[InlineData("Hello", "Hello", "Hello")]
+	[InlineData("Hello", "Hello world", "Hello world")]
+	[InlineData("{\"value\":", "{\"value\":1}", "{\"value\":1}")]
+	public async Task StreamResponseAsync_FinalExtendsProgress_EmitsOnlyMissingSuffix(string progress, string final, string expected)
+	{
+		var operation = new TestOperation();
+		var updates = new List<ChatResponseUpdate>();
+		var read = ReadAsync(CreateStream(operation), updates);
+		await operation.Attached.Task.WaitAsync(Timeout);
+		operation.Report(progress);
+		operation.Complete(final);
+		await read.WaitAsync(Timeout);
+		Assert.Equal(expected, string.Concat(updates.Select(update => update.Text)));
+		Assert.Equal(progress == final ? 1 : 2, updates.Count);
+	}
+
+	[Fact]
+	public async Task StreamResponseAsync_IncompatibleFinal_FailsExplicitly()
+	{
+		var operation = new TestOperation();
+		var updates = new List<ChatResponseUpdate>();
+		var read = ReadAsync(CreateStream(operation), updates);
+		await operation.Attached.Task.WaitAsync(Timeout);
+		operation.Report("Hello");
+		operation.Complete("Goodbye");
+		var error = await Assert.ThrowsAsync<InvalidOperationException>(() => read.WaitAsync(Timeout));
+		Assert.Contains("diverged", error.Message, StringComparison.Ordinal);
+		Assert.Equal("Hello", Assert.Single(updates).Text);
+	}
+
+	// Managed cancellation is not native Completed: request contexts and shared model leases must survive it.
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task StreamResponseAsync_DelayedNativeCancellation_RetainsResourcesUntilNativeTerminalCompletion(bool disposeIterator)
+	{
+		using var cancellation = new CancellationTokenSource();
+		var operation = new TestOperation { DelayCancellation = true };
+		var model = new WindowsAIModelProviderTests.Model();
+		var context = new WindowsAIModelProviderTests.Model();
+		using var models = new WindowsAIModelProvider<WindowsAIModelProviderTests.Model>(
+			() => Task.FromResult(model), () => Microsoft.Windows.AI.AIFeatureReadyState.Ready);
+		var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var stream = WindowsAIChatClient.StreamResponseAsync(async (handler, token) =>
+		{
+			try
+			{
+				using var lease = await models.AcquireAsync(token);
+				using var requestContext = context;
+				await WindowsAIChatClient.ForwardResponseAsync(operation, handler, token, text => text);
+			}
+			finally
+			{
+				released.TrySetResult();
+			}
+		}, cancellation.Token);
+		await using var iterator = stream.GetAsyncEnumerator();
+		try
+		{
+			var first = iterator.MoveNextAsync().AsTask();
+			await operation.Attached.Task.WaitAsync(Timeout);
+			operation.Report("First");
+			Assert.True(await first.WaitAsync(Timeout));
+			if (disposeIterator)
+				await iterator.DisposeAsync().AsTask().WaitAsync(Timeout);
+			else
+			{
+				var next = iterator.MoveNextAsync().AsTask();
+				cancellation.Cancel();
+				await Assert.ThrowsAnyAsync<OperationCanceledException>(() => next.WaitAsync(Timeout));
+			}
+			await operation.CancelRequested.Task.WaitAsync(Timeout);
+			Assert.Equal(AsyncStatus.Started, operation.Status);
+			Assert.Equal(0, context.DisposeCount);
+			Assert.Equal(0, model.DisposeCount);
+			Assert.False(released.Task.IsCompleted);
+
+			models.Dispose();
+			Assert.Equal(0, model.DisposeCount);
+
+			operation.CompleteCancellation();
+			await released.Task.WaitAsync(Timeout);
+			Assert.Equal(1, context.DisposeCount);
+			Assert.Equal(1, model.DisposeCount);
+		}
+		finally
+		{
+			operation.CompleteCancellation();
+			await released.Task.WaitAsync(Timeout);
+		}
 	}
 
 	// Windows's WinRT bridge synthesizes a delta from GetResults when native progress has supplied no text.
@@ -300,6 +394,34 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		WindowsAIChatClient.StreamResponseAsync((handler, token) =>
 			WindowsAIChatClient.ForwardResponseAsync(operation, handler, token, text => text));
 
+	// WinRT can complete with a failed response status after cancellation has already released the reader.
+	[Fact]
+	public async Task StreamResponseAsync_LateNativeResultFailure_IsValidatedAndTraced()
+	{
+		using var source = new CancellationTokenSource();
+		var operation = new TestOperation { DelayCancellation = true };
+		var marker = $"Late result failure {Guid.NewGuid()}";
+		using var listener = new ErrorListener(marker);
+		Trace.Listeners.Add(listener);
+		var read = ReadAsync(WindowsAIChatClient.StreamResponseAsync((handler, token) =>
+			WindowsAIChatClient.ForwardResponseAsync(operation, handler, token,
+				_ => throw new InvalidOperationException(marker)), source.Token), []);
+		try
+		{
+			await operation.Attached.Task.WaitAsync(Timeout);
+			source.Cancel();
+			await Assert.ThrowsAnyAsync<OperationCanceledException>(() => read.WaitAsync(Timeout));
+			operation.Complete("Native failure result");
+			var message = await listener.Error.Task.WaitAsync(Timeout);
+			Assert.Contains("Windows AI generation failed", message, StringComparison.Ordinal);
+		}
+		finally
+		{
+			operation.CompleteCancellation();
+			Trace.Listeners.Remove(listener);
+		}
+	}
+
 	private static async Task ReadAsync(IAsyncEnumerable<ChatResponseUpdate> stream, List<ChatResponseUpdate> updates)
 	{
 		await foreach (var update in stream)
@@ -314,6 +436,7 @@ public class WindowsAIChatClientStreamingLifecycleTests
 
 		public TaskCompletionSource Attached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 		public TaskCompletionSource CancelRequested { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+		public bool DelayCancellation { get; init; }
 		public uint Id => 1;
 		public AsyncStatus Status { get; private set; } = AsyncStatus.Started;
 		public Exception ErrorCode { get; private set; } = null!;
@@ -347,14 +470,18 @@ public class WindowsAIChatClientStreamingLifecycleTests
 		public void Cancel()
 		{
 			CancelRequested.TrySetResult();
-			Finish(AsyncStatus.Canceled);
+			if (!DelayCancellation)
+				CompleteCancellation();
 		}
 
+		public void CompleteCancellation() => Finish(AsyncStatus.Canceled);
 		public void Close() { }
 		public string GetResults() => _result;
 
 		private void Finish(AsyncStatus status)
 		{
+			if (Status != AsyncStatus.Started)
+				return;
 			Status = status;
 			_completed?.Invoke(this, status);
 		}
