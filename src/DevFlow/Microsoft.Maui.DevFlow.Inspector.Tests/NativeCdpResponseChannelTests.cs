@@ -7,6 +7,106 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 public class NativeCdpResponseChannelTests
 {
     [Fact]
+    public async Task EventSubscription_OwnBindingDeliversActualReply_WithoutUsingProjectedSenderIdentity()
+    {
+        using var channel = new NativeCdpResponseChannel();
+        using var subscription = new NativeCdpEventSubscription(channel);
+        var pending = channel.Register(42);
+        const string reply = """{"id":42,"result":{"value":"actual reply"}}""";
+
+        Assert.True(subscription.TryReceive(BindingEvent(channel, Payload(channel, reply))));
+        Assert.Equal(reply, await pending);
+        Assert.False(subscription.TryReceive(BindingEvent(channel, Payload(channel, reply))));
+        Assert.Equal(2, subscription.MatchingBindings);
+        Assert.Equal(1, subscription.AcceptedPayloads);
+        channel.Remove(42);
+    }
+
+    [Fact]
+    public async Task EventSubscription_ForeignReceiverBindingAndChannel_CannotCompleteSameWireId()
+    {
+        using var own = new NativeCdpResponseChannel();
+        using var foreign = new NativeCdpResponseChannel();
+        using var ownReceiver = new NativeCdpEventSubscription(own);
+        using var foreignReceiver = new NativeCdpEventSubscription(foreign);
+        var pending = own.Register(42);
+        const string reply = """{"id":42,"error":{"message":"actual protocol error"}}""";
+
+        Assert.False(ownReceiver.TryReceive(BindingEvent(foreign, Payload(own, reply))));
+        Assert.Equal(0, ownReceiver.MatchingBindings);
+        Assert.False(ownReceiver.TryReceive(BindingEvent(own, Payload(foreign, reply))));
+        Assert.Equal(1, ownReceiver.MatchingBindings);
+        Assert.False(foreignReceiver.TryReceive(BindingEvent(own, Payload(own, reply))));
+        Assert.False(pending.IsCompleted);
+        Assert.True(ownReceiver.TryReceive(BindingEvent(own, Payload(own, reply))));
+        Assert.Equal(reply, await pending);
+        own.Remove(42);
+    }
+
+    [Fact]
+    public async Task EventSubscription_DisposedOldReceiverCannotCompleteRetryHandshakeOrNewReply()
+    {
+        using var channel = new NativeCdpResponseChannel();
+        using var oldReceiver = new NativeCdpEventSubscription(channel);
+        var old = channel.BeginHandshake();
+        channel.EndHandshake(old.Received);
+        oldReceiver.Dispose();
+        using var current = new NativeCdpEventSubscription(channel);
+        var handshake = channel.BeginHandshake();
+        var pending = channel.Register(42);
+        var probe = BindingEvent(channel, HandshakePayload(handshake.Script));
+        var actual = BindingEvent(channel, Payload(channel, """{"id":42,"result":{"value":"fresh"}}"""));
+
+        Assert.False(oldReceiver.TryReceive(probe));
+        Assert.False(oldReceiver.TryReceive(actual));
+        Assert.False(handshake.Received.IsCompleted);
+        Assert.False(pending.IsCompleted);
+        Assert.False(current.TryReceive(BindingEvent(channel, HandshakePayload(old.Script))));
+        Assert.True(current.TryReceive(probe));
+        await handshake.Received;
+        Assert.False(pending.IsCompleted);
+        channel.EndHandshake(handshake.Received);
+        Assert.True(current.TryReceive(actual));
+        Assert.Contains("fresh", await pending);
+        channel.Remove(42);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => old.Received);
+    }
+
+    [Fact]
+    public async Task EventSubscription_ChannelDeactivated_RejectsLateActualRepliesAndSetupProbes()
+    {
+        using var channel = new NativeCdpResponseChannel();
+        using var receiver = new NativeCdpEventSubscription(channel);
+        var handshake = channel.BeginHandshake();
+        var pending = channel.Register(42);
+        channel.Dispose();
+
+        Assert.False(receiver.TryReceive(BindingEvent(channel, HandshakePayload(handshake.Script))));
+        Assert.False(receiver.TryReceive(BindingEvent(channel, Payload(channel, """{"id":42,"result":{}}"""))));
+        Assert.Equal(0, receiver.AcceptedPayloads);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handshake.Received);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("""{"name":4,"payload":"unrelated"}""")]
+    [InlineData("""{"name":"application","payload":"unrelated"}""")]
+    public void EventSubscription_UnrelatedNativeEvents_DoNotEnterOwnedChannel(string eventJson)
+    {
+        using var channel = new NativeCdpResponseChannel();
+        using var receiver = new NativeCdpEventSubscription(channel);
+        var pending = channel.Register(42);
+
+        Assert.False(receiver.TryReceive(eventJson));
+        Assert.False(receiver.TryReceive(JsonSerializer.Serialize(new { name = channel.BindingName, payload = 42 })));
+        Assert.False(receiver.TryReceive(BindingEvent(channel, "invalid payload")));
+        Assert.False(pending.IsCompleted);
+        Assert.Equal(0, receiver.AcceptedPayloads);
+        Assert.ThrowsAny<JsonException>(() => receiver.TryReceive("invalid event JSON"));
+    }
+
+    [Fact]
     public async Task FailureDiagnostics_PreservesOnlyNativeSetupStageAndCounters_NotUserContent()
     {
         const string windows = "Native CDP response binding setup failed during binding handshake callback; callbacks=2, matchingBindings=0, acceptedPayloads=0, lastSender=(null=False, managedSame=False, nativeSame=True).";
@@ -258,6 +358,9 @@ public class NativeCdpResponseChannelTests
 
     static string Payload(NativeCdpResponseChannel channel, string response)
         => JsonSerializer.Serialize(new { channel = channel.BindingName, response });
+
+    static string BindingEvent(NativeCdpResponseChannel channel, string payload)
+        => JsonSerializer.Serialize(new { name = channel.BindingName, payload });
 
     static string HandshakePayload(string script)
     {

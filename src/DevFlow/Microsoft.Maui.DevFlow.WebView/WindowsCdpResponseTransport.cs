@@ -10,24 +10,23 @@ internal sealed class WindowsCdpResponseTransport(
 {
     private CoreWebView2? _core;
     private CoreWebView2DevToolsProtocolEventReceiver? _receiver;
+    private global::Windows.Foundation.TypedEventHandler<CoreWebView2,
+        CoreWebView2DevToolsProtocolEventReceivedEventArgs>? _handler;
+    private NativeCdpEventSubscription? _subscription;
     private Task? _initialization;
     private readonly CancellationTokenSource _lifetime = new();
     private int _callbacks;
-    private int _matchingBindings;
-    private int _acceptedPayloads;
     private string _lastSender = "none";
     private bool _disposed;
 
     internal Task EnsureInitializedAsync(CoreWebView2 core)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        // WinRT can project the same native core through different managed wrappers.
         if (_core is not null && _core != core)
             throw new InvalidOperationException("The CDP response binding belongs to a different native WebView.");
         if (_initialization?.IsFaulted == true)
         {
-            if (_receiver is not null)
-                _receiver.DevToolsProtocolEventReceived -= OnBindingCalled;
+            Unsubscribe();
             _initialization = null;
         }
         return _initialization ??= InitializeAsync(core);
@@ -36,8 +35,12 @@ internal sealed class WindowsCdpResponseTransport(
     private async Task InitializeAsync(CoreWebView2 core)
     {
         _core = core;
-        _receiver = core.GetDevToolsProtocolEventReceiver("Runtime.bindingCalled");
-        _receiver.DevToolsProtocolEventReceived += OnBindingCalled;
+        var receiver = core.GetDevToolsProtocolEventReceiver("Runtime.bindingCalled");
+        var subscription = new NativeCdpEventSubscription(channel);
+        _receiver = receiver;
+        _subscription = subscription;
+        _handler = (sender, args) => OnBindingCalled(receiver, subscription, sender, args);
+        receiver.DevToolsProtocolEventReceived += _handler;
         using var budget = new CancellationTokenSource(initializationTimeout);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(budget.Token, _lifetime.Token);
         var handshake = channel.BeginHandshake();
@@ -66,27 +69,21 @@ internal sealed class WindowsCdpResponseTransport(
         finally { channel.EndHandshake(handshake.Received); }
     }
 
-    private void OnBindingCalled(CoreWebView2 sender,
+    private void OnBindingCalled(CoreWebView2DevToolsProtocolEventReceiver receiver,
+        NativeCdpEventSubscription subscription, CoreWebView2 sender,
         CoreWebView2DevToolsProtocolEventReceivedEventArgs args)
     {
         Interlocked.Increment(ref _callbacks);
         var sameCore = sender is not null && sender == _core;
         Volatile.Write(ref _lastSender,
             $"null={sender is null}, managedSame={ReferenceEquals(sender, _core)}, nativeSame={sameCore}");
-        if (_disposed || !sameCore) return;
+        // The SDK receiver is obtained from this core and owns this exact subscription.
+        // WinRT event-sender projections need not share the bound core's interface pointer.
+        if (_disposed || !ReferenceEquals(receiver, _receiver) ||
+            !ReferenceEquals(subscription, _subscription)) return;
         try
         {
-            using var message = JsonDocument.Parse(args.ParameterObjectAsJson);
-            if (message.RootElement.ValueKind == JsonValueKind.Object &&
-                message.RootElement.TryGetProperty("name", out var name) &&
-                name.ValueKind == JsonValueKind.String && name.GetString() == channel.BindingName)
-            {
-                Interlocked.Increment(ref _matchingBindings);
-                if (message.RootElement.TryGetProperty("payload", out var data) &&
-                    data.ValueKind == JsonValueKind.String && data.GetString() is { } payload &&
-                    channel.TryReceive(payload))
-                    Interlocked.Increment(ref _acceptedPayloads);
-            }
+            subscription.TryReceive(args.ParameterObjectAsJson);
         }
         catch (JsonException ex)
         {
@@ -96,16 +93,25 @@ internal sealed class WindowsCdpResponseTransport(
 
     private string DescribeFailure(string stage)
         => $"Native CDP response binding setup failed during {stage}; " +
-            $"callbacks={Volatile.Read(ref _callbacks)}, matchingBindings={Volatile.Read(ref _matchingBindings)}, " +
-            $"acceptedPayloads={Volatile.Read(ref _acceptedPayloads)}, lastSender=({Volatile.Read(ref _lastSender)}).";
+            $"callbacks={Volatile.Read(ref _callbacks)}, matchingBindings={_subscription?.MatchingBindings ?? 0}, " +
+            $"acceptedPayloads={_subscription?.AcceptedPayloads ?? 0}, lastSender=({Volatile.Read(ref _lastSender)}).";
+
+    private void Unsubscribe()
+    {
+        _subscription?.Dispose();
+        _subscription = null;
+        if (_receiver is not null && _handler is not null)
+            _receiver.DevToolsProtocolEventReceived -= _handler;
+        _handler = null;
+        _receiver = null;
+    }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
-        if (_receiver is not null)
-            _receiver.DevToolsProtocolEventReceived -= OnBindingCalled;
+        Unsubscribe();
         _ = RemoveBindingAsync();
     }
 

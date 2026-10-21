@@ -410,6 +410,45 @@ public class WebViewDebugServiceTests
     }
 
     [Fact]
+    public async Task NativeResponseEvent_RetiredReceiverRejectsActualReply_CurrentReceiverDispatchesOnlyOnce()
+    {
+        NativeCdpResponseChannel? channel = null;
+        NativeCdpEventSubscription? current = null;
+        NativeCdpEventSubscription? retired = null;
+        var sends = 0;
+        using var service = new TestService(script =>
+        {
+            if (!script.Contains("sendRawMessage")) return Task.FromResult(ReadyResult(script));
+            sends++;
+            var wireId = ReadSentWireId(script);
+            var payload = JsonSerializer.Serialize(new
+            {
+                channel = channel!.BindingName,
+                response = JsonSerializer.Serialize(new { id = wireId, result = new { value = "actual native event" } })
+            });
+            var nativeEvent = JsonSerializer.Serialize(new { name = channel.BindingName, payload });
+            Assert.False(retired!.TryReceive(nativeEvent));
+            Assert.True(current!.TryReceive(nativeEvent));
+            return Task.FromResult<string?>("__cdp_pending__");
+        });
+        channel = service.EnableNativeCdpResponses(0);
+        using var oldReceiver = new NativeCdpEventSubscription(channel);
+        retired = oldReceiver;
+        oldReceiver.Dispose();
+        using var newReceiver = new NativeCdpEventSubscription(channel);
+        current = newReceiver;
+
+        using var response = JsonDocument.Parse(await service.SendCdpCommandAsync(
+            """{"id":73,"method":"Runtime.evaluate","params":{"expression":"button.click()"}}""", 0));
+
+        Assert.Equal(73, response.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal("actual native event", response.RootElement.GetProperty("result").GetProperty("value").GetString());
+        Assert.Equal(1, sends);
+        Assert.Equal(0, retired.AcceptedPayloads);
+        Assert.Equal(1, current.AcceptedPayloads);
+    }
+
+    [Fact]
     public async Task WebKitBinding_ActualInstallAndHandshakeScripts_KeepApplicationHandlerAndPrivateScope()
     {
         using var host = new JavaScriptHost();

@@ -96,11 +96,11 @@ public class WebViewBridgeScriptTests
         await page.GotoAsync("https://devflow.test/");
         await InitializeAsync(page);
         using var channel = new NativeCdpResponseChannel();
+        using var responseEvents = new NativeCdpEventSubscription(channel);
         var session = await context.NewCDPSessionAsync(page);
         EventHandler<JsonElement?> receiver = (_, message) =>
         {
-            if (message is { } value && value.GetProperty("name").GetString() == channel.BindingName)
-                channel.TryReceive(value.GetProperty("payload").GetString()!);
+            if (message is { } value) responseEvents.TryReceive(value.GetRawText());
         };
         session.Event("Runtime.bindingCalled").OnEvent += receiver;
         await session.SendAsync("Runtime.enable");
@@ -185,6 +185,9 @@ public class WebViewBridgeScriptTests
         using var failed = JsonDocument.Parse(await failure.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Contains("original navigation-context error", failed.RootElement.GetProperty("result").GetProperty("exceptionDetails").ToString());
         channel.Remove(78);
+        Assert.Equal(responseEvents.MatchingBindings, responseEvents.AcceptedPayloads);
+        Assert.True(responseEvents.AcceptedPayloads >= 6);
+        responseEvents.Dispose();
         await session.SendAsync("Runtime.removeBinding", new() { ["name"] = channel.BindingName });
         session.Event("Runtime.bindingCalled").OnEvent -= receiver;
         await page.EvaluateAsync("() => __application_native_binding('application transport unchanged')");
