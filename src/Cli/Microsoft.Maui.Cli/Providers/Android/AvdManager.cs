@@ -259,7 +259,7 @@ public class AvdManager
 	}
 
 	public async Task StartAvdAsync(string name, bool coldBoot = false, bool wait = false,
-		CancellationToken cancellationToken = default)
+		CancellationToken cancellationToken = default, bool noWindow = false)
 	{
 		if (_emulatorRunner == null)
 			throw MauiToolException.AutoFixable(
@@ -281,10 +281,14 @@ public class AvdManager
 					return; // Already running, nothing to do
 			}
 
+			List<string>? additionalArgs = noWindow
+				? ["-no-window", "-no-audio", "-no-boot-anim", "-gpu", "swiftshader_indirect"]
+				: null;
+
 			if (wait && _adb?.Runner != null)
 			{
 				var result = await _emulatorRunner.BootEmulatorAsync(name, _adb.Runner,
-					new EmulatorBootOptions { ColdBoot = coldBoot }, cancellationToken);
+					new EmulatorBootOptions { ColdBoot = coldBoot, AdditionalArgs = additionalArgs }, cancellationToken);
 				if (!result.Success)
 					throw new MauiToolException(
 						ErrorCodes.AndroidEmulatorNotFound,
@@ -292,7 +296,7 @@ public class AvdManager
 			}
 			else
 			{
-				var process = _emulatorRunner.LaunchEmulator(name, coldBoot);
+				var process = _emulatorRunner.LaunchEmulator(name, coldBoot, additionalArgs);
 
 				// Wait briefly to detect immediate crashes (e.g. stale lock files,
 				// missing system image, HAXM issues). A healthy emulator stays alive.
