@@ -192,14 +192,13 @@ public sealed class MixedWebViewTestPage : ContentPage
             AutomationId = "WebViewNativeClipped",
             Text = "Clipped native fixture",
             LineBreakMode = LineBreakMode.NoWrap,
-            WidthRequest = 80,
-            HeightRequest = 80,
             MinimumWidthRequest = 80,
             MinimumHeightRequest = 80,
             MaximumWidthRequest = 80,
             MaximumHeightRequest = 80,
-            HorizontalOptions = LayoutOptions.Start,
-            VerticalOptions = LayoutOptions.Start,
+            // Fill the explicit AbsoluteLayout allocation instead of using native text's desired size.
+            HorizontalOptions = LayoutOptions.Fill,
+            VerticalOptions = LayoutOptions.Fill,
             BackgroundColor = Color.FromArgb("#345678")
         };
         AbsoluteLayout.SetLayoutBounds(clippedLabel, new Rect(0, 0, 80, 80));
