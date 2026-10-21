@@ -10,36 +10,19 @@ import com.google.mlkit.genai.prompt.ImagePart
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicBoolean
 
 class GeminiNanoNativeClient {
-    private val operations = NativeChatOperations(
-        createModel = { Generation.getClient() },
-        closeModel = { it.close() },
-        infer = { model, request, streaming, callback ->
-            requireAvailable(model.checkStatus())
-            val nativeRequest = request.toNative(
-                model::isSystemPromptAvailable,
-                model::isThinkingModeAvailable,
-            )
-            val modelName = model.getBaseModelName()
-            val tokenCount = model.countTokens(nativeRequest).totalTokens
-            val accumulator = NativeStreamAccumulator(callback, modelName)
-            val generated = if (streaming) {
-                model.generateContent(nativeRequest, object : StreamingCallback {
-                    override fun onNewText(additionalText: String) = accumulator.onText(additionalText)
-                    override fun onNewThought(additionalThought: String) = accumulator.onThought(additionalThought)
-                })
-            } else {
-                model.generateContent(nativeRequest)
-            }
-
-            generated.toNativeResponse(modelName, tokenCount).also {
-                if (streaming) accumulator.finish(it)
-            }
-        },
-        mapError = ::toNativeError,
-    )
+    private val chatJob = SupervisorJob()
+    private val chatScope = CoroutineScope(chatJob + Dispatchers.Default)
+    private val chatClosed = AtomicBoolean()
 
     private val modelOperations = NativeModelOperations(
         createModel = { Generation.getClient() },
@@ -60,11 +43,70 @@ class GeminiNanoNativeClient {
         request: NativeChatRequest,
         streaming: Boolean,
         callback: NativeChatCallback,
-    ): NativeCancellation = operations.generate(request, streaming, callback)
+    ): NativeCancellation {
+        val terminated = AtomicBoolean()
+
+        fun fail(cause: Throwable) {
+            if (terminated.compareAndSet(false, true)) callback.onError(toNativeError(cause))
+        }
+
+        if (chatClosed.get()) {
+            fail(CancellationException("Gemini Nano client is closed."))
+            return NativeCancellation(null)
+        }
+
+        val job = chatScope.launch {
+            val events = NativeChatEventQueue(this, callback)
+            val response = try {
+                val model = Generation.getClient()
+                val generatedResponse = try {
+                    ensureActive()
+                    requireAvailable(model.checkStatus())
+                    val nativeRequest = request.toNative(
+                        model::isSystemPromptAvailable,
+                        model::isThinkingModeAvailable,
+                    )
+                    val modelName = model.getBaseModelName()
+                    val tokenCount = model.countTokens(nativeRequest).totalTokens
+                    val accumulator = NativeStreamAccumulator(events.callback, modelName)
+                    val generated = if (streaming) {
+                        model.generateContent(nativeRequest, object : StreamingCallback {
+                            override fun onNewText(additionalText: String) = accumulator.onText(additionalText)
+                            override fun onNewThought(additionalThought: String) = accumulator.onThought(additionalThought)
+                        })
+                    } else {
+                        model.generateContent(nativeRequest)
+                    }
+
+                    generated.toNativeResponse(modelName, tokenCount).also {
+                        if (streaming) accumulator.finish(it)
+                    }
+                } finally {
+                    model.close()
+                }
+                events.finish()
+                ensureActive()
+                generatedResponse
+            } catch (cause: Throwable) {
+                events.cancel()
+                fail(cause)
+                return@launch
+            }
+
+            if (terminated.compareAndSet(false, true)) callback.onComplete(response)
+        }
+
+        job.invokeOnCompletion { cause ->
+            if (cause != null) fail(cause)
+        }
+        if (chatClosed.get()) job.cancel()
+        return NativeCancellation(job)
+    }
 
     fun close() {
         runBlocking {
-            operations.close()
+            chatClosed.set(true)
+            chatJob.cancelAndJoin()
             modelOperations.close()
         }
     }

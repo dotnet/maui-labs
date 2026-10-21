@@ -50,16 +50,17 @@ trimmed/AOT apps; unsupported object representations reject clearly.
 
 ## Request lifetime and callbacks
 
-`NativeChatOperations` creates a model per request. Its coroutine supervisor
-allows independent requests and cancellation; closing the client cancels and
-joins the outstanding work.
+`GeminiNanoNativeClient` owns the coroutine supervisor and creates/closes the
+ML Kit model directly for each request. Independent requests own independent
+models; closing the client cancels and joins outstanding work.
 
-Native streaming callbacks enter a per-request queue. Text/thought updates
-carry the model name obtained before generation. Model cleanup and admitted
-progress callbacks finish before terminal completion releases the managed JNI
-callback. The returned candidate is reconciled with accumulated additional-text
-deltas: equal emits nothing, an extension emits only its suffix, and divergence
-faults the stream. The C# adapter converts events to `ChatResponseUpdate` values.
+`NativeChatEventQueue` is the horizontal concurrency boundary: it serializes
+per-request text/thought callbacks and drains admitted progress before terminal
+completion releases the managed JNI callback. Text/thought updates carry the
+model name obtained before generation. The returned candidate is reconciled
+with accumulated additional-text deltas: equal emits nothing, an extension
+emits only its suffix, and divergence faults the stream. The C# adapter converts
+events to `ChatResponseUpdate` values.
 
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
@@ -91,40 +92,10 @@ again and rejects non-AVAILABLE states without ever preparing or downloading.
 
 ## Android minimum and model availability
 
-The package and samples retain the repository's API 24 minimum.
-`GeminiNanoChatClient` requires API 26 and checks this before constructing its
-native peer; Chat Playground also guards its DI registration.
-
-The bridge, GenAI Common, and GenAI Prompt AARs declare minimum API 26.
-Consumers with a minimum below API 26 must explicitly override those three
-library manifests while keeping Gemini calls behind the runtime guard:
-
-```xml
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          xmlns:tools="http://schemas.android.com/tools">
-  <uses-sdk tools:overrideLibrary="com.microsoft.maui.essentials.ai,com.google.mlkit.genai.common,com.google.mlkit.genai.prompt" />
-</manifest>
-```
-
-Leave minimum and target SDK selection to the project. The installed Android SDK
-can omit `targetSdkVersion` when the template already has `<uses-sdk>`; see its
-[manifest generation code](https://github.com/dotnet/android/blob/36.1.69/src/Xamarin.Android.Build.Tasks/Utilities/ManifestDocument.cs#L308-L329).
-For these two samples, `Directory.Build.targets` supplies the merger's
-`TARGET_SDK_VERSION` from `TargetPlatformVersion` to retain the framework default
-instead of pinning another API level. If configuring another consumer affected
-by that SDK behavior, the equivalent `Directory.Build.targets` setting is:
-
-```xml
-<Project>
-  <PropertyGroup Condition="'$(TargetPlatformIdentifier)' == 'android'">
-    <AndroidManifestMergerExtraArgs>$(AndroidManifestMergerExtraArgs) --property TARGET_SDK_VERSION=$([System.Version]::Parse('$(TargetPlatformVersion)').Major)</AndroidManifestMergerExtraArgs>
-    <AndroidManifestMergerExtraArgs>$(AndroidManifestMergerExtraArgs.Trim())</AndroidManifestMergerExtraArgs>
-  </PropertyGroup>
-</Project>
-```
-
-This applies to consumers using the framework-default target SDK; keep an
-intentional lower target if the app explicitly selects one.
+The package, samples, and device tests require Android API 26 or later. The
+bridge, GenAI Common, and GenAI Prompt AARs use the same minimum, so consuming
+apps must also set `SupportedOSPlatformVersion` to at least `26.0`. No manifest
+override or runtime API-level guard is required.
 
 OS version alone does not establish model availability. Kotlin checks the
 native feature status before inference. System instructions require Nano V3+;
@@ -159,13 +130,15 @@ cd src/AI/AndroidNative/EssentialsAI
 ## Validation boundaries
 
 `NativeChatRequestTest` checks the Google request shape and capability errors.
-`NativeChatOperationsTest` uses fake models to exercise concurrency,
-cancellation, callback ordering, and cleanup. `NativeModelOperationsTest` uses
-injectable status/download functions and real ML Kit status subclasses for
-preparation, polling, failure, cancellation, and lifetime tests without AICore.
-`NativeStreamAccumulatorTest` covers final-candidate reconciliation. Android
-binds the shared messages, options, response, streaming, cancellation, usage,
-GetService, and schema suites; provider-only tests cover interop/native policy.
+`NativeChatEventQueueTest` exercises callback ordering, drain-before-terminal,
+cancellation, and late-event suppression without abstracting the ML Kit model.
+`NativeModelOperationsTest` uses injectable status/download functions and real
+ML Kit status subclasses for preparation, polling, failure, cancellation, and
+lifetime tests without AICore. `NativeStreamAccumulatorTest` covers
+final-candidate reconciliation. Android binds the shared messages, options,
+response, streaming, cancellation, usage, GetService, and schema suites;
+provider-only tests cover interop/native policy. Real model creation, inference,
+and disposal remain device/model integration coverage.
 
 EssentialsAI CI builds Chat Playground in a separate Android-only job. It is not
 in the cross-platform shipping solution: the generic sample's pre-existing
