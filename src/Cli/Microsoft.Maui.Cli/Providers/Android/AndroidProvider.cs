@@ -262,9 +262,9 @@ public class AndroidProvider : IAndroidProvider
 	}
 
 	public async Task StartAvdAsync(string name, bool coldBoot = false, bool wait = false,
-		CancellationToken cancellationToken = default)
+		CancellationToken cancellationToken = default, bool noWindow = false)
 	{
-		await _avdManager.StartAvdAsync(name, coldBoot, wait, cancellationToken);
+		await _avdManager.StartAvdAsync(name, coldBoot, wait, cancellationToken, noWindow);
 	}
 
 	public async Task StopEmulatorAsync(string deviceSerial, CancellationToken cancellationToken = default)

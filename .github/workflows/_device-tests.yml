@@ -81,6 +81,48 @@ jobs:
         if: inputs.install-workloads
         run: dotnet workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
+      - name: Install Android SDK dependencies
+        if: contains(inputs.target-framework, '-android')
+        run: |
+          dotnet build "${{ inputs.project-path }}" \
+            -t:InstallAndroidDependencies \
+            -f ${{ inputs.target-framework }} \
+            -p:AndroidSdkDirectory="$ANDROID_HOME" \
+            -p:AcceptAndroidSDKLicenses=true
+
+      - name: Build MAUI CLI
+        if: contains(inputs.target-framework, '-android')
+        run: dotnet build src/Cli/Microsoft.Maui.Cli/Microsoft.Maui.Cli.csproj -c Release
+
+      - name: Create Android emulator
+        if: contains(inputs.target-framework, '-android')
+        shell: bash
+        run: |
+          maui_cli="$GITHUB_WORKSPACE/artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui"
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            abi="arm64-v8a"
+          else
+            abi="x86_64"
+          fi
+          image="system-images;android-35;google_apis;$abi"
+          if [[ -e /dev/kvm ]]; then
+            sudo chmod 666 /dev/kvm
+          fi
+          "$maui_cli" android --sdk "$ANDROID_HOME" --ci sdk install \
+            platform-tools emulator "$image"
+          "$maui_cli" android --sdk "$ANDROID_HOME" --ci emulator create \
+            device-tests --force --package "$image" --device pixel_6
+
+      - name: Start Android emulator
+        id: android-emulator
+        if: contains(inputs.target-framework, '-android')
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          "$GITHUB_WORKSPACE/artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui" \
+            android --sdk "$ANDROID_HOME" --ci \
+            emulator start device-tests --cold-boot --wait --no-window
+
       - name: Build device tests
         run: |
           cd "$(dirname "${{ inputs.project-path }}")"
@@ -106,3 +148,10 @@ jobs:
         with:
           name: test-results-${{ inputs.project-name }}-device-${{ inputs.target-framework }}
           path: artifacts/TestResults/**/*.trx
+
+      - name: Stop Android emulator
+        if: always() && steps.android-emulator.outcome == 'success'
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          "$ANDROID_HOME/platform-tools/adb" -e emu kill

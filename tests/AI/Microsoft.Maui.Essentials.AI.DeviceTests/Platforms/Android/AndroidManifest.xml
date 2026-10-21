@@ -1,5 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 	<uses-permission android:name="android.permission.INTERNET" />
-	<application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true"></application>
+	<application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true">
+		<activity-alias
+			android:name="com.microsoft.maui.ai.devicetests.MainActivity"
+			android:enabled="true"
+			android:exported="true"
+			android:targetActivity="com.microsoft.maui.essentials.ai.devicetests.MainActivity" />
+	</application>
 </manifest>

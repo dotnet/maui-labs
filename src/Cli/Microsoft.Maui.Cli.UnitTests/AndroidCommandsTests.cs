@@ -183,6 +183,45 @@ public class AndroidCommandsTests
 		// Assert
 		Assert.Contains(startCommand.Options, o => o.Name == "--cold-boot");
 		Assert.Contains(startCommand.Options, o => o.Name == "--wait");
+		Assert.Contains(startCommand.Options, o => o.Name == "--no-window");
+	}
+
+	[Theory]
+	[InlineData(false, false, false)]
+	[InlineData(false, false, true)]
+	[InlineData(false, true, false)]
+	[InlineData(false, true, true)]
+	[InlineData(true, false, false)]
+	[InlineData(true, false, true)]
+	[InlineData(true, true, false)]
+	[InlineData(true, true, true)]
+	public async Task EmulatorStartCommand_ForwardsLaunchOptions(bool noWindow, bool wait, bool json)
+	{
+		var android = new FakeAndroidProvider();
+		var originalServices = Program.Services;
+		var services = ServiceConfiguration.CreateTestServiceProvider(androidProvider: android);
+		using var serviceLifetime = services as IDisposable;
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+		try
+		{
+			Program.Services = services;
+			var arguments = new List<string> { "android", "emulator", "start", "TestEmulator", "--cold-boot", "--ci" };
+			if (noWindow)
+				arguments.Add("--no-window");
+			if (wait)
+				arguments.Add("--wait");
+			if (json)
+				arguments.Add("--json");
+
+			var result = Program.BuildRootCommand().Parse(arguments.ToArray());
+			Assert.Empty(result.Errors);
+			Assert.Equal(0, await result.InvokeAsync(cancellationToken: timeout.Token));
+			Assert.Equal(("TestEmulator", true, wait, noWindow), Assert.Single(android.StartedAvds));
+		}
+		finally
+		{
+			Program.Services = originalServices;
+		}
 	}
 
 	[Fact]

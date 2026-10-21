@@ -225,8 +225,19 @@ maui android jdk install
 
 # Create and manage emulators
 maui android emulator create --name MyEmulator
-maui android emulator start --name MyEmulator
+maui android emulator start MyEmulator
+
+# Headless CI: cold boot without a window and wait until Android is ready
+maui android emulator start MyEmulator --no-window --cold-boot --wait --ci
 ```
+
+`emulator start --no-window` disables the emulator window, audio, and boot
+animation and selects software graphics (`-gpu swiftshader_indirect`). It works
+with or without `--wait`; omit it to preserve the emulator's normal display and
+graphics settings. `--wait` uses the upstream boot checks (Android boot completed
+and package manager ready), with a five-minute boot timeout; without it the CLI
+only checks for an immediate startup failure. An already-running AVD is left
+unchanged, so stop it first if you need to change its launch settings.
 
 SDK package listing supports both the legacy `sdkmanager` table and the Android
 CLI table produced by Command-line Tools 23. JSON retains

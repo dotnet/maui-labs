@@ -59,7 +59,7 @@ public class FakeAndroidProvider : IAndroidProvider
 	// --- Call tracking ---
 
 	public List<string> DeletedAvds { get; } = new();
-	public List<(string Name, bool ColdBoot, bool Wait)> StartedAvds { get; } = new();
+	public List<(string Name, bool ColdBoot, bool Wait, bool NoWindow)> StartedAvds { get; } = new();
 	public List<(string Name, string DeviceProfile, string SystemImage, bool Force)> CreatedAvds { get; } = new();
 	public List<List<string>> InstalledPackageSets { get; } = new();
 	public List<string> StoppedEmulators { get; } = new();
@@ -113,9 +113,10 @@ public class FakeAndroidProvider : IAndroidProvider
 		return Task.CompletedTask;
 	}
 
-	public Task StartAvdAsync(string name, bool coldBoot = false, bool wait = false, CancellationToken cancellationToken = default)
+	public Task StartAvdAsync(string name, bool coldBoot = false, bool wait = false,
+		CancellationToken cancellationToken = default, bool noWindow = false)
 	{
-		StartedAvds.Add((name, coldBoot, wait));
+		StartedAvds.Add((name, coldBoot, wait, noWindow));
 		return Task.CompletedTask;
 	}
 
