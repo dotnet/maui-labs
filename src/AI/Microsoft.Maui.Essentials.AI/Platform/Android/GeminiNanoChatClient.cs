@@ -28,13 +28,7 @@ public sealed class GeminiNanoChatClient : IChatClient
 	private int _disposed;
 
 	/// <summary>Initializes a client using Gemini Nano.</summary>
-	public GeminiNanoChatClient()
-	{
-		if (!OperatingSystem.IsAndroidVersionAtLeast(26))
-			throw new PlatformNotSupportedException("Gemini Nano requires Android 8.0 (API 26) or later.");
-
-		_native = new();
-	}
+	public GeminiNanoChatClient() => _native = new();
 
 	/// <summary>Reads current ML Kit availability and effective capabilities without downloading model assets.</summary>
 	/// <param name="cancellationToken">Cancels the native status request.</param>

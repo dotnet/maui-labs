@@ -33,8 +33,7 @@ internal static class ChatServiceCollectionExtensions
             services.AddSingleton<IChatClient>(CreateAppleChatClient);
 #endif
 #if ANDROID
-        if (OperatingSystem.IsAndroidVersionAtLeast(26))
-            services.AddSingleton<IChatClient>(CreateGeminiChatClient);
+        services.AddSingleton<IChatClient>(CreateGeminiChatClient);
 #endif
 
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))

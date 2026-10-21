@@ -62,8 +62,8 @@ dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sam
 
 The Windows sample remains unpackaged and offers Azure-backed features and
 offline Chat Replay, not on-device AI. Azure and Replay also run on Android.
-Gemini Nano is offered on Android API 26+ but requires supported AICore hardware
-and configuration. It supports text/image chat, not tools or structured JSON.
+The Android app requires API 26+ and supported AICore hardware/configuration for
+Gemini Nano. It supports text/image chat, not tools or structured JSON.
 The first request never downloads assets: explicitly await
 `GeminiNanoChatClient.PrepareModelAsync` from app setup after a download decision.
 There is no preparation UI or automatic cloud fallback. See the

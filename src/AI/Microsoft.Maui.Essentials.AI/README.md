@@ -44,8 +44,7 @@ if (OperatingSystem.IsIOSVersionAtLeast(26) ||
     builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
 }
 #elif ANDROID
-if (OperatingSystem.IsAndroidVersionAtLeast(26))
-    builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
+builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
 #endif
 ```
 
