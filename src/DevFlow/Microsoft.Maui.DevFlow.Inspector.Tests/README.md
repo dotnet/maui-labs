@@ -92,6 +92,8 @@ are mocked; browser requests are not intercepted and HTML is not injected.
 Teardown stops browser timers and prevents a late pagehide keepalive request, then
 drains HTTP traffic before disposing the
 Inspector and awaiting the agent server's shutdown.
+The only intercepted browser request is one held `/api/state` response, which keeps
+a refresh in flight while a tap lands.
 
 From the repository root (PowerShell):
 

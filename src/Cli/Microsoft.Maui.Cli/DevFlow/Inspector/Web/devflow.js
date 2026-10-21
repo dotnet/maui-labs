@@ -202,6 +202,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     if (refreshPromise) {
       if (!force) return refreshPromise;
       await refreshPromise;
+      // Another forced caller may already have started the fresh refresh; share it.
+      if (refreshPromise) return refreshPromise;
     }
 
     const currentRefresh = (async () => {
@@ -410,13 +412,21 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Debounced refresh — coalesce rapid calls
   let refreshTimer = null;
+  let pendingTap = null; // accepted tap whose post-tap refresh has not started
+  let latestTap = null; // newest accepted tap the Preview does not reflect yet
   function scheduleRefresh(delayMs) {
     if (refreshTimer) clearTimeout(refreshTimer);
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
-      await refreshState();
-      // A newer scheduled refresh means the Preview is still stale.
-      if (!refreshTimer) previewPending.classList.add('df-hidden');
+      const tap = pendingTap;
+      pendingTap = null;
+      // A refresh already in flight may predate the tap, so wait for it and capture again.
+      await refreshState(tap !== null);
+      // A newer tap keeps the hint until its own refresh lands.
+      if (tap !== null && tap === latestTap) {
+        latestTap = null;
+        previewPending.classList.add('df-hidden');
+      }
     }, delayMs || 300);
   }
   if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(3000));
@@ -749,8 +759,11 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         if (tap.ok && tap.target) await recordStep('tap', tap.target);
         else if (!tap.target) setStatus('Tap not recorded — no element under the cursor.');
       }
-      // An accepted tap leaves the Preview stale until this refresh lands.
-      if (tap.ok) previewPending.classList.remove('df-hidden');
+      // An accepted tap leaves the Preview stale until a refresh issued after it lands.
+      if (tap.ok) {
+        pendingTap = latestTap = tap;
+        previewPending.classList.remove('df-hidden');
+      }
       scheduleRefresh(400);
     } catch (err) {
       console.error('Tap failed:', err);

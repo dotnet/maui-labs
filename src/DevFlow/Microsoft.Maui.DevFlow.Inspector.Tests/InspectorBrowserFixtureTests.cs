@@ -195,14 +195,55 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     public async Task Tap_ShowsUpdatingHintUntilSlowCaptureRefreshesPreview()
     {
         var hint = Page.Locator("#df-preview-pending");
+        var button = Page.Locator(".devflow-element[data-id='fixture-button']");
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _screenshotGate = gate;
         await Expect(hint).ToBeHiddenAsync();
 
-        await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
-        await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        await Expect(hint).ToBeVisibleAsync();
-        await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+        var stateRequests = 0;
+        Page.Request += (_, request) =>
+        {
+            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal)) Interlocked.Increment(ref stateRequests);
+        };
+
+        // The server retries a capture that a tap invalidates, so only a response held in the
+        // browser is stale. Hold a real pre-tap /api/state response to keep a refresh in flight.
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/api/state", async route =>
+        {
+            var response = await route.FetchAsync();
+            held.SetResult();
+            await release.Task;
+            await route.FulfillAsync(new() { Response = response });
+        }, new() { Times = 1 });
+        try
+        {
+            // The online handler starts a debounced refresh, like a WebSocket event would.
+            await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+            await held.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            await button.ClickAsync();
+            await Expect(hint).ToBeVisibleAsync();
+            // Outlast the 400 ms post-tap refresh timer so it fires while the stale refresh is in flight.
+            await Page.WaitForTimeoutAsync(1000);
+            // A second tap's refresh also waits on the stale one, and both must share one post-tap capture.
+            await button.ClickAsync();
+            await Page.WaitForTimeoutAsync(1000);
+            var requestsBeforeRelease = Volatile.Read(ref stateRequests);
+            release.SetResult();
+
+            await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            // Let a duplicate post-tap request, if any, arrive before counting.
+            await Page.WaitForTimeoutAsync(500);
+            await Expect(hint).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            Assert.Equal(requestsBeforeRelease + 1, Volatile.Read(ref stateRequests));
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
 
         gate.SetResult();
         await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped", new() { Timeout = 10_000 });
