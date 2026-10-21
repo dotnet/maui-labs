@@ -36,6 +36,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private ILocator Editor => Row.Locator("textarea.df-field");
     private ILocator SourceButton => Row.Locator(".df-prop-source");
     private ILocator Overlay => Page.Locator(".devflow-element[data-id='fixture-label']");
+    private ILocator ColorRow(string name) => Page.Locator($".df-prop-row[data-property-name='{name.ToLowerInvariant()}']");
 
     public async Task InitializeAsync()
     {
@@ -70,6 +71,10 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 {
                     new { name = "Text", kind = "text", value = Volatile.Read(ref _text), writable = true },
                     new { name = "Opacity", kind = "number", value = 1, writable = true, min = 0, max = 1, step = 0.05 },
+                    // The Agent reads colors as #RRGGBB, or #RRGGBBAA when alpha is not FF.
+                    new { name = "BackgroundColor", kind = "color", value = "#00000000", writable = true },
+                    new { name = "TextColor", kind = "color", value = "#FFFF00", writable = true },
+                    new { name = "BorderColor", kind = "color", value = "#00FF0080", writable = true },
                 },
             }));
             _agent.MapPut("/api/v1/ui/elements/{id}/properties/{name}", async (HttpContext context, string name) =>
@@ -298,6 +303,56 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Empty(_writes);
         await Page.Locator("#df-prop-filter").FillAsync("no-such-property");
         await Expect(Page.Locator(".df-prop-no-results")).ToBeVisibleAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task TransparentColor_ShowsPlaceholder_AndPickIsWrittenOpaque()
+    {
+        var row = ColorRow("BackgroundColor");
+        var editor = row.Locator("input[type='color']");
+        await Expect(row.Locator(".df-color-unset-label")).ToHaveTextAsync("Transparent");
+        await Expect(editor).ToHaveAttributeAsync("aria-label", "BackgroundColor: transparent; activate to choose a color");
+        // The input is invisible inside the placeholder, so the placeholder itself must show keyboard focus.
+        var placeholder = row.Locator(".df-color-unset");
+        var border = await placeholder.EvaluateAsync<string>("element => getComputedStyle(element).borderTopColor");
+        await editor.FocusAsync();
+        Assert.NotEqual(border, await placeholder.EvaluateAsync<string>("element => getComputedStyle(element).borderTopColor"));
+        await editor.FillAsync("#0000ff");
+        await Expect(row.Locator(".df-prop-source")).ToHaveAttributeAsync("data-state", "dirty");
+        await Expect(placeholder).ToHaveCountAsync(0);
+        await Expect(editor).ToHaveAttributeAsync("title", "#0000ff");
+        // The Agent parses writes as #AARRGGBB: re-attaching the old alpha sent "#000000ff", blue at alpha 00.
+        Assert.Equal(("BackgroundColor", "#0000ff"), Assert.Single(_writes));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task OpaqueColor_ShowsSwatch_AndPickIsWrittenOpaque()
+    {
+        var row = ColorRow("TextColor");
+        var editor = row.Locator("input[type='color']");
+        await Expect(editor).ToHaveValueAsync("#ffff00");
+        await Expect(row.Locator(".df-color-unset")).ToHaveCountAsync(0);
+        await editor.FillAsync("#0000ff");
+        await Expect(row.Locator(".df-prop-source")).ToHaveAttributeAsync("data-state", "dirty");
+        Assert.Equal(("TextColor", "#0000ff"), Assert.Single(_writes));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task SemiTransparentColor_ReadsAlphaFromTrailingByte_AndPickIsWrittenOpaque()
+    {
+        var row = ColorRow("BorderColor");
+        var editor = row.Locator("input[type='color']");
+        // #RRGGBBAA is green at alpha 0x80. Reading the first byte as alpha would make it
+        // fully transparent (a placeholder) with the swatch RGB #ff0080.
+        await Expect(editor).ToHaveValueAsync("#00ff00");
+        await Expect(row.Locator(".df-color-unset")).ToHaveCountAsync(0);
+        await editor.FillAsync("#0000ff");
+        await Expect(row.Locator(".df-prop-source")).ToHaveAttributeAsync("data-state", "dirty");
+        // A pick is opaque and carries no alpha byte; "#800000ff" would be blue at alpha 0x80 (#AARRGGBB).
+        Assert.Equal(("BorderColor", "#0000ff"), Assert.Single(_writes));
         Assert.Empty(_pageErrors);
     }
 

@@ -240,8 +240,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$results = Get-Content artifacts/TestResults/inspector-browser/inspector-browser.trx -Raw
           $counts = $results.TestRun.ResultSummary.Counters
-          if ($counts.total -ne '5' -or $counts.executed -ne '5' -or $counts.passed -ne '5' -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
-            throw 'All five Inspector browser fixtures must execute and pass with zero skips.'
+          if ($counts.total -ne '8' -or $counts.executed -ne '8' -or $counts.passed -ne '8' -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
+            throw 'All eight Inspector browser fixtures must execute and pass with zero skips.'
           }
 
       - name: Upload browser test results
