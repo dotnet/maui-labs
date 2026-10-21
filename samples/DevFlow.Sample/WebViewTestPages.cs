@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Components.WebView.Maui;
+using Microsoft.Maui.Dispatching;
 
 namespace DevFlow.Sample;
 
@@ -28,6 +29,7 @@ public sealed class WebViewTestPage : ContentPage
 {
     readonly Grid _grid = WebViewTestContent.CreateRows(3);
     readonly Label _status = new() { AutomationId = "StandardNavigationStatus" };
+    readonly Label _documentStatus = new() { AutomationId = "StandardDocumentStatus", IsVisible = false };
     WebView? _view;
 
     public WebViewTestPage()
@@ -42,6 +44,7 @@ public sealed class WebViewTestPage : ContentPage
         buttons.Add(recreate);
         _grid.Add(buttons, 0, 0);
         _grid.Add(_status, 0, 1);
+        _grid.Add(_documentStatus, 0, 1);
         Content = _grid;
     }
 
@@ -65,7 +68,15 @@ public sealed class WebViewTestPage : ContentPage
                     _view.Handler?.DisconnectHandler();
                 }
                 _view = new WebView { AutomationId = "StandardWebView" };
-                _view.Navigated += (_, args) => _status.Text = $"{args.Result}: {args.Url}";
+                _view.Navigated += async (sender, args) =>
+                {
+                    _status.Text = $"{args.Result}: {args.Url}";
+                    if (sender is WebView view && ReferenceEquals(view, _view))
+                    {
+                        _documentStatus.Text = $"Inspecting native document after {args.Result}: {args.Url}";
+                        await ReadDocumentStatusAsync(view);
+                    }
+                };
                 _grid.Add(_view, 0, 2);
             }
             _status.Text = "Loading packaged HTML";
@@ -75,6 +86,34 @@ public sealed class WebViewTestPage : ContentPage
         {
             Console.WriteLine(ex);
             _status.Text = $"Unable to load WebView fixture: {ex.Message}";
+        }
+    }
+
+    async Task ReadDocumentStatusAsync(WebView view)
+    {
+        try
+        {
+            await view.Dispatcher.DispatchAsync(async () =>
+            {
+                if (!ReferenceEquals(view, _view) || view.Handler is null)
+                    return;
+                _documentStatus.Text = await view.EvaluateJavaScriptAsync(
+                    """
+                    JSON.stringify({
+                        location: location.href,
+                        title: document.title,
+                        readyState: document.readyState,
+                        body: document.body?.innerText.slice(0, 2048)
+                    })
+                    """);
+                Console.WriteLine($"Standard WebView document: {_documentStatus.Text}");
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Unable to inspect the standard WebView document: {ex}");
+            await _documentStatus.Dispatcher.DispatchAsync(() =>
+                _documentStatus.Text = $"Native document inspection failed: {ex.Message}");
         }
     }
 }
@@ -140,6 +179,10 @@ public sealed class MixedWebViewTestPage : ContentPage
             AutomationId = "WebViewNativeClipHost",
             WidthRequest = 40,
             HeightRequest = 40,
+            MinimumWidthRequest = 40,
+            MinimumHeightRequest = 40,
+            MaximumWidthRequest = 40,
+            MaximumHeightRequest = 40,
             HorizontalOptions = LayoutOptions.Start,
             VerticalOptions = LayoutOptions.Start,
             IsClippedToBounds = true
@@ -151,6 +194,10 @@ public sealed class MixedWebViewTestPage : ContentPage
             LineBreakMode = LineBreakMode.NoWrap,
             WidthRequest = 80,
             HeightRequest = 80,
+            MinimumWidthRequest = 80,
+            MinimumHeightRequest = 80,
+            MaximumWidthRequest = 80,
+            MaximumHeightRequest = 80,
             HorizontalOptions = LayoutOptions.Start,
             VerticalOptions = LayoutOptions.Start,
             BackgroundColor = Color.FromArgb("#345678")
@@ -239,6 +286,26 @@ static class WebViewTestContent
             HybridRoot = "webview-fixture",
             DefaultFile = "index.html"
         };
+#if WINDOWS
+        view.WebViewInitializing += (_, args) =>
+        {
+            var languages = global::Windows.Globalization.ApplicationLanguages.Languages;
+            if (languages.Count > 0)
+            {
+                // Match WinUI's default environment shared by the standard and Blazor WebViews.
+                var platformArgs = args.PlatformArgs
+                    ?? throw new InvalidOperationException("Windows HybridWebView initialization requires platform arguments.");
+                var options = platformArgs.EnvironmentOptions
+                    ??= new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
+                options.Language = languages[0];
+            }
+#if DEBUG
+            var language = languages.Count > 0 ? languages[0] : "<default: no application language>";
+            WinUI.App.WriteRuntimeDiagnostic(
+                $"{DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} Hybrid '{automationId}' environment language={language}");
+#endif
+        };
+#endif
 #if WINDOWS && DEBUG
         Microsoft.UI.Xaml.Controls.WebView2? observed = null;
         global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.Controls.WebView2,

@@ -123,6 +123,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         {
             if (fixture is not null)
             {
+                WriteHttpEvidence(fixture);
                 Assert.True(await Client.TapAsync((await FindElementAsync("ResetStandardWebViewButton")).Id));
                 await WaitForDocumentAsync(kind, title);
             }
@@ -162,6 +163,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         Assert.False(layout.TryGetProperty("blazor", out _));
         Assert.Contains(layout.GetProperty("features").EnumerateArray(), f => f.GetString() == "webview-dom");
         var result = await AnalyzeAsync(includeDom: true);
+        await WriteLayoutEvidenceAsync(result, [context]);
         var text = Assert.Single(result.Findings, f => f.Element.AutomationId == "fixture-overflow"
             && f.RuleId == LayoutDiagnosticRules.TextNotFullyRendered);
         Assert.StartsWith($"web-{context.GetProperty("index").GetInt32()}-", text.Element.Id);
@@ -233,6 +235,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         }
         finally
         {
+            WriteHttpEvidence(fixture);
             Assert.True(await Client.TapAsync((await FindElementAsync("ResetStandardWebViewButton")).Id));
             await WaitForDocumentAsync("webview", "Standard WebView fixture");
         }
@@ -333,13 +336,14 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
             await AssertDomClipGeometryAsync(ContextId(context));
         var nativeHost = await FindElementAsync("WebViewNativeClipHost");
         var nativeChild = await FindElementAsync("WebViewNativeClipped");
+        var result = await AnalyzeAsync(includeDom: true);
+        await WriteLayoutEvidenceAsync(result, active);
         Assert.NotNull(nativeHost.Bounds);
         Assert.NotNull(nativeChild.Bounds);
         Assert.Equal(40, nativeHost.Bounds.Width, precision: 1);
         Assert.Equal(40, nativeHost.Bounds.Height, precision: 1);
         Assert.Equal(80, nativeChild.Bounds.Width, precision: 1);
         Assert.Equal(80, nativeChild.Bounds.Height, precision: 1);
-        var result = await AnalyzeAsync(includeDom: true);
         foreach (var context in active.Where(c => HostKind(c) != "blazor"))
         {
             var prefix = $"web-{context.GetProperty("index").GetInt32()}-";
@@ -356,6 +360,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
             && f.RuleId == LayoutDiagnosticRules.ElementClipped);
         Assert.InRange(Assert.IsType<double>(native.Evidence?.LostAreaRatio), 0.74, 0.76);
         var nativeOnly = await AnalyzeAsync(includeDom: false);
+        await WriteLayoutEvidenceAsync(nativeOnly, active);
         Assert.Equal(result.Snapshot.TreeRevision, nativeOnly.Snapshot.TreeRevision);
         Assert.DoesNotContain(nativeOnly.Findings, f => f.Element.Id.StartsWith("web-", StringComparison.Ordinal));
         var preserved = Assert.Single(nativeOnly.Findings, f => f.Element.AutomationId == "WebViewNativeClipped"
@@ -443,6 +448,33 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         Assert.True(clip.GetProperty("top").GetDouble() >= 0);
         Assert.True(clip.GetProperty("right").GetDouble() <= root.GetProperty("width").GetDouble());
         Assert.True(clip.GetProperty("bottom").GetDouble() <= root.GetProperty("height").GetDouble());
+    }
+
+    void WriteHttpEvidence(WebViewHttpFixture fixture)
+        => Output.WriteLine(JsonSerializer.Serialize(new
+        {
+            httpFixturePort = fixture.Port,
+            accepted = fixture.AcceptedConnectionCount,
+            started = fixture.StartedRequestCount,
+            paths = fixture.RequestPaths.ToArray(),
+            served = fixture.ServedResponses.ToArray(),
+            disconnects = fixture.ClientDisconnects.ToArray()
+        }));
+
+    async Task WriteLayoutEvidenceAsync(LayoutInspectionResult result, JsonElement[] contexts)
+    {
+        var tree = Flatten(await Client.GetTreeAsync()).ToArray();
+        var hosts = contexts.Select(context =>
+        {
+            var elementId = context.GetProperty("elementId").GetString();
+            var element = tree.SingleOrDefault(node => node.Id == elementId);
+            return new { context, elementId, bounds = element?.Bounds, windowBounds = element?.WindowBounds };
+        }).ToArray();
+        Output.WriteLine($"Layout hosts: {JsonSerializer.Serialize(hosts)}");
+        Output.WriteLine($"Native clip fixture: {JsonSerializer.Serialize(tree
+            .Where(node => node.AutomationId is "WebViewNativeClipHost" or "WebViewNativeClipped")
+            .Select(node => new { node.Id, node.AutomationId, node.Bounds, node.WindowBounds }))}");
+        Output.WriteLine($"Layout inspection: {JsonSerializer.Serialize(result)}");
     }
 
     async Task AssertInputAndClickAsync(string id)
@@ -570,9 +602,12 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
                 $"lastTitle={lastTitle}, lastError={lastError}, contexts={lastContexts}");
             try
             {
-                var statusId = kind == "webview" ? "StandardNavigationStatus" : "HybridMessageStatus";
-                foreach (var status in await Client.QueryAsync(automationId: statusId))
-                    Output.WriteLine($"Native {statusId}: text={status.Text}, visible={status.IsVisible}.");
+                var statusIds = kind == "webview"
+                    ? new[] { "StandardNavigationStatus", "StandardDocumentStatus" }
+                    : new[] { "HybridMessageStatus" };
+                foreach (var statusId in statusIds)
+                    foreach (var status in await Client.QueryAsync(automationId: statusId))
+                        Output.WriteLine($"Native {statusId}: text={status.Text}, visible={status.IsVisible}.");
             }
             catch (HttpRequestException ex)
             {

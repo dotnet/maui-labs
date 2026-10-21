@@ -71,7 +71,16 @@ public class WebViewHttpFixtureTests
             Assert.All(fixture.ClientDisconnects, error =>
                 Assert.True(error is SocketError.ConnectionReset or SocketError.ConnectionAborted, error.ToString()));
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            Assert.Contains("HTTP WebView fixture", await http.GetStringAsync(fixture.GetUrl("maccatalyst")));
+            var body = await http.GetStringAsync(fixture.GetUrl("maccatalyst"));
+            Assert.Contains("HTTP WebView fixture", body);
+            await WaitForAsync(() => !fixture.ServedResponses.IsEmpty);
+            var served = Assert.Single(fixture.ServedResponses);
+            Assert.Equal("/index.html", served.Path);
+            Assert.Equal(200, served.StatusCode);
+            Assert.Equal(body, served.Body);
+            Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(body), served.BodyLength);
+            Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(body))), served.BodySha256);
         }
         finally
         {

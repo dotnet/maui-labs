@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
@@ -18,6 +19,7 @@ internal sealed class WebViewHttpFixture : IAsyncDisposable
     public int AcceptedConnectionCount => Volatile.Read(ref _acceptedConnections);
     public int StartedRequestCount => Volatile.Read(ref _startedRequests);
     public ConcurrentQueue<string> RequestPaths { get; } = new();
+    public ConcurrentQueue<WebViewHttpResponse> ServedResponses { get; } = new();
     public ConcurrentQueue<SocketError> ClientDisconnects { get; } = new();
 
     public WebViewHttpFixture()
@@ -93,6 +95,8 @@ internal sealed class WebViewHttpFixture : IAsyncDisposable
                     $"Content-Length: {bytes.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
                 await stream.WriteAsync(headers, cancellationToken);
                 await stream.WriteAsync(bytes, cancellationToken);
+                ServedResponses.Enqueue(new WebViewHttpResponse(
+                    path, found ? 200 : 404, bytes.Length, Convert.ToHexString(SHA256.HashData(bytes)), html));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -120,4 +124,6 @@ internal sealed class WebViewHttpFixture : IAsyncDisposable
             _shutdown.Dispose();
         }
     }
+
+    internal sealed record WebViewHttpResponse(string Path, int StatusCode, int BodyLength, string BodySha256, string Body);
 }
