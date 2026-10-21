@@ -394,7 +394,7 @@ public class XamlSourceMapIdentityTests
             ("0", Entry(3, "VerticalStackLayout", labels.Length)),
         };
         for (var index = 0; index < labels.Length; index++)
-            entries.Add(($"0/{index}", new XamlSourceEntry(labels[index].Line, 1, "Label", 0, Text: labels[index].Text)));
+            entries.Add(($"0/{index}", new XamlSourceEntry(labels[index].Line, 1, "Label", 0) { Text = labels[index].Text }));
         return MapWith("MainPage.xaml", "h", entries.ToArray());
     }
 

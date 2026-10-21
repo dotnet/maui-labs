@@ -3,18 +3,21 @@ using System.Xml.Linq;
 
 namespace Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 
-/// <param name="Text">
-/// The element's literal <c>Text</c> attribute, or null when absent or a markup extension. Tells
-/// same-type siblings apart, since the runtime element must still show this text to be mapped.
-/// </param>
 public readonly record struct XamlSourceEntry(
     int Line,
     int Column,
     string TypeName,
     int ChildCount,
     string? AutomationId = null,
-    string? FullTypeName = null,
-    string? Text = null);
+    string? FullTypeName = null)
+{
+    /// <summary>
+    /// The element's literal <c>Text</c> attribute, or null when absent or a markup extension. Tells
+    /// same-type siblings apart, since the runtime element must still show this text to be mapped.
+    /// Init-only rather than positional so the public constructor and deconstruction are unchanged.
+    /// </summary>
+    public string? Text { get; init; }
+}
 
 public sealed class XamlSourceMap
 {
@@ -102,8 +105,10 @@ public sealed class XamlSourceMap
                 element.Name.LocalName,
                 children.Count,
                 usableAutomationId,
-                ResolveFullTypeName(element),
-                LiteralText(element));
+                ResolveFullTypeName(element))
+            {
+                Text = LiteralText(element)
+            };
         }
 
         var childIds = children.Select(child => child.Attribute("AutomationId")?.Value).ToList();
