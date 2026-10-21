@@ -113,9 +113,28 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Verify device tests executed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $results = @(Get-ChildItem -Path artifacts/TestResults -Recurse -Filter *.trx)
+          if ($results.Count -eq 0) {
+            throw 'Device tests produced no TRX results.'
+          }
+          foreach ($result in $results) {
+            [xml]$document = Get-Content -LiteralPath $result.FullName -Raw
+            $counts = $document.TestRun.ResultSummary.Counters
+            if ([int]$counts.total -le 0 -or [int]$counts.executed -ne [int]$counts.total -or
+                [int]$counts.passed -ne [int]$counts.total -or [int]$counts.failed -ne 0 -or
+                [int]$counts.notExecuted -ne 0) {
+              throw "Device tests must all execute and pass without skips: $($result.Name)"
+            }
+          }
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ inputs.project-name }}-device-${{ inputs.target-framework }}
           path: artifacts/TestResults/**/*.trx
+          if-no-files-found: error
