@@ -6,6 +6,8 @@ using System.CommandLine.Parsing;
 using Microsoft.Maui.Cli;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
+using Spectre.Console;
+using Spectre.Console.Testing;
 using Xunit;
 
 namespace Microsoft.Maui.Cli.UnitTests;
@@ -199,12 +201,15 @@ public class AndroidCommandsTests
 	{
 		var android = new FakeAndroidProvider();
 		var originalServices = Program.Services;
+		var originalConsole = AnsiConsole.Console;
+		using var console = new TestConsole();
 		var services = ServiceConfiguration.CreateTestServiceProvider(androidProvider: android);
 		using var serviceLifetime = services as IDisposable;
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 		try
 		{
 			Program.Services = services;
+			AnsiConsole.Console = console;
 			var arguments = new List<string> { "android", "emulator", "start", "TestEmulator", "--cold-boot", "--ci" };
 			if (noWindow)
 				arguments.Add("--no-window");
@@ -221,6 +226,7 @@ public class AndroidCommandsTests
 		finally
 		{
 			Program.Services = originalServices;
+			AnsiConsole.Console = originalConsole;
 		}
 	}
 
