@@ -34,6 +34,18 @@
     <ApplicationId>com.microsoft.maui.ai.devicetests</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <!-- Prevent MSBuild from overriding MaxVersionTested (required for systemAIModels capability) -->
+    <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
+    <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
+  </PropertyGroup>
+
+  <!-- Windows: self-contained publish to bundle WinAppSDK experimental runtime -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- The experimental SDK's generated XAML metadata references experimental chart/table providers. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS8305</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -49,6 +61,13 @@
     <PackageReference Include="DeviceRunners.VisualRunners.Xunit" />
     <PackageReference Include="DeviceRunners.VisualRunners.Maui" />
     <PackageReference Include="DeviceRunners.Testing.Targets" />
+  </ItemGroup>
+
+  <!-- Windows AI WinRT APIs -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion_Experimental)" />
+    <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
