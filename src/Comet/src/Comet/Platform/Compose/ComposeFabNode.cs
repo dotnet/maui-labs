@@ -16,7 +16,7 @@ namespace Comet.Platform.Compose
 	/// by the engine + the FAB's documented insets) so the parent's Yoga layout can corner-pin
 	/// it, then <see cref="Render"/> positions it at that offset and lets the native FAB size +
 	/// lay out its own content. Owns its content (<see cref="IBackendManagesOwnContent"/>).</summary>
-	sealed class ComposeFabNode : ComposeNode, IBackendManagesOwnContent
+	sealed class ComposeFabNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		// Material extended-FAB content insets (dp): start 16, icon→text gap 12, end 20.
 		const float PadStart = 16f, Gap = 12f, PadEnd = 20f, MinWidth = 48f;
@@ -24,6 +24,8 @@ namespace Comet.Platform.Compose
 		Fab _fab;
 		readonly BackendContext _context;
 		readonly MutableState<bool> _extended;
+		readonly FabExtendedStateBinding _extendedBinding;
+		readonly MutableState<int> _contentVersion = new(0);
 		ComposeNode? _icon, _label;
 		bool _built;
 
@@ -32,17 +34,9 @@ namespace Comet.Platform.Compose
 			_fab = fab;
 			_context = context;
 			_extended = new MutableState<bool>(fab.Extended);
-
-			// Subscribe to the reactive extended signal so Compose recomposes when it changes.
-			if (fab.ExtendedSignal is { } sig)
-			{
-				_extended.Value = sig.Peek();
-				sig.PropertyChanged += (_, __) =>
-				{
-					bool v = sig.Peek();
-					Comet.ThreadHelper.RunOnMainThread(() => _extended.Value = v);
-				};
-			}
+			_extendedBinding = new FabExtendedStateBinding(
+				fab,
+				value => _extended.Value = value);
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value) { }
@@ -54,11 +48,13 @@ namespace Comet.Platform.Compose
 			if (newView is not Fab fab)
 				return;
 			_fab = fab;
-			if (!isHotReload)
+			_extendedBinding.TransferOwner(fab);
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
 				return;
 			_built = false;
 			_icon = null;
 			_label = null;
+			_contentVersion.Value++;
 		}
 
 		void EnsureContent()
@@ -93,6 +89,7 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
+			_ = _contentVersion.Value;
 			EnsureContent();
 
 			// Subscribe to _extended so Compose recomposes when the extended state changes.
@@ -128,6 +125,12 @@ namespace Comet.Platform.Compose
 				contentColor:   _fab.ContentColor is { } fc ? ToComposeColor(fc) : null,
 				modifier:       modifier,
 				composer:       composer);
+		}
+
+		public override void Dispose()
+		{
+			_extendedBinding.Dispose();
+			base.Dispose();
 		}
 	}
 }

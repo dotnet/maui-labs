@@ -9,5 +9,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "CometSwiftUIShim", path: "Sources/CometSwiftUIShim"),
+        .testTarget(
+            name: "CometSwiftUIShimTests",
+            dependencies: ["CometSwiftUIShim"],
+            path: "Tests/CometSwiftUIShimTests"),
     ]
 )
