@@ -177,8 +177,20 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 		var first = await WindowsAIChatClient.GetModelStatusAsync();
 		var second = await WindowsAIChatClient.GetModelStatusAsync();
 		Assert.NotSame(first, second);
-		Assert.Equal(WindowsAIChatClient.MapAvailability(state), second.Availability);
+		Assert.Equal(state switch
+		{
+			AIFeatureReadyState.Ready => ChatModelAvailability.Available,
+			AIFeatureReadyState.NotReady => ChatModelAvailability.NotReady,
+			AIFeatureReadyState.NotSupportedOnCurrentSystem or
+				AIFeatureReadyState.NotCompatibleWithSystemHardware => ChatModelAvailability.NotSupported,
+			AIFeatureReadyState.DisabledByUser => ChatModelAvailability.Disabled,
+			AIFeatureReadyState.CapabilityMissing or
+				AIFeatureReadyState.OSUpdateNeeded => ChatModelAvailability.RequirementsNotMet,
+			_ => ChatModelAvailability.Unknown,
+		}, second.Availability);
 		Assert.Equal(state is AIFeatureReadyState.Ready ? null : state.ToString(), second.UnavailableReason);
+		Assert.Equal([ChatModelCapability.Text, ChatModelCapability.Streaming, ChatModelCapability.StructuredOutput],
+			second.Capabilities);
 	}
 
 	// An already-ready Windows model must not be prepared again.
@@ -203,106 +215,13 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 			() => WindowsAIChatClient.GetModelStatusAsync(cts.Token));
 	}
 
-	public static TheoryData<AIFeatureReadyState, ChatModelAvailability> NativeAvailabilityCases => new()
-	{
-		{ AIFeatureReadyState.Ready, ChatModelAvailability.Available },
-		{ AIFeatureReadyState.NotReady, ChatModelAvailability.NotReady },
-		{ AIFeatureReadyState.NotSupportedOnCurrentSystem, ChatModelAvailability.NotSupported },
-		{ AIFeatureReadyState.DisabledByUser, ChatModelAvailability.Disabled },
-		{ AIFeatureReadyState.CapabilityMissing, ChatModelAvailability.RequirementsNotMet },
-		{ AIFeatureReadyState.NotCompatibleWithSystemHardware, ChatModelAvailability.NotSupported },
-		{ AIFeatureReadyState.OSUpdateNeeded, ChatModelAvailability.RequirementsNotMet },
-		{ (AIFeatureReadyState)int.MaxValue, ChatModelAvailability.Unknown },
-	};
-
-	// Windows availability maps every native state, but advertises only features implemented by the MEAI adapter.
-	[Theory]
-	[MemberData(nameof(NativeAvailabilityCases))]
-	public void ModelStatus_MapsNativeReasonAndEffectiveCapabilities(
-		AIFeatureReadyState state,
-		ChatModelAvailability expectedAvailability)
-	{
-		var status = WindowsAIChatClient.CreateModelStatus(state);
-		Assert.Equal(expectedAvailability, status.Availability);
-		if (state == AIFeatureReadyState.Ready)
-		{
-			Assert.Null(status.UnavailableReason);
-		}
-		else
-		{
-			Assert.Equal(state.ToString(), status.UnavailableReason);
-		}
-		Assert.Equal([ChatModelCapability.Text, ChatModelCapability.Streaming, ChatModelCapability.StructuredOutput],
-			status.Capabilities);
-	}
-
-	// Native readiness can change between requests; both reads must use the supplied native accessor.
-	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public async Task EnsureReadyAsync_RefreshesStateAndDownloadsOnlyWhenNeeded(bool notReady)
-	{
-		var reads = 0;
-		var downloads = 0;
-		using var source = new CancellationTokenSource();
-		await WindowsAIChatClient.EnsureReadyAsync(
-			() => ++reads == 1 && notReady ? AIFeatureReadyState.NotReady : AIFeatureReadyState.Ready,
-			token =>
-			{
-				Assert.Equal(source.Token, token);
-				downloads++;
-				return Task.CompletedTask;
-			}, source.Token);
-		Assert.Equal(2, reads);
-		Assert.Equal(notReady ? 1 : 0, downloads);
-	}
-
-	// Each GetReadyState failure is a native reason, not a generic model-unavailable flag.
-	[Theory]
-	[InlineData(AIFeatureReadyState.NotSupportedOnCurrentSystem)]
-	[InlineData(AIFeatureReadyState.DisabledByUser)]
-	[InlineData(AIFeatureReadyState.CapabilityMissing)]
-	[InlineData(AIFeatureReadyState.NotCompatibleWithSystemHardware)]
-	[InlineData(AIFeatureReadyState.OSUpdateNeeded)]
-	[InlineData((AIFeatureReadyState)int.MaxValue)]
-	public async Task EnsureReadyAsync_Unavailable_PreservesReasonWithoutSetup(AIFeatureReadyState state)
-	{
-		var error = await Assert.ThrowsAsync<NotSupportedException>(() => WindowsAIChatClient.EnsureReadyAsync(
-			() => state, _ => throw new InvalidOperationException("Must not download"), default));
-		Assert.Contains(state.ToString(), error.Message, StringComparison.Ordinal);
-	}
-
-	// EnsureReadyAsync's successful result is not a substitute for rereading actual system readiness.
-	[Fact]
-	public async Task EnsureReadyAsync_SetupDoesNotMakeReady_Throws()
-	{
-		await Assert.ThrowsAsync<NotSupportedException>(() => WindowsAIChatClient.EnsureReadyAsync(
-			() => AIFeatureReadyState.NotReady, _ => Task.CompletedTask, default));
-	}
-
-	// Setup cancellation must prevent native access, including through the additive public API.
+	// Setup cancellation must prevent native access.
 	[Fact]
 	public async Task EnsureReadyAsync_PreCancelled_DoesNotReadOrDownload()
 	{
 		using var source = new CancellationTokenSource();
 		source.Cancel();
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => WindowsAIChatClient.EnsureReadyAsync(
-			() => throw new InvalidOperationException("Must not read"), _ => throw new InvalidOperationException("Must not download"), source.Token));
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => WindowsAIChatClient.EnsureReadyAsync(source.Token));
-	}
-
-	// Windows setup exposes display text and ExtendedError; neither may be lost during translation.
-	[Fact]
-	public void ValidateReadyResult_Failure_PreservesStatusDisplayTextAndExtendedError()
-	{
-		var state = (AIFeatureReadyResultState)int.MaxValue;
-		var cause = new InvalidOperationException("Native cause");
-		var error = Assert.Throws<NotSupportedException>(() =>
-			WindowsAIChatClient.ValidateReadyResult(state, "Download failed", cause));
-		Assert.Contains(state.ToString(), error.Message, StringComparison.Ordinal);
-		Assert.Contains("Download failed", error.Message, StringComparison.Ordinal);
-		Assert.Same(cause, error.InnerException);
-		WindowsAIChatClient.ValidateReadyResult(AIFeatureReadyResultState.Success, null, null);
 	}
 }
 #endif

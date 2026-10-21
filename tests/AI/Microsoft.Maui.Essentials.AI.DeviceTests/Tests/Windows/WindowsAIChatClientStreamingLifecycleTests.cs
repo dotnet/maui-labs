@@ -76,8 +76,8 @@ public class WindowsAIChatClientStreamingLifecycleTests
 	{
 		using var cancellation = new CancellationTokenSource();
 		var operation = new TestOperation { DelayCancellation = true };
-		var model = new WindowsAIChatClientLifecycleTests.Model();
-		var context = new WindowsAIChatClientLifecycleTests.Model();
+		var model = new TrackedDisposable();
+		var context = new TrackedDisposable();
 		var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 		var stream = WindowsAIChatClient.StreamResponseAsync(async (handler, token) =>
 		{
@@ -421,6 +421,13 @@ public class WindowsAIChatClientStreamingLifecycleTests
 	{
 		await foreach (var update in stream)
 			updates.Add(update);
+	}
+
+	private sealed class TrackedDisposable : IDisposable
+	{
+		private int _disposeCount;
+		internal int DisposeCount => Volatile.Read(ref _disposeCount);
+		public void Dispose() => Interlocked.Increment(ref _disposeCount);
 	}
 
 	// Deliberately not ITaskAwareAsyncInfo: exercise the WinRT bridge, not its managed-task fast path.

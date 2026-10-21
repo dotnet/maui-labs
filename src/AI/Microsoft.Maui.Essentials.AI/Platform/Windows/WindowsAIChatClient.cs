@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
+using Microsoft.Windows.AI;
 using Microsoft.Windows.AI.ContentSafety;
 using Microsoft.Windows.AI.Text;
 using Windows.Foundation;
@@ -14,7 +15,7 @@ namespace Microsoft.Maui.Essentials.AI;
 /// Provides an <see cref="IChatClient"/> implementation backed by the Windows AI language model.
 /// </summary>
 [SupportedOSPlatform("windows10.0.26100.0")]
-public sealed partial class WindowsAIChatClient : IChatClient
+public sealed class WindowsAIChatClient : IChatClient
 {
 	/// <summary>The provider name for this chat client.</summary>
 	private const string ProviderName = "windows";
@@ -30,12 +31,115 @@ public sealed partial class WindowsAIChatClient : IChatClient
 	/// Lazily-initialized metadata describing the implementation.
 	/// </summary>
 	private ChatClientMetadata? _metadata;
+	private readonly LanguageModel? _suppliedModel;
+	private int _disposed;
 
 	private static readonly AIJsonSchemaTransformCache SchemaTransformCache = new(new()
 	{
 		DisallowAdditionalProperties = true,
 		RequireAllProperties = true,
 	});
+
+	/// <summary>
+	/// Initializes a new instance of the <see cref="WindowsAIChatClient"/> class.
+	/// </summary>
+	/// <remarks>
+	/// The client creates and disposes a separate <see cref="LanguageModel"/> for each request.
+	/// </remarks>
+	public WindowsAIChatClient() { }
+
+	/// <summary>
+	/// Initializes a new instance of the <see cref="WindowsAIChatClient"/> class
+	/// with the specified <see cref="LanguageModel"/>.
+	/// </summary>
+	/// <param name="model">The <see cref="LanguageModel"/> to use for chat interactions.</param>
+	/// <remarks>
+	/// When using this constructor, the client does not own the <see cref="LanguageModel"/>
+	/// and will not dispose it. The caller is responsible for disposing the model.
+	/// </remarks>
+	/// <exception cref="ArgumentNullException">Thrown when <paramref name="model"/> is <see langword="null"/>.</exception>
+	public WindowsAIChatClient(LanguageModel model)
+	{
+		ArgumentNullException.ThrowIfNull(model);
+		_suppliedModel = model;
+	}
+
+	/// <summary>Reads current native availability and effective capabilities without caching or downloading.</summary>
+	/// <param name="cancellationToken">A token that cancels the status request before the native read.</param>
+	/// <returns>A fresh snapshot preserving the unavailable reason from <see cref="LanguageModel.GetReadyState"/>.</returns>
+	public static Task<ChatModelStatus> GetModelStatusAsync(CancellationToken cancellationToken = default)
+	{
+		cancellationToken.ThrowIfCancellationRequested();
+		var state = LanguageModel.GetReadyState();
+		var availability = state switch
+		{
+			AIFeatureReadyState.Ready => ChatModelAvailability.Available,
+			AIFeatureReadyState.NotReady => ChatModelAvailability.NotReady,
+			AIFeatureReadyState.NotSupportedOnCurrentSystem or
+				AIFeatureReadyState.NotCompatibleWithSystemHardware => ChatModelAvailability.NotSupported,
+			AIFeatureReadyState.DisabledByUser => ChatModelAvailability.Disabled,
+			AIFeatureReadyState.CapabilityMissing or
+				AIFeatureReadyState.OSUpdateNeeded => ChatModelAvailability.RequirementsNotMet,
+			_ => ChatModelAvailability.Unknown,
+		};
+		return Task.FromResult(new ChatModelStatus(
+			availability,
+			state is AIFeatureReadyState.Ready ? null : state.ToString(),
+			[ChatModelCapability.Text, ChatModelCapability.Streaming, ChatModelCapability.StructuredOutput]));
+	}
+
+	/// <summary>Ensures the system language model is ready, downloading its components if necessary.</summary>
+	/// <param name="cancellationToken">A token that cancels native setup.</param>
+	/// <returns>A task that completes when the native model reports ready.</returns>
+	/// <exception cref="NotSupportedException">The native state or setup result prevents use; native error details are preserved.</exception>
+	public static async Task EnsureReadyAsync(CancellationToken cancellationToken = default)
+	{
+		cancellationToken.ThrowIfCancellationRequested();
+		var readyState = LanguageModel.GetReadyState();
+		if (readyState is not AIFeatureReadyState.Ready and not AIFeatureReadyState.NotReady)
+			throw new NotSupportedException($"Windows AI language model is not available: {DescribeReadyState(readyState)}");
+
+		if (readyState is AIFeatureReadyState.NotReady)
+		{
+			var operation = LanguageModel.EnsureReadyAsync();
+			var completion = operation.AsTask();
+			using var registration = cancellationToken.Register(() =>
+			{
+				try
+				{
+					operation.Cancel();
+				}
+				catch (Exception ex)
+				{
+					System.Diagnostics.Trace.TraceError($"Windows AI preparation cancellation failed: {ex}");
+				}
+			});
+
+			AIFeatureReadyResult result;
+			try
+			{
+				result = await completion.ConfigureAwait(false)
+					?? throw new InvalidOperationException("Windows AI returned a null model setup result.");
+			}
+			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+			{
+				throw new OperationCanceledException(cancellationToken);
+			}
+
+			if (result.Status is not AIFeatureReadyResultState.Success)
+			{
+				var reason = string.IsNullOrWhiteSpace(result.ErrorDisplayText)
+					? result.Status.ToString()
+					: $"{result.Status}: {result.ErrorDisplayText}";
+				throw new NotSupportedException($"Windows AI language model could not be made ready: {reason}", result.ExtendedError);
+			}
+		}
+
+		var finalState = LanguageModel.GetReadyState();
+		if (finalState is not AIFeatureReadyState.Ready)
+			throw new NotSupportedException($"Windows AI language model is not available after setup: {DescribeReadyState(finalState)}");
+		cancellationToken.ThrowIfCancellationRequested();
+	}
 
 	/// <inheritdoc />
 	public Task<ChatResponse> GetResponseAsync(
@@ -80,6 +184,64 @@ public sealed partial class WindowsAIChatClient : IChatClient
 			yield return update;
 		}
 	}
+
+	private async Task<ModelLease> AcquireModelAsync(CancellationToken cancellationToken)
+	{
+		ThrowIfDisposed();
+		cancellationToken.ThrowIfCancellationRequested();
+		var state = LanguageModel.GetReadyState();
+		if (state is not AIFeatureReadyState.Ready)
+			throw new NotSupportedException($"Windows AI language model is not ready: {DescribeReadyState(state)}. Call WindowsAIChatClient.EnsureReadyAsync explicitly to prepare the model.");
+
+		if (_suppliedModel is not null)
+		{
+			ThrowIfDisposed();
+			cancellationToken.ThrowIfCancellationRequested();
+			return new ModelLease(_suppliedModel, ownsModel: false);
+		}
+
+		var creation = Task.Run(async () =>
+			await LanguageModel.CreateAsync()
+				?? throw new InvalidOperationException("Windows AI returned a null language model."));
+		LanguageModel model;
+		try
+		{
+			model = await creation.WaitAsync(cancellationToken).ConfigureAwait(false);
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			_ = creation.ContinueWith(static task =>
+			{
+				if (task.Status is TaskStatus.RanToCompletion)
+					task.Result.Dispose();
+				else if (task.IsFaulted)
+					System.Diagnostics.Trace.TraceError($"Windows AI model creation failed after its request ended: {task.Exception}");
+			}, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+			throw;
+		}
+
+		try
+		{
+			ThrowIfDisposed();
+			cancellationToken.ThrowIfCancellationRequested();
+			return new ModelLease(model, ownsModel: true);
+		}
+		catch
+		{
+			model.Dispose();
+			throw;
+		}
+	}
+
+	private static string DescribeReadyState(AIFeatureReadyState state) =>
+		state switch
+		{
+			AIFeatureReadyState.CapabilityMissing => $"{state}: Missing systemAIModels capability",
+			AIFeatureReadyState.NotCompatibleWithSystemHardware =>
+				$"{state}: The model is not compatible with the current system hardware",
+			AIFeatureReadyState.OSUpdateNeeded => $"{state}: The current OS version is incompatible with the model",
+			_ => state.ToString()
+		};
 
 	private static async Task GenerateTextResponseAsync(
 		LanguageModel model,
@@ -353,6 +515,27 @@ public sealed partial class WindowsAIChatClient : IChatClient
 		}
 
 		return null;
+	}
+
+	private void ThrowIfDisposed() =>
+		ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+	/// <inheritdoc />
+	void IDisposable.Dispose() => Interlocked.Exchange(ref _disposed, 1);
+
+	private sealed class ModelLease : IDisposable
+	{
+		private LanguageModel? _ownedModel;
+
+		internal LanguageModel Model { get; }
+
+		internal ModelLease(LanguageModel model, bool ownsModel)
+		{
+			Model = model;
+			_ownedModel = ownsModel ? model : null;
+		}
+
+		public void Dispose() => Interlocked.Exchange(ref _ownedModel, null)?.Dispose();
 	}
 
 	internal static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(
