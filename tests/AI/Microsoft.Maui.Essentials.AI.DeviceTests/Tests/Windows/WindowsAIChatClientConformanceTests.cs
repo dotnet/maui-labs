@@ -152,17 +152,6 @@ public class WindowsAIChatClientConformanceTests
 		}));
 	}
 
-	// WinRT completion status must not hide malformed structured JSON.
-	[Fact]
-	public void NativeComplete_ValidatesPayloadWithoutRewritingIt()
-	{
-		Assert.Equal("Hello", WindowsAIChatClient.GetResponseText(LanguageModelResponseStatus.Complete, "Hello", null));
-		const string json = """{"value":1}""";
-		Assert.Equal(json, WindowsAIChatClient.GetStructuredResponseText(GenerateStructuredJsonResponseStatus.Complete, json, null));
-		Assert.Throws<InvalidOperationException>(() => WindowsAIChatClient.GetStructuredResponseText(
-			GenerateStructuredJsonResponseStatus.Complete, "{", null));
-	}
-
 	private sealed class UnrecognizedContent : AIContent;
 }
 

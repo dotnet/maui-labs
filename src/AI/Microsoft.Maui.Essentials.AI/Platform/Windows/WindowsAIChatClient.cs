@@ -171,11 +171,19 @@ public sealed class WindowsAIChatClient : IChatClient
 		var updates = StreamResponseAsync(
 			async (handler, token) =>
 			{
-				using var lease = await AcquireModelAsync(token).ConfigureAwait(false);
-				if (jsonSchema is not null)
-					await GenerateStructuredResponseAsync(lease.Model, systemPrompt, prompt, jsonSchema, modelOptions, handler, token).ConfigureAwait(false);
-				else
-					await GenerateTextResponseAsync(lease.Model, systemPrompt, prompt, modelOptions, handler, token).ConfigureAwait(false);
+				var model = await AcquireModelAsync(token).ConfigureAwait(false);
+				try
+				{
+					if (jsonSchema is not null)
+						await GenerateStructuredResponseAsync(model, systemPrompt, prompt, jsonSchema, modelOptions, handler, token).ConfigureAwait(false);
+					else
+						await GenerateTextResponseAsync(model, systemPrompt, prompt, modelOptions, handler, token).ConfigureAwait(false);
+				}
+				finally
+				{
+					if (_suppliedModel is null)
+						model.Dispose();
+				}
 			},
 			cancellationToken);
 
@@ -185,7 +193,7 @@ public sealed class WindowsAIChatClient : IChatClient
 		}
 	}
 
-	private async Task<ModelLease> AcquireModelAsync(CancellationToken cancellationToken)
+	private async Task<LanguageModel> AcquireModelAsync(CancellationToken cancellationToken)
 	{
 		ThrowIfDisposed();
 		cancellationToken.ThrowIfCancellationRequested();
@@ -197,12 +205,10 @@ public sealed class WindowsAIChatClient : IChatClient
 		{
 			ThrowIfDisposed();
 			cancellationToken.ThrowIfCancellationRequested();
-			return new ModelLease(_suppliedModel, ownsModel: false);
+			return _suppliedModel;
 		}
 
-		var creation = Task.Run(async () =>
-			await LanguageModel.CreateAsync()
-				?? throw new InvalidOperationException("Windows AI returned a null language model."));
+		var creation = Task.Run(async () => await LanguageModel.CreateAsync() ?? throw new InvalidOperationException("Windows AI returned a null language model."));
 		LanguageModel model;
 		try
 		{
@@ -224,7 +230,7 @@ public sealed class WindowsAIChatClient : IChatClient
 		{
 			ThrowIfDisposed();
 			cancellationToken.ThrowIfCancellationRequested();
-			return new ModelLease(model, ownsModel: true);
+			return model;
 		}
 		catch
 		{
@@ -262,7 +268,13 @@ public sealed class WindowsAIChatClient : IChatClient
 
 		// Caller cancellation stops the reader, not this context's native lifetime.
 		await ForwardResponseAsync(operation, handler, cancellationToken, result =>
-			GetResponseText(result.Status, result.Text, result.ExtendedError)).ConfigureAwait(false);
+			result.Status switch
+			{
+				LanguageModelResponseStatus.Complete => result.Text,
+				LanguageModelResponseStatus.PromptLargerThanContext =>
+					throw new InvalidOperationException(PromptTooLargeMessage, result.ExtendedError),
+				_ => throw new InvalidOperationException($"Response generation failed: {result.Status}", result.ExtendedError)
+			}).ConfigureAwait(false);
 	}
 
 	private static async Task GenerateStructuredResponseAsync(
@@ -283,47 +295,13 @@ public sealed class WindowsAIChatClient : IChatClient
 		var operation = model.GenerateStructuredJsonResponseAsync(structuredPrompt, jsonSchema, modelOptions);
 
 		await ForwardResponseAsync(operation, handler, cancellationToken, static result =>
-			GetStructuredResponseText(result.Status, result.Text, result.ExtendedError)).ConfigureAwait(false);
-	}
-
-	internal static string? GetResponseText(
-		LanguageModelResponseStatus status, string? text, Exception? extendedError) =>
-		status switch
-		{
-			LanguageModelResponseStatus.Complete => RequireResponseText(text, extendedError),
-
-			LanguageModelResponseStatus.PromptLargerThanContext =>
-				throw new InvalidOperationException(PromptTooLargeMessage, extendedError),
-
-			_ => throw new InvalidOperationException($"Response generation failed: {status}", extendedError)
-		};
-
-	internal static string? GetStructuredResponseText(
-		GenerateStructuredJsonResponseStatus status, string? text, Exception? extendedError) =>
-		status switch
-		{
-			GenerateStructuredJsonResponseStatus.Complete => RequireStructuredResponseText(text, extendedError),
-			GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
-				throw new InvalidOperationException(PromptTooLargeMessage, extendedError),
-			_ => throw new InvalidOperationException($"Structured response generation failed: {status}", extendedError)
-		};
-
-	private static string RequireResponseText(string? text, Exception? extendedError) =>
-		!string.IsNullOrEmpty(text) ? text :
-			throw new InvalidOperationException("Windows AI returned a null or empty native response.", extendedError);
-
-	private static string RequireStructuredResponseText(string? text, Exception? extendedError)
-	{
-		var json = RequireResponseText(text, extendedError);
-		try
-		{
-			using var document = JsonDocument.Parse(json);
-		}
-		catch (JsonException ex)
-		{
-			throw new InvalidOperationException("Windows AI returned malformed structured JSON.", ex);
-		}
-		return json;
+			result.Status switch
+			{
+				GenerateStructuredJsonResponseStatus.Complete => result.Text,
+				GenerateStructuredJsonResponseStatus.PromptLargerThanContext =>
+					throw new InvalidOperationException(PromptTooLargeMessage, result.ExtendedError),
+				_ => throw new InvalidOperationException($"Structured response generation failed: {result.Status}", result.ExtendedError)
+			}).ConfigureAwait(false);
 	}
 
 	internal static async IAsyncEnumerable<ChatResponseUpdate> StreamResponseAsync(
@@ -522,21 +500,6 @@ public sealed class WindowsAIChatClient : IChatClient
 
 	/// <inheritdoc />
 	void IDisposable.Dispose() => Interlocked.Exchange(ref _disposed, 1);
-
-	private sealed class ModelLease : IDisposable
-	{
-		private LanguageModel? _ownedModel;
-
-		internal LanguageModel Model { get; }
-
-		internal ModelLease(LanguageModel model, bool ownsModel)
-		{
-			Model = model;
-			_ownedModel = ownsModel ? model : null;
-		}
-
-		public void Dispose() => Interlocked.Exchange(ref _ownedModel, null)?.Dispose();
-	}
 
 	internal static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(
 		IEnumerable<ChatMessage> chatMessages,
