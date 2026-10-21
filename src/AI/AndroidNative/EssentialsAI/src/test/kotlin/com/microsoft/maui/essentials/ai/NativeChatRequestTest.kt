@@ -1,7 +1,6 @@
 package com.microsoft.maui.essentials.ai
 
 import com.google.mlkit.genai.prompt.TextPart
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -13,15 +12,14 @@ class NativeChatRequestTest {
     private fun request(
         vararg messages: NativeChatMessage,
         options: NativeChatOptions = NativeChatOptions(null, null, null, null, false),
-    ) = NativeChatRequest(arrayOf(*messages), options)
+    ) = NativeChatRequest(arrayOf(*messages), options    )
 
     @Test
-    fun userContentsAndPartsArePassedToNativeWithoutRoleTokens() = runBlocking {
+    fun userContentsAndPartsArePassedToNativeWithoutRoleTokens() {
         val result = request(
             message("user", "hello", "world"),
             message("user", "second content"),
-        ).toNative({ error("System capability should not be queried.") },
-            { error("Thinking capability should not be queried.") })
+        ).toNative()
 
         assertEquals(listOf(listOf("hello", "world"), listOf("second content")),
             result.contents.map { content -> content.parts.map { (it as TextPart).textString } })
@@ -30,13 +28,13 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun userAssistantConversationIsIncludedInOrderAsOrdinaryPromptText() = runBlocking {
+    fun userAssistantConversationIsIncludedInOrderAsOrdinaryPromptText() {
         val result = request(
             message("system", "Be concise."),
             message("user", "hello", " world"),
             message("assistant", "Hello!"),
             message("user", "What did I say?"),
-        ).toNative({ true }, { false })
+        ).toNative()
 
         val prompt = result.contents.flatMap { it.parts }
             .joinToString("") { (it as TextPart).textString }
@@ -46,13 +44,13 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun caseVariantStandardRolesRetainInstructionsAndToolHistory() = runBlocking {
+    fun caseVariantStandardRolesRetainInstructionsAndToolHistory() {
         val result = request(
             message("SYSTEM", "Be concise."),
             message("ASSISTANT", "Earlier answer."),
             message("TOOL", """{"type":"function_result","callId":"call-1","result":"ok"}"""),
             message("USER", "Continue."),
-        ).toNative({ true }, { false })
+        ).toNative()
 
         assertEquals("Be concise.", result.systemInstruction!!.textString)
         val prompt = result.contents.flatMap { it.parts }
@@ -64,13 +62,13 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun prependedOptionsInstructionsAndSystemPartsKeepTheirOrder() = runBlocking {
+    fun prependedOptionsInstructionsAndSystemPartsKeepTheirOrder() {
         val result = request(
             message("system", "options instructions"),
             message("system", "first system", "second part"),
             message("user", "hello"),
             message("system", "last system"),
-        ).toNative({ true }, { false })
+        ).toNative()
 
         assertEquals("options instructions\n\nfirst systemsecond part\n\nlast system",
             result.systemInstruction!!.textString)
@@ -78,34 +76,20 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun unavailableNativeSystemInstructionsFailWithoutPromptFallback() = runBlocking {
-        val error = runCatching {
-            request(message("system", "instructions"), message("user", "hello"))
-                .toNative({ false }, { true })
-        }.exceptionOrNull()
-
-        assertTrue(error is IllegalStateException)
-        assertTrue(error!!.message!!.contains("native system instructions"))
-    }
-
-    @Test
-    fun thinkingMapsToTheNativeFlagAndFailsWhenUnavailable() = runBlocking {
+    fun thinkingMapsToTheNativeFlag() {
         val request = request(message("user", "hello"),
             options = NativeChatOptions(null, null, null, null, true))
 
-        assertTrue(request.toNative({ false }, { true }).enableThinking)
-        val error = runCatching { request.toNative({ true }, { false }) }.exceptionOrNull()
-        assertTrue(error is IllegalStateException)
-        assertTrue(error!!.message!!.contains("thinking mode"))
+        assertTrue(request.toNative().enableThinking)
     }
 
     @Test
-    fun toolHistoryIsTextualAndUnknownRolesAreIgnored() = runBlocking {
+    fun toolHistoryIsTextualAndUnknownRolesAreIgnored() {
         val result = request(message("user", "hello"),
             message("assistant", """{"type":"function_call","callId":"1","name":"sample","arguments":{}}"""),
             message("tool", """{"type":"function_result","callId":"1","result":"ok"}"""),
             message("custom", "ignored"), message("developer", "ignored"),
-            message("user", "next")).toNative({ true }, { true })
+            message("user", "next")).toNative()
         val prompt = result.contents.flatMap { it.parts }.joinToString("") { (it as TextPart).textString }
         assertEquals("User:\nhello\n\nAssistant:\n" +
             """{"type":"function_call","callId":"1","name":"sample","arguments":{}}""" +
@@ -114,10 +98,10 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun blankSystemChunksAreOmittedButBlankConversationTurnsRemain() = runBlocking {
+    fun blankSystemChunksAreOmittedButBlankConversationTurnsRemain() {
         val result = request(message("system", " \n", "\t"), message("system"),
             message("user"), message("assistant", ""), message("user", "next"))
-            .toNative({ error("No instructions remain.") }, { false })
+            .toNative()
         assertNull(result.systemInstruction)
         assertEquals(3, result.contents.size)
         assertEquals("User:\n\n\nAssistant:\n\n\nUser:\nnext\n\n",
@@ -125,31 +109,31 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun systemImagesMissingImageDataAndUnknownPartsAreRejected() = runBlocking {
+    fun systemImagesMissingImageDataAndUnknownPartsAreRejected() {
         for (message in listOf(
             NativeChatMessage("system", arrayOf(NativeContentPart(CONTENT_IMAGE, null, byteArrayOf(1)))),
             NativeChatMessage("user", arrayOf(NativeContentPart(CONTENT_IMAGE, null, null))),
             NativeChatMessage("user", arrayOf(NativeContentPart(123, "unknown", null))),
         )) {
             assertNotNull(runCatching {
-                request(message, message("user", "hello")).toNative({ true }, { true })
+                request(message, message("user", "hello")).toNative()
             }.exceptionOrNull())
         }
     }
 
     @Test
-    fun conversationContentIsRequired() = runBlocking {
+    fun conversationContentIsRequired() {
         for (request in listOf(request(), request(message("system", "instructions")))) {
-            assertTrue(runCatching { request.toNative({ true }, { true }) }
+            assertTrue(runCatching { request.toNative() }
                 .exceptionOrNull() is IllegalArgumentException)
         }
     }
 
     @Test
-    fun supportedGenerationOptionsMapDirectlyToTheNativeRequest() = runBlocking {
+    fun supportedGenerationOptionsMapDirectlyToTheNativeRequest() {
         val result = request(message("user", "hello"),
             options = NativeChatOptions(0.3f, 12, 42, 128, false))
-            .toNative({ false }, { false })
+            .toNative()
 
         assertEquals(0.3f, result.temperature, 0f)
         assertEquals(12, result.topK)
@@ -158,11 +142,11 @@ class NativeChatRequestTest {
     }
 
     @Test
-    fun nativeBuilderOwnsGenerationValueValidation() = runBlocking {
+    fun nativeBuilderOwnsGenerationValueValidation() {
         val error = runCatching {
             request(message("user", "hello"),
                 options = NativeChatOptions(2f, null, null, null, false))
-                .toNative({ false }, { false })
+                .toNative()
         }.exceptionOrNull()
 
         assertTrue(error is IllegalArgumentException)

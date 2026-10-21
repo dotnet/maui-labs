@@ -12,7 +12,7 @@ import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-class NativeChatEventQueueTest {
+class NativeChatStreamTest {
     private class Callback : NativeChatCallback {
         val events = mutableListOf<Triple<Boolean, String, String>>()
 
@@ -28,24 +28,64 @@ class NativeChatEventQueueTest {
         override fun onError(error: NativeChatError) = error("Unexpected terminal callback.")
     }
 
-    @Test
-    fun textAndThoughtEventsDrainInOrderWithTheirModelNames() = runBlocking {
-        val callback = Callback()
-        val queue = NativeChatEventQueue(this, callback)
+    private fun response(text: String, thoughts: Array<String> = emptyArray()) =
+        NativeChatResponse(text, thoughts, 0, "native-model", 1)
 
-        queue.callback.onText("first", "model-a")
-        queue.callback.onThought("thinking", "model-a")
-        queue.callback.onText("second", "model-b")
-        queue.finish()
+    @Test
+    fun deltasDrainInOrderWithoutRepeatingTheFinalCandidate() = runBlocking {
+        val callback = Callback()
+        val stream = NativeChatStream(this, callback, "native-model")
+
+        stream.onNewText("ha")
+        stream.onNewThought("first")
+        stream.onNewText("ha")
+        stream.onNewThought("second")
+        stream.finish(response("haha", arrayOf("first", "second")))
 
         assertEquals(
             listOf(
-                Triple(false, "first", "model-a"),
-                Triple(true, "thinking", "model-a"),
-                Triple(false, "second", "model-b"),
+                Triple(false, "ha", "native-model"),
+                Triple(true, "first", "native-model"),
+                Triple(false, "ha", "native-model"),
+                Triple(true, "second", "native-model"),
             ),
             callback.events,
         )
+    }
+
+    @Test
+    fun finishEmitsMissingTextAndThoughtSuffixes() = runBlocking {
+        val callback = Callback()
+        val stream = NativeChatStream(this, callback, "native-model")
+        stream.onNewText("hello")
+        stream.onNewThought("think")
+
+        stream.finish(response("hello world", arrayOf("thinking")))
+
+        assertEquals(
+            listOf(
+                Triple(false, "hello", "native-model"),
+                Triple(true, "think", "native-model"),
+                Triple(false, " world", "native-model"),
+                Triple(true, "ing", "native-model"),
+            ),
+            callback.events,
+        )
+    }
+
+    @Test
+    fun divergentFinalTextOrThoughtFails() = runBlocking {
+        for ((finalText, finalThought) in listOf("different" to "thinking", "hello" to "different")) {
+            val callback = Callback()
+            val stream = NativeChatStream(this, callback, "native-model")
+            stream.onNewText("hello")
+            stream.onNewThought("thinking")
+
+            assertTrue(runCatching {
+                stream.finish(response(finalText, arrayOf(finalThought)))
+            }.exceptionOrNull() is IllegalStateException)
+            stream.cancel()
+        }
     }
 
     @Test
@@ -61,12 +101,11 @@ class NativeChatEventQueueTest {
             override fun onComplete(response: NativeChatResponse) = Unit
             override fun onError(error: NativeChatError) = Unit
         }
-        val scope = CoroutineScope(Dispatchers.Default)
-        val queue = NativeChatEventQueue(scope, callback)
+        val stream = NativeChatStream(CoroutineScope(Dispatchers.Default), callback, "model")
         try {
-            queue.callback.onText("first", "model")
+            stream.onNewText("first")
             assertTrue(entered.await(5, TimeUnit.SECONDS))
-            val finish = async(Dispatchers.Default) { queue.finish() }
+            val finish = async(Dispatchers.Default) { stream.finish(response("first")) }
             assertFalse(finish.isCompleted)
             release.countDown()
             withTimeout(5_000) { finish.await() }
@@ -76,11 +115,13 @@ class NativeChatEventQueueTest {
     }
 
     @Test
-    fun cancelWaitsForAnInFlightCallback() = runBlocking {
+    fun cancelWaitsForAnInFlightCallbackAndIgnoresLateEvents() = runBlocking {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val callback = object : NativeChatCallback {
+            val text = mutableListOf<String>()
             override fun onText(text: String, modelName: String) {
+                this.text.add(text)
                 entered.countDown()
                 assertTrue(release.await(5, TimeUnit.SECONDS))
             }
@@ -88,29 +129,18 @@ class NativeChatEventQueueTest {
             override fun onComplete(response: NativeChatResponse) = Unit
             override fun onError(error: NativeChatError) = Unit
         }
-        val queue = NativeChatEventQueue(CoroutineScope(Dispatchers.Default), callback)
+        val stream = NativeChatStream(CoroutineScope(Dispatchers.Default), callback, "model")
         try {
-            queue.callback.onText("first", "model")
+            stream.onNewText("first")
             assertTrue(entered.await(5, TimeUnit.SECONDS))
-            val cancel = async(Dispatchers.Default) { queue.cancel() }
+            val cancel = async(Dispatchers.Default) { stream.cancel() }
             assertFalse(cancel.isCompleted)
             release.countDown()
             withTimeout(5_000) { cancel.await() }
+            stream.onNewText("late")
+            assertEquals(listOf("first"), callback.text)
         } finally {
             release.countDown()
         }
-    }
-
-    @Test
-    fun eventsAfterFinishAreIgnored() = runBlocking {
-        val callback = Callback()
-        val queue = NativeChatEventQueue(this, callback)
-        queue.callback.onText("before", "model")
-        queue.finish()
-
-        queue.callback.onText("late", "model")
-        queue.callback.onThought("late", "model")
-
-        assertEquals(listOf(Triple(false, "before", "model")), callback.events)
     }
 }

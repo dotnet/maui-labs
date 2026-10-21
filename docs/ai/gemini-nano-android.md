@@ -54,13 +54,12 @@ trimmed/AOT apps; unsupported object representations reject clearly.
 ML Kit model directly for each request. Independent requests own independent
 models; closing the client cancels and joins outstanding work.
 
-`NativeChatEventQueue` is the horizontal concurrency boundary: it serializes
-per-request text/thought callbacks and drains admitted progress before terminal
-completion releases the managed JNI callback. Text/thought updates carry the
-model name obtained before generation. The returned candidate is reconciled
-with accumulated additional-text deltas: equal emits nothing, an extension
-emits only its suffix, and divergence faults the stream. The C# adapter converts
-events to `ChatResponseUpdate` values.
+`NativeChatStream` is the horizontal concurrency boundary: it implements ML
+Kit's streaming callback, serializes text/thought deltas, drains admitted
+progress before terminal completion releases the managed JNI callback, and
+reconciles the returned final text/thoughts. Equal final content emits nothing,
+an extension emits only its suffix, and divergence faults the stream. The C#
+adapter converts events to `ChatResponseUpdate` values.
 
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
@@ -133,14 +132,14 @@ cd src/AI/AndroidNative/EssentialsAI
 ## Validation boundaries
 
 `NativeChatRequestTest` checks the Google request shape and capability errors.
-`NativeChatEventQueueTest` exercises callback ordering, drain-before-terminal,
-cancellation, and late-event suppression without abstracting the ML Kit model.
+`NativeChatStreamTest` exercises callback ordering, text/thought reconciliation,
+drain-before-terminal, cancellation, and late-event suppression without
+abstracting the ML Kit model.
 Status and download operations call ML Kit directly. Download Flow behavior,
 model creation, and disposal remain device/model integration coverage rather
-than introducing a fake model abstraction. `NativeStreamAccumulatorTest` covers
-final-candidate reconciliation. Android binds the shared messages, options,
-response, streaming, cancellation, usage, GetService, and schema suites;
-provider-only tests cover interop/native policy.
+than introducing a fake model abstraction. Android binds the shared messages,
+options, response, streaming, cancellation, usage, GetService, and schema
+suites; provider-only tests cover interop/native policy.
 
 EssentialsAI CI builds Chat Playground in a separate Android-only job. It is not
 in the cross-platform shipping solution: the generic sample's pre-existing

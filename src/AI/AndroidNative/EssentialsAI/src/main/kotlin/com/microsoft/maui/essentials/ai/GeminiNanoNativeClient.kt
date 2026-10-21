@@ -3,7 +3,6 @@ package com.microsoft.maui.essentials.ai
 import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
-import com.google.mlkit.genai.common.StreamingCallback
 import com.google.mlkit.genai.prompt.Content
 import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.GenerateContentResponse
@@ -93,9 +92,9 @@ class GeminiNanoNativeClient {
                         ensureActive()
                         when (update) {
                             is DownloadStatus.DownloadStarted ->
-                                callback.onUpdate(NativeDownloadUpdate(0, update.bytesToDownload))
+                                callback.onStarted(update.bytesToDownload)
                             is DownloadStatus.DownloadProgress ->
-                                callback.onUpdate(NativeDownloadUpdate(1, update.totalBytesDownloaded))
+                                callback.onProgress(update.totalBytesDownloaded)
                             DownloadStatus.DownloadCompleted -> completed = true
                             is DownloadStatus.DownloadFailed -> throw update.e
                         }
@@ -110,7 +109,7 @@ class GeminiNanoNativeClient {
                 return@launch
             }
             if (terminated.compareAndSet(false, true)) {
-                callback.onUpdate(NativeDownloadUpdate(2, 0))
+                callback.onComplete()
             }
         }
         job.invokeOnCompletion { cause -> if (cause != null) fail(cause) }
@@ -135,39 +134,43 @@ class GeminiNanoNativeClient {
         }
 
         val job = operationScope.launch {
-            val events = NativeChatEventQueue(this, callback)
+            var stream: NativeChatStream? = null
             val response = try {
                 val model = Generation.getClient()
                 val generatedResponse = try {
                     ensureActive()
                     requireAvailable(model.checkStatus())
-                    val nativeRequest = request.toNative(
-                        model::isSystemPromptAvailable,
-                        model::isThinkingModeAvailable,
-                    )
+                    val nativeRequest = request.toNative()
+                    if (nativeRequest.systemInstruction != null) {
+                        check(model.isSystemPromptAvailable()) {
+                            "The selected Gemini Nano model does not support native system instructions (requires Nano V3 or later)."
+                        }
+                    }
+                    if (nativeRequest.enableThinking) {
+                        check(model.isThinkingModeAvailable()) {
+                            "The selected Gemini Nano model does not support thinking mode (requires Nano V4 or later)."
+                        }
+                    }
                     val modelName = model.getBaseModelName()
                     val tokenCount = model.countTokens(nativeRequest).totalTokens
-                    val accumulator = NativeStreamAccumulator(events.callback, modelName)
                     val generated = if (streaming) {
-                        model.generateContent(nativeRequest, object : StreamingCallback {
-                            override fun onNewText(additionalText: String) = accumulator.onText(additionalText)
-                            override fun onNewThought(additionalThought: String) = accumulator.onThought(additionalThought)
-                        })
+                        val nativeStream = NativeChatStream(this, callback, modelName)
+                        stream = nativeStream
+                        model.generateContent(nativeRequest, nativeStream)
                     } else {
                         model.generateContent(nativeRequest)
                     }
 
-                    generated.toNativeResponse(modelName, tokenCount).also {
-                        if (streaming) accumulator.finish(it)
-                    }
+                    val response = generated.toNativeResponse(modelName, tokenCount)
+                    stream?.finish(response)
+                    response
                 } finally {
                     model.close()
                 }
-                events.finish()
                 ensureActive()
                 generatedResponse
             } catch (cause: Throwable) {
-                events.cancel()
+                stream?.cancel()
                 fail(cause)
                 return@launch
             }
@@ -224,10 +227,7 @@ class GeminiNanoNativeClient {
     }
 }
 
-internal suspend fun NativeChatRequest.toNative(
-    isSystemPromptAvailable: suspend () -> Boolean,
-    isThinkingModeAvailable: suspend () -> Boolean,
-): GenerateContentRequest {
+internal fun NativeChatRequest.toNative(): GenerateContentRequest {
     val instructions = mutableListOf<String>()
     val contents = mutableListOf<Content>()
     val hasAssistantHistory = messages.any {
@@ -278,9 +278,6 @@ internal suspend fun NativeChatRequest.toNative(
 
     val builder = GenerateContentRequest.Builder(contents)
     if (instructions.isNotEmpty()) {
-        check(isSystemPromptAvailable()) {
-            "The selected Gemini Nano model does not support native system instructions (requires Nano V3 or later)."
-        }
         builder.systemInstruction = SystemInstruction(instructions.joinToString("\n\n"))
     }
 
@@ -288,11 +285,6 @@ internal suspend fun NativeChatRequest.toNative(
     builder.topK = options.topK
     builder.seed = options.seed
     builder.maxOutputTokens = options.maxOutputTokens
-    if (options.enableThinking) {
-        check(isThinkingModeAvailable()) {
-            "The selected Gemini Nano model does not support thinking mode (requires Nano V4 or later)."
-        }
-        builder.enableThinking = true
-    }
+    builder.enableThinking = options.enableThinking
     return builder.build()
 }

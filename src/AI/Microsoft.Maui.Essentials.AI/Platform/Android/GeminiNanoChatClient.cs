@@ -502,31 +502,17 @@ public sealed class GeminiNanoChatClient : IChatClient
 
 		internal Task Terminated => _terminated.Task;
 
-		public void OnUpdate(AndroidNative.NativeDownloadUpdate update)
+		public void OnStarted(long bytesToDownload) =>
+			writer.TryWrite(new(GeminiNanoDownloadState.Started, bytesToDownload));
+
+		public void OnProgress(long bytesDownloaded) =>
+			writer.TryWrite(new(GeminiNanoDownloadState.Progress, bytesDownloaded));
+
+		public void OnComplete()
 		{
-			try
-			{
-				var state = update.Kind switch
-				{
-					0 => GeminiNanoDownloadState.Started,
-					1 => GeminiNanoDownloadState.Progress,
-					2 => GeminiNanoDownloadState.Completed,
-					_ => throw new InvalidOperationException($"Unknown Gemini Nano download update kind '{update.Kind}'."),
-				};
-				writer.TryWrite(new(state, update.Bytes));
-				if (state == GeminiNanoDownloadState.Completed)
-					writer.TryComplete();
-			}
-			catch (Exception exception)
-			{
-				writer.TryComplete(exception);
-				_terminated.TrySetResult();
-			}
-			finally
-			{
-				if (update.Kind == 2)
-					_terminated.TrySetResult();
-			}
+			writer.TryWrite(new(GeminiNanoDownloadState.Completed, 0));
+			writer.TryComplete();
+			_terminated.TrySetResult();
 		}
 
 		public void OnError(AndroidNative.NativeChatError? error)
