@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-android'))">26.0</SupportedOSPlatformVersion>
     <RootNamespace>EssentialsAISample</RootNamespace>
     <AssemblyName>Microsoft.EssentialsAISample</AssemblyName>
     <OutputType>Exe</OutputType>

@@ -22,6 +22,7 @@
     <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
     <!-- Live model generation can exceed the runner's default 30-second gap between results. -->
     <DeviceRunnersDataTimeout>180</DeviceRunnersDataTimeout>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-android'))">26.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <!-- Opt in with -p:EnableOpenAIClient=true or -p:EnableOpenAITests=true. -->

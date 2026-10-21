@@ -1,6 +1,6 @@
 # AI Chat Playground
 
-A .NET MAUI sample for comparing on-device Apple Intelligence with optional
+A .NET MAUI sample for comparing on-device Apple Intelligence/Gemini Nano with optional
 Azure OpenAI providers. It runs on Android, iOS, Mac Catalyst, and Windows
 (not native macOS); providers vary by platform.
 
@@ -8,7 +8,7 @@ Azure OpenAI providers. It runs on Android, iOS, Mac Catalyst, and Windows
 
 | Tab | Features | Providers |
 |-----|----------|-----------|
-| Chat | Text, streaming, structured JSON, optional tools and image input | Apple Intelligence (iOS/Mac Catalyst), Azure OpenAI, offline Replay |
+| Chat | Text, streaming, structured JSON, optional tools and image input | Apple Intelligence (iOS/Mac Catalyst), Gemini Nano (Android), Azure OpenAI, offline Replay |
 | Embeddings | Import documents, index them, and search | Apple NaturalLanguage (iOS/Mac Catalyst), Azure OpenAI |
 | Images | Generate images or edit a source image | Azure OpenAI |
 
@@ -62,6 +62,12 @@ dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sam
 
 The Windows sample remains unpackaged and offers Azure-backed features and
 offline Chat Replay, not on-device AI. Azure and Replay also run on Android.
+The Android app requires API 26+ and supported AICore hardware/configuration for
+Gemini Nano. It supports text/image chat, not tools or structured JSON.
+The first request never downloads assets: explicitly enumerate
+`GeminiNanoChatClient.DownloadModelAsync` after a download decision and query
+status again before chatting. There is no download UI or automatic cloud fallback. See the
+[Android guide](../../docs/ai/gemini-nano-android.md).
 
 With Java and the Android SDK installed:
 

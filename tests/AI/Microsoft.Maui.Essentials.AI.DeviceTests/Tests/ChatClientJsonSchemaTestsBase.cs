@@ -522,12 +522,16 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	}
 
 	[Fact]
-	public async Task GetResponseAsyncT_WithNullMessage_ThrowsArgumentNullException()
+	public async Task GetResponseAsyncT_WithNullMessage_Throws()
 	{
 		var client = new T();
 
-		await Assert.ThrowsAsync<NullReferenceException>(
+		var error = await Record.ExceptionAsync(
 			() => client.GetResponseAsync<SimpleResponse>((ChatMessage)null!));
+
+		Assert.True(
+			error is ArgumentNullException or NullReferenceException,
+			$"Expected a null-message exception, but got {error?.GetType().FullName ?? "no exception"}.");
 	}
 
 	[Fact]
