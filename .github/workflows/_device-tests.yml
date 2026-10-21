@@ -98,6 +98,9 @@ jobs:
         if: contains(inputs.target-framework, '-android')
         shell: bash
         run: |
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           maui_cli="$GITHUB_WORKSPACE/artifacts/bin/Microsoft.Maui.Cli/Release/net10.0/maui"
           if [[ "$(uname -m)" == "arm64" ]]; then
             abi="arm64-v8a"
