@@ -200,7 +200,7 @@ jobs:
             --configuration Release `
             --framework $env:BUILD_TARGET_FRAMEWORK `
             --warnaserror `
-            -p:ContinuousIntegrationBuild=true `
+            -p:ContinuousIntegrationBuild=false `
             -p:VersionSuffix=$env:CI_PACKAGE_VERSION_SUFFIX `
             ${{ inputs.build-arguments }}
 
