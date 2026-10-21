@@ -1,11 +1,158 @@
+using System.Text.Json;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.Graphics;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
-public class LayoutCaptureScopeTests
+[Collection("Layout capture application")]
+public class LayoutCaptureScopeTests : IDisposable
 {
+    private readonly Application? _previousApplication = Application.Current;
+
+    public void Dispose() => Application.Current = _previousApplication;
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CaptureLayoutSnapshot_LiveClientBounds_PreserveNativeAndDomClipsBeyondRequestedWindow(bool includeDom)
+    {
+        var nativeChild = new Button { AutomationId = "native-child", Frame = new Rect(0, 0, 80, 80) };
+        var clip = new Grid
+        {
+            AutomationId = "native-clip", Frame = new Rect(1290, 86, 40, 40),
+            IsClippedToBounds = true, Children = { nativeChild }
+        };
+        var edgeChild = new Button { AutomationId = "window-edge", Frame = new Rect(1290, 200, 80, 80) };
+        var webView = new Microsoft.Maui.Controls.WebView { AutomationId = "webview", Frame = new Rect(0, 134, 1330, 755) };
+        var window = new Window(new ContentPage
+        {
+            Frame = new Rect(0, 0, 1330, 889),
+            Content = new Grid { Frame = new Rect(0, 0, 1330, 889), Children = { clip, edgeChild, webView } }
+        }) { Width = 1024, Height = 684 };
+        var app = WithWindows(window);
+        var walker = new RecordingWalker { Scale = 2 };
+        walker.ClientBounds[window] = new LayoutRectInfo { Width = 1330, Height = 889 };
+        walker.WindowBounds[nativeChild] = new BoundsInfo { X = 1290, Y = 86, Width = 80, Height = 80 };
+        var request = new LayoutInspectionRequest
+        {
+            Profile = "strict",
+            Rules = [LayoutDiagnosticRules.ElementClipped],
+            Scope = new LayoutInspectionScope { IncludeWebViewElements = includeDom }
+        };
+
+        var capture = walker.CaptureLayoutSnapshot(app, request);
+        var nativeRevision = capture.GeometryHash;
+        var windowInfo = Assert.Single(capture.Windows);
+        Assert.Equal(1330, windowInfo.Bounds!.Width);
+        Assert.Equal(889, windowInfo.Bounds.Height);
+        Assert.Equal(2, windowInfo.Scale);
+        Assert.Equal(1024, window.Width);
+        Assert.Equal(684, window.Height);
+        Assert.Equal(1330 * 755, Assert.Single(capture.Nodes, node => node.Element.Id == "webview").VisibleRegion.Area);
+        if (includeDom)
+        {
+            using var snapshot = JsonDocument.Parse("""
+                {
+                  "viewport":{"width":1330,"height":755},
+                  "nodes":[
+                    {"index":0,"parentIndex":-1,"tag":"div","visible":true,
+                     "rect":{"x":1274,"y":16,"width":40,"height":40}},
+                    {"index":1,"parentIndex":0,"tag":"button","visible":true,"interactive":true,
+                     "rect":{"x":1274,"y":16,"width":80,"height":80},
+                     "ancestorClips":[{"clipperIndex":0,"kind":"ancestor-layout-clip",
+                                      "rect":{"x":1274,"y":16,"width":40,"height":40}}]}
+                  ]
+                }
+                """);
+            MauiDevFlowAgentService.AppendBlazorLayoutNodes(capture,
+                new CdpWebViewInfo { Index = 7, Owner = new WeakReference<object>(webView) },
+                snapshot.RootElement, request);
+        }
+        Assert.Equal(nativeRevision, capture.GeometryHash);
+        walker.ApplyLayoutScope(capture, request.Scope);
+        var result = LayoutDiagnosticsEngine.Analyze(capture, request, "test", true, null, walker.GetLayoutRuleSupport());
+        var native = Assert.Single(result.Findings, finding => finding.Element.Id == "native-child");
+        Assert.Equal(0.75, native.Evidence!.LostAreaRatio);
+        Assert.Contains(native.RelatedElements, related => related.Element.Id == "native-clip");
+        var edge = Assert.Single(capture.Nodes, node => node.Element.Id == "window-edge");
+        Assert.Equal(40 * 80, edge.VisibleRegion.Area);
+        Assert.Contains(edge.ClipChain, contribution => contribution.Kind == "window-edge" && contribution.LostAreaRatio == 0.5);
+        if (includeDom)
+        {
+            var dom = Assert.Single(result.Findings, finding => finding.Element.Id == "web-7-1");
+            Assert.Equal(0.75, dom.Evidence!.LostAreaRatio);
+            Assert.Equal(1274, dom.Evidence.FullRegion!.Bounds.X);
+            Assert.Equal(150, dom.Evidence.FullRegion.Bounds.Y);
+            Assert.Equal("webview", Assert.Single(capture.Nodes, node => node.Element.Id == "web-7-0").Element.ParentId);
+        }
+        else
+        {
+            Assert.DoesNotContain(capture.Nodes, node => node.Element.Framework == "webview");
+            Assert.DoesNotContain(result.Findings, finding => finding.Element.Id.StartsWith("web-", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void CaptureLayoutSnapshot_LiveClientResize_UsesCurrentWindowWithoutExpandingToFitNodes()
+    {
+        var child = new Button { AutomationId = "edge", Frame = new Rect(1290, 86, 80, 80) };
+        var window = new Window(new ContentPage
+        {
+            Frame = new Rect(0, 0, 1330, 889),
+            Content = child
+        }) { Width = 1024, Height = 684 };
+        var walker = new RecordingWalker();
+        var app = WithWindows(window);
+        var request = new LayoutInspectionRequest();
+        walker.ClientBounds[window] = new LayoutRectInfo { Width = 1330, Height = 889 };
+        var grown = walker.CaptureLayoutSnapshot(app, request);
+        Assert.Equal(40 * 80, Assert.Single(grown.Nodes, node => node.Element.Id == "edge").VisibleRegion.Area);
+
+        walker.ClientBounds[window] = new LayoutRectInfo { Width = 1000, Height = 650 };
+        var shrunk = walker.CaptureLayoutSnapshot(app, request);
+        Assert.Equal(1000, Assert.Single(shrunk.Windows).Bounds!.Width);
+        Assert.Equal(650, Assert.Single(shrunk.Windows).Bounds!.Height);
+        var outside = Assert.Single(shrunk.Nodes, node => node.Element.Id == "edge");
+        Assert.Equal(0, outside.VisibleRegion.Area);
+        Assert.Contains(outside.ClipChain, contribution => contribution.Kind == "window-edge" && contribution.LostAreaRatio == 1);
+        Assert.Equal(1024, window.Width);
+        Assert.Equal(684, window.Height);
+    }
+
+    [Fact]
+    public void CaptureLayoutSnapshot_SelectedWindow_UsesOnlyItsLiveClientBounds()
+    {
+        var first = new Window(new ContentPage());
+        var second = new Window(new ContentPage()) { Width = 1024, Height = 684 };
+        var walker = new RecordingWalker();
+        walker.ClientBounds[first] = new LayoutRectInfo { Width = 400, Height = 300 };
+        walker.ClientBounds[second] = new LayoutRectInfo { Width = 1330, Height = 889 };
+        var capture = walker.CaptureLayoutSnapshot(WithWindows(first, second),
+            new LayoutInspectionRequest { Scope = new LayoutInspectionScope { Window = 1 } });
+
+        var window = Assert.Single(capture.Windows);
+        Assert.Equal("window-1", window.Id);
+        Assert.Equal(1330, window.Bounds!.Width);
+        Assert.Equal(889, window.Bounds.Height);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void CaptureLayoutSnapshot_UnavailableClientBounds_RetainsManagedFallback(double nativeWidth)
+    {
+        var window = new Window(new ContentPage()) { Width = 1024, Height = 684 };
+        var walker = new RecordingWalker();
+        walker.ClientBounds[window] = new LayoutRectInfo { Width = nativeWidth, Height = 889 };
+        var capture = walker.CaptureLayoutSnapshot(WithWindows(window), new LayoutInspectionRequest());
+
+        var bounds = Assert.Single(capture.Windows).Bounds!;
+        Assert.Equal(1024, bounds.Width);
+        Assert.Equal(684, bounds.Height);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -136,6 +283,14 @@ public class LayoutCaptureScopeTests
     {
         public List<string?> Collected { get; } = [];
         public double Scale { get; init; } = 1;
+        public Dictionary<Window, LayoutRectInfo> ClientBounds { get; } = [];
+        public Dictionary<VisualElement, BoundsInfo> WindowBounds { get; } = [];
+
+        protected override LayoutRectInfo? ResolveWindowClientBounds(Window window)
+            => ClientBounds.GetValueOrDefault(window);
+
+        protected override BoundsInfo? ResolveWindowBounds(VisualElement element)
+            => WindowBounds.GetValueOrDefault(element) ?? base.ResolveWindowBounds(element);
 
         protected override double ResolveWindowScale(Window window) => Scale;
 
@@ -143,4 +298,19 @@ public class LayoutCaptureScopeTests
             LayoutPlatformMetrics metrics, VisualElement element, ElementInfo info, LayoutInspectionRequest request)
             => Collected.Add(element.AutomationId);
     }
+
+    private static Application WithWindows(params Window[] windows)
+    {
+        var app = new Application();
+        var addWindow = typeof(Application).GetMethod("AddWindow",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        foreach (var window in windows)
+            addWindow.Invoke(app, [window]);
+        return app;
+    }
+}
+
+[CollectionDefinition("Layout capture application", DisableParallelization = true)]
+public class LayoutCaptureApplicationCollection
+{
 }

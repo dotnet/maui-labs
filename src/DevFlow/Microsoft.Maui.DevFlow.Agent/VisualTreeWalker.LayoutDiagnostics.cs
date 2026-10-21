@@ -21,6 +21,20 @@ namespace Microsoft.Maui.DevFlow.Agent;
 
 public partial class PlatformVisualTreeWalker
 {
+    protected override LayoutRectInfo? ResolveWindowClientBounds(Microsoft.Maui.Controls.Window window)
+    {
+#if IOS || MACCATALYST
+        var uiWindow = window.Handler?.PlatformView as UIWindow
+            ?? (window.Page?.Handler?.PlatformView as UIView)?.Window;
+        if (uiWindow is not null)
+        {
+            var client = uiWindow.RootViewController?.View ?? uiWindow;
+            return UIKitRegion(client, client.Bounds, uiWindow).Bounds;
+        }
+#endif
+        return base.ResolveWindowClientBounds(window);
+    }
+
     protected override double ResolveWindowScale(Microsoft.Maui.Controls.Window window)
     {
         try

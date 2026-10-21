@@ -182,6 +182,8 @@ public partial class VisualTreeWalker
 
     protected virtual double ResolveWindowScale(Window window) => 1;
 
+    protected virtual LayoutRectInfo? ResolveWindowClientBounds(Window window) => null;
+
     protected virtual void PopulatePlatformLayoutMetrics(
         LayoutPlatformMetrics metrics,
         VisualElement element,
@@ -628,8 +630,18 @@ public partial class VisualTreeWalker
         return afterRegion;
     }
 
-    private static LayoutRectInfo? ResolveRootBounds(ElementInfo root, Window? window)
+    private LayoutRectInfo? ResolveRootBounds(ElementInfo root, Window? window)
     {
+        // Window.Width/Height may still contain the requested launch size after a native resize.
+        if (window is not null
+            && ResolveWindowClientBounds(window) is { } clientBounds
+            && double.IsFinite(clientBounds.X) && double.IsFinite(clientBounds.Y)
+            && double.IsFinite(clientBounds.Width) && double.IsFinite(clientBounds.Height)
+            && clientBounds.Width > 0 && clientBounds.Height > 0)
+        {
+            return clientBounds;
+        }
+
         var bounds = root.WindowBounds ?? root.Bounds;
         if (bounds is { Width: > 0, Height: > 0 })
         {
