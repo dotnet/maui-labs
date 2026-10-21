@@ -282,7 +282,7 @@ public class DeviceManager : IDeviceManager
 		if (_appleProvider is null)
 			return;
 
-		// Apple devices (simulators); the provider returns an empty list off macOS.
+		// Apple devices (simulators and connected physical devices); the provider returns an empty list off macOS.
 		devices.AddRange(_appleProvider.GetDevices());
 	}
 
