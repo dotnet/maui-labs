@@ -760,10 +760,14 @@ public partial class PlatformVisualTreeWalker
     }
 
     private static LayoutRegionInfo WinUIRegion(FrameworkElement element, UIElement root)
-        => TransformWinUIRect(
+    {
+        // TextBlock.ActualHeight reports text metrics, not the element's arranged extent.
+        var size = element.ActualSize;
+        return TransformWinUIRect(
             element,
             root,
-            new global::Windows.Foundation.Rect(0, 0, element.ActualWidth, element.ActualHeight));
+            new global::Windows.Foundation.Rect(0, 0, size.X, size.Y));
+    }
 
     private static LayoutRegionInfo TransformWinUIRect(
         UIElement source,

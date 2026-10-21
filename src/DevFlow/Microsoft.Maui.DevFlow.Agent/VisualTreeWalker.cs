@@ -1167,12 +1167,13 @@ public partial class PlatformVisualTreeWalker : VisualTreeWalker
                 var point = transform.TransformPoint(new global::Windows.Foundation.Point(0, 0));
                 if (uiElement is Microsoft.UI.Xaml.FrameworkElement fe)
                 {
+                    var size = fe.ActualSize;
                     return new BoundsInfo
                     {
                         X = point.X,
                         Y = point.Y,
-                        Width = fe.ActualWidth,
-                        Height = fe.ActualHeight
+                        Width = size.X,
+                        Height = size.Y
                     };
                 }
             }
