@@ -46,11 +46,10 @@ class NativeChatError(
 
 class NativeModelStatus(
     val status: Int,
-    val reason: String?,
     val thinkingAvailable: Boolean,
 )
 
-interface NativeModelCallback {
+interface NativeCheckStatusCallback {
     fun onComplete(status: NativeModelStatus)
     fun onError(error: NativeChatError)
 }

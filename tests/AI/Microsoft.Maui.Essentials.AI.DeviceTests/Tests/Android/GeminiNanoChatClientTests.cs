@@ -307,13 +307,20 @@ public class GeminiNanoChatClientInteropTests
 	[InlineData(2, ChatModelAvailability.NotReady)]
 	[InlineData(0, ChatModelAvailability.Unknown)]
 	[InlineData(99, ChatModelAvailability.Unknown)]
-	public void CreateModelStatus_PreservesReasonAndOnlyAdvertisesEffectiveCapabilities(int native, ChatModelAvailability expected)
+	public void CreateModelStatus_MapsAvailabilityAndOnlyAdvertisesEffectiveCapabilities(int native, ChatModelAvailability expected)
 	{
 		foreach (var thinking in new[] { false, true })
 		{
-			var status = GeminiNanoChatClient.CreateModelStatus(native, "native reason", thinking);
+			var status = GeminiNanoChatClient.CreateModelStatus(native, thinking);
 			Assert.Equal(expected, status.Availability);
-			Assert.Equal(native == 3 ? null : "native reason", status.UnavailableReason);
+			Assert.Equal(native switch
+			{
+				0 => "UNAVAILABLE (0): Gemini Nano is unsupported or AICore configuration is not ready.",
+				1 => "DOWNLOADABLE (1)",
+				2 => "DOWNLOADING (2)",
+				3 => null,
+				_ => $"Unknown ML Kit FeatureStatus ({native})",
+			}, status.UnavailableReason);
 			Assert.Equal(thinking ? 5 : 4, status.Capabilities!.Count);
 			Assert.Contains(ChatModelCapability.Text, status.Capabilities);
 			Assert.Contains(ChatModelCapability.Streaming, status.Capabilities);
