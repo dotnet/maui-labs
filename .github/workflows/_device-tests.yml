@@ -90,8 +90,14 @@ jobs:
           DEVICE_TEST_DOTNET_ARGS: ${{ inputs.dotnet-args }}
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet restore $env:DEVICE_TEST_PROJECT
-          dotnet build $env:DEVICE_TEST_PROJECT -f $env:DEVICE_TEST_TFM -c Release --no-restore
+          & dotnet restore $env:DEVICE_TEST_PROJECT -p:TargetFrameworks=$env:DEVICE_TEST_TFM
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          & dotnet build $env:DEVICE_TEST_PROJECT -f $env:DEVICE_TEST_TFM -c Release --no-restore -p:TargetFrameworks=$env:DEVICE_TEST_TFM
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
           $arguments = @(
             'test', $env:DEVICE_TEST_PROJECT,
@@ -99,6 +105,7 @@ jobs:
             '-c', 'Release',
             '--no-build',
             '--no-restore',
+            "-p:TargetFrameworks=$env:DEVICE_TEST_TFM",
             '--logger', 'trx',
             '--results-directory', (Join-Path $env:GITHUB_WORKSPACE 'artifacts/TestResults')
           )

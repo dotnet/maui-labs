@@ -27,6 +27,7 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
     <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
+    <NoWarn>$(NoWarn);CS8305;MVVMTK0045</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
