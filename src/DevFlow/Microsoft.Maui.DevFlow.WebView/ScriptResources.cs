@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Collections.Concurrent;
+using System.Text.Json;
 
 namespace Microsoft.Maui.DevFlow.WebView;
 
@@ -11,6 +12,16 @@ internal static class ScriptResources
 {
     private static readonly Assembly Assembly = typeof(ScriptResources).Assembly;
     private static readonly ConcurrentDictionary<string, string> Cache = new();
+
+    internal static string BuildCdpSendScript(string escapedCommand, string? nativeBinding)
+        => Load("cdp-send-receive.js")
+            .Replace("%NATIVE_CDP_BINDING%", JsonSerializer.Serialize(nativeBinding))
+            .Replace("%CDP_MESSAGE%", escapedCommand);
+
+    internal static string BuildInsertTextScript(string escapedText, int textLength)
+        => Load("insert-text.js")
+            .Replace("%TEXT_LENGTH%", textLength.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .Replace("%TEXT%", escapedText);
 
     /// <summary>
     /// Loads an embedded script resource by filename (e.g. "chobitsu-init.js").

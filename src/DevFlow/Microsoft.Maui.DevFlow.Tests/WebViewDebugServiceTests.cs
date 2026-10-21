@@ -284,6 +284,87 @@ public class WebViewDebugServiceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task SendCdpCommand_LiteralTemplateMarker_PreservesExpressionAndTextOnBothTransports(bool native)
+    {
+        const string marker = "%NATIVE_CDP_BINDING%";
+        const string expression = "'%NATIVE_CDP_BINDING%'";
+        NativeCdpResponseChannel? channel = null;
+        string? reply = null;
+        var sends = 0;
+        using var service = new TestService(script =>
+        {
+            if (script.Contains("sendRawMessage"))
+            {
+                sends++;
+                var encoded = Regex.Match(script, @"JSON\.parse\('((?:\\.|[^'])*)'\)").Groups[1].Value;
+                using var command = JsonDocument.Parse(Regex.Unescape(encoded));
+                var parameters = command.RootElement.GetProperty("params");
+                Assert.Equal(expression, parameters.GetProperty("expression").GetString());
+                Assert.Equal(marker, parameters.GetProperty("text").GetString());
+                var wireId = command.RootElement.GetProperty("id").GetInt64();
+                reply = JsonSerializer.Serialize(new { id = wireId, result = new { result = new { value = marker } } });
+                if (native)
+                    Assert.True(channel!.TryReceive(JsonSerializer.Serialize(new { channel = channel.BindingName, response = reply })));
+                return Task.FromResult<string?>("__cdp_pending__");
+            }
+            if (script.Contains("var r = window.__cdpResponse")) return Task.FromResult(reply);
+            return Task.FromResult(ReadyResult(script));
+        });
+        if (native) channel = service.EnableNativeCdpResponses(0);
+
+        using var response = JsonDocument.Parse(await service.SendCdpCommandAsync(
+            JsonSerializer.Serialize(new { id = 731, method = "Runtime.evaluate", @params = new { expression, text = marker } }), 0));
+
+        Assert.Equal(731, response.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal(marker, response.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetString());
+        Assert.Equal(1, sends);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendCdpCommand_InputTextWithLiteralMarkers_PreservesTextAndFiresEventsOnce(bool native)
+    {
+        const string text = "%TEXT_LENGTH% %TEXT% %NATIVE_CDP_BINDING%";
+        using var host = new JavaScriptHost();
+        await host.EvaluateAsync("""
+            window.__inputEvents = [];
+            Event = class { constructor(type) { this.type = type; } };
+            document = { activeElement: {
+                tagName: 'INPUT', value: '', selectionStart: 0, selectionEnd: 0,
+                dispatchEvent: event => window.__inputEvents.push(event.type)
+            }};
+            null
+            """);
+        var insertions = 0;
+        using var service = new TestService(script =>
+        {
+            if (script.Contains("var el = document.activeElement"))
+            {
+                insertions++;
+                return host.EvaluateAsync(script);
+            }
+            return Task.FromResult(ReadyResult(script));
+        });
+        if (native) service.EnableNativeCdpResponses(0);
+
+        using var response = JsonDocument.Parse(await service.SendCdpCommandAsync(JsonSerializer.Serialize(
+            new { id = 732, method = "Input.insertText", @params = new { text } }), 0));
+
+        Assert.False(response.RootElement.TryGetProperty("error", out _));
+        Assert.Equal(732, response.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal(text, await host.EvaluateAsync("document.activeElement.value"));
+        using var state = JsonDocument.Parse((await host.EvaluateAsync(
+            "JSON.stringify({caret:document.activeElement.selectionStart, events:window.__inputEvents})"))!);
+        Assert.Equal(text.Length, state.RootElement.GetProperty("caret").GetInt32());
+        Assert.Equal(new[] { "input", "change" },
+            state.RootElement.GetProperty("events").EnumerateArray().Select(value => value.GetString()));
+        Assert.Equal(1, insertions);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task SendCdpCommand_NativeReplySurvivesDestroyedEvaluation_UsesActualResponseOnce(bool evaluationThrows)
     {
         NativeCdpResponseChannel? channel = null;

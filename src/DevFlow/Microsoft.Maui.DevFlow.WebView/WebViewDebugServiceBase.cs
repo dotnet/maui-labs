@@ -362,9 +362,7 @@ public abstract class WebViewDebugServiceBase : IDisposable
                 if (method == "Input.insertText")
                 {
                     var text = command.RootElement.GetProperty("params").GetProperty("text").GetString() ?? "";
-                    await EvaluateAsync(ScriptResources.Load("insert-text.js")
-                        .Replace("%TEXT%", EscapeJsString(text))
-                        .Replace("%TEXT_LENGTH%", text.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                    await EvaluateAsync(ScriptResources.BuildInsertTextScript(EscapeJsString(text), text.Length));
                     return Success(id);
                 }
                 // External callers may reuse IDs, even after a timeout. Never reuse one on the
@@ -376,9 +374,8 @@ public abstract class WebViewDebugServiceBase : IDisposable
                 {
                     var message = System.Text.Json.Nodes.JsonNode.Parse(cdpJson)!.AsObject();
                     message["id"] = wireId;
-                    var script = ScriptResources.Load("cdp-send-receive.js")
-                        .Replace("%CDP_MESSAGE%", EscapeJsString(message.ToJsonString()))
-                        .Replace("%NATIVE_CDP_BINDING%", JsonSerializer.Serialize(nativeResponses?.BindingName));
+                    var script = ScriptResources.BuildCdpSendScript(
+                        EscapeJsString(message.ToJsonString()), nativeResponses?.BindingName);
                     string? sendResult = null;
                     Exception? dispatchFailure = null;
                     try { sendResult = await EvaluateAsync(script); }

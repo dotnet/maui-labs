@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 using Microsoft.Playwright;
 using Microsoft.Maui.DevFlow.WebView;
@@ -21,6 +20,7 @@ public class WebViewBridgeScriptTests
 
         await InitializeAsync(page);
         await AssertRuntimeDomAndInputAsync(page);
+        await AssertLiteralMarkersAsync(page, (method, parameters) => CommandAsync(page, method, parameters));
 
         Assert.True(await page.EvaluateAsync<bool>("() => { try { void window.localStorage; return false; } catch (error) { return error.name === 'SecurityError'; } }"));
         Assert.True(await page.EvaluateAsync<bool>("() => { try { void window.sessionStorage; return false; } catch (error) { return error.name === 'SecurityError'; } }"));
@@ -90,7 +90,7 @@ public class WebViewBridgeScriptTests
             return route.FulfillAsync(new()
             {
                 ContentType = "text/html",
-                Body = "<a id='navigate' href='/second' onclick='window.__navClicks=(window.__navClicks||0)+1'>Next</a>"
+                Body = "<input><a id='navigate' href='/second' onclick='window.__navClicks=(window.__navClicks||0)+1'>Next</a>"
             });
         });
         await page.GotoAsync("https://devflow.test/");
@@ -113,6 +113,17 @@ public class WebViewBridgeScriptTests
                 applicationMessage.TrySetResult(value.GetProperty("payload").GetString()!);
         };
         session.Event("Runtime.bindingCalled").OnEvent += applicationReceiver;
+        await AssertLiteralMarkersAsync(page, async (method, parameters) =>
+        {
+            var task = channel.Register(79);
+            try
+            {
+                var json = JsonSerializer.Serialize(new { id = 79, method, @params = parameters });
+                Assert.Equal("__cdp_pending__", await page.EvaluateAsync<string>(SendScript(json, channel.BindingName)));
+                return await task.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            finally { channel.Remove(79); }
+        });
         var normal = channel.Register(76);
         var readCommand = JsonSerializer.Serialize(new
         {
@@ -188,9 +199,10 @@ public class WebViewBridgeScriptTests
         using var click = JsonDocument.Parse(await CommandAsync(page, "Runtime.evaluate",
             new { expression = "document.querySelector('button').click(); document.querySelector('input').focus(); 'clicked'", returnByValue = true }));
         Assert.False(click.RootElement.TryGetProperty("error", out _));
-        await page.EvaluateAsync(Script("insert-text.js").Replace("%TEXT%", "hello").Replace("%TEXT_LENGTH%", "5"));
+        const string inputText = "hello %TEXT_LENGTH% %TEXT% %NATIVE_CDP_BINDING%";
+        await page.EvaluateAsync(ScriptResources.BuildInsertTextScript(inputText, inputText.Length));
         Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__clicks"));
-        Assert.Equal("hello", await page.Locator("input").InputValueAsync());
+        Assert.Equal(inputText, await page.Locator("input").InputValueAsync());
         Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__inputs"));
         Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__changes"));
     }
@@ -211,17 +223,25 @@ public class WebViewBridgeScriptTests
     static string SendScript(string command, string? bindingName = null)
     {
         var escaped = command.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\n", "\\n").Replace("\r", "\\r");
-        return Script("cdp-send-receive.js").Replace("%CDP_MESSAGE%", escaped)
-            .Replace("%NATIVE_CDP_BINDING%", JsonSerializer.Serialize(bindingName));
+        return ScriptResources.BuildCdpSendScript(escaped, bindingName);
     }
 
-    static string Script(string name)
+    static async Task AssertLiteralMarkersAsync(IPage page, Func<string, object, Task<string>> command)
     {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("WebViewScripts." + name)
-            ?? throw new InvalidOperationException($"Missing actual WebView script: {name}");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        const string marker = "%NATIVE_CDP_BINDING%";
+        using var literal = JsonDocument.Parse(await command("Runtime.evaluate",
+            new { expression = "'" + marker + "'", returnByValue = true }));
+        Assert.Equal(marker, literal.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetString());
+        using var text = JsonDocument.Parse(await command("Runtime.evaluate",
+            new { expression = "document.querySelector('input').value = '" + marker + "'; document.querySelector('input').value", returnByValue = true }));
+        Assert.Equal(marker, text.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetString());
+        Assert.Equal(marker, await page.Locator("input").InputValueAsync());
+        using var error = JsonDocument.Parse(await command("Runtime.evaluate",
+            new { expression = "(() => { throw new Error('" + marker + "'); })()", returnByValue = true }));
+        Assert.Contains(marker, error.RootElement.GetProperty("result").GetProperty("exceptionDetails").ToString());
     }
+
+    static string Script(string name) => ScriptResources.Load(name);
 
     const string Fixture = """
         <!doctype html><html><head><title>Opaque fixture</title></head>
