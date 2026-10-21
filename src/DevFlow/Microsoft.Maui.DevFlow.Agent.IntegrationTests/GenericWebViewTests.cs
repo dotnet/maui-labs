@@ -357,10 +357,12 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
                 "Handler.NeedsContainer", "Handler.HasContainer", "Handler.ContainerView",
                 "Handler.ContainerView.Width", "Handler.ContainerView.Height",
                 "Handler.ContainerView.MinHeight", "Handler.ContainerView.ActualHeight",
+                "Handler.ContainerView.RenderSize",
                 "Handler.PlatformView", "Handler.PlatformView.Width", "Handler.PlatformView.Height",
                 "Handler.PlatformView.MinHeight", "Handler.PlatformView.MaxHeight",
                 "Handler.PlatformView.ActualWidth", "Handler.PlatformView.ActualHeight",
-                "Handler.PlatformView.VerticalAlignment", "Handler.PlatformView.Parent"
+                "Handler.PlatformView.RenderSize", "Handler.PlatformView.VerticalAlignment",
+                "Handler.PlatformView.Parent"
             })
                 Output.WriteLine($"Native clipping Label {property}: " +
                     JsonSerializer.Serialize(await Client.GetPropertyAsync(nativeChild.Id, property)));
