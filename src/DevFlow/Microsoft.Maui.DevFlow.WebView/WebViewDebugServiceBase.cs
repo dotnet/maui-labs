@@ -151,6 +151,7 @@ public abstract class WebViewDebugServiceBase : IDisposable
         private readonly WeakReference<object>? _owner;
         private readonly Func<string, Task<string>> _commandHandler;
         private NativeCdpResponseChannel? _nativeResponses;
+        private DocumentReloadFence? _reloadFence;
 
         public string? AutomationId { get; }
         public string? ElementId { get; set; }
@@ -250,11 +251,12 @@ public abstract class WebViewDebugServiceBase : IDisposable
             var deadline = DateTime.UtcNow.AddMilliseconds(_service.GetWebViewLoadDelayMs());
             var documentReady = false;
             Exception? probeFailure = null;
+            var reloadFence = _reloadFence;
             do
             {
                 try
                 {
-                    var state = await EvaluateAsync("document.readyState");
+                    var state = await EvaluateAsync(reloadFence?.ReadinessScript ?? "document.readyState");
                     if (state is "interactive" or "complete") { documentReady = true; break; }
                 }
                 catch (Exception ex) when (!_token.IsCancellationRequested) { probeFailure = ex; }
@@ -275,6 +277,8 @@ public abstract class WebViewDebugServiceBase : IDisposable
                 throw new InvalidOperationException("CDP initialization did not report ready.");
             await EvaluateAsync(ScriptResources.Load("console-intercept.js"));
             _token.ThrowIfCancellationRequested();
+            if (ReferenceEquals(_reloadFence, reloadFence))
+                _reloadFence = null;
             Volatile.Write(ref _lastError, null);
             _ready = true;
             _service.Log($"[WebViewDevFlow] {HostKind} bridge initialized (automationId={AutomationId ?? "(none)"}).");
@@ -347,6 +351,10 @@ public abstract class WebViewDebugServiceBase : IDisposable
                 if (method == "Page.reload")
                 {
                     _ready = false;
+                    var reloadFence = new DocumentReloadFence();
+                    if (await EvaluateAsync(reloadFence.MarkCurrentDocumentScript) != "marked")
+                        throw new InvalidOperationException("Could not identify the document before reload.");
+                    _reloadFence = reloadFence;
                     await _service.RunOnMainThreadAsync(() => _reload()).WaitAsync(_token);
                     return Success(id);
                 }

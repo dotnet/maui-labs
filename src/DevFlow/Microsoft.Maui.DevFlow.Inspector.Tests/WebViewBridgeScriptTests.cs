@@ -176,6 +176,84 @@ public class WebViewBridgeScriptTests
         session.Event("Runtime.bindingCalled").OnEvent -= applicationReceiver;
         await session.SendAsync("Runtime.removeBinding", new() { ["name"] = "__application_native_binding" });
         await session.DetachAsync();
+        await AssertDelayedReloadAsync(context);
+    }
+
+    static async Task AssertDelayedReloadAsync(IBrowserContext context)
+    {
+        var page = await context.NewPageAsync();
+        var requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldDocument = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requests = 0;
+        var phase = "initial navigation";
+        await page.RouteAsync("https://reload.devflow.test/index.html", async route =>
+        {
+            var request = Interlocked.Increment(ref requests);
+            if (request == 2)
+            {
+                requested.TrySetResult();
+                await release.Task;
+            }
+            await route.FulfillAsync(new()
+            {
+                ContentType = "text/html",
+                Body = $"<title>Document {request}</title>"
+            });
+        });
+        try
+        {
+            await page.GotoAsync("https://reload.devflow.test/index.html").WaitAsync(TimeSpan.FromSeconds(5));
+            phase = "initial engine injection";
+            await InitializeAsync(page).WaitAsync(TimeSpan.FromSeconds(5));
+            var fence = new DocumentReloadFence();
+            phase = "mark old document";
+            Assert.Equal("marked", await page.EvaluateAsync<string>(fence.MarkCurrentDocumentScript).WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.True(await page.EvaluateAsync<bool>("""
+                () => Object.getOwnPropertyNames(document)
+                    .filter(name => name.startsWith('__devflow_reload_'))
+                    .every(name => !Object.getOwnPropertyDescriptor(document, name).enumerable)
+                """));
+            await page.ExposeFunctionAsync("__recordReloadStart", (string value) => oldDocument.TrySetResult(value));
+            await page.EvaluateAsync($$"""
+                () => window.addEventListener('beforeunload', () => window.__recordReloadStart(JSON.stringify({
+                    state: document.readyState,
+                    bridgeReady: !!window.__chobitsuReady,
+                    fenced: {{fence.ReadinessScript}}
+                })))
+                """);
+            var navigation = page.ReloadAsync();
+            phase = "reload request";
+            await requested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // A provisional reload still exposes the fully initialized old document.
+            phase = "old readiness probe";
+            using var old = JsonDocument.Parse(await oldDocument.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.Equal("complete", old.RootElement.GetProperty("state").GetString());
+            Assert.True(old.RootElement.GetProperty("bridgeReady").GetBoolean());
+            Assert.Equal("reloading", old.RootElement.GetProperty("fenced").GetString());
+
+            release.TrySetResult();
+            phase = "replacement navigation";
+            await navigation.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal("complete", await page.EvaluateAsync<string>(fence.ReadinessScript));
+            Assert.False(await page.EvaluateAsync<bool>("() => !!window.__chobitsuReady"));
+            await InitializeAsync(page);
+            using var reply = JsonDocument.Parse(await CommandAsync(page, "Runtime.evaluate",
+                new { expression = "window.__readQueries=(window.__readQueries||0)+1;document.title", returnByValue = true }));
+            Assert.Equal("Document 2", reply.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetString());
+            Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__readQueries"));
+            Assert.Equal(2, requests);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Delayed reload failed during {phase}; document requests={requests}.", ex);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await page.CloseAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
     }
 
     static async Task InitializeAsync(IPage page)

@@ -182,6 +182,53 @@ public class WebViewDebugServiceTests
     }
 
     [Fact]
+    public async Task Reload_OldCompleteDocumentCannotBecomeReadyOrReceiveQuery_BeforeReplacement()
+    {
+        using var host = new JavaScriptHost();
+        await host.EvaluateAsync("document = { readyState: 'complete' }; null");
+        var reloads = 0;
+        var sends = 0;
+        string? reply = null;
+        using var service = new TestService(script =>
+        {
+            if (script == "document.readyState" ||
+                script.Contains("Object.defineProperty(document,") ||
+                script.Contains("Object.prototype.hasOwnProperty.call(document,"))
+                return host.EvaluateAsync(script);
+            if (script.Contains("sendRawMessage"))
+            {
+                sends++;
+                reply = JsonSerializer.Serialize(new { id = ReadSentWireId(script), result = new { value = "new document" } });
+                return Task.FromResult<string?>("__cdp_pending__");
+            }
+            if (script.Contains("var r = window.__cdpResponse")) return Task.FromResult(reply);
+            return Task.FromResult(ReadyResult(script));
+        }, loadBudget: 1, reload: () => reloads++);
+        await service.InitializeOne();
+        Assert.True(service.IsReady);
+
+        using var reload = JsonDocument.Parse(await service.SendCdpCommandAsync(
+            """{"id":81,"method":"Page.reload"}""", 0));
+        Assert.False(reload.RootElement.TryGetProperty("error", out _));
+        Assert.Equal(1, reloads);
+        Assert.False(service.IsReady);
+        using var oldQuery = JsonDocument.Parse(await service.SendCdpCommandAsync(
+            """{"id":82,"method":"Runtime.evaluate","params":{"expression":"document.title"}}""", 0));
+        Assert.Contains("Document readiness timed out", oldQuery.RootElement.GetProperty("error").GetProperty("message").GetString());
+        Assert.False(service.IsReady);
+        Assert.Equal(0, sends);
+
+        await host.EvaluateAsync("document = { readyState: 'complete' }; null");
+        await service.InitializeOne();
+        Assert.True(service.IsReady);
+        using var newQuery = JsonDocument.Parse(await service.SendCdpCommandAsync(
+            """{"id":83,"method":"Runtime.evaluate","params":{"expression":"document.title"}}""", 0));
+        Assert.Equal("new document", newQuery.RootElement.GetProperty("result").GetProperty("value").GetString());
+        Assert.Equal(1, sends);
+        Assert.Equal(1, reloads);
+    }
+
+    [Fact]
     public async Task SendCdpCommand_ConcurrentRequests_SerializesSingleSlotMailbox()
     {
         var firstSend = NewCompletion();
@@ -795,11 +842,11 @@ public class WebViewDebugServiceTests
         private readonly int _responseBudget;
         public int DispatchCount { get; private set; }
         public TestService(Func<string, Task<string?>> evaluate, Action? cleanup = null, object? owner = null,
-            int loadBudget = 2000, int responseBudget = 10000, Action<string>? navigate = null)
+            int loadBudget = 2000, int responseBudget = 10000, Action<string>? navigate = null, Action? reload = null)
         {
             _loadBudget = loadBudget;
             _responseBudget = responseBudget;
-            _index = AddWebViewBridge(evaluate, () => { }, navigate ?? (_ => { }), null, cleanup, "hybrid", owner);
+            _index = AddWebViewBridge(evaluate, reload ?? (() => { }), navigate ?? (_ => { }), null, cleanup, "hybrid", owner);
         }
         protected override int GetWebViewLoadDelayMs() => _loadBudget;
         protected override int GetCdpResponseTimeoutMs() => _responseBudget;
