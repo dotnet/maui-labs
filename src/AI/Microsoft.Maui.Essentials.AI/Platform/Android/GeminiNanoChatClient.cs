@@ -16,7 +16,7 @@ namespace Microsoft.Maui.Essentials.AI;
 /// Requests use independent native models. Supplied user/assistant/tool history is
 /// included in the prompt by the Kotlin bridge, with in-memory images and native
 /// system instructions. Tool registration and structured output are not supported.
-/// Model preparation is explicit and awaited; generation never downloads or falls back to a cloud provider.
+/// Model download is explicit and observable; generation never downloads or falls back to a cloud provider.
 /// </remarks>
 [SupportedOSPlatform("android26.0")]
 public sealed class GeminiNanoChatClient : IChatClient
@@ -34,26 +34,49 @@ public sealed class GeminiNanoChatClient : IChatClient
 	/// <param name="cancellationToken">Cancels the native status request.</param>
 	/// <returns>A fresh advisory snapshot; generation rechecks readiness.</returns>
 	public static Task<ChatModelStatus> GetModelStatusAsync(CancellationToken cancellationToken = default) =>
-		RunModelOperationAsync(prepare: false, cancellationToken);
+		RunModelOperationAsync(cancellationToken);
 
-	/// <summary>Explicitly downloads or awaits Gemini Nano model assets until ML Kit reports readiness.</summary>
-	/// <param name="cancellationToken">Cancels waiting and any download Flow collection owned by this call.</param>
-	/// <returns>A task that completes after preparation and native cleanup. Generation never calls this API.</returns>
-	public static async Task PrepareModelAsync(CancellationToken cancellationToken = default) =>
-		_ = await RunModelOperationAsync(prepare: true, cancellationToken).ConfigureAwait(false);
-
-	private static async Task<ChatModelStatus> RunModelOperationAsync(bool prepare, CancellationToken cancellationToken)
+	private static async Task<ChatModelStatus> RunModelOperationAsync(CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		var client = new GeminiNanoChatClient();
 		using var lifetime = (IDisposable)client;
 		using var callback = new ModelCallback(cancellationToken);
-		using var cancellation = prepare
-			? client._native.PrepareModel(callback)
-			: client._native.CheckStatus(callback);
+		using var cancellation = client._native.CheckStatus(callback);
 		using var registration = cancellationToken.Register(() => cancellation.Cancel());
 		var status = await callback.Response.ConfigureAwait(false);
 		return CreateModelStatus(status.Status, status.Reason, status.ThinkingAvailable);
+	}
+
+	/// <summary>
+	/// Downloads Gemini Nano model assets and streams ML Kit's native download progress.
+	/// Check <see cref="GetModelStatusAsync"/> before starting and again after completion.
+	/// </summary>
+	/// <param name="cancellationToken">Cancels this download Flow collection.</param>
+	public static async IAsyncEnumerable<GeminiNanoDownloadUpdate> DownloadModelAsync(
+		[EnumeratorCancellation] CancellationToken cancellationToken = default)
+	{
+		cancellationToken.ThrowIfCancellationRequested();
+		var client = new GeminiNanoChatClient();
+		using var lifetime = (IDisposable)client;
+		var channel = Channel.CreateUnbounded<GeminiNanoDownloadUpdate>(new()
+		{
+			SingleReader = true,
+			SingleWriter = true,
+		});
+		using var callback = new DownloadCallback(channel.Writer, cancellationToken);
+		using var cancellation = client._native.DownloadModel(callback);
+		try
+		{
+			using var registration = cancellationToken.Register(() => cancellation.Cancel());
+			await foreach (var update in channel.Reader.ReadAllAsync().ConfigureAwait(false))
+				yield return update;
+		}
+		finally
+		{
+			cancellation.Cancel();
+			await callback.Terminated.ConfigureAwait(false);
+		}
 	}
 
 	internal static ChatModelStatus CreateModelStatus(int nativeStatus, string? nativeReason, bool thinkingAvailable)
@@ -468,6 +491,49 @@ public sealed class GeminiNanoChatClient : IChatClient
 		public void OnComplete(AndroidNative.NativeModelStatus status) => _response.TrySetResult(status);
 		public void OnError(AndroidNative.NativeChatError? error) =>
 			_response.TrySetException(CreateNativeException(error, cancellationToken));
+	}
+
+	private sealed class DownloadCallback(
+		ChannelWriter<GeminiNanoDownloadUpdate> writer,
+		CancellationToken cancellationToken) : Java.Lang.Object, AndroidNative.INativeDownloadCallback
+	{
+		private readonly TaskCompletionSource _terminated =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+		internal Task Terminated => _terminated.Task;
+
+		public void OnUpdate(AndroidNative.NativeDownloadUpdate update)
+		{
+			try
+			{
+				var state = update.Kind switch
+				{
+					0 => GeminiNanoDownloadState.Started,
+					1 => GeminiNanoDownloadState.Progress,
+					2 => GeminiNanoDownloadState.Completed,
+					_ => throw new InvalidOperationException($"Unknown Gemini Nano download update kind '{update.Kind}'."),
+				};
+				writer.TryWrite(new(state, update.Bytes));
+				if (state == GeminiNanoDownloadState.Completed)
+					writer.TryComplete();
+			}
+			catch (Exception exception)
+			{
+				writer.TryComplete(exception);
+				_terminated.TrySetResult();
+			}
+			finally
+			{
+				if (update.Kind == 2)
+					_terminated.TrySetResult();
+			}
+		}
+
+		public void OnError(AndroidNative.NativeChatError? error)
+		{
+			writer.TryComplete(CreateNativeException(error, cancellationToken));
+			_terminated.TrySetResult();
+		}
 	}
 
 	private sealed class NativeCallback(

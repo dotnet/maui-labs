@@ -48,18 +48,23 @@ builder.Services.AddSingleton<IChatClient>(new GeminiNanoChatClient());
 #endif
 ```
 
-On Android, prepare model assets only after an explicit app or user decision:
+On Android, start and monitor a model download only after an explicit app or
+user decision:
 
 ```csharp
 var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
 if (status.Availability == ChatModelAvailability.NotReady)
-    await GeminiNanoChatClient.PrepareModelAsync(cancellationToken);
+{
+    await foreach (var update in GeminiNanoChatClient.DownloadModelAsync(cancellationToken))
+        Console.WriteLine($"{update.State}: {update.BytesDownloaded ?? update.BytesToDownload}");
+}
 ```
 
 Gemini Nano supports text, in-memory images, streaming, and input-token usage.
 It rejects structured output and required tool invocation; Auto tool definitions
-are ignored and historical calls/results are replayed as text. Query model status
-for effective capabilities, but each request rechecks readiness.
+are ignored and historical calls/results are replayed as text. Download
+enumeration reports ML Kit's native progress; query model status again afterward
+when the app wants to enable generation.
 
 ## Chat
 

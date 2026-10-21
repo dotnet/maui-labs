@@ -74,7 +74,7 @@ internal static class ChatServiceCollectionExtensions
                 "Gemini Nano",
                 "Gemini Nano includes the supplied conversation in each text/image request. " +
                     "No tools or structured JSON. System instructions require Nano V3+. Requests never download models; " +
-                    "prepare explicitly with GeminiNanoChatClient.PrepareModelAsync before chatting.",
+                    "start and monitor GeminiNanoChatClient.DownloadModelAsync explicitly before chatting.",
                 SupportsImageInput: true,
                 SupportsReasoningSummary: false,
                 SupportsImageGeneration: false,

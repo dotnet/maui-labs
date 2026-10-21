@@ -325,14 +325,19 @@ public class GeminiNanoChatClientInteropTests
 		}
 	}
 
-	// Both static native operations must observe cancellation before allocating their JNI client.
+	// Static native operations must observe cancellation before allocating their JNI client.
 	[Fact]
 	public async Task ModelOperations_PreCancelled_Throw()
 	{
 		using var cts = new CancellationTokenSource();
 		cts.Cancel();
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => GeminiNanoChatClient.GetModelStatusAsync(cts.Token));
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => GeminiNanoChatClient.PrepareModelAsync(cts.Token));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+		{
+			await foreach (var _ in GeminiNanoChatClient.DownloadModelAsync(cts.Token))
+			{
+			}
+		});
 	}
 
 	// Exercise the new Java-friendly status callback/cleanup on devices without requiring or downloading AICore models.

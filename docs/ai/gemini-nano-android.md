@@ -66,29 +66,32 @@ The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
 Unavailable IDs, timestamps, and other usage counts remain null.
 
-## Explicit preparation
+## Explicit download
 
 ```csharp
 var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
 if (status.Availability == ChatModelAvailability.NotReady)
-    await GeminiNanoChatClient.PrepareModelAsync(cancellationToken);
+{
+    await foreach (var update in GeminiNanoChatClient.DownloadModelAsync(cancellationToken))
+        Console.WriteLine($"{update.State}: {update.BytesDownloaded ?? update.BytesToDownload}");
+}
 ```
 
-Only the explicit awaited preparation call can initiate a download. AVAILABLE
-returns without downloading; DOWNLOADABLE collects ML Kit's actual
-`DownloadStarted`, `DownloadProgress`, `DownloadCompleted`, and `DownloadFailed`
-Flow values until terminal completion/failure. DOWNLOADING polls status every
-250 ms with cancellable asynchronous delay, without initiating another download
-to join existing work. If it returns to DOWNLOADABLE, preparation may start the
-now-needed download. UNAVAILABLE and unknown values reject preparation.
+`DownloadModelAsync` directly collects ML Kit's cold download Flow, which starts
+the download and reports `DownloadStarted`, `DownloadProgress`, and
+`DownloadCompleted`. `DownloadFailed` becomes the native managed exception.
+Stopping enumeration cancels this call's Flow collection; it does not promise to
+cancel an AICore download shared with other apps.
 
-Status is never cached. DOWNLOADABLE/DOWNLOADING map to NotReady. ML Kit's
-UNAVAILABLE means either unsupported hardware **or** missing AICore configuration;
-without more evidence it maps to Unknown, preserving that native reason. Only a
-successful runtime `isThinkingModeAvailable` check advertises Reasoning.
-Preparation cancellation stops this call's Flow collection; it does not promise
-to cancel an AICore download shared with other apps. Generation checks status
-again and rejects non-AVAILABLE states without ever preparing or downloading.
+The client does not poll readiness or join a download already reported as
+DOWNLOADING. Callers own that policy: inspect `GetModelStatusAsync`, enumerate a
+download only when appropriate, and query status again when deciding whether to
+enable generation. Status is never cached. DOWNLOADABLE/DOWNLOADING map to
+NotReady. ML Kit's UNAVAILABLE means either unsupported hardware **or** missing
+AICore configuration; without more evidence it maps to Unknown, preserving that
+native reason. Only a successful runtime `isThinkingModeAvailable` check
+advertises Reasoning. Generation rejects non-AVAILABLE states without ever
+starting a download.
 
 ## Android minimum and model availability
 
@@ -132,13 +135,12 @@ cd src/AI/AndroidNative/EssentialsAI
 `NativeChatRequestTest` checks the Google request shape and capability errors.
 `NativeChatEventQueueTest` exercises callback ordering, drain-before-terminal,
 cancellation, and late-event suppression without abstracting the ML Kit model.
-`NativeModelOperationsTest` uses injectable status/download functions and real
-ML Kit status subclasses for preparation, polling, failure, cancellation, and
-lifetime tests without AICore. `NativeStreamAccumulatorTest` covers
+Status and download operations call ML Kit directly. Download Flow behavior,
+model creation, and disposal remain device/model integration coverage rather
+than introducing a fake model abstraction. `NativeStreamAccumulatorTest` covers
 final-candidate reconciliation. Android binds the shared messages, options,
 response, streaming, cancellation, usage, GetService, and schema suites;
-provider-only tests cover interop/native policy. Real model creation, inference,
-and disposal remain device/model integration coverage.
+provider-only tests cover interop/native policy.
 
 EssentialsAI CI builds Chat Playground in a separate Android-only job. It is not
 in the cross-platform shipping solution: the generic sample's pre-existing

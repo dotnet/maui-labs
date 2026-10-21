@@ -1,6 +1,8 @@
 package com.microsoft.maui.essentials.ai
 
 import com.google.mlkit.genai.common.GenAiException
+import com.google.mlkit.genai.common.DownloadStatus
+import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.common.StreamingCallback
 import com.google.mlkit.genai.prompt.Content
 import com.google.mlkit.genai.prompt.GenerateContentRequest
@@ -19,25 +21,102 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicBoolean
 
+internal fun featureStatusReason(status: Int): String? = when (status) {
+    FeatureStatus.AVAILABLE -> null
+    FeatureStatus.DOWNLOADABLE -> "DOWNLOADABLE ($status)"
+    FeatureStatus.DOWNLOADING -> "DOWNLOADING ($status)"
+    FeatureStatus.UNAVAILABLE -> "UNAVAILABLE ($status): Gemini Nano is unsupported or AICore configuration is not ready."
+    else -> "Unknown ML Kit FeatureStatus ($status)"
+}
+
+internal fun requireAvailable(status: Int) {
+    check(status == FeatureStatus.AVAILABLE) {
+        "Gemini Nano is not ready: ${featureStatusReason(status)}. Download the model explicitly before retrying."
+    }
+}
+
 class GeminiNanoNativeClient {
-    private val chatJob = SupervisorJob()
-    private val chatScope = CoroutineScope(chatJob + Dispatchers.Default)
-    private val chatClosed = AtomicBoolean()
+    private val operationJob = SupervisorJob()
+    private val operationScope = CoroutineScope(operationJob + Dispatchers.Default)
+    private val closed = AtomicBoolean()
 
-    private val modelOperations = NativeModelOperations(
-        createModel = { Generation.getClient() },
-        closeModel = { it.close() },
-        checkStatus = { it.checkStatus() },
-        thinkingAvailable = { it.isThinkingModeAvailable() },
-        download = { it.download() },
-        mapError = ::toNativeError,
-    )
+    fun checkStatus(callback: NativeModelCallback): NativeCancellation {
+        val terminated = AtomicBoolean()
+        fun fail(cause: Throwable) {
+            if (terminated.compareAndSet(false, true)) callback.onError(toNativeError(cause))
+        }
+        if (closed.get()) {
+            fail(CancellationException("Gemini Nano client is closed."))
+            return NativeCancellation(null)
+        }
+        val job = operationScope.launch {
+            val status = try {
+                val model = Generation.getClient()
+                try {
+                    ensureActive()
+                    val featureStatus = model.checkStatus()
+                    NativeModelStatus(
+                        featureStatus,
+                        featureStatusReason(featureStatus),
+                        featureStatus == FeatureStatus.AVAILABLE && model.isThinkingModeAvailable(),
+                    )
+                } finally {
+                    model.close()
+                }.also { ensureActive() }
+            } catch (cause: Throwable) {
+                fail(cause)
+                return@launch
+            }
+            if (terminated.compareAndSet(false, true)) callback.onComplete(status)
+        }
+        job.invokeOnCompletion { cause -> if (cause != null) fail(cause) }
+        if (closed.get()) job.cancel()
+        return NativeCancellation(job)
+    }
 
-    fun checkStatus(callback: NativeModelCallback): NativeCancellation =
-        modelOperations.execute(false, callback)
-
-    fun prepareModel(callback: NativeModelCallback): NativeCancellation =
-        modelOperations.execute(true, callback)
+    fun downloadModel(callback: NativeDownloadCallback): NativeCancellation {
+        val terminated = AtomicBoolean()
+        fun fail(cause: Throwable) {
+            if (terminated.compareAndSet(false, true)) callback.onError(toNativeError(cause))
+        }
+        if (closed.get()) {
+            fail(CancellationException("Gemini Nano client is closed."))
+            return NativeCancellation(null)
+        }
+        val job = operationScope.launch {
+            var completed = false
+            try {
+                val model = Generation.getClient()
+                try {
+                    ensureActive()
+                    model.download().collect { update ->
+                        ensureActive()
+                        when (update) {
+                            is DownloadStatus.DownloadStarted ->
+                                callback.onUpdate(NativeDownloadUpdate(0, update.bytesToDownload))
+                            is DownloadStatus.DownloadProgress ->
+                                callback.onUpdate(NativeDownloadUpdate(1, update.totalBytesDownloaded))
+                            DownloadStatus.DownloadCompleted -> completed = true
+                            is DownloadStatus.DownloadFailed -> throw update.e
+                        }
+                    }
+                    check(completed) { "Gemini Nano download Flow ended without completing." }
+                } finally {
+                    model.close()
+                }
+                ensureActive()
+            } catch (cause: Throwable) {
+                fail(cause)
+                return@launch
+            }
+            if (terminated.compareAndSet(false, true)) {
+                callback.onUpdate(NativeDownloadUpdate(2, 0))
+            }
+        }
+        job.invokeOnCompletion { cause -> if (cause != null) fail(cause) }
+        if (closed.get()) job.cancel()
+        return NativeCancellation(job)
+    }
 
     fun generate(
         request: NativeChatRequest,
@@ -50,12 +129,12 @@ class GeminiNanoNativeClient {
             if (terminated.compareAndSet(false, true)) callback.onError(toNativeError(cause))
         }
 
-        if (chatClosed.get()) {
+        if (closed.get()) {
             fail(CancellationException("Gemini Nano client is closed."))
             return NativeCancellation(null)
         }
 
-        val job = chatScope.launch {
+        val job = operationScope.launch {
             val events = NativeChatEventQueue(this, callback)
             val response = try {
                 val model = Generation.getClient()
@@ -99,15 +178,14 @@ class GeminiNanoNativeClient {
         job.invokeOnCompletion { cause ->
             if (cause != null) fail(cause)
         }
-        if (chatClosed.get()) job.cancel()
+        if (closed.get()) job.cancel()
         return NativeCancellation(job)
     }
 
     fun close() {
         runBlocking {
-            chatClosed.set(true)
-            chatJob.cancelAndJoin()
-            modelOperations.close()
+            closed.set(true)
+            operationJob.cancelAndJoin()
         }
     }
 

@@ -50,8 +50,18 @@ class NativeModelStatus(
     val thinkingAvailable: Boolean,
 )
 
+class NativeDownloadUpdate(
+    val kind: Int,
+    val bytes: Long,
+)
+
 interface NativeModelCallback {
     fun onComplete(status: NativeModelStatus)
+    fun onError(error: NativeChatError)
+}
+
+interface NativeDownloadCallback {
+    fun onUpdate(update: NativeDownloadUpdate)
     fun onError(error: NativeChatError)
 }
 

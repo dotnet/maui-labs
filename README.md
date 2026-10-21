@@ -146,7 +146,7 @@ Intelligence and NaturalLanguage on Apple platforms.
   responses, and tool calling. OS 27+ adds image input and token usage metadata.
 - **Embeddings:** Apple NaturalLanguage generates text vectors on supported systems.
 - **Android:** Gemini Nano text/image chat, streaming, and input-token usage on
-  supported AICore devices; model preparation is explicit and awaited.
+  supported AICore devices; model download is explicit and observable.
 
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
 

@@ -64,9 +64,9 @@ The Windows sample remains unpackaged and offers Azure-backed features and
 offline Chat Replay, not on-device AI. Azure and Replay also run on Android.
 The Android app requires API 26+ and supported AICore hardware/configuration for
 Gemini Nano. It supports text/image chat, not tools or structured JSON.
-The first request never downloads assets: explicitly await
-`GeminiNanoChatClient.PrepareModelAsync` from app setup after a download decision.
-There is no preparation UI or automatic cloud fallback. See the
+The first request never downloads assets: explicitly enumerate
+`GeminiNanoChatClient.DownloadModelAsync` after a download decision and query
+status again before chatting. There is no download UI or automatic cloud fallback. See the
 [Android guide](../../docs/ai/gemini-nano-android.md).
 
 With Java and the Android SDK installed:

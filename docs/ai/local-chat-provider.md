@@ -102,8 +102,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Treat reported capabilities as immutable, best-effort guidance; generation remains authoritative.
 - Refresh status rather than caching it.
 - Generation must recheck availability and fail clearly when the model is not ready; it must never initiate model setup or download.
-- Model preparation, where supported, must be an explicit awaited provider API,
-  separate from generation.
+- Model setup/download, where supported, must be an explicit provider API
+  separate from generation. The provider should expose native progress/status
+  rather than hiding readiness policy in generation.
 
 **Essentials.AI implementation**
 
@@ -116,8 +117,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   maps to `Available`; downloadable/downloading map to `NotReady`; ambiguous
   unavailable/unknown states map to `Unknown` with the native reason. Advertise
   Text, Streaming, ImageInput, and input TokenUsage; add Reasoning only after
-  the runtime thinking-capability check. `PrepareModelAsync` explicitly awaits
-  ML Kit download/status `Flow` completion and is never called by generation.
+  the runtime thinking-capability check. `DownloadModelAsync` exposes ML Kit's
+  native download `Flow`; callers enumerate progress and decide when to query
+  status again. Generation never starts or joins a download.
 
 ### Model identity
 
