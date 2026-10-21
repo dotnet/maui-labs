@@ -36,10 +36,10 @@ internal sealed class WindowsCdpResponseTransport(
             JsonSerializer.Serialize(new { name = channel.BindingName }));
     }
 
-    private void OnBindingCalled(CoreWebView2DevToolsProtocolEventReceiver sender,
+    private void OnBindingCalled(CoreWebView2 sender,
         CoreWebView2DevToolsProtocolEventReceivedEventArgs args)
     {
-        if (_disposed) return;
+        if (_disposed || !ReferenceEquals(sender, _core)) return;
         using var message = JsonDocument.Parse(args.ParameterObjectAsJson);
         if (message.RootElement.TryGetProperty("name", out var name) &&
             name.ValueKind == JsonValueKind.String && name.GetString() == channel.BindingName &&

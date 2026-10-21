@@ -378,7 +378,7 @@ public class WebViewDebugServiceTests
                 Assert.True(channel!.TryReceive(JsonSerializer.Serialize(new
                 {
                     channel = channel.BindingName,
-                    response = $$"""{"id":{{wireId}},"result":{"value":"actual reply"}}"""
+                    response = JsonSerializer.Serialize(new { id = wireId, result = new { value = "actual reply" } })
                 })));
                 if (evaluationThrows) throw new InvalidOperationException("The old evaluation context was destroyed.");
                 return Task.FromResult<string?>(null);
