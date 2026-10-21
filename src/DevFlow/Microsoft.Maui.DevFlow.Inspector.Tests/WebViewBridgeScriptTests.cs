@@ -104,7 +104,16 @@ public class WebViewBridgeScriptTests
         };
         session.Event("Runtime.bindingCalled").OnEvent += receiver;
         await session.SendAsync("Runtime.enable");
-        await session.SendAsync("Runtime.addBinding", new() { ["name"] = channel.BindingName });
+        var handshake = channel.BeginHandshake();
+        try
+        {
+            Assert.Equal("missing", await page.EvaluateAsync<string>(handshake.Script));
+            Assert.False(handshake.Received.IsCompleted);
+            await session.SendAsync("Runtime.addBinding", new() { ["name"] = channel.BindingName });
+            Assert.Equal("sent", await page.EvaluateAsync<string>(handshake.Script));
+            await handshake.Received.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally { channel.EndHandshake(handshake.Received); }
         await session.SendAsync("Runtime.addBinding", new() { ["name"] = "__application_native_binding" });
         var applicationMessage = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         EventHandler<JsonElement?> applicationReceiver = (_, message) =>
@@ -159,6 +168,13 @@ public class WebViewBridgeScriptTests
         Assert.Equal(1, secondDocumentRequests);
         channel.Remove(77);
         await InitializeAsync(page);
+        var replacementHandshake = channel.BeginHandshake();
+        try
+        {
+            Assert.Equal("sent", await page.EvaluateAsync<string>(replacementHandshake.Script));
+            await replacementHandshake.Received.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally { channel.EndHandshake(replacementHandshake.Received); }
         var failure = channel.Register(78);
         var failingCommand = JsonSerializer.Serialize(new
         {

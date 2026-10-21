@@ -409,6 +409,31 @@ public class WebViewDebugServiceTests
         Assert.Equal(1, insertions);
     }
 
+    [Fact]
+    public async Task NativeResponseHandshake_ActualScriptDispatchRequiresMatchingCallback_NotCommandAcknowledgement()
+    {
+        using var host = new JavaScriptHost();
+        using var channel = new NativeCdpResponseChannel();
+        var command = channel.Register(42);
+        var handshake = channel.BeginHandshake();
+        Assert.Equal("missing", await host.EvaluateAsync(handshake.Script));
+        Assert.False(handshake.Received.IsCompleted);
+        await host.EvaluateAsync(
+            $"window[{JsonSerializer.Serialize(channel.BindingName)}] = payload => {{ window.__nativePayload = payload; }}; null");
+
+        Assert.Equal("sent", await host.EvaluateAsync(handshake.Script));
+        Assert.False(handshake.Received.IsCompleted);
+        Assert.False(command.IsCompleted);
+        var payload = await host.EvaluateAsync("window.__nativePayload");
+        Assert.True(channel.TryReceive(payload!));
+        await handshake.Received.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(command.IsCompleted);
+        channel.EndHandshake(handshake.Received);
+        Assert.False(channel.TryReceive(payload!));
+        channel.Remove(42);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => command);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -152,7 +152,8 @@ public class WebViewDebugService : WebViewDebugServiceBase
 #if WINDOWS
         // CDP bindings have their own native event channel; Hybrid and Blazor raw messages
         // must never receive diagnostic replies through their shared WebMessageReceived handlers.
-        responses = new WindowsCdpResponseTransport(EnableNativeCdpResponses(index), LogError);
+        responses = new WindowsCdpResponseTransport(EnableNativeCdpResponses(index),
+            TimeSpan.FromMilliseconds(GetCdpResponseTimeoutMs()), LogError);
 #endif
         _attachments.Remove(platformView);
         _attachments.Add(platformView, new(Bridges[index]));
