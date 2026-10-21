@@ -124,8 +124,9 @@ public class GeminiNanoChatClientInteropTests
 		[
 			new(ChatRole.System, "system"),
 			new(ChatRole.User, [new CustomContent(), new TextContent(null), new TextContent("hello"),
-				new DataContent(bytes, "image/png"), new CustomContent()]),
+				new DataContent(bytes, "image/png"), new TextContent("after image"), new CustomContent()]),
 			new(ChatRole.Assistant, []),
+			new(ChatRole.User, [new CustomContent()]),
 			new(new ChatRole("developer"), [new HostedFileContent("ignored")]),
 		];
 		var enumerations = 0;
@@ -137,16 +138,17 @@ public class GeminiNanoChatClientInteropTests
 		var options = new ChatOptions { Instructions = "options" };
 		using var request = GeminiNanoChatClient.ToNative(Enumerate(), options);
 		var native = request.GetMessages();
-		Assert.Equal(["system", "system", "user", "assistant"], native.Select(message => message.Role));
+		Assert.Equal(["system", "system", "user", "assistant", "user"], native.Select(message => message.Role));
 		Assert.Equal("options", native[0].GetParts()[0].Text);
 		Assert.Equal("system", native[1].GetParts()[0].Text);
 		var parts = native[2].GetParts();
-		Assert.Equal(["", "hello", null], parts.Select(part => part.Text));
-		Assert.Equal([0, 0, 1], parts.Select(part => part.Kind));
+		Assert.Equal(["", "hello", null, "after image"], parts.Select(part => part.Text));
+		Assert.Equal([0, 0, 1, 0], parts.Select(part => part.Kind));
 		Assert.Equal(bytes, parts[2].GetImage());
 		Assert.Empty(native[3].GetParts());
-		Assert.Equal(5, messages[1].Contents.Count);
-		Assert.Equal(4, messages.Length);
+		Assert.Empty(native[4].GetParts());
+		Assert.Equal(6, messages[1].Contents.Count);
+		Assert.Equal(5, messages.Length);
 		Assert.Equal("options", options.Instructions);
 	}
 
@@ -160,7 +162,8 @@ public class GeminiNanoChatClientInteropTests
 				new FunctionCallContent("call-1", "actual-name", new Dictionary<string, object?> { ["x"] = 23 }),
 				new FunctionCallContent("call-2", "second-name")]),
 			new(ChatRole.Tool, [new FunctionResultContent("call-2", "second"),
-				new FunctionResultContent("call-1", new Dictionary<string, object?> { ["value"] = 42 })]),
+				new FunctionResultContent("call-1", new Dictionary<string, object?> { ["value"] = 42 }),
+				new FunctionResultContent("unmatched-call", null)]),
 			new(ChatRole.User, "after"),
 		], null);
 		var messages = request.GetMessages();
@@ -172,15 +175,26 @@ public class GeminiNanoChatClientInteropTests
 		Assert.Equal("call-1", firstCall.RootElement.GetProperty("callId").GetString());
 		Assert.Equal("actual-name", firstCall.RootElement.GetProperty("name").GetString());
 		Assert.Equal(23, firstCall.RootElement.GetProperty("arguments").GetProperty("x").GetInt32());
+		using var secondCall = JsonDocument.Parse(calls[2].Text!);
+		Assert.Equal("call-2", secondCall.RootElement.GetProperty("callId").GetString());
+		Assert.Equal("second-name", secondCall.RootElement.GetProperty("name").GetString());
+		Assert.Equal(JsonValueKind.Null, secondCall.RootElement.GetProperty("arguments").ValueKind);
 		using var firstResult = JsonDocument.Parse(messages[1].GetParts()[0].Text!);
+		Assert.Equal("function_result", firstResult.RootElement.GetProperty("type").GetString());
 		Assert.Equal("call-2", firstResult.RootElement.GetProperty("callId").GetString());
 		Assert.Equal("second", firstResult.RootElement.GetProperty("result").GetString());
 		Assert.False(firstResult.RootElement.TryGetProperty("name", out _));
 		using var secondResult = JsonDocument.Parse(messages[1].GetParts()[1].Text!);
 		Assert.Equal("call-1", secondResult.RootElement.GetProperty("callId").GetString());
 		Assert.Equal(42, secondResult.RootElement.GetProperty("result").GetProperty("value").GetInt32());
+		using var unmatchedResult = JsonDocument.Parse(messages[1].GetParts()[2].Text!);
+		Assert.Equal(["type", "callId", "result"],
+			unmatchedResult.RootElement.EnumerateObject().Select(property => property.Name));
+		Assert.Equal("unmatched-call", unmatchedResult.RootElement.GetProperty("callId").GetString());
+		Assert.Equal(JsonValueKind.Null, unmatchedResult.RootElement.GetProperty("result").ValueKind);
 	}
 
+	// JNI role strings must be canonical even when the MEAI standard role used different casing.
 	[Fact]
 	public void ToNative_CanonicalizesCaseInsensitiveStandardRoles()
 	{
@@ -196,41 +210,61 @@ public class GeminiNanoChatClientInteropTests
 			request.GetMessages().Select(message => message.Role));
 	}
 
-	// Reflection-free JSON replay must survive Android full trimming while retaining nested native prompt values.
-	[Fact]
-	public void ToNative_ToolReplaySupportsJsonValuesAndRejectsUnpreservedObjectsClearly()
-	{
-		using var json = JsonDocument.Parse("""{"name":"actual","values":[null,true,3]}""");
-		using var request = GeminiNanoChatClient.ToNative(
-			[new(ChatRole.Tool, [new FunctionResultContent("call", new object?[]
-				{ json.RootElement, new Dictionary<string, int> { ["answer"] = 42 }, null })]),
-				new(ChatRole.User, "Hello")], null);
-		using var replay = JsonDocument.Parse(request.GetMessages()[0].GetParts()[0].Text!);
-		var result = replay.RootElement.GetProperty("result");
-		Assert.Equal("actual", result[0].GetProperty("name").GetString());
-		Assert.Equal(JsonValueKind.Null, result[0].GetProperty("values")[0].ValueKind);
-		Assert.True(result[0].GetProperty("values")[1].GetBoolean());
-		Assert.Equal(42, result[1].GetProperty("answer").GetInt32());
-		Assert.Equal(JsonValueKind.Null, result[2].ValueKind);
-		var error = Assert.Throws<NotSupportedException>(() => GeminiNanoChatClient.ToNative(
-			[new(ChatRole.Tool, [new FunctionResultContent("call", new object())]), new(ChatRole.User, "Hello")], null));
-		Assert.Contains("JsonElement", error.Message, StringComparison.Ordinal);
-	}
-
-	// This is ML Kit's byte-array image boundary, not a provider-neutral image decoder contract.
+	// User and Assistant image input reaches Android's byte-array decoder boundary.
 	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public void ToNative_EmptyOrMalformedImages_ThrowManagedArgumentException(bool malformed)
+	[InlineData("user", false)]
+	[InlineData("user", true)]
+	[InlineData("assistant", false)]
+	[InlineData("assistant", true)]
+	public void ToNative_EmptyOrMalformedImages_ThrowManagedArgumentException(string role, bool malformed)
 	{
 		var content = new DataContent(malformed ? new byte[] { 1, 2, 3 } : [], "image/png");
-		Assert.Throws<ArgumentException>(() => GeminiNanoChatClient.ToNative([new(ChatRole.User, [content])], null));
+
+		Assert.Throws<ArgumentException>(() => GeminiNanoChatClient.ToNative(
+			[new(new ChatRole(role), [content]), new(ChatRole.User, "Hello")], null));
+	}
+
+	// Validate identifiers only after the content is in its supported history role.
+	[Theory]
+	[InlineData("assistant", "call-id")]
+	[InlineData("assistant", "call-name")]
+	[InlineData("tool", "result-id")]
+	public void ToNative_MalformedIdentifiers_RejectInSupportedRole(string role, string kind)
+	{
+		AIContent content = kind switch
+		{
+			"call-id" => new FunctionCallContent(" ", "sample"),
+			"call-name" => new FunctionCallContent("call-1", " "),
+			_ => new FunctionResultContent(" ", "result"),
+		};
+
+		Assert.Throws<ArgumentException>(() => GeminiNanoChatClient.ToNative(
+			[new(new ChatRole(role), [content]), new(ChatRole.User, "Hello")], null));
+	}
+
+	// Unsupported representations take precedence over validating payloads the provider cannot consume.
+	[Theory]
+	[InlineData("uri")]
+	[InlineData("hosted")]
+	[InlineData("audio")]
+	public void ToNative_UnsupportedRepresentation_ThrowsNotSupported(string kind)
+	{
+		AIContent content = kind switch
+		{
+			"uri" => new UriContent(new Uri("relative.png", UriKind.Relative), "image/png"),
+			"hosted" => new HostedFileContent("file-1"),
+			_ => new DataContent(Array.Empty<byte>(), "audio/wav"),
+		};
+
+		Assert.Throws<NotSupportedException>(() => GeminiNanoChatClient.ToNative(
+			[new(ChatRole.User, [content])], null));
 	}
 
 	// Native system instructions accept text only, and tool replay has defined MEAI roles.
 	[Theory]
 	[InlineData("system", "image")]
 	[InlineData("tool", "image")]
+	[InlineData("tool", "text")]
 	[InlineData("user", "call")]
 	[InlineData("assistant", "result")]
 	public void ToNative_UnsupportedNativeContentRole_Rejects(string role, string kind)
@@ -239,10 +273,28 @@ public class GeminiNanoChatClientInteropTests
 		{
 			"call" => new FunctionCallContent("call-1", "sample"),
 			"result" => new FunctionResultContent("call-1", "result"),
+			"text" => new TextContent("not a tool result"),
 			_ => new DataContent(Convert.FromBase64String(Png), "image/png"),
 		};
 		Assert.Throws<NotSupportedException>(() => GeminiNanoChatClient.ToNative(
 			[new(new ChatRole(role), [content]), new(ChatRole.User, "Hello")], null));
+	}
+
+	// ML Kit accepts image parts for Assistant history as well as User prompts.
+	[Fact]
+	public void ToNative_AssistantImages_PreserveOrderedTextAndImageParts()
+	{
+		var bytes = Convert.FromBase64String(Png);
+		using var request = GeminiNanoChatClient.ToNative(
+			[new(ChatRole.Assistant, [new TextContent("before"), new DataContent(bytes, "image/png"),
+				new TextContent("after")])], null);
+
+		var message = Assert.Single(request.GetMessages());
+		Assert.Equal("assistant", message.Role);
+		var parts = message.GetParts();
+		Assert.Equal([0, 1, 0], parts.Select(part => part.Kind));
+		Assert.Equal(["before", null, "after"], parts.Select(part => part.Text));
+		Assert.Equal(bytes, parts[1].GetImage());
 	}
 
 	// Only the four native builder options are marshalled. Optional unsupported MEAI settings are ignored.

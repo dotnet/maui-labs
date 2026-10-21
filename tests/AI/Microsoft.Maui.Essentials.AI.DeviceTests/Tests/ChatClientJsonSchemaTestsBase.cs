@@ -526,7 +526,7 @@ public abstract class ChatClientJsonSchemaTestsBase<T>
 	{
 		var client = new T();
 
-		await Assert.ThrowsAsync<NullReferenceException>(
+		await Assert.ThrowsAsync<ArgumentNullException>(
 			() => client.GetResponseAsync<SimpleResponse>((ChatMessage)null!));
 	}
 

@@ -44,9 +44,22 @@ No separators are inserted between content fragments within a message. Results
 carry no invented function name. This is prompt history, not a native call or
 an execution request. None/Auto tool modes omit registration; Required rejects.
 Replay accepts JSON values (`JsonElement`/`JsonDocument`, primitives, string-keyed
-dictionaries, and sequences) without reflection. Convert custom result objects
-to `JsonElement` using the caller's serializer context before replaying them in
-trimmed/AOT apps; unsupported object representations reject clearly.
+dictionaries, sequences, and serializable managed objects) through standard
+`JsonSerializer.Serialize` with `AIJsonUtilities.DefaultOptions`. There is no
+provider-specific recursive serializer or requirement to pre-convert managed
+objects to `JsonElement`. Standard System.Text.Json serialization and
+trimming/AOT limitations apply to the supplied argument/result types.
+
+Unsupported roles and representations reject with `NotSupportedException`
+without validating payload details that ML Kit cannot consume. URI media,
+non-image media, hosted files, misplaced tool content, and other recognized
+unsupported MEAI content follow this path.
+
+Once content is in a supported role and representation, malformed payloads
+reject with `ArgumentException`: tool IDs/names must be nonblank, and in-memory
+images must have nonempty data, a valid media type, and decodable bytes. Images
+are supported only in User/Assistant history; System accepts text instructions
+and Tool accepts function results.
 
 ## Request lifetime and callbacks
 
@@ -144,7 +157,10 @@ suites; provider-only tests cover interop/native policy.
 EssentialsAI CI builds Chat Playground in a separate Android-only job. It is not
 in the cross-platform shipping solution: the generic sample's pre-existing
 Windows WinRT/AOT observable-field migration is not part of Gemini integration.
-Portable playground tests remain in that solution. No AOT warnings are suppressed.
+Portable playground tests remain in that solution. Tool replay uses the same
+localized IL2026/IL3050 warning suppressions as the Windows provider's standard
+JSON serialization path; this does not guarantee arbitrary type preservation
+in trimmed/AOT consumers.
 
 These tests do not establish successful model execution. A provisioned supported
 physical device is needed to validate inference, conversation quality, image
