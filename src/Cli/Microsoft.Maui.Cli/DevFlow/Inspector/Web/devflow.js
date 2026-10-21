@@ -1158,9 +1158,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const propsOpen = !!propsPaneEl && !propsPaneEl.classList.contains('df-hidden');
     const treeOpen = !document.body.classList.contains('df-tree-hidden');
     const dockOpen = document.body.classList.contains('df-dock-open');
+    // Compact docks Properties beside the screenshot, so only the drawer layouts dim it for them.
     const showScrim =
-      (isTreeDrawerLayout() && treeOpen) ||
-      (isTransientPaneLayout() && propsOpen) ||
+      (isTreeDrawerLayout() && (treeOpen || propsOpen)) ||
       (hostLayout !== 'wide' && dockOpen);
     document.body.classList.toggle('df-props-open', propsOpen);
     if (paneScrim) paneScrim.classList.toggle('df-hidden', !showScrim);

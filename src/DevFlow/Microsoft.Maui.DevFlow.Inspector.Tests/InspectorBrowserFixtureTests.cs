@@ -206,6 +206,39 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task CompactLayout_DocksPropertiesBesideScreenshot_AndFitRefitsAroundIt()
+    {
+        // 900px is compact, and beside the Properties pane the 400px screenshot has to shrink to fit.
+        await Page.SetViewportSizeAsync(900, 780);
+        await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-host-layout", "compact");
+        await WaitForScreenshotFitAsync(propertiesOpen: true);
+        await Expect(Page.Locator("#df-pane-scrim")).ToBeHiddenAsync();
+
+        // Nothing is dimmed or covered, so the close button and Escape are what dismiss Properties.
+        await Page.Locator("#df-props-close").ClickAsync();
+        await Expect(Page.Locator("#df-props-pane")).ToBeHiddenAsync();
+        await WaitForScreenshotFitAsync(propertiesOpen: false);
+
+        await Page.Locator(".df-tree-node[data-tree-id='fixture-label']").ClickAsync();
+        await WaitForScreenshotFitAsync(propertiesOpen: true);
+        await Page.Keyboard.PressAsync("Escape");
+        await Expect(Page.Locator("#df-props-pane")).ToBeHiddenAsync();
+        await WaitForScreenshotFitAsync(propertiesOpen: false);
+        Assert.Empty(_pageErrors);
+    }
+
+    // Fit re-runs from a ResizeObserver and a requestAnimationFrame, so poll until it settles.
+    private Task WaitForScreenshotFitAsync(bool propertiesOpen) => Page.WaitForFunctionAsync("""
+        propertiesOpen => {
+          const shot = document.getElementById('screenshot').getBoundingClientRect();
+          const props = document.getElementById('df-props-pane').getBoundingClientRect();
+          return propertiesOpen
+            ? shot.width < 400 && shot.right <= props.left + 0.5
+            : Math.round(shot.width) === 400;
+        }
+        """, propertiesOpen);
+
+    [InspectorBrowserFixtureFact]
     public async Task PropertyFilter_AndInvalidNumericEdit_DoNotWriteToAgent()
     {
         await Page.Locator("#df-prop-filter").FillAsync("opacity");

@@ -52,8 +52,8 @@ authenticated host bridge for source navigation, recording persistence, and Copi
 The shared inspector keeps one interaction model while adapting its chrome to the host viewport:
 
 - **Wide browser/editor:** tree, screenshot, and properties are docked as three panes.
-- **Compact editor:** the tree remains available while properties open as a drawer, preserving
-  screenshot width.
+- **Compact editor:** the tree stays docked and properties dock beside the screenshot, so Fit
+  re-fits around them instead of a drawer covering the preview.
 - **Narrow Canvas/editor:** the screenshot is primary; tree and properties become coordinated
   full-height drawers with a scrim.
 - **Short host:** drawers and overlay Data/timeline sheets protect the screenshot's vertical budget.
