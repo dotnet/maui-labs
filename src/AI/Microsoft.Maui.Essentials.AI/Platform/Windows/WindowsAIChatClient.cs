@@ -4,7 +4,6 @@ using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
-using Microsoft.Windows.AI;
 using Microsoft.Windows.AI.ContentSafety;
 using Microsoft.Windows.AI.Text;
 using Windows.Foundation;
@@ -15,7 +14,7 @@ namespace Microsoft.Maui.Essentials.AI;
 /// Provides an <see cref="IChatClient"/> implementation backed by the Windows AI language model.
 /// </summary>
 [SupportedOSPlatform("windows10.0.26100.0")]
-public sealed class WindowsAIChatClient : IChatClient
+public sealed partial class WindowsAIChatClient : IChatClient
 {
 	/// <summary>The provider name for this chat client.</summary>
 	private const string ProviderName = "windows";
@@ -27,8 +26,6 @@ public sealed class WindowsAIChatClient : IChatClient
 		"The prompt is larger than the Windows AI language model's context window. " +
 		"Shorten the conversation or start a new one.";
 
-	private readonly WindowsAIModelProvider<LanguageModel> _models;
-
 	/// <summary>
 	/// Lazily-initialized metadata describing the implementation.
 	/// </summary>
@@ -39,57 +36,6 @@ public sealed class WindowsAIChatClient : IChatClient
 		DisallowAdditionalProperties = true,
 		RequireAllProperties = true,
 	});
-
-	/// <summary>
-	/// Initializes a new instance of the <see cref="WindowsAIChatClient"/> class.
-	/// </summary>
-	/// <remarks>
-	/// The client creates and disposes a separate <see cref="LanguageModel"/> for each request.
-	/// </remarks>
-	public WindowsAIChatClient() : this(LanguageModel.GetReadyState, WindowsAIModelFactory.CreateModelAsync) { }
-
-	internal WindowsAIChatClient(Func<AIFeatureReadyState> getReadyState, Func<Task<LanguageModel>> createModel)
-	{
-		_models = new(createModel, getReadyState);
-	}
-
-	/// <summary>
-	/// Initializes a new instance of the <see cref="WindowsAIChatClient"/> class
-	/// with the specified <see cref="LanguageModel"/>.
-	/// </summary>
-	/// <param name="model">The <see cref="LanguageModel"/> to use for chat interactions.</param>
-	/// <remarks>
-	/// When using this constructor, the client does not own the <see cref="LanguageModel"/>
-	/// and will not dispose it. The caller is responsible for disposing the model.
-	/// </remarks>
-	/// <exception cref="ArgumentNullException">Thrown when <paramref name="model"/> is <see langword="null"/>.</exception>
-	public WindowsAIChatClient(LanguageModel model)
-	{
-		ArgumentNullException.ThrowIfNull(model);
-		_models = new(model, LanguageModel.GetReadyState);
-	}
-
-	/// <summary>Reads current native availability and effective capabilities without caching or downloading.</summary>
-	/// <param name="cancellationToken">A token that cancels the status request before the native read.</param>
-	/// <returns>A fresh snapshot preserving the unavailable reason from <see cref="LanguageModel.GetReadyState"/>.</returns>
-	public static Task<ChatModelStatus> GetModelStatusAsync(CancellationToken cancellationToken = default)
-	{
-		cancellationToken.ThrowIfCancellationRequested();
-		return Task.FromResult(CreateModelStatus(LanguageModel.GetReadyState()));
-	}
-
-	internal static ChatModelStatus CreateModelStatus(AIFeatureReadyState state) =>
-		new(
-			WindowsAIModelFactory.MapAvailability(state),
-			state is AIFeatureReadyState.Ready ? null : state.ToString(),
-			[ChatModelCapability.Text, ChatModelCapability.Streaming, ChatModelCapability.StructuredOutput]);
-
-	/// <summary>Ensures the system language model is ready, downloading its components if necessary.</summary>
-	/// <param name="cancellationToken">A token that cancels native setup.</param>
-	/// <returns>A task that completes when the native model reports ready.</returns>
-	/// <exception cref="NotSupportedException">The native state or setup result prevents use; native error details are preserved.</exception>
-	public static Task EnsureReadyAsync(CancellationToken cancellationToken = default) =>
-		WindowsAIModelFactory.EnsureReadyAsync(cancellationToken);
 
 	/// <inheritdoc />
 	public Task<ChatResponse> GetResponseAsync(
@@ -104,7 +50,7 @@ public sealed class WindowsAIChatClient : IChatClient
 		ChatOptions? options = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
-		_models.ThrowIfDisposed();
+		ThrowIfDisposed();
 		ArgumentNullException.ThrowIfNull(chatMessages);
 		ValidateOptions(options);
 		cancellationToken.ThrowIfCancellationRequested();
@@ -121,7 +67,7 @@ public sealed class WindowsAIChatClient : IChatClient
 		var updates = StreamResponseAsync(
 			async (handler, token) =>
 			{
-				using var lease = await _models.AcquireAsync(token).ConfigureAwait(false);
+				using var lease = await AcquireModelAsync(token).ConfigureAwait(false);
 				if (jsonSchema is not null)
 					await GenerateStructuredResponseAsync(lease.Model, systemPrompt, prompt, jsonSchema, modelOptions, handler, token).ConfigureAwait(false);
 				else
@@ -408,9 +354,6 @@ public sealed class WindowsAIChatClient : IChatClient
 
 		return null;
 	}
-
-	/// <inheritdoc />
-	void IDisposable.Dispose() => _models.Dispose();
 
 	internal static (string SystemPrompt, List<ChatMessage> History) NormalizeChatMessages(
 		IEnumerable<ChatMessage> chatMessages,

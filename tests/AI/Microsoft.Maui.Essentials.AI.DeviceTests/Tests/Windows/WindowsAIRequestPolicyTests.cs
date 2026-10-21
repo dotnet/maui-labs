@@ -2,7 +2,6 @@
 #pragma warning disable MEAI001 // Exercise explicitly rejected experimental MEAI options and content.
 using System.Text.Json;
 using Microsoft.Extensions.AI;
-using Microsoft.Windows.AI;
 using Xunit;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
@@ -44,22 +43,19 @@ public class WindowsAIRequestPolicyTests
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]
-	public async Task BlankUserTurn_IsNotMistakenForMissingPrompt(bool unknownOnly)
+	public void BlankUserTurn_IsNotMistakenForMissingPrompt(bool unknownOnly)
 	{
-		using var client = new WindowsAIChatClient(() => AIFeatureReadyState.NotReady,
-			() => throw new InvalidOperationException("Must not create"));
-		var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
-			client.GetResponseAsync([new(ChatRole.User, unknownOnly ? [new CustomContent()] : [])]));
-		Assert.Contains("NotReady", error.Message, StringComparison.Ordinal);
+		var (_, history) = WindowsAIChatClient.NormalizeChatMessages(
+			[new(ChatRole.User, unknownOnly ? [new CustomContent()] : [])]);
+		Assert.Equal("User: ", WindowsAIChatClient.ConvertToPrompt(history));
 	}
 
 	[Fact]
-	public async Task EmptyRecognizedPayload_RejectBeforeAnyNativeWork()
+	public void EmptyRecognizedPayload_RejectBeforeAnyNativeWork()
 	{
-		using var client = NoNativeClient();
 		AIContent content = new DataContent(ReadOnlyMemory<byte>.Empty, "image/png");
-		await Assert.ThrowsAsync<ArgumentException>(() => client.GetResponseAsync(
-			[new(ChatRole.User, [content])]));
+		Assert.Throws<ArgumentException>(() =>
+			WindowsAIChatClient.NormalizeChatMessages([new(ChatRole.User, [content])]));
 	}
 
 	[Fact]
@@ -69,10 +65,6 @@ public class WindowsAIRequestPolicyTests
 			[new(ChatRole.User, [new CustomContent(), new TextContent("Keep"), new CustomContent()])]);
 		Assert.Equal("User: Keep", text);
 	}
-
-	private static WindowsAIChatClient NoNativeClient() => new(
-		() => throw new InvalidOperationException("Must reject before native status read"),
-		() => throw new InvalidOperationException("Must reject before native creation"));
 
 	private sealed class CustomContent : AIContent;
 }

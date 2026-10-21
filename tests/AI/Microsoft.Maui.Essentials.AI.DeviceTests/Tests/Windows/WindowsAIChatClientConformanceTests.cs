@@ -177,7 +177,7 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 		var first = await WindowsAIChatClient.GetModelStatusAsync();
 		var second = await WindowsAIChatClient.GetModelStatusAsync();
 		Assert.NotSame(first, second);
-		Assert.Equal(WindowsAIModelFactory.MapAvailability(state), second.Availability);
+		Assert.Equal(WindowsAIChatClient.MapAvailability(state), second.Availability);
 		Assert.Equal(state is AIFeatureReadyState.Ready ? null : state.ToString(), second.UnavailableReason);
 	}
 
@@ -245,7 +245,7 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 		var reads = 0;
 		var downloads = 0;
 		using var source = new CancellationTokenSource();
-		await WindowsAIModelFactory.EnsureReadyAsync(
+		await WindowsAIChatClient.EnsureReadyAsync(
 			() => ++reads == 1 && notReady ? AIFeatureReadyState.NotReady : AIFeatureReadyState.Ready,
 			token =>
 			{
@@ -267,7 +267,7 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 	[InlineData((AIFeatureReadyState)int.MaxValue)]
 	public async Task EnsureReadyAsync_Unavailable_PreservesReasonWithoutSetup(AIFeatureReadyState state)
 	{
-		var error = await Assert.ThrowsAsync<NotSupportedException>(() => WindowsAIModelFactory.EnsureReadyAsync(
+		var error = await Assert.ThrowsAsync<NotSupportedException>(() => WindowsAIChatClient.EnsureReadyAsync(
 			() => state, _ => throw new InvalidOperationException("Must not download"), default));
 		Assert.Contains(state.ToString(), error.Message, StringComparison.Ordinal);
 	}
@@ -276,7 +276,7 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 	[Fact]
 	public async Task EnsureReadyAsync_SetupDoesNotMakeReady_Throws()
 	{
-		await Assert.ThrowsAsync<NotSupportedException>(() => WindowsAIModelFactory.EnsureReadyAsync(
+		await Assert.ThrowsAsync<NotSupportedException>(() => WindowsAIChatClient.EnsureReadyAsync(
 			() => AIFeatureReadyState.NotReady, _ => Task.CompletedTask, default));
 	}
 
@@ -286,7 +286,7 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 	{
 		using var source = new CancellationTokenSource();
 		source.Cancel();
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => WindowsAIModelFactory.EnsureReadyAsync(
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => WindowsAIChatClient.EnsureReadyAsync(
 			() => throw new InvalidOperationException("Must not read"), _ => throw new InvalidOperationException("Must not download"), source.Token));
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => WindowsAIChatClient.EnsureReadyAsync(source.Token));
 	}
@@ -298,11 +298,11 @@ public class WindowsAIModelStatusTests(ITestOutputHelper output)
 		var state = (AIFeatureReadyResultState)int.MaxValue;
 		var cause = new InvalidOperationException("Native cause");
 		var error = Assert.Throws<NotSupportedException>(() =>
-			WindowsAIModelFactory.ValidateReadyResult(state, "Download failed", cause));
+			WindowsAIChatClient.ValidateReadyResult(state, "Download failed", cause));
 		Assert.Contains(state.ToString(), error.Message, StringComparison.Ordinal);
 		Assert.Contains("Download failed", error.Message, StringComparison.Ordinal);
 		Assert.Same(cause, error.InnerException);
-		WindowsAIModelFactory.ValidateReadyResult(AIFeatureReadyResultState.Success, null, null);
+		WindowsAIChatClient.ValidateReadyResult(AIFeatureReadyResultState.Success, null, null);
 	}
 }
 #endif

@@ -76,16 +76,14 @@ public class WindowsAIChatClientStreamingLifecycleTests
 	{
 		using var cancellation = new CancellationTokenSource();
 		var operation = new TestOperation { DelayCancellation = true };
-		var model = new WindowsAIModelProviderTests.Model();
-		var context = new WindowsAIModelProviderTests.Model();
-		using var models = new WindowsAIModelProvider<WindowsAIModelProviderTests.Model>(
-			() => Task.FromResult(model), () => Microsoft.Windows.AI.AIFeatureReadyState.Ready);
+		var model = new WindowsAIChatClientLifecycleTests.Model();
+		var context = new WindowsAIChatClientLifecycleTests.Model();
 		var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 		var stream = WindowsAIChatClient.StreamResponseAsync(async (handler, token) =>
 		{
 			try
 			{
-				using var lease = await models.AcquireAsync(token);
+				using var requestModel = model;
 				using var requestContext = context;
 				await WindowsAIChatClient.ForwardResponseAsync(operation, handler, token, text => text);
 			}
@@ -114,9 +112,6 @@ public class WindowsAIChatClientStreamingLifecycleTests
 			Assert.Equal(0, context.DisposeCount);
 			Assert.Equal(0, model.DisposeCount);
 			Assert.False(released.Task.IsCompleted);
-
-			models.Dispose();
-			Assert.Equal(0, model.DisposeCount);
 
 			operation.CompleteCancellation();
 			await released.Task.WaitAsync(Timeout);
