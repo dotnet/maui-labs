@@ -135,25 +135,35 @@ public sealed class MixedWebViewTestPage : ContentPage
         send.Clicked += (_, _) => WebViewTestContent.SendMessage(_hybrid!, _status);
         buttons.Add(reset);
         buttons.Add(send);
-        var nativeClip = new Grid
+        var nativeClip = new AbsoluteLayout
         {
             AutomationId = "WebViewNativeClipHost",
             WidthRequest = 40,
             HeightRequest = 40,
+            HorizontalOptions = LayoutOptions.Start,
+            VerticalOptions = LayoutOptions.Start,
             IsClippedToBounds = true
         };
-        nativeClip.Add(new Label
+        var clippedLabel = new Label
         {
             AutomationId = "WebViewNativeClipped",
             Text = "Clipped native fixture",
+            LineBreakMode = LineBreakMode.NoWrap,
             WidthRequest = 80,
             HeightRequest = 80,
             HorizontalOptions = LayoutOptions.Start,
             VerticalOptions = LayoutOptions.Start,
             BackgroundColor = Color.FromArgb("#345678")
-        });
-        buttons.Add(nativeClip);
-        _grid.Add(buttons, 0, 0);
+        };
+        AbsoluteLayout.SetLayoutBounds(clippedLabel, new Rect(0, 0, 80, 80));
+        nativeClip.Add(clippedLabel);
+        var toolbar = new Grid
+        {
+            ColumnDefinitions = { new(GridLength.Star), new(GridLength.Auto) }
+        };
+        toolbar.Add(new ScrollView { Orientation = ScrollOrientation.Horizontal, Content = buttons }, 0, 0);
+        toolbar.Add(nativeClip, 1, 0);
+        _grid.Add(toolbar, 0, 0);
         _grid.Add(_status, 0, 1);
         _grid.Add(_hosts, 0, 2);
         Content = _grid;
@@ -229,6 +239,30 @@ static class WebViewTestContent
             HybridRoot = "webview-fixture",
             DefaultFile = "index.html"
         };
+#if WINDOWS && DEBUG
+        Microsoft.UI.Xaml.Controls.WebView2? observed = null;
+        global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.Controls.WebView2,
+            Microsoft.UI.Xaml.Controls.CoreWebView2InitializedEventArgs> initialized = (native, args) =>
+            WinUI.App.WriteRuntimeDiagnostic(
+                $"{DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} Hybrid '{automationId}' CoreWebView2Initialized: " +
+                $"corePresent={native.CoreWebView2 is not null}, loaded={native.IsLoaded}, exception={args.Exception}");
+        view.HandlerChanging += (_, _) =>
+        {
+            if (observed is not null)
+                observed.CoreWebView2Initialized -= initialized;
+            observed = null;
+        };
+        view.HandlerChanged += (_, _) =>
+        {
+            if (view.Handler?.PlatformView is not Microsoft.UI.Xaml.Controls.WebView2 native)
+                return;
+            observed = native;
+            native.CoreWebView2Initialized += initialized;
+            WinUI.App.WriteRuntimeDiagnostic(
+                $"{DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} Hybrid '{automationId}' handler attached: " +
+                $"corePresent={native.CoreWebView2 is not null}, loaded={native.IsLoaded}");
+        };
+#endif
         view.RawMessageReceived += (_, args) =>
         {
             try

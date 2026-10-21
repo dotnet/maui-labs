@@ -155,6 +155,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
     public async Task Layout_GenericHost_ReportsMeasuredDomDefectsAndHonestCapabilities(string kind, string title)
     {
         var context = await EnsureHostAsync(kind, title);
+        await AssertDomClipGeometryAsync(ContextId(context));
         var capabilities = (await Client.GetCapabilitiesAsync()).GetProperty("capabilities");
         var layout = capabilities.GetProperty("ui.layoutDiagnostics");
         Assert.True(layout.GetProperty("webview").GetProperty("supported").GetBoolean());
@@ -328,6 +329,16 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
     public async Task MixedHosts_LayoutScopesKeepNativeDefectsAndRevisionWithoutHiddenDom()
     {
         var active = await EnsureMixedAsync();
+        foreach (var context in active.Where(c => HostKind(c) != "blazor"))
+            await AssertDomClipGeometryAsync(ContextId(context));
+        var nativeHost = await FindElementAsync("WebViewNativeClipHost");
+        var nativeChild = await FindElementAsync("WebViewNativeClipped");
+        Assert.NotNull(nativeHost.Bounds);
+        Assert.NotNull(nativeChild.Bounds);
+        Assert.Equal(40, nativeHost.Bounds.Width, precision: 1);
+        Assert.Equal(40, nativeHost.Bounds.Height, precision: 1);
+        Assert.Equal(80, nativeChild.Bounds.Width, precision: 1);
+        Assert.Equal(80, nativeChild.Bounds.Height, precision: 1);
         var result = await AnalyzeAsync(includeDom: true);
         foreach (var context in active.Where(c => HostKind(c) != "blazor"))
         {
@@ -407,6 +418,31 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         Assert.True(await Client.NavigateWebViewAsync("/", id));
         await WaitForAsync(async () => (await EvaluateAsync("!!document.querySelector('.todo-container')", id)).GetBoolean());
         Assert.DoesNotContain("Current count:", await Client.GetCdpSourceAsync(id));
+    }
+
+    async Task AssertDomClipGeometryAsync(string id)
+    {
+        var value = await EvaluateAsync(
+            """
+            JSON.stringify((() => {
+                const clip = document.querySelector('#fixture-clip').getBoundingClientRect();
+                const child = document.querySelector('#fixture-clipped').getBoundingClientRect();
+                return { clip: clip.toJSON(), child: child.toJSON(), width: innerWidth, height: innerHeight };
+            })())
+            """, id);
+        using var geometry = JsonDocument.Parse(value.GetString()!);
+        var root = geometry.RootElement;
+        var clip = root.GetProperty("clip");
+        var child = root.GetProperty("child");
+        Output.WriteLine($"Controlled clipping geometry for {id}: {root}");
+        Assert.Equal(40, clip.GetProperty("width").GetDouble(), precision: 1);
+        Assert.Equal(40, clip.GetProperty("height").GetDouble(), precision: 1);
+        Assert.Equal(80, child.GetProperty("width").GetDouble(), precision: 1);
+        Assert.Equal(80, child.GetProperty("height").GetDouble(), precision: 1);
+        Assert.True(clip.GetProperty("left").GetDouble() >= 0);
+        Assert.True(clip.GetProperty("top").GetDouble() >= 0);
+        Assert.True(clip.GetProperty("right").GetDouble() <= root.GetProperty("width").GetDouble());
+        Assert.True(clip.GetProperty("bottom").GetDouble() <= root.GetProperty("height").GetDouble());
     }
 
     async Task AssertInputAndClickAsync(string id)

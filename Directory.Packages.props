@@ -50,6 +50,7 @@
     <PackageVersion Include="Fizzler" Version="$(FizzlerVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="$(MicrosoftCodeAnalysisCSharpVersion)" />
     <PackageVersion Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="$(SkiaSharpVersion)" />
     <PackageVersion Include="Spectre.Console" Version="$(SpectreConsoleVersion)" />
     <PackageVersion Include="Spectre.Console.Testing" Version="$(SpectreConsoleVersion)" />
     <PackageVersion Include="System.CommandLine" Version="$(SystemCommandLineStableVersion)" />

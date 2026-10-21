@@ -33,6 +33,21 @@ public partial class App : MauiWinUIApplication
 	static void WriteUnhandledDiagnostic(Exception? exception)
 	{
 		var message = $"{DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} unhandled: {exception}";
+		if (exception is not null)
+		{
+			foreach (var frame in new System.Diagnostics.StackTrace(exception, false).GetFrames())
+			{
+				var method = frame.GetMethod();
+				message += $"{Environment.NewLine}frame: {method?.DeclaringType?.FullName}.{method?.Name}; " +
+					$"assembly={method?.Module.Assembly.FullName}; mvid={method?.Module.ModuleVersionId}; " +
+					$"ilOffset={frame.GetILOffset()}; nativeOffset={frame.GetNativeOffset()}";
+			}
+		}
+		WriteRuntimeDiagnostic(message);
+	}
+
+	internal static void WriteRuntimeDiagnostic(string message)
+	{
 		Console.Error.WriteLine(message);
 		var path = Environment.GetEnvironmentVariable("DEVFLOW_TEST_DIAGNOSTICS_PATH");
 		if (!string.IsNullOrEmpty(path))
