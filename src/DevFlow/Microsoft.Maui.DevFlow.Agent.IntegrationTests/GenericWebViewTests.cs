@@ -348,6 +348,23 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         var nativeChild = await FindElementAsync("WebViewNativeClipped");
         var result = await AnalyzeAsync(includeDom: true);
         await WriteLayoutEvidenceAsync(result, active);
+        if (Platform == "windows")
+        {
+            foreach (var property in new[]
+            {
+                "Background", "Background.IsEmpty", "BackgroundColor", "Style",
+                "VerticalTextAlignment", "Clip", "Shadow", "WidthRequest", "HeightRequest",
+                "Handler.NeedsContainer", "Handler.HasContainer", "Handler.ContainerView",
+                "Handler.ContainerView.Width", "Handler.ContainerView.Height",
+                "Handler.ContainerView.MinHeight", "Handler.ContainerView.ActualHeight",
+                "Handler.PlatformView", "Handler.PlatformView.Width", "Handler.PlatformView.Height",
+                "Handler.PlatformView.MinHeight", "Handler.PlatformView.MaxHeight",
+                "Handler.PlatformView.ActualWidth", "Handler.PlatformView.ActualHeight",
+                "Handler.PlatformView.VerticalAlignment", "Handler.PlatformView.Parent"
+            })
+                Output.WriteLine($"Native clipping Label {property}: " +
+                    JsonSerializer.Serialize(await Client.GetPropertyAsync(nativeChild.Id, property)));
+        }
         Assert.NotNull(nativeHost.Bounds);
         Assert.NotNull(nativeChild.Bounds);
         Assert.Equal(40, nativeHost.Bounds.Width, precision: 1);
