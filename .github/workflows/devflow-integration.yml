@@ -54,6 +54,10 @@ on:
         description: iOS runtime version filter (e.g. 26.2). Leave blank for the CI-pinned 26.2 runtime.
         default: ""
         type: string
+      windows-test-filter:
+        description: Optional manual Windows diagnostic test filter; leave empty to run the full suite.
+        default: ""
+        type: string
   pull_request:
     types: [opened, synchronize, reopened, edited]
     branches: [main]
@@ -589,6 +593,7 @@ jobs:
     timeout-minutes: 90
     env:
       DEVFLOW_TEST_PLATFORM: windows
+      WINDOWS_TEST_FILTER: ${{ github.event_name == 'workflow_dispatch' && inputs.windows-test-filter || '' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -605,12 +610,36 @@ jobs:
 
       - name: Run DevFlow integration tests (windows)
         shell: pwsh
-        run: >
-          dotnet test $env:TEST_PROJECT
-          -c Debug
-          --logger "trx;LogFileName=devflow-integration-windows.trx"
-          --logger "console;verbosity=normal"
-          --results-directory .\artifacts\TestResults\devflow-integration\windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testArguments = @(
+            'test', $env:TEST_PROJECT,
+            '-c', 'Debug',
+            '--logger', 'trx;LogFileName=devflow-integration-windows.trx',
+            '--logger', 'console;verbosity=normal',
+            '--results-directory', '.\artifacts\TestResults\devflow-integration\windows'
+          )
+          if (-not [string]::IsNullOrEmpty($env:WINDOWS_TEST_FILTER)) {
+            $testArguments += @('--filter', $env:WINDOWS_TEST_FILTER)
+          }
+          dotnet @testArguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          if (-not [string]::IsNullOrEmpty($env:WINDOWS_TEST_FILTER)) {
+            [xml]$results = Get-Content -Raw '.\artifacts\TestResults\devflow-integration\windows\devflow-integration-windows.trx'
+            $counts = $results.TestRun.ResultSummary.Counters
+            foreach ($name in @('total', 'executed', 'passed', 'notExecuted', 'failed')) {
+              if ($null -eq $counts -or [string]::IsNullOrEmpty($counts.GetAttribute($name))) {
+                throw "Selected Windows diagnostic TRX is missing counter '$name'."
+              }
+            }
+            if ([int]$counts.total -le 0 -or [int]$counts.executed -le 0 -or
+                [int]$counts.executed -ne [int]$counts.total -or
+                [int]$counts.passed -ne [int]$counts.executed -or
+                [int]$counts.notExecuted -ne 0 -or [int]$counts.failed -ne 0) {
+              throw "Selected Windows diagnostic tests did not all execute and pass: $($counts.OuterXml)"
+            }
+          }
 
       - name: Run live inspector Playwright tests (windows)
         shell: pwsh
