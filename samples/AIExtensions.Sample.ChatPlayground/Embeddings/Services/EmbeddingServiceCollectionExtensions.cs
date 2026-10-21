@@ -26,7 +26,7 @@ internal static class EmbeddingServiceCollectionExtensions
         services.AddTransient<Page, EmbeddingPage>();
 
 #if IOS || MACCATALYST
-        if (OperatingSystem.IsIOSVersionAtLeast(13) || OperatingSystem.IsMacCatalystVersionAtLeast(13, 1))
+        if (OperatingSystem.IsIOSVersionAtLeast(14) || OperatingSystem.IsMacCatalystVersionAtLeast(14))
         {
             using var embedding = NLEmbedding.GetSentenceEmbedding(NLLanguage.English);
             if (embedding is not null)
@@ -40,18 +40,22 @@ internal static class EmbeddingServiceCollectionExtensions
     }
 
 #if IOS || MACCATALYST
-    [SupportedOSPlatform("ios13.0")]
-    [SupportedOSPlatform("maccatalyst13.1")]
-    private static IEmbeddingGenerator<string, Embedding<float>> CreateAppleEmbeddingGenerator(IServiceProvider provider) =>
-        new DescribedEmbeddingGenerator(
-            new NLEmbeddingGenerator().AsBuilder()
+    [SupportedOSPlatform("ios14.0")]
+    [SupportedOSPlatform("maccatalyst14.0")]
+    private static IEmbeddingGenerator<string, Embedding<float>> CreateAppleEmbeddingGenerator(IServiceProvider provider)
+    {
+        var generator = new NLEmbeddingGenerator();
+        var native = ((IEmbeddingGenerator<string, Embedding<float>>)generator).GetService<NLEmbedding>()!;
+        return new DescribedEmbeddingGenerator(
+            generator.AsBuilder()
                 .UsePlaygroundTelemetry()
                 .UseLogging(provider.GetRequiredService<ILoggerFactory>())
                 .Build(),
             new EmbeddingGeneratorDescriptor(
-                "apple-natural-language",
+                $"apple-natural-language/en/sentence/{native.Revision}/{native.Dimension}",
                 "Apple NaturalLanguage",
-                "On-device English sentence embeddings from Apple's NaturalLanguage framework."));
+                $"On-device English sentence embeddings, revision {native.Revision}, {native.Dimension} dimensions."));
+    }
 #endif
 
     private static IEmbeddingGenerator<string, Embedding<float>> CreateAzureEmbeddingGenerator(IServiceProvider provider, AISettings settings) =>

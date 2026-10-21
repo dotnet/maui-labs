@@ -18,6 +18,7 @@
                 <HorizontalStackLayout Spacing="4">
                     <VerticalStackLayout Spacing="2">
                         <ImageButton Source="folder.png" Style="{StaticResource ChatActionButton}"
+                                     IsEnabled="{Binding CanManageDocuments}"
                                      SemanticProperties.Description="Import a Markdown or text document"
                                      AutomationId="ImportDocumentButton">
                             <local:PopupMenu.Content>
@@ -25,8 +26,8 @@
                                     <Label Text="IMPORT DOCUMENT" Style="{StaticResource SectionHeading}" />
                                     <Button Text="Choose file" Clicked="ImportDocumentClicked"
                                             AutomationId="ChooseDocumentButton" />
-                                    <Button Text="Use sample document" Clicked="ImportSampleDocumentClicked"
-                                            AutomationId="SampleDocumentButton" />
+                                    <Button Text="Load sample documents" Command="{Binding LoadSampleDocuments}"
+                                            AutomationId="LoadSampleDocumentsButton" />
                                 </VerticalStackLayout>
                             </local:PopupMenu.Content>
                         </ImageButton>

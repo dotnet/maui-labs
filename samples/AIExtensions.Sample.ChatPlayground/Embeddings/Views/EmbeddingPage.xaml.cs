@@ -21,7 +21,7 @@ public partial class EmbeddingPage : ContentPage
             });
             if (file is null)
             {
-                viewModel.StatusMessage = "Document import cancelled.";
+                viewModel.ReportImportProblem("Document import cancelled.");
                 return;
             }
             await using var stream = await file.OpenReadAsync();
@@ -29,21 +29,7 @@ public partial class EmbeddingPage : ContentPage
         }
         catch (Exception exception)
         {
-            viewModel.StatusMessage = $"Could not open document: {exception.Message}";
-        }
-    }
-
-    private async void ImportSampleDocumentClicked(object? sender, EventArgs e)
-    {
-        var viewModel = (EmbeddingPlaygroundViewModel)BindingContext;
-        try
-        {
-            await using var stream = await FileSystem.OpenAppPackageFileAsync("playground_notes.md");
-            await viewModel.ImportDocumentAsync("playground_notes.md", stream);
-        }
-        catch (Exception exception)
-        {
-            viewModel.StatusMessage = $"Could not open sample document: {exception.Message}";
+            viewModel.ReportImportProblem($"Could not open document: {exception.Message}");
         }
     }
 }

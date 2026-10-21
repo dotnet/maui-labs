@@ -1,0 +1,5049 @@
+{
+  "SchemaVersion": 1,
+  "CorpusFingerprint": "1e750f2f231b041a0fbcbacf08f5551ce2cd6582ece467fa11b2d326d10ba97d",
+  "ModelKey": "sentence:en:1:512",
+  "ObservedPlatform": "MacCatalyst",
+  "ObservedOSVersion": "27.0.0",
+  "Expectations": {
+    "whole/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "whole/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 4
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 3
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "whole/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 6
+      },
+      "EvidenceRank": null
+    },
+    "whole/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 3
+      },
+      "EvidenceRank": 3
+    },
+    "whole/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "whole/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 3
+    },
+    "fixed120/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed120/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed120/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed120/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 7
+    },
+    "fixed120/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed120/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed120/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 13
+    },
+    "fixed180/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 11
+    },
+    "fixed180/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed180/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed180/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": 9
+    },
+    "fixed240/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed240/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed240/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed240/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed240/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed240/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 5
+    },
+    "fixed240/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed240/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed240/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed240/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed240/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 4
+    },
+    "fixed240/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed240/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed240/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 4
+    },
+    "fixed240/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 6
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 5
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 5
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 8
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 5
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": 5
+    },
+    "fixed360/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 8
+    },
+    "fixed360/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 4
+    },
+    "fixed360/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed360/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed360/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 10
+    },
+    "fixed720/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 5
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 5
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 7
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 8
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 7
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 8
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 7
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": 6
+    },
+    "fixed720/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 6
+    },
+    "fixed180_overlap45/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed180_overlap45/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed180_overlap45/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180_overlap45/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180_overlap45/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 5
+    },
+    "fixed180_overlap45/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 7
+    },
+    "fixed180_overlap45/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed180_overlap45/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed180_overlap45/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180_overlap45/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed180_overlap45/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed180_overlap45/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed180_overlap45/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": 5
+    },
+    "fixed360_overlap90/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 7
+    },
+    "fixed360_overlap90/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 4
+    },
+    "fixed360_overlap90/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 5
+    },
+    "fixed360_overlap90/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed360_overlap90/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 4
+    },
+    "fixed360_overlap90/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 5
+    },
+    "fixed360_overlap90/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed360_overlap90/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed360_overlap90/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 14
+    },
+    "fixed720_overlap180/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 3
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "fixed720_overlap180/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 3
+      },
+      "EvidenceRank": 8
+    },
+    "fixed720_overlap180/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720_overlap180/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed720_overlap180/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "fixed720_overlap180/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720_overlap180/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 2
+      },
+      "EvidenceRank": 3
+    },
+    "fixed720_overlap180/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 2
+    },
+    "fixed720_overlap180/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "fixed720_overlap180/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 7
+    },
+    "sentence1/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence1/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence1/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence1/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 5
+    },
+    "sentence1/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence1/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence1/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence1/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence1/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence1/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence1/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence1/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 8
+    },
+    "sentence2/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 9
+    },
+    "sentence2/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence2/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence2/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 4
+    },
+    "sentence2/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence2/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence2/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 8
+    },
+    "sentence2/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence2/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence2/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 9
+    },
+    "sentence3/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": 4
+    },
+    "sentence3/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 8
+    },
+    "sentence3/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": 2
+    },
+    "sentence3/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence3/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence3/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence3/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence3/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 12
+    },
+    "sentence2_overlap1/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence2_overlap1/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 2
+      },
+      "EvidenceRank": 17
+    },
+    "sentence2_overlap1/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence2_overlap1/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 5
+    },
+    "sentence2_overlap1/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 6
+    },
+    "sentence2_overlap1/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 4
+    },
+    "sentence2_overlap1/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 4
+    },
+    "sentence2_overlap1/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 6
+    },
+    "sentence2_overlap1/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence2_overlap1/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence2_overlap1/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 19
+    },
+    "sentence3_overlap1/short/q01": {
+      "DocumentRanks": {
+        "coffee": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q02": {
+      "DocumentRanks": {
+        "tea": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q03": {
+      "DocumentRanks": {
+        "bike": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q04": {
+      "DocumentRanks": {
+        "car": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q05": {
+      "DocumentRanks": {
+        "rain": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q06": {
+      "DocumentRanks": {
+        "sun": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q07": {
+      "DocumentRanks": {
+        "meeting": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q08": {
+      "DocumentRanks": {
+        "alarm": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q09": {
+      "DocumentRanks": {
+        "offline": 3
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q10": {
+      "DocumentRanks": {
+        "online": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q11": {
+      "DocumentRanks": {
+        "restore": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q12": {
+      "DocumentRanks": {
+        "backup": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q13": {
+      "DocumentRanks": {
+        "error": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q14": {
+      "DocumentRanks": {
+        "success": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q15": {
+      "DocumentRanks": {
+        "encrypt": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q16": {
+      "DocumentRanks": {
+        "decrypt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q17": {
+      "DocumentRanks": {
+        "invoice": 4
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q18": {
+      "DocumentRanks": {
+        "receipt": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q19": {
+      "DocumentRanks": {
+        "mute": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q20": {
+      "DocumentRanks": {
+        "delete": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q21": {
+      "DocumentRanks": {
+        "flight": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q22": {
+      "DocumentRanks": {
+        "train": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q23": {
+      "DocumentRanks": {
+        "vegetarian": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/short/q24": {
+      "DocumentRanks": {
+        "meat": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_early/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_early/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_early/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_early/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_early/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_early/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_middle/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_middle/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_middle/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_middle/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_middle/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_middle/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_late/l01": {
+      "DocumentRanks": {
+        "l_early_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_late/l02": {
+      "DocumentRanks": {
+        "l_middle_a": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_late/l03": {
+      "DocumentRanks": {
+        "l_late_a": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_late/l04": {
+      "DocumentRanks": {
+        "l_early_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_late/l05": {
+      "DocumentRanks": {
+        "l_middle_b": 1
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/matched_late/l06": {
+      "DocumentRanks": {
+        "l_late_b": 2
+      },
+      "EvidenceRank": null
+    },
+    "sentence3_overlap1/playground/p01": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 8
+    },
+    "sentence3_overlap1/playground/p02": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 3
+    },
+    "sentence3_overlap1/playground/p03": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3_overlap1/playground/p04": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3_overlap1/playground/p05": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3_overlap1/playground/p06": {
+      "DocumentRanks": {
+        "harbor-routes": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence3_overlap1/playground/p07": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 4
+    },
+    "sentence3_overlap1/playground/p08": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 5
+    },
+    "sentence3_overlap1/playground/p09": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 5
+    },
+    "sentence3_overlap1/playground/p10": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence3_overlap1/playground/p11": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence3_overlap1/playground/p12": {
+      "DocumentRanks": {
+        "developer-runbook": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3_overlap1/playground/p13": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3_overlap1/playground/p14": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 2
+    },
+    "sentence3_overlap1/playground/p15": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3_overlap1/playground/p16": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3_overlap1/playground/p17": {
+      "DocumentRanks": {
+        "copper-kettle": 1
+      },
+      "EvidenceRank": 1
+    },
+    "sentence3_overlap1/playground/p18": {
+      "DocumentRanks": {
+        "copper-kettle": 3
+      },
+      "EvidenceRank": 10
+    }
+  }
+}

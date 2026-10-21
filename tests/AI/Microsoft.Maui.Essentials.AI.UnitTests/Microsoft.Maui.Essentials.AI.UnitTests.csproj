@@ -20,6 +20,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\EmbeddingQuality\EmbeddingQuality.cs" Link="EmbeddingQuality\EmbeddingQuality.cs" />
+    <EmbeddedResource Include="..\AppleEmbeddingEvaluation\corpus.json" LogicalName="EmbeddingQuality.corpus.json" />
+    <EmbeddedResource Include="..\EmbeddingQuality\multi-relevant.json" LogicalName="EmbeddingQuality.multi-relevant.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\..\..\samples\EssentialsAISample\Models\**" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\StreamingJsonDeserializer.cs" Link="Services\StreamingJsonDeserializer.cs" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\BufferedChatClient.cs" Link="Services\BufferedChatClient.cs" />

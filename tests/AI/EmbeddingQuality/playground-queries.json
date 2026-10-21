@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "queries": [
+    {"id":"p01","group":"paraphrase","text":"Where can someone using a wheelchair take a level nature walk?","documentId":"harbor-routes","evidence":["Willow Loop","flat walking trail","suitable for wheelchairs"]},
+    {"id":"p02","group":"paraphrase","text":"Where should I top up drinking water before the steep climb?","documentId":"harbor-routes","evidence":["hikers should fill their bottles at Quarry Gate","before starting the climb"]},
+    {"id":"p03","group":"exact_detail","text":"When is the final Sunday bus back from the hiking entrance?","documentId":"harbor-routes","evidence":["On Sundays","last return bus leaves the gate at 18:10"]},
+    {"id":"p04","group":"constraint","text":"Can I transport my car on the ferry to Lantern Island?","documentId":"harbor-routes","evidence":["Lantern Island","ferry does not carry cars"]},
+    {"id":"p05","group":"constraint","text":"What safety equipment must I wear while renting a kayak?","documentId":"harbor-routes","evidence":["Kayaks","Paddlers must wear the supplied buoyancy vest"]},
+    {"id":"p06","group":"paraphrase","text":"How should I prepare for the guided sunset birdwatching walk?","documentId":"harbor-routes","evidence":["sunset birdwatching walks","Bring binoculars and a warm jacket"]},
+    {"id":"p07","group":"technical","text":"My development server refuses connections. What should I check first?","documentId":"developer-runbook","evidence":["local web server refuses a connection","process is running and listening"]},
+    {"id":"p08","group":"technical","text":"The server succeeds but the browser shows an older page. How do I troubleshoot?","documentId":"developer-runbook","evidence":["stale content","Clear the browser cache"]},
+    {"id":"p09","group":"paraphrase","text":"How can I safely check a database schema update before deploying?","documentId":"developer-runbook","evidence":["Database migrations","before production deployment","run the migration in staging"]},
+    {"id":"p10","group":"constraint","text":"I committed an API secret. Is removing it from the file enough?","documentId":"developer-runbook","evidence":["credential appears in a log or commit","revoke it immediately","deleting the visible text is not sufficient"]},
+    {"id":"p11","group":"exact_detail","text":"How long before the demo service bearer token expires?","documentId":"developer-runbook","evidence":["Access tokens expire after fifteen minutes"]},
+    {"id":"p12","group":"technical","text":"A background task is slow. Should I simply add more workers?","documentId":"developer-runbook","evidence":["Increasing worker concurrency","make lock contention worse"]},
+    {"id":"p13","group":"exact_detail","text":"When does weekday breakfast finish at the cafe?","documentId":"copper-kettle","evidence":["serves breakfast","until 11:00 on weekdays"]},
+    {"id":"p14","group":"constraint","text":"How do I reserve a cafe table for a group of eight people?","documentId":"copper-kettle","evidence":["up to six people","Larger groups must telephone the manager"]},
+    {"id":"p15","group":"constraint","text":"Can I bring my pet dog inside the dining room?","documentId":"copper-kettle","evidence":["Dogs must remain on a leash","only assistance animals are permitted in the indoor dining room"]},
+    {"id":"p16","group":"constraint","text":"Which cake ingredients should someone allergic to nuts and milk know about?","documentId":"copper-kettle","evidence":["almond cake contains both nuts and dairy"]},
+    {"id":"p17","group":"paraphrase","text":"Which coffee is light and fruity rather than chocolatey?","documentId":"copper-kettle","evidence":["seasonal filter coffee is lighter with citrus aromas"]},
+    {"id":"p18","group":"exact_detail","text":"How far ahead must I cancel a private event to get the deposit back?","documentId":"copper-kettle","evidence":["cancellations at least seventy-two hours","receive a full deposit refund"]}
+  ]
+}

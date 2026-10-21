@@ -5,6 +5,38 @@ guarantee or a replacement for device tests. It uses the installed
 `NaturalLanguage.NLEmbedding` models, without cloud inference or explicit
 network/download requests.
 `NLEmbeddingGenerator` is tested separately by the Mac Catalyst device tests.
+The executable corpus regression tests are in
+[`../Microsoft.Maui.Essentials.AI.DeviceTests/Tests/EmbeddingCorpusQualityTests.cs`](../Microsoft.Maui.Essentials.AI.DeviceTests/Tests/EmbeddingCorpusQualityTests.cs).
+They run the actual Apple sentence embedding and, when explicitly opted in, the configured
+OpenAI embedding service, using this unchanged `corpus.json` plus the frozen
+[`../EmbeddingQuality/multi-relevant.json`](../EmbeddingQuality/multi-relevant.json).
+For the current playground chunk-size/overlap sweep, full passage evidence,
+and per-query device regression gates, see
+[`../EmbeddingQuality/README.md`](../EmbeddingQuality/README.md).
+Run three independent trials per provider from the repository root:
+
+```sh
+# Apple only; the default build must not embed local user secrets.
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
+  -f net10.0-maccatalyst -c Debug -p:UserSecretsId= \
+  --filter 'Suite=EmbeddingCorpus' --logger 'trx;LogFileName=apple-corpus.trx'
+
+# Explicit network opt-in: embeds existing Debug user secrets; keep binaries/logs private.
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
+  -f net10.0-maccatalyst -c Debug -p:EnableOpenAIClient=true \
+  --filter 'Suite=EmbeddingCorpus' --logger 'trx;LogFileName=both-corpus.trx'
+```
+
+The 100% all-relevant Recall@5 assertion is an **initial calibration target**, not
+an assertion that either model achieves it: an observed ranking miss intentionally
+fails its trial, with `QUALITY` metrics and every `QUERY` rank in the TRX output.
+Recall@K is macro-averaged over *all* relevant document IDs; Hit@K, Precision@K,
+MRR and ranks 1–5 are reported separately. The bounded long-document matched-middle
+control runs whole, 360-UTF-16-unit playground, and one-sentence chunk policies.
+Text is deduplicated only within a trial; no vectors are reused across trials.
+Do not publish opted-in binaries or logs: they may contain private service details
+in provider errors. Portable scorer tests run without any network or device:
+`dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/ --filter 'FullyQualifiedName~EmbeddingQualityTests'`.
 The experiment was fixed before inspecting the ranks; the declared relevance
 labels live in `corpus.json` (schema 1), whose byte-level SHA-256 is in the output.
 The provenance for the comparison strategy is playground #516,
