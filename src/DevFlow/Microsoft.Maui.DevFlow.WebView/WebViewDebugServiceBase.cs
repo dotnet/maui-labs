@@ -78,6 +78,9 @@ public abstract class WebViewDebugServiceBase : IDisposable
     }
 
     protected void DeactivateWebViewBridge(int bridgeIndex) => GetBridge(bridgeIndex)?.Deactivate();
+    internal NativeCdpResponseChannel EnableNativeCdpResponses(int bridgeIndex)
+        => (GetBridge(bridgeIndex) ?? throw new ArgumentOutOfRangeException(nameof(bridgeIndex)))
+            .EnableNativeResponses();
     protected Task InitializeBridgeAsync(int bridgeIndex)
     {
         var bridge = GetBridge(bridgeIndex);
@@ -147,6 +150,7 @@ public abstract class WebViewDebugServiceBase : IDisposable
         private string? _lastError;
         private readonly WeakReference<object>? _owner;
         private readonly Func<string, Task<string>> _commandHandler;
+        private NativeCdpResponseChannel? _nativeResponses;
 
         public string? AutomationId { get; }
         public string? ElementId { get; set; }
@@ -210,6 +214,15 @@ public abstract class WebViewDebugServiceBase : IDisposable
 
         internal void NavigateNative(string url) => _navigate(url);
         internal void ResetReadyState() => _ready = false;
+
+        internal NativeCdpResponseChannel EnableNativeResponses()
+        {
+            lock (_registrationGate)
+            {
+                _token.ThrowIfCancellationRequested();
+                return _nativeResponses ??= new NativeCdpResponseChannel();
+            }
+        }
 
         internal async Task InitializeAndMonitorAsync()
         {
@@ -357,47 +370,81 @@ public abstract class WebViewDebugServiceBase : IDisposable
                 // External callers may reuse IDs, even after a timeout. Never reuse one on the
                 // JavaScript wire, where a late response can otherwise satisfy a newer command.
                 var wireId = Interlocked.Increment(ref _nextWireId);
-                var message = System.Text.Json.Nodes.JsonNode.Parse(cdpJson)!.AsObject();
-                message["id"] = wireId;
-                var sendResult = await EvaluateAsync(ScriptResources.Load("cdp-send-receive.js")
-                    .Replace("%CDP_MESSAGE%", EscapeJsString(message.ToJsonString())));
-                if (sendResult != "__cdp_pending__")
+                var nativeResponses = _nativeResponses;
+                var nativeResponse = nativeResponses?.Register(wireId);
+                try
                 {
-                    // The send script checks the bridge before dispatching the command.
-                    // A replaced document is transient, but the command must not be replayed.
-                    if (sendResult is not null)
+                    var message = System.Text.Json.Nodes.JsonNode.Parse(cdpJson)!.AsObject();
+                    message["id"] = wireId;
+                    var script = ScriptResources.Load("cdp-send-receive.js")
+                        .Replace("%CDP_MESSAGE%", EscapeJsString(message.ToJsonString()))
+                        .Replace("%NATIVE_CDP_BINDING%", JsonSerializer.Serialize(nativeResponses?.BindingName));
+                    string? sendResult = null;
+                    Exception? dispatchFailure = null;
+                    try { sendResult = await EvaluateAsync(script); }
+                    catch (Exception ex) when (nativeResponse is not null && !_token.IsCancellationRequested)
                     {
-                        using var rejected = JsonDocument.Parse(sendResult);
-                        if (rejected.RootElement.TryGetProperty("error", out var reason)
-                            && reason.ValueKind == JsonValueKind.String
-                            && reason.GetString() == "chobitsu not loaded")
+                        // Navigation can destroy the evaluating context after dispatch. Only the
+                        // actual, correlated native reply may establish the command's outcome.
+                        dispatchFailure = ex;
+                    }
+                    if (nativeResponse?.IsCompletedSuccessfully == true)
+                        return RemapResponse(await nativeResponse, wireId, id);
+                    if (sendResult != "__cdp_pending__" && dispatchFailure is null &&
+                        !(nativeResponse is not null && sendResult is null))
+                    {
+                        // The send script checks the bridge before dispatching the command.
+                        // A replaced document is transient, but the command must not be replayed.
+                        if (sendResult is not null)
+                        {
+                            using var rejected = JsonDocument.Parse(sendResult);
+                            if (rejected.RootElement.TryGetProperty("error", out var reason)
+                                && reason.ValueKind == JsonValueKind.String
+                                && reason.GetString() == "chobitsu not loaded")
+                            {
+                                _ready = false;
+                                throw new InvalidOperationException("WebView not ready: the document changed before CDP dispatch.");
+                            }
+                        }
+                        throw new InvalidOperationException($"Failed to send CDP command: {sendResult ?? "null"}");
+                    }
+                    if (nativeResponse is not null)
+                    {
+                        try
+                        {
+                            var response = await nativeResponse.WaitAsync(
+                                TimeSpan.FromMilliseconds(_service.GetCdpResponseTimeoutMs()), _token);
+                            return RemapResponse(response, wireId, id);
+                        }
+                        catch (TimeoutException)
                         {
                             _ready = false;
-                            throw new InvalidOperationException("WebView not ready: the document changed before CDP dispatch.");
+                            throw new TimeoutException(
+                                dispatchFailure is null ? "CDP response timeout" :
+                                    $"CDP response timeout after native dispatch failed: {dispatchFailure.Message}",
+                                dispatchFailure);
                         }
                     }
-                    throw new InvalidOperationException($"Failed to send CDP command: {sendResult ?? "null"}");
-                }
-                var deadline = DateTime.UtcNow.AddMilliseconds(_service.GetCdpResponseTimeoutMs());
-                do
-                {
-                    var response = await EvaluateAsync(ScriptResources.Load("cdp-read-response.js"));
-                    if (response is not null)
+                    var deadline = DateTime.UtcNow.AddMilliseconds(_service.GetCdpResponseTimeoutMs());
+                    do
                     {
-                        using var parsed = JsonDocument.Parse(response);
-                        if (parsed.RootElement.TryGetProperty("id", out var responseId) &&
-                            responseId.TryGetInt64(out var receivedId) && receivedId == wireId)
+                        var response = await EvaluateAsync(ScriptResources.Load("cdp-read-response.js"));
+                        if (response is not null)
                         {
-                            var reply = System.Text.Json.Nodes.JsonNode.Parse(response)!.AsObject();
-                            reply["id"] = id;
-                            return reply.ToJsonString();
+                            using var parsed = JsonDocument.Parse(response);
+                            if (parsed.RootElement.TryGetProperty("id", out var responseId) &&
+                                responseId.TryGetInt64(out var receivedId) && receivedId == wireId)
+                            {
+                                return RemapResponse(response, wireId, id);
+                            }
                         }
-                    }
-                    await Task.Delay(50, _token);
-                } while (DateTime.UtcNow < deadline);
-                // Never replay a timed-out mutation: the original may already have run.
-                _ready = false;
-                throw new TimeoutException("CDP response timeout");
+                        await Task.Delay(50, _token);
+                    } while (DateTime.UtcNow < deadline);
+                    // Never replay a timed-out mutation: the original may already have run.
+                    _ready = false;
+                    throw new TimeoutException("CDP response timeout");
+                }
+                finally { nativeResponses?.Remove(wireId); }
             }
             catch (OperationCanceledException) when (_token.IsCancellationRequested)
             { return Error(id, "WebView is no longer available"); }
@@ -410,6 +457,14 @@ public abstract class WebViewDebugServiceBase : IDisposable
         }
 
         private static string Success(int id) => $"{{\"id\":{id},\"result\":{{}}}}";
+        private static string RemapResponse(string response, long wireId, int callerId)
+        {
+            var reply = System.Text.Json.Nodes.JsonNode.Parse(response)!.AsObject();
+            if (reply["id"]?.GetValue<long>() != wireId)
+                throw new InvalidOperationException("CDP response did not match the pending command.");
+            reply["id"] = callerId;
+            return reply.ToJsonString();
+        }
         private static string Error(int id, string message, int code = -32000)
             => JsonSerializer.Serialize(new { id, error = new { code, message } });
         private static string EscapeJsString(string value)
@@ -430,6 +485,7 @@ public abstract class WebViewDebugServiceBase : IDisposable
             _lifetime.Cancel();
             lock (_registrationGate)
             {
+                _nativeResponses?.Dispose();
                 _agent?.UnregisterCdpWebView(_agentIndex, _commandHandler);
                 _agent = null;
             }

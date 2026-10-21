@@ -281,6 +281,91 @@ public class WebViewDebugServiceTests
         else Assert.Equal("result", response.RootElement.GetProperty("result").GetProperty("value").GetString());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendCdpCommand_NativeReplySurvivesDestroyedEvaluation_UsesActualResponseOnce(bool evaluationThrows)
+    {
+        NativeCdpResponseChannel? channel = null;
+        var sends = 0;
+        using var service = new TestService(script =>
+        {
+            if (script.Contains("sendRawMessage"))
+            {
+                sends++;
+                var wireId = ReadSentWireId(script);
+                Assert.True(channel!.TryReceive(JsonSerializer.Serialize(new
+                {
+                    channel = channel.BindingName,
+                    response = $$"""{"id":{{wireId}},"result":{"value":"actual reply"}}"""
+                })));
+                if (evaluationThrows) throw new InvalidOperationException("The old evaluation context was destroyed.");
+                return Task.FromResult<string?>(null);
+            }
+            Assert.DoesNotContain("var r = window.__cdpResponse", script);
+            return Task.FromResult(ReadyResult(script));
+        });
+        channel = service.EnableNativeCdpResponses(0);
+
+        using var response = JsonDocument.Parse(await service.SendCdpCommandAsync(
+            """{"id":73,"method":"Runtime.evaluate","params":{"expression":"button.click()"}}""", 0));
+
+        Assert.Equal(73, response.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal("actual reply", response.RootElement.GetProperty("result").GetProperty("value").GetString());
+        Assert.Equal(1, sends);
+    }
+
+    [Fact]
+    public async Task SendCdpCommand_NativeReplyAbsentAfterDispatchFailure_ReportsOriginalErrorWithoutReplay()
+    {
+        var sends = 0;
+        using var service = new TestService(script =>
+        {
+            if (script.Contains("sendRawMessage"))
+            {
+                sends++;
+                throw new InvalidOperationException("native dispatch context destroyed");
+            }
+            return Task.FromResult(ReadyResult(script));
+        }, responseBudget: 1);
+        service.EnableNativeCdpResponses(0);
+
+        using var response = JsonDocument.Parse(await service.SendCdpCommandAsync(
+            """{"id":74,"method":"Runtime.evaluate","params":{"expression":"button.click()"}}""", 0));
+
+        Assert.Contains("CDP response timeout", response.RootElement.GetProperty("error").GetProperty("message").GetString());
+        Assert.Contains("native dispatch context destroyed", response.RootElement.GetProperty("error").GetProperty("message").GetString());
+        Assert.Equal(1, sends);
+    }
+
+    [Fact]
+    public async Task SendCdpCommand_NativePendingAndQueuedCommands_DetachmentCancelsBoth()
+    {
+        var dispatched = NewCompletion();
+        var sends = 0;
+        using var service = new TestService(script =>
+        {
+            if (script.Contains("sendRawMessage"))
+            {
+                sends++;
+                dispatched.TrySetResult();
+                return Task.FromResult<string?>("__cdp_pending__");
+            }
+            return Task.FromResult(ReadyResult(script));
+        });
+        service.EnableNativeCdpResponses(0);
+        var first = service.SendCdpCommandAsync("""{"id":1,"method":"Runtime.evaluate"}""", 0);
+        await dispatched.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var queued = service.SendCdpCommandAsync("""{"id":2,"method":"Runtime.evaluate"}""", 0);
+
+        service.Detach();
+
+        Assert.Contains("no longer available", await first.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Contains("no longer available", await queued.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, sends);
+        Assert.False(service.IsReady);
+    }
+
     [Fact]
     public async Task Deactivate_ActiveAndQueuedCommands_CancelsBothAndCleansUpOnce()
     {

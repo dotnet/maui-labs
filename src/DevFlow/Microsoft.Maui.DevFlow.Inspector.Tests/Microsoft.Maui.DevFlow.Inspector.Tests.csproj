@@ -23,6 +23,10 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <EmbeddedResource Include="..\Microsoft.Maui.DevFlow.WebView\Resources\Scripts\*.js"
+                      LogicalName="WebViewScripts.%(Filename)%(Extension)" />
+    <Compile Include="..\Microsoft.Maui.DevFlow.WebView\NativeCdpResponseChannel.cs"
+             Link="WebView\NativeCdpResponseChannel.cs" />
   </ItemGroup>
 
 </Project>

@@ -117,9 +117,11 @@ public class WebViewDebugService : WebViewDebugServiceBase
         // which also owns Hybrid resource interception and raw-message transport.
 #elif WINDOWS
         if (platformView is not Microsoft.UI.Xaml.Controls.WebView2 native) return;
+        WindowsCdpResponseTransport? responses = null;
         evaluate = async script =>
         {
             var core = native.CoreWebView2 ?? throw new InvalidOperationException("WebView2 is not initialized.");
+            if (responses is not null) await responses.EnsureInitializedAsync(core);
             return await core.ExecuteScriptAsync(script);
         };
         reload = () => (native.CoreWebView2 ?? throw new InvalidOperationException("WebView2 is not initialized.")).Reload();
@@ -141,11 +143,17 @@ public class WebViewDebugService : WebViewDebugServiceBase
         if (native.CoreWebView2 is { } existingCore) existingCore.Settings.AreDevToolsEnabled = Options.EnableWebViewInspection;
         cleanupNative = () =>
         {
+            responses?.Dispose();
             native.CoreWebView2Initialized -= coreInitialized;
             native.NavigationCompleted -= completed;
         };
 #endif
         index = AddWebViewBridge(evaluate, reload, navigate, owner.AutomationId, cleanup, hostKind, owner);
+#if WINDOWS
+        // CDP bindings have their own native event channel; Hybrid and Blazor raw messages
+        // must never receive diagnostic replies through their shared WebMessageReceived handlers.
+        responses = new WindowsCdpResponseTransport(EnableNativeCdpResponses(index), LogError);
+#endif
         _attachments.Remove(platformView);
         _attachments.Add(platformView, new(Bridges[index]));
         changing = (_, args) =>
