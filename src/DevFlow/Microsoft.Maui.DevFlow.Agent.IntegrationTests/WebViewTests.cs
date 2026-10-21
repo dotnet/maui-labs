@@ -69,7 +69,16 @@ public class WebViewTests : IntegrationTestBase
         return false;
     }
 
-    Task EnsureOnBlazorPageAsync() => App.EnsureBlazorReadyAsync();
+    async Task EnsureOnBlazorPageAsync()
+    {
+        try { await App.EnsureBlazorReadyAsync(); }
+        catch
+        {
+            Output.WriteLine(await NativeBindingFailureDiagnostics.CaptureAsync(
+                () => Client.GetLogsAsync(limit: 50, source: "webview")));
+            throw;
+        }
+    }
 
     async Task<string> EvaluateStringAsync(string expression, string contextId)
     {

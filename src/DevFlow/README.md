@@ -201,6 +201,10 @@ The shared engine injects embedded assets through native evaluation, not a Blazo
 JS initializer or hosted debug asset. Navigation delegates, Android WebViewClient,
 Hybrid resource interception and messaging remain app/MAUI-owned. Registrations
 are lazy and idempotent; generic and Blazor options are independent.
+WebView2 and WKWebView use private attachment-scoped native reply callbacks for
+commands that replace the document; WebKit does not alter application user scripts
+or raw-message handlers. Android and legacy polling adapters cannot guarantee a
+reply survives document replacement.
 Weak owners correlate active hosts and native screenshots, including unnamed and
 duplicate-AutomationId controls across visible pages/windows.
 

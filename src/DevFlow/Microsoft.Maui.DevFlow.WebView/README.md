@@ -91,6 +91,12 @@ available through the shared engine.
 Each attachment serializes CDP requests because its JavaScript response mailbox has
 one slot. Unique internal wire IDs isolate late replies even when callers reuse a
 CDP ID; matching responses are remapped to the caller's original ID.
+WebView2 and Apple WKWebView attachments deliver actual replies through private,
+attachment-scoped native callbacks so a navigation click cannot discard its reply
+with the old document's mailbox. WebKit uses a unique named message handler and
+lazy per-document binding without changing application user scripts or raw messages.
+Android and legacy adapters retain the polling mailbox; replies across document
+replacement are not guaranteed on those transports.
 Handler replacement cancels queued commands, readiness and console work,
 detaches listeners and unregisters only the old attachment's exact command delegate.
 Timeouts are not replayed automatically, avoiding duplicate mutations.

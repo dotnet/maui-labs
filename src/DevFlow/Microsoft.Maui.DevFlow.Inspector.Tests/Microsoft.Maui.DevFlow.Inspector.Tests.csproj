@@ -31,6 +31,10 @@
              Link="WebView\ScriptResources.cs" />
     <Compile Include="..\Microsoft.Maui.DevFlow.WebView\DocumentReloadFence.cs"
              Link="WebView\DocumentReloadFence.cs" />
+    <Compile Include="..\Microsoft.Maui.DevFlow.WebView\WebKitCdpResponseBinding.cs"
+             Link="WebView\WebKitCdpResponseBinding.cs" />
+    <Compile Include="..\Microsoft.Maui.DevFlow.Agent.IntegrationTests\Fixtures\NativeBindingFailureDiagnostics.cs"
+             Link="WebView\NativeBindingFailureDiagnostics.cs" />
   </ItemGroup>
 
 </Project>

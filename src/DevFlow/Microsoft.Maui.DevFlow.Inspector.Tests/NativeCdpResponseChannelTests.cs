@@ -1,10 +1,103 @@
 using System.Text.Json;
+using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 using Microsoft.Maui.DevFlow.WebView;
 
 namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 
 public class NativeCdpResponseChannelTests
 {
+    [Fact]
+    public async Task FailureDiagnostics_PreservesOnlyNativeSetupStageAndCounters_NotUserContent()
+    {
+        const string windows = "Native CDP response binding setup failed during binding handshake callback; callbacks=2, matchingBindings=0, acceptedPayloads=0, lastSender=(null=False, managedSame=False, nativeSame=True).";
+        const string webkit = "WebKit CDP response binding setup failed during document binding installation; callbacks=0, matchingScopes=0, acceptedPayloads=0.";
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new { c = "WebView.DevFlow", l = "Error", m = "Initialization failed: " + windows + " PRIVATE-COMMAND-PAYLOAD" },
+            new { c = "WebView.DevFlow", l = "Error", m = "Monitor failed: " + webkit + " PRIVATE-APP-CONTENT" },
+            new { c = "WebView.Console", l = "Error", m = windows },
+            new { c = "WebView.DevFlow", l = "Information", m = windows },
+            new { c = "WebView.DevFlow", l = "Error", m = "user error contains PRIVATE-APP-CONTENT" }
+        });
+
+        var summary = await NativeBindingFailureDiagnostics.CaptureAsync(() => Task.FromResult(json));
+
+        Assert.Equal(windows + Environment.NewLine + webkit, summary);
+        Assert.DoesNotContain("PRIVATE", summary);
+    }
+
+    [Fact]
+    public async Task FailureDiagnostics_ReadFailureIsExplicitWithoutReplacingOrDumpingOriginalError()
+    {
+        var summary = await NativeBindingFailureDiagnostics.CaptureAsync(
+            () => throw new HttpRequestException("PRIVATE-TRANSPORT-CONTENT"));
+        Assert.Equal("Native binding diagnostics unavailable (HttpRequestException).", summary);
+    }
+
+    [Theory]
+    [InlineData(11, 22, true, false)]
+    [InlineData(10, 23, true, false)]
+    [InlineData(10, 22, false, false)]
+    [InlineData(10, 22, true, true)]
+    [InlineData(0, 22, true, false)]
+    [InlineData(10, 0, true, false)]
+    public async Task WebKitBinding_WrongNativeScopeCannotCompleteActualReply(
+        int controller, int webView, bool mainFrame, bool wrongName)
+    {
+        using var channel = new NativeCdpResponseChannel();
+        using var binding = new WebKitCdpResponseBinding(channel, 10, 22);
+        var pending = channel.Register(42);
+        const string response = """{"id":42,"result":{"value":"actual reply"}}""";
+
+        Assert.False(binding.TryReceive(controller, webView, mainFrame,
+            wrongName ? "application-handler" : binding.Name, Payload(channel, response)));
+        Assert.False(pending.IsCompleted);
+        Assert.True(binding.TryReceive(10, 22, true, binding.Name, Payload(channel, response)));
+        Assert.Equal(response, await pending);
+        channel.Remove(42);
+    }
+
+    [Fact]
+    public async Task WebKitBinding_SharedControllerAndRecreatedView_IsolateChannelsAndRejectLateOldReplies()
+    {
+        using var first = new NativeCdpResponseChannel();
+        using var second = new NativeCdpResponseChannel();
+        using var oldBinding = new WebKitCdpResponseBinding(first, 10, 22);
+        using var current = new WebKitCdpResponseBinding(second, 10, 23);
+        var oldPending = first.Register(42);
+        var newPending = second.Register(42);
+        const string response = """{"id":42,"error":{"message":"original failure"}}""";
+
+        Assert.False(current.TryReceive(10, 22, true, oldBinding.Name, Payload(first, response)));
+        Assert.False(current.TryReceive(10, 23, true, current.Name, Payload(first, response)));
+        Assert.False(newPending.IsCompleted);
+        oldBinding.Dispose();
+        first.Dispose();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => oldPending);
+        Assert.False(oldBinding.TryReceive(10, 22, true, oldBinding.Name, Payload(first, response)));
+        Assert.True(current.TryReceive(10, 23, true, current.Name, Payload(second, response)));
+        Assert.Equal(response, await newPending);
+        second.Remove(42);
+    }
+
+    [Fact]
+    public async Task WebKitBinding_DisposalStopsHandshakeAndReplyDelivery_BeforeNativeUnregistration()
+    {
+        using var channel = new NativeCdpResponseChannel();
+        using var binding = new WebKitCdpResponseBinding(channel, 10, 22);
+        var handshake = channel.BeginHandshake();
+        var pending = channel.Register(42);
+        binding.Dispose();
+
+        Assert.False(binding.TryReceive(10, 22, true, binding.Name, HandshakePayload(handshake.Script)));
+        Assert.False(binding.TryReceive(10, 22, true, binding.Name, Payload(channel, """{"id":42,"result":{}}""")));
+        Assert.False(handshake.Received.IsCompleted);
+        Assert.False(pending.IsCompleted);
+        channel.Dispose();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handshake.Received);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+    }
+
     [Fact]
     public async Task Handshake_OnlyItsActualNonceCompletesProbe_NotCommandOrOtherChannel()
     {

@@ -410,6 +410,43 @@ public class WebViewDebugServiceTests
     }
 
     [Fact]
+    public async Task WebKitBinding_ActualInstallAndHandshakeScripts_KeepApplicationHandlerAndPrivateScope()
+    {
+        using var host = new JavaScriptHost();
+        using var channel = new NativeCdpResponseChannel();
+        using var binding = new WebKitCdpResponseBinding(channel, 10, 22);
+        Assert.Equal("missing", await host.EvaluateAsync(binding.InstallScript));
+        await host.EvaluateAsync($$"""
+            window.__applicationHandler = payload => { window.__applicationMessage = payload; };
+            window.webkit = { messageHandlers: {
+                application: { postMessage: window.__applicationHandler },
+                [{{JsonSerializer.Serialize(binding.Name)}}]: { postMessage: payload => { window.__nativePayload = payload; } }
+            } };
+            null
+            """);
+        Assert.Equal("installed", await host.EvaluateAsync(binding.InstallScript));
+        Assert.Equal("bound", await host.EvaluateAsync(binding.InstallScript));
+        var handshake = channel.BeginHandshake();
+        Assert.Equal("sent", await host.EvaluateAsync(handshake.Script));
+        Assert.False(handshake.Received.IsCompleted);
+        var payload = await host.EvaluateAsync("window.__nativePayload");
+        Assert.False(binding.TryReceive(10, 23, true, binding.Name, payload!));
+        Assert.False(binding.TryReceive(10, 22, false, binding.Name, payload!));
+        Assert.True(binding.TryReceive(10, 22, true, binding.Name, payload!));
+        await handshake.Received.WaitAsync(TimeSpan.FromSeconds(5));
+        channel.EndHandshake(handshake.Received);
+
+        await host.EvaluateAsync("window.webkit.messageHandlers.application.postMessage('unchanged'); null");
+        Assert.Equal("unchanged", await host.EvaluateAsync("window.__applicationMessage"));
+        Assert.Equal("true", await host.EvaluateAsync(
+            "String(window.webkit.messageHandlers.application.postMessage === window.__applicationHandler)"));
+        await host.EvaluateAsync(
+            $"delete window[{JsonSerializer.Serialize(binding.Name)}]; Object.defineProperty(window, {JsonSerializer.Serialize(binding.Name)}, {{ value: 'application value' }}); null");
+        Assert.Equal("collision", await host.EvaluateAsync(binding.InstallScript));
+        Assert.Equal("application value", await host.EvaluateAsync($"window[{JsonSerializer.Serialize(binding.Name)}]"));
+    }
+
+    [Fact]
     public async Task NativeResponseHandshake_ActualScriptDispatchRequiresMatchingCallback_NotCommandAcknowledgement()
     {
         using var host = new JavaScriptHost();

@@ -193,6 +193,116 @@ public class WebViewBridgeScriptTests
         await session.SendAsync("Runtime.removeBinding", new() { ["name"] = "__application_native_binding" });
         await session.DetachAsync();
         await AssertDelayedReloadAsync(context);
+        await AssertWebKitBindingNavigationAsync(context);
+    }
+
+    static async Task AssertWebKitBindingNavigationAsync(IBrowserContext context)
+    {
+        // Chromium supplies only the out-of-document callback for this WK message API shim.
+        // The binding scripts, routing gate, channel and Chobitsu reply are production code.
+        var page = await context.NewPageAsync();
+        var requests = 0;
+        await page.RouteAsync("https://webkit.devflow.test/**", route =>
+        {
+            if (route.Request.Url.EndsWith("/second", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref requests);
+                return route.FulfillAsync(new() { ContentType = "text/html", Body = "<title>WebKit second document</title>" });
+            }
+            return route.FulfillAsync(new()
+            {
+                ContentType = "text/html",
+                Body = "<a href='/second' onclick='window.__clicks=(window.__clicks||0)+1'>Next</a>"
+            });
+        });
+        using var channel = new NativeCdpResponseChannel();
+        using var binding = new WebKitCdpResponseBinding(channel, 10, 22);
+        var session = await context.NewCDPSessionAsync(page);
+        var applicationMessage = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<JsonElement?> receiver = (_, message) =>
+        {
+            if (message is not { } value || value.GetProperty("name").GetString() != "__testWKMessage") return;
+            using var forwarded = JsonDocument.Parse(value.GetProperty("payload").GetString()!);
+            var name = forwarded.RootElement.GetProperty("name").GetString()!;
+            var payload = forwarded.RootElement.GetProperty("payload").GetString()!;
+            if (name == "application") applicationMessage.TrySetResult(payload);
+            else binding.TryReceive(10, 22, true, name, payload);
+        };
+        session.Event("Runtime.bindingCalled").OnEvent += receiver;
+        await session.SendAsync("Runtime.enable");
+        await session.SendAsync("Runtime.addBinding", new() { ["name"] = "__testWKMessage" });
+        await page.AddInitScriptAsync($$"""
+            window.__applicationUserScriptRan = true;
+            window.__originalApplicationHandler = payload => __testWKMessage(JSON.stringify({name:'application',payload}));
+            window.webkit = { messageHandlers: {
+                application: { postMessage: window.__originalApplicationHandler },
+                [{{JsonSerializer.Serialize(binding.Name)}}]: {
+                    postMessage: payload => __testWKMessage(JSON.stringify({name:{{JsonSerializer.Serialize(binding.Name)}},payload}))
+                }
+            } };
+            """);
+        try
+        {
+            await page.GotoAsync("https://webkit.devflow.test/");
+            await InitializeAsync(page);
+            Assert.Equal("installed", await page.EvaluateAsync<string>(binding.InstallScript));
+            Assert.Equal("bound", await page.EvaluateAsync<string>(binding.InstallScript));
+            await AssertWebKitHandshakeAsync(page, channel);
+            var pending = channel.Register(81);
+            var command = JsonSerializer.Serialize(new
+            {
+                id = 81, method = "Runtime.evaluate", @params = new
+                {
+                    expression = "document.querySelector('a').click(); JSON.stringify({clicks:window.__clicks,value:'actual WK reply'})",
+                    returnByValue = true
+                }
+            });
+            var navigation = page.WaitForURLAsync("https://webkit.devflow.test/second");
+            Assert.Equal("__cdp_pending__", await page.EvaluateAsync<string>(SendScript(command, binding.Name)));
+            using var reply = JsonDocument.Parse(await pending.WaitAsync(TimeSpan.FromSeconds(5)));
+            using var actual = JsonDocument.Parse(reply.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetString()!);
+            Assert.Equal(1, actual.RootElement.GetProperty("clicks").GetInt32());
+            Assert.Equal("actual WK reply", actual.RootElement.GetProperty("value").GetString());
+            await navigation;
+            Assert.Equal(1, requests);
+            Assert.Null(await page.EvaluateAsync<string?>(Script("cdp-read-response.js")));
+            channel.Remove(81);
+
+            Assert.Equal("installed", await page.EvaluateAsync<string>(binding.InstallScript));
+            await AssertWebKitHandshakeAsync(page, channel);
+            await InitializeAsync(page);
+            var failure = channel.Register(82);
+            var failedCommand = JsonSerializer.Serialize(new
+            {
+                id = 82, method = "Runtime.evaluate",
+                @params = new { expression = "(() => { throw new Error('actual WK JavaScript error'); })()", returnByValue = true }
+            });
+            Assert.Equal("__cdp_pending__", await page.EvaluateAsync<string>(SendScript(failedCommand, binding.Name)));
+            using var failed = JsonDocument.Parse(await failure.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.Contains("actual WK JavaScript error", failed.RootElement.GetProperty("result").GetProperty("exceptionDetails").ToString());
+            channel.Remove(82);
+            binding.Dispose();
+            await page.EvaluateAsync("() => window.webkit.messageHandlers.application.postMessage('application still owns messages')");
+            Assert.Equal("application still owns messages", await applicationMessage.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.True(await page.EvaluateAsync<bool>("() => window.__applicationUserScriptRan && window.webkit.messageHandlers.application.postMessage === window.__originalApplicationHandler"));
+        }
+        finally
+        {
+            session.Event("Runtime.bindingCalled").OnEvent -= receiver;
+            await session.DetachAsync();
+            await page.CloseAsync();
+        }
+    }
+
+    static async Task AssertWebKitHandshakeAsync(IPage page, NativeCdpResponseChannel channel)
+    {
+        var handshake = channel.BeginHandshake();
+        try
+        {
+            Assert.Equal("sent", await page.EvaluateAsync<string>(handshake.Script));
+            await handshake.Received.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally { channel.EndHandshake(handshake.Received); }
     }
 
     static async Task AssertDelayedReloadAsync(IBrowserContext context)

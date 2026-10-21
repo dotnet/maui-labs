@@ -77,10 +77,12 @@ public class WebViewDebugService : WebViewDebugServiceBase
         Action<string> navigate;
 #if IOS || MACCATALYST || MACOS
         if (platformView is not WebKit.WKWebView native) return;
+        WebKitCdpResponseTransport? responses = null;
         evaluate = async script =>
         {
             if (script == "document.readyState" && native.IsLoading)
                 return "loading";
+            if (responses is not null) await responses.EnsureInitializedAsync(native);
             var value = await native.EvaluateJavaScriptAsync(script);
             return value is null or Foundation.NSNull ? null : value.ToString();
         };
@@ -101,7 +103,11 @@ public class WebViewDebugService : WebViewDebugServiceBase
         {
             PostToMainThread(() => { if (!native.IsLoading) Reinitialize(); });
         });
-        cleanupNative = loading.Dispose;
+        cleanupNative = () =>
+        {
+            try { responses?.Dispose(); }
+            finally { loading.Dispose(); }
+        };
 #elif ANDROID
         if (platformView is not global::Android.Webkit.WebView native) return;
         evaluate = script =>
@@ -154,6 +160,11 @@ public class WebViewDebugService : WebViewDebugServiceBase
         // must never receive diagnostic replies through their shared WebMessageReceived handlers.
         responses = new WindowsCdpResponseTransport(EnableNativeCdpResponses(index),
             TimeSpan.FromMilliseconds(GetCdpResponseTimeoutMs()), LogError);
+#elif IOS || MACCATALYST || MACOS
+        // A unique script-message handler avoids the app/MAUI raw-message channels.
+        // Lazy per-document binding needs no additions or removals to host-owned UserScripts.
+        responses = new WebKitCdpResponseTransport(native, EnableNativeCdpResponses(index),
+            TimeSpan.FromMilliseconds(GetCdpResponseTimeoutMs()));
 #endif
         _attachments.Remove(platformView);
         _attachments.Add(platformView, new(Bridges[index]));
