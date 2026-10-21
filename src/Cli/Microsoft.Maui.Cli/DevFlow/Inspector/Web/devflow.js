@@ -260,6 +260,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   // Reachability of the live app, derived from /api/state. Toggling it re-evaluates the drive-action
   // buttons so they disable when the agent goes away (and re-enable when it returns).
   const disconnectedStatus = 'App disconnected — waiting for DevFlow to reconnect.';
+  const checkingStatus = 'Checking for the running app…';
   let disconnectReturnFocus = null;
   function markConnected(value) {
     if (connected === value) return;
@@ -287,17 +288,15 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     updateFlowButtons();
   }
   if (retryConnectionBtn) retryConnectionBtn.addEventListener('click', async () => {
-    if (refreshInProgress) {
-      setStatus('Reconnect check queued…');
-      scheduleRefresh(100);
-      return;
-    }
     retryConnectionBtn.disabled = true;
-    setStatus('Checking for the running app…');
+    setStatus(checkingStatus);
     try {
-      await refreshState();
+      // Forced: wait for any in-flight poll, then check again rather than reusing its result.
+      await refreshState(true);
     } finally {
       retryConnectionBtn.disabled = false;
+      // markConnected() ignores an unchanged state, so settle our own status here unless something newer replaced it.
+      if (tb.status?.textContent === checkingStatus) setStatus(connected ? '' : disconnectedStatus);
     }
   });
 
