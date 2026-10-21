@@ -215,6 +215,14 @@ static class WebViewTestContent
 
     public static HybridWebView CreateHybrid(string automationId, Label status)
     {
+        void UpdateStatus(string text)
+        {
+            if (!status.Dispatcher.IsDispatchRequired)
+                status.Text = text;
+            else if (!status.Dispatcher.Dispatch(() => status.Text = text))
+                throw new InvalidOperationException("Unable to dispatch the Hybrid message to its UI.");
+        }
+
         var view = new HybridWebView
         {
             AutomationId = automationId,
@@ -229,12 +237,12 @@ static class WebViewTestContent
                     args.Message ?? throw new JsonException("Missing Hybrid message."),
                     WebViewTestJsonContext.Default.WebViewTestMessage)
                     ?? throw new JsonException("Missing Hybrid message value.");
-                status.Text = $"{message.Action}: {message.Value}";
+                UpdateStatus($"{message.Action}: {message.Value}");
             }
             catch (JsonException ex)
             {
                 Console.WriteLine(ex);
-                status.Text = $"Invalid Hybrid message: {ex.Message}";
+                UpdateStatus($"Invalid Hybrid message: {ex.Message}");
             }
         };
         return view;

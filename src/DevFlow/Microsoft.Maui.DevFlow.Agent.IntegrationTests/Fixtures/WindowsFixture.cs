@@ -8,6 +8,12 @@ namespace Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 public sealed class WindowsFixture : AppFixtureBase
 {
     Process? _appProcess;
+    Process? _launcherProcess;
+    readonly List<Task> _outputPumps = [];
+    readonly List<Task> _exitObservations = [];
+    readonly object _diagnosticsGate = new();
+    string _diagnosticsPath = "";
+    volatile bool _stopping;
 
     public override string Platform => "windows";
 
@@ -31,28 +37,91 @@ public sealed class WindowsFixture : AppFixtureBase
                 $"-p:ApplicationId={applicationId}");
 
             var exePath = FindExecutable();
+            var diagnosticsDirectory = Path.Combine(
+                FindRepoRoot(), "artifacts", "TestResults", "devflow-integration", "windows", "diagnostics");
+            Directory.CreateDirectory(diagnosticsDirectory);
+            _diagnosticsPath = Path.Combine(diagnosticsDirectory, $"sample-{AgentPort}.log");
             var psi = new ProcessStartInfo(exePath)
             {
                 UseShellExecute = false,
                 WorkingDirectory = Path.GetDirectoryName(exePath) ?? Environment.CurrentDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
             };
 
             psi.Environment["DEVFLOW_TEST_PORT"] = AgentPort.ToString();
+            psi.Environment["DEVFLOW_TEST_DIAGNOSTICS_PATH"] =
+                Path.Combine(diagnosticsDirectory, $"sample-{AgentPort}-unhandled.log");
 
-            _appProcess = Process.Start(psi)
+            _launcherProcess = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to launch {exePath}");
+            _appProcess = _launcherProcess;
+            _exitObservations.Add(ObserveExitAsync(_launcherProcess, "launcher"));
+            _outputPumps.Add(DrainAsync(_launcherProcess.StandardOutput, "stdout"));
+            _outputPumps.Add(DrainAsync(_launcherProcess.StandardError, "stderr"));
+            WriteDiagnostic($"Launched pid={_launcherProcess.Id}, port={AgentPort}, executable={exePath}.");
+
+            await WaitForAgentAsync(timeoutSeconds: 120);
+            var status = await Client.GetStatusAsync();
+            var agentPid = status?.App?.ProcessId
+                ?? throw new InvalidOperationException("The Windows agent did not report its process ID.");
+            if (agentPid != _launcherProcess.Id)
+            {
+                var actualProcess = Process.GetProcessById(agentPid);
+                if (!string.Equals(actualProcess.MainModule?.FileName, exePath, StringComparison.OrdinalIgnoreCase)
+                    || actualProcess.StartTime.ToUniversalTime() < _launcherProcess.StartTime.ToUniversalTime())
+                {
+                    actualProcess.Dispose();
+                    throw new InvalidOperationException($"Agent PID {agentPid} is not the owned sample process.");
+                }
+                _appProcess = actualProcess;
+                _exitObservations.Add(ObserveExitAsync(actualProcess, "agent"));
+            }
+            WriteDiagnostic($"Connected to actual agent pid={agentPid}, launcher pid={_launcherProcess.Id}, port={AgentPort}.");
+            Console.WriteLine($"[DevFlow Windows sample] Agent pid={agentPid}; diagnostics: {_diagnosticsPath}");
         });
+    }
+
+    async Task ObserveExitAsync(Process process, string role)
+    {
+        await process.WaitForExitAsync();
+        WriteDiagnostic($"{role} pid={process.Id} exited: code={process.ExitCode} " +
+            $"(0x{process.ExitCode:X8}), fixtureStopping={_stopping}.");
+    }
+
+    async Task DrainAsync(StreamReader reader, string source)
+    {
+        while (await reader.ReadLineAsync() is { } line)
+            WriteDiagnostic($"{source}: {line}");
+    }
+
+    void WriteDiagnostic(string message)
+    {
+        lock (_diagnosticsGate)
+            File.AppendAllText(_diagnosticsPath, $"{DateTimeOffset.UtcNow:O} {message}{Environment.NewLine}");
     }
 
     protected override async Task DisposePlatformAsync()
     {
-        if (_appProcess is { HasExited: false })
+        _stopping = true;
+        try
         {
-            _appProcess.Kill(entireProcessTree: true);
-            try { await _appProcess.WaitForExitAsync(new CancellationTokenSource(5000).Token); } catch { }
+            foreach (var process in new[] { _appProcess, _launcherProcess }.OfType<Process>().DistinctBy(p => p.Id))
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                }
+            }
+            await Task.WhenAll(_outputPumps.Concat(_exitObservations)).WaitAsync(TimeSpan.FromSeconds(5));
         }
-
-        _appProcess?.Dispose();
+        finally
+        {
+            if (!ReferenceEquals(_appProcess, _launcherProcess))
+                _launcherProcess?.Dispose();
+            _appProcess?.Dispose();
+        }
     }
 
     static string FindExecutable()

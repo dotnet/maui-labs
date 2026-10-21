@@ -19,7 +19,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
 
     public async Task DisposeAsync()
     {
-        Assert.True(await Client.NavigateAsync("//native"));
+        await NavigateAsync("//native");
         App.InvalidateBlazorReady();
     }
 
@@ -270,7 +270,11 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
             {
                 await abandoned.ConnectAsync("127.0.0.1", port);
                 await WaitForAsync(() => Task.FromResult(fixture.AcceptedConnectionCount >= 2));
+                await abandoned.GetStream().WriteAsync(
+                    System.Text.Encoding.ASCII.GetBytes("GET /index.html HTTP/1.1\r\nX-Abandoned: "));
+                await WaitForAsync(() => Task.FromResult(fixture.StartedRequestCount == 1));
                 abandoned.Client.LingerState = new System.Net.Sockets.LingerOption(true, 0);
+                abandoned.Client.Close();
             }
             await WaitForAsync(() => Task.FromResult(!fixture.ClientDisconnects.IsEmpty));
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -459,7 +463,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
     {
         var route = kind == "webview" ? "//webview" : "//hybrid";
         var reset = kind == "webview" ? "RecreateStandardWebViewButton" : "ResetHybridWebViewButton";
-        Assert.True(await Client.NavigateAsync(route));
+        await NavigateAsync(route);
         var previous = await WaitForDocumentAsync(kind, title);
         Assert.True(await Client.TapAsync((await FindElementAsync(reset)).Id));
         return await WaitForDocumentAsync(kind, title, ContextId(previous));
@@ -467,7 +471,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
 
     async Task<JsonElement[]> EnsureMixedAsync()
     {
-        Assert.True(await Client.NavigateAsync("//mixedwebviews"));
+        await NavigateAsync("//mixedwebviews");
         var previous = await WaitForMixedAsync();
         Assert.True(await Client.TapAsync((await FindElementAsync("ResetMixedWebViewsButton")).Id));
         await WaitForAsync(async () => !Contexts(await Client.GetCdpWebViewsAsync())
@@ -495,27 +499,67 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         string kind, string title, string? previousId = null, int? expectedCount = null, string? expectedNativeMessage = null)
     {
         JsonElement selected = default;
-        await WaitForAsync(async () =>
+        JsonElement lastContexts = default;
+        string? lastTitle = null;
+        string? lastError = null;
+        try
         {
-            var active = Contexts(await Client.GetCdpWebViewsAsync()).Where(c =>
-                c.GetProperty("active").GetBoolean() && c.GetProperty("ready").GetBoolean() && HostKind(c) == kind
-                && ContextId(c) != previousId).ToArray();
-            if (active.Length != 1)
-                return false;
-            selected = active[0];
+            await WaitForAsync(async () =>
+            {
+                lastContexts = await Client.GetCdpWebViewsAsync();
+                var active = Contexts(lastContexts).Where(c =>
+                    c.GetProperty("active").GetBoolean() && c.GetProperty("ready").GetBoolean() && HostKind(c) == kind
+                    && ContextId(c) != previousId).ToArray();
+                if (active.Length != 1)
+                    return false;
+                selected = active[0];
+                try
+                {
+                    lastTitle = (await EvaluateAsync("document.title", ContextId(selected))).GetString();
+                    return lastTitle == title
+                        && (expectedCount is null || (await EvaluateAsync("count", ContextId(selected))).GetInt32() == expectedCount)
+                        && (expectedNativeMessage is null || (await EvaluateAsync(
+                            "document.querySelector('#native-message').textContent", ContextId(selected))).GetString() == expectedNativeMessage);
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("not ready", StringComparison.OrdinalIgnoreCase))
+                {
+                    lastError = ex.Message;
+                    return false;
+                }
+            }, timeoutMs: 60000);
+        }
+        catch (TimeoutException)
+        {
+            Output.WriteLine($"Document readiness failed: kind={kind}, expectedTitle={title}, previousId={previousId}, " +
+                $"lastTitle={lastTitle}, lastError={lastError}, contexts={lastContexts}");
             try
             {
-                return (await EvaluateAsync("document.title", ContextId(selected))).GetString() == title
-                    && (expectedCount is null || (await EvaluateAsync("count", ContextId(selected))).GetInt32() == expectedCount)
-                    && (expectedNativeMessage is null || (await EvaluateAsync(
-                        "document.querySelector('#native-message').textContent", ContextId(selected))).GetString() == expectedNativeMessage);
+                var statusId = kind == "webview" ? "StandardNavigationStatus" : "HybridMessageStatus";
+                foreach (var status in await Client.QueryAsync(automationId: statusId))
+                    Output.WriteLine($"Native {statusId}: text={status.Text}, visible={status.IsVisible}.");
             }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("not ready", StringComparison.OrdinalIgnoreCase))
+            catch (HttpRequestException ex)
             {
-                return false;
+                Output.WriteLine($"Native readiness diagnostic could not reach the agent: {ex.Message}");
             }
-        }, timeoutMs: 60000);
+            catch (InvalidOperationException ex)
+            {
+                Output.WriteLine($"Native readiness diagnostic failed: {ex.Message}");
+            }
+            throw;
+        }
         return selected;
+    }
+
+    async Task NavigateAsync(string route)
+    {
+        using var response = await PostRawAsync("/api/v1/ui/actions/navigate", new { route });
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode,
+            $"Navigation to '{route}' failed: HTTP {(int)response.StatusCode}: {body}");
+        using var result = JsonDocument.Parse(body);
+        Assert.True(result.RootElement.GetProperty("success").GetBoolean(),
+            $"Navigation to '{route}' did not succeed: {body}");
     }
 
     async Task<JsonElement> EvaluateAsync(string expression, string id)

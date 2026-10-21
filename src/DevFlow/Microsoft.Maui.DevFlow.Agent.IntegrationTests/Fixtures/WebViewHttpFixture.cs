@@ -12,9 +12,11 @@ internal sealed class WebViewHttpFixture : IAsyncDisposable
     readonly Task _requests;
     readonly string _resourceDirectory;
     int _acceptedConnections;
+    int _startedRequests;
 
     public int Port { get; }
     public int AcceptedConnectionCount => Volatile.Read(ref _acceptedConnections);
+    public int StartedRequestCount => Volatile.Read(ref _startedRequests);
     public ConcurrentQueue<string> RequestPaths { get; } = new();
     public ConcurrentQueue<SocketError> ClientDisconnects { get; } = new();
 
@@ -66,6 +68,7 @@ internal sealed class WebViewHttpFixture : IAsyncDisposable
                 var request = await reader.ReadLineAsync(cancellationToken);
                 if (request is null)
                     return;
+                Interlocked.Increment(ref _startedRequests);
                 var path = request.Split(' ').ElementAtOrDefault(1)?.Split('?')[0] ?? "";
                 for (var count = 0; ; count++)
                 {

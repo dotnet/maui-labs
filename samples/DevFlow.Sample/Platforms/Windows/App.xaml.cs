@@ -17,6 +17,11 @@ public partial class App : MauiWinUIApplication
 	/// </summary>
 	public App()
 	{
+#if DEBUG
+		UnhandledException += (_, args) => WriteUnhandledDiagnostic(args.Exception);
+		AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+			WriteUnhandledDiagnostic(args.ExceptionObject as Exception);
+#endif
 		this.InitializeComponent();
 
 #if DEBUG
@@ -25,6 +30,19 @@ public partial class App : MauiWinUIApplication
 	}
 
 #if DEBUG
+	static void WriteUnhandledDiagnostic(Exception? exception)
+	{
+		var message = $"{DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} unhandled: {exception}";
+		Console.Error.WriteLine(message);
+		var path = Environment.GetEnvironmentVariable("DEVFLOW_TEST_DIAGNOSTICS_PATH");
+		if (!string.IsNullOrEmpty(path))
+		{
+			try { File.AppendAllText(path, message + Environment.NewLine); }
+			catch (IOException ex) { Console.Error.WriteLine($"Unable to write sample diagnostics: {ex}"); }
+			catch (UnauthorizedAccessException ex) { Console.Error.WriteLine($"Unable to write sample diagnostics: {ex}"); }
+		}
+	}
+
 	static bool IsEnabled(string? value)
 		=> value is not null &&
 		   (value.Equals("1", StringComparison.OrdinalIgnoreCase) ||
