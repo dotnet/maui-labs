@@ -4328,9 +4328,15 @@ public class DevFlowCommands
         if (result.Running) data["agents"] = result.Agents;
         if (result.StateFile is false) data["stateFile"] = false;
         if (result.Stale) data["stale"] = true;
-        Output.WriteResult(data, json, _ => Console.WriteLine(result.Running
-            ? $"Broker: running on port {result.Port} ({result.Agents} agent(s) connected){(result.StateFile is false ? " [no state file]" : "")}"
-            : result.Stale ? $"Broker: not responding on port {result.Port} (stale state file?)" : "Broker: not running"));
+        if (result.SourceWorkspace is not null) data["sourceWorkspace"] = result.SourceWorkspace;
+        Output.WriteResult(data, json, _ =>
+        {
+            Console.WriteLine(result.Running
+                ? $"Broker: running on port {result.Port} ({result.Agents} agent(s) connected){(result.StateFile is false ? " [no state file]" : "")}"
+                : result.Stale ? $"Broker: not responding on port {result.Port} (stale state file?)" : "Broker: not running");
+            if (result.SourceWorkspace is not null)
+                Console.WriteLine($"Source workspace: {result.SourceWorkspace}");
+        });
     }
 
     private static void BrokerLogAsync()

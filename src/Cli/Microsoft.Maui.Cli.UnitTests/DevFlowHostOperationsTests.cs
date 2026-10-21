@@ -66,7 +66,22 @@ public sealed class BrokerOperationsTests
         Assert.False(status.StateFile);
         Assert.Equal(2, status.Agents);
         Assert.Equal(server.Port, status.Port);
+        Assert.Null(status.SourceWorkspace);
         Assert.Equal("/api/health", Assert.Single(server.RecordedRequests).Path);
+    }
+
+    [Theory]
+    [InlineData("""{"status":"ok","agents":2,"sourceWorkspace":"/work/app"}""", "/work/app")]
+    [InlineData("""{"status":"ok","agents":2,"sourceWorkspace":null}""", null)]
+    public async Task Status_Health_ReportsSourceWorkspace(string health, string? expected)
+    {
+        await using var server = new MockAgentServer { BindToLocalhost = true, BrokerHealthResponse = health };
+        await server.StartAsync();
+
+        var status = await new BrokerOperations().GetStatusAsync(null, server.Port);
+
+        Assert.True(status.Running);
+        Assert.Equal(expected, status.SourceWorkspace);
     }
 
     [Fact]
