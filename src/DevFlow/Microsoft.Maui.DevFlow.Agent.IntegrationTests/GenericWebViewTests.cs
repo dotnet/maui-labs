@@ -203,6 +203,16 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         context = await WaitForDocumentAsync("hybrid", "Hybrid WebView fixture", previousId);
         Assert.NotEqual(previousId, ContextId(context));
         await AssertHybridMessagingAsync(ContextId(context), "HybridMessageStatus", "HybridSendMessageButton");
+
+        Assert.True(await Client.ClickWebViewAsync("#fixture-link", ContextId(context)));
+        context = await WaitForDocumentAsync("hybrid", "Second WebView document");
+        previousId = ContextId(context);
+        await NavigateAsync("//native");
+        context = await EnsureHostAsync("hybrid", "Hybrid WebView fixture");
+        Assert.NotEqual(previousId, ContextId(context));
+        Assert.Equal("Hybrid WebView fixture", (await EvaluateAsync("document.title", ContextId(context))).GetString());
+        Assert.Equal(0, (await EvaluateAsync("count", ContextId(context))).GetInt32());
+        await AssertHybridMessagingAsync(ContextId(context), "HybridMessageStatus", "HybridSendMessageButton");
     }
 
     [Fact]
@@ -531,10 +541,19 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
     {
         var route = kind == "webview" ? "//webview" : "//hybrid";
         var reset = kind == "webview" ? "RecreateStandardWebViewButton" : "ResetHybridWebViewButton";
+        var hostId = kind == "webview" ? "StandardWebView" : "HybridWebView";
         await NavigateAsync(route);
-        var previous = await WaitForDocumentAsync(kind, title);
+        // A retained host can still contain another healthy document from the previous test.
+        var previous = await WaitForDocumentAsync(kind, title: null);
+        AssertContext(previous);
+        Assert.Equal(hostId, previous.GetProperty("automationId").GetString());
+        Assert.Equal((await FindElementAsync(hostId)).Id, previous.GetProperty("elementId").GetString());
         Assert.True(await Client.TapAsync((await FindElementAsync(reset)).Id));
-        return await WaitForDocumentAsync(kind, title, ContextId(previous));
+        var current = await WaitForDocumentAsync(kind, title, ContextId(previous));
+        AssertContext(current);
+        Assert.Equal(hostId, current.GetProperty("automationId").GetString());
+        Assert.Equal((await FindElementAsync(hostId)).Id, current.GetProperty("elementId").GetString());
+        return current;
     }
 
     async Task<JsonElement[]> EnsureMixedAsync()
@@ -564,7 +583,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
     }
 
     async Task<JsonElement> WaitForDocumentAsync(
-        string kind, string title, string? previousId = null, int? expectedCount = null, string? expectedNativeMessage = null)
+        string kind, string? title, string? previousId = null, int? expectedCount = null, string? expectedNativeMessage = null)
     {
         JsonElement selected = default;
         JsonElement lastContexts = default;
@@ -584,7 +603,7 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
                 try
                 {
                     lastTitle = (await EvaluateAsync("document.title", ContextId(selected))).GetString();
-                    return lastTitle == title
+                    return (title is null || lastTitle == title)
                         && (expectedCount is null || (await EvaluateAsync("count", ContextId(selected))).GetInt32() == expectedCount)
                         && (expectedNativeMessage is null || (await EvaluateAsync(
                             "document.querySelector('#native-message').textContent", ContextId(selected))).GetString() == expectedNativeMessage);
