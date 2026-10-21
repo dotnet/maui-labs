@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ci-essentialsai.yml'
+      - '.github/workflows/_device-tests.yml'
+      - 'src/Cli/**'
       - 'src/AI/**'
       - 'tests/AI/**'
       - 'tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/**'
@@ -20,6 +22,8 @@ on:
     types: [opened, synchronize, reopened, edited]
     paths:
       - '.github/workflows/ci-essentialsai.yml'
+      - '.github/workflows/_device-tests.yml'
+      - 'src/Cli/**'
       - 'src/AI/**'
       - 'tests/AI/**'
       - 'tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/**'
@@ -33,6 +37,17 @@ on:
       - 'NuGet.config'
 
 jobs:
+  device-tests-android:
+    uses: ./.github/workflows/_device-tests.yml
+    with:
+      project-path: tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
+      project-name: essentialsai
+      target-framework: net10.0-android
+      filter: 'RequiresModel!=true'
+      os: ubuntu-24.04
+      workloads: maui-android
+      workload-version: '10.0.401'
+
   # Step 1: Build on Xcode 27 — compiles Swift xcframeworks, produces .resources.zip,
   # and uploads them as native-apple-essentialsai artifact via _build.yml.
   build-macos:

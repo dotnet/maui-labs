@@ -344,11 +344,11 @@ public class AndroidProviderTests
 		var provider = new FakeAndroidProvider();
 
 		// Act
-		await provider.StartAvdAsync("TestEmulator", coldBoot: true, wait: true);
+		await provider.StartAvdAsync("TestEmulator", coldBoot: true, wait: true, noWindow: true);
 
 		// Assert
 		Assert.Single(provider.StartedAvds);
-		Assert.Equal(("TestEmulator", true, true), provider.StartedAvds[0]);
+		Assert.Equal(("TestEmulator", true, true, true), provider.StartedAvds[0]);
 	}
 
 	[Fact]
