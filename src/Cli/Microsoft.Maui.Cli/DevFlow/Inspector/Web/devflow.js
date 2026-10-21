@@ -1340,6 +1340,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     return badgeEl;
   }
   function setHover(el) {
+    // Off-screen overlays aren't drawn, so a hover box/badge for one would only mislead.
+    if (el?.dataset.offscreen === 'true') el = null;
     if (hoveredEl === el) return;
     if (hoveredEl) hoveredEl.classList.remove('df-hover', 'df-hover-noninteractive', 'df-hover-interactive');
     hoveredEl = el;
@@ -1396,7 +1398,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     if (el) el.classList.add('df-selected');
     elementTree.updateSelection();
     elementTree.reveal(id);
-    if (el) { propertyGrid.open(el); setStatus(elementLabel(el)); }
+    if (el) { propertyGrid.open(el); setStatus(elementLabel(el) + (el.dataset.offscreen === 'true' ? ' (off-screen)' : '')); }
     updateHostButtons();
     updateFlowButtons();
     postSelectionToHost(el);
@@ -1410,7 +1412,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       const el = elById(selectedId);
       if (el) el.classList.add('df-selected'); else selectElement(null);
     }
-    if (hoveredEl && !hoveredEl.isConnected) { hoveredEl = null; if (badgeEl) badgeEl.style.display = 'none'; }
+    if (hoveredEl && (!hoveredEl.isConnected || hoveredEl.dataset.offscreen === 'true')) setHover(null);
   }
 
   // ── Workflow recording: capture interactions into the shared Flow format, then

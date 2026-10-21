@@ -16,6 +16,9 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 [Trait("Category", "BrowserFixture")]
 public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAsyncLifetime
 {
+    private const int ClosedFlyoutX = -320;
+    private const int OpenFlyoutX = 20;
+
     private WebApplication? _agent;
     private InspectorServer? _inspector;
     private IPlaywright? _playwright;
@@ -25,6 +28,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private readonly ConcurrentQueue<string> _pageErrors = new();
     private readonly ConcurrentDictionary<IRequest, byte> _pendingRequests = new();
     private string _text = "Original text";
+    private int _flyoutX = ClosedFlyoutX;
     private int _treeRequests;
     private volatile bool _rejectWrites;
     private int _disposed;
@@ -224,12 +228,57 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Empty(_pageErrors);
     }
 
-    private object Label() => new
+    [InspectorBrowserFixtureFact]
+    public async Task OffscreenElement_IsDimmedInTreeAndNotDrawnOnPreview()
+    {
+        var flyoutRow = Page.Locator(".devflow-element[data-id='fixture-flyout-row']");
+        var flyoutTreeRow = Page.Locator(".df-tree-node[data-tree-id='fixture-flyout-row']");
+        var labelTreeRow = Page.Locator(".df-tree-node[data-tree-id='fixture-label']");
+        var badge = Page.Locator("#df-badge");
+        var dimmed = new System.Text.RegularExpressions.Regex(@"\bdf-hidden-el\b");
+
+        await Expect(flyoutRow).ToHaveAttributeAsync("data-offscreen", "true");
+        await Expect(flyoutRow).ToBeHiddenAsync();
+        await Expect(flyoutTreeRow).ToHaveClassAsync(dimmed);
+        await Expect(Overlay).Not.ToHaveAttributeAsync("data-offscreen", "true");
+        await Expect(labelTreeRow).Not.ToHaveClassAsync(dimmed);
+
+        await flyoutTreeRow.HoverAsync();
+        await Expect(flyoutRow).Not.ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdf-hover\b"));
+        await Expect(badge).ToBeHiddenAsync();
+
+        await flyoutTreeRow.ClickAsync();
+        await Expect(Page.Locator("#df-status")).ToHaveTextAsync("Grid (off-screen)");
+
+        // Opening the flyout brings the row back into the Preview and the tree.
+        Volatile.Write(ref _flyoutX, OpenFlyoutX);
+        await Expect(flyoutRow).Not.ToHaveAttributeAsync("data-offscreen", "true", new() { Timeout = 10_000 });
+        await Expect(flyoutRow).ToBeVisibleAsync();
+        await Expect(flyoutTreeRow).Not.ToHaveClassAsync(dimmed);
+
+        // Closing it again dismisses a hover on it even though the pointer never moves.
+        await flyoutRow.HoverAsync();
+        await Expect(badge).ToBeVisibleAsync();
+        Volatile.Write(ref _flyoutX, ClosedFlyoutX);
+        await Expect(flyoutRow).ToHaveAttributeAsync("data-offscreen", "true", new() { Timeout = 10_000 });
+        await Expect(badge).ToBeHiddenAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    private object Label(params object[] children) => new
     {
         id = "fixture-label", type = "Label", automationId = "FixtureLabel",
         text = Volatile.Read(ref _text), isVisible = true, isEnabled = true,
         bounds = new { x = 20, y = 30, width = 250, height = 40 },
         sourceFile = "FixturePage.xaml", sourceLine = 2,
+        children,
+    };
+
+    // A Shell flyout row: while closed it is realized left of the window yet still reported as displayed.
+    private object FlyoutRow() => new
+    {
+        id = "fixture-flyout-row", type = "Grid", isVisible = true, isEnabled = true,
+        bounds = new { x = Volatile.Read(ref _flyoutX), y = 100, width = 320, height = 50 },
         children = Array.Empty<object>(),
     };
 
@@ -237,7 +286,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     {
         id = "fixture-page", type = "ContentPage", isVisible = true, isEnabled = true,
         bounds = new { x = 0, y = 0, width = 400, height = 300 },
-        children = new[] { Label() },
+        children = new[] { Label(FlyoutRow()) },
     };
 
     public async Task DisposeAsync()

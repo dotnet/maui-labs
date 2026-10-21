@@ -83,6 +83,12 @@ from producing negative offsets.
 Browser coordinates are converted from the fit-scaled viewport back to screenshot coordinates,
 then translated to window coordinates with the frame's root offset before hit testing.
 
+Elements the Agent reports as displayed can still lie wholly outside the frame (a closed Shell
+flyout is realized left of the window). The renderer marks those overlays `data-offscreen="true"`
+after the root offset is applied; the client dims their tree rows, does not draw or hover-highlight
+them on the Preview, and tags the status line `(off-screen)`. `data-isVisible` keeps the Agent's
+value.
+
 ## Global mutation lease
 
 All state-changing calls use one lease per running app. Browser tabs, VS Code, Canvas, MCP, and CLI

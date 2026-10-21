@@ -336,6 +336,7 @@ body.df-mode-inspect #app-viewport { cursor: crosshair; }
 /* ── Element overlays ── */
 .devflow-element { position: absolute; box-sizing: border-box; }
 .devflow-element[data-isvisible="false"] { pointer-events: none; }
+.devflow-element[data-offscreen="true"] { visibility: hidden; }
 .devflow-element.df-hover { outline: 1px solid var(--df-outline-hover); background: var(--df-tint-hover); }
 .devflow-element.df-hover.df-hover-interactive { outline-color: var(--df-success); }
 .devflow-element.df-hover.df-hover-noninteractive { outline-style: dashed; background: transparent; }
