@@ -93,9 +93,8 @@ CI runs this assembly through the shared `_device-tests.yml` workflow on
 Ubuntu 24.04 with the pinned `maui-android` workload. The repository-built
 `maui` CLI installs the Android 35 Google APIs system image, creates an emulator,
 and performs a bounded headless cold boot before DeviceRunners launches the
-tests. This is execution coverage, not a Playground build. The Android manifest
-keeps the fully-qualified test activity and adds a package-relative launcher
-alias for DeviceRunners' default `MainActivity` convention.
+tests. This is execution coverage, not a Playground build. The test activity's
+explicit Android name matches DeviceRunners' default `MainActivity` convention.
 
 For live OpenAI baseline tests, configure the device-test user secrets:
 
