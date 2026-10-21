@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Concurrent;
 using System.Linq;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
@@ -20,6 +21,7 @@ public class AvdManager
 	readonly AvdManagerRunner? _runner;
 	readonly EmulatorRunner? _emulatorRunner;
 	readonly Adb? _adb;
+	readonly ConcurrentQueue<string> _emulatorOutput = new();
 
 	public AvdManager(Func<string?> getSdkPath, Func<string?> getJdkPath, Adb? adb = null)
 	{
@@ -33,7 +35,12 @@ public class AvdManager
 
 		var emulatorPath = ResolveEmulatorPath(sdkPath);
 		if (emulatorPath != null)
-			_emulatorRunner = new EmulatorRunner(emulatorPath, env);
+			_emulatorRunner = new EmulatorRunner(emulatorPath, env, (level, message) =>
+			{
+				_emulatorOutput.Enqueue(message);
+				while (_emulatorOutput.Count > 20)
+					_emulatorOutput.TryDequeue(out _);
+			});
 		_emulatorPath = emulatorPath;
 	}
 
@@ -281,8 +288,9 @@ public class AvdManager
 					return; // Already running, nothing to do
 			}
 
+			_emulatorOutput.Clear();
 			List<string>? additionalArgs = noWindow
-				? ["-no-window", "-no-audio", "-no-boot-anim", "-gpu", "swiftshader_indirect"]
+				? ["-no-window", "-no-audio", "-no-boot-anim", "-gpu", "swiftshader"]
 				: null;
 
 			if (wait && _adb?.Runner != null)
@@ -292,7 +300,7 @@ public class AvdManager
 				if (!result.Success)
 					throw new MauiToolException(
 						ErrorCodes.AndroidEmulatorNotFound,
-						result.ErrorMessage ?? $"Failed to boot AVD '{name}'");
+						WithEmulatorOutput(result.ErrorMessage ?? $"Failed to boot AVD '{name}'"));
 			}
 			else
 			{
@@ -341,9 +349,9 @@ public class AvdManager
 					process.Dispose();
 					throw new MauiToolException(
 						ErrorCodes.AndroidEmulatorNotFound,
-						$"Emulator exited immediately with code {launcherExitCode}. " +
+						WithEmulatorOutput($"Emulator exited immediately with code {launcherExitCode}. " +
 						$"This often means stale lock files exist. " +
-						$"Try stopping all emulators first with: maui android emulator stop");
+						$"Try stopping all emulators first with: maui android emulator stop"));
 				}
 
 				// Release the process handle; the emulator continues running independently.
@@ -356,6 +364,12 @@ public class AvdManager
 				ErrorCodes.AndroidEmulatorNotFound,
 				$"Failed to start AVD '{name}': {ex.Message}");
 		}
+	}
+
+	string WithEmulatorOutput(string message)
+	{
+		var output = string.Join(Environment.NewLine, _emulatorOutput);
+		return string.IsNullOrEmpty(output) ? message : $"{message}{Environment.NewLine}{output}";
 	}
 
 	public async Task DeleteAvdAsync(string name, CancellationToken cancellationToken = default)

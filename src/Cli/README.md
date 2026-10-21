@@ -232,7 +232,7 @@ maui android emulator start MyEmulator --no-window --cold-boot --wait --ci
 ```
 
 `emulator start --no-window` disables the emulator window, audio, and boot
-animation and selects software graphics (`-gpu swiftshader_indirect`). It works
+animation and selects software graphics (`-gpu swiftshader`). It works
 with or without `--wait`; omit it to preserve the emulator's normal display and
 graphics settings. `--wait` uses the upstream boot checks (Android boot completed
 and package manager ready), with a five-minute boot timeout; without it the CLI
