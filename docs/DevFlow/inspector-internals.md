@@ -119,8 +119,11 @@ elements to source file, line, column, and a build-time content hash. VS Code co
 file hash before opening the recorded line and warns when the file changed after the app was built.
 
 Source locations are emitted only when the runtime element can be matched conservatively to its
-XAML declaration. Repeated same-type siblings need sibling-unique `AutomationId` values; otherwise
-their source actions are withheld rather than risk opening or editing the wrong declaration.
+XAML declaration. Repeated same-type siblings, such as the two `Label`s in the default template,
+are told apart by a sibling-unique `AutomationId`, or when every one of them declares a different
+literal `Text` that the runtime element still shows. Otherwise (bound, duplicated, or
+code-behind-changed text) their source actions are withheld rather than risk opening or editing
+the wrong declaration; give those elements a unique `AutomationId` to map them.
 
 Source maps are disabled outside Debug by default because they embed XAML text and source paths.
 They can be disabled explicitly:

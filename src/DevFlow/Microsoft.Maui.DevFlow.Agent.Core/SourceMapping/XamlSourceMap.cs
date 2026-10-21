@@ -3,13 +3,18 @@ using System.Xml.Linq;
 
 namespace Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 
+/// <param name="Text">
+/// The element's literal <c>Text</c> attribute, or null when absent or a markup extension. Tells
+/// same-type siblings apart, since the runtime element must still show this text to be mapped.
+/// </param>
 public readonly record struct XamlSourceEntry(
     int Line,
     int Column,
     string TypeName,
     int ChildCount,
     string? AutomationId = null,
-    string? FullTypeName = null);
+    string? FullTypeName = null,
+    string? Text = null);
 
 public sealed class XamlSourceMap
 {
@@ -97,7 +102,8 @@ public sealed class XamlSourceMap
                 element.Name.LocalName,
                 children.Count,
                 usableAutomationId,
-                ResolveFullTypeName(element));
+                ResolveFullTypeName(element),
+                LiteralText(element));
         }
 
         var childIds = children.Select(child => child.Attribute("AutomationId")?.Value).ToList();
@@ -117,6 +123,13 @@ public sealed class XamlSourceMap
             var childPath = path.Length == 0 ? index.ToString() : $"{path}/{index}";
             Visit(children[index], childPath, map, uniqueId);
         }
+    }
+
+    // MAUI treats a value as a markup extension when it starts with '{' after trimming.
+    private static string? LiteralText(XElement element)
+    {
+        var text = element.Attribute("Text")?.Value;
+        return text is null || text.TrimStart().StartsWith('{') ? null : text;
     }
 
     private static string? ResolveFullTypeName(XElement element)
