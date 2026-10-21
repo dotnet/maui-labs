@@ -354,6 +354,12 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         Assert.Equal(40, nativeHost.Bounds.Height, precision: 1);
         Assert.Equal(80, nativeChild.Bounds.Width, precision: 1);
         Assert.Equal(80, nativeChild.Bounds.Height, precision: 1);
+        Assert.NotNull(nativeHost.WindowBounds);
+        Assert.NotNull(nativeChild.WindowBounds);
+        Assert.Equal(40, nativeHost.WindowBounds.Width, precision: 1);
+        Assert.Equal(40, nativeHost.WindowBounds.Height, precision: 1);
+        Assert.Equal(80, nativeChild.WindowBounds.Width, precision: 1);
+        Assert.Equal(80, nativeChild.WindowBounds.Height, precision: 1);
         foreach (var context in active.Where(c => HostKind(c) != "blazor"))
         {
             var prefix = $"web-{context.GetProperty("index").GetInt32()}-";

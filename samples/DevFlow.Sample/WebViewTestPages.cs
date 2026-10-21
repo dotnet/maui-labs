@@ -192,14 +192,15 @@ public sealed class MixedWebViewTestPage : ContentPage
             AutomationId = "WebViewNativeClipped",
             Text = "Clipped native fixture",
             LineBreakMode = LineBreakMode.NoWrap,
+            WidthRequest = 80,
+            HeightRequest = 80,
             MinimumWidthRequest = 80,
             MinimumHeightRequest = 80,
             MaximumWidthRequest = 80,
             MaximumHeightRequest = 80,
-            // Fill the explicit AbsoluteLayout allocation instead of using native text's desired size.
+            // Fill prevents Android intrinsic-width shrinking; no background keeps WinUI sizing on the TextBlock.
             HorizontalOptions = LayoutOptions.Fill,
-            VerticalOptions = LayoutOptions.Fill,
-            BackgroundColor = Color.FromArgb("#345678")
+            VerticalOptions = LayoutOptions.Fill
         };
         AbsoluteLayout.SetLayoutBounds(clippedLabel, new Rect(0, 0, 80, 80));
         nativeClip.Add(clippedLabel);
