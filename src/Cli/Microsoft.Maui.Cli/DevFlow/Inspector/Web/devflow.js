@@ -1388,6 +1388,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   viewport.addEventListener('pointerleave', () => setHover(null));
 
   // ── Selection: screenshot ↔ tree ↔ property grid ──
+  // Status last written for the selection. A refresh rewrites the line only while it still shows
+  // this, so messages from other actions (tap, recording, mode) are never overwritten.
+  let selectionStatus = '';
+  function selectionStatusFor(el) {
+    return elementLabel(el) + (el.dataset.offscreen === 'true' ? ' (off-screen)' : '');
+  }
   function selectElement(id) {
     viewport.querySelectorAll('.devflow-element.df-selected').forEach((el) => el.classList.remove('df-selected'));
     const previousId = selectedId;
@@ -1398,7 +1404,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     if (el) el.classList.add('df-selected');
     elementTree.updateSelection();
     elementTree.reveal(id);
-    if (el) { propertyGrid.open(el); setStatus(elementLabel(el) + (el.dataset.offscreen === 'true' ? ' (off-screen)' : '')); }
+    if (el) { propertyGrid.open(el); setStatus(selectionStatus = selectionStatusFor(el)); }
     updateHostButtons();
     updateFlowButtons();
     postSelectionToHost(el);
@@ -1410,7 +1416,11 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     elementTree.syncStructure();
     if (selectedId) {
       const el = elById(selectedId);
-      if (el) el.classList.add('df-selected'); else selectElement(null);
+      if (el) {
+        el.classList.add('df-selected');
+        const status = selectionStatusFor(el);
+        if (status !== selectionStatus && tb.status?.textContent === selectionStatus) setStatus(selectionStatus = status);
+      } else selectElement(null);
     }
     if (hoveredEl && (!hoveredEl.isConnected || hoveredEl.dataset.offscreen === 'true')) setHover(null);
   }

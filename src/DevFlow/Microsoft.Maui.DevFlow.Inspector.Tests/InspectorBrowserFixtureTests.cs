@@ -235,6 +235,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         var flyoutTreeRow = Page.Locator(".df-tree-node[data-tree-id='fixture-flyout-row']");
         var labelTreeRow = Page.Locator(".df-tree-node[data-tree-id='fixture-label']");
         var badge = Page.Locator("#df-badge");
+        var status = Page.Locator("#df-status");
         var dimmed = new System.Text.RegularExpressions.Regex(@"\bdf-hidden-el\b");
 
         await Expect(flyoutRow).ToHaveAttributeAsync("data-offscreen", "true");
@@ -248,13 +249,14 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Expect(badge).ToBeHiddenAsync();
 
         await flyoutTreeRow.ClickAsync();
-        await Expect(Page.Locator("#df-status")).ToHaveTextAsync("Grid (off-screen)");
+        await Expect(status).ToHaveTextAsync("Grid (off-screen)");
 
         // Opening the flyout brings the row back into the Preview and the tree.
         Volatile.Write(ref _flyoutX, OpenFlyoutX);
         await Expect(flyoutRow).Not.ToHaveAttributeAsync("data-offscreen", "true", new() { Timeout = 10_000 });
         await Expect(flyoutRow).ToBeVisibleAsync();
         await Expect(flyoutTreeRow).Not.ToHaveClassAsync(dimmed);
+        await Expect(status).ToHaveTextAsync("Grid");
 
         // Closing it again dismisses a hover on it even though the pointer never moves.
         await flyoutRow.HoverAsync();
@@ -262,6 +264,13 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Volatile.Write(ref _flyoutX, ClosedFlyoutX);
         await Expect(flyoutRow).ToHaveAttributeAsync("data-offscreen", "true", new() { Timeout = 10_000 });
         await Expect(badge).ToBeHiddenAsync();
+        await Expect(status).ToHaveTextAsync("Grid (off-screen)");
+
+        // A refresh only updates the selection's own status text, never another message.
+        await Page.Locator("#df-mode-inspect").ClickAsync();
+        Volatile.Write(ref _flyoutX, OpenFlyoutX);
+        await Expect(flyoutRow).Not.ToHaveAttributeAsync("data-offscreen", "true", new() { Timeout = 10_000 });
+        await Expect(status).ToContainTextAsync("Inspect mode");
         Assert.Empty(_pageErrors);
     }
 
