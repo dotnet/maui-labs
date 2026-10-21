@@ -27,6 +27,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private string _text = "Original text";
     private int _treeRequests;
     private volatile bool _rejectWrites;
+    private readonly TaskCompletionSource _screenshotHeld = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private volatile TaskCompletionSource? _screenshotGate;
     private int _disposed;
 
     private IPage Page => _page!;
@@ -80,9 +82,24 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 if (name == "Text") Volatile.Write(ref _text, value);
                 return Results.Json(new { success = true });
             });
+            _agent.MapPost("/api/v1/ui/actions/tap", () =>
+            {
+                Volatile.Write(ref _text, "Tapped");
+                return Results.Json(new { success = true });
+            });
             _agent.MapGet("/api/v1/ui/screenshot", () => Results.File(
                 Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAABdElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+Bn+3AAHo8fTrAAAAAElFTkSuQmCC"),
-                "image/png"));
+                "image/png"))
+                .AddEndpointFilter(async (context, next) =>
+                {
+                    // Park only post-tap captures so the page's periodic poll cannot trip the gate first.
+                    if (Volatile.Read(ref _text) == "Tapped" && _screenshotGate is { } gate)
+                    {
+                        _screenshotHeld.TrySetResult();
+                        await gate.Task.WaitAsync(context.HttpContext.RequestAborted);
+                    }
+                    return await next(context);
+                });
             await _agent.StartAsync();
             var agentPort = new Uri(_agent.Urls.Single()).Port;
 
@@ -175,6 +192,25 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task Tap_ShowsUpdatingHintUntilSlowCaptureRefreshesPreview()
+    {
+        var hint = Page.Locator("#df-preview-pending");
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _screenshotGate = gate;
+        await Expect(hint).ToBeHiddenAsync();
+
+        await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+        await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Expect(hint).ToBeVisibleAsync();
+        await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+
+        gate.SetResult();
+        await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped", new() { Timeout = 10_000 });
+        await Expect(hint).ToBeHiddenAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task SourceState_RequiresSuccessfulRuntimeEditBeforeEnablingPersistence()
     {
         await Expect(SourceButton).ToHaveAttributeAsync("data-state", "clean");
@@ -230,6 +266,14 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         text = Volatile.Read(ref _text), isVisible = true, isEnabled = true,
         bounds = new { x = 20, y = 30, width = 250, height = 40 },
         sourceFile = "FixturePage.xaml", sourceLine = 2,
+        children = new[] { Button() },
+    };
+
+    // Nested under the Label because the Inspector scopes each frame to the window's last child.
+    private static object Button() => new
+    {
+        id = "fixture-button", type = "Button", text = "Tap me", isVisible = true, isEnabled = true,
+        bounds = new { x = 20, y = 90, width = 160, height = 44 },
         children = Array.Empty<object>(),
     };
 
@@ -243,6 +287,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     public async Task DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _screenshotGate?.TrySetResult();
         try
         {
             if (_page is { IsClosed: false })

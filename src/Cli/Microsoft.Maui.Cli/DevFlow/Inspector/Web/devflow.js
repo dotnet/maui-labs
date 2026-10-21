@@ -18,6 +18,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   const vpWrap = document.getElementById('df-viewport-wrap');
   const disconnectedOverlay = document.getElementById('df-disconnected-overlay');
   const retryConnectionBtn = document.getElementById('df-retry-connection');
+  const previewPending = document.getElementById('df-preview-pending');
   let fitMode = true;   // default: scale down to fit (never upscale past 1:1)
   let scaleRaf = 0;
   let rootOffsetX = parseFloat(viewport.dataset.rootOffsetX) || 0;
@@ -411,9 +412,11 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let refreshTimer = null;
   function scheduleRefresh(delayMs) {
     if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
+    refreshTimer = setTimeout(async () => {
       refreshTimer = null;
-      refreshState();
+      await refreshState();
+      // A newer scheduled refresh means the Preview is still stale.
+      if (!refreshTimer) previewPending.classList.add('df-hidden');
     }, delayMs || 300);
   }
   if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(3000));
@@ -746,6 +749,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         if (tap.ok && tap.target) await recordStep('tap', tap.target);
         else if (!tap.target) setStatus('Tap not recorded — no element under the cursor.');
       }
+      // An accepted tap leaves the Preview stale until this refresh lands.
+      if (tap.ok) previewPending.classList.remove('df-hidden');
       scheduleRefresh(400);
     } catch (err) {
       console.error('Tap failed:', err);
