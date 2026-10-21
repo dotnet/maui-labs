@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Xml.Linq;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
@@ -73,6 +74,7 @@ public class WebViewHttpFixtureTests
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             var body = await http.GetStringAsync(fixture.GetUrl("maccatalyst"));
             Assert.Contains("HTTP WebView fixture", body);
+            Assert.Contains("fixture-button", body);
             await WaitForAsync(() => !fixture.ServedResponses.IsEmpty);
             var served = Assert.Single(fixture.ServedResponses);
             Assert.Equal("/index.html", served.Path);
@@ -81,6 +83,8 @@ public class WebViewHttpFixtureTests
             Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(body), served.BodyLength);
             Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes(body))), served.BodySha256);
+            using var missing = await http.GetAsync($"http://127.0.0.1:{port}/missing.html");
+            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         }
         finally
         {

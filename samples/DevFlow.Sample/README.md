@@ -63,7 +63,7 @@ host-sized PNGs with host-specific colors, HTTP and packaged relative navigation
 reload/recreation, console delivery, measured layout defects and native-only
 scope/revision stability. It returns to the native page after each case.
 
-All 24 generic fixture cases run on the Android, iOS, Mac Catalyst and Windows
+All 23 generic fixture cases run on the Android, iOS, Mac Catalyst and Windows
 MAUI sample heads. They carry `fixture=GenericWebView` separately from the
 `Category=WebView` trait. GTK excludes only that fixture because its linked Shell
 does not compile these pages; its existing Blazor WebView and native integration

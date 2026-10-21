@@ -272,41 +272,6 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task HttpFixture_ServesRealResourcesRejectsUnknownPathsAndStopsOwnedListener()
-    {
-        var fixture = new WebViewHttpFixture();
-        var port = fixture.Port;
-        try
-        {
-            using var idleConnection = new System.Net.Sockets.TcpClient();
-            await idleConnection.ConnectAsync("127.0.0.1", port);
-            using (var abandoned = new System.Net.Sockets.TcpClient())
-            {
-                await abandoned.ConnectAsync("127.0.0.1", port);
-                await WaitForAsync(() => Task.FromResult(fixture.AcceptedConnectionCount >= 2));
-                await abandoned.GetStream().WriteAsync(
-                    System.Text.Encoding.ASCII.GetBytes("GET /index.html HTTP/1.1\r\nX-Abandoned: "));
-                await WaitForAsync(() => Task.FromResult(fixture.StartedRequestCount == 1));
-                abandoned.Client.LingerState = new System.Net.Sockets.LingerOption(true, 0);
-                abandoned.Client.Close();
-            }
-            await WaitForAsync(() => Task.FromResult(!fixture.ClientDisconnects.IsEmpty));
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var html = await http.GetStringAsync(fixture.GetUrl("maccatalyst"));
-            Assert.Contains("HTTP WebView fixture", html);
-            Assert.Contains("fixture-button", html);
-            using var missing = await http.GetAsync($"http://127.0.0.1:{port}/missing.html");
-            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
-        }
-        finally
-        {
-            await fixture.DisposeAsync();
-        }
-        using var socket = new System.Net.Sockets.TcpClient();
-        await Assert.ThrowsAsync<System.Net.Sockets.SocketException>(() => socket.ConnectAsync("127.0.0.1", port));
-    }
-
-    [Fact]
     public async Task MixedHosts_UnnamedAndDuplicateIds_RouteStateSourceAndNativePngIndependently()
     {
         var active = await EnsureMixedAsync();
@@ -348,25 +313,6 @@ public class GenericWebViewTests(AppFixture app, ITestOutputHelper output)
         var nativeChild = await FindElementAsync("WebViewNativeClipped");
         var result = await AnalyzeAsync(includeDom: true);
         await WriteLayoutEvidenceAsync(result, active);
-        if (Platform == "windows")
-        {
-            foreach (var property in new[]
-            {
-                "Background", "Background.IsEmpty", "BackgroundColor", "Style",
-                "VerticalTextAlignment", "Clip", "Shadow", "WidthRequest", "HeightRequest",
-                "Handler.NeedsContainer", "Handler.HasContainer", "Handler.ContainerView",
-                "Handler.ContainerView.Width", "Handler.ContainerView.Height",
-                "Handler.ContainerView.MinHeight", "Handler.ContainerView.ActualHeight",
-                "Handler.ContainerView.RenderSize",
-                "Handler.PlatformView", "Handler.PlatformView.Width", "Handler.PlatformView.Height",
-                "Handler.PlatformView.MinHeight", "Handler.PlatformView.MaxHeight",
-                "Handler.PlatformView.ActualWidth", "Handler.PlatformView.ActualHeight",
-                "Handler.PlatformView.RenderSize", "Handler.PlatformView.VerticalAlignment",
-                "Handler.PlatformView.Parent"
-            })
-                Output.WriteLine($"Native clipping Label {property}: " +
-                    JsonSerializer.Serialize(await Client.GetPropertyAsync(nativeChild.Id, property)));
-        }
         Assert.NotNull(nativeHost.Bounds);
         Assert.NotNull(nativeChild.Bounds);
         Assert.Equal(40, nativeHost.Bounds.Width, precision: 1);
