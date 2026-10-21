@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Providers.Android;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Xunit;
@@ -31,12 +32,28 @@ public class EmulatorLaunchTests
 		if (coldBoot)
 			expected.Add("-no-snapshot-load");
 		if (noWindow)
-			expected.AddRange(["-no-window", "-no-audio", "-no-boot-anim", "-gpu", "swiftshader_indirect"]);
+			expected.AddRange(["-no-window", "-no-audio", "-no-boot-anim", "-gpu", "swiftshader"]);
 		Assert.Equal(expected, File.ReadAllLines(sdk.ArgumentsPath));
 		if (wait)
 			Assert.Contains("shell pm path android", File.ReadAllText(sdk.AdbCallsPath), StringComparison.Ordinal);
 		else
 			Assert.DoesNotContain("shell pm path android", File.ReadAllText(sdk.AdbCallsPath), StringComparison.Ordinal);
+	}
+
+	[UnixTheory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task StartAvdAsync_EmulatorExits_IncludesNativeFailure(bool wait)
+	{
+		using var sdk = new ScriptedAndroidSdk(failLaunch: true);
+		var adb = new Adb(() => sdk.Path);
+		var manager = new AvdManager(() => sdk.Path, () => null, adb);
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+		var error = await Assert.ThrowsAsync<MauiToolException>(() =>
+			manager.StartAvdAsync("TestEmulator", wait: wait, cancellationToken: timeout.Token, noWindow: true));
+
+		Assert.Contains("Synthetic emulator startup failure", error.Message, StringComparison.Ordinal);
 	}
 
 	sealed class UnixTheoryAttribute : TheoryAttribute
@@ -57,11 +74,15 @@ public class EmulatorLaunchTests
 		public string AdbCallsPath => System.IO.Path.Combine(Path, "platform-tools", "calls.txt");
 		string PidPath => System.IO.Path.Combine(Path, "emulator", "pid.txt");
 
-		public ScriptedAndroidSdk()
+		public ScriptedAndroidSdk(bool failLaunch = false)
 		{
 			// Only replace the external executables: the provider, AVD manager and
 			// upstream launch/boot orchestration all run unchanged.
-			WriteExecutable("emulator", "emulator", """
+			WriteExecutable("emulator", "emulator", failLaunch ? """
+				#!/bin/sh
+				echo "Synthetic emulator startup failure" >&2
+				exit 1
+				""" : """
 				#!/bin/sh
 				cd "$(dirname "$0")"
 				echo $$ > pid.txt
