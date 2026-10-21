@@ -176,11 +176,16 @@ builder.AddMauiDevFlowAgent(options =>
 
 ### WebView screenshots
 
-`maui devflow webview Page captureScreenshot` and `maui_cdp_screenshot` use the
+`maui devflow webview Page captureScreenshot` and `maui_webview_screenshot` use the
 existing native-first `/api/v1/webview/screenshot` endpoint instead of sending
 `Page.captureScreenshot` directly through CDP. The selected WebView is forwarded
 by the portable `AgentClient.GetWebViewScreenshotAsync(webviewId: null)` API.
-The CLI still returns base64; MCP returns an `image/png` content block.
+Capture uses the registered native control, with CDP fallback. The CLI returns
+base64; MCP returns an `image/png` content block.
+
+Use `maui_cdp_screenshot` for direct CDP page-only PNG capture without native
+fallback. `maui_screenshot` captures the app page, an element, or the fullscreen
+native surface.
 
 The client checks the eight-byte PNG signature before returning image bytes.
 HTTP failures include the agent's response body; invalid signatures produce an

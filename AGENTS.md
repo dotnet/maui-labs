@@ -442,7 +442,8 @@ DevFlow exposes 73 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_battery_info` | Battery level, state, power source |
 | `maui_capabilities` | Get capabilities supported by the connected agent |
 | `maui_cdp_evaluate` | Execute JavaScript in Blazor WebView via CDP |
-| `maui_cdp_screenshot` | WebView screenshot via CDP |
+| `maui_cdp_screenshot` | Page-only PNG via direct CDP capture; no native fallback |
+| `maui_webview_screenshot` | Registered WebView PNG via native control capture with CDP fallback |
 | `maui_cdp_source` | Get WebView page source |
 | `maui_cdp_webviews` | List available WebViews |
 | `maui_clear` | Clear text from an element |

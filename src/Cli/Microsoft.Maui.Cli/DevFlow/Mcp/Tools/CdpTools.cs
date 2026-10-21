@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -40,10 +41,54 @@ public sealed class CdpTools
         }
     }
 
-    [McpServerTool(Name = "maui_cdp_screenshot"), Description("Capture a screenshot of a Blazor WebView using the agent's native-first screenshot path. Returns the PNG image directly.")]
+    [McpServerTool(Name = "maui_cdp_screenshot"), Description("Capture WebView page content directly via CDP Page.captureScreenshot. Returns PNG; fails if CDP capture is unsupported or invalid. For native-rendered WebView pixels, use maui_webview_screenshot.")]
     public static async Task<ContentBlock[]> CdpScreenshot(
         McpAgentSession session,
-        [Description("WebView ID or index to target (optional if only one WebView)")] string? webviewId = null,
+        [Description("Canonical contextId of the registered WebView (optional if only one WebView)")] string? webviewId = null,
+        [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+    {
+        using var agent = await session.GetAgentClientAsync(agentPort);
+        try
+        {
+            var response = await agent.SendCdpCommandAsync("Page.captureScreenshot", new JsonObject
+            {
+                ["format"] = "png"
+            }, webviewId);
+            if (!response.TryGetProperty("result", out var result)
+                || result.ValueKind != JsonValueKind.Object
+                || !result.TryGetProperty("data", out var data)
+                || data.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(data.GetString()))
+                throw new McpException("CDP Page.captureScreenshot returned no nonempty base64 image in result.data.");
+
+            byte[] pngBytes;
+            try
+            {
+                pngBytes = Convert.FromBase64String(data.GetString()!);
+            }
+            catch (FormatException)
+            {
+                throw new McpException("CDP Page.captureScreenshot returned invalid base64 image data.");
+            }
+
+            if (!pngBytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
+                throw new McpException("CDP Page.captureScreenshot did not return a PNG image.");
+
+            return [
+                new TextContentBlock { Text = $"CDP WebView screenshot captured ({pngBytes.Length} bytes)" },
+                ImageContentBlock.FromBytes(pngBytes, "image/png")
+            ];
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or JsonException)
+        {
+            throw new McpException(ex.Message);
+        }
+    }
+
+    [McpServerTool(Name = "maui_webview_screenshot"), Description("Capture a registered standard, Hybrid, or Blazor WebView by its canonical contextId. Uses native control capture with CDP fallback. Returns PNG. For direct page-only CDP capture, use maui_cdp_screenshot.")]
+    public static async Task<ContentBlock[]> WebViewScreenshot(
+        McpAgentSession session,
+        [Description("Canonical contextId of the registered WebView (optional if only one WebView)")] string? webviewId = null,
         [Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
     {
         using var agent = await session.GetAgentClientAsync(agentPort);

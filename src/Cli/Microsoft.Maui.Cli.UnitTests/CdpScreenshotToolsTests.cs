@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow.Mcp;
 using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
@@ -10,37 +12,66 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class CdpScreenshotToolsTests
 {
     [Fact]
-    public async Task Screenshot_UsesNativeEndpointAndReturnsPng()
+    public async Task Screenshot_UsesOnlyDirectCdpAndReturnsPng()
     {
-        await using var server = new MockAgentServer();
+        var response = JsonSerializer.Serialize(new { result = new { data = Convert.ToBase64String(MockAgentResponses.ScreenshotPng) } });
+        await using var server = new MockAgentServer { WebViewEvaluateResponse = response };
         await server.StartAsync();
         var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
 
         var content = await CdpTools.CdpScreenshot(session, "Left View/#");
 
-        Assert.Contains("screenshot captured", Assert.IsType<TextContentBlock>(content[0]).Text);
         var image = Assert.IsType<ImageContentBlock>(content[1]);
         Assert.Equal("image/png", image.MimeType);
-        Assert.Equal(MockAgentResponses.ScreenshotPng,
-            Convert.FromBase64String(System.Text.Encoding.UTF8.GetString(image.Data.Span)));
-        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
-        Assert.Equal("GET", request.Method);
-        Assert.Contains("webview=Left%20View%2F%23", request.QueryString);
-        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+        Assert.Equal(MockAgentResponses.ScreenshotPng, Convert.FromBase64String(Encoding.UTF8.GetString(image.Data.Span)));
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+        Assert.Equal("POST", request.Method);
+        Assert.Equal("?webview=Left%20View%2F%23", request.QueryString);
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal("Page.captureScreenshot", body.RootElement.GetProperty("method").GetString());
+        Assert.Equal("png", body.RootElement.GetProperty("params").GetProperty("format").GetString());
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
     }
 
     [Theory]
-    [InlineData(true, false, "PNG")]
-    [InlineData(false, true, "Failed to capture WebView screenshot")]
-    public async Task Screenshot_Failure_ThrowsUsefulMcpError(bool invalidPng, bool httpFailure, string expected)
+    [InlineData("{}", "result.data")]
+    [InlineData("""{"result":null}""", "result.data")]
+    [InlineData("""{"result":{}}""", "result.data")]
+    [InlineData("""{"result":{"data":null}}""", "result.data")]
+    [InlineData("""{"result":{"data":42}}""", "result.data")]
+    [InlineData("""{"result":{"data":""}}""", "result.data")]
+    [InlineData("""{"result":{"data":"  "}}""", "result.data")]
+    [InlineData("""{"result":{"data":"not base64!"}}""", "base64")]
+    [InlineData("""{"result":{"data":"cG5n"}}""", "PNG")]
+    [InlineData("""{"result":{"data":"iVBORw0KGg=="}}""", "PNG")]
+    [InlineData("""{"error":{"message":"Capture unsupported"}}""", "Capture unsupported")]
+    [InlineData("""{"result":{"exceptionDetails":{"exception":{"description":"Screenshot JS failure"}}}}""", "Screenshot JS failure")]
+    [InlineData("not JSON", "invalid JSON")]
+    public async Task Screenshot_InvalidCdpResponse_ThrowsWithoutNativeFallback(string response, string expected)
     {
-        await using var server = new MockAgentServer(
-            invalidWebViewScreenshot: invalidPng, failWebViewScreenshot: httpFailure);
+        await using var server = new MockAgentServer { WebViewEvaluateResponse = response };
         await server.StartAsync();
         var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
 
         var error = await Assert.ThrowsAsync<McpException>(() => CdpTools.CdpScreenshot(session));
 
         Assert.Contains(expected, error.Message);
+        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/webview/evaluate");
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
+    }
+
+    [Fact]
+    public async Task Screenshot_HttpFailure_PreservesAgentDetails()
+    {
+        await using var server = new MockAgentServer(
+            webViewEvaluateResponse: """{"error":"CDP target unavailable"}""", webViewResponseStatusCode: 400);
+        await server.StartAsync();
+        var session = new McpAgentSession { DefaultAgentHost = "127.0.0.1", DefaultAgentPort = server.Port };
+
+        var error = await Assert.ThrowsAsync<McpException>(() => CdpTools.CdpScreenshot(session));
+
+        Assert.Contains("HTTP 400", error.Message);
+        Assert.Contains("CDP target unavailable", error.Message);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/webview/screenshot");
     }
 }
