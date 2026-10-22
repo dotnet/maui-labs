@@ -176,9 +176,29 @@ public sealed class AguiChatComposition : INotifyPropertyChanged, IDisposable
     private void ConfigureAgent(UIAgentOptions options, string scenario)
     {
         var threadId = $"maui-{Guid.NewGuid():N}";
+        var showWeatherCard = AIFunctionFactory.Create(
+            (string conditions) =>
+            {
+                State.TryApplySnapshot(JsonSerializer.SerializeToElement(new
+                {
+                    weather = new { temperature = 20, conditions, humidity = 50, wind_speed = 10 },
+                }));
+                return "Weather card shown.";
+            },
+            "show_weather_card",
+            "Show a weather card in the client.");
+        var renderPlan = AIFunctionFactory.Create(
+            (Plan plan) =>
+            {
+                State.TryApplySnapshot(JsonSerializer.SerializeToElement(new { plan }));
+                return "Plan rendered.";
+            },
+            "render_plan",
+            "Render plan progress in the client.");
         options.ChatOptions = new ChatOptions
         {
             AllowMultipleToolCalls = PredictiveToolCallPolicy.ForAgui(scenario),
+            Tools = [showWeatherCard, renderPlan],
             RawRepresentationFactory = _ => new RunAgentInput
             {
                 ThreadId = threadId,
@@ -195,17 +215,6 @@ public sealed class AguiChatComposition : INotifyPropertyChanged, IDisposable
         };
         options.AddBlockHandler(new AguiStateEventHandler(State));
         options.RegisterUIAction(AIFunctionFactory.Create(
-            (string conditions) =>
-            {
-                State.TryApplySnapshot(JsonSerializer.SerializeToElement(new
-                {
-                    weather = new { temperature = 20, conditions, humidity = 50, wind_speed = 10 },
-                }));
-                return "Weather card shown.";
-            },
-            "show_weather_card",
-            "Show a weather card in the client."));
-        options.RegisterUIAction(AIFunctionFactory.Create(
             (DocumentProposal proposal, bool? accepted = null) =>
             {
                 if (accepted is null)
@@ -215,14 +224,6 @@ public sealed class AguiChatComposition : INotifyPropertyChanged, IDisposable
             "propose_document",
             "Present a document proposal for explicit client approval."),
             UIActionInvocationMode.Manual);
-        options.RegisterUIAction(AIFunctionFactory.Create(
-            (Plan plan) =>
-            {
-                State.TryApplySnapshot(JsonSerializer.SerializeToElement(new { plan }));
-                return "Plan rendered.";
-            },
-            "render_plan",
-            "Render plan progress in the client."));
     }
 }
 
