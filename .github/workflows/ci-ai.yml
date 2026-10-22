@@ -42,7 +42,7 @@ jobs:
   build:
     uses: ./.github/workflows/_build.yml
     with:
-      project-path: src/AIExtensions/AIExtensions.Packages.slnf
+      project-path: src/AIExtensions/AIExtensions.slnf
       project-name: ai-extensions
       run-tests: true
       pack: true
