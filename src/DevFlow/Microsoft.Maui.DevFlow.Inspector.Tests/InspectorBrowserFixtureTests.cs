@@ -31,6 +31,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private int _flyoutX = ClosedFlyoutX;
     private int _treeRequests;
     private volatile bool _rejectWrites;
+    private readonly TaskCompletionSource _screenshotHeld = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private volatile TaskCompletionSource? _screenshotGate;
     private int _disposed;
 
     private IPage Page => _page!;
@@ -84,9 +86,24 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 if (name == "Text") Volatile.Write(ref _text, value);
                 return Results.Json(new { success = true });
             });
+            _agent.MapPost("/api/v1/ui/actions/tap", () =>
+            {
+                Volatile.Write(ref _text, "Tapped");
+                return Results.Json(new { success = true });
+            });
             _agent.MapGet("/api/v1/ui/screenshot", () => Results.File(
                 Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAABdElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+Bn+3AAHo8fTrAAAAAElFTkSuQmCC"),
-                "image/png"));
+                "image/png"))
+                .AddEndpointFilter(async (context, next) =>
+                {
+                    // Park only post-tap captures so the page's periodic poll cannot trip the gate first.
+                    if (Volatile.Read(ref _text) == "Tapped" && _screenshotGate is { } gate)
+                    {
+                        _screenshotHeld.TrySetResult();
+                        await gate.Task.WaitAsync(context.HttpContext.RequestAborted);
+                    }
+                    return await next(context);
+                });
             await _agent.StartAsync();
             var agentPort = new Uri(_agent.Urls.Single()).Port;
 
@@ -175,6 +192,66 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Expect(SourceButton).ToBeEnabledAsync();
         Assert.True(Volatile.Read(ref _treeRequests) > initialTreeRequests);
         Assert.Equal(("Text", "Updated through HTTP"), Assert.Single(_writes));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_ShowsUpdatingHintUntilSlowCaptureRefreshesPreview()
+    {
+        var hint = Page.Locator("#df-preview-pending");
+        var button = Page.Locator(".devflow-element[data-id='fixture-button']");
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _screenshotGate = gate;
+        await Expect(hint).ToBeHiddenAsync();
+
+        var stateRequests = 0;
+        Page.Request += (_, request) =>
+        {
+            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal)) Interlocked.Increment(ref stateRequests);
+        };
+
+        // The server retries a capture that a tap invalidates, so only a response held in the
+        // browser is stale. Hold a real pre-tap /api/state response to keep a refresh in flight.
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/api/state", async route =>
+        {
+            var response = await route.FetchAsync();
+            held.SetResult();
+            await release.Task;
+            await route.FulfillAsync(new() { Response = response });
+        }, new() { Times = 1 });
+        try
+        {
+            // The online handler starts a debounced refresh, like a WebSocket event would.
+            await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+            await held.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            await button.ClickAsync();
+            await Expect(hint).ToBeVisibleAsync();
+            // Outlast the 400 ms post-tap refresh timer so it fires while the stale refresh is in flight.
+            await Page.WaitForTimeoutAsync(1000);
+            // A second tap's refresh also waits on the stale one, and both must share one post-tap capture.
+            await button.ClickAsync();
+            await Page.WaitForTimeoutAsync(1000);
+            var requestsBeforeRelease = Volatile.Read(ref stateRequests);
+            release.SetResult();
+
+            await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            // Let a duplicate post-tap request, if any, arrive before counting.
+            await Page.WaitForTimeoutAsync(500);
+            await Expect(hint).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            Assert.Equal(requestsBeforeRelease + 1, Volatile.Read(ref stateRequests));
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        gate.SetResult();
+        await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped", new() { Timeout = 10_000 });
+        await Expect(hint).ToBeHiddenAsync();
         Assert.Empty(_pageErrors);
     }
 
@@ -274,13 +351,21 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Empty(_pageErrors);
     }
 
-    private object Label(params object[] children) => new
+    private object Label() => new
     {
         id = "fixture-label", type = "Label", automationId = "FixtureLabel",
         text = Volatile.Read(ref _text), isVisible = true, isEnabled = true,
         bounds = new { x = 20, y = 30, width = 250, height = 40 },
         sourceFile = "FixturePage.xaml", sourceLine = 2,
-        children,
+        children = new[] { Button(), FlyoutRow() },
+    };
+
+    // Nested under the Label because the Inspector scopes each frame to the window's last child.
+    private static object Button() => new
+    {
+        id = "fixture-button", type = "Button", text = "Tap me", isVisible = true, isEnabled = true,
+        bounds = new { x = 20, y = 90, width = 160, height = 44 },
+        children = Array.Empty<object>(),
     };
 
     // A Shell flyout row: while closed it is realized left of the window yet still reported as displayed.
@@ -295,12 +380,13 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     {
         id = "fixture-page", type = "ContentPage", isVisible = true, isEnabled = true,
         bounds = new { x = 0, y = 0, width = 400, height = 300 },
-        children = new[] { Label(FlyoutRow()) },
+        children = new[] { Label() },
     };
 
     public async Task DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _screenshotGate?.TrySetResult();
         try
         {
             if (_page is { IsClosed: false })
