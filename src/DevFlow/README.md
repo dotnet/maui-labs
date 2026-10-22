@@ -404,6 +404,8 @@ support result in no action. As with other MCP elicitation, the host is trusted 
 request to a human rather than approve it automatically.
 Tokens expire after two minutes, are scoped to the detecting MCP session, and can be used only
 once. Responses revalidate the target and prompt and respect the app's global mutation lease.
+Dialog fingerprints retain 128 bits of SHA-256 and format geometry independently of the
+host's locale; the one-time response token is separate from the fingerprint.
 macOS uses AXPress, Windows uses UI Automation Invoke, Linux uses the connected agent, and
 Android/iOS Simulator input is restricted to the device associated with that agent. Physical
 iOS and unattributed system dialogs require manual interaction. macOS requires Accessibility

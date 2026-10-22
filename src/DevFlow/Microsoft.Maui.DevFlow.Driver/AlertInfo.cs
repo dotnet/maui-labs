@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -60,14 +61,14 @@ public static class NativeDialogIdentity
             identity
                 .Append(button.Label).Append(':')
                 .Append(button.Identifier).Append(':')
-                .Append(button.X).Append(',')
-                .Append(button.Y).Append(',')
-                .Append(button.Width).Append(',')
-                .Append(button.Height).Append('\n');
+                .Append(button.X.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(button.Y.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(button.Width.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(button.Height.ToString("R", CultureInfo.InvariantCulture)).Append('\n');
         }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity.ToString())))
-            [..16]
+            [..32]
             .ToLowerInvariant();
     }
 }

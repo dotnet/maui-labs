@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Maui.DevFlow.Driver;
 using Microsoft.Maui.DevFlow.Driver.Mac;
 
@@ -37,6 +38,37 @@ public class NativeDialogSafetyTests
         var secondId = NativeDialogIdentity.CreateFingerprint("macOS", "42:CoreServicesUIAgent", second);
 
         Assert.Equal(firstId, secondId);
+    }
+
+    [Fact]
+    public void CreateFingerprint_Retains128Bits()
+    {
+        var fingerprint = NativeDialogIdentity.CreateFingerprint("macOS", "target", CreateDialog());
+
+        Assert.Matches("^[0-9a-f]{32}$", fingerprint);
+    }
+
+    [Fact]
+    public void CreateFingerprint_DifferentCurrentCulture_IsStable()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        var dialog = CreateDialog() with
+        {
+            Buttons = [new AlertButton("Allow", 1.25, 2.5, 30.75, 40.125)]
+        };
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            var first = NativeDialogIdentity.CreateFingerprint("Windows", "target", dialog);
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            var second = NativeDialogIdentity.CreateFingerprint("Windows", "target", dialog);
+
+            Assert.Equal(first, second);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 
     [Fact]
