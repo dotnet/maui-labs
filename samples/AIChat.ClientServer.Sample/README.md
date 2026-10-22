@@ -1,7 +1,7 @@
 # AIChat client/server sample
 
 An experimental .NET 10 sample showing a separately launched MAUI chat client communicating with a
-plain ASP.NET Core AG-UI server. The AppHost orchestrates the server only; it does not provision
+plain ASP.NET Core AG-UI 1.0 server. The AppHost orchestrates the server only; it does not provision
 Azure AI Foundry resources.
 
 ## Architecture
@@ -63,6 +63,10 @@ snapshots/deltas, never opaque provider data or protected reasoning. Set
 `AI:Chat:FixtureDestination` to an explicit path outside the repository before selecting Record;
 each scenario uses a distinct recording file, and the composition host exposes its manifest/save
 outcome.
+
+Automatic frontend tools are executable `ChatOptions.Tools` and continue without user input.
+`RegisterUIAction(..., UIActionInvocationMode.Manual)` is reserved for interactions such as the
+predictive document proposal that must pause for an explicit user decision.
 
 ## Endpoints
 

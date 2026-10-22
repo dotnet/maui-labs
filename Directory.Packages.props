@@ -89,8 +89,8 @@
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="$(MicrosoftAgentsAIWorkflowsVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Workflows.Generators" Version="$(MicrosoftAgentsAIWorkflowsGeneratorsVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.15.0" />
-    <PackageVersion Include="AGUI.Server" Version="0.0.6" />
-    <PackageVersion Include="AGUI.Client" Version="0.0.6" />
+    <PackageVersion Include="AGUI.Server" Version="1.0.0" />
+    <PackageVersion Include="AGUI.Client" Version="1.0.0" />
     <!-- Sample app: additional packages (pinned) -->
     <PackageVersion Include="Markdig" Version="0.31.0" />
     <PackageVersion Include="OpenAI" Version="2.11.0" />
