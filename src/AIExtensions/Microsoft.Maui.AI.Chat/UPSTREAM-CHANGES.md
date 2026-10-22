@@ -3,6 +3,26 @@
 `Microsoft.Maui.AI.Chat` shares its block/pipeline ancestry with the experimental
 `Microsoft.AspNetCore.Components.AI` work in dotnet/aspnetcore.
 
+## 2026-10-22 merged-upstream audit
+
+No Components.AI runtime or public API feature changes landed after the September parity audit.
+The ASP.NET changes in that window were package-reference, central-package-management, and
+source-generator dependency-isolation changes.
+
+AgenticUI moved `AGUI.Client` and `AGUI.Server` from 0.0.6 to 1.0.0 and clarified the client-tool
+boundary:
+
+- executable automatic frontend tools belong in `ChatOptions.Tools`;
+- `RegisterUIAction` is for interactions that require application UI or a user decision;
+- renderers project tool/action state but do not trigger duplicate execution.
+
+The MAUI AG-UI sample now uses AG-UI 1.0.0, registers weather and plan rendering as executable
+client tools, and keeps predictive document review as a manual UI action. The stronger MAUI
+thread abort, rollback, reasoning, media, and composer behavior remains intentionally preserved.
+
+ASP.NET multimodal input PR #68672 and AgenticUI real-time voice PR #8 remain unmerged and are
+watch items rather than merged parity requirements.
+
 The old monolithic PR #67673 is closed. The current reference is the incremental
 05-10 stack whose top is:
 

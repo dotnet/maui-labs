@@ -1007,7 +1007,10 @@ public sealed class SampleClientTests
                 break;
             case ScenarioIds.FrontendTools:
             case ScenarioIds.ToolBasedGenerativeUi:
-                Assert.Contains(blocks, block => block is UIActionBlock action && action.IsComplete);
+                Assert.Contains(
+                    blocks,
+                    block => block is FunctionInvocationContentBlock function
+                        && function.Result is not null);
                 break;
             case ScenarioIds.HumanInTheLoop:
                 Assert.Contains(blocks, block => block is ToolApprovalBlock { Status: ApprovalStatus.Approved });
