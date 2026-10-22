@@ -47,11 +47,9 @@ thread.
 ## CI
 
 - GitHub Actions: `ci-ai.yml`
-- Solution filter: `AIExtensions.slnf` includes the MAUI playground. The portable
-  `AIExtensions.Packages.slnf` includes the recording/replay tests and is used by
-  the Windows official packaging job and package/test CI job. A separate macOS
-  CI job builds the MAUI sample with the required workloads and native Apple
-  dependencies.
+- Solution filter: `AIExtensions.slnf` covers the shipping packages, tests, and consolidated
+  native/Blazor samples. A separate CI job also builds `AIExtensions.Sample.ChatPlayground`
+  against its Xcode 27 and native Apple dependencies.
 
 ## Requirements
 
