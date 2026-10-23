@@ -91,13 +91,13 @@ for MAUI DevFlow product feedback. Do not run it automatically.
 Always prefer the unified `maui` CLI surface for device prep and DevFlow
 operations. For programmatic consumption:
 
-- Pass `--json` to any command an agent will parse. For `maui android`, `maui
-  apple`, and `maui device`, errors are emitted as a structured envelope at the
-  **top level** of stdout (no `"error"` wrapper), with `snake_case` property
-  names. See `references/troubleshooting.md`. Two surfaces differ: `maui doctor
-  --json` emits a `DoctorReport` (`status` + `checks[]` with `fix.command`), and
-  `maui devflow …` commands emit `{ "error", "type", "retryable" }` on
-  **stderr**.
+- Pass `--json` to any command an agent will parse. Most `maui android`, `maui
+  apple`, and `maui device` failures use a structured envelope at the **top
+  level** of stdout (no `"error"` wrapper), with `snake_case` property names;
+  some commands return command-specific warning/result shapes. `maui doctor
+  --json` emits a `DoctorReport`, while `maui devflow` keeps data on stdout and
+  errors on stderr but does not use one error shape for every command. See
+  `references/troubleshooting.md`.
 - Inspect `code` to branch logic. Categories: `E1xxx` tool, `E2xxx`
   platform/SDK, `E3xxx` user action, `E4xxx` network, `E5xxx` permission.
 - When `remediation` is present and `remediation.type` is `autofixable`

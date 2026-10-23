@@ -315,9 +315,9 @@ If status commands fail:
 - **iOS Simulator:** Should work without extra config
 - **Linux/GTK:** Should work without extra config — runs directly on localhost
 - **All platforms:** Ensure the app is running and the `#if DEBUG` block is active
-- **Port conflict:** Check if another process holds the port: `lsof -i :9223` (raw; not yet wrapped by `maui`)
+- **Port conflict:** Check if another process holds the port: `maui port check 9223 --json`
 - **Wrong port:** Use `maui devflow list` to find the assigned port, or ensure CLI is run from the project directory
-- **Reading errors:** For `maui android`/`apple`/`device` commands, pass `--json` and inspect the top-level `code` / `remediation` fields (no `error` wrapper). `maui doctor --json` emits a `DoctorReport` (`status` + `checks[]`), and `maui devflow …` emits `{error,type,retryable}` on stderr. See [troubleshooting.md](troubleshooting.md#reading-machine-readable-output-and-errors)
+- **Reading errors:** Pass `--json`; most `maui android`/`apple`/`device` failures use top-level `code` / `remediation`, but some commands return command-specific warning/result shapes. `maui doctor --json` emits a `DoctorReport`; DevFlow keeps errors on stderr, with plain-text failures for `wait` and structured errors for most action commands. See [troubleshooting.md](troubleshooting.md#reading-machine-readable-output-and-errors)
 
 ## Quick Checklist
 
