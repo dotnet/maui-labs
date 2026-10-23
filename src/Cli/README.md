@@ -312,6 +312,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui devflow init` | Install project-scoped DevFlow onboarding/debugging skills |
 | `maui devflow skills` | Manage bundled DevFlow skill installs and updates |
 | `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
+| `maui devflow device fold` | [Foldable emulator/simulator modes, hinge angles, and verified transitions](../../docs/DevFlow/foldables.md) (iOS requires experimental opt-in) |
 | `maui devflow ui diagnostics` | Detect clipping, overflow, text truncation, overlap, and occlusion |
 | `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |

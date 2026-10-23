@@ -15,7 +15,7 @@ namespace Microsoft.Maui.Cli.DevFlow;
 /// <summary>
 /// CLI registration, connection preparation, and presentation for DevFlow operations.
 /// </summary>
-public class DevFlowCommands
+public partial class DevFlowCommands
 {
     private static Command? _devflowCommand;
     private static bool _errorOccurred;
@@ -1330,9 +1330,10 @@ public class DevFlowCommands
         storageCommand.Add(filesCommand);
         devflowCommand.Add(storageCommand);
 
-        // ===== device subcommands (read-only) =====
-        var platformCommand = new Command("device", "Query app, device, and sensor information");
+        // ===== device subcommands =====
+        var platformCommand = new Command("device", "Query device information and control foldable emulators/simulators");
         platformCommand.Aliases.Add("platform");
+        RegisterFoldCommands(platformCommand, deviceOption, jsonOption, noJsonOption, agentHostOption, agentPortOption);
 
         var platformAppInfoCmd = new Command("app-info", "Get app name, version, package name, theme");
         platformAppInfoCmd.SetAction(async (ctx, ct) =>
@@ -2579,6 +2580,9 @@ public class DevFlowCommands
         new("device app-info", "Get app name, version, theme", false),
         new("device device-info", "Get device manufacturer, model, OS", false),
         new("device display", "Get screen density, size, orientation", false),
+        new("device fold capabilities", "Discover foldable emulator/simulator host capabilities", false),
+        new("device fold get", "Read hinge angles and observed fold state", false),
+        new("device fold set", "Set and verify an emulator/simulator hinge mode or angle", true),
         new("device battery", "Get battery level, state, power source", false),
         new("device connectivity", "Get network access and profiles", false),
         new("device version-tracking", "Get version history and launch info", false),
