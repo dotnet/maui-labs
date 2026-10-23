@@ -299,6 +299,7 @@ input.df-field[type="checkbox"] { width: auto; flex: 0 0 auto; }
   background-color: var(--df-surface-2); background-image: linear-gradient(45deg, var(--df-border-subtle) 25%, transparent 25%), linear-gradient(-45deg, var(--df-border-subtle) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--df-border-subtle) 75%), linear-gradient(-45deg, transparent 75%, var(--df-border-subtle) 75%); background-size: 10px 10px; background-position: 0 0, 0 5px, 5px -5px, -5px 0; }
 .df-color-unset-label { position: relative; z-index: 1; padding: 1px 5px; color: var(--df-fg); background: var(--df-surface); border-radius: var(--df-radius-sm); font-size: 11px; pointer-events: none; }
 .df-color-unset input.df-field[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.df-color-unset:focus-within { border-color: var(--df-focus); }
 
 .df-tree-node { display: flex; align-items: center; gap: 3px; padding: 2px 8px 2px 2px; cursor: pointer; line-height: 1.5; border-radius: 0 var(--df-radius-sm) var(--df-radius-sm) 0; }
 .df-tree-node:hover { background: var(--df-hover-row); }

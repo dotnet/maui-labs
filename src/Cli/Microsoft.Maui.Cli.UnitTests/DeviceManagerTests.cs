@@ -4,9 +4,11 @@
 using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Providers.Android;
+using Microsoft.Maui.Cli.Providers.Apple;
 using Microsoft.Maui.Cli.Services;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Xunit;
+using static Microsoft.Maui.Cli.UnitTests.Fixtures.DeviceCtlFixtures;
 
 namespace Microsoft.Maui.Cli.UnitTests;
 
@@ -873,5 +875,39 @@ public class DeviceManagerTests
 			var queriedAProvider = fakeAndroid.GetDevicesCallCount > 0 || fakeApple.GetDevicesCallCount > 0;
 			Assert.Equal(queriedAProvider, manager.HasProviderFor(platform));
 		}
+	}
+
+	// --- Physical Apple devices (issue #722) ---
+	//
+	// Connected iPhones/iPads come from `xcrun devicectl` inside the real AppleProvider, so they
+	// must appear in every query that reaches it, and an Android query must not run devicectl.
+
+	[Theory]
+	[InlineData(Platforms.iOS)]
+	[InlineData("apple")]
+	[InlineData(Platforms.All)]
+	public async Task GetDevicesByPlatformAsync_IncludesConnectedPhysicalIosDevices(string platform)
+	{
+		var devicectl = new FakePhysicalDeviceService(IPhone("COREDEVICE-1"), IPad("COREDEVICE-2"));
+		var manager = new DeviceManager(CreateAndroidProvider(), new AppleProvider(devicectl));
+
+		var devices = await manager.GetDevicesByPlatformAsync(platform);
+
+		Assert.Equal(1, devicectl.ListCallCount);
+		Assert.Equal(
+			[IPhoneUdid, IPadUdid],
+			devices.Where(d => d.Type == DeviceType.Physical && d.Platform == Platforms.iOS).Select(d => d.Id));
+	}
+
+	[Fact]
+	public async Task GetDevicesByPlatformAsync_Android_DoesNotRunDevicectl()
+	{
+		var devicectl = new FakePhysicalDeviceService(IPhone("COREDEVICE-1"));
+		var manager = new DeviceManager(CreateAndroidProvider(), new AppleProvider(devicectl));
+
+		var devices = await manager.GetDevicesByPlatformAsync(Platforms.Android);
+
+		Assert.Equal(0, devicectl.ListCallCount);
+		Assert.Equal("emulator-5554", Assert.Single(devices).Id);
 	}
 }

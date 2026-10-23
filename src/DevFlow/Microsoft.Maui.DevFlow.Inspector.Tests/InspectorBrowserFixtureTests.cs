@@ -27,6 +27,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private string _text = "Original text";
     private int _treeRequests;
     private volatile bool _rejectWrites;
+    private readonly TaskCompletionSource _screenshotHeld = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private volatile TaskCompletionSource? _screenshotGate;
     private int _disposed;
 
     private IPage Page => _page!;
@@ -34,6 +36,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private ILocator Editor => Row.Locator("textarea.df-field");
     private ILocator SourceButton => Row.Locator(".df-prop-source");
     private ILocator Overlay => Page.Locator(".devflow-element[data-id='fixture-label']");
+    private ILocator ColorRow(string name) => Page.Locator($".df-prop-row[data-property-name='{name.ToLowerInvariant()}']");
 
     public async Task InitializeAsync()
     {
@@ -68,6 +71,10 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 {
                     new { name = "Text", kind = "text", value = Volatile.Read(ref _text), writable = true },
                     new { name = "Opacity", kind = "number", value = 1, writable = true, min = 0, max = 1, step = 0.05 },
+                    // The Agent reads colors as #RRGGBB, or #RRGGBBAA when alpha is not FF.
+                    new { name = "BackgroundColor", kind = "color", value = "#00000000", writable = true },
+                    new { name = "TextColor", kind = "color", value = "#FFFF00", writable = true },
+                    new { name = "BorderColor", kind = "color", value = "#00FF0080", writable = true },
                 },
             }));
             _agent.MapPut("/api/v1/ui/elements/{id}/properties/{name}", async (HttpContext context, string name) =>
@@ -80,9 +87,24 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 if (name == "Text") Volatile.Write(ref _text, value);
                 return Results.Json(new { success = true });
             });
+            _agent.MapPost("/api/v1/ui/actions/tap", () =>
+            {
+                Volatile.Write(ref _text, "Tapped");
+                return Results.Json(new { success = true });
+            });
             _agent.MapGet("/api/v1/ui/screenshot", () => Results.File(
                 Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAABdElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+Bn+3AAHo8fTrAAAAAElFTkSuQmCC"),
-                "image/png"));
+                "image/png"))
+                .AddEndpointFilter(async (context, next) =>
+                {
+                    // Park only post-tap captures so the page's periodic poll cannot trip the gate first.
+                    if (Volatile.Read(ref _text) == "Tapped" && _screenshotGate is { } gate)
+                    {
+                        _screenshotHeld.TrySetResult();
+                        await gate.Task.WaitAsync(context.HttpContext.RequestAborted);
+                    }
+                    return await next(context);
+                });
             await _agent.StartAsync();
             var agentPort = new Uri(_agent.Urls.Single()).Port;
 
@@ -175,6 +197,66 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task Tap_ShowsUpdatingHintUntilSlowCaptureRefreshesPreview()
+    {
+        var hint = Page.Locator("#df-preview-pending");
+        var button = Page.Locator(".devflow-element[data-id='fixture-button']");
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _screenshotGate = gate;
+        await Expect(hint).ToBeHiddenAsync();
+
+        var stateRequests = 0;
+        Page.Request += (_, request) =>
+        {
+            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal)) Interlocked.Increment(ref stateRequests);
+        };
+
+        // The server retries a capture that a tap invalidates, so only a response held in the
+        // browser is stale. Hold a real pre-tap /api/state response to keep a refresh in flight.
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/api/state", async route =>
+        {
+            var response = await route.FetchAsync();
+            held.SetResult();
+            await release.Task;
+            await route.FulfillAsync(new() { Response = response });
+        }, new() { Times = 1 });
+        try
+        {
+            // The online handler starts a debounced refresh, like a WebSocket event would.
+            await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+            await held.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            await button.ClickAsync();
+            await Expect(hint).ToBeVisibleAsync();
+            // Outlast the 400 ms post-tap refresh timer so it fires while the stale refresh is in flight.
+            await Page.WaitForTimeoutAsync(1000);
+            // A second tap's refresh also waits on the stale one, and both must share one post-tap capture.
+            await button.ClickAsync();
+            await Page.WaitForTimeoutAsync(1000);
+            var requestsBeforeRelease = Volatile.Read(ref stateRequests);
+            release.SetResult();
+
+            await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            // Let a duplicate post-tap request, if any, arrive before counting.
+            await Page.WaitForTimeoutAsync(500);
+            await Expect(hint).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            Assert.Equal(requestsBeforeRelease + 1, Volatile.Read(ref stateRequests));
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        gate.SetResult();
+        await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped", new() { Timeout = 10_000 });
+        await Expect(hint).ToBeHiddenAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task SourceState_RequiresSuccessfulRuntimeEditBeforeEnablingPersistence()
     {
         await Expect(SourceButton).ToHaveAttributeAsync("data-state", "clean");
@@ -224,12 +306,70 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Empty(_pageErrors);
     }
 
+    [InspectorBrowserFixtureFact]
+    public async Task TransparentColor_ShowsPlaceholder_AndPickIsWrittenOpaque()
+    {
+        var row = ColorRow("BackgroundColor");
+        var editor = row.Locator("input[type='color']");
+        await Expect(row.Locator(".df-color-unset-label")).ToHaveTextAsync("Transparent");
+        await Expect(editor).ToHaveAttributeAsync("aria-label", "BackgroundColor: transparent; activate to choose a color");
+        // The input is invisible inside the placeholder, so the placeholder itself must show keyboard focus.
+        var placeholder = row.Locator(".df-color-unset");
+        var border = await placeholder.EvaluateAsync<string>("element => getComputedStyle(element).borderTopColor");
+        await editor.FocusAsync();
+        Assert.NotEqual(border, await placeholder.EvaluateAsync<string>("element => getComputedStyle(element).borderTopColor"));
+        await editor.FillAsync("#0000ff");
+        await Expect(row.Locator(".df-prop-source")).ToHaveAttributeAsync("data-state", "dirty");
+        await Expect(placeholder).ToHaveCountAsync(0);
+        await Expect(editor).ToHaveAttributeAsync("title", "#0000ff");
+        // The Agent parses writes as #AARRGGBB: re-attaching the old alpha sent "#000000ff", blue at alpha 00.
+        Assert.Equal(("BackgroundColor", "#0000ff"), Assert.Single(_writes));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task OpaqueColor_ShowsSwatch_AndPickIsWrittenOpaque()
+    {
+        var row = ColorRow("TextColor");
+        var editor = row.Locator("input[type='color']");
+        await Expect(editor).ToHaveValueAsync("#ffff00");
+        await Expect(row.Locator(".df-color-unset")).ToHaveCountAsync(0);
+        await editor.FillAsync("#0000ff");
+        await Expect(row.Locator(".df-prop-source")).ToHaveAttributeAsync("data-state", "dirty");
+        Assert.Equal(("TextColor", "#0000ff"), Assert.Single(_writes));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task SemiTransparentColor_ReadsAlphaFromTrailingByte_AndPickIsWrittenOpaque()
+    {
+        var row = ColorRow("BorderColor");
+        var editor = row.Locator("input[type='color']");
+        // #RRGGBBAA is green at alpha 0x80. Reading the first byte as alpha would make it
+        // fully transparent (a placeholder) with the swatch RGB #ff0080.
+        await Expect(editor).ToHaveValueAsync("#00ff00");
+        await Expect(row.Locator(".df-color-unset")).ToHaveCountAsync(0);
+        await editor.FillAsync("#0000ff");
+        await Expect(row.Locator(".df-prop-source")).ToHaveAttributeAsync("data-state", "dirty");
+        // A pick is opaque and carries no alpha byte; "#800000ff" would be blue at alpha 0x80 (#AARRGGBB).
+        Assert.Equal(("BorderColor", "#0000ff"), Assert.Single(_writes));
+        Assert.Empty(_pageErrors);
+    }
+
     private object Label() => new
     {
         id = "fixture-label", type = "Label", automationId = "FixtureLabel",
         text = Volatile.Read(ref _text), isVisible = true, isEnabled = true,
         bounds = new { x = 20, y = 30, width = 250, height = 40 },
         sourceFile = "FixturePage.xaml", sourceLine = 2,
+        children = new[] { Button() },
+    };
+
+    // Nested under the Label because the Inspector scopes each frame to the window's last child.
+    private static object Button() => new
+    {
+        id = "fixture-button", type = "Button", text = "Tap me", isVisible = true, isEnabled = true,
+        bounds = new { x = 20, y = 90, width = 160, height = 44 },
         children = Array.Empty<object>(),
     };
 
@@ -243,6 +383,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     public async Task DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _screenshotGate?.TrySetResult();
         try
         {
             if (_page is { IsClosed: false })
