@@ -144,6 +144,11 @@ Intelligence and NaturalLanguage on Apple platforms. Chat includes streaming,
 structured responses, tool calling, and image input on supported systems.
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
 
+See the [chat guides](https://github.com/dotnet/docs-maui/blob/main/docs/ai/chat.md)
+and [embedding guides](https://github.com/dotnet/docs-maui/blob/main/docs/ai/embeddings.md)
+for provider comparisons and Apple-specific best practices, and the
+[retained Apple evaluation](docs/ai/apple-ai-evaluation.md) for reproducible findings.
+
 | Package | Description |
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.Essentials.AI](https://img.shields.io/nuget/v/Microsoft.Maui.Essentials.AI.svg?label=Microsoft.Maui.Essentials.AI)](https://www.nuget.org/packages/Microsoft.Maui.Essentials.AI/) | On-device AI APIs for MAUI |

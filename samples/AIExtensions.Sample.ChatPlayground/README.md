@@ -9,7 +9,7 @@ Azure OpenAI providers. It runs on Android, iOS, Mac Catalyst, and Windows
 | Tab | Features | Providers |
 |-----|----------|-----------|
 | Chat | Text, streaming, structured JSON, optional tools and image input | Apple Intelligence (iOS/Mac Catalyst), Azure OpenAI, offline Replay |
-| Embeddings | Import documents, index them, and search | Apple NaturalLanguage (iOS/Mac Catalyst), Azure OpenAI |
+| Embeddings | Import documents, compare chunking policies, and inspect ranked documents and chunks | Apple NaturalLanguage (iOS/Mac Catalyst), Azure OpenAI |
 | Images | Generate images or edit a source image | Azure OpenAI |
 
 Apple image input requires OS 27 and a ready vision-capable model. Apple does
@@ -37,6 +37,58 @@ image logging only. Model and usage data appear only when supplied by the provid
 Trace payload logging and sensitive telemetry capture are disabled, but
 exceptions may still contain sensitive data. Diagnostics are not exported
 automatically.
+
+## Compare embeddings and chunking
+
+The [native device experiments](../../tests/AI/EmbeddingQuality/README.md)
+exercise this same chunker and sample documents. They show tradeoffs, not a
+universally optimal chunk size: try two-sentence windows or compare 360/90 with
+360/0, and inspect whether the top chunks actually retain the answer context.
+
+In **Embeddings**, use **Import → Load sample documents** to add three synthetic,
+multi-paragraph documents about harbor routes, developer troubleshooting/security,
+and cafe bookings/food. Loading is explicit, local, additive, and never replaces
+your documents or contacts a model. You can also import your own Markdown or
+plain text files (UTF-8, up to 256 KB each).
+
+In **Embedding settings**, choose a generator, optional dimensions, and chunking:
+
+- **FixedCharacters** defaults to size **360**, overlap **0**, preserving the
+  original policy. Size and overlap are UTF-16 units, not tokens. Splits prefer
+  word boundaries; surrogate pairs are never split (a pair can exceed size 1).
+  Overlap is at most the requested units after whitespace/boundary adjustment;
+  even near-total overlap always advances.
+- **Sentences** defaults to **1** sentence, overlap **0** sentences. This is a
+  portable punctuation-based splitter, **not native NLTokenizer**: `.`, `!`, or
+  `?` followed by whitespace/end ends a sentence. Dots inside identifiers and
+  decimals are preserved. Abbreviations, closing quotes, and languages without
+  whitespace are not handled linguistically.
+- **WholeDocument** embeds the normalized document as one chunk with no size or
+  overlap inputs. Provider input limits still apply.
+
+Whitespace is normalized in every mode. Sizes must be 1–262144; overlap must be
+non-negative and smaller than size. Changing modes restores their defaults.
+Each document is limited to **4,096 chunks** and **4 Mi UTF-16 units of total
+emitted chunk text**, including repeated overlap. The budget is checked before
+allocating each chunk string. Excessive overlap or very small chunks fail with
+an explicit error instead of expanding without bound; reduce overlap or increase
+chunk size before indexing again.
+Choose **Index documents** explicitly after changing settings. Each model,
+dimension count, and chunking policy has its own saved index; older pre-chunking
+indexes are not reused. Search never silently builds an index.
+
+Search ranks documents on the left by their **maximum chunk cosine similarity**.
+The first document is selected automatically; select another to see **all** its
+chunks on the right, ranked by cosine with source chunk numbers and full text.
+Ties use source order. Cosine is not confidence; there is no lexical reranking
+or acceptance threshold. Narrow windows stack the document and chunk sections.
+Changing settings, importing, or maintaining indexes clears stale result details.
+**Clear index** targets only the selected configuration. **Clear documents**
+removes imported text and all its indexes, never chat recordings.
+
+Indexing with a cloud provider sends document chunks off-device; searching sends
+the query. Loading the samples does neither. Keep sensitive text out of cloud
+indexes unless you intend to share it with that provider.
 
 ## Run the sample
 

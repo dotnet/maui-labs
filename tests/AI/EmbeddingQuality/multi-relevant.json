@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "queries": [
+    {"id":"m01","group":"multi_relevant","text":"How do I prepare a hot drink using coffee beans or tea leaves?","relevant":["coffee","tea"]},
+    {"id":"m02","group":"multi_relevant","text":"What should I do with a flat wheel on my bicycle or car?","relevant":["bike","car"]},
+    {"id":"m03","group":"multi_relevant","text":"Travel to Paris by train or airplane in early October","relevant":["train","flight"]}
+  ]
+}

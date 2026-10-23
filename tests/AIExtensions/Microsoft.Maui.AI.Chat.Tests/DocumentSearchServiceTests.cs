@@ -68,6 +68,21 @@ public sealed class DocumentSearchServiceTests
     }
 
     [Fact]
+    public async Task QueryAndDocument_UseTheSameWhitespaceNormalization()
+    {
+        using var directory = new DocumentDirectory();
+        using var store = directory.CreateStore();
+        await ImportAsync(store, "notes.txt", "  blue\n\tbird  ");
+        var generator = new TestEmbeddings(_ => [1f, 0f]);
+        using var search = directory.CreateSearch(store);
+        await search.IndexDocumentsAsync(generator, "apple/english");
+
+        await search.SearchAsync(" \tblue\nbird  ", generator, "apple/english");
+
+        Assert.Equal(["blue bird", "blue bird"], generator.Inputs);
+    }
+
+    [Fact]
     public async Task Ranking_UsesOnlyTheSelectedGeneratorAndItsCosineSimilarity()
     {
         using var directory = new DocumentDirectory();
@@ -272,6 +287,133 @@ public sealed class DocumentSearchServiceTests
         Assert.Single((await searchRestored.SearchAsync("blue", generator, "apple/english")).Hits);
     }
 
+    [Fact]
+    public async Task Search_ReturnsEveryFullChunkWithSourceIdentityRankedByCosineAndSourceOrder()
+    {
+        using var directory = new DocumentDirectory();
+        using var store = directory.CreateStore();
+        var longSentence = new string('A', 220) + ".";
+        var first = await ImportAsync(store, "first.md", longSentence + " Best. Tie. Low.");
+        await ImportAsync(store, "second.md", "Other.");
+        var generator = new TestEmbeddings(text => text switch
+        {
+            "query" or "Best." or "Tie." => [1f, 0f],
+            "Low." => [-1f, 0f],
+            "Other." => [0.8f, 0.6f],
+            _ => [0.6f, 0.8f],
+        });
+        var chunking = new DocumentChunkingOptions(DocumentChunkingMode.Sentences, 1);
+        using var search = directory.CreateSearch(store);
+        await search.IndexDocumentsAsync(generator, "test", chunking: chunking);
+
+        var results = await search.SearchAsync("query", generator, "test", chunking: chunking);
+
+        Assert.Equal(2, results.Hits.Count);
+        var best = results.Hits[0];
+        Assert.Equal(first.Id, best.Id);
+        Assert.Equal(1f, best.Score, 5);
+        Assert.Equal("Best.", best.Snippet);
+        Assert.Equal([2, 3, 1, 4], best.Chunks.Select(chunk => chunk.Ordinal));
+        Assert.Equal([1f, 1f, 0.6f, -1f], best.Chunks.Select(chunk => chunk.Score));
+        Assert.Equal(longSentence, best.Chunks[2].Text);
+        Assert.All(best.Chunks, chunk =>
+        {
+            Assert.Equal(first.Id, chunk.DocumentId);
+            Assert.Equal("first.md", chunk.DocumentName);
+            Assert.Contains("cosine", chunk.Details);
+        });
+        Assert.Equal(0.8f, results.Hits[1].Score, 5);
+        Assert.Equal(6, generator.Inputs.Count);
+    }
+
+    [Fact]
+    public async Task ChunkingPolicies_HaveSeparateIndexesThatSurviveRestartAndClearIndependently()
+    {
+        using var directory = new DocumentDirectory();
+        using var store = directory.CreateStore();
+        await ImportAsync(store, "notes.md", "First. Second. Third. Fourth.");
+        DocumentChunkingOptions[] policies =
+        [
+            new(),
+            new(Size: 12),
+            new(Size: 12, Overlap: 2),
+            new(DocumentChunkingMode.WholeDocument),
+            new(DocumentChunkingMode.Sentences, 1),
+            new(DocumentChunkingMode.Sentences, 2),
+            new(DocumentChunkingMode.Sentences, 2, 1),
+        ];
+        using (var search = directory.CreateSearch(store))
+        {
+            var generator = new TestEmbeddings(_ => [1f, 0f]);
+            foreach (var policy in policies)
+                Assert.Equal(1, (await search.IndexDocumentsAsync(generator, "model", chunking: policy)).UpdatedDocuments);
+            Assert.Equal(0, (await search.IndexDocumentsAsync(generator, "model",
+                chunking: new(DocumentChunkingMode.WholeDocument, 5, 2))).UpdatedDocuments);
+            Assert.Equal(7, Directory.GetDirectories(directory.IndexDirectory).Length);
+        }
+
+        using var restored = directory.CreateSearch(store);
+        var queryGenerator = new TestEmbeddings(_ => [1f, 0f]);
+        foreach (var policy in policies)
+        {
+            var result = await restored.SearchAsync("query", queryGenerator, "model", chunking: policy);
+            Assert.Equal(DocumentChunker.Chunk("First. Second. Third. Fourth.", policy),
+                Assert.Single(result.Hits).Chunks.OrderBy(chunk => chunk.Ordinal).Select(chunk => chunk.Text));
+        }
+        Assert.Equal(7, queryGenerator.Inputs.Count);
+        Assert.All(queryGenerator.Inputs, text => Assert.Equal("query", text));
+        Assert.True(await restored.ClearIndexAsync("model", chunking: policies[^1]));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            restored.SearchAsync("query", queryGenerator, "model", chunking: policies[^1]));
+        Assert.Single((await restored.SearchAsync("query", queryGenerator, "model", chunking: policies[0])).Hits);
+        Assert.Single(await store.ListAsync());
+    }
+
+    [Fact]
+    public async Task LegacyIndex_IsNeverReusedUnderTheNewChunkingIdentity()
+    {
+        using var directory = new DocumentDirectory();
+        using var store = directory.CreateStore();
+        var document = await ImportAsync(store, "notes.md", "First. Second.");
+        var oldKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            Encoding.UTF8.GetBytes("5:model\0default")));
+        var legacyDirectory = Path.Combine(directory.IndexDirectory, oldKey);
+        Directory.CreateDirectory(legacyDirectory);
+        File.WriteAllText(Path.Combine(legacyDirectory, document.Id + ".json"), "{ damaged legacy index");
+        using var search = directory.CreateSearch(store);
+        var generator = new TestEmbeddings(_ => [1f, 0f]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => search.SearchAsync("query", generator, "model"));
+        Assert.Empty(generator.Inputs);
+        Assert.Equal(1, (await search.IndexDocumentsAsync(generator, "model")).UpdatedDocuments);
+        Assert.Equal(2, Directory.GetDirectories(directory.IndexDirectory).Length);
+        Assert.Single((await search.SearchAsync("query", generator, "model")).Hits);
+    }
+
+    [Theory]
+    [InlineData(DocumentChunkingMode.Sentences, 0, 0)]
+    [InlineData(DocumentChunkingMode.FixedCharacters, 8, 8)]
+    [InlineData((DocumentChunkingMode)999, 1, 0)]
+    public async Task InvalidChunking_RejectsIndexSearchAndClearBeforeCallingModel(
+        DocumentChunkingMode mode, int size, int overlap)
+    {
+        using var directory = new DocumentDirectory();
+        using var store = directory.CreateStore();
+        await ImportAsync(store, "notes.md", "First.");
+        using var search = directory.CreateSearch(store);
+        var generator = new TestEmbeddings(_ => [1f, 0f]);
+        var policy = new DocumentChunkingOptions(mode, size, overlap);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            search.IndexDocumentsAsync(generator, "model", chunking: policy));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            search.SearchAsync("query", generator, "model", chunking: policy));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            search.ClearIndexAsync("model", chunking: policy));
+        Assert.Empty(generator.Inputs);
+        Assert.False(Directory.Exists(directory.IndexDirectory));
+    }
+
     private static async Task<ImportedDocument> ImportAsync(DocumentStore store, string name, string text)
     {
         using var input = new MemoryStream(Encoding.UTF8.GetBytes(text));
@@ -280,7 +422,7 @@ public sealed class DocumentSearchServiceTests
 
     private sealed class DocumentDirectory : IDisposable
     {
-        private readonly string _root = Path.Combine(Path.GetTempPath(), "document-search-" + Guid.NewGuid().ToString("N"));
+        private readonly string _root = Path.Combine(Directory.GetCurrentDirectory(), "document-search-" + Guid.NewGuid().ToString("N"));
         public string DataDirectory => Path.Combine(_root, "data");
         public string CacheDirectory => Path.Combine(_root, "cache");
         public string IndexDirectory => Path.Combine(DataDirectory, "embedding-playground", "indexes");

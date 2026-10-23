@@ -50,6 +50,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\EmbeddingQuality\EmbeddingQuality.cs" Link="EmbeddingQuality\EmbeddingQuality.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentChunker.cs" Link="EmbeddingQuality\DocumentChunker.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\EmbeddingSampleDocuments.cs" Link="EmbeddingQuality\EmbeddingSampleDocuments.cs" />
+    <EmbeddedResource Include="..\AppleEmbeddingEvaluation\corpus.json" LogicalName="EmbeddingQuality.corpus.json" />
+    <EmbeddedResource Include="..\EmbeddingQuality\multi-relevant.json" LogicalName="EmbeddingQuality.multi-relevant.json" />
+    <EmbeddedResource Include="..\EmbeddingQuality\playground-queries.json" LogicalName="EmbeddingQuality.playground-queries.json" />
+    <EmbeddedResource Include="..\EmbeddingQuality\apple-rank-baseline.json" LogicalName="EmbeddingQuality.apple-rank-baseline.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <MauiIcon Include="Resources\appicon.svg" ForegroundFile="Resources\appiconfg.svg" Color="#512BD4" />
     <MauiSplashScreen Include="Resources\appiconfg.svg" Color="#512BD4" BaseSize="128,128" />
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
