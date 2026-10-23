@@ -43,4 +43,25 @@ public sealed class CliMutationLeaseTests : IDisposable
         Assert.Matches("^[0-9a-f]{32}$", id);
         Assert.Equal(id, CliMutationLease.Resolve(explicitId: null, _directory));
     }
+
+    [Fact]
+    public async Task ConcurrentCorruptIdentityRepairConvergesOnOneIdentity()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path.Combine(_directory, CliMutationLease.FileName), "not valid\nat all");
+        using var start = new ManualResetEventSlim(initialState: false);
+        var tasks = Enumerable.Range(0, 16)
+            .Select(_ => Task.Run(() =>
+            {
+                start.Wait();
+                return CliMutationLease.Resolve(explicitId: null, _directory);
+            }))
+            .ToArray();
+
+        start.Set();
+        var identities = await Task.WhenAll(tasks);
+
+        Assert.Single(identities.Distinct());
+        Assert.Equal(identities[0], File.ReadAllText(Path.Combine(_directory, CliMutationLease.FileName)));
+    }
 }

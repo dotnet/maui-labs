@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.DevFlow;
@@ -669,10 +668,7 @@ public class WebViewTests : IntegrationTestBase
             }
             finally
             {
-                var cliLeaseId = (string)typeof(DevFlowCommands)
-                    .GetField("s_cliMutationLeaseId", BindingFlags.Static | BindingFlags.NonPublic)!
-                    .GetValue(null)!;
-                var cliReleased = await Client.ControlMutationLeaseAsync("release", leaseId: cliLeaseId);
+                var cliReleased = await Client.ControlMutationLeaseAsync("release", leaseId: CliMutationLease.Id);
                 Assert.True(cliReleased.Ok, cliReleased.Error);
                 var restored = await Client.ControlMutationLeaseAsync("claim");
                 Assert.True(restored.YouHold, restored.Error);

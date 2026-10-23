@@ -17,6 +17,7 @@ internal static class CliMutationLease
 {
     internal const string EnvironmentVariable = "MAUI_DEVFLOW_LEASE_ID";
     internal const string FileName = "cli-lease-id";
+    private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(5);
 
     private static readonly Lazy<string> s_id = new(() => Resolve(
         Environment.GetEnvironmentVariable(EnvironmentVariable),
@@ -37,36 +38,57 @@ internal static class CliMutationLease
         var path = Path.Combine(stateDirectory, FileName);
         try
         {
-            if (File.Exists(path))
-            {
-                var stored = File.ReadAllText(path).Trim();
-                if (IsValid(stored))
-                    return stored;
-
-                File.Delete(path);
-            }
-
             Directory.CreateDirectory(stateDirectory);
+            using var stateLock = AcquireLock(path + ".lock");
+
+            if (TryReadValid(path, out var stored))
+                return stored;
+
             var created = Guid.NewGuid().ToString("N");
-            var temp = path + "." + Environment.ProcessId + ".tmp";
-            File.WriteAllText(temp, created);
+            var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
-                // Two first runs can race; keep whichever identity landed first.
-                File.Move(temp, path, overwrite: false);
+                File.WriteAllText(temp, created);
+                File.Move(temp, path, overwrite: true);
             }
-            catch (IOException)
+            finally
             {
-                File.Delete(temp);
+                if (File.Exists(temp))
+                    File.Delete(temp);
             }
 
-            var winner = File.ReadAllText(path).Trim();
-            return IsValid(winner) ? winner : created;
+            return created;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Guid.NewGuid().ToString("N");
         }
+    }
+
+    private static FileStream AcquireLock(string path)
+    {
+        var deadline = DateTime.UtcNow + LockTimeout;
+        while (true)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(25);
+            }
+        }
+    }
+
+    private static bool TryReadValid(string path, out string value)
+    {
+        value = "";
+        if (!File.Exists(path))
+            return false;
+
+        value = File.ReadAllText(path).Trim();
+        return IsValid(value);
     }
 
     private static bool IsValid(string value) => value.Length is > 0 and <= 128 && !value.Any(char.IsWhiteSpace);
