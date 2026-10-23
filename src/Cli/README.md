@@ -272,7 +272,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | Command | Description |
 |---------|-------------|
 | `maui doctor` | Run environment diagnostics and auto-fix issues |
-| `maui device list` | List connected devices and emulators |
+| `maui device list` | List connected devices, emulators, and simulators (including physical iPhones and iPads on macOS) |
 | `maui project version` | Show the effective .NET MAUI version for a project |
 | `maui project version list` | List available .NET MAUI package versions |
 | `maui project version set` | Pin a project to a specific, latest stable, nightly, or custom-source MAUI version |
