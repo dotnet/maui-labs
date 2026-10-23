@@ -57,15 +57,14 @@ feedback. Do not run it automatically.
    - `maui devflow diagnose --json` writes a health report to **stdout** on
      success — `cli_version`, `broker_running`, `agent_count`, `agents`,
      `projects`, plus optional `broker_port` (when the broker is up) and
-     `android` (emulator forwarding status). It only emits DevFlow's error
-     shape (`{ "error", "type", "retryable", "suggestions" }`) on **stderr**
-     when the command itself fails.
+     `android` (emulator forwarding status). Broker or agent unavailability is
+     represented in that report rather than as a structured stderr error.
 
-   The flat `code` / `remediation` envelope (no `error` wrapper; `snake_case`;
-   lowercase `remediation.type`, e.g. `autofixable`) applies to the other `maui`
-   groups — `maui android`, `maui apple`, `maui device`. See `maui-devflow-debug`
-   references/troubleshooting.md for the full code taxonomy (E1xxx tool, E2xxx
-   platform/SDK, E3xxx user action, etc.).
+   Most failures in the other `maui` groups (`android`, `apple`, `device`) use
+   the flat `code` / `remediation` envelope (no `error` wrapper; `snake_case`;
+   lowercase `remediation.type`, e.g. `autofixable`), though some commands
+   return command-specific warning/result shapes. See `maui-devflow-debug`
+   references/troubleshooting.md for details.
 
 If verification fails after integration, switch to `maui-devflow-debug` for connectivity recovery.
 

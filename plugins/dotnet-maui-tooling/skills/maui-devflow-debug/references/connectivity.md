@@ -100,10 +100,10 @@ Mac Catalyst needs Debug entitlements that allow the agent and CDP servers to bi
 <true/>
 ```
 
-macOS AppKit and Mac Catalyst otherwise use direct localhost access. Check for explicit port conflicts only after confirming broker discovery (`lsof` is not yet wrapped by `maui` — use raw):
+macOS AppKit and Mac Catalyst otherwise use direct localhost access. Check for explicit port conflicts only after confirming broker discovery:
 
 ```bash
-lsof -i :9223
+maui port check 9223 --json
 ```
 
 ### Windows and Linux/GTK
@@ -116,9 +116,9 @@ pgrep -f "YourApp"
 
 ## Reading errors from the CLI
 
-`maui` commands accept `--json` to emit a structured output that an AI agent
-can parse. On failure, error fields are at the **top level** of stdout (no
-`"error"` wrapper) with `snake_case` property names:
+`maui` commands accept `--json` to emit structured output that an AI agent can
+parse. Most non-DevFlow failures use error fields at the **top level** of
+stdout (no `"error"` wrapper) with `snake_case` property names:
 
 ```json
 {
@@ -152,11 +152,12 @@ Branch on `code`. When `remediation.type` is `autofixable` (lowercase!), run
 `remediation.manual_steps`. If `remediation` is absent, surface `message`
 and stop retrying.
 
-> **DevFlow commands differ.** The flat stdout envelope above applies to `maui
-> android`, `maui apple`, and `maui device`. The `maui devflow …` commands used
-> throughout this file instead emit `{ "error", "type", "retryable",
-> "suggestions" }` on **stderr**, so read stderr (not stdout) when a `maui
-> devflow` invocation fails.
+> **Output exceptions.** Some non-DevFlow commands return command-specific
+> warning/result objects instead of the flat error envelope. `maui devflow`
+> keeps data on stdout and errors on stderr, but its error format varies:
+> action commands generally emit `{ "error", "type", "retryable",
+> "suggestions" }`, `wait` writes plain-text broker/timeout errors, and
+> `diagnose --json` reports broker/agent availability in its stdout report.
 
 ## Extension tools registered by the app
 
@@ -182,7 +183,7 @@ not be registered with the connected agent.
 | Android connection refused after registration | Run `maui devflow diagnose --device <serial>` or manually set `adb forward tcp:<port> tcp:<port>` using the port from `maui devflow list` |
 | Android broker list is empty but app is running | Forward the direct `.mauidevflow` port and run `maui devflow agent status --agent-host localhost --agent-port <port>` |
 | Broker unavailable | `maui devflow broker start`; retry the command |
-| Port already in use | Identify the owner with `lsof -i :<port>` before killing a PID |
+| Port already in use | Identify the owner with `maui port check <port> --json` before killing a PID |
 | Multiple agents connected | Ask which app/device/agent port to target; use `--agent-port` |
 
 ## Stop signals

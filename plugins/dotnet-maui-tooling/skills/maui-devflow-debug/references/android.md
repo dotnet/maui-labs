@@ -221,8 +221,10 @@ adb -s <serial> shell
   (`maui device list --platform android`).
 - **Slow emulator**: Use hardware acceleration. Prefer `arm64-v8a` images on
   Apple Silicon Macs.
-- **JSON error envelope**: When a `maui` command fails with `--json`, parse
-  the top-level `code` and `remediation` fields (no `error` wrapper; see
-  `troubleshooting.md`). Common Android codes: `E2101` AndroidSdkNotFound,
-  `E2103` AndroidLicensesNotAccepted, `E2106` AndroidEmulatorNotFound,
-  `E2110` AndroidAdbNotFound, `E2111` AndroidDeviceNotFound.
+- **JSON error envelope**: When an Android command returns the standard failure
+  envelope with `--json`, parse the top-level `code` and `remediation` fields
+  (no `error` wrapper; see `troubleshooting.md`). Common Android codes:
+  `E2101` AndroidSdkNotFound,
+  `E2106` AndroidEmulatorNotFound, `E2110` AndroidAdbNotFound, and `E2111`
+  AndroidDeviceNotFound. `E2103` AndroidLicensesNotAccepted currently appears
+  as a `maui doctor --json` fix `issue_id`.

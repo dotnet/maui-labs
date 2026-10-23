@@ -65,7 +65,7 @@ xcrun simctl shutdown <UDID>
 
 ### Install and launch app
 ```bash
-# Preferred: unified maui CLI (JSON output + structured errors)
+# Preferred: unified maui CLI (JSON output; structured errors where supported)
 maui apple simulator install <UDID> /path/to/App.app
 maui apple simulator launch <UDID> com.company.appid
 
@@ -171,11 +171,13 @@ Common values: `net9.0-ios`, `net9.0-maccatalyst`, `net10.0-ios`, `net10.0-macca
 The `apple` command (from `appledev.tools` NuGet) provides higher-level wrappers.
 
 > **Prefer `maui apple simulator …`** (unified CLI) for new automation — it adds
-> `--json` output and the standard error envelope. The standalone `apple` syntax
-> below differs from `maui`: it uses `boot`/`shutdown` (maui: `start`/`stop`),
-> supports `list --booted` (maui has no such flag), and takes `create <name>
-> --device-type …` (maui inverts this: `create <device-type> --name …`). Don't
-> blindly prefix these with `maui`.
+> `--json` output and structured errors where supported. Some operations,
+> including failed `start`, `stop`, or `delete` attempts, can instead return a
+> command-specific `{ "status": "warning", "message": "…" }` result. The
+> standalone `apple` syntax below differs from `maui`: it uses
+> `boot`/`shutdown` (maui: `start`/`stop`), supports `list --booted` (maui has no
+> such flag), and takes `create <name> --device-type …` (maui inverts this:
+> `create <device-type> --name …`). Don't blindly prefix these with `maui`.
 
 ### Simulator commands
 ```
@@ -205,9 +207,9 @@ apple xcode list                                # installed Xcode versions
 
 ## xcrun simctl Reference
 
-Key subcommands beyond the basics. Several of these are now wrapped by the `maui` CLI
-(`maui apple simulator …`) — prefer the wrapper when available so you get `--json` output and
-the standard error envelope:
+Key subcommands beyond the basics. Several of these are now wrapped by the
+`maui` CLI (`maui apple simulator …`) — prefer the wrapper when available for
+machine-readable output and consistent command discovery:
 
 | Command | Use | `maui` equivalent |
 |---------|-----|-------------------|
