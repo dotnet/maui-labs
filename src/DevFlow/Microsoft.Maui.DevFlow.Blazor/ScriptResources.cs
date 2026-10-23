@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Reflection;
 
 namespace Microsoft.Maui.DevFlow.Blazor;
@@ -10,7 +9,7 @@ namespace Microsoft.Maui.DevFlow.Blazor;
 internal static class ScriptResources
 {
     private static readonly Assembly Assembly = typeof(ScriptResources).Assembly;
-    private static readonly ConcurrentDictionary<string, string> Cache = new();
+    private static readonly Dictionary<string, string> Cache = new();
 
     /// <summary>
     /// Loads an embedded script resource by filename (e.g. "chobitsu-init.js").
