@@ -40,6 +40,7 @@
                         StrokeThickness="0" StrokeShape="RoundRectangle 18"
                         WidthRequest="36" HeightRequest="36">
                     <Button Text="&#xF788;" FontFamily="FluentFilled" FontSize="16"
+                            ToolTipProperties.Text="Browse the product catalog"
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"
@@ -50,6 +51,7 @@
                         StrokeThickness="0" StrokeShape="RoundRectangle 18"
                         WidthRequest="36" HeightRequest="36">
                     <Button Text="&#xEA07;" FontFamily="FluentFilled" FontSize="16"
+                            ToolTipProperties.Text="View past orders"
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"
@@ -62,6 +64,7 @@
                         WidthRequest="36" HeightRequest="36"
                         IsVisible="False">
                     <Button Text="&#xF26B;" FontFamily="FluentFilled" FontSize="16"
+                            ToolTipProperties.Text="Open the cart"
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"
@@ -74,12 +77,38 @@
                         </DataTrigger>
                     </Border.Triggers>
                 </Border>
+                <!-- Handler axis: custom handlers vs built-in defaults -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                        WidthRequest="36" HeightRequest="36">
+                    <Button Text="{Binding HandlerToggleIcon}" FontFamily="FluentFilled" FontSize="16"
+                            AutomationId="ToggleHandlersButton"
+                            ToolTipProperties.Text="{Binding HandlerToggleTooltip}"
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                            BackgroundColor="Transparent" Padding="0"
+                            VerticalOptions="Center" HorizontalOptions="Center"
+                            Command="{Binding StartNewSessionCommand}"
+                            CommandParameter="toggle" />
+                </Border>
+                <!-- Rendering axis: designed views vs raw block preview -->
+                <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
+                        StrokeThickness="0" StrokeShape="RoundRectangle 18"
+                        WidthRequest="36" HeightRequest="36">
+                    <Button Text="{Binding PreviewToggleIcon}" FontFamily="FluentFilled" FontSize="16"
+                            AutomationId="TogglePreviewButton"
+                            ToolTipProperties.Text="{Binding PreviewToggleTooltip}"
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
+                            BackgroundColor="Transparent" Padding="0"
+                            VerticalOptions="Center" HorizontalOptions="Center"
+                            Command="{Binding ToggleChatPreviewModeCommand}" />
+                </Border>
                 <!-- New Chat -->
                 <Border BackgroundColor="{AppThemeBinding Light={StaticResource PillBackgroundLight}, Dark={StaticResource PillBackgroundDark}}"
                         StrokeThickness="0" StrokeShape="RoundRectangle 18"
                         WidthRequest="36" HeightRequest="36">
                     <Button Text="&#xF7ED;" FontFamily="FluentFilled" FontSize="16"
                             AutomationId="NewChatButton"
+                            ToolTipProperties.Text="Start a new chat"
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource TextAccentDark}}"
                             BackgroundColor="Transparent" Padding="0"
                             VerticalOptions="Center" HorizontalOptions="Center"

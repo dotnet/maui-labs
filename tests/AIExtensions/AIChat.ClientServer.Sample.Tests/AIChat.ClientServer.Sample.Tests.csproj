@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);OPENAI001;MEAI001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Agents.AI" VersionOverride="1.15.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting" VersionOverride="1.15.0-preview.260722.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" VersionOverride="1.15.0" />
+    <!-- Match the sample's Azure Responses dependency set; OpenAI 2.11 is binary-incompatible here. -->
+    <PackageReference Include="Azure.AI.OpenAI" VersionOverride="2.9.0-beta.1" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" VersionOverride="10.6.0" />
+    <PackageReference Include="OpenAI" VersionOverride="2.10.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+    <PackageReference Include="Azure.Identity" VersionOverride="1.21.0" />
+    <PackageReference Include="AGUI.Client" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\samples\AIChat.ClientServer.Sample\AIChat.ClientServer.Sample.Shared\AIChat.ClientServer.Sample.Shared.csproj" />
+    <ProjectReference Include="..\..\..\samples\AIChat.ClientServer.Sample\AIChat.ClientServer.Sample.AgentServer\AIChat.ClientServer.Sample.AgentServer.csproj" />
+    <ProjectReference Include="..\..\..\samples\AIChat.Sample.Shared\AIChat.Sample.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\..\samples\AIChat.ClientServer.Sample\AIChat.ClientServer.Sample.Client\AguiChatComposition.cs"
+             Link="AguiChatComposition.cs" />
+    <Compile Include="..\..\..\samples\AIChat.Client.Sample\DirectChatComposition.cs"
+             Link="DirectChatComposition.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

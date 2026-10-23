@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    xmlns:themes="clr-namespace:Microsoft.Maui.AI.Chat.Controls.Themes"
+                    x:Class="Microsoft.Maui.AI.Chat.Controls.Themes.ChatTheme">
+
+    <!-- Root chat theme. It merges the layered dictionaries so a single      -->
+    <!-- new ChatTheme() (via ChatThemeLoader) brings in everything:           -->
+    <!--   • ChatColors        — shared color/size tokens                      -->
+    <!--   • MessageListTheme   — AI-specific per-block view templates         -->
+    <!-- CopilotChatView inherits the provider-neutral ChatView shell.          -->
+    <!-- Override individual keys in your App resources to restyle.            -->
+    <ResourceDictionary.MergedDictionaries>
+        <themes:ChatColors />
+        <themes:MessageListTheme />
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>

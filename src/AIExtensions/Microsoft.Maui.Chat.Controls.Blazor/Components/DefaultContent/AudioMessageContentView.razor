@@ -1,0 +1,89 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    Default renderer for audio message content. Wraps an HTML5 audio element with an
+    accessible play/pause toggle. Remote HTTP audio uses the URL directly; in-memory
+    buffered recordings are handed to the browser as a data URI. The play/pause state
+    is authoritative in .NET, and the JS side is only a thin play()/pause() bridge.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+@implements IAsyncDisposable
+
+<div class="mchat-audio" role="group" aria-label="@Label">
+    <button type="button"
+            class="mchat-audio__toggle"
+            aria-label="@(_isPlaying ? "Pause audio" : "Play audio")"
+            aria-pressed="@_isPlaying"
+            @onclick="TogglePlayback">
+        @(_isPlaying ? "❚❚" : "▶")
+    </button>
+    <span class="mchat-audio__label">@Label</span>
+    <audio @ref="_audio"
+           src="@ResolvedSource"
+           preload="metadata"
+           @onended="OnEnded"></audio>
+</div>
+
+@code {
+    private ElementReference _audio;
+    private bool _isPlaying;
+    private string? _cachedDataUri;
+    private MChatJsModule? _module;
+
+    /// <summary>Gets or sets the audio content to render.</summary>
+    [Parameter, EditorRequired]
+    public MediaMessageContent Content { get; set; } = default!;
+
+    [Inject]
+    private Microsoft.JSInterop.IJSRuntime Js { get; set; } = default!;
+
+    private string Label => Content.DisplayName;
+
+    private string ResolvedSource => Content.Uri?.ToString() ?? BuildDataUri();
+
+    private string BuildDataUri()
+    {
+        if (_cachedDataUri is not null)
+        {
+            return _cachedDataUri;
+        }
+
+        if (Content.Data.IsEmpty)
+        {
+            return string.Empty;
+        }
+
+        _cachedDataUri = "data:" + Content.MediaType + ";base64," + Convert.ToBase64String(Content.Data.Span);
+        return _cachedDataUri;
+    }
+
+    private async Task TogglePlayback()
+    {
+        _isPlaying = !_isPlaying;
+        _module ??= new MChatJsModule(Js);
+
+        if (_isPlaying)
+        {
+            await _module.PlayAudioAsync(_audio);
+        }
+        else
+        {
+            await _module.PauseAudioAsync(_audio);
+        }
+    }
+
+    private void OnEnded() => _isPlaying = false;
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.DisposeAsync();
+        }
+
+        _cachedDataUri = null;
+    }
+}
