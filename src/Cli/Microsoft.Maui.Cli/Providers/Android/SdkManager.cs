@@ -59,16 +59,7 @@ public partial class SdkManager : IDisposable
 		return (sdkPath, jdkPath);
 	}
 
-	public string? SdkManagerPath
-	{
-		get
-		{
-			SyncPaths();
-			// Availability must use the same resolver as install/list/license operations,
-			// or an unsupported layout can incorrectly bypass bootstrap.
-			return _sdkManager.FindSdkManagerPath();
-		}
-	}
+	public string? SdkManagerPath => FindCommandLineTools()?.Path;
 
 	public bool IsAvailable => !string.IsNullOrEmpty(SdkManagerPath);
 
@@ -463,8 +454,8 @@ public partial class SdkManager : IDisposable
 	}
 
 	/// <summary>
-	/// Resolves the installed command-line tools (sdkmanager path + revision) from the highest
-	/// <c>cmdline-tools</c> revision reported by <c>source.properties</c>. Returns
+	/// Resolves sdkmanager and its revision, preferring <c>cmdline-tools/latest</c>,
+	/// then the highest installed revision reported by <c>source.properties</c>. Returns
 	/// <see langword="null"/> when no SDK path is configured or no sdkmanager is installed.
 	/// </summary>
 	public Xamarin.Android.Tools.CommandLineTool? FindCommandLineTools()
@@ -483,6 +474,8 @@ public partial class SdkManager : IDisposable
 		Action<Xamarin.Android.Tools.SdkBootstrapPhase, int, string>? onProgress = null,
 		CancellationToken cancellationToken = default)
 	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+		SyncPaths();
 		var bootstrapProgress = new Progress<Xamarin.Android.Tools.SdkBootstrapProgress>(p =>
 			onProgress?.Invoke(p.Phase, p.PercentComplete, p.Message));
 		return await _sdkManager.EnsureLatestCommandLineToolsAsync(targetPath, bootstrapProgress, cancellationToken);

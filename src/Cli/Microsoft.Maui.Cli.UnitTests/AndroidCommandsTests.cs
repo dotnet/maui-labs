@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Text.Json;
 using Microsoft.Maui.Cli;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
@@ -543,19 +544,24 @@ public class AndroidCommandsTests
 		Assert.Contains(sdkCommand.Subcommands, c => c.Name == "update-tools");
 	}
 
-	[Fact]
-	public async Task SdkUpdateToolsCommand_Json_InvokesProvider_WithResolvedSdkPath()
+	[Theory]
+	[InlineData("19.0")]
+	[InlineData(null)]
+	public async Task SdkUpdateToolsCommand_Json_ReportsReady_WithResolvedSdkPath(string? revision)
 	{
 		var fakeAndroid = new FakeAndroidProvider
 		{
 			SdkPath = Path.Combine(Path.GetTempPath(), "sdk-update-tools-test"),
-			EnsureLatestSdkToolsRevision = "19.0"
+			EnsureLatestSdkToolsRevision = revision
 		};
 
 		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		using var output = new StringWriter();
+		var originalOut = Console.Out;
 		try
 		{
 			Program.Services = testProvider;
+			Console.SetOut(output);
 
 			var rootCommand = Program.BuildRootCommand();
 			var parseResult = rootCommand.Parse("android sdk update-tools --json");
@@ -564,9 +570,16 @@ public class AndroidCommandsTests
 			Assert.Equal(0, exitCode);
 			Assert.Single(fakeAndroid.EnsureLatestSdkToolsCalls);
 			Assert.Equal(fakeAndroid.SdkPath, fakeAndroid.EnsureLatestSdkToolsCalls[0]);
+			using var json = JsonDocument.Parse(output.ToString());
+			Assert.True(json.RootElement.GetProperty("success").GetBoolean());
+			Assert.Equal("ready", json.RootElement.GetProperty("status").GetString());
+			Assert.Equal(fakeAndroid.SdkPath, json.RootElement.GetProperty("path").GetString());
+			Assert.Equal(revision is null ? "Command-line tools are ready" : $"Command-line tools {revision} are ready",
+				json.RootElement.GetProperty("message").GetString());
 		}
 		finally
 		{
+			Console.SetOut(originalOut);
 			Program.ResetServices();
 		}
 	}
@@ -593,6 +606,37 @@ public class AndroidCommandsTests
 		}
 		finally
 		{
+			Program.ResetServices();
+		}
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task SdkUpdateToolsCommand_EmptySdkPath_ReturnsActionableError(bool dryRun)
+	{
+		var fakeAndroid = new FakeAndroidProvider { SdkPath = "" };
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		using var output = new StringWriter();
+		var originalOut = Console.Out;
+		try
+		{
+			Program.Services = testProvider;
+			Console.SetOut(output);
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse($"android sdk update-tools --json{(dryRun ? " --dry-run" : "")}");
+
+			Assert.NotEqual(0, await parseResult.InvokeAsync());
+			Assert.Empty(fakeAndroid.EnsureLatestSdkToolsCalls);
+			using var json = JsonDocument.Parse(output.ToString());
+			Assert.Equal("E2101", json.RootElement.GetProperty("code").GetString());
+			Assert.Equal("maui android install",
+				json.RootElement.GetProperty("remediation").GetProperty("command").GetString());
+		}
+		finally
+		{
+			Console.SetOut(originalOut);
 			Program.ResetServices();
 		}
 	}

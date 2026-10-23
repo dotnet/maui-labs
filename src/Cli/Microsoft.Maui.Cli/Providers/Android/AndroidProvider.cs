@@ -110,7 +110,8 @@ public class AndroidProvider : IAndroidProvider
 		});
 
 		// Check SDK Manager
-		if (!_sdkManager.IsAvailable)
+		var commandLineTools = _sdkManager.FindCommandLineTools();
+		if (commandLineTools is null)
 		{
 			checks.Add(new HealthCheck
 			{
@@ -129,24 +130,19 @@ public class AndroidProvider : IAndroidProvider
 		}
 		else
 		{
-			// Surface the resolved command-line tools revision (new in the android-tools
-			// resolver API) so `maui doctor` reports which cmdline-tools build is in use.
-			var commandLineTools = _sdkManager.FindCommandLineTools();
 			checks.Add(new HealthCheck
 			{
 				Category = "android",
 				Name = "SDK Manager",
 				Status = CheckStatus.Ok,
-				Message = commandLineTools?.Revision is { Length: > 0 } rev
+				Message = commandLineTools.Revision is { Length: > 0 } rev
 					? $"command-line tools {rev}"
 					: null,
-				Details = commandLineTools is not null
-					? new JsonObject
-					{
-						["path"] = commandLineTools.Path,
-						["revision"] = commandLineTools.Revision
-					}
-					: null
+				Details = new JsonObject
+				{
+					["path"] = commandLineTools.Path,
+					["revision"] = commandLineTools.Revision
+				}
 			});
 
 			// Check licenses

@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Providers.Android;
@@ -490,6 +491,12 @@ public static partial class AndroidCommands
 
 			try
 			{
+				if (string.IsNullOrWhiteSpace(targetPath))
+					throw MauiToolException.AutoFixable(
+						ErrorCodes.AndroidSdkNotFound,
+						"No Android SDK path configured. Run 'maui android install' first.",
+						"maui android install");
+
 				if (dryRun)
 				{
 					formatter.WriteInfo($"[dry-run] Would ensure latest command-line tools at: {targetPath}");
@@ -512,13 +519,16 @@ public static partial class AndroidCommands
 									"Verifying" => "Verifying checksum...",
 									"Extracting" => "Extracting...",
 									"Installing" => "Installing...",
-									"Complete" => "Command-line tools updated",
+									"Complete" => "Command-line tools ready",
 									_ => msg
 								};
-								task.Update(Math.Max(0, pct), label);
+								if (pct < 0)
+									task.SetIndeterminate(label);
+								else
+									task.Update(Math.Clamp(pct, 0, 100), label);
 							},
 							cancellationToken);
-						task.Complete(revision is null ? "Command-line tools up to date" : $"cmdline-tools {revision}");
+						task.Complete(revision is null ? "Command-line tools ready" : $"cmdline-tools {revision}");
 					});
 				}
 				else
@@ -531,16 +541,16 @@ public static partial class AndroidCommands
 					formatter.Write(new CliCommandResult
 					{
 						Success = true,
-						Status = "updated",
-						Message = revision is null ? "command-line tools up to date" : $"command-line tools {revision}",
+						Status = "ready",
+						Message = revision is null ? "Command-line tools are ready" : $"Command-line tools {revision} are ready",
 						Path = targetPath
 					});
 				}
 				else
 				{
 					formatter.WriteSuccess(revision is null
-						? "Command-line tools are up to date"
-						: $"Command-line tools updated to revision {revision}");
+						? "Command-line tools are ready"
+						: $"Command-line tools {revision} are ready");
 				}
 				return 0;
 			}
