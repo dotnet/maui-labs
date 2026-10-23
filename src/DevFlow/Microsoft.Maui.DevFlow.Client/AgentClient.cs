@@ -882,6 +882,30 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>
+    /// Tap at a point inside an element, delivered as a real touch there. <paramref name="x"/> and
+    /// <paramref name="y"/> are device-independent units from the element's top-left corner. This
+    /// is how content drawn on a canvas — SkiaSharp, Microsoft.Maui.Graphics, Syncfusion charts —
+    /// is tapped, since what is drawn has no element id of its own. On iOS and Mac Catalyst the app
+    /// must enable synthetic touch (<c>capabilities.syntheticTouch</c> in the agent status).
+    /// </summary>
+    public Task<ActionResult> TapResultAsync(
+        string elementId,
+        double x,
+        double y,
+        long? captureEpoch,
+        long? registryGeneration)
+    {
+        var payload = new JsonObject
+        {
+            ["elementId"] = elementId,
+            ["x"] = x,
+            ["y"] = y
+        };
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+        return PostActionResultAsync($"{UiApi}/actions/tap", payload);
+    }
+
+    /// <summary>
     /// Fill text into an element.
     /// </summary>
     public Task<bool> FillAsync(string elementId, string text)
@@ -1034,7 +1058,8 @@ public class AgentClient : IDisposable
     }
 
     /// <summary>
-    /// Performs a gesture. Supported types: tap, doubletap, longpress, swipe, pan, pinch, rotate.
+    /// Performs a gesture. Supported types: tap, doubletap, longpress, swipe, pan, drag, pinch, rotate.
+    /// For a drag from a point use <see cref="DragAsync"/>.
     /// </summary>
     public async Task<bool> GestureAsync(
         string type,
@@ -1099,6 +1124,55 @@ public class AgentClient : IDisposable
         if (steps.HasValue) payload["steps"] = steps.Value;
         AddCaptureMetadata(payload, captureEpoch, registryGeneration);
 
+        return await PostGestureAsync(payload, type);
+    }
+
+    /// <summary>
+    /// Drag from a point on an element, delivered as a real touch: pressed at
+    /// (<paramref name="x"/>, <paramref name="y"/>), optionally held for <paramref name="holdMs"/>,
+    /// moved to the end point and lifted there. Points are device-independent units from the
+    /// element's top-left. The drag ends at (<paramref name="toX"/>, <paramref name="toY"/>) — on
+    /// <paramref name="toElementId"/> when one is given, otherwise on the dragged element (where it
+    /// may lie past the element's edge) — or, with no end point, at the centre of
+    /// <paramref name="toElementId"/>. This is what moves a custom slider's thumb, reorders a list
+    /// or drops an item onto a target the way a finger does; unlike <see cref="PanAsync"/> it is
+    /// never serviced by invoking a gesture recognizer directly. On iOS and Mac Catalyst the app
+    /// must enable synthetic touch (<c>capabilities.syntheticTouch</c> in the agent status).
+    /// </summary>
+    public async Task<GestureResult> DragAsync(
+        string elementId,
+        double x,
+        double y,
+        double? toX = null,
+        double? toY = null,
+        string? toElementId = null,
+        int? holdMs = null,
+        int? durationMs = null,
+        int? steps = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null)
+    {
+        var payload = new JsonObject
+        {
+            ["type"] = "drag",
+            ["elementId"] = elementId,
+            ["x"] = x,
+            ["y"] = y
+        };
+
+        if (toX.HasValue) payload["toX"] = toX.Value;
+        if (toY.HasValue) payload["toY"] = toY.Value;
+        if (toElementId is not null) payload["toElementId"] = toElementId;
+        if (holdMs.HasValue) payload["holdMs"] = holdMs.Value;
+        if (durationMs.HasValue) payload["durationMs"] = durationMs.Value;
+        if (steps.HasValue) payload["steps"] = steps.Value;
+        AddCaptureMetadata(payload, captureEpoch, registryGeneration);
+
+        return await PostGestureAsync(payload, "drag");
+    }
+
+    private async Task<GestureResult> PostGestureAsync(JsonObject payload, string type)
+    {
         try
         {
             using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
@@ -1184,7 +1258,10 @@ public class AgentClient : IDisposable
             "rotate", elementId, rotation: degrees, durationMs: durationMs, steps: steps,
             captureEpoch: captureEpoch, registryGeneration: registryGeneration);
 
-    /// <summary>Drag by a vector in device-independent pixels.</summary>
+    /// <summary>
+    /// Drag by a vector in device-independent pixels. This may be serviced by invoking the MAUI
+    /// pan recognizer directly; for a real touch from a known point use <see cref="DragAsync"/>.
+    /// </summary>
     public Task<GestureResult> PanAsync(
         string? elementId,
         double deltaX,

@@ -682,6 +682,12 @@ public partial class DevFlowAgentService
         public double? DeltaY { get; set; }
         public double? OriginX { get; set; }
         public double? OriginY { get; set; }
+        public double? X { get; set; }
+        public double? Y { get; set; }
+        public double? ToX { get; set; }
+        public double? ToY { get; set; }
+        public string? ToElementId { get; set; }
+        public int? HoldMs { get; set; }
         public int? Steps { get; set; }
     }
 
@@ -716,6 +722,12 @@ public partial class DevFlowAgentService
         public double? Rotation { get; set; }
         public double? OriginX { get; set; }
         public double? OriginY { get; set; }
+        public double? X { get; set; }
+        public double? Y { get; set; }
+        public double? ToX { get; set; }
+        public double? ToY { get; set; }
+        public string? ToElementId { get; set; }
+        public int? HoldMs { get; set; }
         public int? Steps { get; set; }
         public JsonElement[]? Args { get; set; }
         public string? Name { get; set; }
@@ -2914,6 +2926,18 @@ public class CaptureBoundRequest
 public class ActionRequest : CaptureBoundRequest
 {
     public string? ElementId { get; set; }
+}
+
+/// <summary>
+/// A tap, optionally at a point inside the element. <see cref="X"/> and <see cref="Y"/> are
+/// device-independent units from the element's top-left corner and are given together; with a
+/// point, the tap is delivered as a real touch there, which is how content drawn on a canvas
+/// (SkiaSharp, Microsoft.Maui.Graphics, Syncfusion charts) is reached.
+/// </summary>
+public class TapRequest : ActionRequest
+{
+    public double? X { get; set; }
+    public double? Y { get; set; }
 }
 
 public class FillRequest : CaptureBoundRequest

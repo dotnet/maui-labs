@@ -2792,14 +2792,19 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
-        var body = request.BodyAs<ActionRequest>();
+        var body = request.BodyAs<TapRequest>();
         if (body?.ElementId == null)
             return HttpResponse.Error("elementId is required");
+        if (body.X.HasValue != body.Y.HasValue)
+            return HttpResponse.Error("x and y must be given together");
         if (await PrepareUiMutationAsync(request, body, body.ElementId) is { } staleCapture)
             return staleCapture;
 
         var startedAtUtc = DateTime.UtcNow;
         var reservedCapture = GetReservedCapture(request);
+        if (body.X is { } x && body.Y is { } y)
+            return await HandlePointTapAsync(request, body.ElementId, new Point(x, y), reservedCapture, startedAtUtc);
+
         if (IsNativeElementId(body.ElementId))
         {
             string nativeResult;
@@ -3689,8 +3694,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var reservation = ReserveUiCapture(body);
         if (reservation.Error is not null)
             return reservation.Error;
+        // A drag's drop target is a referenced target too.
         foreach (var elementId in body.Actions
-            .Select(action => action.ElementId)
+            .SelectMany(action => new[] { action.ElementId, action.ToElementId })
             .Distinct(StringComparer.Ordinal))
         {
             if (await ValidateCapturedElementIdentityAsync(reservation.Capture, elementId) is { } identityError)
@@ -3707,9 +3713,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 var actionName = (action.Action ?? action.Type ?? string.Empty).Trim().ToLowerInvariant();
                 HttpResponse response;
 
-                if (await ValidateCapturedElementIdentityAsync(
-                    reservation.Capture,
-                    action.ElementId) is { } identityError)
+                var identityError = await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ElementId)
+                    ?? await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ToElementId);
+                if (identityError is not null)
                 {
                     response = identityError;
                 }
@@ -3723,9 +3729,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             {
                                 Method = "POST",
                                 MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new ActionRequest
+                                Body = AgentJson.Serialize(new TapRequest
                                 {
-                                    ElementId = action.ElementId
+                                    ElementId = action.ElementId,
+                                    X = action.X,
+                                    Y = action.Y
                                 })
                             });
                             break;
@@ -3824,6 +3832,12 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                                     DeltaY = action.DeltaY,
                                     OriginX = action.OriginX,
                                     OriginY = action.OriginY,
+                                    X = action.X,
+                                    Y = action.Y,
+                                    ToX = action.ToX,
+                                    ToY = action.ToY,
+                                    ToElementId = action.ToElementId,
+                                    HoldMs = action.HoldMs,
                                     Steps = action.Steps
                                 })
                             });

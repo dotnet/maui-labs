@@ -65,6 +65,13 @@ internal sealed class NativeUiOperations(AgentClient client)
         return client.TapAsync(element.Id, epoch, generation);
     }
 
+    internal Task<ActionResult> TapAtAsync(ElementInfo element, double x, double y)
+    {
+        var (epoch, generation) = GetCaptureMetadata(element);
+
+        return client.TapResultAsync(element.Id, x, y, epoch, generation);
+    }
+
     internal Task<bool> FillAsync(ElementInfo element, string text)
     {
         var (epoch, generation) = GetCaptureMetadata(element);
@@ -94,6 +101,15 @@ internal sealed class NativeUiOperations(AgentClient client)
 
         return client.GestureDetailedAsync(type, element?.Id, direction, distance, durationMs,
             scale, rotation, deltaX, deltaY, originX, originY, steps, epoch, generation);
+    }
+
+    internal Task<GestureResult> DragAsync(
+        ElementInfo element, double x, double y, double? toX, double? toY, string? toElementId,
+        int? holdMs, int? durationMs, int? steps)
+    {
+        var (epoch, generation) = GetCaptureMetadata(element);
+
+        return client.DragAsync(element.Id, x, y, toX, toY, toElementId, holdMs, durationMs, steps, epoch, generation);
     }
 
     internal async Task<(List<ElementInfo> Elements, bool TimedOut)> QueryAsync(

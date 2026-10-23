@@ -834,6 +834,302 @@ public class UiActionTests : IntegrationTestBase
         Assert.Contains(TestFramework.IsNative ? "elementId is required to tap" : "tap requires elementId", body);
     }
 
+    // ========== tap at a point: content drawn on a canvas ==========
+    // SkiaSharp and Syncfusion hit-test what they drew from the touch location, so the drawn
+    // items have no element id and only a tap at a point reaches them. Android delivers real
+    // MotionEvents; iOS and Mac Catalyst feed a synthesised UITouch to the canvas's recognizers.
+    // Each status label names the drawn item the app resolved, so these assert the tap landed
+    // where it was aimed — not only that it was accepted.
+
+    private async Task<ElementInfo> FindCanvasTargetAsync(string automationId)
+    {
+        await NavigateToPageAsync("//canvastaps", "SkiaCanvas");
+        await Client.ScrollAsync(automationId);
+        await SettleAsync();
+        return await FindElementAsync(automationId);
+    }
+
+    private async Task<ActionResult> TapAtFractionAsync(ElementInfo target, double fx, double fy)
+    {
+        var bounds = target.Bounds ?? throw new InvalidOperationException($"{target.Id} has no bounds");
+        return await Client.TapResultAsync(
+            target.Id,
+            bounds.Width * fx,
+            bounds.Height * fy,
+            target.CaptureEpoch,
+            target.RegistryGeneration);
+    }
+
+    [Theory]
+    [InlineData(0.8, "right")]
+    [InlineData(0.2, "left")]
+    public async Task TapAtPoint_OnSkiaCanvas_ReachesTheDrawnHalfAtThatPoint(double fx, string expected)
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var canvas = await FindCanvasTargetAsync("SkiaCanvas");
+
+        var result = await TapAtFractionAsync(canvas, fx, 0.5);
+
+        Assert.True(result.Success, result.Error);
+        await SettleAsync();
+        var status = await FindElementAsync("SkiaStatusLabel");
+        // The canvas reports the location it was handed; it must be the one asked for.
+        var expectedX = canvas.Bounds!.Width * fx;
+        var match = System.Text.RegularExpressions.Regex.Match(status.Text ?? "", @"^skia: (\w+) at \((\d+), (\d+)\)");
+        Assert.True(match.Success, status.Text);
+        Assert.Equal(expected, match.Groups[1].Value);
+        Assert.InRange(double.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture), expectedX - 1, expectedX + 1);
+        Assert.InRange(double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture), canvas.Bounds.Height / 2 - 1, canvas.Bounds.Height / 2 + 1);
+    }
+
+    [Fact]
+    public async Task TapAtPoint_OnSyncfusionChart_SelectsEachColumnItIsAimedAt()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Touch injection is not available on {Platform}.");
+            return;
+        }
+
+        // Alternating columns is the point: a double-tap recognizer left holding the previous
+        // tap would complete on the next one and select the previous column instead.
+        (double X, double Y, string Column)[] columns = [(0.54, 0.6, "B"), (0.85, 0.65, "C"), (0.24, 0.78, "A"), (0.85, 0.65, "C")];
+        foreach (var (fx, fy, column) in columns)
+        {
+            var chart = await FindCanvasTargetAsync("SalesChart");
+
+            var result = await TapAtFractionAsync(chart, fx, fy);
+
+            Assert.True(result.Success, result.Error);
+            await SettleAsync();
+            var status = await FindElementAsync("ChartStatusLabel");
+            Assert.StartsWith($"chart: selected {column} ", status.Text);
+        }
+    }
+
+    [Fact]
+    public async Task TapAtPoint_OutsideTheElement_IsRejectedWithoutTapping()
+    {
+        var canvas = await FindCanvasTargetAsync("SkiaCanvas");
+        var before = (await FindElementAsync("SkiaStatusLabel")).Text;
+
+        var result = await Client.TapResultAsync(
+            canvas.Id, canvas.Bounds!.Width + 10, 5, canvas.CaptureEpoch, canvas.RegistryGeneration);
+
+        Assert.False(result.Success);
+        Assert.Contains("outside the element", result.Error);
+        await SettleAsync();
+        var status = await FindElementAsync("SkiaStatusLabel");
+        Assert.Equal(before, status.Text);
+    }
+
+    [Fact]
+    public async Task TapAtPoint_WithOnlyOneCoordinate_IsRejected()
+    {
+        var canvas = await FindCanvasTargetAsync("SkiaCanvas");
+
+        using var response = await PostRawAsync("/api/v1/ui/actions/tap", new { elementId = canvas.Id, x = 10 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("x and y must be given together", await response.Content.ReadAsStringAsync());
+    }
+
+    // ========== drag from a point: real touches along a path ==========
+    // The Drag and Drop page's slider and card move only for what MAUI's pan and tap
+    // recognizers receive from the platform, and each status label counts it. A drag driven
+    // through the recognizer directly would also have passed — these check the touch pipeline:
+    // the thumb lands where the finger stopped, and the tap on the same layout stays silent.
+
+    private async Task<ElementInfo> OpenDragPageAsync(string automationId)
+    {
+        await NavigateToPageAsync("//dragdrop", "DragSliderTrack");
+        // The counters are what every drag test asserts, so they start from zero. The page can
+        // still be settling from the navigation, so a reset tap that misses is retried.
+        await WaitForAsync(async () =>
+        {
+            var reset = await FindElementAsync("DragResetButton");
+            return await Client.TapAsync(reset.Id, reset.CaptureEpoch, reset.RegistryGeneration)
+                && (await FindElementAsync("DropStatus")).Text == "drop: none drops=0";
+        });
+        await Client.ScrollAsync(automationId);
+        await SettleAsync();
+        return await FindElementAsync(automationId);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task DragFromPoint_OnACustomSlider_MovesTheThumbWithoutFiringItsTap()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var track = await OpenDragPageAsync("DragSliderTrack");
+        var bounds = track.Bounds!;
+        const double thumb = 24;
+        var travel = bounds.Width - thumb;
+
+        // From the thumb at 0 to the middle of the track.
+        var result = await Client.DragAsync(
+            track.Id, thumb / 2, bounds.Height / 2, toX: thumb / 2 + travel / 2, toY: bounds.Height / 2,
+            durationMs: 400, steps: 20, captureEpoch: track.CaptureEpoch, registryGeneration: track.RegistryGeneration);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("drag", result.Type);
+        Assert.Equal("native", result.HandledBy);
+        await SettleAsync();
+        var status = (await FindElementAsync("DragSliderStatus")).Text ?? "";
+        var match = System.Text.RegularExpressions.Regex.Match(
+            status, @"^slider: value=(\d+) pans=(\d+) taps=(\d+) commits=(\d+)$");
+        Assert.True(match.Success, status);
+        // UIKit starts a pan's translation after its 10pt slop, so iOS lands a little short.
+        Assert.InRange(int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), 44, 52);
+        Assert.Equal("1", match.Groups[2].Value);
+        Assert.Equal("0", match.Groups[3].Value);
+        Assert.Equal("1", match.Groups[4].Value);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task DragFromPoint_OntoADropTarget_IsReleasedOverThatTarget()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Touch injection is not available on {Platform}.");
+            return;
+        }
+
+        await OpenDragPageAsync("DragCard");
+        // Both ids from one capture: a drop target is validated against the dragged element's.
+        var both = await Client.QueryCssAsync("#DragCard, #DropZone");
+        var card = Assert.Single(both, e => e.AutomationId == "DragCard");
+        var zone = Assert.Single(both, e => e.AutomationId == "DropZone");
+
+        var result = await Client.DragAsync(
+            card.Id, card.Bounds!.Width / 2, card.Bounds.Height / 2, toElementId: zone.Id,
+            durationMs: 500, steps: 20, captureEpoch: card.CaptureEpoch, registryGeneration: card.RegistryGeneration);
+
+        Assert.True(result.Success, result.Error);
+        await SettleAsync();
+        Assert.Equal("drop: DropZone drops=1", (await FindElementAsync("DropStatus")).Text);
+
+        // And one released short of the zone is reported outside it.
+        card = await FindElementAsync("DragCard");
+        result = await Client.DragAsync(
+            card.Id, card.Bounds!.Width / 2, card.Bounds.Height / 2,
+            toX: card.Bounds.Width / 2 + 40, toY: card.Bounds.Height / 2,
+            captureEpoch: card.CaptureEpoch, registryGeneration: card.RegistryGeneration);
+
+        Assert.True(result.Success, result.Error);
+        await SettleAsync();
+        Assert.Equal("drop: outside drops=2", (await FindElementAsync("DropStatus")).Text);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task DragFromPoint_InACaptureBoundBatch_DropsOntoTheTarget()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Touch injection is not available on {Platform}.");
+            return;
+        }
+
+        await OpenDragPageAsync("DragCard");
+        var both = await Client.QueryCssAsync("#DragCard, #DropZone");
+        var card = Assert.Single(both, e => e.AutomationId == "DragCard");
+        var zone = Assert.Single(both, e => e.AutomationId == "DropZone");
+
+        using var response = await PostRawAsync("/api/v1/ui/actions/batch", new
+        {
+            actions = new object[]
+            {
+                new { action = "gesture", type = "drag", elementId = card.Id, x = 30, y = 30, toElementId = zone.Id, durationMs = 500, steps = 20 },
+            },
+            captureEpoch = card.CaptureEpoch,
+            registryGeneration = card.RegistryGeneration,
+        });
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        await SettleAsync();
+        Assert.Equal("drop: DropZone drops=1", (await FindElementAsync("DropStatus")).Text);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task DragFromPoint_OntoATargetFromAnotherCapture_IsRejectedAsStale()
+    {
+        var card = await OpenDragPageAsync("DragCard");
+        var zone = await FindElementAsync("DropZone");
+        Assert.NotEqual(card.CaptureEpoch, zone.CaptureEpoch);
+
+        var result = await Client.DragAsync(
+            card.Id, 10, 10, toElementId: zone.Id,
+            captureEpoch: card.CaptureEpoch, registryGeneration: card.RegistryGeneration);
+
+        Assert.False(result.Success);
+        Assert.Equal("drop: none drops=0", (await FindElementAsync("DropStatus")).Text);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task DragFromPoint_OnRawTouchView_DeliversTheWholeDrag()
+    {
+        if (!SupportsRawTouchInjection)
+        {
+            Output.WriteLine($"Raw-touch injection is not available on {Platform}.");
+            return;
+        }
+
+        var target = await FindRawTouchTargetAsync();
+        var bounds = target.Bounds!;
+
+        var result = await Client.DragAsync(
+            target.Id, bounds.Width / 4, bounds.Height / 2, toX: bounds.Width / 4 + 80, toY: bounds.Height / 2,
+            captureEpoch: target.CaptureEpoch, registryGeneration: target.RegistryGeneration);
+
+        Assert.True(result.Success, result.Error);
+        await SettleAsync();
+        Assert.Contains("dx=80", (await FindElementAsync("RawTouchStatusLabel")).Text);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task DragFromPoint_StartingOutsideTheElement_IsRejectedWithoutTouching()
+    {
+        var track = await OpenDragPageAsync("DragSliderTrack");
+        var before = (await FindElementAsync("DragSliderStatus")).Text;
+
+        var result = await Client.DragAsync(
+            track.Id, track.Bounds!.Width + 10, 5, toX: 10, toY: 5,
+            captureEpoch: track.CaptureEpoch, registryGeneration: track.RegistryGeneration);
+
+        Assert.False(result.Success);
+        Assert.Contains("outside the element", result.Error);
+        await SettleAsync();
+        Assert.Equal(before, (await FindElementAsync("DragSliderStatus")).Text);
+    }
+
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    [Fact]
+    public async Task DragFromPoint_WithNoEnd_IsRejected()
+    {
+        var track = await OpenDragPageAsync("DragSliderTrack");
+
+        using var response = await PostRawAsync(
+            "/api/v1/ui/actions/gesture", new { type = "drag", elementId = track.Id, x = 10, y = 10 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("needs an end", await response.Content.ReadAsStringAsync());
+    }
+
     [Trait(TestFramework.Trait, TestFramework.Maui)]
     [Fact]
     public async Task LongPress_OnAndroid_HoldsTheNativeTouchForAtLeastThePlatformThreshold()

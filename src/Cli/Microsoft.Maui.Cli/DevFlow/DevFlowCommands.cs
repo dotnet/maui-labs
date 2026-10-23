@@ -487,7 +487,9 @@ public class DevFlowCommands
 
         // MAUI tap
         var tapIdArg = new Argument<string?>("elementId") { Description = "Element ID to tap (optional if --automationId, --type, or --text is used)", DefaultValueFactory = _ => null };
-        var mauiTapCmd = new Command("tap", "Tap element") { tapIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
+        var tapXOption = new Option<double?>("--x") { Description = "Tap at this X inside the element (device-independent units from its left edge); use with --y to tap content drawn on a canvas" };
+        var tapYOption = new Option<double?>("--y") { Description = "Tap at this Y inside the element (device-independent units from its top edge); use with --x" };
+        var mauiTapCmd = new Command("tap", "Tap element, or a point inside it with --x/--y") { tapIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption, tapXOption, tapYOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
         mauiTapCmd.SetAction(async (ctx, ct) =>
         {
             var host = ctx.GetValue(agentHostOption)!;
@@ -502,6 +504,14 @@ public class DevFlowCommands
             var hasAndScreenshot = ctx.GetResult(andScreenshotOption) != null;
             var andTree = ctx.GetValue(andTreeOption);
             var andTreeDepth = ctx.GetValue(andTreeDepthOption);
+            var tapX = ctx.GetValue(tapXOption);
+            var tapY = ctx.GetValue(tapYOption);
+            if (tapX.HasValue != tapY.HasValue)
+            {
+                Output.WriteError("--x and --y must be given together", isJson, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
             var target = await ResolveElementTargetAsync(
                 host,
                 port,
@@ -514,7 +524,10 @@ public class DevFlowCommands
                 ElementActionKind.Tap,
                 preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
             if (target == null) return;
-            await MauiTapAsync(host, port, isJson, target);
+            if (tapX is { } x && tapY is { } y)
+                await MauiTapAtAsync(host, port, isJson, target, x, y);
+            else
+                await MauiTapAsync(host, port, isJson, target);
             await HandlePostActionFlags(host, port, isJson, hasAndScreenshot, andScreenshot, andTree, andTreeDepth);
         });
         mauiCommand.Add(mauiTapCmd);
@@ -748,7 +761,7 @@ public class DevFlowCommands
         // already taken by element resolution.
         var gestureTypeArg = new Argument<string>("gestureType")
         {
-            Description = "Gesture: pinch, rotate, pan, swipe, doubletap, longpress, or tap"
+            Description = "Gesture: pinch, rotate, pan, drag, swipe, doubletap, longpress, or tap"
         };
         var gestureElementOption = new Option<string?>("--element") { Description = "Target element ID (required for tap; other gestures default to the current page)" };
         var gestureDirectionOption = new Option<string?>("--direction") { Description = "Direction for swipe/pan: up, down, left, right" };
@@ -761,12 +774,19 @@ public class DevFlowCommands
         var gestureOriginYOption = new Option<double?>("--origin-y") { Description = "Focal point Y, element-relative 0..1 (default: 0.5)" };
         var gestureDurationOption = new Option<int?>("--duration") { Description = "Gesture duration in milliseconds (default: 200)" };
         var gestureStepsOption = new Option<int?>("--steps") { Description = "Interpolation steps between start and end (default: 10)" };
-        var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, swipe, doubletap, longpress, tap")
+        var gestureXOption = new Option<double?>("--x") { Description = "drag: press at this X on the element (device-independent units from its left edge); with --y, makes the drag a real touch from that point" };
+        var gestureYOption = new Option<double?>("--y") { Description = "drag: press at this Y on the element (device-independent units from its top edge); use with --x" };
+        var gestureToXOption = new Option<double?>("--to-x") { Description = "drag: release at this X, on --to-element if given, otherwise on the element (may lie past its edge)" };
+        var gestureToYOption = new Option<double?>("--to-y") { Description = "drag: release at this Y, on --to-element if given, otherwise on the element; use with --to-x" };
+        var gestureToElementOption = new Option<string?>("--to-element") { Description = "drag: element ID to drop onto; released at its centre unless --to-x/--to-y are given" };
+        var gestureHoldOption = new Option<int?>("--hold") { Description = "drag: hold the press this many milliseconds before moving (long-press-to-drag)" };
+        var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, drag, swipe, doubletap, longpress, tap")
         {
             gestureTypeArg, gestureElementOption, resolveAutoIdOption, resolveTextOption, resolveIndexOption,
             gestureDirectionOption, gestureDistanceOption, gestureScaleOption, gestureRotationOption,
             gestureDxOption, gestureDyOption, gestureOriginXOption, gestureOriginYOption,
-            gestureDurationOption, gestureStepsOption
+            gestureDurationOption, gestureStepsOption,
+            gestureXOption, gestureYOption, gestureToXOption, gestureToYOption, gestureToElementOption, gestureHoldOption
         };
         mauiGestureCmd.SetAction(async (ctx, ct) =>
         {
@@ -809,7 +829,14 @@ public class DevFlowCommands
                 ctx.GetValue(gestureDyOption),
                 ctx.GetValue(gestureOriginXOption),
                 ctx.GetValue(gestureOriginYOption),
-                ctx.GetValue(gestureStepsOption));
+                ctx.GetValue(gestureStepsOption),
+                new PointDragOptions(
+                    ctx.GetValue(gestureXOption),
+                    ctx.GetValue(gestureYOption),
+                    ctx.GetValue(gestureToXOption),
+                    ctx.GetValue(gestureToYOption),
+                    ctx.GetValue(gestureToElementOption),
+                    ctx.GetValue(gestureHoldOption)));
         });
         mauiCommand.Add(mauiGestureCmd);
 
@@ -3154,6 +3181,28 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
     }
 
+    private static async Task MauiTapAtAsync(string host, int port, bool json, ElementInfo element, double x, double y)
+    {
+        try
+        {
+            var result = await SendNativeUiCommandAsync(host, port, operations => operations.TapAtAsync(element, x, y));
+            if (result.Success)
+            {
+                Output.WriteActionResult(true, "Tapped", element.Id, json, $"Tapped: {element.Id} at ({x:0.#}, {y:0.#})");
+                return;
+            }
+
+            // The agent's reason is the useful part — outside the bounds, covered, synthetic
+            // touch not enabled — so it goes out as a structured error rather than a bare false.
+            Output.WriteError(
+                $"Failed to tap {element.Id} at ({x:0.#}, {y:0.#}): {result.Error ?? result.Reason ?? "unknown error"}",
+                json,
+                retryable: result.Retryable);
+            _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
+    }
+
     private static async Task MauiFillAsync(string host, int port, bool json, ElementInfo element, string text)
     {
         try
@@ -3380,15 +3429,40 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
-    private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+    private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "drag", "pinch", "rotate"];
+
+    /// <summary>The options that turn a drag into a real touch from a point.</summary>
+    private sealed record PointDragOptions(
+        double? X, double? Y, double? ToX, double? ToY, string? ToElementId, int? HoldMs)
+    {
+        public bool Requested => X.HasValue || Y.HasValue || ToX.HasValue || ToY.HasValue
+            || ToElementId != null || HoldMs.HasValue;
+    }
 
     private static async Task MauiGestureAsync(
         string host, int port, bool json, string gestureType, ElementInfo? element,
         string? direction, double? distance, int? durationMs, double? scale, double? rotation,
-        double? deltaX, double? deltaY, double? originX, double? originY, int? steps)
+        double? deltaX, double? deltaY, double? originX, double? originY, int? steps,
+        PointDragOptions? pointDrag = null)
     {
         var normalizedType = gestureType.Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
         if (normalizedType == "zoom") normalizedType = "pinch";
+
+        if (pointDrag is { Requested: true })
+        {
+            if (normalizedType is not ("drag" or "pan"))
+            {
+                Output.WriteError(
+                    "--x, --y, --to-x, --to-y, --to-element and --hold apply to the drag gesture only.",
+                    json, "ValidationError");
+                _errorOccurred = true;
+                return;
+            }
+
+            await MauiPointDragAsync(host, port, json, element, deltaX, deltaY, direction, durationMs, steps, pointDrag);
+            return;
+        }
+
         if (normalizedType == "drag") normalizedType = "pan";
 
         if (Array.IndexOf(GestureTypes, normalizedType) < 0)
@@ -3464,6 +3538,71 @@ public class DevFlowCommands
                 {
                     Console.WriteLine($"Failed to perform {normalizedType}{target}: {result.Error}");
                 }
+            }
+
+            if (!result.Success) _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task MauiPointDragAsync(
+        string host, int port, bool json, ElementInfo? element, double? deltaX, double? deltaY,
+        string? direction, int? durationMs, int? steps, PointDragOptions drag)
+    {
+        string? invalid = null;
+        if (element is null)
+            invalid = "drag from a point requires --element, --automationId, or --text: --x/--y are measured from it.";
+        else if (drag.X is null || drag.Y is null)
+            invalid = "drag from a point requires both --x and --y.";
+        else if (drag.ToX.HasValue != drag.ToY.HasValue)
+            invalid = "--to-x and --to-y must be given together.";
+        else if (direction != null)
+            invalid = "drag from a point takes --to-x/--to-y, --to-element, or --dx/--dy; not --direction.";
+        else if ((deltaX.HasValue || deltaY.HasValue) && (drag.ToX.HasValue || drag.ToElementId != null))
+            invalid = "Give the end of a drag once: --to-x/--to-y, --to-element, or --dx/--dy.";
+        else if (!deltaX.HasValue && !deltaY.HasValue && !drag.ToX.HasValue && drag.ToElementId == null)
+            invalid = "drag from a point needs an end: --to-x/--to-y, --to-element, or --dx/--dy.";
+
+        if (invalid != null)
+        {
+            Output.WriteError(invalid, json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        var x = drag.X!.Value;
+        var y = drag.Y!.Value;
+        // A vector from the start is the same drag as an end point on the element itself.
+        var toX = drag.ToX ?? (drag.ToElementId == null ? x + (deltaX ?? 0) : null);
+        var toY = drag.ToY ?? (drag.ToElementId == null ? y + (deltaY ?? 0) : null);
+
+        try
+        {
+            var result = await SendNativeUiCommandAsync(host, port, operations => operations.DragAsync(
+                element!, x, y, toX, toY, drag.ToElementId, drag.HoldMs, durationMs, steps));
+
+            if (json)
+            {
+                Output.WriteRawJson(CliJson.SerializeUntyped(new JsonObject
+                {
+                    ["success"] = result.Success,
+                    ["action"] = "gesture",
+                    ["type"] = result.Type ?? "drag",
+                    ["elementId"] = element!.Id,
+                    ["toElementId"] = drag.ToElementId,
+                    ["handledBy"] = result.HandledBy,
+                    ["platform"] = result.Platform,
+                    ["detail"] = result.Detail,
+                    ["error"] = result.Error
+                }, indented: false));
+            }
+            else if (result.Success)
+            {
+                Console.WriteLine($"Dragged {element!.Id} via native {result.Platform} — {result.Detail}");
+            }
+            else
+            {
+                Console.WriteLine($"Failed to drag {element!.Id}: {result.Error}");
             }
 
             if (!result.Success) _errorOccurred = true;

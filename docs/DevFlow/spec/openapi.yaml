@@ -757,9 +757,18 @@ paths:
     post:
       operationId: tapElement
       tags: [ui-actions]
-      summary: Tap element or coordinates
+      summary: Tap element, or a point inside it
       description: >
-        Taps on an element (by ID) or at absolute coordinates.
+        Taps an element by ID. With x and y — device-independent units from the element's
+        top-left, given together — the tap is instead delivered as a real touch at that point
+        inside the element. That is how content drawn on a canvas is tapped: SkiaSharp's
+        SKCanvasView, GraphicsView, and controls drawn with Microsoft.Maui.Graphics such as
+        Syncfusion's charts hit-test the touch location themselves, and what they draw has no
+        element ID of its own. On Android the touch is a real MotionEvent sent to the element's
+        view; on iOS and Mac Catalyst it is a synthesised UITouch given to the gesture recognizers
+        of the view under the point (or, for a recognizer-less raw-touch view, to the view), which
+        needs AgentOptions.EnableSyntheticTouch (capabilities.syntheticTouch). A point outside the
+        element, or covered by another view, is rejected rather than tapped elsewhere.
       requestBody:
         required: true
         content:
@@ -1000,7 +1009,7 @@ paths:
       tags: [ui-actions]
       summary: Perform a gesture
       description: >
-        Performs a named gesture — pinch, rotate, pan, swipe, doubletap, longpress or tap.
+        Performs a named gesture — pinch, rotate, pan, drag, swipe, doubletap, longpress or tap.
         The gesture is first offered to a matching MAUI gesture recognizer on the target
         element or its ancestors. If there is none, it is injected natively at the platform
         view, which is how pinch-to-zoom reaches controls that handle gestures internally
@@ -1015,6 +1024,18 @@ paths:
         falling back to ancestor swipe or pan recognizers. The response reports which tier
         serviced the gesture so callers can tell a real recognizer hit from a native fallback.
         Tap requires elementId; other gesture types target the current page when it is omitted.
+
+        A drag (or pan) given a start point x/y on elementId is a real touch instead: pressed
+        there, optionally held for holdMs, moved to toX/toY — on toElementId when given, else on
+        the element — or by deltaX/deltaY, and released. With toElementId and no toX/toY it is
+        released at the target's centre, which must be part of the same capture as elementId.
+        It is never serviced by invoking a recognizer directly, so competing recognizers settle
+        as they do for a finger: a pan on a custom slider's track moves the thumb and the track's
+        tap does not fire. Android sends the MotionEvents through the window, so an enclosing
+        scroller can take the drag exactly as it would a finger's; iOS and Mac Catalyst feed a
+        synthesised UITouch to the recognizers under the point and need
+        capabilities.syntheticTouch. A start point off the element is rejected, and the element
+        is scrolled into view first.
       requestBody:
         required: true
         content:
