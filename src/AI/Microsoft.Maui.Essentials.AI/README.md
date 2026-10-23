@@ -55,6 +55,34 @@ await foreach (var update in chat.GetStreamingResponseAsync("Suggest a walking r
 Structured responses stream only when the native provider emits partial
 updates; otherwise a completed response can arrive as one update.
 
+### Structured responses
+
+Use `GetResponseAsync<T>` to generate a schema and deserialize a typed response:
+
+```csharp
+using System.ComponentModel;
+using System.Text.Json.Serialization;
+
+var response = await chat.GetResponseAsync<TripSuggestion>(
+    "Suggest a day trip near Seattle.",
+    AppJsonContext.Default.Options);
+
+Console.WriteLine($"{response.Result.Destination}: {response.Result.Reason}");
+
+[Description("A day trip recommendation.")]
+public sealed record TripSuggestion(
+    [property: Description("The destination name.")] string Destination,
+    [property: Description("A short reason to visit.")] string Reason);
+
+[JsonSerializable(typeof(TripSuggestion))]
+internal partial class AppJsonContext : JsonSerializerContext;
+```
+
+Native schema constraints apply. Structured responses may arrive as one final
+update when a provider emits no incremental progress. For trimmed/AOT apps,
+pass source-generated `JsonSerializerOptions`, as above, for every structured
+response type.
+
 ### Apple tools
 
 Supply `AIFunction` tools through standard `ChatOptions`. The native client
@@ -118,6 +146,21 @@ from Foundation Models, not estimates, and usage is `null` on Apple OS 26.
 Reference `Microsoft.Extensions.AI` to use its telemetry middleware:
 
 ```csharp
+var instrumentedChat = chat.AsBuilder()
+    .UseOpenTelemetry(
+        sourceName: "MyApp.AI",
+        configure: telemetry => telemetry.EnableSensitiveData = false)
+    .Build();
+```
+
+Use the wrapped client for requests, or return it from the provider factory.
+The same middleware works with every `IChatClient`; provider-specific timing,
+metadata, usage, and error behavior is documented in the
+[local chat provider contract](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md).
+
+To construct and instrument the Apple client directly:
+
+```csharp
 using var client = new AppleIntelligenceChatClient().AsBuilder()
     .UseOpenTelemetry(
         sourceName: "MyApp.AI",
@@ -154,6 +197,7 @@ The corresponding NaturalLanguage model asset must be installed on the device.
 
 ## Examples and source
 
+- [Local chat provider contract](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) (shared design target; not a platform support guarantee)
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)
 - [Apple image input](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models-image-input.md)

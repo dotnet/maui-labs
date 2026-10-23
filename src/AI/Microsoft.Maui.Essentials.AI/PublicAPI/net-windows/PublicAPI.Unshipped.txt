@@ -1,1 +1,20 @@
 ﻿#nullable enable
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.Available = 0 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.Disabled = 3 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.NotReady = 1 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.NotSupported = 2 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.RequirementsNotMet = 4 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelAvailability.Unknown = 5 -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.ImageInput = 2 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.Reasoning = 6 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.Streaming = 1 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.StructuredOutput = 4 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.Text = 0 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.TokenUsage = 5 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelCapability.ToolCalling = 3 -> Microsoft.Maui.Essentials.AI.ChatModelCapability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.Availability.get -> Microsoft.Maui.Essentials.AI.ChatModelAvailability
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.Capabilities.get -> System.Collections.Generic.IReadOnlyCollection<Microsoft.Maui.Essentials.AI.ChatModelCapability>?
+[MAUIAI0001]Microsoft.Maui.Essentials.AI.ChatModelStatus.UnavailableReason.get -> string?

@@ -64,11 +64,45 @@ Device tests use DeviceRunners with `dotnet test` and live in
 `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
 Apple device/runtime and model availability; portable tests do not run a model.
 
+Run every model-free provider binding on Mac Catalyst:
+
+```sh
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
+  -f net10.0-maccatalyst -c Release \
+  --filter "RequiresModel!=true" --logger trx
+```
+
+For live OpenAI baseline tests, configure the device-test user secrets:
+
+- `AI:ApiKey`
+- `AI:Endpoint`
+- `AI:DeploymentName`
+- `AI:EmbeddingDeploymentName`
+
+`EnableOpenAIClient=true` and `EnableOpenAITests=true` both compile the OpenAI
+fixtures. Use a Debug test run so the user-secrets file is embedded. The
+unfiltered command runs the complete Apple and live OpenAI device assembly and
+makes real requests against the configured deployments:
+
+```sh
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
+  -f net10.0-maccatalyst -c Debug -p:EnableOpenAITests=true --logger trx
+```
+
+Use a filter only for diagnosis, never as the final validation result:
+
+```sh
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
+  -f net10.0-maccatalyst -c Debug -p:EnableOpenAIClient=true \
+  --filter "FullyQualifiedName~OpenAIChatClient" --logger trx
+```
+
 - `AppleNative/EssentialsAI/`: Swift bridge and binding definitions, producing `.xcframework` bundles.
 - `Microsoft.Maui.Essentials.AI/Platform/`: platform clients and streaming helpers.
 - `JsonStreamChunker`, `PlainTextStreamChunker`, and `StreamingResponseHandler`: cumulative-response deltas and streaming updates.
 - `AppleBindings.targets`: native artifact build and packaging.
 
 Further design documentation:
+[Local chat provider contract](../../docs/ai/local-chat-provider.md),
 [Apple image input](../../docs/ai/apple-foundation-models-image-input.md) and
 [JSON stream chunking](../../docs/ai/json-stream-chunker-design.md).
