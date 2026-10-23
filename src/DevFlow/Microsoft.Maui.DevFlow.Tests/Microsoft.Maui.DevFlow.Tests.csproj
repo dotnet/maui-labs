@@ -75,6 +75,9 @@
 
   <ItemGroup>
     <Compile Include="..\Microsoft.Maui.DevFlow.Blazor\WebViewNavigation.cs" Link="WebViewNavigation.cs" />
+    <Compile Include="..\Microsoft.Maui.DevFlow.Blazor\ScriptResources.cs" Link="ScriptResources.cs" />
+    <EmbeddedResource Include="..\Microsoft.Maui.DevFlow.Blazor\Resources\Scripts\*.js"
+                      LogicalName="Microsoft.Maui.DevFlow.Blazor.Resources.Scripts.%(Filename)%(Extension)" />
     <Using Include="Xunit" />
   </ItemGroup>
 
