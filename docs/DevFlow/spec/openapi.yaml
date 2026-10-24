@@ -2204,8 +2204,11 @@ paths:
       summary: List platform background jobs
       description: >
         Returns platform background jobs known to the agent. Android reports
-        WorkManager identifiers, tags, states, and run attempts. iOS and Mac
-        Catalyst report pending BGTaskScheduler requests.
+        WorkManager identifiers, generations, tags, states, run attempts, and exact
+        JobScheduler mappings. Android also reports the running agent instance identity
+        and device-side HTTP port for host-side adb target verification. Multiple
+        scheduler entries can represent one WorkSpec generation on Android API 23.
+        iOS and Mac Catalyst report pending BGTaskScheduler requests.
       responses:
         "200":
           description: Platform job list.
@@ -2224,11 +2227,15 @@ paths:
       tags: [device]
       summary: Trigger a platform background job
       description: >
-        Attempts to trigger the named platform background job. iOS and Mac
-        Catalyst submit a BGTaskRequest for the identifier; pass `type` when
-        the task is known to be an app refresh task. Android currently reports
+        Attempts to trigger the named platform background job. Debug-built iOS and Mac
+        Catalyst agents submit a BGTaskRequest if needed, then request a debugger launch.
+        Success acknowledges the launch request, not handler execution or completion.
+        Release-built agents return 501 before scheduling or invoking a private API.
+        Pass `type` when the task is known to be an app refresh task. Android reports
         `success=false` because WorkManager worker types and request inputs
-        cannot be reconstructed safely from the listed identifier or tags.
+        cannot be reconstructed safely from the listed identifier or tags. The CLI's
+        Android trigger is a separate host-side adb operation that verifies target
+        identity, holds a mutation transaction, and observes the exact WorkSpec generation.
       parameters:
         - name: identifier
           in: path

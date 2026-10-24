@@ -859,6 +859,53 @@ public class DevFlowCommands
         });
         mauiCommand.Add(mauiResizeCmd);
 
+        // MAUI background jobs — Android WorkManager, iOS BGTaskScheduler
+        var jobsCommand = new Command("jobs", "List and run background jobs (Android WorkManager, iOS BGTask)");
+
+        var jobsListCmd = new Command("list", "List registered background jobs");
+        jobsListCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiJobsListAsync(host, port, isJson);
+        });
+        jobsCommand.Add(jobsListCmd);
+
+        var jobRunIdArg = new Argument<string>("identifier")
+        {
+            Description = "Android WorkSpec UUID, unambiguous worker/tag or JobScheduler id; iOS BGTask identifier"
+        };
+        var jobRunTypeOption = new Option<string?>("--type") { Description = "iOS BGTask type: processing or refresh" };
+        var jobRunSerialOption = new Option<string?>("--serial") { Description = "Android device/emulator serial (adb -s)" };
+        var jobRunPackageOption = new Option<string?>("--package") { Description = "Android package name (auto-detected from the agent if omitted)" };
+        var jobRunTimeoutOption = new Option<int>("--timeout") { Description = "Android: overall timeout in seconds for target verification, triggering, and observing one-time work", DefaultValueFactory = _ => 30 };
+        jobRunTimeoutOption.Validators.Add(result =>
+        {
+            if (result.GetValueOrDefault<int>() <= 0)
+                result.AddError("--timeout must be greater than zero.");
+        });
+        var jobsRunCmd = new Command("run", "Android: force work and report its outcome; iOS: request a debug BGTask launch (not completion)")
+        {
+            jobRunIdArg, jobRunTypeOption, jobRunSerialOption, jobRunPackageOption, jobRunTimeoutOption
+        };
+        // Android exit status verifies completion; iOS only acknowledges the launch request.
+        jobsRunCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            var succeeded = await MauiJobsRunAsync(host, port, isJson,
+                ctx.GetValue(jobRunIdArg)!,
+                ctx.GetValue(jobRunTypeOption),
+                ctx.GetValue(jobRunSerialOption),
+                ctx.GetValue(jobRunPackageOption),
+                ctx.GetValue(jobRunTimeoutOption), ct);
+            return succeeded ? 0 : 1;
+        });
+        jobsCommand.Add(jobsRunCmd);
+        mauiCommand.Add(jobsCommand);
+
         // System/app alert subcommands — platform drivers cover Android, iOS simulator,
         // Mac Catalyst, and Windows.
         var alertCommand = new Command("alert", "Detect and dismiss system/app dialogs");
@@ -3380,6 +3427,60 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
+    internal static Func<AndroidAppDriver> JobDriverFactory { get; set; } = () => new AndroidAppDriver();
+
+    private static async Task MauiJobsListAsync(string host, int port, bool json)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await client.GetJobsAsync();
+
+            if (result.TryGetProperty("error", out var queryError))
+                throw new InvalidOperationException($"Could not read jobs: {queryError.GetString()}");
+            if (json) { Output.WriteJsonElement(result, json); return; }
+
+            var platform = result.TryGetProperty("platform", out var p) ? p.GetString() : "unknown";
+            var kind = result.TryGetProperty("type", out var t) ? t.GetString() : "";
+            var supported = result.TryGetProperty("supported", out var s) && s.GetBoolean();
+
+            if (!supported)
+            {
+                Console.WriteLine($"Background jobs are not available on {platform}.");
+                if (result.TryGetProperty("reason", out var reason))
+                    Console.WriteLine(reason.GetString());
+                return;
+            }
+
+            var jobs = result.TryGetProperty("jobs", out var j) && j.ValueKind == JsonValueKind.Array
+                ? j.EnumerateArray().ToList()
+                : [];
+
+            if (jobs.Count == 0)
+            {
+                Console.WriteLine($"{platform} / {kind}: no jobs scheduled.");
+                return;
+            }
+
+            Console.WriteLine($"{platform} / {kind}: {jobs.Count} job(s)");
+            foreach (var job in jobs)
+            {
+                Console.WriteLine($"  {(job.TryGetProperty("identifier", out var i) ? i.GetString() : "?")}");
+                if (job.TryGetProperty("state", out var st))
+                    Console.WriteLine($"    state:    {st.GetString()}");
+                if (job.TryGetProperty("runAttemptCount", out var rc))
+                    Console.WriteLine($"    attempts: {rc}");
+                if (job.TryGetProperty("type", out var ty))
+                    Console.WriteLine($"    type:     {ty.GetString()}");
+                if (job.TryGetProperty("earliestBeginDate", out var eb) && !string.IsNullOrWhiteSpace(eb.GetString()))
+                    Console.WriteLine($"    earliest: {eb.GetString()}");
+                if (job.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array)
+                    Console.WriteLine($"    tags:     {string.Join(", ", tg.EnumerateArray().Select(x => x.GetString()))}");
+            }
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
     private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
 
     private static async Task MauiGestureAsync(
@@ -3469,6 +3570,84 @@ public class DevFlowCommands
             if (!result.Success) _errorOccurred = true;
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task<bool> MauiJobsRunAsync(
+        string host, int port, bool json, string identifier,
+        string? type, string? serial, string? package, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var jobs = await client.GetJobsAsync();
+            var platform = jobs.TryGetProperty("platform", out var p) ? p.GetString() ?? "" : "";
+
+            if (platform.Equals("Android", StringComparison.OrdinalIgnoreCase))
+                return await RunAndroidJobAsync(client, json, identifier, serial, package, timeoutSeconds, cancellationToken);
+
+            // iOS / Mac Catalyst: the agent schedules the request and forces the launch in-process.
+            var result = await client.RunJobAsync(identifier, type);
+            var ok = result.TryGetProperty("success", out var okFlag) && okFlag.GetBoolean();
+
+            if (json) Output.WriteJsonElement(result, json);
+            else
+            {
+                var msg = result.TryGetProperty("message", out var m) ? m.GetString() : null;
+                var error = result.TryGetProperty("error", out var e) ? e.GetString() : null;
+                var launchRequested = result.TryGetProperty("launchRequested", out var requested) && requested.GetBoolean();
+                Console.WriteLine(ok
+                    ? $"{(launchRequested ? "LAUNCH REQUESTED" : "SUCCESS")}: {msg ?? identifier}"
+                    : $"FAILED: {error ?? "unknown error"}");
+                if (ok && result.TryGetProperty("note", out var note)) Console.WriteLine($"  note: {note.GetString()}");
+            }
+
+            if (!ok) _errorOccurred = true;
+            return ok;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; return false; }
+    }
+
+    private static async Task<bool> RunAndroidJobAsync(
+        Microsoft.Maui.DevFlow.Driver.AgentClient client, bool json,
+        string identifier, string? serial, string? package, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        using var driver = JobDriverFactory();
+        driver.Serial = serial;
+        var result = await new Jobs.AndroidJobRunner(client, driver).RunAsync(
+            identifier, package, TimeSpan.FromSeconds(timeoutSeconds), cancellationToken);
+        var target = result.Target.Job;
+
+        if (json)
+        {
+            Output.WriteRawJson(CliJson.SerializeUntyped(new JsonObject
+            {
+                ["success"] = result.Success,
+                ["identifier"] = result.Target.WorkSpecId,
+                ["generation"] = result.Target.Generation,
+                ["requestedIdentifier"] = identifier,
+                ["jobId"] = target.JobId,
+                ["worker"] = target.Worker,
+                ["namespace"] = target.Namespace,
+                ["stateBefore"] = result.StateBefore,
+                ["state"] = result.State,
+                ["timedOut"] = result.TimedOut,
+                ["error"] = result.TimedOut ? $"No terminal state reported within {timeoutSeconds}s." : null,
+                ["runAttemptCount"] = result.Attempts,
+                ["triggeredVia"] = "adb cmd jobscheduler run -f",
+                ["adbOutput"] = result.AdbOutput
+            }, indented: false));
+        }
+        else
+        {
+            Console.WriteLine($"Forced job {target.JobId} ({target.Worker ?? identifier}) via adb — {result.AdbOutput}");
+            if (result.TimedOut)
+                Console.WriteLine($"FAILED: no terminal state reported within {timeoutSeconds}s (state: {result.State})");
+            else
+                Console.WriteLine($"{(result.Success ? "SUCCESS" : "FAILED")}: {result.State} after {result.Attempts} attempt(s)");
+        }
+
+        if (!result.Success) _errorOccurred = true;
+        return result.Success;
     }
 
     private static async Task MauiFocusAsync(string host, int port, bool json, ElementInfo element)

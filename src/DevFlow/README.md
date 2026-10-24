@@ -651,6 +651,55 @@ User-wide suppressions use the same `suppressions` shape in
 `~/.mauidevflow/layout-diagnostics.json`. CLI, MCP, and the Web Inspector merge
 user and project policies before requesting a scan.
 
+### Background jobs
+
+```bash
+maui devflow ui jobs list --agent-port <port>
+maui devflow ui jobs run <work-spec-uuid> --serial <android-serial> --timeout 30 --agent-port <port>
+maui devflow ui jobs run com.example.sync --type processing --agent-port <port>
+```
+
+| Surface | Android WorkManager | iOS BGTaskScheduler |
+|---------|---------------------|---------------------|
+| Listing (HTTP, CLI, MCP) | Requires WorkManager in the app; includes states and exact JobScheduler mappings | Lists pending requests; physical device required for scheduling |
+| CLI `jobs run` | Forces enqueued one-time work through host-side adb and polls the exact UUID | Requests a debug launch, not verified execution or completion |
+| HTTP/MCP run | Unsupported; no host-side adb in the agent | Requires a Debug-built agent library and a physical device |
+
+Android `jobs run` matches the JobScheduler id to `EXTRA_WORK_SPEC_ID` read through the app's
+public JobScheduler API. Worker names and tags are not unique identities: shorthand is accepted
+only when it resolves to one WorkSpec generation. Duplicate backing jobs for that same generation
+(WorkManager's Android API 23 workaround) are equivalent, not ambiguous. An explicit UUID never
+falls back to another request, and generation changes fail instead of reporting a different run.
+Use `--serial` when multiple Android devices are connected. Before triggering, the host runner
+pins that serial, temporarily forwards the device-side agent port, and compares the running
+agent's opaque instance identity. A different device, app restart, or unavailable probe fails
+closed; matching package names or numeric job IDs alone are not accepted.
+
+Host execution claims the app's mutation lease and holds a renewable transaction through adb
+triggering and outcome polling. Another owner, failed renewal, missing mappings, ambiguous
+identifiers, query errors, failed/cancelled work, and
+timeouts fail the command. Exit 0 means the resolved WorkSpec reached `SUCCEEDED`; periodic work
+returns to `ENQUEUED` rather than a terminal success, so it needs an app-specific outcome assertion.
+`--timeout` bounds target verification, triggering, and observation; cancellation releases the
+transaction and temporary forward, but does not cancel a worker that has already started.
+Older agents without identity, generation, scheduler mapping, or mutation-transaction support
+must be updated before the CLI can safely force work.
+
+iOS triggering uses Apple's private debugger selector, compiled only into **Debug builds of the
+agent library**. The shipped Release-built NuGet agent does not support it, even when the consuming
+app is built in Debug. Release trigger requests return unsupported **before scheduling work**;
+use your app's own scheduling API if you only want to schedule. Keep source-built Debug agents and sample trigger actions out of App Store
+builds. Configure `BGTaskSchedulerPermittedIdentifiers`, the appropriate background mode, and a
+launch handler before app launch completes; scheduling requires a physical device and enabled
+Background App Refresh. The simulator cannot schedule these tasks.
+
+On iOS, exit 0 and `success: true` acknowledge only the launch request. The response reports
+`launchRequested: true`, `executionVerified: false`, and `completionVerified: false`. Verify
+execution and completion using state recorded by your handler. Pending-request disappearance is
+not used as an outcome: a handler can immediately reschedule the same identifier. The iOS sample's
+Debug-only `bgtask-simulate-launch` action accepts `reschedule: true` to exercise that pattern;
+inspect `bgtask-run-count` and the next pending request to verify it.
+
 ### DevFlow Global Options
 
 These options apply to all `maui devflow` subcommands:

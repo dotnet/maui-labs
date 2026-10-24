@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json;
 using System.Xml.Linq;
 using Xamarin.Android.Tools;
 
@@ -486,6 +487,176 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     }
 
     // ──────────────────────────────────────────────
+    // ──────────────────────────────────────────────
+    // Background jobs (WorkManager via JobScheduler)
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// The JobScheduler namespace WorkManager schedules into. Job lookups and the run command
+    /// both need it — without <c>-n</c> the job simply is not found.
+    /// </summary>
+    public const string WorkManagerNamespace = "androidx.work.systemjobscheduler";
+
+    /// <summary>
+    /// Lists the app's scheduled JobScheduler jobs by parsing <c>dumpsys jobscheduler</c>.
+    ///
+    /// <para>
+    /// This is the host-side counterpart to the in-app WorkManager query. It sees what the
+    /// system actually has scheduled rather than what the app's WorkManager database believes,
+    /// and it needs no cooperation from the app — but it reports JobScheduler's view, so the
+    /// identifier is a numeric job id rather than a WorkSpec UUID.
+    /// </para>
+    /// </summary>
+    public virtual async Task<IReadOnlyList<AndroidScheduledJob>> ListScheduledJobsAsync(string packageName, CancellationToken cancellationToken = default)
+    {
+        var dump = await RunJobAdbAsync(["shell", "dumpsys", "jobscheduler"], cancellationToken);
+        return ParseScheduledJobs(dump, packageName);
+    }
+
+    /// <summary>
+    /// Reads jobs through a temporary forward on the selected adb device, pinning its serial
+    /// for subsequent scheduler commands. Callers must compare the agent instance identity.
+    /// </summary>
+    public virtual async Task<JsonElement> ReadJobsOnDeviceAsync(int agentPort, CancellationToken cancellationToken = default)
+    {
+        if (agentPort is < 1 or > 65535)
+            throw new ArgumentOutOfRangeException(nameof(agentPort));
+        Serial = await ResolveSerialAsync().WaitAsync(cancellationToken);
+        var localPortText = await RunJobAdbAsync(
+            ["forward", "tcp:0", $"tcp:{agentPort}"], cancellationToken);
+        if (!int.TryParse(localPortText.Trim(), out var localPort) || localPort is < 1 or > 65535)
+            throw new InvalidOperationException($"adb did not return an allocated forward port: {localPortText}");
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var response = await http.GetAsync(
+                $"http://127.0.0.1:{localPort}/api/v1/device/jobs", cancellationToken);
+            response.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            return document.RootElement.Clone();
+        }
+        finally
+        {
+            await RunJobAdbAsync(["forward", "--remove", $"tcp:{localPort}"], CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Parses <c>dumpsys jobscheduler</c> output. Entries look like:
+    /// <code>
+    /// JOB androidx.work.systemjobscheduler:u0a233/1: 258ed68 #SampleSyncWorker#@androidx.work.systemjobscheduler@com.pkg/androidx.work.impl.background.systemjob.SystemJobService
+    /// JOB #1000/808: cb8ff9f android/com.android.server.MountServiceIdler
+    /// </code>
+    /// The namespaced form carries the WorkManager worker name in <c>#…#</c>.
+    /// </summary>
+    internal static IReadOnlyList<AndroidScheduledJob> ParseScheduledJobs(string dumpsysOutput, string packageName)
+    {
+        var jobs = new List<AndroidScheduledJob>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        // Two shapes occur, and both must parse:
+        //   JOB <namespace>:<uid>/<jobId>: <hash> #<worker>#@<namespace>@<package>/<service>
+        //   JOB #<uid>/<jobId>: <hash> <package>/<service>          (no namespace)
+        var pattern = new System.Text.RegularExpressions.Regex(
+            @"JOB\s+(?:(?<ns>[A-Za-z0-9_.\-]+):)?#?u?(?<uid>[0-9a-z]+)/(?<jobId>-?\d+):\s+\S+\s+(?<detail>.*)",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        foreach (var rawLine in dumpsysOutput.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (!line.StartsWith("JOB ", StringComparison.Ordinal)) continue;
+            var match = pattern.Match(line);
+            if (!match.Success) continue;
+
+            var detail = match.Groups["detail"].Value;
+            var jobId = match.Groups["jobId"].Value;
+
+            // A namespace appears as a "<ns>:" prefix, and again as "@<ns>@" inside the detail.
+            // The plain "JOB #<uid>/<id>" form has neither.
+            string? ns = match.Groups["ns"].Success && match.Groups["ns"].Value.Length > 0
+                ? match.Groups["ns"].Value
+                : null;
+            if (ns == null)
+            {
+                var atMatch = System.Text.RegularExpressions.Regex.Match(detail, @"@(?<ns>[^@]+)@");
+                if (atMatch.Success) ns = atMatch.Groups["ns"].Value;
+            }
+
+            var workerMatch = System.Text.RegularExpressions.Regex.Match(detail, @"#(?<worker>[^#]+)#");
+            var worker = workerMatch.Success ? workerMatch.Groups["worker"].Value : null;
+
+            var serviceMatch = System.Text.RegularExpressions.Regex.Match(
+                detail, @"(?:^|@|\s)" + System.Text.RegularExpressions.Regex.Escape(packageName) + @"/(?<service>\S+)");
+            if (!serviceMatch.Success) continue;
+            var service = serviceMatch.Success ? serviceMatch.Groups["service"].Value : null;
+
+            var key = $"{ns}|{jobId}";
+            if (!seen.Add(key)) continue;
+
+            jobs.Add(new AndroidScheduledJob
+            {
+                JobId = jobId,
+                Namespace = ns,
+                Worker = worker,
+                Service = service,
+                IsWorkManager = ns == WorkManagerNamespace
+                    || service?.Contains("androidx.work", StringComparison.Ordinal) == true
+            });
+        }
+
+        return jobs;
+    }
+
+    /// <summary>
+    /// Returns JobScheduler's view of a job: pending / active / ready / waiting, etc.
+    /// </summary>
+    public async Task<string> GetJobStateAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace)
+    {
+        var output = await RunAdbWithOutputAsync(BuildJobSchedulerArguments("get-job-state", packageName, jobId, jobNamespace));
+        return output.Trim();
+    }
+
+    /// <summary>
+    /// Forces a scheduled job to run now.
+    /// </summary>
+    /// <param name="force">
+    /// Ignore unmet constraints. Required for anything with a delay or a network/charging
+    /// requirement, which is most real work; without it JobScheduler declines.
+    /// </param>
+    public virtual async Task<string> RunScheduledJobAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace, bool force = true, CancellationToken cancellationToken = default)
+    {
+        var output = await RunJobAdbAsync(BuildJobSchedulerArguments("run", packageName, jobId, jobNamespace, force), cancellationToken);
+        return output.Trim();
+    }
+
+    /// <summary>
+    /// Stops a running job, delivering the given stop reason so <c>onStopped</c> paths are testable.
+    /// </summary>
+    public async Task<string> StopScheduledJobAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace)
+    {
+        var output = await RunAdbWithOutputAsync(BuildJobSchedulerArguments("stop", packageName, jobId, jobNamespace));
+        return output.Trim();
+    }
+
+    internal static string[] BuildJobSchedulerArguments(
+        string action, string packageName, string jobId, string? jobNamespace, bool force = false)
+    {
+        var arguments = new List<string> { "shell", "cmd", "jobscheduler", action };
+        if (force) arguments.Add("-f");
+        if (!string.IsNullOrWhiteSpace(jobNamespace))
+            arguments.AddRange(["-n", jobNamespace]);
+        arguments.AddRange([packageName, jobId]);
+        return arguments.ToArray();
+    }
+
+    private async Task<string> RunJobAdbAsync(string[] arguments, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        return await RunAdbForSerialAsync(Serial, arguments, timeout.Token);
+    }
+
+    // ──────────────────────────────────────────────
     // adb helpers
     // ──────────────────────────────────────────────
 
@@ -528,7 +699,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     private Task<string> RunAdbWithOutputAsync(params string[] arguments)
         => RunAdbForSerialAsync(Serial, arguments);
 
-    private async Task<string> RunAdbForSerialAsync(string? serial, string[] arguments)
+    private async Task<string> RunAdbForSerialAsync(string? serial, string[] arguments, CancellationToken cancellationToken = default)
     {
         var adbArguments = BuildAdbArguments(serial, arguments);
         var processStartInfo = CreateAdbProcessStartInfo(AdbPath, adbArguments);
@@ -539,7 +710,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             processStartInfo,
             output,
             error,
-            CancellationToken.None).ConfigureAwait(false);
+            cancellationToken).ConfigureAwait(false);
 
         if (exitCode != 0)
             throw new InvalidOperationException($"adb {string.Join(" ", arguments)} failed: {error}");
