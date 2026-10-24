@@ -434,6 +434,8 @@ extends:
               inputs:
                 version: 11.0.x
                 includePreviewVersions: true
+                # Arcade installs the root .NET 10 SDK here; keep .NET 11 and its workloads in the same host.
+                installationPath: $(Build.SourcesDirectory)\.dotnet
             - powershell: |
                 dotnet workload install maui
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
