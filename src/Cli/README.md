@@ -220,6 +220,10 @@ maui android install
 maui android sdk list
 maui android sdk install "platforms;android-35"
 
+# Ensure the latest Android command-line tools are installed
+maui android sdk update-tools
+maui android sdk update-tools --json
+
 # Manage JDK installations
 maui android jdk install
 
@@ -237,6 +241,16 @@ Listed revisions are preserved when `source.properties` or its revision is
 missing; unlisted tools without revision metadata keep an unknown version.
 Inventory execution or parsing failures return an error rather than an empty
 successful package list.
+
+`sdk update-tools` checks Google's catalog and bootstraps or updates
+`cmdline-tools;latest` as needed. It uses the configured SDK path (or the default
+SDK location) and requires a working JDK. `--dry-run` only previews the target
+path. JSON success reports `status: "ready"` whether the tools were already
+current or were installed; it does not claim an update occurred.
+`maui doctor` reports the selected tool's path and revision when available.
+The resolver prefers `cmdline-tools/latest`, then the highest installed
+command-line tools revision. Legacy `tools/bin` installations are no longer
+supported; run `maui android sdk update-tools` to install modern tools.
 
 ### 6. Set up Apple development (macOS only)
 
@@ -293,6 +307,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui android sdk check` | Check Android SDK installation status |
 | `maui android sdk uninstall` | Uninstall Android SDK packages |
 | `maui android sdk accept-licenses` | Accept Android SDK licenses interactively |
+| `maui android sdk update-tools` | Ensure the latest Android SDK command-line tools are installed |
 | `maui android jdk install` | Install and manage JDK versions |
 | `maui android jdk check` | Check JDK installation status |
 | `maui android jdk list` | List available JDK versions |

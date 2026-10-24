@@ -87,9 +87,9 @@ is required.
 
 Coverage includes runtime property writes and rejection, source-button
 clean/pending/dirty states, selection preservation after real state refresh,
-property filtering, numeric validation, and color-editor alpha handling. Only the
-agent's controlled responses are mocked; browser requests are not intercepted and
-HTML is not injected.
+property filtering, numeric validation, color-editor alpha handling, and off-screen overlays (dimmed in the tree,
+not drawn or highlighted on the Preview). Only the agent's controlled responses
+are mocked; browser requests are not intercepted and HTML is not injected.
 Teardown stops browser timers and prevents a late pagehide keepalive request, then
 drains HTTP traffic before disposing the
 Inspector and awaiting the agent server's shutdown.

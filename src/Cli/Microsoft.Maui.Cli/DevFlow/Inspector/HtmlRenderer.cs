@@ -32,8 +32,11 @@ public static class HtmlRenderer
         var (viewportWidth, viewportHeight) = ComputeViewportSize(tree, screenshotWidth, screenshotHeight);
 
         // Build the elements HTML (flat list — all elements use window-absolute bounds,
-        // shifted by rootOffset so they align with the root page screenshot)
-        var elementsHtml = RenderElements(tree, elementScale, rootOffsetX, rootOffsetY);
+        // shifted by rootOffset so they align with the root page screenshot).
+        // Without a screenshot the viewport is a placeholder, so nothing is judged off-screen.
+        var elementsHtml = RenderElements(
+            tree, elementScale, rootOffsetX, rootOffsetY,
+            hasScreenshot ? viewportWidth : 0, hasScreenshot ? viewportHeight : 0);
 
         // Build screenshot tag
         var screenshotHtml = hasScreenshot
@@ -78,8 +81,17 @@ public static class HtmlRenderer
     /// When rootOffsetX/Y are provided, element positions are shifted so that the
     /// root page's window origin aligns with the screenshot origin (coordinate-space fix
     /// for modals, sheets, and safe-area offsets).
+    /// When viewportWidth/Height are provided, overlays wholly outside that area (for example a
+    /// closed Shell flyout, realized at negative x while the Agent still reports it displayed) get
+    /// <c>data-offscreen="true"</c>. 0 means the viewport is unknown and nothing is marked.
     /// </summary>
-    public static string RenderElements(List<ElementInfo> tree, double elementScale = 1, double rootOffsetX = 0, double rootOffsetY = 0)
+    public static string RenderElements(
+        List<ElementInfo> tree,
+        double elementScale = 1,
+        double rootOffsetX = 0,
+        double rootOffsetY = 0,
+        double viewportWidth = 0,
+        double viewportHeight = 0)
     {
         var sb = new StringBuilder();
         // Drop inactive Shell tab/flyout pages (mounted but not on screen) so the overlay + visual
@@ -87,7 +99,7 @@ public static class HtmlRenderer
         var dropIds = PageFilter.InactivePageIds(tree);
         foreach (var element in tree)
         {
-            RenderElementsFlat(sb, element, elementScale, rootOffsetX, rootOffsetY, parentRenderedId: null, dropIds);
+            RenderElementsFlat(sb, element, elementScale, rootOffsetX, rootOffsetY, viewportWidth, viewportHeight, parentRenderedId: null, dropIds);
         }
         return sb.ToString();
     }
@@ -121,14 +133,14 @@ public static class HtmlRenderer
     /// client rebuild the visual hierarchy from the flat div list via data-parentId without
     /// orphaning children of a skipped parent.
     /// </summary>
-    private static void RenderElementsFlat(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY, string? parentRenderedId, HashSet<string> dropIds)
+    private static void RenderElementsFlat(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY, double viewportWidth, double viewportHeight, string? parentRenderedId, HashSet<string> dropIds)
     {
         // Skip an inactive Shell page (or its exclusive wrapper) and its entire subtree — it's mounted
         // but not on screen, so rendering it would stack a stale page's elements over the live one.
         if (element.Id is { Length: > 0 } id && dropIds.Contains(id))
             return;
 
-        var rendered = RenderSingleElement(sb, element, scale, rootOffsetX, rootOffsetY, parentRenderedId);
+        var rendered = RenderSingleElement(sb, element, scale, rootOffsetX, rootOffsetY, viewportWidth, viewportHeight, parentRenderedId);
         // Children attach to this element if it rendered a div, otherwise to the nearest
         // rendered ancestor (so a bounds-less container doesn't break the tree).
         var childParentId = rendered ? element.Id : parentRenderedId;
@@ -136,12 +148,12 @@ public static class HtmlRenderer
         {
             foreach (var child in element.Children)
             {
-                RenderElementsFlat(sb, child, scale, rootOffsetX, rootOffsetY, childParentId, dropIds);
+                RenderElementsFlat(sb, child, scale, rootOffsetX, rootOffsetY, viewportWidth, viewportHeight, childParentId, dropIds);
             }
         }
     }
 
-    private static bool RenderSingleElement(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY, string? parentRenderedId)
+    private static bool RenderSingleElement(StringBuilder sb, ElementInfo element, double scale, double rootOffsetX, double rootOffsetY, double viewportWidth, double viewportHeight, string? parentRenderedId)
     {
         // Build style for positioning using window-absolute bounds, adjusted by the
         // root page offset so overlays align with the per-page screenshot.
@@ -151,8 +163,10 @@ public static class HtmlRenderer
 
         var left = (bounds.X - rootOffsetX) * scale;
         var top = (bounds.Y - rootOffsetY) * scale;
+        var width = bounds.Width * scale;
+        var height = bounds.Height * scale;
         var style = string.Create(CultureInfo.InvariantCulture,
-            $"position:absolute;left:{left:F0}px;top:{top:F0}px;width:{bounds.Width * scale:F0}px;height:{bounds.Height * scale:F0}px;");
+            $"position:absolute;left:{left:F0}px;top:{top:F0}px;width:{width:F0}px;height:{height:F0}px;");
 
         // Build data attributes
         var attrs = new StringBuilder();
@@ -191,6 +205,8 @@ public static class HtmlRenderer
             attrs.Append(" data-sensitive=\"true\"");
 
         attrs.Append($" data-isVisible=\"{element.IsVisible.ToString().ToLowerInvariant()}\"");
+        if (IsOutsideViewport(left, top, width, height, viewportWidth, viewportHeight))
+            attrs.Append(" data-offscreen=\"true\"");
         attrs.Append($" data-isEnabled=\"{element.IsEnabled.ToString().ToLowerInvariant()}\"");
         attrs.Append($" data-isFocused=\"{element.IsFocused.ToString().ToLowerInvariant()}\"");
         if (element.FrameworkProperties?.TryGetValue("IsReadOnly", out var readOnlyValue) == true &&
@@ -223,6 +239,21 @@ public static class HtmlRenderer
 
         sb.AppendLine($"    <div class=\"devflow-element\"{attrs} style=\"{style}\"></div>");
         return true;
+    }
+
+    /// <summary>
+    /// Whether a rect lies wholly outside the viewport. The 1px slack absorbs fractional
+    /// platform bounds (an iOS flyout row ends at x = +0.1). A zero viewport means unknown
+    /// and never matches.
+    /// </summary>
+    private static bool IsOutsideViewport(double left, double top, double width, double height, double viewportWidth, double viewportHeight)
+    {
+        const double Tolerance = 1;
+        return viewportWidth > 0 && viewportHeight > 0
+            && (left + width < Tolerance
+                || top + height < Tolerance
+                || left > viewportWidth - Tolerance
+                || top > viewportHeight - Tolerance);
     }
 
     private static bool IsSensitive(ElementInfo element)

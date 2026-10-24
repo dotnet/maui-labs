@@ -337,6 +337,7 @@ body.df-mode-inspect #app-viewport { cursor: crosshair; }
 /* ── Element overlays ── */
 .devflow-element { position: absolute; box-sizing: border-box; }
 .devflow-element[data-isvisible="false"] { pointer-events: none; }
+.devflow-element[data-offscreen="true"] { visibility: hidden; }
 .devflow-element.df-hover { outline: 1px solid var(--df-outline-hover); background: var(--df-tint-hover); }
 .devflow-element.df-hover.df-hover-interactive { outline-color: var(--df-success); }
 .devflow-element.df-hover.df-hover-noninteractive { outline-style: dashed; background: transparent; }
@@ -537,18 +538,9 @@ body:not([data-host-layout="wide"]) .df-tool-btn { padding: 4px 8px; }
   }
 }
 
-/* Compact editor: keep the tree docked, preserve screenshot width with a properties drawer. */
+/* Compact editor: tree and properties both stay docked, so Fit re-fits around them. */
 body[data-host-layout="compact"] #df-tree-pane { flex: 0 0 clamp(190px, 25vw, 240px); }
-body[data-host-layout="compact"] #df-props-pane:not(.df-hidden) {
-  position: absolute;
-  z-index: 46;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: min(44vw, 360px);
-  min-width: 280px;
-  box-shadow: var(--df-shadow);
-}
+body[data-host-layout="compact"] #df-props-pane { flex-basis: min(44vw, 360px); }
 body[data-host-layout="compact"] .df-pane-scrim {
   left: clamp(190px, 25vw, 240px);
 }

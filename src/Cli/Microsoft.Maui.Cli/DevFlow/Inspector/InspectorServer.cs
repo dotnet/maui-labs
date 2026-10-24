@@ -1849,7 +1849,8 @@ public sealed class InspectorServer : IDisposable
                     captureEpoch,
                     registryGeneration,
                     fullscreen) ?? Array.Empty<byte>();
-                var (width, height) = screenshot.Length > 0 ? GetPngDimensions(screenshot) : (0, 0);
+                var hasScreenshot = screenshot.Length > 0;
+                var (width, height) = hasScreenshot ? GetPngDimensions(screenshot) : (0, 0);
                 if (width <= 0 || height <= 0)
                 {
                     width = 800;
@@ -1865,7 +1866,7 @@ public sealed class InspectorServer : IDisposable
                     height,
                     rootOffsetX,
                     rootOffsetY,
-                    HtmlRenderer.RenderElements(frameTree, 1, rootOffsetX, rootOffsetY),
+                    HtmlRenderer.RenderElements(frameTree, 1, rootOffsetX, rootOffsetY, hasScreenshot ? width : 0, hasScreenshot ? height : 0),
                     captureEpoch,
                     registryGeneration,
                     windowId,
