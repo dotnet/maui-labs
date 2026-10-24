@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="coverlet.collector" />
+    <ProjectReference Include="../Core/BespokeCollections.Core.csproj" />
+    <ProjectReference Include="../Fixture/BespokeCollections.Fixture.csproj" />
+  </ItemGroup>
+</Project>
