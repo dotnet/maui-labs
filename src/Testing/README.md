@@ -142,4 +142,6 @@ dotnet pack templates/Microsoft.Maui.Testing.Templates.csproj
 The official Windows pipeline installs the .NET 11 SDK and its workloads in the
 repo-local `.dotnet` directory. Arcade bootstraps the root .NET 10 SDK into that
 same installation, so its `dotnet` host can also resolve the .NET 11 SDK required
-by `src/Testing/global.json`.
+by `src/Testing/global.json`. Before building, it runs
+`InstallAndroidDependencies` for `net11.0-android` to provision the Android SDK
+platform required by that workload.

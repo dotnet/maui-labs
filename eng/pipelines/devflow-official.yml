@@ -441,6 +441,20 @@ extends:
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               displayName: Install MAUI workload
               workingDirectory: $(Build.SourcesDirectory)\src\Testing
+            - pwsh: |
+                $arguments = @(
+                  'build'
+                  '-t:InstallAndroidDependencies'
+                  '-f'
+                  'net11.0-android'
+                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+                  '-p:AcceptAndroidSDKLicenses=true'
+                  'Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj'
+                )
+                & dotnet @arguments
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              displayName: Install Android SDK dependencies
+              workingDirectory: $(Build.SourcesDirectory)\src\Testing
             - script: $(Build.SourcesDirectory)\eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
