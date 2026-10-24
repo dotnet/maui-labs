@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net;
 using System.Net.Sockets;
 using System.Globalization;
@@ -2782,6 +2783,305 @@ public class AgentClient : IDisposable
     public async Task<bool> DeleteFileAsync(string path, string? root = null)
     {
         return await DeleteActionAsync($"{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}");
+    }
+
+    /// <summary>Downloads the file as bytes rather than through the base64 JSON envelope.</summary>
+    public async Task<byte[]?> DownloadFileBytesAsync(string path, string? root = null)
+    {
+        try
+        {
+            var query = BuildRootQuery(root);
+            query = string.IsNullOrEmpty(query) ? "?raw=true" : query + "&raw=true";
+
+            using var response = await _http.GetAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{query}",
+                HttpCompletionOption.ResponseHeadersRead);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            if (response.Content.Headers.ContentLength > 64 * 1024 * 1024)
+                throw new InvalidOperationException("Use DownloadFileToAsync for files larger than 64 MiB.");
+            return await response.Content.ReadAsByteArrayAsync();
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex)) { return null; }
+    }
+
+    /// <summary>Streams a file without buffering it. Leaves destination open.</summary>
+    public async Task DownloadFileToAsync(string path, Stream destination, string? root = null, CancellationToken cancellationToken = default)
+    {
+        var query = BuildRootQuery(root);
+        query = string.IsNullOrEmpty(query) ? "?raw=true" : query + "&raw=true";
+        using var response = await _http.GetAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{query}",
+            HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var source = await response.Content.ReadAsStreamAsync();
+        await source.CopyToAsync(destination, 64 * 1024, cancellationToken);
+    }
+
+    /// <summary>Streams up to 64 MiB. Leaves source open; non-seekable streams are never retried.</summary>
+    public async Task<FileWriteResponse> UploadFileFromAsync(string path, Stream source, string? root = null,
+        CancellationToken cancellationToken = default)
+    {
+        var start = source.CanSeek ? source.Position : (long?)null;
+        async Task<HttpResponseMessage> Send()
+        {
+            if (start.HasValue)
+                source.Position = start.Value;
+            using var content = new FileUploadContent(source, cancellationToken);
+            return await _http.PutAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}",
+                content, cancellationToken);
+        }
+        HttpResponseMessage response;
+        if (start.HasValue)
+            response = await SendWithTransientRetriesAsync(HttpMethod.Put, Send);
+        else
+        {
+            await EnsureMutationLeaseAsync();
+            response = await Send();
+        }
+        using (response)
+        {
+            response.EnsureSuccessStatusCode();
+            return DecodeStorage(await ReadJsonAsync(response), StorageJsonContext.Default.FileWriteResponse);
+        }
+    }
+
+    /// <summary>Uploads raw bytes, skipping the third of extra wire traffic base64 costs.</summary>
+    public async Task<JsonElement> UploadFileBytesAsync(string path, byte[] content, string? root = null)
+    {
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
+        {
+            using var body = new ByteArrayContent(content);
+            body.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            return await _http.PutAsync($"{_baseUrl}{StorageApi}/files/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}", body);
+        });
+        return await ReadJsonAsync(response);
+    }
+
+    public async Task<JsonElement> CreateDirectoryAsync(string path, string? root = null)
+    {
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
+        {
+            using var content = ProtocolJson.CreateJsonContent(new JsonObject());
+            return await _http.PutAsync($"{_baseUrl}{StorageApi}/directories/{Uri.EscapeDataString(path)}{BuildRootQuery(root)}", content);
+        });
+        return await ReadJsonAsync(response);
+    }
+
+    public async Task<bool> DeleteDirectoryAsync(string path, bool recursive = false, string? root = null)
+    {
+        var query = BuildRootQuery(root);
+        query = string.IsNullOrEmpty(query)
+            ? $"?recursive={(recursive ? "true" : "false")}"
+            : $"{query}&recursive={(recursive ? "true" : "false")}";
+
+        return await DeleteActionAsync($"{StorageApi}/directories/{Uri.EscapeDataString(path)}{query}");
+    }
+
+    /// <summary>Renames or moves a file or directory within one storage root.</summary>
+    public async Task<JsonElement> MoveAsync(string from, string to, bool overwrite = false, string? root = null)
+    {
+        var body = new JsonObject
+        {
+            ["from"] = from,
+            ["to"] = to,
+            ["overwrite"] = overwrite
+        };
+
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+        {
+            using var content = ProtocolJson.CreateJsonContent(body);
+            return await _http.PostAsync($"{_baseUrl}{StorageApi}/files/move{BuildRootQuery(root)}", content);
+        });
+        return await ReadJsonAsync(response);
+    }
+
+    // ── SQLite ──
+    //
+    // The database is read where it lives, in the app's own process. Copying it out would read a
+    // snapshot, miss whatever is still in the write-ahead log, and overwrite the app's own writes
+    // when it went back.
+
+    public async Task<JsonElement> GetDatabaseSchemaAsync(string path, string? root = null)
+        => await GetJsonAsync($"{StorageApi}/sqlite/schema?path={Uri.EscapeDataString(path)}{RootQueryTail(root)}");
+
+    public async Task<JsonElement> QueryDatabaseAsync(string path, string sql, int? maxRows = null, string? root = null)
+    {
+        var body = new JsonObject { ["path"] = path, ["sql"] = sql };
+        if (maxRows.HasValue)
+            body["maxRows"] = maxRows.Value;
+
+        return await PostSqliteAsync("query", body, root);
+    }
+
+    public async Task<JsonElement> GetDatabaseRowsAsync(string path, string table, int? maxRows = null, string? root = null,
+        string? cursor = null)
+    {
+        var url = $"{StorageApi}/sqlite/rows?path={Uri.EscapeDataString(path)}&table={Uri.EscapeDataString(table)}";
+        if (maxRows.HasValue)
+            url += $"&maxRows={maxRows.Value}";
+        if (cursor is not null)
+            url += $"&cursor={Uri.EscapeDataString(cursor)}";
+
+        return await GetJsonAsync(url + RootQueryTail(root));
+    }
+
+    public Task<JsonElement> InsertDatabaseRowAsync(string path, string table, IEnumerable<(string Column, string? Value)> values, string? root = null)
+        => PostSqliteAsync("rows", DatabaseRowBody(path, table, null, values), root);
+
+    public async Task<JsonElement> UpdateDatabaseRowAsync(string path, string table, long rowId, IEnumerable<(string Column, string? Value)> changes, string? root = null)
+    {
+        var body = DatabaseRowBody(path, table, rowId, changes);
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Put, async () =>
+        {
+            using var content = ProtocolJson.CreateJsonContent(body);
+            return await _http.PutAsync($"{_baseUrl}{StorageApi}/sqlite/rows{BuildRootQuery(root)}", content);
+        });
+        return await ReadJsonAsync(response);
+    }
+
+    public Task<JsonElement> DeleteDatabaseRowAsync(string path, string table, long rowId, string? root = null)
+        => PostSqliteAsync("rows/delete", DatabaseRowBody(path, table, rowId, null), root);
+
+    /// <summary>Makes a new, empty database - a real one, with the header a file needs.</summary>
+    public Task<JsonElement> CreateDatabaseAsync(string path, string? root = null)
+        => PostSqliteAsync("create", new JsonObject { ["path"] = path }, root);
+
+    /// <remarks>
+    /// Every one of these can write - the query pane runs UPDATE and DDL as readily as SELECT - so all
+    /// of them go through the lease, the same as the agent's route table requires.
+    /// </remarks>
+    private async Task<JsonElement> PostSqliteAsync(string route, JsonObject body, string? root)
+    {
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+        {
+            using var content = ProtocolJson.CreateJsonContent(body);
+            return await _http.PostAsync($"{_baseUrl}{StorageApi}/sqlite/{route}{BuildRootQuery(root)}", content);
+        });
+        return await ReadJsonAsync(response);
+    }
+
+    private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        return string.IsNullOrWhiteSpace(body) ? default : ProtocolJson.ParseElement(body);
+    }
+
+    private static JsonObject DatabaseRowBody(string path, string table, long? rowId, IEnumerable<(string Column, string? Value)>? values)
+    {
+        var body = new JsonObject { ["path"] = path, ["table"] = table };
+
+        if (rowId.HasValue)
+            body["rowId"] = rowId.Value.ToString(CultureInfo.InvariantCulture);
+
+        if (values != null)
+        {
+            var cells = new JsonArray();
+            foreach (var (column, value) in values)
+            {
+                // Cast so this binds to Add(JsonNode?) rather than the generic Add<T>, which is
+                // neither trim- nor AOT-safe. Same reason as BuildBatchBody above.
+                cells.Add((JsonNode?)new JsonObject { ["column"] = column, ["value"] = value });
+            }
+
+            body["values"] = cells;
+        }
+
+        return body;
+    }
+
+    /// <summary>The root as an extra query parameter, for URLs that already carry one.</summary>
+    private static string RootQueryTail(string? root)
+        => string.IsNullOrEmpty(root) ? string.Empty : $"&root={Uri.EscapeDataString(root)}";
+
+    public Task<SqliteSchemaResponse> ReadDatabaseSchemaAsync(string path, string? root = null,
+        CancellationToken cancellationToken = default)
+        => SendStorageAsync(HttpMethod.Get, $"{StorageApi}/sqlite/schema?path={Uri.EscapeDataString(path)}{RootQueryTail(root)}",
+            null, StorageJsonContext.Default.SqliteSchemaResponse, cancellationToken);
+
+    public Task<SqliteRowsResponse> ReadDatabaseRowsAsync(string path, string table, int maxRows = 500, string? cursor = null,
+        string? root = null, CancellationToken cancellationToken = default)
+        => SendStorageAsync(HttpMethod.Get,
+            $"{StorageApi}/sqlite/rows?path={Uri.EscapeDataString(path)}&table={Uri.EscapeDataString(table)}&maxRows={maxRows}"
+                + (cursor is null ? "" : $"&cursor={Uri.EscapeDataString(cursor)}") + RootQueryTail(root),
+            null, StorageJsonContext.Default.SqliteRowsResponse, cancellationToken);
+
+    public Task<SqliteQueryResponse> ExecuteDatabaseAsync(string path, string sql, int maxRows = 500, string? root = null,
+        CancellationToken cancellationToken = default)
+        => SendStorageAsync(HttpMethod.Post, $"{StorageApi}/sqlite/query{BuildRootQuery(root)}",
+            new SqliteQueryBody { Path = path, Sql = sql, MaxRows = maxRows }, StorageJsonContext.Default.SqliteQueryResponse,
+            cancellationToken);
+
+    public Task<SqliteQueryResponse> InsertDatabaseRecordAsync(string path, string table, IEnumerable<SqliteCellBody> values,
+        string? root = null, CancellationToken cancellationToken = default)
+        => SendStorageAsync(HttpMethod.Post, $"{StorageApi}/sqlite/rows{BuildRootQuery(root)}",
+            new SqliteRowBody { Path = path, Table = table, Values = values.ToArray() },
+            StorageJsonContext.Default.SqliteQueryResponse, cancellationToken);
+
+    public Task<SqliteQueryResponse> UpdateDatabaseRecordAsync(string path, string table, string rowId,
+        IEnumerable<SqliteCellBody> values, string? expectedVersion = null, string? root = null,
+        CancellationToken cancellationToken = default)
+        => SendStorageAsync(HttpMethod.Put, $"{StorageApi}/sqlite/rows{BuildRootQuery(root)}",
+            new SqliteRowBody { Path = path, Table = table, RowId = rowId, Values = values.ToArray(), ExpectedVersion = expectedVersion },
+            StorageJsonContext.Default.SqliteQueryResponse, cancellationToken);
+
+    public Task<SqliteQueryResponse> DeleteDatabaseRecordAsync(string path, string table, string rowId,
+        string? expectedVersion = null, string? root = null, CancellationToken cancellationToken = default)
+        => SendStorageAsync(HttpMethod.Post, $"{StorageApi}/sqlite/rows/delete{BuildRootQuery(root)}",
+            new SqliteRowBody { Path = path, Table = table, RowId = rowId, ExpectedVersion = expectedVersion },
+            StorageJsonContext.Default.SqliteQueryResponse, cancellationToken);
+
+    private async Task<T> SendStorageAsync<T>(HttpMethod method, string url, SqliteRequestBody? body,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo, CancellationToken cancellationToken) where T : class
+    {
+        using var response = await SendWithTransientRetriesAsync(method, async () =>
+        {
+            using var request = new HttpRequestMessage(method, _baseUrl + url);
+            if (body is not null)
+                request.Content = new StringContent(JsonSerializer.Serialize(body, body.GetType(), StorageJsonContext.Default),
+                    System.Text.Encoding.UTF8, "application/json");
+            return await _http.SendAsync(request, cancellationToken);
+        });
+        response.EnsureSuccessStatusCode();
+        return DecodeStorage(await ReadJsonAsync(response), typeInfo);
+    }
+
+    private static T DecodeStorage<T>(JsonElement json, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo) where T : class
+        => JsonSerializer.Deserialize(json.GetRawText(), typeInfo)
+            ?? throw new JsonException("The storage response was empty.");
+
+    private sealed class FileUploadContent : HttpContent
+    {
+        private readonly Stream _source;
+        private readonly CancellationToken _cancellationToken;
+
+        public FileUploadContent(Stream source, CancellationToken cancellationToken)
+        {
+            _source = source;
+            _cancellationToken = cancellationToken;
+            Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            if (source.CanSeek && source.Length - source.Position > 64 * 1024 * 1024)
+                throw new ArgumentException("Uploads cannot exceed 64 MiB.", nameof(source));
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = _source.CanSeek ? _source.Length - _source.Position : 0;
+            return _source.CanSeek;
+        }
+
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            var buffer = new byte[64 * 1024];
+            long sent = 0;
+            int read;
+            while ((read = await _source.ReadAsync(buffer, 0, buffer.Length, _cancellationToken)) > 0)
+            {
+                sent += read;
+                if (sent > 64 * 1024 * 1024)
+                    throw new IOException("Uploads cannot exceed 64 MiB.");
+                await stream.WriteAsync(buffer, 0, read, _cancellationToken);
+            }
+        }
     }
 
     private static string BuildStorageFilesQuery(string? path, string? root)

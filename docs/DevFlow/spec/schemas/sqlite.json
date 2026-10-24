@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://microsoft.github.io/maui-devflow/spec/schemas/sqlite.json",
+  "title": "DevFlow SQLite schemas",
+  "$defs": {
+    "RowId": {
+      "type": "string",
+      "maxLength": 20,
+      "pattern": "^(0|-?[1-9][0-9]*)$",
+      "description": "Canonical signed 64-bit decimal string, never a JSON number. Preserve verbatim; JavaScript Number loses precision."
+    },
+    "RowVersion": {
+      "type": "string",
+      "pattern": "^[A-F0-9]{64}$",
+      "description": "Opaque row-content version. Echo as expectedVersion for optimistic update/delete; omission explicitly selects last-write-wins."
+    },
+    "DatabaseValue": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["null", "integer", "real", "text", "blob"] },
+        "value": {
+          "type": ["string", "null"],
+          "description": "Integer/real in invariant format, text verbatim, blob as base64. Omitted for SQL NULL or truncated data."
+        },
+        "byteLength": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" }
+      },
+      "required": ["type", "byteLength", "truncated"],
+      "description": "Typed cell, parallel to the display-only rows field. Values over 65536 bytes are explicitly truncated, with no editable value."
+    },
+    "DatabaseCells": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/DatabaseValue" }
+      }
+    },
+    "DatabaseColumn": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "description": "Declared type, or \"any\" for a column declared without one."
+        },
+        "notNull": {
+          "type": "boolean"
+        },
+        "primaryKey": {
+          "type": "boolean"
+        },
+        "isGenerated": { "type": "boolean" },
+        "isHidden": { "type": "boolean" },
+        "isWritable": {
+          "type": "boolean",
+          "description": "False for generated/hidden columns and view columns."
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ]
+    },
+    "DatabaseIndex": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "In index order. An expression index reads \"(expression)\" for that position."
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "automatic": {
+          "type": "boolean",
+          "description": "Created by SQLite for a constraint; cannot be dropped."
+        },
+        "partial": {
+          "type": "boolean",
+          "description": "Has a WHERE clause, so it covers only some rows."
+        }
+      },
+      "required": [
+        "name",
+        "columns"
+      ]
+    },
+    "DatabaseTable": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "table",
+            "view"
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseColumn"
+          }
+        },
+        "indexes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseIndex"
+          }
+        },
+        "hasRowId": {
+          "type": "boolean",
+          "description": "Whether a row can be named for editing. False for views, WITHOUT ROWID tables, and tables whose own columns are called rowid, _rowid_ and oid - each of which hides the real rowid by that name."
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "columns",
+        "indexes",
+        "hasRowId"
+      ]
+    },
+    "DatabaseSchemaResponse": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseTable"
+          }
+        },
+        "fileSize": {
+          "type": "integer"
+        },
+        "sqliteVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tables"
+      ]
+    },
+    "DatabaseRow": {
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "description": "Display only: numbers as strings, SQL NULL as null, blobs as previews. Use the parallel cells field to edit or export values."
+    },
+    "DatabaseQueryRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Root-relative path to the database file."
+        },
+        "sql": {
+          "type": "string"
+        },
+        "maxRows": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647,
+          "default": 500,
+          "description": "Non-positive values use 500; positive values clamp to 1000. The 1 MiB response budget may truncate earlier."
+        }
+      },
+      "required": [
+        "path",
+        "sql"
+      ]
+    },
+    "DatabaseQueryResponse": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseRow"
+          }
+        },
+        "rowsAffected": {
+          "type": "integer",
+          "description": "-1 when the statement was a query rather than a change."
+        },
+        "cells": { "$ref": "#/$defs/DatabaseCells" },
+        "rowId": { "$ref": "#/$defs/RowId" },
+        "rowVersion": { "$ref": "#/$defs/RowVersion" },
+        "errorCode": {
+          "type": "string",
+          "description": "conflict, timeout, cancelled, invalid_request, or sqlite_<primary result code>."
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "elapsedMs": {
+          "type": "integer"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What the statement failed with. A failed statement is a 200 with this set, not an HTTP error."
+        }
+      },
+      "required": [
+        "columns",
+        "rows",
+        "rowsAffected"
+      ]
+    },
+    "DatabaseRowsResponse": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rowIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RowId"
+          },
+          "description": "Parallel to rows. Empty when the table has no rowid to address by."
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseRow"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "cells": { "$ref": "#/$defs/DatabaseCells" },
+        "rowVersions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RowVersion" }
+        },
+        "nextCursor": {
+          "type": "string",
+          "description": "Opaque, URI-encode when sent as cursor. Scoped to database/table/schema; rows are live, not a cross-page snapshot."
+        },
+        "errorCode": { "type": "string" },
+        "elapsedMs": {
+          "type": "integer"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "columns",
+        "rowIds",
+        "rows"
+      ]
+    },
+    "DatabaseCell": {
+      "type": "object",
+      "properties": {
+        "column": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Null is SQL NULL."
+        },
+        "type": {
+          "enum": ["null", "integer", "real", "text", "blob"],
+          "description": "Omit for legacy text/affinity binding. Otherwise binds exactly this SQLite storage class (subject to column affinity); blobs use base64."
+        },
+        "truncated": {
+          "type": "boolean",
+          "const": false,
+          "default": false,
+          "description": "Truncated cells cannot be saved."
+        }
+      },
+      "required": [
+        "column"
+      ]
+    },
+    "DatabaseRowRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "rowId": {
+          "$ref": "#/$defs/RowId"
+        },
+        "expectedVersion": { "$ref": "#/$defs/RowVersion" },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatabaseCell"
+          }
+        }
+      },
+      "required": [
+        "path",
+        "table"
+      ]
+    },
+    "DatabaseInsertRequest": {
+      "allOf": [{ "$ref": "#/$defs/DatabaseRowRequest" }],
+      "description": "Omitted or empty values inserts DEFAULT VALUES. Generated and hidden columns cannot be written."
+    },
+    "DatabaseUpdateRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/DatabaseRowRequest" },
+        {
+          "required": ["rowId", "values"],
+          "properties": { "values": { "type": "array", "minItems": 1 } }
+        }
+      ]
+    },
+    "DatabaseDeleteRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/DatabaseRowRequest" },
+        { "required": ["rowId"] }
+      ]
+    },
+    "DatabaseCreateRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "DatabaseCreateResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "root": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "success",
+        "path"
+      ]
+    }
+  }
+}

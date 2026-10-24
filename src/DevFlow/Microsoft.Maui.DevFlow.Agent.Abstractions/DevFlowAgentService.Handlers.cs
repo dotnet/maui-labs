@@ -10,6 +10,12 @@ using Microsoft.Maui.DevFlow.Agent.Core.Profiling;
 using Microsoft.Maui.DevFlow.Logging;
 using Microsoft.Maui.DevFlow.Agent.Core.Network;
 
+using Microsoft.Maui.DevFlow.Driver;
+using ProfilerMarker = Microsoft.Maui.DevFlow.Agent.Core.Profiling.ProfilerMarker;
+using ProfilerSample = Microsoft.Maui.DevFlow.Agent.Core.Profiling.ProfilerSample;
+using ProfilerSessionInfo = Microsoft.Maui.DevFlow.Agent.Core.Profiling.ProfilerSessionInfo;
+using ProfilerSpan = Microsoft.Maui.DevFlow.Agent.Core.Profiling.ProfilerSpan;
+
 namespace Microsoft.Maui.DevFlow.Agent.Core;
 
 public partial class DevFlowAgentService
@@ -448,9 +454,14 @@ public partial class DevFlowAgentService
 
         _server.MapGet("/api/v1/storage/roots", HandleStorageRoots);
         _server.MapGet("/api/v1/storage/files", HandleFilesList);
+        _server.MapPost("/api/v1/storage/files/move", HandleFileMove);
         _server.MapGet("/api/v1/storage/files/{path}", HandleFileDownload);
         _server.MapPut("/api/v1/storage/files/{path}", HandleFileUpload);
         _server.MapDelete("/api/v1/storage/files/{path}", HandleFileDelete);
+        _server.MapPut("/api/v1/storage/directories/{path}", HandleDirectoryCreate);
+        _server.MapDelete("/api/v1/storage/directories/{path}", HandleDirectoryDelete);
+
+        MapSqliteRoutes();
 
         _server.MapGet("/api/v1/ui/menus", HandleMenusList);
         _server.MapPost("/api/v1/ui/menus/invoke", request => ExecuteUiMutationAsync(request, HandleMenuInvoke));
@@ -2413,6 +2424,8 @@ public partial class DevFlowAgentService
 
     protected const string DefaultFileStorageRootId = "appData";
 
+    protected const string CacheFileStorageRootId = "cache";
+
     protected const string FileStorageOperationList = "list";
 
     protected const string FileStorageOperationDownload = "download";
@@ -2420,6 +2433,24 @@ public partial class DevFlowAgentService
     protected const string FileStorageOperationUpload = "upload";
 
     protected const string FileStorageOperationDelete = "delete";
+
+    protected const string FileStorageOperationCreateDirectory = "create-directory";
+
+    protected const string FileStorageOperationDeleteDirectory = "delete-directory";
+
+    protected const string FileStorageOperationMove = "move";
+
+    /// <summary>Every operation a fully writable root supports. Read-only roots list a subset.</summary>
+    protected static readonly string[] AllFileStorageOperations =
+    [
+        FileStorageOperationList,
+        FileStorageOperationDownload,
+        FileStorageOperationUpload,
+        FileStorageOperationDelete,
+        FileStorageOperationCreateDirectory,
+        FileStorageOperationDeleteDirectory,
+        FileStorageOperationMove
+    ];
 
     protected sealed class FileStorageRoot
     {
@@ -2465,13 +2496,12 @@ public partial class DevFlowAgentService
 
     protected virtual IReadOnlyList<FileStorageRoot> GetFileStorageRoots()
     {
-        var appDataPath = GetAppDataBasePath();
-        if (string.IsNullOrWhiteSpace(appDataPath))
-            return Array.Empty<FileStorageRoot>();
+        var roots = new List<FileStorageRoot>();
 
-        return new[]
+        var appDataPath = GetAppDataBasePath();
+        if (!string.IsNullOrWhiteSpace(appDataPath))
         {
-            new FileStorageRoot(
+            roots.Add(new FileStorageRoot(
                 DefaultFileStorageRootId,
                 "App data",
                 "appData",
@@ -2481,21 +2511,51 @@ public partial class DevFlowAgentService
                 isBackedUp: true,
                 mayBeClearedBySystem: false,
                 isUserVisible: false,
-                FileStorageOperationList,
-                FileStorageOperationDownload,
-                FileStorageOperationUpload,
-                FileStorageOperationDelete)
-        };
+                AllFileStorageOperations));
+        }
+
+        // The cache is where half the "why is my app 400MB" questions are answered, so it is worth
+        // browsing even though the OS may empty it at any moment.
+        var cachePath = TryGetCacheBasePath();
+        if (!string.IsNullOrWhiteSpace(cachePath)
+            && !string.Equals(cachePath, appDataPath, StringComparison.Ordinal))
+        {
+            roots.Add(new FileStorageRoot(
+                CacheFileStorageRootId,
+                "Cache",
+                "cache",
+                cachePath,
+                isWritable: true,
+                isPersistent: false,
+                isBackedUp: false,
+                mayBeClearedBySystem: true,
+                isUserVisible: false,
+                AllFileStorageOperations));
+        }
+
+        return roots;
+    }
+
+    private string? TryGetCacheBasePath()
+    {
+        try
+        {
+            return GetCacheBasePath();
+        }
+        catch
+        {
+            // Not every host has one, and a missing cache directory is not a reason to lose app data.
+            return null;
+        }
     }
 
     protected Task<HttpResponse> HandleStorageRoots(HttpRequest request)
     {
         try
         {
-            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
-            {
-                ["roots"] = GetFileStorageRoots().Select(ToFileStorageRootDescriptor).ToArray()
-            }));
+            return Task.FromResult(HttpResponse.Json(
+                new StorageRootsResponse { Roots = GetFileStorageRoots().Select(ToFileStorageRootDescriptor).ToArray() },
+                StorageAgentJsonContext.Default.StorageRootsResponse));
         }
         catch (Exception)
         {
@@ -2503,19 +2563,19 @@ public partial class DevFlowAgentService
         }
     }
 
-    protected static object ToFileStorageRootDescriptor(FileStorageRoot root)
-        => new Dictionary<string, object?>
+    protected static StorageRootDescriptor ToFileStorageRootDescriptor(FileStorageRoot root)
+        => new()
         {
-            ["id"] = root.Id,
-            ["displayName"] = root.DisplayName,
-            ["kind"] = root.Kind,
-            ["isWritable"] = root.IsWritable,
-            ["isReadOnly"] = root.IsReadOnly,
-            ["isPersistent"] = root.IsPersistent,
-            ["isBackedUp"] = root.IsBackedUp,
-            ["mayBeClearedBySystem"] = root.MayBeClearedBySystem,
-            ["isUserVisible"] = root.IsUserVisible,
-            ["supportedOperations"] = root.SupportedOperations.ToArray()
+            Id = root.Id,
+            DisplayName = root.DisplayName,
+            Kind = root.Kind,
+            IsWritable = root.IsWritable,
+            IsReadOnly = root.IsReadOnly,
+            IsPersistent = root.IsPersistent,
+            IsBackedUp = root.IsBackedUp,
+            MayBeClearedBySystem = root.MayBeClearedBySystem,
+            IsUserVisible = root.IsUserVisible,
+            SupportedOperations = root.SupportedOperations.ToArray()
         };
 
     protected FileStorageRoot ResolveFileStorageRoot(HttpRequest request, string operation)
@@ -2549,42 +2609,43 @@ public partial class DevFlowAgentService
             FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
 
             if (!Directory.Exists(resolved.FullPath))
-                return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
-                {
-                    ["root"] = root.Id,
-                    ["path"] = resolved.RelativePath,
-                    ["entries"] = Array.Empty<object>()
-                }));
+                return Task.FromResult(HttpResponse.Json(
+                    new FileListResponse { Root = root.Id, Path = resolved.RelativePath },
+                    StorageAgentJsonContext.Default.FileListResponse));
 
-            var entries = new List<object>();
+            var entries = new List<FileEntryDescriptor>();
             foreach (var dir in Directory.GetDirectories(resolved.FullPath))
             {
                 var info = new DirectoryInfo(dir);
-                entries.Add(new Dictionary<string, object?>
+                entries.Add(new FileEntryDescriptor
                 {
-                    ["name"] = info.Name,
-                    ["type"] = "directory",
-                    ["lastModified"] = info.LastWriteTimeUtc.ToString("O")
+                    Name = info.Name,
+                    Path = CombineRelativePath(resolved.RelativePath, info.Name),
+                    Type = "directory",
+                    LastModified = info.LastWriteTimeUtc.ToString("O")
                 });
             }
             foreach (var file in Directory.GetFiles(resolved.FullPath))
             {
                 var info = new FileInfo(file);
-                entries.Add(new Dictionary<string, object?>
+                entries.Add(new FileEntryDescriptor
                 {
-                    ["name"] = info.Name,
-                    ["type"] = "file",
-                    ["size"] = info.Length,
-                    ["lastModified"] = info.LastWriteTimeUtc.ToString("O")
+                    Name = info.Name,
+                    Path = CombineRelativePath(resolved.RelativePath, info.Name),
+                    Type = "file",
+                    Size = info.Length,
+                    LastModified = info.LastWriteTimeUtc.ToString("O")
                 });
             }
 
-            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
-            {
-                ["root"] = root.Id,
-                ["path"] = resolved.RelativePath,
-                ["entries"] = entries
-            }));
+            return Task.FromResult(HttpResponse.Json(
+                new FileListResponse
+                {
+                    Root = root.Id,
+                    Path = resolved.RelativePath,
+                    Entries = entries.ToArray()
+                },
+                StorageAgentJsonContext.Default.FileListResponse));
         }
         catch (Exception ex)
         {
@@ -2608,18 +2669,32 @@ public partial class DevFlowAgentService
             if (!File.Exists(resolved.FullPath))
                 return HttpResponse.NotFound($"File not found: {relativePath}");
 
-            var bytes = await File.ReadAllBytesAsync(resolved.FullPath);
-            var contentBase64 = Convert.ToBase64String(bytes);
             var info = new FileInfo(resolved.FullPath);
 
-            return HttpResponse.Json(new Dictionary<string, object?>
-            {
-                ["root"] = root.Id,
-                ["path"] = resolved.RelativePath,
-                ["size"] = info.Length,
-                ["lastModified"] = info.LastWriteTimeUtc.ToString("O"),
-                ["contentBase64"] = contentBase64
-            });
+            if (IsTruthy(request.QueryParams.GetValueOrDefault("raw")))
+                return new HttpResponse
+                {
+                    ContentType = "application/octet-stream",
+                    BodyStream = new FileStream(resolved.FullPath, FileMode.Open, FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan)
+                };
+            await using var bufferedSource = new FileStream(resolved.FullPath, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.Asynchronous);
+            if (bufferedSource.Length > 16 * 1024 * 1024)
+                return HttpResponse.Error("Base64 downloads are limited to 16 MiB. Use raw=true for streaming.", 413);
+            var bytes = new byte[(int)bufferedSource.Length];
+            await bufferedSource.ReadExactlyAsync(bytes, request.CancellationToken);
+
+            return HttpResponse.Json(
+                new FileContentResponse
+                {
+                    Root = root.Id,
+                    Path = resolved.RelativePath,
+                    Size = bytes.Length,
+                    LastModified = info.LastWriteTimeUtc.ToString("O"),
+                    ContentBase64 = Convert.ToBase64String(bytes)
+                },
+                StorageAgentJsonContext.Default.FileContentResponse);
         }
         catch (InvalidOperationException ex)
         {
@@ -2642,18 +2717,27 @@ public partial class DevFlowAgentService
             var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
             FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
 
-            var body = request.BodyAs<FileUploadRequest>();
-            if (body == null || string.IsNullOrEmpty(body.ContentBase64))
-                return HttpResponse.Error("Request body must include 'contentBase64'");
+            byte[]? bytes = null;
+            if (IsJsonContentType(request.ContentType))
+            {
+                var body = request.BodyAs(StorageAgentJsonContext.Default.FileUploadRequest);
+                if (body?.ContentBase64 is null)
+                    return HttpResponse.Error("Request body must include 'contentBase64'");
 
-            byte[] bytes;
-            try
-            {
-                bytes = Convert.FromBase64String(body.ContentBase64);
+                try
+                {
+                    bytes = Convert.FromBase64String(body.ContentBase64);
+                }
+                catch (FormatException)
+                {
+                    return HttpResponse.Error("Invalid base64 content");
+                }
             }
-            catch (FormatException)
+            else
             {
-                return HttpResponse.Error("Invalid base64 content");
+                // Anything that is not JSON is taken as the file itself.
+                if (request.BodyStream is null)
+                    bytes = request.BodyBytes ?? Array.Empty<byte>();
             }
 
             var dir = Path.GetDirectoryName(resolved.FullPath);
@@ -2662,17 +2746,39 @@ public partial class DevFlowAgentService
 
             FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
 
-            await File.WriteAllBytesAsync(resolved.FullPath, bytes);
+            var temporaryPath = Path.Combine(dir!, $".devflow-upload-{Guid.NewGuid():N}");
+            try
+            {
+                await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write,
+                    FileShare.None, 64 * 1024, FileOptions.Asynchronous))
+                {
+                    if (request.BodyStream is { } source)
+                        await source.CopyToAsync(destination, request.CancellationToken);
+                    else
+                        await destination.WriteAsync(bytes!, request.CancellationToken);
+                    await destination.FlushAsync(request.CancellationToken);
+                }
+                request.CancellationToken.ThrowIfCancellationRequested();
+                FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
+                File.Move(temporaryPath, resolved.FullPath, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                    File.Delete(temporaryPath);
+            }
             var info = new FileInfo(resolved.FullPath);
 
-            return HttpResponse.Json(new Dictionary<string, object?>
-            {
-                ["success"] = true,
-                ["root"] = root.Id,
-                ["path"] = resolved.RelativePath,
-                ["size"] = info.Length,
-                ["lastModified"] = info.LastWriteTimeUtc.ToString("O")
-            });
+            return HttpResponse.Json(
+                new FileWriteResponse
+                {
+                    Success = true,
+                    Root = root.Id,
+                    Path = resolved.RelativePath,
+                    Size = info.Length,
+                    LastModified = info.LastWriteTimeUtc.ToString("O")
+                },
+                StorageAgentJsonContext.Default.FileWriteResponse);
         }
         catch (InvalidOperationException ex)
         {
@@ -2699,13 +2805,15 @@ public partial class DevFlowAgentService
                 return Task.FromResult(HttpResponse.NotFound($"File not found: {relativePath}"));
 
             File.Delete(resolved.FullPath);
-            return Task.FromResult(HttpResponse.Json(new Dictionary<string, object?>
-            {
-                ["success"] = true,
-                ["root"] = root.Id,
-                ["path"] = resolved.RelativePath,
-                ["message"] = $"File deleted: {resolved.RelativePath}"
-            }));
+            return Task.FromResult(HttpResponse.Json(
+                new FileRemovedResponse
+                {
+                    Success = true,
+                    Root = root.Id,
+                    Path = resolved.RelativePath,
+                    Message = $"File deleted: {resolved.RelativePath}"
+                },
+                StorageAgentJsonContext.Default.FileRemovedResponse));
         }
         catch (InvalidOperationException ex)
         {
@@ -2716,6 +2824,168 @@ public partial class DevFlowAgentService
             return Task.FromResult(HttpResponse.Error("Failed to delete file"));
         }
     }
+
+    protected Task<HttpResponse> HandleDirectoryCreate(HttpRequest request)
+    {
+        try
+        {
+            if (!request.RouteParams.TryGetValue("path", out var relativePath) || string.IsNullOrWhiteSpace(relativePath))
+                return Task.FromResult(HttpResponse.Error("directory path is required"));
+
+            var root = ResolveFileStorageRoot(request, FileStorageOperationCreateDirectory);
+            relativePath = Uri.UnescapeDataString(relativePath);
+            var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
+
+            if (File.Exists(resolved.FullPath))
+                return Task.FromResult(HttpResponse.Error($"A file already exists at {resolved.RelativePath}"));
+
+            var existed = Directory.Exists(resolved.FullPath);
+            if (!existed)
+                Directory.CreateDirectory(resolved.FullPath);
+
+            return Task.FromResult(HttpResponse.Json(
+                new DirectoryCreatedResponse
+                {
+                    Success = true,
+                    Root = root.Id,
+                    Path = resolved.RelativePath,
+                    Created = !existed
+                },
+                StorageAgentJsonContext.Default.DirectoryCreatedResponse));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Task.FromResult(HttpResponse.Error(ex.Message));
+        }
+        catch (Exception)
+        {
+            return Task.FromResult(HttpResponse.Error("Failed to create directory"));
+        }
+    }
+
+    protected Task<HttpResponse> HandleDirectoryDelete(HttpRequest request)
+    {
+        try
+        {
+            if (!request.RouteParams.TryGetValue("path", out var relativePath) || string.IsNullOrWhiteSpace(relativePath))
+                return Task.FromResult(HttpResponse.Error("directory path is required"));
+
+            var root = ResolveFileStorageRoot(request, FileStorageOperationDeleteDirectory);
+            relativePath = Uri.UnescapeDataString(relativePath);
+            var resolved = FileStoragePathResolver.Resolve(root.BasePath, relativePath);
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(resolved.BasePath, resolved.FullPath, includeTarget: true);
+
+            if (!Directory.Exists(resolved.FullPath))
+                return Task.FromResult(HttpResponse.NotFound($"Directory not found: {relativePath}"));
+
+            // Recursion is opt-in: emptying a tree by accident is the one mistake here with no undo.
+            var recursive = IsTruthy(request.QueryParams.GetValueOrDefault("recursive"));
+            if (!recursive && Directory.GetFileSystemEntries(resolved.FullPath).Length > 0)
+                return Task.FromResult(HttpResponse.Error(
+                    $"{resolved.RelativePath} is not empty. Pass recursive=true to delete it and everything in it."));
+
+            Directory.Delete(resolved.FullPath, recursive);
+            return Task.FromResult(HttpResponse.Json(
+                new FileRemovedResponse
+                {
+                    Success = true,
+                    Root = root.Id,
+                    Path = resolved.RelativePath,
+                    Message = $"Directory deleted: {resolved.RelativePath}"
+                },
+                StorageAgentJsonContext.Default.FileRemovedResponse));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Task.FromResult(HttpResponse.Error(ex.Message));
+        }
+        catch (Exception)
+        {
+            return Task.FromResult(HttpResponse.Error("Failed to delete directory"));
+        }
+    }
+
+    /// <summary>
+    /// Rename or move, for a file or a whole directory. Both ends are resolved against the same root -
+    /// moving between roots would cross a persistence and backup boundary silently.
+    /// </summary>
+    protected Task<HttpResponse> HandleFileMove(HttpRequest request)
+    {
+        try
+        {
+            var root = ResolveFileStorageRoot(request, FileStorageOperationMove);
+
+            var body = request.BodyAs(StorageAgentJsonContext.Default.FileMoveRequest);
+            if (body == null || string.IsNullOrWhiteSpace(body.From) || string.IsNullOrWhiteSpace(body.To))
+                return Task.FromResult(HttpResponse.Error("Request body must include 'from' and 'to'"));
+
+            var from = FileStoragePathResolver.Resolve(root.BasePath, body.From);
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(from.BasePath, from.FullPath, includeTarget: true);
+
+            var to = FileStoragePathResolver.Resolve(root.BasePath, body.To);
+            FileStoragePathResolver.EnsureNoReparsePointTraversal(to.BasePath, to.FullPath, includeTarget: false);
+
+            var isDirectory = Directory.Exists(from.FullPath);
+            if (!isDirectory && !File.Exists(from.FullPath))
+                return Task.FromResult(HttpResponse.NotFound($"Not found: {from.RelativePath}"));
+
+            if (string.Equals(from.FullPath, to.FullPath, StringComparison.Ordinal))
+                return Task.FromResult(HttpResponse.Error("Source and destination are the same"));
+
+            // Moving a directory into itself leaves an unreachable tree, and the OS error for it is
+            // no help at all.
+            if (isDirectory && to.FullPath.StartsWith(from.FullPath + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                return Task.FromResult(HttpResponse.Error($"Cannot move {from.RelativePath} inside itself"));
+
+            var destinationExists = Directory.Exists(to.FullPath) || File.Exists(to.FullPath);
+            if (destinationExists && !body.Overwrite)
+                return Task.FromResult(HttpResponse.Error($"{to.RelativePath} already exists. Pass overwrite=true to replace it."));
+
+            if (destinationExists && Directory.Exists(to.FullPath))
+                return Task.FromResult(HttpResponse.Error($"{to.RelativePath} is a directory and will not be overwritten"));
+
+            var parent = Path.GetDirectoryName(to.FullPath);
+            if (!string.IsNullOrEmpty(parent) && !Directory.Exists(parent))
+                Directory.CreateDirectory(parent);
+
+            if (isDirectory)
+                Directory.Move(from.FullPath, to.FullPath);
+            else
+                File.Move(from.FullPath, to.FullPath, body.Overwrite);
+
+            return Task.FromResult(HttpResponse.Json(
+                new FileMovedResponse
+                {
+                    Success = true,
+                    Root = root.Id,
+                    From = from.RelativePath,
+                    Path = to.RelativePath,
+                    Type = isDirectory ? "directory" : "file"
+                },
+                StorageAgentJsonContext.Default.FileMovedResponse));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Task.FromResult(HttpResponse.Error(ex.Message));
+        }
+        catch (Exception)
+        {
+            return Task.FromResult(HttpResponse.Error("Failed to move"));
+        }
+    }
+
+    private static string CombineRelativePath(string parentRelativePath, string name)
+        => string.IsNullOrEmpty(parentRelativePath) ? name : $"{parentRelativePath}/{name}";
+
+    /// <summary>A missing Content-Type is taken as JSON: that is what every caller sent before raw uploads existed.</summary>
+    private static bool IsJsonContentType(string? contentType)
+        => string.IsNullOrEmpty(contentType) || contentType.Contains("json", StringComparison.Ordinal);
+
+    private static bool IsTruthy(string? value)
+        => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "1", StringComparison.Ordinal)
+            || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
 
     // ── Platform info endpoints ──
 

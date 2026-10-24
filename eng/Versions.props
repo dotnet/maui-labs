@@ -25,6 +25,11 @@
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
+    <!-- The agent's SQLite browser references SQLitePCLRaw.core alone, so it always uses the app's own
+         provider - see SqliteGateway. Microsoft.Data.Sqlite.Core and the bundle are for the tests, which
+         need a provider and a way to seed a file. -->
+    <MicrosoftDataSqliteVersion>10.0.5</MicrosoftDataSqliteVersion>
+    <SQLitePCLRawVersion>3.0.4</SQLitePCLRawVersion>
     <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
     <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
     <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>

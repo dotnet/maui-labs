@@ -54,6 +54,13 @@ public class ProtocolSpecTests
         "getSecureValue",
         "setSecureValue",
         "deleteSecureValue",
+        "getDatabaseSchema",
+        "queryDatabase",
+        "getDatabaseRows",
+        "insertDatabaseRow",
+        "updateDatabaseRow",
+        "deleteDatabaseRow",
+        "createDatabase",
     ];
 
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder().Build();
@@ -159,7 +166,8 @@ public class ProtocolSpecTests
             "DevFlow",
             "Microsoft.Maui.DevFlow.Agent.Abstractions",
             "DevFlowAgentService.Handlers.cs");
-        var serviceSource = File.ReadAllText(servicePath);
+        var serviceSource = string.Join("\n", Directory.EnumerateFiles(Path.GetDirectoryName(servicePath)!,
+            "DevFlowAgentService*.cs").Select(File.ReadAllText));
         var routePattern = new Regex(
             "_server\\.Map(?<method>Get|Post|Put|Delete|WebSocket)\\s*\\(\\s*\"(?<path>[^\"]+)\"",
             RegexOptions.CultureInvariant | RegexOptions.Singleline);
@@ -336,6 +344,31 @@ public class ProtocolSpecTests
                     yield return nestedReference;
             }
         }
+    }
+
+    [Fact]
+    public void StorageSpec_DescribesRawTransfersStringIdentitiesAndMutationRequirements()
+    {
+        var paths = LoadDocument(Path.Combine(SpecRoot.Value, "openapi.yaml"))["paths"]!;
+        var download = paths["/api/v1/storage/files/{path}"]!["get"]!;
+        Assert.Contains(download["parameters"]!.AsArray(), p => p!["name"]!.GetValue<string>() == "raw");
+        Assert.NotNull(download["responses"]!["200"]!["content"]!["application/octet-stream"]);
+        Assert.NotNull(paths["/api/v1/storage/files/{path}"]!["put"]!["requestBody"]!["content"]!["application/octet-stream"]);
+        foreach (var (path, item) in paths.AsObject().Where(p => p.Key.StartsWith("/api/v1/storage/sqlite/", StringComparison.Ordinal)))
+        {
+            foreach (var operation in item!.AsObject().Where(p => p.Key is "post" or "put"))
+            {
+                Assert.NotNull(operation.Value!["responses"]!["409"]);
+                Assert.NotNull(operation.Value!["responses"]!["503"]);
+                Assert.NotNull(operation.Value!["responses"]!["501"]);
+            }
+        }
+        var schema = LoadDocument(Path.Combine(SpecRoot.Value, "schemas", "sqlite.json"))["$defs"]!;
+        Assert.Equal("string", schema["RowId"]!["type"]!.GetValue<string>());
+        Assert.Contains(schema["DatabaseUpdateRequest"]!["allOf"]![1]!["required"]!.AsArray(),
+            n => n!.GetValue<string>() == "rowId");
+        Assert.Contains(schema["DatabaseDeleteRequest"]!["allOf"]![1]!["required"]!.AsArray(),
+            n => n!.GetValue<string>() == "rowId");
     }
 
     private static (string TargetPath, string Pointer) ResolveReference(string sourcePath, string reference)
