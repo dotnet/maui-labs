@@ -24,6 +24,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Client\Microsoft.Maui.DevFlow.Client.csproj" />
+    <EmbeddedResource Include="FoldableSimulator.m" LogicalName="Microsoft.Maui.DevFlow.Driver.FoldableSimulator.m" />
+    <None Include="..\..\..\THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!-- This dependency is only published to a transport feed, not NuGet.org.

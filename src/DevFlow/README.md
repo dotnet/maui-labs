@@ -430,6 +430,7 @@ All DevFlow commands are available under `maui devflow`. Run `maui devflow <comm
 | Command Group | Description |
 |---------------|-------------|
 | `ui` | Visual tree, element interaction, screenshots, alerts, assertions, application menus |
+| `device fold` | Host-side fold/hinge capabilities, state, and verified controls for Android emulators and experimental iOS simulators |
 | `recording` | Start, stop, and manage screen recordings of app sessions |
 | `webview` | Blazor WebView automation — DOM, JS eval, navigation, input, screenshots |
 | `logs` | Fetch and stream application logs |
@@ -674,6 +675,7 @@ These options apply to all `maui devflow` subcommands:
 
 ## Documentation
 
+- [Foldable and hinge commands, support, and limitations](../../docs/DevFlow/foldables.md)
 - [MAUI DevFlow Inspector setup and host selection](../../docs/DevFlow/inspector.md)
 - [MAUI DevFlow Inspector internals](../../docs/DevFlow/inspector-internals.md)
 - [Broker Architecture](../../docs/DevFlow/broker.md)
