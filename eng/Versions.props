@@ -1,5 +1,6 @@
 <Project>
   <PropertyGroup>
+    <_MauiLabsVersionsPropsImported>true</_MauiLabsVersionsPropsImported>
     <!-- Product version -->
     <MajorVersion>0</MajorVersion>
     <MinorVersion>1</MinorVersion>
