@@ -882,7 +882,7 @@ public class DevFlowCommands
         // dismiss
         var dismissUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var dismissPid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
-        var dismissButtonArg = new Argument<string?>("button") { Description = "Button label to tap (default: first accept-style button)", DefaultValueFactory = _ => null };
+        var dismissButtonArg = new Argument<string?>("button") { Description = "Exact visible button label to invoke (required on macOS)", DefaultValueFactory = _ => null };
         var alertDismissCmd = new Command("dismiss", "Dismiss the current alert/dialog") { dismissButtonArg, dismissUdid, dismissPid };
         alertDismissCmd.SetAction(async (ctx, ct) =>
         {
@@ -3963,11 +3963,20 @@ public class DevFlowCommands
             Output.WriteResult(new JsonObject
             {
                 ["detected"] = true,
+                ["promptId"] = alert.PromptId,
                 ["title"] = alert.Title,
-                ["buttons"] = buttons
+                ["text"] = new JsonArray(alert.Text.Select(text => (JsonNode)text).ToArray()),
+                ["buttons"] = buttons,
+                ["sourceProcessId"] = alert.SourceProcessId,
+                ["sourceProcessName"] = alert.SourceProcessName,
+                ["isSystemDialog"] = alert.IsSystemDialog,
+                ["requiresUserConfirmation"] = alert.RequiresUserConfirmation,
+                ["canRespond"] = alert.CanRespond
             }, json, _ =>
             {
                 Console.WriteLine($"Alert: {alert.Title ?? "(no title)"}");
+                if (!string.IsNullOrEmpty(alert.SourceProcessName))
+                    Console.WriteLine($"  Source: {alert.SourceProcessName} ({alert.SourceProcessId})");
                 foreach (var btn in alert.Buttons)
                     Console.WriteLine($"  Button: \"{btn.Label}\"");
             });

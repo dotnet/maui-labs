@@ -369,7 +369,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Layout Diagnostics** — detect clipping, lost overflow, text truncation, overlap, and interaction occlusion with platform-specific evidence and confidence
 - **Element Interaction** — tap, fill, scroll, navigate, focus, resize, and mutate properties
 - **Application Menus** — inspect and invoke the app menu bar: the cross-platform MAUI `MenuBarItems` tree plus the native macOS AppKit `NSMenu` and active Mac Catalyst responder-chain key commands. Disabled items and disabled ancestors are respected; unhandled native actions report failure.
-- **Screenshots** — capture PNG screenshots from any platform (full window or per-element)
+- **Screenshots** — capture PNG screenshots from any platform (full window or per-element); AppKit window capture includes native chrome and attached sheets without activating the app
 - **Screen Recording** — start/stop video recording of app sessions
 - **Network Monitoring** — intercept and inspect HTTP requests/responses
 - **Performance Profiling** — CPU, memory, GC, and jank detection with markers and spans
@@ -383,10 +383,48 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Real-time Streaming** — WebSocket channels for logs, network, sensors, profiler, and UI events
 - **Storage Access** — read/write app preferences, secure storage, discover file storage roots, and manage sandboxed app files remotely
 - **Device Introspection** — battery, connectivity, geolocation, display, permissions, and sensor data
-- **Dialog Handling** — detect and dismiss alerts/action sheets programmatically
+- **Dialog Handling** — detect and dismiss alerts/action sheets programmatically; `maui_native_dialog_detect` / `maui_native_dialog_respond` require an exact, user-confirmed choice and a one-time prompt token
 - **Batch Operations** — execute command sequences from stdin for scripting
 - **Agent Extensions** — expose app-specific diagnostic tools under `/api/v1/ext/{namespace}/...` with self-describing metadata for CLI and MCP discovery
 - **Multi-Platform** — iOS, Android, Mac Catalyst, Windows, Linux/GTK
+
+## Focus-safe capture and native dialogs
+
+AppKit screenshots prefer ScreenCaptureKit and fall back to CoreGraphics or in-process
+rendering without activating or reordering windows. On macOS 14.0–14.1, an attached sheet
+forces a parent/sheet CoreGraphics composite because ScreenCaptureKit cannot include child
+windows until macOS 14.2. Capture does not request screen-recording permission automatically.
+
+The MCP native-dialog workflow detects the visible prompt, then receives `promptId` and
+`buttonLabel`. Before acting, the server sends a form elicitation request to the MCP host,
+which must present the exact app, dialog and button to the user and return explicit approval.
+The former caller-supplied `confirmedByUser` flag has been removed; it cannot prove consent.
+Declines, cancellations, malformed approval responses and hosts without form elicitation
+support result in no action. As with other MCP elicitation, the host is trusted to show the
+request to a human rather than approve it automatically.
+Tokens expire after two minutes, are scoped to the detecting MCP session, and can be used only
+once. Responses revalidate the target and prompt and respect the app's global mutation lease.
+Dialog fingerprints retain 128 bits of SHA-256 and format geometry independently of the
+host's locale; the one-time response token is separate from the fingerprint.
+macOS uses AXPress, Windows uses UI Automation Invoke, Linux uses the connected agent, and
+Android/iOS Simulator input is restricted to the device associated with that agent. Physical
+iOS and unattributed system dialogs require manual interaction. macOS requires Accessibility
+permission for native dialog automation.
+
+Android verifies the hierarchy package against the focused dialog window's package and
+WindowManager owner UID, as resolved by the device's package manager. Before tapping, it
+re-reads the dialog and rejects visible windows above it that overlap its response buttons.
+This includes non-focusable overlays even when `mFocusedApp` still names the target app.
+Missing ownership, visibility or geometry information and non-default displays require
+manual interaction. This minimizes stale coordinate risks; device input is not an atomic
+window-targeted invocation, so callers must not use it while another actor is manipulating
+the device UI.
+
+**Behavior change:** `MacCatalystAppDriver.DismissAlertAsync` and
+`HandleAlertIfPresentAsync` no longer choose a button implicitly: a null or empty label throws.
+The `IAlertDriver` signatures remain compatible with other platforms. Use an exact detected
+label with `maui devflow ui alert dismiss` on macOS; ASCII and typographic quotes are treated
+equivalently, and ambiguous labels are rejected.
 
 ## Agent API
 
