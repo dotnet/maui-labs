@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using AppKit;
 using CoreAnimation;
 using CoreGraphics;
@@ -156,16 +155,20 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
         var measureInvalidationCount = 0;
         resizedRow.MeasureInvalidated += OnResizedRowMeasureInvalidated;
         resizedRow.HeightRequest = resizedRowHeight;
+        var expectedListHeight = previousListHeight + resizedRowHeight - previousRowHeight;
+        for (var attempt = 0; attempt < 10 && Math.Abs(native.Bounds.Height - expectedListHeight) >= 1; attempt++)
+        {
+            await Task.Delay(100);
+            await RuntimeTestContext.FlushMainQueueAsync();
+        }
         var resizedImage = await CaptureAsync(context, nativeWindow, "resized.png");
         resizedRow.MeasureInvalidated -= OnResizedRowMeasureInvalidated;
-        var expectedListHeight = previousListHeight + resizedRowHeight - previousRowHeight;
         context.WriteJson("resized.json", new
         {
             previousListHeight,
             previousRowHeight,
             resizedRowHeight,
             measureInvalidationCount,
-            resizedRowRuntimeHash = RuntimeHelpers.GetHashCode(resizedRow),
             listHeight = native.Bounds.Height,
             rowBounds = nativeResizedRow.Bounds.ToString(),
             rowFrame = nativeResizedRow.Frame.ToString(),
