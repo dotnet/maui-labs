@@ -164,7 +164,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
             rowBounds = nativeResizedRow.Bounds.ToString(),
             rowFrame = nativeResizedRow.Frame.ToString(),
         });
-        context.Assert(Math.Abs(nativeResizedRow.Bounds.Height - resizedRowHeight) < 1,
+        context.Assert(Math.Abs(nativeResizedRow.Frame.Height - resizedRowHeight) < 1,
             "A measured row updates its native height after its requested size changes.");
         context.Assert(Math.Abs(native.Bounds.Height - expectedListHeight) < 1,
             "The content-sized document extent includes a later measured-row size change.");

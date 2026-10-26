@@ -49,6 +49,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     // Virtualization state
     readonly List<ItemInfo> _flatItems = new();
     readonly Dictionary<int, (IView mauiView, NSView platformView)> _visibleViews = new();
+    readonly Dictionary<VisualElement, int> _measuredItemViews = new();
     readonly Dictionary<DataTemplate, Queue<IView>> _recyclePool = new();
     nfloat _estimatedItemHeight = 44;
     bool _positionsCalculated;
@@ -96,12 +97,15 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         SubscribeItemsLayout((VirtualView as StructuredItemsView)?.ItemsLayout);
         if (VirtualView is ItemsView itemsView)
             itemsView.ScrollToRequested += OnScrollToRequested;
+        foreach (var item in _visibleViews)
+            ObserveItemMeasurement(item.Value.mauiView, item.Key);
     }
 
     protected override void DisconnectHandler(NSScrollView platformView)
     {
         UnsubscribeScroll();
         UnsubscribeCollection();
+        UnobserveItemMeasurements();
         SubscribeItemsLayout(null);
         if (VirtualView is ItemsView itemsView)
             itemsView.ScrollToRequested -= OnScrollToRequested;
@@ -404,6 +408,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         {
             var (mauiView, platformView) = _visibleViews[idx];
             platformView.RemoveFromSuperview();
+            UnobserveItemMeasurement(mauiView);
             if (mauiView is Element elem && VirtualView is Element parent)
                 parent.RemoveLogicalChild(elem);
             RecycleView(idx, mauiView);
@@ -468,6 +473,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
             PositionItem(platformView, info, idx, isHorizontal, span, containerWidth, containerHeight,
                 (nfloat)GetItemSpacing(layout), (nfloat)GetLineSpacing(layout));
+            ObserveItemMeasurement(mauiView, idx);
         }
 
         // If any measurements changed, recalculate positions and reposition all visible items,
@@ -487,6 +493,46 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             if (_measureContent)
                 ((IView)VirtualView).InvalidateMeasure();
         }
+    }
+
+    void ObserveItemMeasurement(IView mauiView, int index)
+    {
+        if (mauiView is not VisualElement visualElement)
+            return;
+
+        if (!_measuredItemViews.ContainsKey(visualElement))
+            visualElement.MeasureInvalidated += OnItemMeasureInvalidated;
+        _measuredItemViews[visualElement] = index;
+    }
+
+    void UnobserveItemMeasurement(IView mauiView)
+    {
+        if (mauiView is VisualElement visualElement && _measuredItemViews.Remove(visualElement))
+            visualElement.MeasureInvalidated -= OnItemMeasureInvalidated;
+    }
+
+    void UnobserveItemMeasurements()
+    {
+        foreach (var visualElement in _measuredItemViews.Keys)
+            visualElement.MeasureInvalidated -= OnItemMeasureInvalidated;
+        _measuredItemViews.Clear();
+    }
+
+    void OnItemMeasureInvalidated(object? sender, EventArgs args)
+    {
+        if (_isInLayout || _isReloading || sender is not VisualElement visualElement ||
+            !_measuredItemViews.TryGetValue(visualElement, out var index) ||
+            index < 0 || index >= _flatItems.Count)
+            return;
+
+        var info = _flatItems[index];
+        if (!info.Measured)
+            return;
+
+        info.Measured = false;
+        info.Size = _estimatedItemHeight;
+        _positionsCalculated = false;
+        ((IView)VirtualView).InvalidateMeasure();
     }
 
     void PositionItem(NSView platformView, ItemInfo info, int index,
@@ -1035,6 +1081,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         UnsubscribeCollection();
 
         // Clear all visible views
+        UnobserveItemMeasurements();
         foreach (var kvp in _visibleViews)
         {
             kvp.Value.platformView.RemoveFromSuperview();
