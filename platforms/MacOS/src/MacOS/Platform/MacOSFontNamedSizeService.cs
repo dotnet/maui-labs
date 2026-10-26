@@ -4,6 +4,8 @@ using Microsoft.Maui.Platforms.MacOS.Handlers;
 
 [assembly: Dependency(typeof(Microsoft.Maui.Platforms.MacOS.Platform.MacOSFontNamedSizeService))]
 
+#pragma warning disable CS0612 // Required by MAUI's legacy named-size XAML conversion path.
+
 namespace Microsoft.Maui.Platforms.MacOS.Platform;
 
 /// <summary>

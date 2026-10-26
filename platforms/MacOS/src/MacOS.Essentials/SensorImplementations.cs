@@ -9,8 +9,8 @@ class AccelerometerImplementation : IAccelerometer
 {
 	public bool IsSupported => false;
 	public bool IsMonitoring => false;
-	public event EventHandler<AccelerometerChangedEventArgs>? ReadingChanged;
-	public event EventHandler? ShakeDetected;
+	public event EventHandler<AccelerometerChangedEventArgs>? ReadingChanged { add { } remove { } }
+	public event EventHandler? ShakeDetected { add { } remove { } }
 	public void Start(SensorSpeed sensorSpeed) { }
 	public void Stop() { }
 }
@@ -19,7 +19,7 @@ class GyroscopeImplementation : IGyroscope
 {
 	public bool IsSupported => false;
 	public bool IsMonitoring => false;
-	public event EventHandler<GyroscopeChangedEventArgs>? ReadingChanged;
+	public event EventHandler<GyroscopeChangedEventArgs>? ReadingChanged { add { } remove { } }
 	public void Start(SensorSpeed sensorSpeed) { }
 	public void Stop() { }
 }
@@ -28,7 +28,7 @@ class CompassImplementation : ICompass
 {
 	public bool IsSupported => false;
 	public bool IsMonitoring => false;
-	public event EventHandler<CompassChangedEventArgs>? ReadingChanged;
+	public event EventHandler<CompassChangedEventArgs>? ReadingChanged { add { } remove { } }
 	public void Start(SensorSpeed sensorSpeed) { }
 	public void Start(SensorSpeed sensorSpeed, bool applyLowPassFilter) { }
 	public void Stop() { }
@@ -38,7 +38,7 @@ class BarometerImplementation : IBarometer
 {
 	public bool IsSupported => false;
 	public bool IsMonitoring => false;
-	public event EventHandler<BarometerChangedEventArgs>? ReadingChanged;
+	public event EventHandler<BarometerChangedEventArgs>? ReadingChanged { add { } remove { } }
 	public void Start(SensorSpeed sensorSpeed) { }
 	public void Stop() { }
 }
@@ -47,7 +47,7 @@ class MagnetometerImplementation : IMagnetometer
 {
 	public bool IsSupported => false;
 	public bool IsMonitoring => false;
-	public event EventHandler<MagnetometerChangedEventArgs>? ReadingChanged;
+	public event EventHandler<MagnetometerChangedEventArgs>? ReadingChanged { add { } remove { } }
 	public void Start(SensorSpeed sensorSpeed) { }
 	public void Stop() { }
 }
