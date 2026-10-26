@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using AppKit;
 using CoreAnimation;
 using CoreGraphics;
