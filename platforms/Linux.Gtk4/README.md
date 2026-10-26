@@ -498,8 +498,18 @@ handler cleanup on disposal.
 
 `GtkSignalLifetimeTests` repeatedly connects real MAUI button and layout handlers,
 forces collection, emits native clicks, and verifies that click and visual-state
-controller signals are disconnected before retiring their owners. It pumps GTK
-during finalization to exercise closure/native teardown lifetime boundaries.
+controller signals are disconnected before retiring their owners across 400
+button and 400 layout lifecycles. The test owns the default GLib main context,
+checks that worker dispatch is deferred to the GTK thread, and waits for forced
+finalizers to finish before pumping GTK or accessing more native objects.
+GirCore 0.7 removes instance-cache entries and frees boxed GValues on the
+finalizer thread, using different locks for cache reads and writes. Pumping GTK
+or creating/retiring objects concurrently with forced finalization can therefore
+abort the test host in `GObject.Internal.InstanceCache.ToggleNotify`. This
+test-harness sequencing avoids that overlap without suppressing signal cleanup
+assertions or replacing finalization with explicit controller disposal; it does
+not fix GirCore's underlying cache synchronization or guarantee that applications
+cannot encounter it during automatic collection.
 
 `ContentViewRootLayoutTests` covers child-size changes without window resizing,
 measure invalidation and idle layout convergence.
