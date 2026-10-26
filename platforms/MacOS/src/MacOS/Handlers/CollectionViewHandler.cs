@@ -64,6 +64,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
     nfloat _lastMeasurementConstraint = -1;
     bool _lastMeasurementWasHorizontal;
     bool _measureContent;
+    bool _contentMeasureInvalidationPending;
 
     // Threshold: render items this far beyond the visible rect
     static readonly nfloat OverScanPixels = 200;
@@ -494,7 +495,32 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             // Items shrank — more items may now fit in the viewport; re-run once
             UpdateVisibleItems(viewportOverride);
             if (_measureContent)
+                InvalidateContentMeasure();
+        }
+    }
+
+    void InvalidateContentMeasure()
+    {
+        if (_contentMeasureInvalidationPending)
+            return;
+
+        var dispatcher = MauiContext?.Dispatcher;
+        if (dispatcher is null || !_isInLayout)
+        {
+            ((IView)VirtualView).InvalidateMeasure();
+            return;
+        }
+
+        _contentMeasureInvalidationPending = true;
+        if (!dispatcher.Dispatch(() =>
+        {
+            _contentMeasureInvalidationPending = false;
+            if (_itemsContainer != null)
                 ((IView)VirtualView).InvalidateMeasure();
+        }))
+        {
+            _contentMeasureInvalidationPending = false;
+            throw new InvalidOperationException("Could not dispatch CollectionView content measurement invalidation.");
         }
     }
 
