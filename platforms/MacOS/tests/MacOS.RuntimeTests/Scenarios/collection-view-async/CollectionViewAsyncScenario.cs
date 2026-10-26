@@ -25,6 +25,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
 {
     readonly ObservableCollection<string> _items = new();
     readonly List<Label> _labels = new();
+    readonly List<Grid> _rows = new();
     CollectionView _collection = null!;
     Label _control = null!;
     Label _empty = null!;
@@ -61,6 +62,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
                 };
                 grid.Add(caption, 0);
                 grid.Add(value, 1);
+                _rows.Add(grid);
                 return grid;
             }),
         };
@@ -95,6 +97,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
         {
             _items.Clear();
             _labels.Clear();
+            _rows.Clear();
             _empty.IsVisible = true;
             await RuntimeTestContext.FlushMainQueueAsync();
             await Task.Delay(50);
@@ -144,6 +147,30 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
             context.Pass($"Async insertion and redraw cycle {cycle + 1}");
         }
 
+        var resizedRow = _rows[0];
+        var nativeResizedRow = (NSView)resizedRow.Handler!.PlatformView!;
+        var previousListHeight = native.Bounds.Height;
+        var previousRowHeight = resizedRow.HeightRequest;
+        var resizedRowHeight = previousRowHeight + 34;
+        resizedRow.HeightRequest = resizedRowHeight;
+        var resizedImage = await CaptureAsync(context, nativeWindow, "resized.png");
+        var expectedListHeight = previousListHeight + resizedRowHeight - previousRowHeight;
+        context.WriteJson("resized.json", new
+        {
+            previousListHeight,
+            previousRowHeight,
+            resizedRowHeight,
+            listHeight = native.Bounds.Height,
+            rowBounds = nativeResizedRow.Bounds.ToString(),
+            rowFrame = nativeResizedRow.Frame.ToString(),
+        });
+        context.Assert(Math.Abs(nativeResizedRow.Bounds.Height - resizedRowHeight) < 1,
+            "A measured row updates its native height after its requested size changes.");
+        context.Assert(Math.Abs(native.Bounds.Height - expectedListHeight) < 1,
+            "The content-sized document extent includes a later measured-row size change.");
+        context.Assert(CountPixels(resizedImage, nativeWindow, Native(_labels[0]), cyan: false) > 5,
+            "The resized row remains visibly rendered after its measurement changes.");
+
         var settled = false;
         var previous = (ObservedCollectionViewHandler.Measures, ObservedCollectionViewHandler.Arranges);
         for (var attempt = 0; attempt < 10; attempt++)
@@ -169,6 +196,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
         _collection.HeightRequest = 112;
         _items.Clear();
         _labels.Clear();
+        _rows.Clear();
         for (var i = 0; i < 20; i++)
             _items.Add($"Constrained row {i + 1}");
         await CaptureAsync(context, nativeWindow, "constrained.png");

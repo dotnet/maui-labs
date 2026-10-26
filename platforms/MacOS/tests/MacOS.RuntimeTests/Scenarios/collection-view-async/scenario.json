@@ -2,7 +2,7 @@
   "name": "collection-view-async",
   "expectedCases": 5,
   "evidence": ["empty.png", "rows-0.png", "rows-0.json", "assertions.txt"],
-  "fixedEvidence": ["rows-1.png", "rows-1.json", "rows-2.png", "rows-2.json", "layout-convergence.json", "constrained.png", "constrained-scrolled.png", "constrained.json", "minimum.png", "maximum.png", "explicit.png", "size-limits.json"],
+  "fixedEvidence": ["rows-1.png", "rows-1.json", "rows-2.png", "rows-2.json", "resized.png", "resized.json", "layout-convergence.json", "constrained.png", "constrained-scrolled.png", "constrained.json", "minimum.png", "maximum.png", "explicit.png", "size-limits.json"],
   "baseline": {
     "source": "platforms/MacOS/src/MacOS/Handlers/CollectionViewHandler.cs",
     "commit": "111c6f7b6f0b046fbdc8087448108297c083be9d",
