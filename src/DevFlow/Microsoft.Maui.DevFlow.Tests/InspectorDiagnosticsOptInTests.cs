@@ -154,8 +154,10 @@ public class InspectorDiagnosticsOptInTests
         }
     }
 
-    [Fact]
-    public async Task LayoutSuppression_RootedProject_ReportsPathAndPreservesSuccessfulRoundTrip()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LayoutSuppression_RootedProject_ReportsPathAndPreservesSuccessfulRoundTrip(bool legacyFingerprint)
     {
         var root = Path.Combine(Path.GetTempPath(), $"devflow-layout-policy-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -163,13 +165,16 @@ public class InspectorDiagnosticsOptInTests
         {
             var project = Path.Combine(root, "App.csproj");
             await File.WriteAllTextAsync(project, "<Project />");
+            if (legacyFingerprint)
+                await File.WriteAllTextAsync(Path.Combine(root, ".mauidevflow"),
+                    """{"layoutDiagnostics":{"suppressions":[{"fingerprint":"0123456789abcdef","reason":"Saved policy"}]}}""");
             await using var agent = new DiagnosticsAgent
             {
                 LayoutResponse = """
                     {"schemaVersion":"1.0","ruleSetVersion":"1.1",
                      "snapshot":{"id":"snapshot","stable":true,"nodeCount":1},
                      "summary":{"violations":1},"coverage":{"overall":"partial","rules":[]},
-                     "findings":[{"id":"test-finding","suppressionKey":"test-fingerprint",
+                     "findings":[{"id":"test-finding","suppressionKey":"0123456789abcdef0123456789abcdef",
                        "ruleId":"layout.constraint-violation","outcome":"violation","severity":"moderate",
                        "confidence":"high","message":"Conflicting constraints.","element":{"id":"root","type":"BoxView"}}]}
                     """
@@ -188,7 +193,8 @@ public class InspectorDiagnosticsOptInTests
             Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
             using var result = JsonDocument.Parse(await saved.Content.ReadAsStringAsync());
             Assert.True(result.RootElement.GetProperty("success").GetBoolean());
-            Assert.Single(Microsoft.Maui.Cli.DevFlow.LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(project).Suppressions);
+            var suppression = Assert.Single(Microsoft.Maui.Cli.DevFlow.LayoutDiagnosticsPolicyLoader.LoadProjectPolicy(project).Suppressions);
+            Assert.Equal(legacyFingerprint ? "0123456789abcdef" : "0123456789abcdef0123456789abcdef", suppression.Fingerprint);
 
             using var rescanned = await http.PostAsync($"{inspector.Url}/api/diagnostics/layout",
                 new StringContent("{}", Encoding.UTF8, "application/json"));

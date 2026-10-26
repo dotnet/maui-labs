@@ -1,84 +1,97 @@
 # AI Chat Playground
 
-A .NET MAUI sample for trying `Microsoft.Extensions.AI` across on-device and
-optional Azure OpenAI providers. The app runs on Android, iOS, Mac Catalyst,
-and Windows (not native macOS); available providers vary by platform.
+A .NET MAUI sample for comparing on-device Apple Intelligence with optional
+Azure OpenAI providers. It runs on Android, iOS, Mac Catalyst, and Windows
+(not native macOS); providers vary by platform.
 
-## Features
+## What you can try
 
-### Chat
+| Tab | Features | Providers |
+|-----|----------|-----------|
+| Chat | Text, streaming, structured JSON, optional tools and image input | Apple Intelligence (iOS/Mac Catalyst), Azure OpenAI, offline Replay |
+| Embeddings | Import documents, index them, and search | Apple NaturalLanguage (iOS/Mac Catalyst), Azure OpenAI |
+| Images | Generate images or edit a source image | Azure OpenAI |
 
-Switch between providers, stream responses, request structured JSON, and try
-optional tools. `Microsoft.Maui.Essentials.AI` provides on-device text chat
-through `AppleIntelligenceChatClient`. On iOS and Mac Catalyst 27+, image
-attachments require a ready vision-capable model. Azure uses the Responses
-API and also supports image input, reasoning summaries, and an optional
-image-generation tool. Apple does not generate images or fall back to Azure.
+Apple image input requires OS 27 and a ready vision-capable model. Apple does
+not generate images or fall back to Azure. Azure chat uses the Responses API
+and supports image input, reasoning summaries, and an optional image-generation
+tool. Structured responses stream only when the provider emits incremental
+updates. Each tab has its own services.
 
 Chat displays the model ID reported by the provider, including during replay.
-Save the current chat locally, import or export recordings, and replay them
-offline. The **More** menu includes a bundled example; **New** replaces the
-current recording. Uncheck tools you do not need, or choose **None** to disable
-tool calls.
+It auto-saves the current recording locally. **New** replaces that recording;
+**More** loads a bundled example or imports and exports recordings. Replay
+works offline without credentials or a model. Select a live provider to
+continue a conversation. Features are shown only when the selected provider
+supports them. Uncheck unneeded tools or choose **None** to disable tool calls.
+Switching providers preserves your Structured JSON preference, but providers
+that opt out receive plain-text requests and their responses display as text.
 
-The header's **Logs** button toggles the local, bounded diagnostics sidebar
-(also available on Embeddings and Images). It groups built-in logs and spans
-by trace, including existing tool-invocation lifecycle logs from MEAI and Apple.
-Apple's native tool callbacks retain the originating request's trace/span.
-Chat and embeddings emit spans, while the pinned MEAI version
-provides image logging only. Model and usage data appear only when emitted
-by the provider. Trace payload logging and sensitive telemetry capture are
-disabled; exceptions may still contain sensitive data. Nothing is exported.
+The local, bounded diagnostics sidebar starts collapsed on Chat, Embeddings,
+and Images. The header's **Logs** button toggles it without stopping diagnostic
+capture while hidden. In narrower windows, tap outside the sidebar to dismiss it.
+It groups built-in logs and completed spans by trace, including tool lifecycle logs from
+MEAI and Apple. Apple's native tool callbacks retain the originating request's
+trace/span. Chat and embeddings emit spans; the pinned MEAI version provides
+image logging only. Model and usage data appear only when supplied by the provider.
+Trace payload logging and sensitive telemetry capture are disabled, but
+exceptions may still contain sensitive data. Diagnostics are not exported
+automatically.
 
-### Embeddings
+## Run the sample
 
-Import documents, build an index, and search it using Apple's on-device
-`NLEmbeddingGenerator` or a configured Azure provider.
-
-### Images
-
-Generate images from text or edit a source image with a configured Azure provider.
-
-Chat, Embeddings, and Images each have their own tab and services. Replay
-works without credentials or a model.
-
-## Build and run
-
-Install the repo's pinned .NET 10 SDK, the matching MAUI workload, and Xcode 27
-for Apple builds. From the repository root on macOS, build and run the Mac
-Catalyst sample with:
+Use the repository's pinned .NET 10 SDK and matching MAUI workload.
+Apple builds require Xcode 27. On macOS, from the repository root:
 
 ```sh
-dotnet build samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
-  -f net10.0-maccatalyst27.0 -c Debug -t:Build,Run -p:UseXcode27Preview=true
+dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-For iOS, use `-f net10.0-ios27.0` instead. Apple Intelligence text chat requires
-iOS or Mac Catalyst 26+ on a supported device with the model enabled. Apple
-image input requires 27+ and a ready vision-capable model. Apple embeddings
-require the English sentence-embedding asset, which may be absent on
-simulators. Azure-backed features also run on Android and Windows.
+Use `net10.0-ios27.0` for iOS and select a device with `--device <device-id>`.
+Use `--list-devices` to list available targets. Apple Intelligence text chat requires iOS or Mac
+Catalyst 26+ on a supported device with the model enabled. Image input requires
+27+ and a ready vision model. Apple sentence embeddings require the English
+language asset, which may be absent on simulators.
 
-## Optional Azure configuration
-
-No cloud credentials are needed for the on-device providers or Replay. To
-enable Azure, set an Azure OpenAI endpoint (typically ending in
-`/openai/v1/`), an API key, and at least one deployment name in user secrets.
-The project uses user-secrets ID `2727d4aa-a3a5-484b-9447-91604761972b`.
-From the repository root, for example:
+On Windows:
 
 ```powershell
-dotnet user-secrets set "AI:Endpoint" "https://<resource>.openai.azure.com/openai/v1/" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:ApiKey" "<key>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
-dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>" --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj
+dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj -f net10.0-windows10.0.19041.0
 ```
 
-Only set the deployment names you intend to use: `AI:DeploymentName` enables
-Chat, `AI:ImageDeploymentName` enables Images and Chat's image-generation tool,
-and `AI:EmbeddingDeploymentName` enables Embeddings. The endpoint and key are
-required only when at least one Azure deployment name is configured.
-User secrets are **embedded in Debug builds** for device testing: never
-distribute those builds or commit keys. Azure prompts, images, and indexed
-text may leave the device and incur charges.
+The Windows sample remains unpackaged and offers Azure-backed features and
+offline Chat Replay, not on-device AI. Azure and Replay also run on Android.
+
+With Java and the Android SDK installed:
+
+```sh
+dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
+  -f net10.0-android --device <device-id>
+```
+
+## Configure Azure OpenAI
+
+Azure is optional. On-device providers and Replay need no cloud credentials.
+Configure an endpoint (typically ending in `/openai/v1/`), a key, and only the
+deployments you want to use. The project uses user-secrets ID
+`2727d4aa-a3a5-484b-9447-91604761972b`. From the repository root:
+
+```powershell
+$project = "samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sample.ChatPlayground.csproj"
+dotnet user-secrets set "AI:Endpoint" "https://<resource>.openai.azure.com/openai/v1/" --project $project
+dotnet user-secrets set "AI:ApiKey" "<key>" --project $project
+dotnet user-secrets set "AI:DeploymentName" "<chat-deployment>" --project $project
+dotnet user-secrets set "AI:ImageDeploymentName" "<image-deployment>" --project $project
+dotnet user-secrets set "AI:EmbeddingDeploymentName" "<embedding-deployment>" --project $project
+```
+
+`AI:DeploymentName` enables Chat, `AI:EmbeddingDeploymentName` enables Embeddings,
+and `AI:ImageDeploymentName` enables Images and Chat's image-generation tool for
+providers that support tool calling. The endpoint and key are required only
+when at least one Azure deployment is configured.
+
+**Debug builds embed your local user secrets. Do not distribute these builds
+or commit credentials.** Azure prompts, images, and indexed text may leave the
+device and incur charges. Recordings may also contain sensitive data; review
+them before sharing.

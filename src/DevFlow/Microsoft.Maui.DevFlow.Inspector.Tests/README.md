@@ -3,7 +3,7 @@
 Two separate deterministic suites exercise the shipped Inspector. Neither enables
 the opt-in native-app journeys.
 
-## Layout workspace
+## Layout workspace and shared UI synchronization
 
 `InspectorLayoutWorkspaceTests` runs deterministic Chromium regressions without a broker or
 native app. A loopback fixture agent supplies the initial tree/screenshot; scenario-specific
@@ -23,15 +23,25 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.De
   --results-directory artifacts\TestResults\InspectorBrowser
 ```
 
-All **15** fixtures must execute and pass: the original eleven Layout workspace checks,
+All **19** fixtures must execute and pass: the original eleven Layout workspace checks,
 cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticInputsRevision`
-invalidation/Live rescanning with unchanged geometry, plus two queued Live cancellation checks.
+invalidation/Live rescanning with unchanged geometry, two queued Live cancellation checks,
+three property/Network synchronization checks, and the disconnected overlay's "Retry now" check.
 Disabling Live cancels queued automatic rescans while preserving an explicit refresh requested
 during an active scan; it does not abort the in-flight scan.
 
+The read-only property-filter cases cover descriptor and legacy property loading while the
+mutation lease is held elsewhere. The Network case covers out-of-order lists, a late automatic
+poll during detail loading, disabled attachment until detail completion, and paused list polling
+while detail stays open. Response gates hold each loading state until asserted; Playwright's
+clock drives the real polling intervals instead of wall-clock sleeps.
+
 `ci-devflow.yml` provisions Chromium in its dedicated `inspector-layout-browser` Windows job and
-sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 15 passed results and fails
+sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 19 passed results and fails
 if any filtered test is skipped; adding another fixture requires updating the explicit count.
+It also repeats all three synchronization cases five times, failing immediately on any failure
+or skip. The Windows live integration job enables these browser fixtures alongside the native
+journeys.
 `InspectorBrowserFact` skips these fixtures only in ordinary GitHub Actions/Azure Pipelines
 jobs without that opt-in, where Playwright browsers are not provisioned. Local execution
 does not require the opt-in; a missing Chromium installation fails with Playwright's guidance.
@@ -77,11 +87,14 @@ is required.
 
 Coverage includes runtime property writes and rejection, source-button
 clean/pending/dirty states, selection preservation after real state refresh,
-property filtering, and numeric validation. Only the agent's controlled responses
+property filtering, numeric validation, color-editor alpha handling, and off-screen overlays (dimmed in the tree,
+not drawn or highlighted on the Preview). Only the agent's controlled responses
 are mocked; browser requests are not intercepted and HTML is not injected.
 Teardown stops browser timers and prevents a late pagehide keepalive request, then
 drains HTTP traffic before disposing the
 Inspector and awaiting the agent server's shutdown.
+The only intercepted browser request is one held `/api/state` response, which keeps
+a refresh in flight while a tap lands.
 
 From the repository root (PowerShell):
 

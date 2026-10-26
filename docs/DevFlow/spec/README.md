@@ -45,10 +45,6 @@ WebView endpoints also accept `contextId`; query values override the JSON body's
 JSON object. `/webview/screenshot` returns PNG, trying the registered native
 element before the CDP screenshot fallback.
 
-`/api/v1/webview/network` is an existing HTTP 200 alias of
-`/api/v1/network/requests`: it reads the native .NET HTTP capture store, not browser
-fetch/XHR traffic. It does not associate requests with a WebView context.
-
 ## Streaming payloads
 
 There is no universal `{ type, timestamp, data }` wire envelope. Network and log

@@ -1,5 +1,7 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.DevFlow.Agent.IntegrationTests.Fixtures;
 using Microsoft.Maui.DevFlow.Driver;
 using Xunit.Abstractions;
@@ -68,6 +70,19 @@ public class WebViewTests : IntegrationTestBase
     }
 
     Task EnsureOnBlazorPageAsync() => App.EnsureBlazorReadyAsync();
+
+    async Task<string> EvaluateStringAsync(string expression, string contextId)
+    {
+        var result = await Client.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
+        {
+            ["expression"] = expression,
+            ["returnByValue"] = true,
+        }, contextId);
+        Assert.False(result.TryGetProperty("error", out _), $"CDP evaluation failed: {result}");
+        var evaluation = result.GetProperty("result");
+        Assert.False(evaluation.TryGetProperty("exceptionDetails", out _), $"JavaScript evaluation failed: {result}");
+        return evaluation.GetProperty("result").GetProperty("value").GetString()!;
+    }
 
     static IEnumerable<JsonElement> EnumerateContexts(JsonElement json)
     {
@@ -459,19 +474,6 @@ public class WebViewTests : IntegrationTestBase
         const string fixtureId = "DevFlowExactlyOnceFixture";
         var fixtureIdJson = JsonSerializer.Serialize(fixtureId);
 
-        async Task<string> EvaluateStringAsync(string expression)
-        {
-            var result = await Client.SendCdpCommandAsync("Runtime.evaluate", new JsonObject
-            {
-                ["expression"] = expression,
-                ["returnByValue"] = true,
-            }, contextId);
-            Assert.False(result.TryGetProperty("error", out _), $"CDP evaluation failed: {result}");
-            var evaluation = result.GetProperty("result");
-            Assert.False(evaluation.TryGetProperty("exceptionDetails", out _), $"JavaScript evaluation failed: {result}");
-            return evaluation.GetProperty("result").GetProperty("value").GetString()!;
-        }
-
         try
         {
             var ready = await EvaluateStringAsync(
@@ -499,7 +501,7 @@ public class WebViewTests : IntegrationTestBase
                     document.body.appendChild(root);
                     return 'ready';
                 })()
-                """);
+                """, contextId);
             Assert.Equal("ready", ready);
 
             var selector = $"#{fixtureId} {(action == "fill" ? "input" : "button")}";
@@ -550,7 +552,7 @@ public class WebViewTests : IntegrationTestBase
                         value: root.querySelector('input').value
                     });
                 })()
-                """);
+                """, contextId);
             using var state = JsonDocument.Parse(stateJson);
             Assert.Equal(action == "click" ? 1 : 0, state.RootElement.GetProperty("clicks").GetInt32());
             Assert.Equal(action == "fill" ? 1 : 0, state.RootElement.GetProperty("inputs").GetInt32());
@@ -561,7 +563,232 @@ public class WebViewTests : IntegrationTestBase
         finally
         {
             await EvaluateStringAsync(
-                $"(() => {{ const root = document.getElementById({fixtureIdJson}); if (root) root.remove(); return 'removed'; }})()");
+                $"(() => {{ const root = document.getElementById({fixtureIdJson}); if (root) root.remove(); return 'removed'; }})()", contextId);
+        }
+    }
+
+    const string CliFixtureId = "DevFlowCliOperationsFixture";
+    const string CliFixtureButtonText = "Exactly once \"quoted\" \\ button";
+    const string CliFillText = "Hello \"quoted\"\n'world'\\ \u2603";
+
+    async Task CreateCliDomFixtureAsync(string contextId)
+    {
+        var ready = await EvaluateStringAsync(
+            $$"""
+            (() => {
+                const id = {{JsonSerializer.Serialize(CliFixtureId)}};
+                document.getElementById(id)?.remove();
+                const root = document.createElement('div');
+                root.id = id;
+                root.dataset.name = {{JsonSerializer.Serialize("a'b\\c")}};
+                root.style.cssText = 'position:fixed;top:10px;left:10px;z-index:99999;background:white;padding:10px;';
+                root.dataset.clicks = '0';
+                root.dataset.inputs = '0';
+                root.dataset.changes = '0';
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = {{JsonSerializer.Serialize(CliFixtureButtonText)}};
+                button.addEventListener('click', () => root.dataset.clicks = String(Number(root.dataset.clicks) + 1));
+                root.appendChild(button);
+                for (const tag of ['textarea', 'div']) {
+                    const field = document.createElement(tag);
+                    if (tag === 'div') field.contentEditable = 'true';
+                    field.addEventListener('input', () => root.dataset.inputs = String(Number(root.dataset.inputs) + 1));
+                    field.addEventListener('change', () => root.dataset.changes = String(Number(root.dataset.changes) + 1));
+                    root.appendChild(field);
+                }
+                document.body.appendChild(root);
+                return 'ready';
+            })()
+            """, contextId);
+        Assert.Equal("ready", ready);
+    }
+
+    Task RemoveCliDomFixtureAsync(string contextId)
+        => EvaluateStringAsync(
+            $"(() => {{ document.getElementById({JsonSerializer.Serialize(CliFixtureId)})?.remove(); return 'removed'; }})()", contextId);
+
+    async Task<JsonDocument> ReadCliDomStateAsync(string contextId)
+        => JsonDocument.Parse(await EvaluateStringAsync(
+            $$"""
+            (() => {
+                const root = document.getElementById({{JsonSerializer.Serialize(CliFixtureId)}});
+                return JSON.stringify({
+                    clicks: Number(root.dataset.clicks),
+                    inputs: Number(root.dataset.inputs),
+                    changes: Number(root.dataset.changes),
+                    value: root.querySelector('textarea').value,
+                    editable: root.querySelector('[contenteditable]').textContent
+                });
+            })()
+            """, contextId));
+
+    [Fact]
+    public async Task CliOperations_QuerySnapshotAndCommand_ReturnRealSelectedDom()
+    {
+        await EnsureOnBlazorPageAsync();
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
+        var operations = new WebViewOperations(Client);
+        try
+        {
+            await CreateCliDomFixtureAsync(contextId);
+            var selector = $"#{CliFixtureId}[data-name=\"a'b\\\\c\"] button";
+            var queryResult = await operations.DomQuerySelectorAsync(selector, contextId);
+            Assert.False(queryResult.StartsWith("Error:", StringComparison.Ordinal), $"CLI DOM query failed: {queryResult}");
+            using var query = JsonDocument.Parse(queryResult);
+            Assert.Equal("button", query.RootElement.GetProperty("tagName").GetString());
+            Assert.Equal(CliFixtureButtonText, query.RootElement.GetProperty("textContent").GetString());
+            Assert.Equal(JsonValueKind.Null, query.RootElement.GetProperty("id").ValueKind);
+
+            using var queryAll = JsonDocument.Parse(await operations.DomQuerySelectorAllAsync($"#{CliFixtureId} > *", contextId));
+            Assert.Equal(new[] { "button", "textarea", "div" },
+                queryAll.RootElement.EnumerateArray().Select(e => e.GetProperty("tagName").GetString()));
+            Assert.Equal(new[] { 0, 1, 2 },
+                queryAll.RootElement.EnumerateArray().Select(e => e.GetProperty("index").GetInt32()));
+            Assert.Equal("null", await operations.DomQuerySelectorAsync($"#{CliFixtureId} .missing", contextId));
+            Assert.Equal("[]", await operations.DomQuerySelectorAllAsync($"#{CliFixtureId} .missing", contextId));
+            Assert.Contains("<button type=\"button\">", await operations.DomGetOuterHtmlAsync(selector, contextId));
+            var snapshot = await operations.SnapshotAsync(contextId);
+            Assert.Contains($"<div id=\"{CliFixtureId}\">", snapshot);
+            Assert.Contains($"<button [clickable]> {CliFixtureButtonText}", snapshot);
+            Assert.Contains("<textarea [input]>", snapshot);
+
+            // Runtime.evaluate takes a mutation lease even for a DOM read. Hand it to the
+            // real CLI, then release only that CLI's lease and restore the fixture's owner.
+            var released = await Client.ControlMutationLeaseAsync("release");
+            Assert.True(released.Ok, released.Error);
+            try
+            {
+                var (exitCode, stdout, stderr) = await InvokeWebViewCommandAsync(
+                    "DOM", "querySelector", selector, "--webview", contextId);
+                Assert.Equal(0, exitCode);
+                Assert.DoesNotContain("Error:", stderr);
+                using var commandQuery = JsonDocument.Parse(stdout);
+                Assert.Equal(query.RootElement.ToString(), commandQuery.RootElement.ToString());
+            }
+            finally
+            {
+                var cliLeaseId = (string)typeof(DevFlowCommands)
+                    .GetField("s_cliMutationLeaseId", BindingFlags.Static | BindingFlags.NonPublic)!
+                    .GetValue(null)!;
+                var cliReleased = await Client.ControlMutationLeaseAsync("release", leaseId: cliLeaseId);
+                Assert.True(cliReleased.Ok, cliReleased.Error);
+                var restored = await Client.ControlMutationLeaseAsync("claim");
+                Assert.True(restored.YouHold, restored.Error);
+            }
+        }
+        finally
+        {
+            await RemoveCliDomFixtureAsync(contextId);
+        }
+    }
+
+    Task<(int ExitCode, string Stdout, string Stderr)> InvokeWebViewCommandAsync(params string[] args) =>
+        InvokeCliCommandAsync(["webview", .. args]);
+
+    [Theory]
+    [InlineData("click", "button")]
+    [InlineData("fill", "textarea")]
+    [InlineData("fill", "[contenteditable]")]
+    public async Task CliOperations_Mutations_ExecuteExactlyOnce(string action, string field)
+    {
+        await EnsureOnBlazorPageAsync();
+        await AssertCdpResponsiveAsync();
+        var contextId = await GetActiveContextIdAsync();
+        var operations = new WebViewOperations(Client);
+        var retryMutations = Client.RetryMutatingRequests;
+        try
+        {
+            await CreateCliDomFixtureAsync(contextId);
+            Client.RetryMutatingRequests = false;
+            var selector = $"#{CliFixtureId} {field}";
+            var result = action == "click"
+                ? await operations.InputDispatchClickAsync(selector, contextId)
+                : await operations.InputFillAsync(selector, CliFillText, contextId);
+            Assert.Equal(action == "click" ? "Clicked: button"
+                : $"Filled: {(field == "textarea" ? "textarea" : "div")} with {CliFillText.Length} chars", result);
+
+            using var state = await ReadCliDomStateAsync(contextId);
+            Assert.Equal(action == "click" ? 1 : 0, state.RootElement.GetProperty("clicks").GetInt32());
+            Assert.Equal(action == "fill" ? 1 : 0, state.RootElement.GetProperty("inputs").GetInt32());
+            Assert.Equal(action == "fill" ? 1 : 0, state.RootElement.GetProperty("changes").GetInt32());
+            Assert.Equal(action == "fill" && field == "textarea" ? CliFillText : "", state.RootElement.GetProperty("value").GetString());
+            Assert.Equal(action == "fill" && field == "[contenteditable]" ? CliFillText : "", state.RootElement.GetProperty("editable").GetString());
+            Output.WriteLine($"Verified CLI {action} on {field}, including exact DOM event counts on {Platform}: {state.RootElement}");
+        }
+        finally
+        {
+            Client.RetryMutatingRequests = retryMutations;
+            await RemoveCliDomFixtureAsync(contextId);
+        }
+    }
+
+    [Fact]
+    public async Task CliOperations_SelectedContext_LeavesOtherContextUnchanged()
+    {
+        App.InvalidateBlazorReady();
+        var retryMutations = Client.RetryMutatingRequests;
+        var leftFixtureCreated = false;
+        var rightFixtureCreated = false;
+        try
+        {
+            await NavigateToPageAsync("//multiblazor", "BlazorLeft");
+            var deadline = DateTime.UtcNow.AddSeconds(Platform is "android" or "windows" ? 90 : 60);
+            JsonElement contexts = default;
+            while (DateTime.UtcNow < deadline)
+            {
+                contexts = await Client.GetCdpWebViewsAsync();
+                if (new[] { "BlazorLeft", "BlazorRight" }.All(id => EnumerateContexts(contexts).Any(c =>
+                    c.TryGetProperty("automationId", out var automationId) && automationId.GetString() == id && IsReadyContext(c))))
+                    break;
+                await Task.Delay(500);
+            }
+            Assert.True(new[] { "BlazorLeft", "BlazorRight" }.All(id => EnumerateContexts(contexts).Any(c =>
+                c.TryGetProperty("automationId", out var automationId) && automationId.GetString() == id && IsReadyContext(c))),
+                $"Expected both existing multi-Blazor contexts to be ready: {contexts}");
+
+            await CreateCliDomFixtureAsync("BlazorLeft");
+            leftFixtureCreated = true;
+            await CreateCliDomFixtureAsync("BlazorRight");
+            rightFixtureCreated = true;
+            Client.RetryMutatingRequests = false;
+            var operations = new WebViewOperations(Client);
+            Assert.Equal("Clicked: button", await operations.InputDispatchClickAsync($"#{CliFixtureId} button", "BlazorRight"));
+            Assert.Equal($"Filled: textarea with {CliFillText.Length} chars",
+                await operations.InputFillAsync($"#{CliFixtureId} textarea", CliFillText, "BlazorRight"));
+            using var left = await ReadCliDomStateAsync("BlazorLeft");
+            using var right = await ReadCliDomStateAsync("BlazorRight");
+            Assert.Equal(0, left.RootElement.GetProperty("clicks").GetInt32());
+            Assert.Equal(0, left.RootElement.GetProperty("inputs").GetInt32());
+            Assert.Equal(0, left.RootElement.GetProperty("changes").GetInt32());
+            Assert.Equal("", left.RootElement.GetProperty("value").GetString());
+            Assert.Equal(1, right.RootElement.GetProperty("clicks").GetInt32());
+            Assert.Equal(1, right.RootElement.GetProperty("inputs").GetInt32());
+            Assert.Equal(1, right.RootElement.GetProperty("changes").GetInt32());
+            Assert.Equal(CliFillText, right.RootElement.GetProperty("value").GetString());
+        }
+        finally
+        {
+            Client.RetryMutatingRequests = retryMutations;
+            try
+            {
+                try
+                {
+                    if (leftFixtureCreated)
+                        await RemoveCliDomFixtureAsync("BlazorLeft");
+                }
+                finally
+                {
+                    if (rightFixtureCreated)
+                        await RemoveCliDomFixtureAsync("BlazorRight");
+                }
+            }
+            finally
+            {
+                await NavigateToMainPageAsync();
+                App.InvalidateBlazorReady();
+            }
         }
     }
 

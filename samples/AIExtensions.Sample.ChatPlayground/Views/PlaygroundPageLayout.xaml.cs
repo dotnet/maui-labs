@@ -30,14 +30,12 @@ public partial class PlaygroundPageLayout : ContentView
         propertyChanged: (bindable, _, _) => ((PlaygroundPageLayout)bindable).DiagnosticsOpenChanged());
     public static readonly BindableProperty DiagnosticsAutomationPrefixProperty = BindableProperty.Create(
         nameof(DiagnosticsAutomationPrefix), typeof(string), typeof(PlaygroundPageLayout), "Chat");
-    private const double SidebarWidth = 330;
     private bool _isCompact;
 
     public PlaygroundPageLayout()
     {
         InitializeComponent();
         SizeChanged += (_, _) => Resize(Width);
-        HeaderPanel.SizeChanged += (_, _) => ResizeDiagnostics();
     }
 
     public string HeaderTitle
@@ -138,29 +136,23 @@ public partial class PlaygroundPageLayout : ContentView
     private void ResizeDiagnostics()
     {
         var visible = IsDiagnosticsOpen && Diagnostics is not null;
-        var overlay = Width < 1200;
-        var margin = new Thickness(0, overlay ? Math.Max(0, HeaderPanel.Height) + MainPanel.RowSpacing : 0, 0, 0);
-        DiagnosticsPanel.Margin = margin;
-        DiagnosticsBackdrop.Margin = margin;
-        RootGrid.ColumnDefinitions[2].Width = visible && !overlay ? 390 : 0;
-        Grid.SetColumnSpan(MainPanel, _isCompact ? 3 : visible && !overlay ? 1 : 2);
+        var layout = new PlaygroundLayoutMetrics(Width);
+        var overlay = layout.DiagnosticsOverlay;
+        DiagnosticsPanel.Margin = new Thickness(overlay ? 0 : 12);
+        RootGrid.ColumnDefinitions[2].Width = visible && !overlay ? PlaygroundLayoutMetrics.DiagnosticsWidth : 0;
+        Grid.SetColumnSpan(MainPanel, layout.MainColumnSpan(visible));
         DiagnosticsPanel.IsVisible = visible;
         DiagnosticsBackdrop.IsVisible = visible && overlay;
-        Grid.SetColumn(DiagnosticsPanel, overlay ? 0 : 2);
-        Grid.SetColumnSpan(DiagnosticsPanel, overlay ? 3 : 1);
-        DiagnosticsPanel.HorizontalOptions = overlay ? LayoutOptions.End : LayoutOptions.Fill;
-        if (overlay)
-            DiagnosticsPanel.WidthRequest = Math.Max(0, Math.Min(390, Width - 24));
-        else
-            DiagnosticsPanel.ClearValue(VisualElement.WidthRequestProperty);
+        DiagnosticsPanel.WidthRequest = layout.DiagnosticsPanelWidth;
     }
 
     private void Resize(double width)
     {
+        var layout = new PlaygroundLayoutMetrics(width);
+        var compact = layout.IsCompact;
+        SettingsPanel.WidthRequest = layout.SettingsPanelWidth;
+        SettingsPanel.Margin = new Thickness(compact ? 0 : 12);
         ResizeDiagnostics();
-        var compact = width > 0 && width < 760;
-        if (compact)
-            SettingsPanel.WidthRequest = width < 480 ? Math.Max(0, width - 24) : SidebarWidth;
         if (compact == _isCompact)
             return;
 
@@ -176,20 +168,13 @@ public partial class PlaygroundPageLayout : ContentView
         {
             RootGrid.ColumnDefinitions[0].Width = 0;
             SettingsPanel.IsVisible = false;
-            SettingsPanel.HorizontalOptions = LayoutOptions.Start;
-            Grid.SetColumnSpan(SettingsPanel, 2);
             Grid.SetColumn(MainPanel, 0);
-            Grid.SetColumnSpan(MainPanel, 3);
         }
         else
         {
-            RootGrid.ColumnDefinitions[0].Width = SidebarWidth;
+            RootGrid.ColumnDefinitions[0].Width = PlaygroundLayoutMetrics.SidebarWidth;
             SettingsPanel.IsVisible = true;
-            SettingsPanel.ClearValue(VisualElement.WidthRequestProperty);
-            SettingsPanel.HorizontalOptions = LayoutOptions.Fill;
-            Grid.SetColumnSpan(SettingsPanel, 1);
             Grid.SetColumn(MainPanel, 1);
-            Grid.SetColumnSpan(MainPanel, IsDiagnosticsOpen && Diagnostics is not null && width >= 1200 ? 1 : 2);
         }
     }
 

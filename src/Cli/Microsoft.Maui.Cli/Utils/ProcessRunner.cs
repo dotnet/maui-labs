@@ -152,40 +152,50 @@ public static class ProcessRunner
 		Action<string>? onErrorData = null,
 		CancellationToken cancellationToken = default)
 	{
-		var stopwatch = Stopwatch.StartNew();
-		var stdoutBuilder = new StringBuilder();
-		var stderrBuilder = new StringBuilder();
-
-		using var process = new Process();
-		process.StartInfo = new ProcessStartInfo
+		var startInfo = new ProcessStartInfo
 		{
 			FileName = fileName,
-			WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory,
-			UseShellExecute = false,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true,
-			RedirectStandardInput = continuousInput != null,
-			CreateNoWindow = true
+			WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory
 		};
 
 		foreach (var arg in args)
-			process.StartInfo.ArgumentList.Add(arg);
+			startInfo.ArgumentList.Add(arg);
 
 		// Remove inherited env vars first (e.g. MSBuild SDK path vars set by a parent dotnet run)
 		if (environmentVariablesToRemove != null)
 		{
 			foreach (var key in environmentVariablesToRemove)
-				process.StartInfo.EnvironmentVariables.Remove(key);
+				startInfo.EnvironmentVariables.Remove(key);
 		}
 
 		if (environmentVariables != null)
 		{
 			foreach (var kvp in environmentVariables)
 			{
-				process.StartInfo.EnvironmentVariables[kvp.Key] = kvp.Value;
+				startInfo.EnvironmentVariables[kvp.Key] = kvp.Value;
 			}
 		}
 
+		return await RunAsync(startInfo, timeout, continuousInput, onOutputData, onErrorData, cancellationToken).ConfigureAwait(false);
+	}
+
+	internal static async Task<ProcessResult> RunAsync(
+		ProcessStartInfo startInfo,
+		TimeSpan? timeout = null,
+		string? continuousInput = null,
+		Action<string>? onOutputData = null,
+		Action<string>? onErrorData = null,
+		CancellationToken cancellationToken = default)
+	{
+		var stopwatch = Stopwatch.StartNew();
+		var stdoutBuilder = new StringBuilder();
+		var stderrBuilder = new StringBuilder();
+		startInfo.UseShellExecute = false;
+		startInfo.RedirectStandardOutput = true;
+		startInfo.RedirectStandardError = true;
+		startInfo.RedirectStandardInput = continuousInput != null;
+		startInfo.CreateNoWindow = true;
+		using var process = new Process { StartInfo = startInfo };
 		var outputTcs = new TaskCompletionSource<bool>();
 		var errorTcs = new TaskCompletionSource<bool>();
 
@@ -253,7 +263,7 @@ public static class ProcessRunner
 			catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
 			{
 				await KillAndWaitForExitAsync(process, "async timeout");
-				throw new TimeoutException($"Process '{fileName}' timed out after {effectiveTimeout.TotalSeconds}s");
+				throw new TimeoutException($"Process '{startInfo.FileName}' timed out after {effectiveTimeout.TotalSeconds}s");
 			}
 			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 			{

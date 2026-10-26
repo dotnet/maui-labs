@@ -8,17 +8,14 @@ using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Cli.DevFlow.Skills;
-using Microsoft.Maui.Cli.Providers.Apple;
-using Microsoft.Maui.Cli.Utils;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.Cli.DevFlow;
 
 /// <summary>
-/// CDP-oriented CLI for automating MAUI Blazor WebViews.
-/// Commands mirror CDP domain/method patterns for familiarity.
+/// CLI registration, connection preparation, and presentation for DevFlow operations.
 /// </summary>
-public class DevFlowCommands
+public partial class DevFlowCommands
 {
     private static Command? _devflowCommand;
     private static bool _errorOccurred;
@@ -39,7 +36,7 @@ public class DevFlowCommands
     internal static Func<int, Task<Broker.AgentRegistration[]?>> ListBrokerAgentsAsync { get; set; } = Broker.BrokerClient.ListAgentsAsync;
     internal static Func<AndroidDevFlowPortForwarder> CreateAndroidPortForwarder { get; set; } = AndroidDevFlowPortForwarder.CreateDefault;
     internal static Func<bool> IsAndroidAdbLikelyAvailable { get; set; } = AndroidDevFlowPortForwarder.IsAdbLikelyAvailable;
-    internal static Func<string, IAppDriver> RecordingDriverFactory { get; set; } = CreateDefaultRecordingDriver;
+    internal static Func<string, IAppDriver> RecordingDriverFactory { get; set; } = RecordingOperations.CreateDefaultDriver;
     internal static Func<RecordingState?> ReadRecordingState { get; set; } = RecordingStateManager.Load;
 
     private static IDevFlowOutputWriter Output => s_output ?? throw new InvalidOperationException("DevFlowCommands not initialized. Call CreateDevFlowCommand first.");
@@ -1088,7 +1085,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/v1/storage/roots", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.GetRootsAsync());
         });
         storageCommand.Add(storageRootsCmd);
 
@@ -1106,8 +1103,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var sharedName = ctx.GetValue(prefsSharedNameOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            var qs = sharedName != null ? $"?sharedName={Uri.EscapeDataString(sharedName)}" : "";
-            await SimpleGetAsync(host, port, $"/api/v1/storage/preferences{qs}", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.ListPreferencesAsync(sharedName));
         });
         prefsCommand.Add(prefsListCmd);
 
@@ -1124,9 +1120,7 @@ public class DevFlowCommands
             var type = ctx.GetValue(prefsGetTypeOption)!;
             var sharedName = ctx.GetValue(prefsSharedNameOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            var qs = $"?type={Uri.EscapeDataString(type)}";
-            if (sharedName != null) qs += $"&sharedName={Uri.EscapeDataString(sharedName)}";
-            await SimpleGetAsync(host, port, $"/api/v1/storage/preferences/{Uri.EscapeDataString(key)}{qs}", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.GetPreferenceAsync(key, type, sharedName));
         });
         prefsCommand.Add(prefsGetCmd);
 
@@ -1146,13 +1140,7 @@ public class DevFlowCommands
             var type = ctx.GetValue(prefsSetTypeOption)!;
             var sharedName = ctx.GetValue(prefsSetSharedNameOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            var body = new JsonObject
-            {
-                ["value"] = value,
-                ["type"] = type,
-                ["sharedName"] = sharedName
-            };
-            await SimplePutAsync(host, port, $"/api/v1/storage/preferences/{Uri.EscapeDataString(key)}", body, isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.SetPreferenceAsync(key, value, type, sharedName));
         });
         prefsCommand.Add(prefsSetCmd);
 
@@ -1168,8 +1156,7 @@ public class DevFlowCommands
             var key = ctx.GetValue(prefsDeleteKeyArg)!;
             var sharedName = ctx.GetValue(prefsDeleteSharedNameOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            var qs = sharedName != null ? $"?sharedName={Uri.EscapeDataString(sharedName)}" : "";
-            await SimpleDeleteAsync(host, port, $"/api/v1/storage/preferences/{Uri.EscapeDataString(key)}{qs}", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.DeletePreferenceAsync(key, sharedName));
         });
         prefsCommand.Add(prefsDeleteCmd);
 
@@ -1183,8 +1170,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var sharedName = ctx.GetValue(prefsClearSharedNameOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            var qs = sharedName != null ? $"?sharedName={Uri.EscapeDataString(sharedName)}" : "";
-            await SimpleDeleteAsync(host, port, $"/api/v1/storage/preferences{qs}", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.ClearPreferencesAsync(sharedName));
         });
         prefsCommand.Add(prefsClearCmd);
 
@@ -1203,7 +1189,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var key = ctx.GetValue(secureGetKeyArg)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimpleGetAsync(host, port, $"/api/v1/storage/secure/{Uri.EscapeDataString(key)}", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.GetSecureAsync(key));
         });
         secureCommand.Add(secureGetCmd);
 
@@ -1219,10 +1205,7 @@ public class DevFlowCommands
             var key = ctx.GetValue(secureSetKeyArg)!;
             var value = ctx.GetValue(secureSetValueArg)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimplePutAsync(host, port, $"/api/v1/storage/secure/{Uri.EscapeDataString(key)}", new JsonObject
-            {
-                ["value"] = value
-            }, isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.SetSecureAsync(key, value));
         });
         secureCommand.Add(secureSetCmd);
 
@@ -1236,7 +1219,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var key = ctx.GetValue(secureDeleteKeyArg)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimpleDeleteAsync(host, port, $"/api/v1/storage/secure/{Uri.EscapeDataString(key)}", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.DeleteSecureAsync(key));
         });
         secureCommand.Add(secureDeleteCmd);
 
@@ -1248,7 +1231,7 @@ public class DevFlowCommands
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimpleDeleteAsync(host, port, "/api/v1/storage/secure", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.ClearSecureAsync());
         });
         secureCommand.Add(secureClearCmd);
 
@@ -1271,8 +1254,7 @@ public class DevFlowCommands
             var path = ctx.GetValue(filesListPathArg);
             var root = ctx.GetValue(filesRootOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            var qs = BuildStorageFilesQuery(path, root);
-            await SimpleGetAsync(host, port, $"/api/v1/storage/files{qs}", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.ListFilesAsync(path, root));
         });
         filesCommand.Add(filesListCmd);
 
@@ -1294,7 +1276,7 @@ public class DevFlowCommands
             var isJson = output.ResolveJsonMode(json, noJson);
 
             if (string.IsNullOrWhiteSpace(outputPath))
-                await SimpleGetAsync(host, port, $"/api/v1/storage/files/{Uri.EscapeDataString(path)}{BuildStorageFilesQuery(root: root)}", isJson);
+                await WriteStorageCommandAsync(host, port, isJson, operations => operations.DownloadAsync(path, root));
             else
                 await DownloadFileToLocalPathAsync(host, port, path, root, outputPath, isJson);
         });
@@ -1327,10 +1309,7 @@ public class DevFlowCommands
             if (contentBase64 is null)
                 return;
 
-            await SimplePutAsync(host, port, $"/api/v1/storage/files/{Uri.EscapeDataString(path)}{BuildStorageFilesQuery(root: root)}", new JsonObject
-            {
-                ["contentBase64"] = contentBase64
-            }, isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.UploadAsync(path, root, contentBase64));
         });
         filesCommand.Add(filesUploadCmd);
 
@@ -1344,16 +1323,17 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var path = ctx.GetValue(filesDeletePathArg)!;
             var root = ctx.GetValue(filesRootOption);
-            await SimpleDeleteAsync(host, port, $"/api/v1/storage/files/{Uri.EscapeDataString(path)}{BuildStorageFilesQuery(root: root)}", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.DeleteFileAsync(path, root));
         });
         filesCommand.Add(filesDeleteCmd);
 
         storageCommand.Add(filesCommand);
         devflowCommand.Add(storageCommand);
 
-        // ===== device subcommands (read-only) =====
-        var platformCommand = new Command("device", "Query app, device, and sensor information");
+        // ===== device subcommands =====
+        var platformCommand = new Command("device", "Query device information and control foldable emulators/simulators");
         platformCommand.Aliases.Add("platform");
+        RegisterFoldCommands(platformCommand, deviceOption, jsonOption, noJsonOption, agentHostOption, agentPortOption);
 
         var platformAppInfoCmd = new Command("app-info", "Get app name, version, package name, theme");
         platformAppInfoCmd.SetAction(async (ctx, ct) =>
@@ -1362,7 +1342,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/v1/device/app", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.GetDeviceAsync("app"));
         });
         platformCommand.Add(platformAppInfoCmd);
 
@@ -1373,7 +1353,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/v1/device/info", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.GetDeviceAsync("info"));
         });
         platformCommand.Add(platformDeviceInfoCmd);
 
@@ -1384,7 +1364,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/v1/device/display", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.GetDeviceAsync("display"));
         });
         platformCommand.Add(platformDisplayCmd);
 
@@ -1395,7 +1375,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/v1/device/battery", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.GetDeviceAsync("battery"));
         });
         platformCommand.Add(platformBatteryCmd);
 
@@ -1406,7 +1386,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/v1/device/connectivity", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.GetDeviceAsync("connectivity"));
         });
         platformCommand.Add(platformConnectivityCmd);
 
@@ -1417,7 +1397,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/v1/device/version-tracking", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.GetDeviceAsync("version-tracking"));
         });
         platformCommand.Add(platformVersionTrackingCmd);
 
@@ -1431,10 +1411,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var permName = ctx.GetValue(platformPermsNameArg);
             var isJson = output.ResolveJsonMode(json, noJson);
-            var path = permName != null
-            ? $"/api/v1/device/permissions/{Uri.EscapeDataString(permName)}"
-            : "/api/v1/device/permissions";
-            await SimpleGetAsync(host, port, path, isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.GetPermissionsAsync(permName));
         });
         platformCommand.Add(platformPermsCmd);
 
@@ -1450,7 +1427,7 @@ public class DevFlowCommands
             var accuracy = ctx.GetValue(platformGeoAccuracyOption)!;
             var timeout = ctx.GetValue(platformGeoTimeoutOption);
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimpleGetAsync(host, port, $"/api/v1/device/geolocation?accuracy={Uri.EscapeDataString(accuracy)}&timeout={timeout}", isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.GetGeolocationAsync(accuracy, timeout));
         });
         platformCommand.Add(platformGeoCmd);
 
@@ -1466,7 +1443,7 @@ public class DevFlowCommands
             var port = ctx.GetValue(agentPortOption);
             var json = ctx.GetValue(jsonOption);
             var noJson = ctx.GetValue(noJsonOption);
-            await SimpleGetAsync(host, port, "/api/v1/device/sensors", output.ResolveJsonMode(json, noJson));
+            await WriteStorageCommandAsync(host, port, output.ResolveJsonMode(json, noJson), operations => operations.GetDeviceAsync("sensors"));
         });
         sensorsCommand.Add(sensorsListCmd);
 
@@ -1482,7 +1459,7 @@ public class DevFlowCommands
             var sensor = ctx.GetValue(sensorsStartSensorArg)!;
             var speed = ctx.GetValue(sensorsStartSpeedOption)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimplePostAsync(host, port, $"/api/v1/device/sensors/{Uri.EscapeDataString(sensor)}/start?speed={Uri.EscapeDataString(speed)}", null, isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.StartSensorAsync(sensor, speed));
         });
         sensorsCommand.Add(sensorsStartCmd);
 
@@ -1496,7 +1473,7 @@ public class DevFlowCommands
             var noJson = ctx.GetValue(noJsonOption);
             var sensor = ctx.GetValue(sensorsStopSensorArg)!;
             var isJson = output.ResolveJsonMode(json, noJson);
-            await SimplePostAsync(host, port, $"/api/v1/device/sensors/{Uri.EscapeDataString(sensor)}/stop", null, isJson);
+            await WriteStorageCommandAsync(host, port, isJson, operations => operations.StopSensorAsync(sensor));
         });
         sensorsCommand.Add(sensorsStopCmd);
 
@@ -1821,8 +1798,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var extensions = await client.GetExtensionsAsync();
+            var extensions = await SendExtensionCommandAsync(host, port, operations => operations.ListAsync());
             if (json)
             {
                 var result = new JsonObject
@@ -1858,9 +1834,8 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var extensions = await client.GetExtensionsAsync();
-            if (!extensions.TryGetValue(ns, out var extension))
+            var extension = await SendExtensionCommandAsync(host, port, operations => operations.DescribeAsync(ns));
+            if (extension is null)
             {
                 Output.WriteError($"Extension '{ns}' was not found.", json, "InvocationError");
                 _errorOccurred = true;
@@ -1892,35 +1867,20 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var extensions = await client.GetExtensionsAsync();
-            if (!extensions.TryGetValue(ns, out var extension))
+            var (result, error) = await SendExtensionCommandAsync(host, port, operations => operations.CallAsync(ns, toolName, parameters));
+            if (error is not null)
             {
-                Output.WriteError($"Extension '{ns}' was not found.", json, "InvocationError");
+                Output.WriteError(error, json, "InvocationError");
                 _errorOccurred = true;
                 return;
             }
-
-            var tool = extension.Tools.FirstOrDefault(t => string.Equals(t.Name, toolName, StringComparison.Ordinal));
-            if (tool == null)
-            {
-                Output.WriteError($"Tool '{toolName}' was not found in extension '{ns}'.", json, "InvocationError");
-                _errorOccurred = true;
-                return;
-            }
-
-            JsonElement? parameterJson = null;
-            if (!string.IsNullOrWhiteSpace(parameters))
-                parameterJson = CliJson.ParseElement(parameters);
-
-            var result = await client.CallExtensionToolAsync(tool.Method, tool.Path, parameterJson);
             if (json)
             {
                 Console.WriteLine(result);
                 return;
             }
 
-            Console.WriteLine(TryFormatJson(result));
+            Console.WriteLine(TryFormatJson(result!));
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException)
         {
@@ -1945,7 +1905,7 @@ public class DevFlowCommands
         }
     }
     
-    // ===== CDP Helper: Send command via AgentClient =====
+    // ===== Agent connection preparation =====
 
     private static readonly string s_cliMutationLeaseId = Guid.NewGuid().ToString("N");
 
@@ -1975,50 +1935,68 @@ public class DevFlowCommands
         };
     }
 
-    private static async Task<JsonElement?> SendCdpCommandAsync(string host, int port, string method, JsonNode? parameters = null, string? webview = null)
+    private static async Task<T> SendCdpCommandAsync<T>(string host, int port, Func<WebViewOperations, Task<T>> command)
     {
         using var client = await CreateAgentClientAsync(host, port);
-        var result = await client.SendCdpCommandAsync(method, parameters, webview);
-        return result;
+        return await command(new WebViewOperations(client));
     }
 
-    private static async Task<string> CdpEvaluateAsync(string host, int port, string expression, string? webview = null)
+    private static async Task SendCdpCommandAsync(string host, int port, Func<WebViewOperations, Task> command)
     {
-        var result = await SendCdpCommandAsync(host, port, "Runtime.evaluate", new JsonObject
-        {
-            ["expression"] = expression,
-            ["returnByValue"] = true
-        }, webview);
-
-        if (result == null) return "null";
-        var root = result.Value;
-
-        if (root.TryGetProperty("result", out var evalResult))
-        {
-            if (evalResult.TryGetProperty("result", out var resultProp))
-            {
-                if (resultProp.TryGetProperty("value", out var value))
-                {
-                    if (value.ValueKind == JsonValueKind.String)
-                        return value.GetString() ?? "null";
-                    if (value.ValueKind == JsonValueKind.Object || value.ValueKind == JsonValueKind.Array)
-                        return CliJson.PrettyPrint(value);
-                    return value.ToString();
-                }
-            }
-            if (evalResult.TryGetProperty("exceptionDetails", out var exception))
-            {
-                var text = exception.TryGetProperty("text", out var t) ? t.GetString() : "Unknown error";
-                return $"Error: {text}";
-            }
-        }
-
-        // Response might be the raw chobitsu response
-        if (root.TryGetProperty("result", out var rawResult) && rawResult.TryGetProperty("value", out var rawValue))
-            return rawValue.GetString() ?? rawValue.ToString();
-
-        return root.ToString();
+        using var client = await CreateAgentClientAsync(host, port);
+        await command(new WebViewOperations(client));
     }
+
+    private static async Task<T> SendNativeUiCommandAsync<T>(string host, int port, Func<NativeUiOperations, Task<T>> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        return await command(new NativeUiOperations(client));
+    }
+
+    private static async Task SendNativeUiCommandAsync(string host, int port, Func<NativeUiOperations, Task> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        await command(new NativeUiOperations(client));
+    }
+
+    private static async Task<T> SendExtensionCommandAsync<T>(string host, int port, Func<ExtensionOperations, Task<T>> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        return await command(new ExtensionOperations(client));
+    }
+
+    private static async Task<T> SendThemeCommandAsync<T>(string host, int port, Func<ThemeOperations, Task<T>> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        return await command(new ThemeOperations(client));
+    }
+
+    private static async Task<T> SendLogCommandAsync<T>(string host, int port, Func<LogOperations, Task<T>> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        return await command(new LogOperations(client));
+    }
+
+    private static async Task<T> SendNetworkCommandAsync<T>(string host, int port, Func<NetworkOperations, Task<T>> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        return await command(new NetworkOperations(client));
+    }
+
+    private static async Task<T> SendScreenshotCommandAsync<T>(string host, int port, Func<ScreenshotOperations, Task<T>> command)
+    {
+        using var client = await CreateAgentClientAsync(host, port);
+        return await command(new ScreenshotOperations(client));
+    }
+
+    private static HostOperations CreateHostOperations(string host, int port)
+        => new(() => SendNativeUiCommandAsync(host, port, operations => operations.GetStatusAsync()));
+
+    private static RecordingOperations CreateRecordingOperations()
+        => new(CreateRecordingDriver, ReadRecordingState);
+
+    private static AgentManagementOperations CreateAgentManagementOperations()
+        => new(ResolveRunningBrokerPortAsync, ListBrokerAgentsAsync, CreateAndroidPortForwarder, IsAndroidAdbLikelyAvailable);
 
     // ===== Browser Domain =====
     
@@ -2026,7 +2004,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Browser.getVersion", webview: webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.BrowserGetVersionAsync(webview));
             Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2038,7 +2016,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, expression, webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.EvaluateAsync(expression, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2050,7 +2028,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "DOM.getDocument", webview: webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.DomGetDocumentAsync(webview));
             Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2060,18 +2038,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                JSON.stringify((function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return null;
-                    return {{
-                        tagName: el.tagName.toLowerCase(),
-                        id: el.id || null,
-                        className: el.className || null,
-                        textContent: el.textContent?.trim().substring(0, 100) || null
-                    }};
-                }})())
-            ");
+            var result = await SendCdpCommandAsync(host, port, operations => operations.DomQuerySelectorAsync(selector, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2081,18 +2048,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                JSON.stringify((function() {{
-                    const els = document.querySelectorAll({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    return Array.from(els).map((el, i) => ({{
-                        index: i,
-                        tagName: el.tagName.toLowerCase(),
-                        id: el.id || null,
-                        className: el.className || null,
-                        textContent: el.textContent?.trim().substring(0, 50) || null
-                    }}));
-                }})(), null, 2)
-            ");
+            var result = await SendCdpCommandAsync(host, port, operations => operations.DomQuerySelectorAllAsync(selector, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2102,7 +2058,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"document.querySelector({CliJson.SerializeUntyped(selector, indented: false)})?.outerHTML || null", webview);
+            var result = await SendCdpCommandAsync(host, port, operations => operations.DomGetOuterHtmlAsync(selector, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2114,10 +2070,7 @@ public class DevFlowCommands
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Page.navigate", new JsonObject
-            {
-                ["url"] = url
-            }, webview);
+            await SendCdpCommandAsync(host, port, operations => operations.PageNavigateAsync(url, webview));
             Console.WriteLine($"Navigated to: {url}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2127,7 +2080,7 @@ public class DevFlowCommands
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Page.reload", webview: webview);
+            await SendCdpCommandAsync(host, port, operations => operations.PageReloadAsync(webview));
             Console.WriteLine("Page reloaded");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2137,17 +2090,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await SendCdpCommandAsync(host, port, "Page.captureScreenshot", webview: webview);
-            if (result.HasValue &&
-                result.Value.TryGetProperty("result", out var resultProp) && 
-                resultProp.TryGetProperty("data", out var dataProp))
-            {
-                Console.WriteLine(dataProp.GetString());
-            }
-            else
-            {
-                Console.WriteLine(result.HasValue ? FormatJson(result.Value) : "null");
-            }
+            Console.WriteLine(await SendCdpCommandAsync(host, port, operations => operations.PageCaptureScreenshotAsync(webview)));
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -2158,14 +2101,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return 'Error: Element not found';
-                    el.click();
-                    return 'Clicked: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '');
-                }})()
-            ");
+            var result = await SendCdpCommandAsync(host, port, operations => operations.InputDispatchClickAsync(selector, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2175,10 +2111,7 @@ public class DevFlowCommands
     {
         try
         {
-            await SendCdpCommandAsync(host, port, "Input.insertText", new JsonObject
-            {
-                ["text"] = text
-            }, webview);
+            await SendCdpCommandAsync(host, port, operations => operations.InputInsertTextAsync(text, webview));
             Console.WriteLine($"Inserted: {text.Length} characters");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2188,23 +2121,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, $@"
-                (function() {{
-                    const el = document.querySelector({CliJson.SerializeUntyped(selector, indented: false)}, webview);
-                    if (!el) return 'Error: Element not found';
-                    
-                    const text = {CliJson.SerializeUntyped(text, indented: false)};
-                    if (el.isContentEditable) {{
-                        el.textContent = text;
-                    }} else {{
-                        el.value = text;
-                        el.focus();
-                    }}
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    return 'Filled: ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' with ' + text.length + ' chars';
-                }})()
-            ");
+            var result = await SendCdpCommandAsync(host, port, operations => operations.InputFillAsync(selector, text, webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2217,15 +2134,9 @@ public class DevFlowCommands
         EnsureAgentPortResolved(port);
         try
         {
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(5);
-            var response = await http.GetAsync($"http://{host}:{port}/api/v1/agent/status");
-            var body = await response.Content.ReadAsStringAsync();
-            var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-
-            var cdpReady = root.TryGetProperty("cdpReady", out var cdpProp) && cdpProp.GetBoolean();
-            var cdpCount = root.TryGetProperty("cdpWebViewCount", out var countProp) ? countProp.GetInt32() : 0;
+            // Status historically bypasses broker labels and Android forwarding.
+            using var client = new AgentClient(host, port);
+            var (cdpReady, cdpCount) = await new WebViewOperations(client).GetStatusAsync();
             Console.WriteLine(cdpReady
                 ? $"Connected: CDP ready ({cdpCount} WebView{(cdpCount != 1 ? "s" : "")})"
                 : "Agent connected but CDP not ready");
@@ -2240,8 +2151,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await client.GetCdpWebViewsAsync();
+            var result = await SendCdpCommandAsync(host, port, operations => operations.GetWebViewsAsync());
             var body = result.ToString();
 
             if (json)
@@ -2281,8 +2191,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var source = await client.GetCdpSourceAsync(webview);
+            var source = await SendCdpCommandAsync(host, port, operations => operations.GetSourceAsync(webview));
             Console.WriteLine(source);
         }
         catch (Exception ex)
@@ -2295,44 +2204,7 @@ public class DevFlowCommands
     {
         try
         {
-            var result = await CdpEvaluateAsync(host, port, @"
-                (function() {
-                    function walk(node, depth) {
-                        if (depth > 8) return '';
-                        let result = '';
-                        const indent = '  '.repeat(depth, webview);
-                        
-                        if (node.nodeType === 1) {
-                            const tag = node.tagName.toLowerCase();
-                            const text = node.childNodes.length === 1 && node.childNodes[0].nodeType === 3 
-                                ? node.textContent?.trim().substring(0, 80) : null;
-                            const isClickable = node.onclick || tag === 'button' || tag === 'a' || 
-                                               node.getAttribute('role') === 'button' ||
-                                               (tag === 'input' && node.type === 'submit');
-                            const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
-                            
-                            result += indent + '<' + tag;
-                            if (node.id) result += ' id=""' + node.id + '""';
-                            if (node.className && typeof node.className === 'string') result += ' class=""' + node.className.split(' ').slice(0,2).join(' ') + '""';
-                            if (isClickable) result += ' [clickable]';
-                            if (isInput) result += ' [input]';
-                            if (tag === 'a' && node.href) result += ' href=""' + node.getAttribute('href') + '""';
-                            if (tag === 'input') result += ' type=""' + (node.type || 'text') + '""';
-                            result += '>';
-                            if (text) result += ' ' + text;
-                            result += '\n';
-                            
-                            for (const child of node.children) {
-                                result += walk(child, depth + 1);
-                            }
-                        }
-                        return result;
-                    }
-                    
-                    return 'Title: ' + document.title + '\nURL: ' + location.href + '\n\n' + walk(document.body, 0);
-                })()
-            ");
-            
+            var result = await SendCdpCommandAsync(host, port, operations => operations.SnapshotAsync(webview));
             Console.WriteLine(result);
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -2354,17 +2226,6 @@ public class DevFlowCommands
         return CliJson.PrettyPrint(element);
     }
 
-    private static string BuildStorageFilesQuery(string? path = null, string? root = null)
-    {
-        var query = new List<string>();
-        if (!string.IsNullOrEmpty(path))
-            query.Add($"path={Uri.EscapeDataString(path)}");
-        if (!string.IsNullOrEmpty(root))
-            query.Add($"root={Uri.EscapeDataString(root)}");
-
-        return query.Count == 0 ? string.Empty : "?" + string.Join("&", query);
-    }
-
     private static async Task<string?> GetUploadContentBase64Async(string? contentBase64Argument, string? localFilePath, bool json)
     {
         var hasContentArgument = contentBase64Argument is not null;
@@ -2382,16 +2243,13 @@ public class DevFlowCommands
 
         try
         {
-            var fullPath = Path.GetFullPath(localFilePath!);
-            if (!File.Exists(fullPath))
-            {
-                Output.WriteError($"Local file not found: {fullPath}", json, "InvocationError");
-                _errorOccurred = true;
-                return null;
-            }
-
-            var bytes = await File.ReadAllBytesAsync(fullPath);
-            return Convert.ToBase64String(bytes);
+            return await StorageOperations.ReadUploadFileAsync(localFilePath!);
+        }
+        catch (FileNotFoundException ex)
+        {
+            Output.WriteError(ex.Message, json, "InvocationError");
+            _errorOccurred = true;
+            return null;
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
@@ -2406,59 +2264,27 @@ public class DevFlowCommands
         EnsureAgentPortResolved(port);
         try
         {
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(30);
-            var response = await http.GetAsync($"http://{host}:{port}/api/v1/storage/files/{Uri.EscapeDataString(devicePath)}{BuildStorageFilesQuery(root: root)}");
-            var body = await response.Content.ReadAsStringAsync();
-            if (!response.IsSuccessStatusCode)
+            var result = await SendStorageCommandAsync(host, port,
+                operations => operations.DownloadToFileAsync(devicePath, root, destinationPath), emitLabel: false);
+            if (!result.Response.Success)
             {
-                Console.WriteLine(body);
+                Console.WriteLine(result.Response.Body);
                 _errorOccurred = true;
                 return;
             }
-
-            var responseObject = CliJson.ParseNode(body) as JsonObject;
-            if (responseObject is null ||
-                !responseObject.TryGetPropertyValue("contentBase64", out var contentNode) ||
-                contentNode is null ||
-                contentNode.GetValueKind() != JsonValueKind.String)
+            if (result.Error is not null)
             {
-                Output.WriteError("Download response did not include contentBase64.", json);
+                Output.WriteError(result.Error, json);
                 _errorOccurred = true;
                 return;
             }
-
-            var contentBase64 = contentNode.GetValue<string>();
-
-            byte[] bytes;
-            try
-            {
-                bytes = Convert.FromBase64String(contentBase64);
-            }
-            catch (FormatException ex)
-            {
-                Output.WriteError($"Download response contained invalid base64 content: {ex.Message}", json);
-                _errorOccurred = true;
-                return;
-            }
-
-            var localPath = ResolveDownloadDestinationPath(destinationPath, devicePath);
-            var parentDirectory = Path.GetDirectoryName(localPath);
-            if (!string.IsNullOrEmpty(parentDirectory))
-                Directory.CreateDirectory(parentDirectory);
-
-            await File.WriteAllBytesAsync(localPath, bytes);
-
             if (json)
             {
-                responseObject.Remove("contentBase64");
-                responseObject["success"] = true;
-                responseObject["localPath"] = localPath;
-                Console.WriteLine(CliJson.SerializeUntyped(responseObject));
+                Console.WriteLine(CliJson.SerializeUntyped(result.Metadata));
             }
             else
             {
-                Console.WriteLine($"Downloaded {devicePath} to {localPath}");
+                Console.WriteLine($"Downloaded {devicePath} to {result.Metadata!["localPath"]!.GetValue<string>()}");
             }
         }
         catch (Exception ex) when (ex is ArgumentException or HttpRequestException or IOException or JsonException or NotSupportedException or TaskCanceledException or UnauthorizedAccessException)
@@ -2468,41 +2294,25 @@ public class DevFlowCommands
         }
     }
 
-    private static string ResolveDownloadDestinationPath(string destinationPath, string devicePath)
-    {
-        var fullDestinationPath = Path.GetFullPath(destinationPath);
-        if (Directory.Exists(fullDestinationPath) || EndsWithDirectorySeparator(destinationPath))
-            return Path.Combine(fullDestinationPath, GetDeviceFileName(devicePath));
-
-        return fullDestinationPath;
-    }
-
-    private static bool EndsWithDirectorySeparator(string path)
-        => path.Length > 0 && (path[^1] == Path.DirectorySeparatorChar || path[^1] == Path.AltDirectorySeparatorChar);
-
-    private static string GetDeviceFileName(string devicePath)
-    {
-        var normalizedPath = devicePath.Replace('\\', '/').TrimEnd('/');
-        var fileName = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-        if (string.IsNullOrEmpty(fileName))
-            throw new ArgumentException("The device path must include a file name.", nameof(devicePath));
-
-        return fileName;
-    }
-
     // ===== Generic agent HTTP helpers (for preferences, platform, sensors, etc.) =====
 
-    private static async Task SimpleGetAsync(string host, int port, string path, bool json)
+    private static async Task<T> SendStorageCommandAsync<T>(string host, int port,
+        Func<StorageOperations, Task<T>> command, bool emitLabel = true)
+    {
+        EnsureAgentPortResolved(port);
+        if (emitLabel) await EmitAgentLabelAsync(host, port);
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        return await command(new StorageOperations(http, $"http://{host}:{port}"));
+    }
+
+    private static async Task WriteStorageCommandAsync(string host, int port, bool json,
+        Func<StorageOperations, Task<StorageResponse>> command)
     {
         try
         {
-            EnsureAgentPortResolved(port);
-            await EmitAgentLabelAsync(host, port);
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(30);
-            var response = await http.GetAsync($"http://{host}:{port}{path}");
-            var body = await response.Content.ReadAsStringAsync();
-            if (json || !response.IsSuccessStatusCode)
+            var response = await SendStorageCommandAsync(host, port, command);
+            var body = response.Body;
+            if (json || !response.Success || !response.IsRead)
             {
                 Console.WriteLine(body);
             }
@@ -2517,83 +2327,7 @@ public class DevFlowCommands
                     Console.WriteLine(body);
                 }
             }
-            if (!response.IsSuccessStatusCode) _errorOccurred = true;
-        }
-        catch (Exception ex)
-        {
-            Output.WriteError(ex.Message, json);
-            _errorOccurred = true;
-        }
-    }
-
-    private static async Task SimplePostAsync(string host, int port, string path, JsonNode? bodyObj, bool json)
-    {
-        try
-        {
-            EnsureAgentPortResolved(port);
-            await EmitAgentLabelAsync(host, port);
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(30);
-            HttpResponseMessage response;
-            if (bodyObj != null)
-            {
-                using var content = new StringContent(
-                    CliJson.SerializeUntyped(bodyObj, indented: false),
-                    Encoding.UTF8,
-                    "application/json");
-                response = await http.PostAsync($"http://{host}:{port}{path}", content);
-            }
-            else
-            {
-                response = await http.PostAsync($"http://{host}:{port}{path}", null);
-            }
-            var body = await response.Content.ReadAsStringAsync();
-            Console.WriteLine(body);
-            if (!response.IsSuccessStatusCode) _errorOccurred = true;
-        }
-        catch (Exception ex)
-        {
-            Output.WriteError(ex.Message, json);
-            _errorOccurred = true;
-        }
-    }
-
-    private static async Task SimplePutAsync(string host, int port, string path, JsonNode? bodyObj, bool json)
-    {
-        try
-        {
-            EnsureAgentPortResolved(port);
-            await EmitAgentLabelAsync(host, port);
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(30);
-            using var content = new StringContent(
-                CliJson.SerializeUntyped(bodyObj ?? new JsonObject(), indented: false),
-                Encoding.UTF8,
-                "application/json");
-            var response = await http.PutAsync($"http://{host}:{port}{path}", content);
-            var body = await response.Content.ReadAsStringAsync();
-            Console.WriteLine(body);
-            if (!response.IsSuccessStatusCode) _errorOccurred = true;
-        }
-        catch (Exception ex)
-        {
-            Output.WriteError(ex.Message, json);
-            _errorOccurred = true;
-        }
-    }
-
-    private static async Task SimpleDeleteAsync(string host, int port, string path, bool json)
-    {
-        try
-        {
-            EnsureAgentPortResolved(port);
-            await EmitAgentLabelAsync(host, port);
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(30);
-            var response = await http.DeleteAsync($"http://{host}:{port}{path}");
-            var body = await response.Content.ReadAsStringAsync();
-            Console.WriteLine(body);
-            if (!response.IsSuccessStatusCode) _errorOccurred = true;
+            if (!response.Success) _errorOccurred = true;
         }
         catch (Exception ex)
         {
@@ -2608,32 +2342,27 @@ public class DevFlowCommands
         try
         {
             using var agent = new AgentClient(host, port);
-            if (!await agent.StartSensorAsync(sensor, speed, throttleMs))
+            var operations = new SensorOperations(agent);
+            if (!await operations.StartAsync(sensor, speed, throttleMs))
             {
                 Output.WriteError($"Failed to start sensor '{sensor}'.", json);
                 _errorOccurred = true;
                 return;
             }
 
-            using var client = new System.Net.WebSockets.ClientWebSocket();
-            var uri = new Uri($"ws://{host}:{port}/ws/v1/sensors?sensor={Uri.EscapeDataString(sensor)}");
             using var cts = duration > 0
                 ? new CancellationTokenSource(TimeSpan.FromSeconds(duration))
                 : new CancellationTokenSource();
 
-            Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
-
-            await client.ConnectAsync(uri, cts.Token);
-            var buffer = new byte[4096];
-
-            while (!cts.Token.IsCancellationRequested && client.State == System.Net.WebSockets.WebSocketState.Open)
+            ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; cts.Cancel(); };
+            Console.CancelKeyPress += cancel;
+            try
             {
-                var result = await client.ReceiveAsync(buffer, cts.Token);
-                if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
-                    break;
-
-                var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                Console.WriteLine(message);
+                await operations.StreamAsync(sensor, Console.WriteLine, cts.Token);
+            }
+            finally
+            {
+                Console.CancelKeyPress -= cancel;
             }
         }
         catch (OperationCanceledException)
@@ -2648,14 +2377,6 @@ public class DevFlowCommands
     }
 
     // ===== Element Resolution Helper =====
-
-    private enum ElementActionKind
-    {
-        Tap,
-        TextInput,
-        Focus,
-        Gesture
-    }
 
     /// <summary>
     /// Resolve an element ID from either a direct ID or query options (--automationId, --type, --text).
@@ -2702,10 +2423,10 @@ public class DevFlowCommands
 
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var results = await client.QueryAsync(type, automationId, text);
+            var (element, count) = await SendNativeUiCommandAsync(host, port,
+                operations => operations.ResolveTargetAsync(automationId, type, text, index, actionKind, preferActionable));
 
-            if (results.Count == 0)
+            if (count == 0)
             {
                 var criteria = new List<string>();
                 if (automationId != null) criteria.Add($"automationId=\"{automationId}\"");
@@ -2717,37 +2438,15 @@ public class DevFlowCommands
                 return null;
             }
 
-            if (index >= results.Count)
+            if (index >= count)
             {
-                Output.WriteError($"Index {index} out of range (found {results.Count} element(s))", json, "RuntimeError",
-                    suggestions: new[] { $"Use --index 0 through {results.Count - 1}" });
+                Output.WriteError($"Index {index} out of range (found {count} element(s))", json, "RuntimeError",
+                    suggestions: new[] { $"Use --index 0 through {count - 1}" });
                 _errorOccurred = true;
                 return null;
             }
 
-            if (!preferActionable || actionKind is null)
-                return results[index];
-
-            var selected = results[index];
-            if (GetActionTargetScore(selected, actionKind.Value) > 0)
-                return selected;
-
-            return results
-                .Select((element, resultIndex) => new
-                {
-                    Element = element,
-                    ResultIndex = resultIndex,
-                    Score = GetActionTargetScore(element, actionKind.Value)
-                })
-                .Where(candidate =>
-                    candidate.ResultIndex != index
-                    && candidate.Score > 0
-                    && IsRelatedElementRepresentation(selected, candidate.Element))
-                .OrderByDescending(candidate => candidate.Score)
-                .ThenBy(candidate => candidate.ResultIndex)
-                .Select(candidate => candidate.Element)
-                .FirstOrDefault()
-                ?? selected;
+            return element;
         }
         catch (Exception ex)
         {
@@ -2756,106 +2455,6 @@ public class DevFlowCommands
             return null;
         }
     }
-
-    private static int GetActionTargetScore(ElementInfo element, ElementActionKind actionKind)
-    {
-        var score = 0;
-        var capabilities = element.Capabilities ?? [];
-        var traits = element.Traits ?? [];
-        var gestures = element.Gestures ?? [];
-
-        switch (actionKind)
-        {
-            case ElementActionKind.Tap:
-                if (capabilities.Any(capability => capability.Equals("invoke", StringComparison.OrdinalIgnoreCase)))
-                    score += 100;
-                if (element.Role is "button" or "link" or "menuitem" or "tab" or "checkbox" or "radio" or "switch")
-                    score += 60;
-                if (element.Type is "Button" or "ImageButton" or "CheckBox" or "Switch" or "RadioButton"
-                    or "ToolbarItem" or "BackButton" or "FlyoutButton" or "FlyoutItem" or "FlyoutToggle"
-                    or "Tab" or "MenuItem" or "Picker" or "DatePicker" or "TimePicker"
-                    or "ShellContent" or "ShellSection")
-                {
-                    score += 50;
-                }
-                if (gestures.Any(gesture => gesture.Contains("tap", StringComparison.OrdinalIgnoreCase)))
-                    score += 40;
-                break;
-
-            case ElementActionKind.TextInput:
-                if (capabilities.Any(capability => capability.Equals("set-value", StringComparison.OrdinalIgnoreCase)))
-                    score += 100;
-                if (element.Role is "textbox" or "searchbox")
-                    score += 60;
-                if (element.Type is "Entry" or "Editor" or "SearchBar" or "SearchHandler"
-                    or "TextField" or "TextBox" or "TextArea" or "TextView"
-                    or "UITextField" or "UITextView" or "EditText" or "NSTextField")
-                {
-                    score += 50;
-                }
-                break;
-
-            case ElementActionKind.Focus:
-                if (capabilities.Any(capability => capability.Equals("focus", StringComparison.OrdinalIgnoreCase)))
-                    score += 100;
-                if (traits.Any(trait => trait.Equals("focusable", StringComparison.OrdinalIgnoreCase)))
-                    score += 60;
-                if (element.Type is "Entry" or "Editor" or "SearchBar" or "SearchHandler"
-                    or "Picker" or "DatePicker" or "TimePicker")
-                {
-                    score += 50;
-                }
-                break;
-
-            case ElementActionKind.Gesture:
-                if (gestures.Count > 0)
-                    score += 100;
-                if (traits.Any(trait => trait.Equals("scrollable", StringComparison.OrdinalIgnoreCase)))
-                    score += 40;
-                break;
-        }
-
-        if (score == 0)
-            return 0;
-        if (element.IsVisible)
-            score += 4;
-        if (element.IsEnabled)
-            score += 4;
-        if (element.Id.StartsWith("native:registered:", StringComparison.Ordinal))
-            score += 20;
-        if (element.FullType.StartsWith("Microsoft.Maui.DevFlow.Agent.Core.", StringComparison.Ordinal))
-            score += 15;
-
-        return score;
-    }
-
-    private static bool IsRelatedElementRepresentation(ElementInfo selected, ElementInfo candidate)
-    {
-        if (string.Equals(candidate.OwnerId, selected.Id, StringComparison.Ordinal)
-            || string.Equals(selected.OwnerId, candidate.Id, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return !string.IsNullOrWhiteSpace(selected.AutomationId)
-            && string.Equals(
-                selected.AutomationId,
-                candidate.AutomationId,
-                StringComparison.Ordinal)
-            && IsNativeOrSynthetic(candidate);
-    }
-
-    private static bool IsNativeOrSynthetic(ElementInfo element)
-        => string.Equals(element.Origin, "native", StringComparison.OrdinalIgnoreCase)
-            || element.Id.StartsWith("native:", StringComparison.Ordinal)
-            || element.FullType.StartsWith(
-                "Microsoft.Maui.DevFlow.Agent.Core.",
-                StringComparison.Ordinal);
-
-    private static (long? CaptureEpoch, long? RegistryGeneration) GetCaptureMetadata(ElementInfo element)
-        => element.CaptureEpoch > 0
-            ? (element.CaptureEpoch, element.RegistryGeneration)
-            : (null, null);
 
     /// <summary>
     /// Validate element ID for common agent mistakes (control chars, embedded query params).
@@ -2907,10 +2506,8 @@ public class DevFlowCommands
             var resolvedId = await ResolveElementIdAsync(host, port, json, elementId, automationId, null, null, 0);
             if (resolvedId == null) return;
 
-            using var client = await CreateAgentClientAsync(host, port);
-            var actualValue = await client.GetPropertyAsync(resolvedId, propertyName);
-
-            var passed = string.Equals(actualValue, expectedValue, StringComparison.Ordinal);
+            var (actualValue, passed) = await SendNativeUiCommandAsync(host, port,
+                operations => operations.AssertAsync(resolvedId, propertyName, expectedValue));
             if (json)
             {
                 Output.WriteResult(new JsonObject
@@ -2983,6 +2580,9 @@ public class DevFlowCommands
         new("device app-info", "Get app name, version, theme", false),
         new("device device-info", "Get device manufacturer, model, OS", false),
         new("device display", "Get screen density, size, orientation", false),
+        new("device fold capabilities", "Discover foldable emulator/simulator host capabilities", false),
+        new("device fold get", "Read hinge angles and observed fold state", false),
+        new("device fold set", "Set and verify an emulator/simulator hinge mode or angle", true),
         new("device battery", "Get battery level, state, power source", false),
         new("device connectivity", "Get network access and profiles", false),
         new("device version-tracking", "Get version history and launch info", false),
@@ -3000,7 +2600,7 @@ public class DevFlowCommands
         new("webview DOM querySelector", "Find element by CSS selector", false),
         new("webview DOM querySelectorAll", "Find all elements by CSS selector", false),
         new("webview DOM getOuterHTML", "Get element outer HTML", false),
-        new("webview Input click", "Click element by CSS selector", true),
+        new("webview Input dispatchClickEvent", "Click element by CSS selector", true),
         new("webview Input insertText", "Insert text at cursor", true),
         new("webview Input fill", "Fill form field by CSS selector", true),
         new("webview Page navigate", "Navigate WebView to URL", true),
@@ -3035,8 +2635,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var status = await client.GetStatusAsync(window);
+            var status = await SendNativeUiCommandAsync(host, port, operations => operations.GetStatusAsync(window));
             if (status == null)
             {
                 Output.WriteError($"Cannot connect to agent at {host}:{port}", json);
@@ -3058,8 +2657,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await client.GetThemeAsync();
+            var result = await SendThemeCommandAsync(host, port, operations => operations.GetAsync());
             if (result == null)
             {
                 Output.WriteError($"Cannot get theme from agent at {host}:{port}", json);
@@ -3102,23 +2700,8 @@ public class DevFlowCommands
 
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var status = await client.GetStatusAsync();
-
-            var platformName = status?.Platform ?? platform;
-            var deviceType = status?.DeviceType;
-            var useHost = scope == ThemeSetScope.System
-                || ThemeHostSelector.ShouldUseHostThemeScopeAutomatically(platformName, deviceType, theme, androidDevice, simulatorUdid);
-
-            ThemeResult result;
-            if (useHost)
-            {
-                result = await ThemeHostSelector.SetHostThemeAsync(platformName, deviceType, theme, androidDevice, simulatorUdid, "--scope app");
-            }
-            else
-            {
-                result = await client.SetThemeAsync(theme);
-            }
+            var result = await SendThemeCommandAsync(host, port,
+                operations => operations.SetAsync(platform, theme, scope, androidDevice, simulatorUdid));
 
             WriteThemeResult(result, json);
         }
@@ -3155,8 +2738,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var tree = await client.GetTreeAsync(depth, window);
+            var tree = await SendNativeUiCommandAsync(host, port, operations => operations.GetTreeAsync(depth, window));
             if (json)
             {
                 var projected = ProjectElements(tree, fields, format);
@@ -3211,33 +2793,10 @@ public class DevFlowCommands
             }
 
             var policy = LayoutDiagnosticsPolicyLoader.Load();
-            using var client = await CreateAgentClientAsync(host, port);
-            do
+            await SendNativeUiCommandAsync(host, port, operations => operations.InspectLayoutAsync(
+                profile, rootElementId, checks, minimumSeverity, includeEvidence, includePasses,
+                stabilityTimeoutMs, immediate, window, policy, watch, result =>
             {
-                var request = new LayoutInspectionRequest
-                {
-                    Profile = profile,
-                    MinimumSeverity = minimumSeverity,
-                    IncludeEvidence = includeEvidence,
-                    IncludePasses = includePasses,
-                    Scope = new LayoutInspectionScope
-                    {
-                        RootElementId = rootElementId,
-                        Window = window
-                    },
-                    Stability = new LayoutStabilityOptions
-                    {
-                        Mode = immediate ? "immediate" : "wait",
-                        TimeoutMs = stabilityTimeoutMs
-                    },
-                    Rules = string.IsNullOrWhiteSpace(checks)
-                        ? null
-                        : checks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
-                    Suppressions = policy.Suppressions.ToList()
-                };
-                var result = await client.AnalyzeLayoutAsync(
-                    request,
-                    cancellationToken);
                 if (result is null)
                 {
                     _errorOccurred = true;
@@ -3287,11 +2846,7 @@ public class DevFlowCommands
                     Environment.ExitCode = 1;
                 }
 
-                if (!watch)
-                    return;
-                await Task.Delay(1000, cancellationToken);
-            }
-            while (!cancellationToken.IsCancellationRequested);
+            }, cancellationToken));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -3378,54 +2933,32 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-
-            if (!string.IsNullOrWhiteSpace(waitUntil))
+            await SendNativeUiCommandAsync(host, port, async operations =>
             {
-                var condition = waitUntil.ToLowerInvariant();
-                if (condition != "exists" && condition != "gone")
+                if (!string.IsNullOrWhiteSpace(waitUntil))
                 {
-                    Output.WriteError("--wait-until must be 'exists' or 'gone'", json, "InvocationError");
+                    var condition = waitUntil.ToLowerInvariant();
+                    if (condition != "exists" && condition != "gone")
+                    {
+                        Output.WriteError("--wait-until must be 'exists' or 'gone'", json, "InvocationError");
+                        _errorOccurred = true;
+                        return;
+                    }
+                }
+
+                var (results, timedOut) = await operations.QueryAsync(type, autoId, text, selector, waitUntil, timeout);
+                if (timedOut)
+                {
+                    Output.WriteError(
+                        $"Timeout after {timeout}s: condition '{waitUntil}' not met",
+                        json, "RuntimeError", retryable: true,
+                        suggestions: new[] { "Increase --timeout", "Check element identifiers with 'ui tree'" });
                     _errorOccurred = true;
                     return;
                 }
 
-                var deadline = DateTime.UtcNow.AddSeconds(timeout);
-                var pollInterval = TimeSpan.FromMilliseconds(250);
-                List<Microsoft.Maui.DevFlow.Driver.ElementInfo> results;
-
-                while (true)
-                {
-                    results = !string.IsNullOrWhiteSpace(selector)
-                        ? await client.QueryCssAsync(selector)
-                        : await client.QueryAsync(type, autoId, text);
-
-                    if (condition == "exists" && results.Count > 0) break;
-                    if (condition == "gone" && results.Count == 0) break;
-                    if (DateTime.UtcNow >= deadline)
-                    {
-                        Output.WriteError(
-                            $"Timeout after {timeout}s: condition '{waitUntil}' not met",
-                            json, "RuntimeError", retryable: true,
-                            suggestions: new[] { "Increase --timeout", "Check element identifiers with 'ui tree'" });
-                        _errorOccurred = true;
-                        return;
-                    }
-                    await Task.Delay(pollInterval);
-                }
-
                 WriteQueryResults(results, json, fields, format);
-                return;
-            }
-
-            List<Microsoft.Maui.DevFlow.Driver.ElementInfo> queryResults;
-
-            if (!string.IsNullOrWhiteSpace(selector))
-                queryResults = await client.QueryCssAsync(selector);
-            else
-                queryResults = await client.QueryAsync(type, autoId, text);
-
-            WriteQueryResults(queryResults, json, fields, format);
+            });
         }
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
@@ -3475,8 +3008,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await client.HitTestAsync(x, y, window);
+            var result = await SendNativeUiCommandAsync(host, port, operations => operations.HitTestAsync(x, y, window));
             if (json)
                 Console.WriteLine(result);
             else
@@ -3489,8 +3021,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var menus = await client.GetMenusAsync(window);
+            var menus = await SendNativeUiCommandAsync(host, port, operations => operations.GetMenusAsync(window));
             if (menus.ValueKind == JsonValueKind.Undefined)
             {
                 Output.WriteError("Failed to retrieve menus", json);
@@ -3521,8 +3052,8 @@ public class DevFlowCommands
 
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await client.InvokeMenuAsync(id, path, title, key, modifiers, target, window);
+            var result = await SendNativeUiCommandAsync(host, port,
+                operations => operations.InvokeMenuAsync(id, path, title, key, modifiers, target, window));
 
             var success = result.ValueKind == JsonValueKind.Object &&
                           result.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
@@ -3619,9 +3150,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
-            var success = await client.TapAsync(element.Id, captureEpoch, registryGeneration);
+            var success = await SendNativeUiCommandAsync(host, port, operations => operations.TapAsync(element));
             Output.WriteActionResult(success, "Tapped", element.Id, json,
                 success ? $"Tapped: {element.Id}" : $"Failed to tap: {element.Id}");
             if (!success) _errorOccurred = true;
@@ -3633,9 +3162,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
-            var success = await client.FillAsync(element.Id, text, captureEpoch, registryGeneration);
+            var success = await SendNativeUiCommandAsync(host, port, operations => operations.FillAsync(element, text));
             Output.WriteActionResult(success, "Filled", element.Id, json,
                 success ? $"Filled: {element.Id}" : $"Failed to fill: {element.Id}");
             if (!success) _errorOccurred = true;
@@ -3647,9 +3174,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
-            var success = await client.ClearAsync(element.Id, captureEpoch, registryGeneration);
+            var success = await SendNativeUiCommandAsync(host, port, operations => operations.ClearAsync(element));
             Output.WriteActionResult(success, "Cleared", element.Id, json,
                 success ? $"Cleared: {element.Id}" : $"Failed to clear: {element.Id}");
             if (!success) _errorOccurred = true;
@@ -3669,54 +3194,22 @@ public class DevFlowCommands
                 return;
             }
 
-            byte[]? data = null;
-            bool fromSimctl = false;
-
-            using var client = await CreateAgentClientAsync(host, port);
-
-            // For full-screen captures (no element scoping), try simctl io screenshot first
-            // when connected to an iOS simulator. This captures everything on the simulator
-            // display including SpringBoard permission dialogs and system view controllers
-            // that the in-app agent cannot see.
-            if (id == null && selector == null && !OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+            var result = await SendScreenshotCommandAsync(host, port,
+                operations => operations.CaptureAsync(window, id, selector, maxWidth, scale));
+            if (!result.Success)
             {
-                var status = await client.GetStatusAsync();
-                if (status?.Platform?.Contains("iOS", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    data = await TrySimctlScreenshotAsync();
-                    fromSimctl = data != null;
-                }
+                Output.WriteError(result.Error ?? "Failed to capture screenshot", json,
+                    retryable: result.Retryable, suggestions: result.Suggestions?.ToArray());
+                _errorOccurred = true;
+                return;
             }
-
-            // Fall back to agent-based screenshot (or used for element-scoped captures)
-            if (data == null)
-            {
-                var result = await client.ScreenshotResultAsync(window, id, selector, maxWidth, scale);
-                if (!result.Success)
-                {
-                    Output.WriteError(
-                        result.Error ?? "Failed to capture screenshot",
-                        json,
-                        retryable: result.Retryable,
-                        suggestions: result.Suggestions?.ToArray());
-                    _errorOccurred = true;
-                    return;
-                }
-                data = result.Data;
-            }
-
+            var data = result.Data;
             if (data == null)
             {
                 Output.WriteError("Failed to capture screenshot", json);
                 _errorOccurred = true;
                 return;
             }
-
-            // simctl screenshots are at native device resolution (e.g., 3x).
-            // Apply the same auto-scaling the agent does: downscale to 1x logical pixels
-            // unless scale=native was requested or an explicit maxWidth was given.
-            if (fromSimctl)
-                data = ResizeSimctlScreenshot(data, maxWidth, scale);
 
             await File.WriteAllBytesAsync(filename, data);
             var fullPath = Path.GetFullPath(filename);
@@ -3741,193 +3234,24 @@ public class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
-    /// <summary>
-    /// Attempts a simctl io screenshot for the booted iOS simulator.
-    /// Returns PNG bytes on success, null on failure.
-    /// Caller is responsible for checking platform before calling.
-    /// </summary>
-    private static async Task<byte[]?> TrySimctlScreenshotAsync()
-    {
-        try
-        {
-            var udid = await ResolveUdidAsync(null);
-
-            var tempFile = Path.Combine(Path.GetTempPath(), $"devflow-simctl-{Guid.NewGuid():N}.png");
-            try
-            {
-                var result = await ProcessRunner.RunAsync("xcrun",
-                    new[] { "simctl", "io", udid, "screenshot", "--type", "png", tempFile });
-
-                if (result.ExitCode == 0 && File.Exists(tempFile))
-                {
-                    var bytes = await File.ReadAllBytesAsync(tempFile);
-                    if (bytes.Length > 0)
-                        return bytes;
-                }
-            }
-            finally
-            {
-                try { File.Delete(tempFile); } catch { }
-            }
-        }
-        catch
-        {
-            // Not a simulator, simctl unavailable, or UDID resolution failed — fall through
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Downscales a simctl screenshot to match the agent's auto-scaling behavior.
-    /// iOS simulator screenshots are at native device resolution (e.g., 3x on iPhone).
-    /// By default, scales to 1x logical pixels. Respects scale=native and explicit maxWidth.
-    /// </summary>
-    private static byte[] ResizeSimctlScreenshot(byte[] pngData, int? maxWidth, string? scale)
-    {
-        // If scale=native was requested, return as-is
-        if (scale != null && (scale.Equals("native", StringComparison.OrdinalIgnoreCase)
-                           || scale.Equals("full", StringComparison.OrdinalIgnoreCase)))
-            return pngData;
-
-        try
-        {
-            using var original = SkiaSharp.SKBitmap.Decode(pngData);
-            if (original == null) return pngData;
-
-            // Determine target width: explicit maxWidth takes priority, then auto-scale by
-            // the simulator's display scale (3x for modern iPhones, 2x for older/iPads).
-            // We infer density from common iOS simulator resolutions.
-            int? targetWidth = maxWidth;
-            if (targetWidth == null)
-            {
-                double density = original.Width switch
-                {
-                    1290 or 1320 or 1206 => 3.0, // iPhone 14/15/16 Pro, Pro Max, standard
-                    1170 => 3.0,                   // iPhone 12/13/14
-                    1125 => 3.0,                   // iPhone X/XS/11 Pro
-                    1242 => 3.0,                   // iPhone 8+/XS Max
-                    828 => 2.0,                    // iPhone XR/11
-                    750 => 2.0,                    // iPhone 8/SE
-                    2048 or 2388 or 2360 => 2.0,   // iPad Pro/Air
-                    _ => original.Width > 1000 ? 3.0 : 2.0 // default: assume 3x for large, 2x otherwise
-                };
-                targetWidth = (int)(original.Width / density);
-            }
-
-            if (targetWidth <= 0 || targetWidth >= original.Width)
-                return pngData;
-
-            var scaleRatio = (float)targetWidth.Value / original.Width;
-            var newHeight = (int)(original.Height * scaleRatio);
-
-            using var resized = original.Resize(
-                new SkiaSharp.SKImageInfo(targetWidth.Value, newHeight),
-                SkiaSharp.SKSamplingOptions.Default);
-            if (resized == null) return pngData;
-
-            using var image = SkiaSharp.SKImage.FromBitmap(resized);
-            using var encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
-            return encoded.ToArray();
-        }
-        catch
-        {
-            return pngData;
-        }
-    }
-
     internal static IAppDriver CreateRecordingDriver(string platform, string? device, bool starting)
-    {
-        var isIos = platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
-            || platform.Equals("iossimulator", StringComparison.OrdinalIgnoreCase);
-        if (starting
-            && isIos
-            && string.IsNullOrWhiteSpace(device))
-        {
-            throw new ArgumentException("Specify --device <simulator UDID> for iOS recording.", nameof(device));
-        }
-
-        var driver = RecordingDriverFactory(platform);
-        if (driver is iOSSimulatorAppDriver simulator)
-            simulator.DeviceUdid = device;
-        else if (driver is AndroidAppDriver android)
-            android.Serial = device;
-
-        return driver;
-    }
-
-    private static IAppDriver CreateDefaultRecordingDriver(string platform)
-        => platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
-            || platform.Equals("iossimulator", StringComparison.OrdinalIgnoreCase)
-            ? new RecordingIOSSimulatorAppDriver()
-            : AppDriverFactory.Create(platform);
+        => RecordingOperations.CreateDriver(RecordingDriverFactory, platform, device, starting);
 
     internal static void EnsureRecordingProcessStarted(
         RecordingState? state,
         Func<int, bool>? isProcessRunning = null,
         Action<int?>? killWatchdog = null,
         Action? deleteState = null)
-    {
-        if (state is null)
-            throw new InvalidOperationException("Recording process did not persist startup state.");
-
-        isProcessRunning ??= static pid =>
-        {
-            try
-            {
-                using var process = System.Diagnostics.Process.GetProcessById(pid);
-                return !process.HasExited;
-            }
-            catch (ArgumentException)
-            {
-                return false;
-            }
-        };
-
-        if (isProcessRunning(state.RecordingPid))
-            return;
-
-        try
-        {
-            (killWatchdog ?? KillRecordingWatchdog)(state.WatchdogPid);
-        }
-        finally
-        {
-            (deleteState ?? RecordingStateManager.Delete)();
-        }
-
-        throw new InvalidOperationException(
-            $"{state.Platform} recording process exited during startup.");
-    }
-
-    private static void KillRecordingWatchdog(int? watchdogPid)
-    {
-        if (watchdogPid is null)
-            return;
-
-        try
-        {
-            using var process = System.Diagnostics.Process.GetProcessById(watchdogPid.Value);
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch (ArgumentException)
-        {
-        }
-        catch (InvalidOperationException)
-        {
-        }
-    }
+        => RecordingOperations.EnsureProcessStarted(state, isProcessRunning, killWatchdog, deleteState);
 
     private static async Task RecordingStartAsync(string host, int port, string platform, string? output, int timeout, string? device)
     {
         try
         {
             var filename = output ?? $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
-            using var driver = CreateRecordingDriver(platform, device, starting: true);
-            await driver.StartRecordingAsync(filename, timeout);
-            EnsureRecordingProcessStarted(ReadRecordingState());
+            var path = await CreateRecordingOperations().StartAsync(platform, device, filename, timeout);
             Console.WriteLine($"Recording started (timeout: {timeout}s)");
-            Console.WriteLine($"Output: {Path.GetFullPath(filename)}");
+            Console.WriteLine($"Output: {path}");
         }
         catch (Exception ex) { WriteError(ex.Message); }
     }
@@ -3936,11 +3260,7 @@ public class DevFlowCommands
     {
         try
         {
-            var state = ReadRecordingState()
-                ?? throw new InvalidOperationException("No active recording found.");
-            using var driver = CreateRecordingDriver(state.Platform, state.Serial, starting: false);
-            var outputFile = await driver.StopRecordingAsync();
-            var size = File.Exists(outputFile) ? new FileInfo(outputFile).Length : 0;
+            var (outputFile, size) = await CreateRecordingOperations().StopAsync();
             Console.WriteLine($"Recording saved: {outputFile} ({size} bytes)");
         }
         catch (Exception ex) { WriteError(ex.Message); }
@@ -3948,8 +3268,8 @@ public class DevFlowCommands
 
     private static void RecordingStatusAsync()
     {
-        var state = Microsoft.Maui.DevFlow.Driver.RecordingStateManager.Load();
-        if (state == null || !Microsoft.Maui.DevFlow.Driver.RecordingStateManager.IsRecording())
+        var state = CreateRecordingOperations().GetStatus();
+        if (state == null)
         {
             Console.WriteLine("No active recording.");
             return;
@@ -3967,8 +3287,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var value = await client.GetPropertyAsync(elementId, propertyName);
+            var value = await SendNativeUiCommandAsync(host, port, operations => operations.GetPropertyAsync(elementId, propertyName));
             if (json)
             {
                 Output.WriteResult(new JsonObject
@@ -3989,13 +3308,8 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await client.SetPropertyResultAsync(
-                elementId,
-                propertyName,
-                value,
-                captureEpoch: null,
-                registryGeneration: null);
+            var result = await SendNativeUiCommandAsync(host, port,
+                operations => operations.SetPropertyAsync(elementId, propertyName, value));
             if (result.Success)
             {
                 Output.WriteActionResult(true, "SetProperty", elementId, json,
@@ -4021,8 +3335,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var el = await client.GetElementAsync(elementId);
+            var el = await SendNativeUiCommandAsync(host, port, operations => operations.GetElementAsync(elementId));
             if (el == null)
             {
                 Output.WriteError($"Element '{elementId}' not found", json,
@@ -4039,8 +3352,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var success = await client.NavigateAsync(route);
+            var success = await SendNativeUiCommandAsync(host, port, operations => operations.NavigateAsync(route));
             Output.WriteActionResult(success, "Navigated", route, json,
                 success ? $"Navigated to: {route}" : $"Failed to navigate to: {route}");
             if (!success) _errorOccurred = true;
@@ -4052,8 +3364,8 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var success = await client.ScrollAsync(elementId, dx, dy, animated, window, itemIndex, groupIndex, scrollToPosition);
+            var success = await SendNativeUiCommandAsync(host, port,
+                operations => operations.ScrollAsync(elementId, dx, dy, animated, window, itemIndex, groupIndex, scrollToPosition));
             if (json)
             {
                 Output.WriteActionResult(success, "Scrolled", elementId, json);
@@ -4118,14 +3430,9 @@ public class DevFlowCommands
 
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var (captureEpoch, registryGeneration) = element is null
-                ? (null, null)
-                : GetCaptureMetadata(element);
-            var result = await client.GestureDetailedAsync(
-                normalizedType, element?.Id, direction, distance, durationMs,
-                scale, rotation, deltaX, deltaY, originX, originY, steps,
-                captureEpoch, registryGeneration);
+            var result = await SendNativeUiCommandAsync(host, port, operations => operations.GestureAsync(
+                normalizedType, element, direction, distance, durationMs,
+                scale, rotation, deltaX, deltaY, originX, originY, steps));
 
             if (json)
             {
@@ -4172,9 +3479,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var (captureEpoch, registryGeneration) = GetCaptureMetadata(element);
-            var success = await client.FocusAsync(element.Id, captureEpoch, registryGeneration);
+            var success = await SendNativeUiCommandAsync(host, port, operations => operations.FocusAsync(element));
             Output.WriteActionResult(success, "Focused", element.Id, json,
                 success ? $"Focused: {element.Id}" : $"Failed to focus: {element.Id}");
             if (!success) _errorOccurred = true;
@@ -4186,8 +3491,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var success = await client.ResizeAsync(width, height, window);
+            var success = await SendNativeUiCommandAsync(host, port, operations => operations.ResizeAsync(width, height, window));
             if (json)
                 Output.WriteActionResult(success, "Resized", $"{width}x{height}", json);
             else
@@ -4201,8 +3505,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var body = await client.GetLogsAsync(limit, skip, source);
+            var body = await SendLogCommandAsync(host, port, operations => operations.GetAsync(limit, skip, source));
 
             if (json)
             {
@@ -4228,25 +3531,14 @@ public class DevFlowCommands
     private static async Task MauiLogsFollowAsync(string host, int port, string? source, bool json, int replay)
     {
         EnsureAgentPortResolved(port);
-        var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
-
-        var queryParams = new List<string>();
-        if (!string.IsNullOrEmpty(source))
-            queryParams.Add($"source={Uri.EscapeDataString(source)}");
-        if (replay != 100)
-            queryParams.Add($"replay={replay}");
-        var wsUrl = $"ws://{host}:{port}/ws/v1/logs";
-        if (queryParams.Count > 0)
-            wsUrl += "?" + string.Join("&", queryParams);
-
-        while (!cts.Token.IsCancellationRequested)
+        using var cts = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; cts.Cancel(); };
+        Console.CancelKeyPress += cancel;
+        try
         {
-            try
+            using var client = new AgentClient(host, port);
+            await new LogOperations(client).FollowAsync(source, replay, () =>
             {
-                using var ws = new System.Net.WebSockets.ClientWebSocket();
-                await ws.ConnectAsync(new Uri(wsUrl), cts.Token);
-
                 if (!json)
                 {
                     Console.WriteLine($"Connected to log stream at {host}:{port}");
@@ -4255,64 +3547,16 @@ public class DevFlowCommands
                     Console.WriteLine("Streaming logs... (Ctrl+C to stop)\n");
                 }
 
-                var buffer = new byte[65536];
-                var sb = new StringBuilder();
-
-                while (!cts.Token.IsCancellationRequested && ws.State == System.Net.WebSockets.WebSocketState.Open)
-                {
-                    System.Net.WebSockets.WebSocketReceiveResult result;
-                    sb.Clear();
-                    do
-                    {
-                        result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
-                        if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
-                        sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
-                    } while (!result.EndOfMessage);
-
-                    if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
-                    if (cts.Token.IsCancellationRequested) break;
-
-                    var msg = sb.ToString();
-                    if (string.IsNullOrEmpty(msg)) continue;
-
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(msg);
-                        var type = doc.RootElement.GetProperty("type").GetString();
-
-                        if (type == "replay" && doc.RootElement.TryGetProperty("entries", out var entries))
-                        {
-                            foreach (var entry in entries.EnumerateArray())
-                            {
-                                if (json)
-                                    PrintLogEntryJson(entry);
-                                else
-                                    PrintLogEntry(entry);
-                            }
-                        }
-                        else if (type == "log" && doc.RootElement.TryGetProperty("entry", out var logEntry))
-                        {
-                            if (json)
-                                PrintLogEntryJson(logEntry);
-                            else
-                                PrintLogEntry(logEntry);
-                        }
-                    }
-                    catch (JsonException) { }
-                }
-            }
-            catch (OperationCanceledException) { break; }
-            catch (System.Net.WebSockets.WebSocketException)
+            }, entry =>
             {
-                if (cts.Token.IsCancellationRequested) break;
-                try { await Task.Delay(1000, cts.Token); }
-                catch { break; }
-            }
-            catch (Exception ex)
-            {
-                WriteError(ex.Message);
-                break;
-            }
+                if (json) PrintLogEntryJson(entry);
+                else PrintLogEntry(entry);
+            }, cts.Token);
+        }
+        catch (Exception ex) { WriteError(ex.Message); }
+        finally
+        {
+            Console.CancelKeyPress -= cancel;
         }
     }
 
@@ -4366,22 +3610,17 @@ public class DevFlowCommands
     private static async Task MauiNetworkMonitorAsync(string host, int port, bool json, int limit, string? filterHost, string? filterMethod)
     {
         EnsureAgentPortResolved(port);
-        var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
-
-        int counter = 0;
-        var wsUrl = $"ws://{host}:{port}/ws/v1/network";
-
-        while (!cts.Token.IsCancellationRequested)
+        using var cts = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; cts.Cancel(); };
+        Console.CancelKeyPress += cancel;
+        try
         {
-            try
+            using var client = new AgentClient(host, port);
+            var counter = await new NetworkOperations(client).MonitorAsync(limit, filterHost, filterMethod, count =>
             {
-                using var ws = new System.Net.WebSockets.ClientWebSocket();
-                await ws.ConnectAsync(new Uri(wsUrl), cts.Token);
-
                 if (!json)
                 {
-                    if (counter == 0)
+                    if (count == 0)
                     {
                         Console.WriteLine($"Connected to network monitor at {host}:{port}");
                         Console.WriteLine("Listening for HTTP requests... (Ctrl+C to stop)\n");
@@ -4395,79 +3634,24 @@ public class DevFlowCommands
                     }
                 }
 
-                var buffer = new byte[65536];
-                var sb = new StringBuilder();
-
-                while (!cts.Token.IsCancellationRequested && ws.State == System.Net.WebSockets.WebSocketState.Open)
-                {
-                    System.Net.WebSockets.WebSocketReceiveResult result;
-                    sb.Clear();
-                    do
-                    {
-                        result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
-                        if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
-                        sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
-                    } while (!result.EndOfMessage);
-
-                    if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close) break;
-                    if (cts.Token.IsCancellationRequested) break;
-
-                    var msg = sb.ToString();
-                    if (string.IsNullOrEmpty(msg)) continue;
-
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(msg);
-                        var type = doc.RootElement.GetProperty("type").GetString();
-
-                        if (type == "replay" && doc.RootElement.TryGetProperty("entries", out var entries))
-                        {
-                            foreach (var entry in entries.EnumerateArray())
-                            {
-                                if (!MatchesFilter(entry, filterHost, filterMethod)) continue;
-                                counter++;
-                                if (json) PrintNetworkEntryJson(entry);
-                                else PrintNetworkEntryRow(counter, entry);
-                            }
-                        }
-                        else if (type == "request" && doc.RootElement.TryGetProperty("entry", out var reqEntry))
-                        {
-                            if (!MatchesFilter(reqEntry, filterHost, filterMethod)) continue;
-                            counter++;
-                            if (counter > limit) continue;
-                            if (json) PrintNetworkEntryJson(reqEntry);
-                            else PrintNetworkEntryRow(counter, reqEntry);
-                        }
-                    }
-                    catch (JsonException) { }
-                }
-            }
-            catch (OperationCanceledException) { break; }
-            catch (System.Net.WebSockets.WebSocketException)
+            }, (index, entry) =>
             {
-                if (cts.Token.IsCancellationRequested) break;
-                // Reconnect after a brief delay
-                try { await Task.Delay(1000, cts.Token); }
-                catch { break; }
-            }
-            catch (Exception ex)
-            {
-                if (cts.Token.IsCancellationRequested) break;
-                WriteError(ex.Message);
-                try { await Task.Delay(2000, cts.Token); }
-                catch { break; }
-            }
+                if (json) PrintNetworkEntryJson(entry);
+                else PrintNetworkEntryRow(index, entry);
+            }, ex => WriteError(ex.Message), cts.Token);
+            if (!json && counter > 0) Console.WriteLine($"\n{counter} requests captured.");
         }
-
-        if (!json && counter > 0) Console.WriteLine($"\n{counter} requests captured.");
+        finally
+        {
+            Console.CancelKeyPress -= cancel;
+        }
     }
 
     private static async Task MauiNetworkListAsync(string host, int port, bool json, int limit, string? filterHost, string? filterMethod)
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var requests = await client.GetNetworkRequestsAsync(limit, filterHost, filterMethod);
+            var requests = await SendNetworkCommandAsync(host, port, operations => operations.ListAsync(limit, filterHost, filterMethod));
 
             if (json)
             {
@@ -4499,8 +3683,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var req = await client.GetNetworkRequestDetailAsync(id);
+            var req = await SendNetworkCommandAsync(host, port, operations => operations.DetailAsync(id));
 
             if (req == null)
             {
@@ -4556,8 +3739,7 @@ public class DevFlowCommands
     {
         try
         {
-            using var client = await CreateAgentClientAsync(host, port);
-            var result = await client.ClearNetworkRequestsAsync();
+            var result = await SendNetworkCommandAsync(host, port, operations => operations.ClearAsync());
             Output.WriteActionResult(result, "NetworkCleared", null, json,
                 result ? "Network request buffer cleared." : "Failed to clear.");
             if (!result) _errorOccurred = true;
@@ -4635,21 +3817,6 @@ public class DevFlowCommands
                 Console.WriteLine(body);
             }
         }
-    }
-
-    private static bool MatchesFilter(JsonElement entry, string? filterHost, string? filterMethod)
-    {
-        if (!string.IsNullOrEmpty(filterHost))
-        {
-            var host = entry.TryGetProperty("host", out var h) ? h.GetString() : null;
-            if (host == null || !host.Contains(filterHost, StringComparison.OrdinalIgnoreCase)) return false;
-        }
-        if (!string.IsNullOrEmpty(filterMethod))
-        {
-            var method = entry.GetProperty("method").GetString();
-            if (!string.Equals(method, filterMethod, StringComparison.OrdinalIgnoreCase)) return false;
-        }
-        return true;
     }
 
     private static ConsoleColor GetStatusColor(int? statusCode, string? error)
@@ -4771,190 +3938,11 @@ public class DevFlowCommands
 
     // ===== Alert & Permission Commands (iOS Simulator) =====
 
-    private static async Task<string> ResolveUdidAsync(string? udid)
-    {
-        if (!string.IsNullOrEmpty(udid)) return udid;
-
-        // Auto-detect booted simulator
-        var result = await ProcessRunner.RunAsync("xcrun", new[] { "simctl", "list", "devices", "booted", "-j" });
-
-        if (!result.Success || result.ExitCode != 0)
-        {
-            var baseMessage = $"Failed to resolve simulator UDID. 'xcrun simctl list devices booted -j' exited with code {result.ExitCode}.";
-            var error = result.StandardError;
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? baseMessage : baseMessage + " Error: " + error.Trim());
-        }
-
-        var simOutput = result.StandardOutput;
-        if (string.IsNullOrWhiteSpace(simOutput))
-            throw new InvalidOperationException("Failed to resolve simulator UDID: no output received from 'xcrun simctl list devices booted -j'.");
-
-        using var doc = JsonDocument.Parse(simOutput);
-        if (doc.RootElement.TryGetProperty("devices", out var devices))
-        {
-            foreach (var runtime in devices.EnumerateObject())
-            {
-                foreach (var device in runtime.Value.EnumerateArray())
-                {
-                    var state = device.TryGetProperty("state", out var s) ? s.GetString() : null;
-                    if (state == "Booted")
-                    {
-                        var resolved = device.GetProperty("udid").GetString()!;
-                        return resolved;
-                    }
-                }
-            }
-        }
-        throw new InvalidOperationException("No booted simulator found. Specify --udid or boot a simulator.");
-    }
-
-    private static async Task<string> ResolveAlertPlatformAsync(string? udid, int? pid, string host, int port)
-    {
-        // If a UDID was explicitly provided, it's an iOS simulator
-        if (!string.IsNullOrEmpty(udid))
-            return "ios-simulator";
-
-        // If a PID was explicitly provided, it's Mac Catalyst or Windows
-        if (pid.HasValue)
-            return OperatingSystem.IsWindows() ? "windows" : "maccatalyst";
-
-        // Auto-detect from connected agent
-        try
-        {
-            using var client = await CreateAgentClientAsync(host, port);
-            var status = await client.GetStatusAsync();
-            if (status?.Platform != null)
-            {
-                var sp = status.Platform.ToLowerInvariant();
-                if (sp.Contains("ios")) return "ios-simulator";
-                if (sp.Contains("android")) return "android";
-                if (sp.Contains("windows")) return "windows";
-                if (sp.Contains("linux") || sp.Contains("gtk")) return "linux";
-                // For MacCatalyst, don't return immediately — check if there's a
-                // booted iOS simulator first, since it's more likely the user wants
-                // iOS dialog detection (Mac Catalyst dialogs are less common)
-            }
-        }
-        catch { }
-
-        // Check if a booted iOS simulator exists
-        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
-        {
-            try
-            {
-                var simResult = await ProcessRunner.RunAsync("xcrun", new[] { "simctl", "list", "devices", "booted", "-j" });
-
-                if (!simResult.Success || simResult.ExitCode != 0)
-                    throw new InvalidOperationException($"xcrun simctl failed with exit code {simResult.ExitCode}: {simResult.StandardError}");
-
-                if (string.IsNullOrWhiteSpace(simResult.StandardOutput))
-                    throw new InvalidOperationException("xcrun simctl returned no output.");
-
-                using var doc = JsonDocument.Parse(simResult.StandardOutput);
-                if (doc.RootElement.TryGetProperty("devices", out var devices))
-                {
-                    foreach (var runtime in devices.EnumerateObject())
-                    {
-                        foreach (var device in runtime.Value.EnumerateArray())
-                        {
-                            var state = device.TryGetProperty("state", out var s) ? s.GetString() : null;
-                            if (state == "Booted") return "ios-simulator";
-                        }
-                    }
-                }
-            }
-            catch { }
-        }
-
-        if (OperatingSystem.IsWindows()) return "windows";
-        if (OperatingSystem.IsLinux()) return "linux";
-        return "maccatalyst";
-    }
-
-    private static async Task<int> ResolveMacCatalystPidAsync(int? pid, string host, int port)
-    {
-        if (pid.HasValue) return pid.Value;
-
-        // Try to find the PID by checking what's listening on the agent port
-        try
-        {
-            using var client = await CreateAgentClientAsync(host, port);
-            var status = await client.GetStatusAsync();
-            var appName = status?.App?.Name ?? status?.AppName;
-            if (!string.IsNullOrWhiteSpace(appName))
-            {
-                // Find process by app name
-                var pgrepResult = await ProcessRunner.RunAsync("pgrep", new[] { "-f", appName });
-                var lines = pgrepResult.StandardOutput.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                if (lines.Length > 0 && int.TryParse(lines[0].Trim(), out var resolved))
-                    return resolved;
-            }
-        }
-        catch { }
-
-        throw new InvalidOperationException("Cannot determine Mac Catalyst app PID. Specify --pid.");
-    }
-
-    private static async Task<int> ResolveWindowsPidAsync(int? pid, string host, int port)
-    {
-        if (pid.HasValue) return pid.Value;
-
-        try
-        {
-            using var client = await CreateAgentClientAsync(host, port);
-            var status = await client.GetStatusAsync();
-            var appName = status?.App?.Name ?? status?.AppName;
-            if (!string.IsNullOrWhiteSpace(appName))
-            {
-                var processes = System.Diagnostics.Process.GetProcessesByName(appName);
-                if (processes.Length > 0)
-                    return processes[0].Id;
-
-                var match = System.Diagnostics.Process.GetProcesses()
-                    .FirstOrDefault(p =>
-                    {
-                        try { return p.ProcessName.Contains(appName, StringComparison.OrdinalIgnoreCase); }
-                        catch { return false; }
-                    });
-                if (match != null)
-                    return match.Id;
-            }
-        }
-        catch { }
-
-        throw new InvalidOperationException("Cannot determine Windows app PID. Specify --pid.");
-    }
-
     private static async Task AlertDetectAsync(string? udid, int? pid, string host, int port, bool json)
     {
         try
         {
-            var plat = await ResolveAlertPlatformAsync(udid, pid, host, port);
-            Microsoft.Maui.DevFlow.Driver.AlertInfo? alert = null;
-
-            if (plat == "maccatalyst")
-            {
-                var resolvedPid = await ResolveMacCatalystPidAsync(pid, host, port);
-                var driver = new Microsoft.Maui.DevFlow.Driver.MacCatalystAppDriver { ProcessId = resolvedPid };
-                alert = await driver.DetectAlertAsync();
-            }
-            else if (plat == "android")
-            {
-                var driver = new Microsoft.Maui.DevFlow.Driver.AndroidAppDriver { Serial = udid };
-                alert = await driver.DetectAlertAsync();
-            }
-            else if (plat == "windows")
-            {
-                var resolvedPid = await ResolveWindowsPidAsync(pid, host, port);
-                var driver = new Microsoft.Maui.DevFlow.Driver.WindowsAppDriver { ProcessId = resolvedPid };
-                alert = await driver.DetectAlertAsync();
-            }
-            else
-            {
-                var resolved = await ResolveUdidAsync(udid);
-                var driver = new Microsoft.Maui.DevFlow.Driver.iOSSimulatorAppDriver { DeviceUdid = resolved };
-                alert = await driver.DetectAlertAsync();
-            }
+            var alert = await CreateHostOperations(host, port).DetectAlertAsync(udid, pid);
 
             if (alert is null)
             {
@@ -4995,32 +3983,7 @@ public class DevFlowCommands
     {
         try
         {
-            var plat = await ResolveAlertPlatformAsync(udid, pid, host, port);
-            Microsoft.Maui.DevFlow.Driver.AlertInfo? alert = null;
-
-            if (plat == "maccatalyst")
-            {
-                var resolvedPid = await ResolveMacCatalystPidAsync(pid, host, port);
-                var driver = new Microsoft.Maui.DevFlow.Driver.MacCatalystAppDriver { ProcessId = resolvedPid };
-                alert = await driver.HandleAlertIfPresentAsync(buttonLabel);
-            }
-            else if (plat == "android")
-            {
-                var driver = new Microsoft.Maui.DevFlow.Driver.AndroidAppDriver { Serial = udid };
-                alert = await driver.HandleAlertIfPresentAsync(buttonLabel);
-            }
-            else if (plat == "windows")
-            {
-                var resolvedPid = await ResolveWindowsPidAsync(pid, host, port);
-                var driver = new Microsoft.Maui.DevFlow.Driver.WindowsAppDriver { ProcessId = resolvedPid };
-                alert = await driver.HandleAlertIfPresentAsync(buttonLabel);
-            }
-            else
-            {
-                var resolved = await ResolveUdidAsync(udid);
-                var driver = new Microsoft.Maui.DevFlow.Driver.iOSSimulatorAppDriver { DeviceUdid = resolved };
-                alert = await driver.HandleAlertIfPresentAsync(buttonLabel);
-            }
+            var alert = await CreateHostOperations(host, port).DismissAlertAsync(udid, pid, buttonLabel);
 
             if (alert is null)
                 Output.WriteResult(new JsonObject
@@ -5041,32 +4004,7 @@ public class DevFlowCommands
     {
         try
         {
-            var plat = await ResolveAlertPlatformAsync(udid, pid, host, port);
-            string treeResult;
-
-            if (plat == "maccatalyst")
-            {
-                var resolvedPid = await ResolveMacCatalystPidAsync(pid, host, port);
-                var driver = new Microsoft.Maui.DevFlow.Driver.MacCatalystAppDriver { ProcessId = resolvedPid };
-                treeResult = await driver.GetAccessibilityTreeAsync();
-            }
-            else if (plat == "android")
-            {
-                var driver = new Microsoft.Maui.DevFlow.Driver.AndroidAppDriver { Serial = udid };
-                treeResult = await driver.GetAccessibilityTreeAsync();
-            }
-            else if (plat == "windows")
-            {
-                var resolvedPid = await ResolveWindowsPidAsync(pid, host, port);
-                var driver = new Microsoft.Maui.DevFlow.Driver.WindowsAppDriver { ProcessId = resolvedPid };
-                treeResult = await driver.GetAccessibilityTreeAsync();
-            }
-            else
-            {
-                var resolved = await ResolveUdidAsync(udid);
-                var driver = new Microsoft.Maui.DevFlow.Driver.iOSSimulatorAppDriver { DeviceUdid = resolved };
-                treeResult = await driver.GetAccessibilityTreeAsync();
-            }
+            var treeResult = await CreateHostOperations(host, port).GetAlertTreeAsync(udid, pid);
 
             if (json)
             {
@@ -5095,21 +4033,11 @@ public class DevFlowCommands
     {
         try
         {
-            var resolved = await ResolveUdidAsync(udid);
-
-            // Map the service token to the strongly-typed permission and drive it through
-            // SimulatorService.Privacy (bundleIdentifier is optional in the upstream signature).
-            if (!SimulatorEnumParsing.TryParsePrivacyPermission(service, out var permission))
-            {
-                Output.WriteError($"Unknown permission service '{service}'. Valid services: {SimulatorEnumParsing.PrivacyPermissionNames}.", json);
-                _errorOccurred = true;
-                return;
-            }
-
-            var success = Program.AppleProvider.SetPrivacy(action, resolved, permission, bundleId);
+            var (success, error) = await new HostOperations(() => Task.FromResult<AgentStatus?>(null))
+                .SetPermissionAsync(Program.AppleProvider, action, udid, bundleId, service);
             if (!success)
             {
-                Output.WriteError($"simctl privacy {action} failed for service '{service}'.", json);
+                Output.WriteError(error!, json);
                 _errorOccurred = true;
                 return;
             }
@@ -5265,7 +4193,7 @@ public class DevFlowCommands
 
     /// <summary>
     /// Best-effort stderr labeling for command paths that issue raw HTTP directly (the
-    /// <c>Simple*Async</c> helpers) instead of going through <see cref="CreateAgentClientAsync"/>.
+    /// storage/device helpers) instead of going through <see cref="CreateAgentClientAsync"/>.
     /// Resolves the connected agents via the same injectable broker seams and emits the one-line
     /// target label when more than one agent is connected. Labeling is a usability aid, not a
     /// correctness mechanism — correctness is enforced by <see cref="EnsureAgentPortResolved"/> —
@@ -5298,62 +4226,17 @@ public class DevFlowCommands
         CancellationToken cancellationToken,
         int? brokerPort = null)
     {
-        var androidPorts = agents
-            .Where(IsAndroidAgent)
-            .Select(static a => a.Port)
-            .Distinct()
-            .ToArray();
-
-        if (androidPorts.Length == 0)
-            return null;
-
-        return await EnsureAndroidForwardingForPortsAsync(
-            androidPorts,
-            ensureBrokerReverse: true,
-            deviceId,
-            repair,
-            emitWarnings,
-            cancellationToken,
-            brokerPort: brokerPort);
+        var check = await CreateAgentManagementOperations().EnsureForwardingForAgentsAsync(
+            agents, deviceId, repair, cancellationToken, brokerPort);
+        if (emitWarnings) WriteAndroidForwardingCheck(check);
+        return check.Report;
     }
 
-    private static async Task<AndroidDevFlowForwardingReport?> EnsureAndroidForwardingForPortsAsync(
-        int[] agentPorts,
-        bool ensureBrokerReverse,
-        string? deviceId,
-        bool repair,
-        bool emitWarnings,
-        CancellationToken cancellationToken,
-        int? brokerPort = null)
+    private static void WriteAndroidForwardingCheck(AndroidForwardingCheck check)
     {
-        // Short-circuit on machines without an Android SDK so we don't pay the
-        // cost of instantiating AndroidProvider / building env vars on every
-        // devflow list/wait/diagnose invocation on desktop-only dev boxes.
-        if (!IsAndroidAdbLikelyAvailable())
-            return null;
-
-        try
-        {
-            var report = await CreateAndroidPortForwarder().EnsureAsync(new AndroidDevFlowForwardingRequest
-            {
-                AgentPorts = agentPorts,
-                EnsureBrokerReverse = ensureBrokerReverse,
-                BrokerPort = brokerPort ?? Broker.BrokerClient.ReadBrokerPortPublic() ?? Broker.BrokerServer.DefaultPort,
-                Repair = repair,
-                DeviceSerial = deviceId
-            }, cancellationToken);
-
-            if (emitWarnings)
-                WriteAndroidForwardingWarning(report);
-
-            return report;
-        }
-        catch (Exception ex)
-        {
-            if (emitWarnings)
-                Console.Error.WriteLine($"Android DevFlow forwarding check failed: {ex.Message}");
-            return null;
-        }
+        if (check.Report is not null) WriteAndroidForwardingWarning(check.Report);
+        if (check.Error is not null)
+            Console.Error.WriteLine($"Android DevFlow forwarding check failed: {check.Error}");
     }
 
     private static void WriteAndroidForwardingWarning(AndroidDevFlowForwardingReport report)
@@ -5399,8 +4282,7 @@ public class DevFlowCommands
     }
 
     private static bool IsAndroidAgent(Broker.AgentRegistration agent)
-        => agent.Platform.Contains("Android", StringComparison.OrdinalIgnoreCase)
-           || agent.Tfm.Contains("-android", StringComparison.OrdinalIgnoreCase);
+        => AgentManagementOperations.IsAndroidAgent(agent);
 
     // ===== Broker Commands =====
 
@@ -5408,18 +4290,22 @@ public class DevFlowCommands
     {
         if (foreground)
         {
-            Console.CancelKeyPress += (_, e) => e.Cancel = true;
             using var cts = new CancellationTokenSource();
-            Console.CancelKeyPress += (_, _) => cts.Cancel();
-
-            using var server = new Broker.BrokerServer(
-                log: msg => Console.WriteLine(msg));
-            await server.RunAsync(cts.Token);
+            ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; cts.Cancel(); };
+            Console.CancelKeyPress += cancel;
+            try
+            {
+                await new BrokerOperations().RunAsync(Console.WriteLine, cts.Token);
+            }
+            finally
+            {
+                Console.CancelKeyPress -= cancel;
+            }
             return;
         }
         else
         {
-            var port = await Broker.BrokerClient.EnsureBrokerRunningAsync();
+            var port = await new BrokerOperations().StartAsync();
             if (port.HasValue)
             {
                 Console.WriteLine($"Broker running on port {port.Value}");
@@ -5434,91 +4320,48 @@ public class DevFlowCommands
 
     private static async Task BrokerStopAsync()
     {
-        var success = await Broker.BrokerClient.ShutdownBrokerAsync();
+        var success = await new BrokerOperations().StopAsync();
         Console.WriteLine(success ? "Broker shutdown requested" : "Broker is not running");
     }
 
     private static async Task BrokerStatusAsync(bool json)
     {
-        var port = Broker.BrokerClient.ReadBrokerPortPublic();
-
-        // No state file — try default port as fallback (broker may still be alive)
-        if (port == null)
+        var result = await new BrokerOperations().GetStatusAsync();
+        var data = new JsonObject { ["running"] = result.Running };
+        if (result.Port is not null) data["port"] = result.Port;
+        if (result.Running) data["agents"] = result.Agents;
+        if (result.StateFile is false) data["stateFile"] = false;
+        if (result.Stale) data["stale"] = true;
+        if (result.SourceWorkspace is not null) data["sourceWorkspace"] = result.SourceWorkspace;
+        Output.WriteResult(data, json, _ =>
         {
-            try
-            {
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-                var response = await http.GetStringAsync($"http://localhost:{Broker.BrokerServer.DefaultPort}/api/health");
-                var doc = JsonDocument.Parse(response);
-                var agents = doc.RootElement.GetProperty("agents").GetInt32();
-                Output.WriteResult(new JsonObject
-                {
-                    ["running"] = true,
-                    ["port"] = Broker.BrokerServer.DefaultPort,
-                    ["agents"] = agents,
-                    ["stateFile"] = false
-                }, json,
-                    _ => Console.WriteLine($"Broker: running on port {Broker.BrokerServer.DefaultPort} ({agents} agent(s) connected) [no state file]"));
-                return;
-            }
-            catch { }
-
-            Output.WriteResult(new JsonObject
-            {
-                ["running"] = false
-            }, json,
-                _ => Console.WriteLine("Broker: not running"));
-            return;
-        }
-
-        try
-        {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var response = await http.GetStringAsync($"http://localhost:{port}/api/health");
-            var doc = JsonDocument.Parse(response);
-            var agents = doc.RootElement.GetProperty("agents").GetInt32();
-            Output.WriteResult(new JsonObject
-            {
-                ["running"] = true,
-                ["port"] = port,
-                ["agents"] = agents
-            }, json,
-                _ => Console.WriteLine($"Broker: running on port {port} ({agents} agent(s) connected)"));
-        }
-        catch
-        {
-            Output.WriteResult(new JsonObject
-            {
-                ["running"] = false,
-                ["port"] = port,
-                ["stale"] = true
-            }, json,
-                _ => Console.WriteLine($"Broker: not responding on port {port} (stale state file?)"));
-        }
+            Console.WriteLine(result.Running
+                ? $"Broker: running on port {result.Port} ({result.Agents} agent(s) connected){(result.StateFile is false ? " [no state file]" : "")}"
+                : result.Stale ? $"Broker: not responding on port {result.Port} (stale state file?)" : "Broker: not running");
+            if (result.SourceWorkspace is not null)
+                Console.WriteLine($"Source workspace: {result.SourceWorkspace}");
+        });
     }
 
     private static void BrokerLogAsync()
     {
-        var logPath = Broker.BrokerPaths.LogFile;
-        if (!File.Exists(logPath))
+        var lines = new BrokerOperations().GetLogTail();
+        if (lines is null)
         {
             Console.WriteLine("No broker log found");
             return;
         }
 
-        // Show last 50 lines
-        var lines = File.ReadAllLines(logPath);
-        var start = Math.Max(0, lines.Length - 50);
-        for (int i = start; i < lines.Length; i++)
-            Console.WriteLine(lines[i]);
+        foreach (var line in lines) Console.WriteLine(line);
     }
 
     private static async Task ListAgentsCommandAsync(bool json, string? deviceId, CancellationToken cancellationToken)
     {
         await WriteSkillFreshnessHintAsync(json, cancellationToken);
 
-        var port = await Broker.BrokerClient.EnsureBrokerRunningAsync();
-        if (port == null)
+        var discovery = await CreateAgentManagementOperations().ListAsync(deviceId,
+            check => { if (!json) WriteAndroidForwardingCheck(check); }, cancellationToken);
+        if (discovery.BrokerPort == null)
         {
             Output.WriteError("Broker unavailable", json);
             if (json)
@@ -5529,11 +4372,11 @@ public class DevFlowCommands
             return;
         }
 
-        var agents = await Broker.BrokerClient.ListAgentsAsync(port.Value);
+        var agents = discovery.Agents;
         if (agents == null || agents.Length == 0)
         {
             // Scan current directory for devflow-enabled projects
-            var projects = ScanForDevFlowProjects();
+            var projects = discovery.Projects;
             
             if (json)
             {
@@ -5568,8 +4411,6 @@ public class DevFlowCommands
             return;
         }
 
-        await EnsureAndroidForwardingForAgentsAsync(agents, deviceId, repair: true, emitWarnings: !json, cancellationToken, brokerPort: port.Value);
-
         if (json)
         {
             Output.WriteResult(agents, json);
@@ -5603,12 +4444,12 @@ public class DevFlowCommands
         var version = typeof(DevFlowCommands).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
         
-        // Check broker status
-        var brokerPort = await ResolveRunningBrokerPortAsync();
+        var discovery = await CreateAgentManagementOperations().DiagnoseAsync(deviceId, cancellationToken);
+        var brokerPort = discovery.BrokerPort;
         var brokerRunning = brokerPort != null;
         
         // List connected agents
-        var agents = brokerRunning ? await ListBrokerAgentsAsync(brokerPort!.Value) : null;
+        var agents = discovery.Agents;
         var agentCount = agents?.Length ?? 0;
         if (agents is not null)
         {
@@ -5616,26 +4457,10 @@ public class DevFlowCommands
                 agentsJson.Add(CliJson.ParseNode(CliJson.SerializeUntyped(agent, indented: false)));
         }
 
-        var androidAgentPorts = agents?
-            .Where(IsAndroidAgent)
-            .Select(static a => a.Port)
-            .Distinct()
-            .ToArray() ?? [];
-        AndroidDevFlowForwardingReport? androidForwarding = null;
-        if (androidAgentPorts.Length > 0 || !string.IsNullOrWhiteSpace(deviceId))
-        {
-            androidForwarding = await EnsureAndroidForwardingForPortsAsync(
-                androidAgentPorts,
-                ensureBrokerReverse: true,
-                deviceId,
-                repair: false,
-                emitWarnings: false,
-                cancellationToken,
-                brokerPort: brokerPort);
-        }
+        var androidForwarding = discovery.AndroidForwarding;
         
         // Scan for devflow-enabled projects
-        var projects = ScanForDevFlowProjects();
+        var projects = discovery.Projects;
         foreach (var project in projects)
             projectsJson.Add(project);
         
@@ -5723,39 +4548,14 @@ public class DevFlowCommands
     {
         await WriteSkillFreshnessHintAsync(json, cancellationToken);
 
-        var brokerPort = await Broker.BrokerClient.EnsureBrokerRunningAsync();
-        if (brokerPort == null)
+        var (brokerAvailable, matched) = await CreateAgentManagementOperations().WaitAsync(
+            timeoutSeconds, projectFilter, platformFilter, deviceId,
+            check => { if (!json) WriteAndroidForwardingCheck(check); }, cancellationToken);
+        if (!brokerAvailable)
         {
             Console.Error.WriteLine("Error: Broker unavailable");
             Environment.ExitCode = 1;
             return;
-        }
-
-        if (ShouldPrepareAndroidBrokerReverse(platformFilter))
-            await EnsureAndroidForwardingForPortsAsync([], ensureBrokerReverse: true, deviceId, repair: true, emitWarnings: !json, cancellationToken, brokerPort: brokerPort.Value);
-
-        // Resolve project filter to full path for matching
-        string? resolvedProject = null;
-        if (projectFilter != null)
-        {
-            resolvedProject = Path.GetFullPath(projectFilter);
-        }
-
-        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-        var pollInterval = TimeSpan.FromMilliseconds(500);
-        Broker.AgentRegistration? matched = null;
-
-        while (DateTime.UtcNow < deadline)
-        {
-            var agents = await Broker.BrokerClient.ListAgentsAsync(brokerPort.Value);
-            if (agents != null && agents.Length > 0)
-            {
-                matched = FindMatchingAgent(agents, resolvedProject, platformFilter);
-                if (matched != null)
-                    break;
-            }
-
-            await Task.Delay(pollInterval, cancellationToken);
         }
 
         if (matched == null)
@@ -5765,9 +4565,6 @@ public class DevFlowCommands
             return;
         }
 
-        if (IsAndroidAgent(matched))
-            await EnsureAndroidForwardingForAgentsAsync([matched], deviceId, repair: true, emitWarnings: !json, cancellationToken, brokerPort: brokerPort.Value);
-
         if (json)
         {
             Console.WriteLine(CliJson.SerializeUntyped(matched, indented: false));
@@ -5776,23 +4573,6 @@ public class DevFlowCommands
         {
             Console.WriteLine(matched.Port);
         }
-    }
-
-    private static bool ShouldPrepareAndroidBrokerReverse(string? platformFilter)
-        => string.IsNullOrWhiteSpace(platformFilter)
-           || platformFilter.Contains("Android", StringComparison.OrdinalIgnoreCase);
-
-    private static Broker.AgentRegistration? FindMatchingAgent(Broker.AgentRegistration[] agents, string? projectFilter, string? platformFilter)
-    {
-        foreach (var agent in agents)
-        {
-            if (projectFilter != null && !string.Equals(agent.Project, projectFilter, StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (platformFilter != null && !agent.Platform.Contains(platformFilter, StringComparison.OrdinalIgnoreCase))
-                continue;
-            return agent;
-        }
-        return null;
     }
 
     private static async Task WriteSkillFreshnessHintAsync(bool json, CancellationToken cancellationToken)
@@ -5981,135 +4761,4 @@ public class DevFlowCommands
         return tokens.ToArray();
     }
 
-    /// <summary>
-    /// Scans the current directory for csproj files containing DevFlow package references.
-    /// Returns relative paths to projects that have DevFlow enabled.
-    /// </summary>
-    private static readonly HashSet<string> _scanExcludedDirs = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "bin", "obj", "node_modules", ".git", ".vs", ".idea", "packages"
-    };
-
-    private static string[] ScanForDevFlowProjects()
-    {
-        var cwd = Directory.GetCurrentDirectory();
-        var projects = new List<string>();
-
-        try
-        {
-            var pending = new Queue<string>();
-            pending.Enqueue(cwd);
-
-            while (pending.Count > 0)
-            {
-                var dir = pending.Dequeue();
-
-                // Search for .csproj files in this directory only (not recursive)
-                try
-                {
-                    foreach (var csproj in Directory.EnumerateFiles(dir, "*.csproj", SearchOption.TopDirectoryOnly))
-                    {
-                        try
-                        {
-                            var content = File.ReadAllText(csproj);
-                            if (content.Contains("Redth.MauiDevFlow.Agent") ||
-                                content.Contains("Microsoft.Maui.DevFlow.Agent"))
-                            {
-                                projects.Add(Path.GetRelativePath(cwd, csproj));
-                            }
-                        }
-                        catch
-                        {
-                            // Skip files we can't read
-                        }
-                    }
-                }
-                catch
-                {
-                    // Skip directories we can't enumerate
-                    continue;
-                }
-
-                // Enqueue subdirectories, pruning excluded ones before recursing
-                try
-                {
-                    foreach (var subDir in Directory.EnumerateDirectories(dir, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        var dirName = Path.GetFileName(subDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                        if (!string.IsNullOrEmpty(dirName) && !_scanExcludedDirs.Contains(dirName))
-                            pending.Enqueue(subDir);
-                    }
-                }
-                catch
-                {
-                    // Skip directories we can't enumerate
-                }
-            }
-        }
-        catch
-        {
-            // If scanning fails, return empty array
-        }
-
-        projects.Sort(StringComparer.OrdinalIgnoreCase);
-        return projects.ToArray();
-    }
-}
-
-internal sealed class RecordingIOSSimulatorAppDriver : iOSSimulatorAppDriver
-{
-    public override async Task StartRecordingAsync(string outputFile, int timeoutSeconds = 30)
-    {
-        EnsureNotRecording();
-        if (string.IsNullOrWhiteSpace(DeviceUdid))
-            throw new InvalidOperationException("DeviceUdid must be set for simulator operations.");
-
-        var fullPath = Path.GetFullPath(outputFile);
-        var startInfo = new System.Diagnostics.ProcessStartInfo("xcrun")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        startInfo.ArgumentList.Add("simctl");
-        startInfo.ArgumentList.Add("io");
-        startInfo.ArgumentList.Add(DeviceUdid);
-        startInfo.ArgumentList.Add("recordVideo");
-        startInfo.ArgumentList.Add("--codec");
-        startInfo.ArgumentList.Add("h264");
-        startInfo.ArgumentList.Add(fullPath);
-
-        var process = System.Diagnostics.Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start xcrun simctl io recordVideo");
-
-        await Task.Delay(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
-        process.Refresh();
-        var hasExited = process.HasExited;
-        var standardError = hasExited
-            ? await process.StandardError.ReadToEndAsync().ConfigureAwait(false)
-            : string.Empty;
-        ThrowIfProcessExited(hasExited, hasExited ? process.ExitCode : 0, standardError);
-
-        var watchdogPid = SpawnWatchdog(process.Id, timeoutSeconds);
-        RecordingStateManager.Save(new RecordingState
-        {
-            RecordingPid = process.Id,
-            WatchdogPid = watchdogPid,
-            OutputFile = fullPath,
-            Platform = "ios",
-            StartedAt = DateTimeOffset.UtcNow,
-            TimeoutSeconds = timeoutSeconds,
-        });
-    }
-
-    internal static void ThrowIfProcessExited(bool hasExited, int exitCode, string standardError)
-    {
-        if (!hasExited)
-            return;
-
-        var detail = standardError.Trim();
-        var suffix = detail.Length == 0 ? string.Empty : $": {detail}";
-        throw new InvalidOperationException(
-            $"xcrun simctl io recordVideo exited during startup with code {exitCode}{suffix}");
-    }
 }

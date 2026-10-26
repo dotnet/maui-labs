@@ -64,7 +64,7 @@ public record AgentRegistration
     }
 
     /// <summary>
-    /// Computes a process-specific agent ID while preserving the legacy identity
+    /// Computes a process-specific agent ID while preserving the project/framework identity
     /// for agents that do not report a process ID.
     /// </summary>
     public static string ComputeId(string project, string tfm, string? sessionId, int? processId)
@@ -79,7 +79,7 @@ public record AgentRegistration
     private static string ComputeId(string input)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(hash)[..12].ToLowerInvariant();
+        return Convert.ToHexString(hash)[..32].ToLowerInvariant();
     }
 }
 

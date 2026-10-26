@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Providers.Android;
@@ -475,10 +476,95 @@ public static partial class AndroidCommands
 			}
 		});
 
+		// sdk update-tools
+		var updateToolsCommand = new Command("update-tools",
+			"Ensure the latest Android SDK command-line tools (cmdline-tools;latest) are installed");
+		updateToolsCommand.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
+		{
+			var androidProvider = GetAndroidProvider(parseResult);
+
+			var useJson = parseResult.GetValue(GlobalOptions.JsonOption);
+			var dryRun = parseResult.GetValue(GlobalOptions.DryRunOption);
+			var formatter = Program.GetFormatter(parseResult);
+
+			var targetPath = androidProvider.SdkPath ?? PlatformDetector.Paths.DefaultAndroidSdkPath;
+
+			try
+			{
+				if (string.IsNullOrWhiteSpace(targetPath))
+					throw MauiToolException.AutoFixable(
+						ErrorCodes.AndroidSdkNotFound,
+						"No Android SDK path configured. Run 'maui android install' first.",
+						"maui android install");
+
+				if (dryRun)
+				{
+					formatter.WriteInfo($"[dry-run] Would ensure latest command-line tools at: {targetPath}");
+					return 0;
+				}
+
+				string? revision = null;
+				if (!useJson && formatter is SpectreOutputFormatter spectre)
+				{
+					await spectre.LiveProgressAsync(async (ctx) =>
+					{
+						var task = ctx.AddTask("Updating command-line tools");
+						revision = await androidProvider.EnsureLatestSdkToolsAsync(targetPath,
+							onProgress: (phase, pct, msg) =>
+							{
+								var label = phase switch
+								{
+									"CheckingForUpdates" => "Checking for updates...",
+									"Downloading" => $"Downloading: {msg}",
+									"Verifying" => "Verifying checksum...",
+									"Extracting" => "Extracting...",
+									"Installing" => "Installing...",
+									"Complete" => "Command-line tools ready",
+									_ => msg
+								};
+								if (pct < 0)
+									task.SetIndeterminate(label);
+								else
+									task.Update(Math.Clamp(pct, 0, 100), label);
+							},
+							cancellationToken);
+						task.Complete(revision is null ? "Command-line tools ready" : $"cmdline-tools {revision}");
+					});
+				}
+				else
+				{
+					revision = await androidProvider.EnsureLatestSdkToolsAsync(targetPath, onProgress: null, cancellationToken);
+				}
+
+				if (useJson)
+				{
+					formatter.Write(new CliCommandResult
+					{
+						Success = true,
+						Status = "ready",
+						Message = revision is null ? "Command-line tools are ready" : $"Command-line tools {revision} are ready",
+						Path = targetPath
+					});
+				}
+				else
+				{
+					formatter.WriteSuccess(revision is null
+						? "Command-line tools are ready"
+						: $"Command-line tools {revision} are ready");
+				}
+				return 0;
+			}
+			catch (Exception ex)
+			{
+				return Program.HandleCommandException(formatter, ex);
+			}
+		});
+
 		command.Add(checkCommand);
 		command.Add(installCommand);
 		command.Add(listCommand);
 		command.Add(acceptLicensesCommand);
+		command.Add(updateToolsCommand);
 		command.Add(CreateSdkUninstallCommand());
 
 		return command;

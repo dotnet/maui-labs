@@ -110,7 +110,8 @@ public class AndroidProvider : IAndroidProvider
 		});
 
 		// Check SDK Manager
-		if (!_sdkManager.IsAvailable)
+		var commandLineTools = _sdkManager.FindCommandLineTools();
+		if (commandLineTools is null)
 		{
 			checks.Add(new HealthCheck
 			{
@@ -133,7 +134,15 @@ public class AndroidProvider : IAndroidProvider
 			{
 				Category = "android",
 				Name = "SDK Manager",
-				Status = CheckStatus.Ok
+				Status = CheckStatus.Ok,
+				Message = commandLineTools.Revision is { Length: > 0 } rev
+					? $"command-line tools {rev}"
+					: null,
+				Details = new JsonObject
+				{
+					["path"] = commandLineTools.Path,
+					["revision"] = commandLineTools.Revision
+				}
 			});
 
 			// Check licenses
@@ -284,6 +293,24 @@ public class AndroidProvider : IAndroidProvider
 		if (childPids.Count > 0)
 			EmulatorProcessHelper.KillProcessIds(childPids);
 	}
+
+	public Task<IReadOnlyList<AndroidPortMapping>> ListForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default) =>
+		_adb.ListForwardPortsAsync(deviceSerial, cancellationToken);
+
+	public Task<IReadOnlyList<AndroidPortMapping>> ListReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default) =>
+		_adb.ListReversePortsAsync(deviceSerial, cancellationToken);
+
+	public Task AddForwardPortAsync(string deviceSerial, int hostPort, int devicePort, CancellationToken cancellationToken = default) =>
+		_adb.AddForwardPortAsync(deviceSerial, hostPort, devicePort, cancellationToken);
+
+	public Task AddReversePortAsync(string deviceSerial, int devicePort, int hostPort, CancellationToken cancellationToken = default) =>
+		_adb.AddReversePortAsync(deviceSerial, devicePort, hostPort, cancellationToken);
+
+	public Task ClearForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default) =>
+		_adb.ClearForwardPortsAsync(deviceSerial, cancellationToken);
+
+	public Task ClearReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default) =>
+		_adb.ClearReversePortsAsync(deviceSerial, cancellationToken);
 
 	public async Task<List<SdkPackage>> GetInstalledPackagesAsync(CancellationToken cancellationToken = default)
 	{
@@ -476,6 +503,16 @@ public class AndroidProvider : IAndroidProvider
 			onProgress: (phase, pct, msg) => onProgress?.Invoke(phase.ToString(), pct, msg),
 			cancellationToken);
 		_sdkPath = targetPath;
+	}
+
+	public async Task<string?> EnsureLatestSdkToolsAsync(string targetPath,
+		Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default)
+	{
+		var tool = await _sdkManager.EnsureLatestCommandLineToolsAsync(targetPath,
+			onProgress: (phase, pct, msg) => onProgress?.Invoke(phase.ToString(), pct, msg),
+			cancellationToken);
+		_sdkPath = targetPath;
+		return tool.Revision;
 	}
 
 	public void OverrideSdkPath(string path)

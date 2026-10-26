@@ -135,6 +135,27 @@ public sealed class SettingsPaneViewModelTests
         Assert.Same(ChatToolMode.RequireAny, settings.CreateChatOptions([tool]).ToolMode);
     }
 
+    [Fact]
+    public void CreateChatOptions_SwitchingFromStructuredProvider_DoesNotSendStaleJsonSettings()
+    {
+        using var live = CreateClient("Live", isReplay: false);
+        using var textOnly = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("text-only", "Text only", "Plain text",
+                SupportsStructuredOutput: false));
+        var settings = new SettingsPaneViewModel([live, textOnly]) { UseStructuredJson = true };
+        Assert.IsType<ChatResponseFormatJson>(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.SelectedClient = textOnly;
+        Assert.True(settings.UseStructuredJson);
+        Assert.Null(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.SelectedClient = live;
+        Assert.IsType<ChatResponseFormatJson>(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.UseStructuredJson = false;
+        Assert.Null(settings.CreateChatOptions([]).ResponseFormat);
+    }
+
     private static IChatClient CreateClient(string name, bool isReplay) =>
         new DescribedChatClient(
             new StubChatClient(),

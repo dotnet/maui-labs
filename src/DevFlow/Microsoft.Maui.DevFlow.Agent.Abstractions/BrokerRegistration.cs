@@ -272,7 +272,7 @@ public class BrokerRegistration : IDisposable
     }
 
     /// <summary>
-    /// Computes a process-specific agent identity while preserving the legacy identity
+    /// Computes a process-specific agent identity while preserving the project/framework identity
     /// for registrations that do not provide a process ID.
     /// </summary>
     public static string ComputeId(string project, string tfm, string? sessionId, int processId)
@@ -287,7 +287,7 @@ public class BrokerRegistration : IDisposable
     private static string ComputeId(string input)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(hash)[..12].ToLowerInvariant();
+        return Convert.ToHexString(hash)[..32].ToLowerInvariant();
     }
 
     internal async Task<MutationLeaseStatus?> ControlMutationLeaseAsync(MutationLeaseRequest request)

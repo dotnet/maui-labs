@@ -9,7 +9,15 @@ public readonly record struct XamlSourceEntry(
     string TypeName,
     int ChildCount,
     string? AutomationId = null,
-    string? FullTypeName = null);
+    string? FullTypeName = null)
+{
+    /// <summary>
+    /// The element's literal <c>Text</c> attribute, or null when absent or a markup extension. Tells
+    /// same-type siblings apart, since the runtime element must still show this text to be mapped.
+    /// Init-only rather than positional so the public constructor and deconstruction are unchanged.
+    /// </summary>
+    public string? Text { get; init; }
+}
 
 public sealed class XamlSourceMap
 {
@@ -73,14 +81,14 @@ public sealed class XamlSourceMap
 
     /// <summary>
     /// Build-time content hash of the .xaml text. Must stay byte-identical to
-    /// <c>XamlSourcePropertyEditor.ComputeSourceHash</c> (first 8 bytes of SHA-256 over the UTF-8
+    /// <c>XamlSourcePropertyEditor.ComputeSourceHash</c> (first 16 bytes of SHA-256 over the UTF-8
     /// text, lowercase hex) — the inspector compares them to decide whether source is stale.
     /// </summary>
     internal static string ComputeContentHash(string xaml)
         => Convert.ToHexString(
             System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(xaml)),
             0,
-            8).ToLowerInvariant();
+            16).ToLowerInvariant();
 
     private static void Visit(
         XElement element,
@@ -97,7 +105,10 @@ public sealed class XamlSourceMap
                 element.Name.LocalName,
                 children.Count,
                 usableAutomationId,
-                ResolveFullTypeName(element));
+                ResolveFullTypeName(element))
+            {
+                Text = LiteralText(element)
+            };
         }
 
         var childIds = children.Select(child => child.Attribute("AutomationId")?.Value).ToList();
@@ -117,6 +128,13 @@ public sealed class XamlSourceMap
             var childPath = path.Length == 0 ? index.ToString() : $"{path}/{index}";
             Visit(children[index], childPath, map, uniqueId);
         }
+    }
+
+    // MAUI treats a value as a markup extension when it starts with '{' after trimming.
+    private static string? LiteralText(XElement element)
+    {
+        var text = element.Attribute("Text")?.Value;
+        return text is null || text.TrimStart().StartsWith('{') ? null : text;
     }
 
     private static string? ResolveFullTypeName(XElement element)

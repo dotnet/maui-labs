@@ -52,8 +52,8 @@ authenticated host bridge for source navigation, recording persistence, and Copi
 The shared inspector keeps one interaction model while adapting its chrome to the host viewport:
 
 - **Wide browser/editor:** tree, screenshot, and properties are docked as three panes.
-- **Compact editor:** the tree remains available while properties open as a drawer, preserving
-  screenshot width.
+- **Compact editor:** the tree stays docked and properties dock beside the screenshot, so Fit
+  re-fits around them instead of a drawer covering the preview.
 - **Narrow Canvas/editor:** the screenshot is primary; tree and properties become coordinated
   full-height drawers with a scrim.
 - **Short host:** drawers and overlay Data/timeline sheets protect the screenshot's vertical budget.
@@ -82,6 +82,12 @@ from producing negative offsets.
 
 Browser coordinates are converted from the fit-scaled viewport back to screenshot coordinates,
 then translated to window coordinates with the frame's root offset before hit testing.
+
+Elements the Agent reports as displayed can still lie wholly outside the frame (a closed Shell
+flyout is realized left of the window). The renderer marks those overlays `data-offscreen="true"`
+after the root offset is applied; the client dims their tree rows, does not draw or hover-highlight
+them on the Preview, and tags the selected element's status line `(off-screen)` while it stays
+outside the frame. `data-isVisible` keeps the Agent's value.
 
 ## Global mutation lease
 
@@ -119,8 +125,11 @@ elements to source file, line, column, and a build-time content hash. VS Code co
 file hash before opening the recorded line and warns when the file changed after the app was built.
 
 Source locations are emitted only when the runtime element can be matched conservatively to its
-XAML declaration. Repeated same-type siblings need sibling-unique `AutomationId` values; otherwise
-their source actions are withheld rather than risk opening or editing the wrong declaration.
+XAML declaration. Repeated same-type siblings, such as the two `Label`s in the default template,
+are told apart by a sibling-unique `AutomationId`, or when every one of them declares a different
+literal `Text` that the runtime element still shows. Otherwise (bound, duplicated, or
+code-behind-changed text) their source actions are withheld rather than risk opening or editing
+the wrong declaration; give those elements a unique `AutomationId` to map them.
 
 Source maps are disabled outside Debug by default because they embed XAML text and source paths.
 They can be disabled explicitly:
@@ -184,6 +193,64 @@ Inspector falls back to its legacy static property table when an older agent doe
 runtime descriptors. The Node client negotiates `ui.events`; unsupported agents enter a stable
 `polling-only` state and recheck the capability every 60 seconds so an in-place upgrade recovers
 without reconnect churn. Upgrade the agent packages and host tooling together.
+
+## Browser synchronization regressions
+
+The read-only property-filter and automatic Network refresh scenarios run against the real
+InspectorServer and embedded JavaScript in `InspectorLayoutWorkspaceTests`, without a live app.
+They use response gates to hold descriptor, legacy property, list, and detail requests pending
+until the corresponding UI state has been asserted. Playwright's clock advances the real polling
+intervals; no wall-clock sleeps or enlarged assertion timeouts are needed.
+
+The property filter is created only after property loading completes and remains usable without
+the mutation lease. Network detail loading clears the attachable Data snapshot, rejects late list
+responses, and pauses list polling until returning to the list. These are UI invariants, not
+promises that a native agent will respond within a browser assertion's default timeout.
+
+Run the self-contained suite after building the Inspector test project and installing its
+Playwright Chromium:
+
+```bash
+MAUI_INSPECTOR_BROWSER_TESTS=1 dotnet test \
+  src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests \
+  --filter "FullyQualifiedName~InspectorLayoutWorkspaceTests"
+```
+
+Windows CI runs the full browser fixture suite and repeats the three synchronization cases five
+times, failing immediately on any failure or skip. The Windows live integration job also includes
+these browser cases alongside the tests that genuinely require a native agent.
+
+The Android integration job preinstalls emulator-runner's SDK prerequisites before snapshot
+warm-up or test execution, using the pinned `AndroidSdk.Tool` .NET tool from
+`.config/dotnet-tools.json`. The Android job's `ANDROID_BUILD_TOOLS_VERSION` defines the build-tools
+version. `eng/scripts/Install-AndroidSdk.ps1` allows three installation attempts for recognized
+corrupt-ZIP or network-download errors, waiting 5 then 10 seconds.
+Unknown packages, rejected licenses, permissions, disk-space errors, and other non-transient
+failures are not retried. Exhausted attempts fail the step and report the tool's last exit code.
+The wrapper also checks error output and each requested package's `package.xml` identity because
+the pinned tool can return zero after a command error. PowerShell regressions cover recovery,
+exhaustion, permanent errors, and false-success prevention without Node.js.
+Emulator boot and integration-test failures are outside the retry scope.
+
+Portable client retry-budget tests inject transport failures at the HTTP handler boundary and
+assert exact send counts through the public tap API on modern .NET and .NET Framework. They do
+not infer retry counts from TCP resets, whose exception shape and wire-level retries depend on
+the platform HTTP stack. Separate real-socket tests retain delayed-listener and IPv4/IPv6
+loopback coverage. Cancellation, timeout, protocol, and trust failures remain non-retryable.
+The dedicated Windows Chromium job also repeats all 20 client retry regressions five times on
+each of `net472` and `net10.0`, failing immediately on any failure or skip.
+
+MAUI clipping/overlap integration cases scope their captures to MAUI elements; native accessibility
+and Blazor probes are separate capabilities and are not needed to assert those XAML findings.
+The hit-test envelope case waits only for the server's explicit retryable `409` read state to
+clear, within the existing fixture readiness budget, before checking every required envelope field.
+Other HTTP failures still fail immediately.
+
+Profiling resolver fixtures evaluate SDK-free MSBuild projects, including an imported-properties
+case, so workload discovery is not required to test framework-property parsing. The Windows DNX
+argument fixture disables persistent build/compiler servers for its generated helper. Cleanup
+allows bounded retries for that fixture's temporarily locked executable only; exhausted cleanup
+still fails, and the build and argument assertions are never retried.
 
 ## Implementation
 

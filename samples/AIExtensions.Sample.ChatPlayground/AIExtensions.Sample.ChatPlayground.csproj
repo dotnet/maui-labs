@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
-    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true'">net10.0-android;net10.0-ios27.0;net10.0-maccatalyst27.0</TargetFrameworks>
-    <SupportedOSPlatformVersion Condition="'$(UseXcode27Preview)' == 'true' and $(TargetFramework.Contains('-maccatalyst'))">17.0</SupportedOSPlatformVersion>
+    <TargetFrameworks>net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' != 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios27.0;net10.0-maccatalyst27.0</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <SupportedOSPlatformVersion Condition="'$(UseXcode27Preview)' == 'true' and $(TargetFramework.Contains('-maccatalyst'))">17.0</SupportedOSPlatformVersion>
     <OutputType>Exe</OutputType>
     <RootNamespace>AIExtensions.Sample.ChatPlayground</RootNamespace>
     <UseMaui>true</UseMaui>
