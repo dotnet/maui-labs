@@ -504,7 +504,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         if (_contentMeasureInvalidationPending)
             return;
 
-        var dispatcher = MauiContext?.Dispatcher;
+        var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher is null || !_isInLayout)
         {
             ((IView)VirtualView).InvalidateMeasure();
