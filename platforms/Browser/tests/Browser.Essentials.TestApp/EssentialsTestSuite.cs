@@ -89,32 +89,12 @@ public class EssentialsTestSuite(
 			AssertEqual("b", preferences.Get("test-shared", "", "container2"));
 			return Task.CompletedTask;
 		});
-		await RunAsync(results, "SecureStorage: roundtrip", async () =>
+		await RunAsync(results, "SecureStorage: operations throw PlatformNotSupportedException", async () =>
 		{
-			await secureStorage.SetAsync("test-secret", "top secret value");
-			AssertEqual("top secret value", await secureStorage.GetAsync("test-secret"));
-		});
-		await RunAsync(results, "SecureStorage: value is encrypted at rest", async () =>
-		{
-			await secureStorage.SetAsync("test-encrypted", "plaintext-marker");
-			var raw = BrowserEssentialsInterop.PrefGet("maui:securestorage:test-encrypted");
-			AssertTrue(raw is not null, "raw localStorage entry should exist");
-			AssertTrue(!raw!.Contains("plaintext-marker"), "stored value must not contain the plaintext");
-		});
-		await RunAsync(results, "SecureStorage: remove", async () =>
-		{
-			await secureStorage.SetAsync("test-secret-remove", "x");
-			AssertTrue(secureStorage.Remove("test-secret-remove"), "Remove should report true");
-			AssertEqual(null, await secureStorage.GetAsync("test-secret-remove"));
-			AssertTrue(!secureStorage.Remove("test-secret-remove"), "second Remove should report false");
-		});
-		await RunAsync(results, "SecureStorage: RemoveAll clears only secure entries", async () =>
-		{
-			await secureStorage.SetAsync("test-clear", "x");
-			preferences.Set("test-survives", "y");
-			secureStorage.RemoveAll();
-			AssertEqual(null, await secureStorage.GetAsync("test-clear"));
-			AssertEqual("y", preferences.Get("test-survives", ""));
+			await AssertThrows<PlatformNotSupportedException>(() => secureStorage.GetAsync("test-secret"));
+			await AssertThrows<PlatformNotSupportedException>(() => secureStorage.SetAsync("test-secret", "x"));
+			await AssertThrows<PlatformNotSupportedException>(() => Task.FromResult(secureStorage.Remove("test-secret")));
+			await AssertThrows<PlatformNotSupportedException>(() => { secureStorage.RemoveAll(); return Task.CompletedTask; });
 		});
 		await RunAsync(results, "Clipboard: roundtrip", async () =>
 		{
@@ -243,6 +223,19 @@ public class EssentialsTestSuite(
 		{
 			results.Add(new TestResult(name, false, $"{ex.GetType().Name}: {ex.Message}"));
 		}
+	}
+
+	static async Task AssertThrows<TException>(Func<Task> action) where TException : Exception
+	{
+		try
+		{
+			await action();
+		}
+		catch (TException)
+		{
+			return;
+		}
+		throw new InvalidOperationException($"Assertion failed: expected {typeof(TException).Name}");
 	}
 
 	static void AssertTrue(bool condition, string message)

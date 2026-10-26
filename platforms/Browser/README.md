@@ -31,7 +31,7 @@ See the [package README](src/Browser.Essentials/README.md) for the full API supp
 ## Highlights
 
 - **Preferences** — `localStorage`, with shared-name containers
-- **SecureStorage** — AES-GCM-256 via WebCrypto; the non-extractable key lives in IndexedDB
+- **SecureStorage** — not supported; all operations throw `PlatformNotSupportedException` (apps can register their own `ISecureStorage`)
 - **Clipboard, Share, Launcher, Browser** — async Clipboard API, Web Share (incl. Level 2 file sharing), `window.open` and `mailto:`/`tel:`/`sms:` protocol handlers
 - **Device APIs** — device/display/app info, connectivity, battery, vibration, haptics, wake lock (`KeepScreenOn`)
 - **Geolocation & sensors** — `navigator.geolocation`, accelerometer/gyroscope/orientation/compass from devicemotion/deviceorientation events
@@ -65,7 +65,7 @@ dotnet run --project platforms/Browser/samples/Browser.Essentials.Sample.Blazor
 
 ## Testing
 
-The test suite runs **inside the browser**: `Browser.Essentials.Tests` publishes the `Browser.Essentials.TestApp` Blazor app, serves it from Kestrel, loads it in headless Chromium via Playwright, and asserts the results of the in-browser tests (which exercise real `localStorage`, WebCrypto, clipboard, geolocation, and `fetch`).
+The test suite runs **inside the browser**: `Browser.Essentials.Tests` publishes the `Browser.Essentials.TestApp` Blazor app, serves it from Kestrel, loads it in headless Chromium via Playwright, and asserts the results of the in-browser tests (which exercise real `localStorage`, clipboard, geolocation, and `fetch`).
 
 ```bash
 dotnet test platforms/Browser/tests/Browser.Essentials.Tests

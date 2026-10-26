@@ -4,42 +4,23 @@ using Microsoft.Maui.Storage;
 namespace Microsoft.Maui.Platforms.Browser.Essentials;
 
 /// <summary>
-/// Secure storage backed by localStorage with AES-GCM encryption via WebCrypto.
-/// The encryption key is non-extractable and lives in IndexedDB, so stored values
-/// are unreadable outside this origin's browser context. This is best-effort:
-/// any script running on the same origin can decrypt values, and clearing site
-/// data destroys the key (existing values then read as null).
+/// The .NET MAUI <see cref="Microsoft.Maui.Storage.SecureStorage"/> API is not supported in the browser.
+/// All storage operations throw <see cref="PlatformNotSupportedException"/>.
 /// </summary>
 [SupportedOSPlatform("browser")]
 public class BrowserSecureStorage : ISecureStorage
 {
-	const string KeyPrefix = "maui:securestorage:";
+	const string UnsupportedMessage = "The .NET MAUI Microsoft.Maui.Storage.SecureStorage API is not supported in the browser.";
 
-	public async Task<string?> GetAsync(string key)
-	{
-		await BrowserEssentials.WhenInitializedAsync().ConfigureAwait(false);
-		return await BrowserEssentialsInterop.SecureGet(KeyPrefix + key).ConfigureAwait(false);
-	}
+	public Task<string?> GetAsync(string key)
+		=> throw new PlatformNotSupportedException(UnsupportedMessage);
 
-	public async Task SetAsync(string key, string value)
-	{
-		await BrowserEssentials.WhenInitializedAsync().ConfigureAwait(false);
-		await BrowserEssentialsInterop.SecureSet(KeyPrefix + key, value).ConfigureAwait(false);
-	}
+	public Task SetAsync(string key, string value)
+		=> throw new PlatformNotSupportedException(UnsupportedMessage);
 
 	public bool Remove(string key)
-	{
-		BrowserEssentials.EnsureInitialized();
-		var storageKey = KeyPrefix + key;
-		var exists = BrowserEssentialsInterop.PrefGet(storageKey) is not null;
-		BrowserEssentialsInterop.PrefRemove(storageKey);
-		return exists;
-	}
+		=> throw new PlatformNotSupportedException(UnsupportedMessage);
 
 	public void RemoveAll()
-	{
-		BrowserEssentials.EnsureInitialized();
-		foreach (var storageKey in BrowserEssentialsInterop.PrefKeys(KeyPrefix))
-			BrowserEssentialsInterop.PrefRemove(storageKey);
-	}
+		=> throw new PlatformNotSupportedException(UnsupportedMessage);
 }

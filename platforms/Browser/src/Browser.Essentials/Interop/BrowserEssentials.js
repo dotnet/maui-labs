@@ -28,51 +28,7 @@ export function prefKeys(prefix) {
 	return keys;
 }
 
-// ---------- Secure storage (AES-GCM via WebCrypto, key in IndexedDB) ----------
-
-const CRYPTO_DB = 'maui-essentials';
-const CRYPTO_STORE = 'crypto-keys';
-const CRYPTO_KEY_ID = 'securestorage-aes-gcm';
-let cachedCryptoKey = null;
-
-function openCryptoDb() {
-	return new Promise((resolve, reject) => {
-		const req = globalThis.indexedDB.open(CRYPTO_DB, 1);
-		req.onupgradeneeded = () => req.result.createObjectStore(CRYPTO_STORE);
-		req.onsuccess = () => resolve(req.result);
-		req.onerror = () => reject(req.error);
-	});
-}
-
-async function getCryptoKey() {
-	if (cachedCryptoKey)
-		return cachedCryptoKey;
-	const db = await openCryptoDb();
-	try {
-		const existing = await new Promise((resolve, reject) => {
-			const tx = db.transaction(CRYPTO_STORE, 'readonly');
-			const rq = tx.objectStore(CRYPTO_STORE).get(CRYPTO_KEY_ID);
-			rq.onsuccess = () => resolve(rq.result);
-			rq.onerror = () => reject(rq.error);
-		});
-		if (existing) {
-			cachedCryptoKey = existing;
-			return existing;
-		}
-		// Non-extractable: the key material can never be read back out of the browser.
-		const key = await globalThis.crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-		await new Promise((resolve, reject) => {
-			const tx = db.transaction(CRYPTO_STORE, 'readwrite');
-			const rq = tx.objectStore(CRYPTO_STORE).put(key, CRYPTO_KEY_ID);
-			rq.onsuccess = () => resolve();
-			rq.onerror = () => reject(rq.error);
-		});
-		cachedCryptoKey = key;
-		return key;
-	} finally {
-		db.close();
-	}
-}
+// ---------- Base64 helpers ----------
 
 function bytesToBase64(bytes) {
 	let binary = '';
@@ -88,33 +44,6 @@ function base64ToBytes(base64) {
 	for (let i = 0; i < binary.length; i++)
 		bytes[i] = binary.charCodeAt(i);
 	return bytes;
-}
-
-export async function secureSet(key, value) {
-	const cryptoKey = await getCryptoKey();
-	const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-	const ciphertext = await globalThis.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, new TextEncoder().encode(value));
-	const buf = new Uint8Array(iv.length + ciphertext.byteLength);
-	buf.set(iv);
-	buf.set(new Uint8Array(ciphertext), iv.length);
-	globalThis.localStorage.setItem(key, bytesToBase64(buf));
-}
-
-export async function secureGet(key) {
-	const stored = globalThis.localStorage.getItem(key);
-	if (stored === null)
-		return null;
-	try {
-		const buf = base64ToBytes(stored);
-		const iv = buf.subarray(0, 12);
-		const ciphertext = buf.subarray(12);
-		const cryptoKey = await getCryptoKey();
-		const plaintext = await globalThis.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext);
-		return new TextDecoder().decode(plaintext);
-	} catch {
-		// Key lost (e.g. IndexedDB cleared) or value corrupt — treat as missing.
-		return null;
-	}
 }
 
 // ---------- Clipboard ----------

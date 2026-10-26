@@ -6,8 +6,7 @@ namespace Microsoft.Maui.Platforms.Browser.Essentials;
 /// <summary>
 /// File system rooted in the in-memory WebAssembly (Emscripten) VFS. Data written to
 /// <see cref="AppDataDirectory"/> and <see cref="CacheDirectory"/> does NOT persist
-/// across page reloads — use <see cref="Storage.IPreferences"/> or
-/// <see cref="Storage.ISecureStorage"/> for durable state.
+/// across page reloads — use <see cref="Storage.IPreferences"/> for durable state.
 /// App package files are fetched over HTTP relative to the document base URL
 /// (in Blazor WebAssembly, files under wwwroot).
 /// </summary>

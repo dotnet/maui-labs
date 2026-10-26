@@ -6,7 +6,7 @@
     <AssemblyName>Microsoft.Maui.Platforms.Browser.Essentials</AssemblyName>
     <PackageId>Microsoft.Maui.Platforms.Browser.Essentials</PackageId>
     <Version>$(PlatformMauiBrowserEssentialsVersion)</Version>
-    <Description>MAUI Essentials implementations for the browser (WebAssembly) — preferences, secure storage, clipboard, geolocation, sensors, and more using standard web APIs via [JSImport] interop. Works in Blazor WebAssembly and plain wasm browser apps.</Description>
+    <Description>MAUI Essentials implementations for the browser (WebAssembly) — preferences, clipboard, geolocation, sensors, and more using standard web APIs via [JSImport] interop. Works in Blazor WebAssembly and plain wasm browser apps.</Description>
     <PackageTags>maui;browser;wasm;webassembly;blazor;essentials;clipboard;preferences</PackageTags>
     <IsPackable>true</IsPackable>
     <IsShipping>true</IsShipping>

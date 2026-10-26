@@ -21,13 +21,6 @@ internal static partial class BrowserEssentialsInterop
 	[JSImport("prefKeys", Module)]
 	internal static partial string[] PrefKeys(string prefix);
 
-	// Secure storage
-	[JSImport("secureSet", Module)]
-	internal static partial Task SecureSet(string key, string value);
-
-	[JSImport("secureGet", Module)]
-	internal static partial Task<string?> SecureGet(string key);
-
 	// Clipboard
 	[JSImport("clipboardWriteText", Module)]
 	internal static partial Task ClipboardWriteText(string text);

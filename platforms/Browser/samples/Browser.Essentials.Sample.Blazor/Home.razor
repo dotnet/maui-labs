@@ -8,7 +8,6 @@
 @using Microsoft.Maui.Networking
 @using Microsoft.Maui.Storage
 @inject IPreferences Preferences
-@inject ISecureStorage SecureStorage
 @inject IClipboard Clipboard
 @inject IConnectivity Connectivity
 @inject IDeviceInfo DeviceInfo
@@ -42,11 +41,8 @@
 </section>
 
 <section>
-    <h2>Secure storage (AES-GCM)</h2>
-    <input @bind="secureValue" placeholder="secret" />
-    <button @onclick="SaveSecure">Save</button>
-    <button @onclick="LoadSecure">Load</button>
-    <output>@secureStatus</output>
+    <h2>Secure storage</h2>
+    <p>The .NET MAUI Microsoft.Maui.Storage.SecureStorage API is not supported in the browser.</p>
 </section>
 
 <section>
@@ -107,8 +103,6 @@
 @code {
     string prefValue = "hello from localStorage";
     string prefStatus = "";
-    string secureValue = "s3cret";
-    string secureStatus = "";
     string clipboardValue = "copied from MAUI Essentials";
     string clipboardStatus = "";
     string infoStatus = "";
@@ -130,15 +124,6 @@
 
     void LoadPref() =>
         prefStatus = $"loaded: '{Preferences.Get("sample-key", "(not set)")}'";
-
-    async Task SaveSecure()
-    {
-        await SecureStorage.SetAsync("sample-secret", secureValue);
-        secureStatus = "saved (encrypted)";
-    }
-
-    async Task LoadSecure() =>
-        secureStatus = $"loaded: '{await SecureStorage.GetAsync("sample-secret") ?? "(not set)"}'";
 
     async Task CopyText()
     {
