@@ -520,7 +520,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
     void OnItemMeasureInvalidated(object? sender, EventArgs args)
     {
-        if (_isInLayout || _isReloading || sender is not VisualElement visualElement ||
+        if (_isReloading || sender is not VisualElement visualElement ||
             !_measuredItemViews.TryGetValue(visualElement, out var index) ||
             index < 0 || index >= _flatItems.Count)
             return;

@@ -152,24 +152,32 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
         var previousListHeight = native.Bounds.Height;
         var previousRowHeight = resizedRow.HeightRequest;
         var resizedRowHeight = previousRowHeight + 34;
+        var measureInvalidationCount = 0;
+        resizedRow.MeasureInvalidated += OnResizedRowMeasureInvalidated;
         resizedRow.HeightRequest = resizedRowHeight;
         var resizedImage = await CaptureAsync(context, nativeWindow, "resized.png");
+        resizedRow.MeasureInvalidated -= OnResizedRowMeasureInvalidated;
         var expectedListHeight = previousListHeight + resizedRowHeight - previousRowHeight;
         context.WriteJson("resized.json", new
         {
             previousListHeight,
             previousRowHeight,
             resizedRowHeight,
+            measureInvalidationCount,
             listHeight = native.Bounds.Height,
             rowBounds = nativeResizedRow.Bounds.ToString(),
             rowFrame = nativeResizedRow.Frame.ToString(),
         });
+        context.Assert(measureInvalidationCount > 0,
+            "Changing a row's requested height invalidates its measurement.");
         context.Assert(Math.Abs(nativeResizedRow.Frame.Height - resizedRowHeight) < 1,
             "A measured row updates its native height after its requested size changes.");
         context.Assert(Math.Abs(native.Bounds.Height - expectedListHeight) < 1,
             "The content-sized document extent includes a later measured-row size change.");
         context.Assert(CountPixels(resizedImage, nativeWindow, Native(_labels[0]), cyan: false) > 5,
             "The resized row remains visibly rendered after its measurement changes.");
+
+        void OnResizedRowMeasureInvalidated(object? sender, EventArgs args) => measureInvalidationCount++;
 
         var settled = false;
         var previous = (ObservedCollectionViewHandler.Measures, ObservedCollectionViewHandler.Arranges);
