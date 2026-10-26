@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<uses-sdk android:minSdkVersion="24" android:targetSdkVersion="37" />
+	<uses-permission android:name="android.permission.INTERNET" />
+	<!-- Label comes from the per-variant string resource (Icons/<variant>/strings.xml,
+	     selected by -p:CometSample) so standalone sample apps get their own launcher name. -->
+	<application android:label="@string/comet_app_name" android:theme="@android:style/Theme.Material.Light"></application>
+</manifest>

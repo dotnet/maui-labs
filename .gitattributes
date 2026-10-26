@@ -1,1 +1,4 @@
 .github/workflows/*.lock.yml linguist-generated=true merge=ours
+
+# Keep the native evaluator's authenticated instrument identical across checkouts.
+plugins/dotnet-maui/skills/maui-xcode27-migration/scripts/audit-lifecycle.mjs text eol=lf

@@ -8,22 +8,50 @@ using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Agent.Core.Profiling;
+using Microsoft.Maui.DevFlow.Agent.Windows;
 
 namespace Microsoft.Maui.DevFlow.Agent.WPF;
 
 /// <summary>
 /// WPF-specific agent service with native tap, screenshot, and scroll support for MAUI WPF apps.
 /// </summary>
-public class WpfAgentService : DevFlowAgentService
+public class WpfAgentService : MauiDevFlowAgentService
 {
     public WpfAgentService(AgentOptions? options = null) : base(options) { }
 
-    protected override VisualTreeWalker CreateTreeWalker() => new WpfVisualTreeWalker();
+    internal WpfAgentService(
+        AgentOptions? options,
+        RegisteredNativeElementRegistry nativeElementRegistry,
+        IDisposable nativeElementSubscription)
+        : base(options, nativeElementRegistry, nativeElementSubscription)
+    {
+    }
+
+    protected override VisualTreeWalker CreateTreeWalker()
+        => NativeElementRegistry is null
+            ? new WpfVisualTreeWalker()
+            : new WpfVisualTreeWalker(NativeElementRegistry);
     protected override IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
 
     protected override string PlatformName => "WPF";
     protected override string DeviceTypeName => "Virtual";
     protected override string IdiomName => "Desktop";
+    protected override bool SupportsNativeElementScreenshots => true;
+
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+        // Guard against path traversal: sharedName becomes part of a file name.
+        if (!string.IsNullOrEmpty(sharedName) &&
+            (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+            throw new ArgumentException("sharedName must not contain path separators or '..'.", nameof(sharedName));
+
+        // Mirror WPFPreferences' on-disk layout:
+        // LocalApplicationData / {FriendlyName} / preferences / {shared|default}.json
+        var prefsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            AppDomain.CurrentDomain.FriendlyName, "preferences");
+        return ReadPreferenceFileKeys(Path.Combine(prefsDir, (sharedName ?? "default") + ".json"));
+    }
 
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
@@ -53,27 +81,24 @@ public class WpfAgentService : DevFlowAgentService
 
     protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
     {
-        try
+        var target = element;
+        while (target != null)
         {
-            var target = element;
-            while (target != null)
+            if (target.Handler?.PlatformView is DependencyObject d)
             {
-                if (target.Handler?.PlatformView is DependencyObject d)
+                var scroll = ReferenceEquals(target, element) ? FindDescendant<ScrollViewer>(d) : null;
+                scroll ??= FindAncestor<ScrollViewer>(d);
+                if (scroll != null)
                 {
-                    var scroll = FindAncestor<ScrollViewer>(d);
-                    if (scroll != null)
-                    {
-                        if (deltaX != 0)
-                            scroll.ScrollToHorizontalOffset(Math.Max(0, scroll.HorizontalOffset + deltaX));
-                        if (deltaY != 0)
-                            scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset - deltaY));
-                        return Task.FromResult(true);
-                    }
+                    if (deltaX != 0)
+                        scroll.ScrollToHorizontalOffset(Math.Max(0, scroll.HorizontalOffset + deltaX));
+                    if (deltaY != 0)
+                        scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset - deltaY));
+                    return Task.FromResult(true);
                 }
-                target = target.Parent as VisualElement;
             }
+            target = target.Parent as VisualElement;
         }
-        catch { }
         return Task.FromResult(false);
     }
 
@@ -135,7 +160,7 @@ public class WpfAgentService : DevFlowAgentService
         return false;
     }
 
-    protected override bool TryScheduleNativeTapFirst(VisualElement ve)
+    protected override async Task<bool> TryNativeTapFirstAsync(VisualElement ve)
     {
         try
         {
@@ -145,58 +170,67 @@ public class WpfAgentService : DevFlowAgentService
             var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(buttonBase)
                 ?? System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(buttonBase);
 
-            // Wrap the dispatched lambdas in try/catch: WPF surfaces unhandled
-            // BeginInvoke exceptions through Application.DispatcherUnhandledException,
-            // which can crash the host app if it's not subscribed (or rethrows). The
-            // common cases (button disabled or stale by the time the dispatcher
-            // runs the work) are expected and should be silently dropped.
+            async Task<bool> DispatchInvocationAsync(Action invocation, string actionName)
+            {
+                var completion = new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                var invocationState = 0;
+                _ = buttonBase.Dispatcher.BeginInvoke(() =>
+                {
+                    if (Interlocked.CompareExchange(ref invocationState, 1, 0) != 0)
+                    {
+                        completion.TrySetResult(false);
+                        return;
+                    }
+
+                    try
+                    {
+                        _ = buttonBase.Dispatcher.BeginInvoke(
+                            System.Windows.Threading.DispatcherPriority.Background,
+                            new Action(() => completion.TrySetResult(true)));
+                        invocation();
+                        completion.TrySetResult(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[Microsoft.Maui.DevFlow] WPF native {actionName} skipped: {ex.GetBaseException().Message}");
+                        completion.TrySetResult(false);
+                    }
+                });
+                var winner = await Task.WhenAny(
+                    completion.Task,
+                    Task.Delay(TimeSpan.FromSeconds(5)));
+                if (winner == completion.Task)
+                    return await completion.Task;
+
+                if (Interlocked.CompareExchange(ref invocationState, 2, 0) == 0)
+                {
+                    completion.TrySetResult(false);
+                    return false;
+                }
+
+                // The native invocation already started. Treat it as handled so the
+                // caller does not also fire the managed fallback and execute twice.
+                return true;
+            }
+
             if (peer?.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke)
                 is System.Windows.Automation.Provider.IInvokeProvider invoke)
             {
-                buttonBase.Dispatcher.BeginInvoke(() =>
-                {
-                    try { invoke.Invoke(); }
-                    catch (Exception ex) when (ex is System.Windows.Automation.ElementNotEnabledException
-                                                  or System.Windows.Automation.ElementNotAvailableException
-                                                  or System.Runtime.InteropServices.COMException
-                                                  or InvalidOperationException)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WPF native invoke skipped: {ex.GetBaseException().Message}");
-                    }
-                });
-                return true;
+                return await DispatchInvocationAsync(invoke.Invoke, "invoke");
             }
 
             if (peer?.GetPattern(System.Windows.Automation.Peers.PatternInterface.Toggle)
                 is System.Windows.Automation.Provider.IToggleProvider toggle)
             {
-                buttonBase.Dispatcher.BeginInvoke(() =>
-                {
-                    try { toggle.Toggle(); }
-                    catch (Exception ex) when (ex is System.Windows.Automation.ElementNotEnabledException
-                                                  or System.Windows.Automation.ElementNotAvailableException
-                                                  or System.Runtime.InteropServices.COMException
-                                                  or InvalidOperationException)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WPF native toggle skipped: {ex.GetBaseException().Message}");
-                    }
-                });
-                return true;
+                return await DispatchInvocationAsync(toggle.Toggle, "toggle");
             }
 
-            buttonBase.Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    buttonBase.RaiseEvent(new System.Windows.RoutedEventArgs(ButtonBase.ClickEvent, buttonBase));
-                }
-                catch (Exception ex) when (ex is InvalidOperationException
-                                              or System.Runtime.InteropServices.COMException)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WPF RaiseEvent skipped: {ex.GetBaseException().Message}");
-                }
-            });
-            return true;
+            return await DispatchInvocationAsync(
+                () => buttonBase.RaiseEvent(
+                    new System.Windows.RoutedEventArgs(ButtonBase.ClickEvent, buttonBase)),
+                "raise-event");
         }
         catch { }
 
@@ -224,6 +258,15 @@ public class WpfAgentService : DevFlowAgentService
 
         return null;
     }
+
+    protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+        => Task.FromResult(nativeElement switch
+        {
+            FrameworkElement frameworkElement => CaptureFrameworkElement(frameworkElement),
+            _ => WpfVisualTreeWalker.CaptureNativeElementScreenshot(nativeElement)
+        });
 
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
@@ -256,21 +299,22 @@ public class WpfAgentService : DevFlowAgentService
         return null;
     }
 
-    protected override async Task<byte[]?> CaptureFullScreenAsync()
+    protected override async Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
     {
         try
         {
-            byte[]? bytes = null;
-            var app = System.Windows.Application.Current;
-            if (app?.Dispatcher != null)
+            var index = windowIndex ?? 0;
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?
+                .Windows.ElementAtOrDefault(index);
+            if (mauiWindow?.Handler?.PlatformView is System.Windows.Window window)
             {
-                await app.Dispatcher.InvokeAsync(() =>
-                {
-                    if (app.MainWindow != null)
-                        bytes = CaptureFrameworkElement(app.MainWindow);
-                });
+                var hwnd = await window.Dispatcher.InvokeAsync(
+                    () => new System.Windows.Interop.WindowInteropHelper(window).Handle);
+                return hwnd == IntPtr.Zero
+                    ? null
+                    : await Task.Run(
+                        () => NativeWindowProbe.CaptureCompositedWindowScreenshot(hwnd));
             }
-            return bytes;
         }
         catch { }
         return null;
@@ -320,6 +364,17 @@ public class WpfAgentService : DevFlowAgentService
         {
             return null;
         }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject start) where T : DependencyObject
+    {
+        if (start is T match) return match;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(start); i++)
+        {
+            var matchInChild = FindDescendant<T>(VisualTreeHelper.GetChild(start, i));
+            if (matchInChild != null) return matchInChild;
+        }
+        return null;
     }
 
     private static T? FindAncestor<T>(DependencyObject start) where T : DependencyObject

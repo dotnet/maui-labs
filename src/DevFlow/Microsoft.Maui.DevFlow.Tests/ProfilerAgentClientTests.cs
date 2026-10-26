@@ -118,7 +118,10 @@ public class ProfilerAgentClientTests
             }
         });
 
-        using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", port);
+        using var client = new Microsoft.Maui.DevFlow.Driver.AgentClient("localhost", port)
+        {
+            AutoAcquireMutationLease = false
+        };
 
         var started = await client.StartProfilerAsync(500);
         Assert.NotNull(started);

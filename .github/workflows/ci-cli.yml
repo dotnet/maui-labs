@@ -6,6 +6,7 @@ on:
     paths:
       - '.claude/skills/**'
       - 'src/Cli/**'
+      - 'src/DevFlow/Microsoft.Maui.DevFlow.Client/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
       - 'src/Go/**'
       - 'eng/**'
@@ -20,6 +21,7 @@ on:
     paths:
       - '.claude/skills/**'
       - 'src/Cli/**'
+      - 'src/DevFlow/Microsoft.Maui.DevFlow.Client/**'
       - 'src/DevFlow/Microsoft.Maui.DevFlow.Driver/**'
       - 'src/Go/**'
       - 'eng/**'

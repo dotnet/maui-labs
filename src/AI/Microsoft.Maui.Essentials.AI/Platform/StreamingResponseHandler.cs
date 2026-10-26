@@ -12,28 +12,33 @@ namespace Microsoft.Maui.Essentials.AI;
 /// When a <see cref="StreamChunkerBase"/> is provided, <see cref="ProcessContent"/> expects
 /// cumulative snapshots and the chunker computes deltas (used by Apple Intelligence).
 /// When no chunker is provided, <see cref="ProcessContent"/> expects pre-chunked deltas
-/// and passes them through directly (used by Windows Phi Silica).
+/// and passes them through directly for providers that already emit incremental deltas.
 /// </remarks>
 internal sealed class StreamingResponseHandler
 {
 	private readonly Channel<ChatResponseUpdate> _channel;
 	private readonly StreamChunkerBase? _chunker;
+	private readonly string? _modelId;
 
 	/// <summary>
 	/// Creates a handler that passes content through directly (no chunking).
 	/// Use when the AI model already provides incremental deltas.
 	/// </summary>
-	public StreamingResponseHandler()
+	/// <param name="modelId">Optional provider model identifier to include on every update.</param>
+	public StreamingResponseHandler(string? modelId = null)
 	{
 		_channel = Channel.CreateUnbounded<ChatResponseUpdate>(
 			new UnboundedChannelOptions { SingleReader = true });
+		_modelId = modelId;
 	}
 
 	/// <summary>
 	/// Creates a handler with a chunker for computing deltas from cumulative snapshots.
 	/// Use when the AI model provides progressively longer complete responses.
 	/// </summary>
-	public StreamingResponseHandler(StreamChunkerBase chunker) : this()
+	/// <param name="chunker">The chunker that computes content deltas.</param>
+	/// <param name="modelId">Optional provider model identifier to include on every update.</param>
+	public StreamingResponseHandler(StreamChunkerBase chunker, string? modelId = null) : this(modelId)
 	{
 		_chunker = chunker;
 	}
@@ -54,6 +59,7 @@ internal sealed class StreamingResponseHandler
 			_channel.Writer.TryWrite(new ChatResponseUpdate
 			{
 				Role = ChatRole.Assistant,
+				ModelId = _modelId,
 				Contents = { new TextContent(delta) }
 			});
 		}
@@ -72,6 +78,7 @@ internal sealed class StreamingResponseHandler
 				_channel.Writer.TryWrite(new ChatResponseUpdate
 				{
 					Role = ChatRole.Assistant,
+					ModelId = _modelId,
 					Contents = { new TextContent(pendingContent) }
 				});
 			}
@@ -87,6 +94,7 @@ internal sealed class StreamingResponseHandler
 		_channel.Writer.TryWrite(new ChatResponseUpdate
 		{
 			Role = ChatRole.Assistant,
+			ModelId = _modelId,
 			Contents = { new FunctionCallContent(toolCallId!, toolCallName!, args) { InformationalOnly = true } }
 		});
 	}
@@ -99,14 +107,15 @@ internal sealed class StreamingResponseHandler
 		_channel.Writer.TryWrite(new ChatResponseUpdate
 		{
 			Role = ChatRole.Tool,
+			ModelId = _modelId,
 			Contents = { new FunctionResultContent(toolCallId!, toolCallResult!) }
 		});
 	}
 
 	/// <summary>
-	/// Flushes remaining chunker content and completes the channel successfully.
+	/// Flushes remaining chunker content, emits usage, and completes the channel successfully.
 	/// </summary>
-	public void Complete()
+	public void Complete(UsageDetails? usage = null)
 	{
 		if (_chunker is not null)
 		{
@@ -116,9 +125,19 @@ internal sealed class StreamingResponseHandler
 				_channel.Writer.TryWrite(new ChatResponseUpdate
 				{
 					Role = ChatRole.Assistant,
+					ModelId = _modelId,
 					Contents = { new TextContent(finalChunk) }
 				});
 			}
+		}
+
+		if (usage is not null)
+		{
+			_channel.Writer.TryWrite(new ChatResponseUpdate
+			{
+				ModelId = _modelId,
+				Contents = { new UsageContent(usage) }
+			});
 		}
 
 		_channel.Writer.TryComplete();

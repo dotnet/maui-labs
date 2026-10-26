@@ -26,6 +26,7 @@ public static class WpfAgentServiceExtensions
 
         var project = ReadAssemblyMetadata("Microsoft.Maui.DevFlowProject") ?? "unknown";
         var tfm = ReadAssemblyMetadata("Microsoft.Maui.DevFlowTfm") ?? "unknown";
+        var sessionId = ReadAssemblyMetadata("Microsoft.Maui.DevFlowSessionId");
 
         BrokerRegistration? brokerReg = null;
         bool hasCustomPort = options.Port != AgentOptions.DefaultPort;
@@ -33,7 +34,7 @@ public static class WpfAgentServiceExtensions
         {
             var platform = "WPF";
             var appName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "unknown";
-            brokerReg = new BrokerRegistration(project, tfm, platform, appName);
+            brokerReg = new BrokerRegistration(project, tfm, platform, appName, sessionId);
             if (hasCustomPort)
                 brokerReg.CurrentPort = options.Port;
             var assignedPort = Task.Run(() => brokerReg.TryRegisterAsync(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult();
@@ -57,13 +58,22 @@ public static class WpfAgentServiceExtensions
                 options.Port = metaPort.Value;
         }
 
-        var service = new WpfAgentService(options);
+        var nativeElementRegistry = new RegisteredNativeElementRegistry();
+        var nativeElementDiagnosticSubscriber =
+            new MauiNativeElementDiagnosticSubscriber(nativeElementRegistry);
+        var service = new WpfAgentService(
+            options,
+            nativeElementRegistry,
+            nativeElementDiagnosticSubscriber);
+        service.SetSessionId(sessionId);
         if (brokerReg != null)
         {
             brokerReg.CurrentPort = options.Port;
             service.SetBrokerRegistration(brokerReg);
         }
+        builder.Services.AddSingleton(nativeElementRegistry);
         builder.Services.AddSingleton<DevFlowAgentService>(service);
+        builder.Services.AddSingleton<MauiDevFlowAgentService>(service);
 
         if (options.EnableFileLogging)
         {
@@ -110,7 +120,7 @@ public static class WpfAgentServiceExtensions
                         for (int i = 0; i < 50 && app == null; i++)
                         {
                             await Task.Delay(200);
-                            app = Application.Current;
+                            app = ResolveCurrentApplication();
                         }
                         app?.StartDevFlowAgent();
                     });
@@ -129,10 +139,25 @@ public static class WpfAgentServiceExtensions
         service?.Start(app, app.Dispatcher);
     }
 
-    private static DevFlowAgentService? GetAgentService(Application app)
+    private static MauiDevFlowAgentService? GetAgentService(Application app)
     {
-        try { return app.Handler?.MauiContext?.Services.GetService<DevFlowAgentService>(); }
+        try { return app.Handler?.MauiContext?.Services.GetService<MauiDevFlowAgentService>(); }
         catch { return null; }
+    }
+
+    private static Application? ResolveCurrentApplication()
+    {
+        if (Application.Current is { } current)
+            return current;
+
+        try
+        {
+            return IPlatformApplication.Current?.Application as Application;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string? ReadAssemblyMetadata(string key)

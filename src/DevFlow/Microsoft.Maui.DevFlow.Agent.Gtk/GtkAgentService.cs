@@ -8,16 +8,49 @@ namespace Microsoft.Maui.DevFlow.Agent.Gtk;
 /// <summary>
 /// GTK-specific agent service with native tap and screenshot support for Linux/GTK.
 /// </summary>
-public class GtkAgentService : DevFlowAgentService
+public class GtkAgentService : MauiDevFlowAgentService
 {
     public GtkAgentService(AgentOptions? options = null) : base(options) { }
 
-    protected override VisualTreeWalker CreateTreeWalker() => new GtkVisualTreeWalker();
+    internal GtkAgentService(
+        AgentOptions? options,
+        RegisteredNativeElementRegistry nativeElementRegistry,
+        IDisposable nativeElementSubscription)
+        : base(options, nativeElementRegistry, nativeElementSubscription)
+    {
+    }
+
+    protected override VisualTreeWalker CreateTreeWalker()
+        => NativeElementRegistry is null
+            ? new GtkVisualTreeWalker()
+            : new GtkVisualTreeWalker(NativeElementRegistry);
     protected override IProfilerCollector CreateProfilerCollector() => new RuntimeProfilerCollector();
 
     protected override string PlatformName => "Linux";
     protected override string DeviceTypeName => "Virtual";
     protected override string IdiomName => "Desktop";
+    protected override bool SupportsNativeElementScreenshots => true;
+
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+        // Guard against path traversal: sharedName becomes part of a file name.
+        if (!string.IsNullOrEmpty(sharedName) &&
+            (sharedName.Contains('/') || sharedName.Contains('\\') || sharedName.Contains("..")))
+            throw new ArgumentException("sharedName must not contain path separators or '..'.", nameof(sharedName));
+
+        // Mirror LinuxPreferences' on-disk layout:
+        // $XDG_CONFIG_HOME (or ~/.config) / {FriendlyName} / preferences[.{shared}].json
+        var configDir = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        if (string.IsNullOrEmpty(configDir))
+            configDir = global::System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+
+        var appDir = global::System.IO.Path.Combine(configDir, AppDomain.CurrentDomain.FriendlyName);
+        var fileName = string.IsNullOrEmpty(sharedName)
+            ? "preferences.json"
+            : $"preferences.{sharedName}.json";
+        return ReadPreferenceFileKeys(global::System.IO.Path.Combine(appDir, fileName));
+    }
 
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
@@ -160,6 +193,13 @@ public class GtkAgentService : DevFlowAgentService
         return Task.FromResult<byte[]?>(null);
     }
 
+    protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+        => Task.FromResult(nativeElement is global::Gtk.Widget widget
+            ? CaptureGtkWidget(widget)
+            : null);
+
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
         // Try the standard MAUI API first
@@ -250,7 +290,7 @@ public class GtkAgentService : DevFlowAgentService
         }
     }
 
-    protected override async Task<byte[]?> CaptureFullScreenAsync()
+    protected override async Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
     {
         // Use XDG Desktop Portal Screenshot via DBUS to capture the full screen
         // including all windows (modal dialogs, popups, etc.)

@@ -419,6 +419,11 @@ public class CollectionViewPage : ContentPage
 					FontAttributes = FontAttributes.Bold,
 				};
 				nameLabel.SetBinding(Label.TextProperty, "Name");
+				nameLabel.SetBinding(AutomationIdProperty, "Name");
+				nameLabel.GestureRecognizers.Add(new TapGestureRecognizer
+				{
+					Command = new Command(() => selectedLabel.Text = $"Tapped: {nameLabel.Text}"),
+				});
 
 				var emailLabel = new Label
 				{

@@ -141,6 +141,14 @@ public sealed class PropertySubscription<T> : IReactiveSubscriber, IPropertySubs
 	}
 
 	/// <summary>
+	/// Forces a re-evaluation of a Func-backed subscription. Needed when the compute reads
+	/// state the reactive system can't see (an untracked Peek, an external collection): the
+	/// dependency set never fires, so a data-changed signal (e.g. ListView.ReloadData) must
+	/// re-pull the snapshot explicitly. No-op for static subscriptions.
+	/// </summary>
+	internal void Reevaluate() => Evaluate();
+
+	/// <summary>
 	/// Binds this subscription to a <see cref="View"/> and property name so that
 	/// value changes dispatch to <see cref="View.ViewPropertyChanged"/>.
 	/// Called by <see cref="DatabindingExtensions.SetPropertySubscription{T}"/>.

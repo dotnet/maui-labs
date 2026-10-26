@@ -83,10 +83,12 @@ public class SdkManagerTests : IDisposable
 			Directory.Delete(_tempDir, recursive: true);
 	}
 
-	[Fact]
-	public void SdkManagerPath_FindsVersionedCmdlineToolsLayout()
+	[Theory]
+	[InlineData("cmdline-tools", "16.0")]
+	[InlineData("cmdline-tools", "latest")]
+	public void SdkManagerPath_FindsSupportedLayouts(string directory, string version)
 	{
-		var sdkManagerPath = Path.Combine(_tempDir, "cmdline-tools", "16.0", "bin",
+		var sdkManagerPath = Path.Combine(_tempDir, directory, version, "bin",
 			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
 		Directory.CreateDirectory(Path.GetDirectoryName(sdkManagerPath)!);
 		File.WriteAllText(sdkManagerPath, string.Empty);
@@ -97,11 +99,96 @@ public class SdkManagerTests : IDisposable
 	}
 
 	[Fact]
-	public void ResolveSdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
+	public void SdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
 	{
 		Directory.CreateDirectory(Path.Combine(_tempDir, "cmdline-tools", "latest", "bin"));
 
-		Assert.Null(SdkManager.ResolveSdkManagerPath(_tempDir));
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Null(sdkManager.SdkManagerPath);
+	}
+
+	[Theory]
+	[InlineData("cmdline-tools")]
+	[InlineData("tools")]
+	public void SdkManagerPath_IgnoresUnsupportedLayouts(string directory)
+	{
+		var barePath = Path.Combine(_tempDir, directory, "bin",
+			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
+		Directory.CreateDirectory(Path.GetDirectoryName(barePath)!);
+		File.WriteAllText(barePath, string.Empty);
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Null(sdkManager.SdkManagerPath);
+		Assert.False(sdkManager.IsAvailable);
+	}
+
+	[Fact]
+	public void FindCommandLineTools_ReturnsPathAndRevision_FromSourceProperties()
+	{
+		var toolDir = Path.Combine(_tempDir, "cmdline-tools", "latest");
+		var sdkManagerPath = Path.Combine(toolDir, "bin",
+			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
+		Directory.CreateDirectory(Path.GetDirectoryName(sdkManagerPath)!);
+		File.WriteAllText(sdkManagerPath, string.Empty);
+		File.WriteAllText(Path.Combine(toolDir, "source.properties"),
+			"Pkg.Revision=19.0\nPkg.Path=cmdline-tools;latest\n");
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		var tool = sdkManager.FindCommandLineTools();
+
+		Assert.NotNull(tool);
+		Assert.Equal(sdkManagerPath, tool!.Path);
+		Assert.Equal("19.0", tool.Revision);
+	}
+
+	[Fact]
+	public void FindCommandLineTools_ReturnsNull_WhenSdkPathIsNull()
+	{
+		using var sdkManager = new SdkManager(() => null, () => null);
+
+		Assert.Null(sdkManager.FindCommandLineTools());
+	}
+
+	[Theory]
+	[InlineData("latest", "19.0", "latest", "19.0")]
+	[InlineData("18.0", "23.0", "18.0", "23.0")]
+	[InlineData("18.0", null, "20.0", "20.0")]
+	public void FindCommandLineTools_PrefersLatestThenMetadataRevision(
+		string otherDirectory, string? otherRevision, string expectedDirectory, string expectedRevision)
+	{
+		var executable = OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager";
+		foreach (var (directory, revision) in new[] { ("20.0", "20.0"), (otherDirectory, otherRevision) })
+		{
+			var toolDir = Path.Combine(_tempDir, "cmdline-tools", directory);
+			Directory.CreateDirectory(Path.Combine(toolDir, "bin"));
+			File.WriteAllText(Path.Combine(toolDir, "bin", executable), string.Empty);
+			if (revision is not null)
+				File.WriteAllText(Path.Combine(toolDir, "source.properties"), $"Pkg.Revision={revision}\n");
+		}
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		var tool = sdkManager.FindCommandLineTools();
+
+		Assert.NotNull(tool);
+		Assert.Equal(Path.Combine(_tempDir, "cmdline-tools", expectedDirectory, "bin", executable), tool.Path);
+		Assert.Equal(expectedRevision, tool.Revision);
+		Assert.Equal(tool.Path, sdkManager.SdkManagerPath);
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("")]
+	[InlineData(" ")]
+	public async Task EnsureLatestCommandLineToolsAsync_Throws_OnInvalidTargetPath(string? targetPath)
+	{
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		await Assert.ThrowsAnyAsync<ArgumentException>(
+			() => sdkManager.EnsureLatestCommandLineToolsAsync(targetPath!));
 	}
 }
 
@@ -167,6 +254,38 @@ public class AndroidProviderTests
 
 			if (Directory.Exists(tempSdk))
 				Directory.Delete(tempSdk, recursive: true);
+		}
+	}
+
+	[Theory]
+	[InlineData("23.0")]
+	[InlineData(null)]
+	public async Task CheckHealthAsync_ReportsResolvedCommandLineTools(string? revision)
+	{
+		var tempSdk = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		var toolDir = Path.Combine(tempSdk, "cmdline-tools", "latest");
+		var executable = OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager";
+		var toolPath = Path.Combine(toolDir, "bin", executable);
+		Directory.CreateDirectory(Path.GetDirectoryName(toolPath)!);
+		File.WriteAllText(toolPath, string.Empty);
+		if (revision is not null)
+			File.WriteAllText(Path.Combine(toolDir, "source.properties"), $"Pkg.Revision={revision}\n");
+
+		try
+		{
+			using var provider = new AndroidProvider(new StubJdkManager());
+			provider.OverrideSdkPath(tempSdk);
+
+			var checks = await provider.CheckHealthAsync();
+
+			var manager = Assert.Single(checks, c => c.Name == "SDK Manager");
+			Assert.Equal(CheckStatus.Ok, manager.Status);
+			Assert.Equal(toolPath, manager.Details!["path"]!.GetValue<string>());
+			Assert.Equal(revision, manager.Details["revision"]?.GetValue<string>());
+		}
+		finally
+		{
+			Directory.Delete(tempSdk, recursive: true);
 		}
 	}
 

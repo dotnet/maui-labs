@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
@@ -45,11 +46,19 @@ namespace Microsoft.Maui.Handlers.WPF
 		readonly WBorder _flyoutOverlay;
 		readonly global::System.Windows.Controls.DockPanel _toolbar;
 		readonly global::System.Windows.Controls.StackPanel _toolbarItemsPanel;
+		readonly HashSet<DependencyObject> _registeredNativeElements = new();
+		readonly Dictionary<ShellItem, FlyoutTemplateView> _flyoutTemplateItems = new();
+		FlyoutTemplateView? _flyoutHeader;
+		FlyoutTemplateView? _flyoutFooter;
+		Microsoft.Maui.Controls.Page? _backButtonOwner;
 		bool _flyoutOpen;
+		bool _updatingTabs;
 		FlyoutBehavior _currentBehavior = FlyoutBehavior.Flyout;
 
 		public Action<ShellItem>? OnShellItemSelected { get; set; }
+		internal Action<ShellSection>? OnShellSectionSelected { get; set; }
 		public Action? OnBackButtonClicked { get; set; }
+		public Action<bool>? OnFlyoutOpenChanged { get; set; }
 		public IMauiContext? MauiContext { get; set; }
 
 		public ShellContainerView()
@@ -173,7 +182,13 @@ namespace Microsoft.Maui.Handlers.WPF
 			Children.Add(mainGrid);
 		}
 
-		void TabControl_SelectionChanged(object sender, global::System.Windows.Controls.SelectionChangedEventArgs e) { }
+		void TabControl_SelectionChanged(object sender, global::System.Windows.Controls.SelectionChangedEventArgs e)
+		{
+			if (!_updatingTabs && ReferenceEquals(e.OriginalSource, _tabControl) &&
+				e.AddedItems.Count > 0 &&
+				_tabControl.SelectedItem is global::System.Windows.Controls.TabItem { Tag: ShellSection section })
+				OnShellSectionSelected?.Invoke(section);
+		}
 
 		static bool IsDarkTheme()
 		{
@@ -237,11 +252,15 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public void ToggleFlyout(bool open)
 		{
-			if (_currentBehavior == FlyoutBehavior.Locked)
-				return; // Locked flyout cannot be toggled
+			if (_currentBehavior == FlyoutBehavior.Locked
+				|| _currentBehavior == FlyoutBehavior.Disabled && open)
+				return;
+			if (_flyoutOpen == open)
+				return;
 			_flyoutOpen = open;
 			_flyoutPanel.Visibility = open ? WVisibility.Visible : WVisibility.Collapsed;
 			_flyoutOverlay.Visibility = open ? WVisibility.Visible : WVisibility.Collapsed;
+			OnFlyoutOpenChanged?.Invoke(open);
 		}
 
 		public void SetFlyoutBehavior(FlyoutBehavior behavior)
@@ -250,9 +269,13 @@ namespace Microsoft.Maui.Handlers.WPF
 			switch (behavior)
 			{
 				case FlyoutBehavior.Disabled:
+					var wasOpen = _flyoutOpen;
 					_hamburgerButton.Visibility = WVisibility.Collapsed;
 					_flyoutPanel.Visibility = WVisibility.Collapsed;
+					_flyoutOverlay.Visibility = WVisibility.Collapsed;
 					_flyoutOpen = false;
+					if (wasOpen)
+						OnFlyoutOpenChanged?.Invoke(false);
 					break;
 				case FlyoutBehavior.Flyout:
 					_hamburgerButton.Visibility = WVisibility.Visible;
@@ -260,10 +283,13 @@ namespace Microsoft.Maui.Handlers.WPF
 						_flyoutPanel.Visibility = WVisibility.Collapsed;
 					break;
 				case FlyoutBehavior.Locked:
+					var wasClosed = !_flyoutOpen;
 					_hamburgerButton.Visibility = WVisibility.Collapsed;
 					_flyoutPanel.Visibility = WVisibility.Visible;
 					_flyoutOverlay.Visibility = WVisibility.Collapsed;
 					_flyoutOpen = true;
+					if (wasClosed)
+						OnFlyoutOpenChanged?.Invoke(true);
 					break;
 			}
 		}
@@ -295,89 +321,21 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public void BuildFlyoutItems(Shell shell)
 		{
-			_flyoutItems.Children.Clear();
-			_tabControl.Items.Clear();
+			UnregisterNativeElements();
+			RegisterNativeElement(shell, _hamburgerButton, "ShellFlyoutToggle");
+			UpdateBackButtonRegistration(shell.CurrentPage);
 
-			// Render FlyoutHeader template
-			if (shell.FlyoutHeaderTemplate != null && MauiContext != null)
-			{
-				try
-				{
-					var headerContent = shell.FlyoutHeaderTemplate.CreateContent();
-					if (headerContent is View headerView)
-					{
-						headerView.BindingContext = shell.FlyoutHeader ?? shell.BindingContext;
-
-						// Build native WPF header to avoid MAUI LayoutPanel sizing issues.
-						// The header template is typically a Grid with an Image centered.
-						var nativeHeader = BuildNativeHeader(headerView);
-						if (nativeHeader != null)
-						{
-							_flyoutHeaderHost.Content = nativeHeader;
-						}
-						else
-						{
-							var platformHeader = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)headerView, MauiContext);
-							if (platformHeader is FrameworkElement fe)
-							{
-								// Force explicit height from the view's RowDefinitions or HeightRequest
-								double h = headerView.HeightRequest;
-								if (double.IsNaN(h) || h <= 0)
-									h = 120; // default flyout header height
-								fe.Height = h;
-							}
-							_flyoutHeaderHost.Content = platformHeader;
-						}
-					}
-				}
-				catch { }
-			}
-			else if (shell.FlyoutHeader is View headerFallback && MauiContext != null)
-			{
-				try
-				{
-					var platformHeader = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)headerFallback, MauiContext);
-					_flyoutHeaderHost.Content = platformHeader;
-				}
-				catch { }
-			}
-
-			// Render FlyoutFooter template
-			if (shell.FlyoutFooterTemplate != null && MauiContext != null)
-			{
-				try
-				{
-					var footerContent = shell.FlyoutFooterTemplate.CreateContent();
-					if (footerContent is View footerView)
-					{
-						footerView.BindingContext = shell.FlyoutFooter ?? shell.BindingContext;
-
-						// Build a native WPF rendering of the footer for reliable layout.
-						// The MAUI LayoutPanel can miscalculate positions in constrained areas.
-						var nativeFooter = BuildNativeFooter(footerView);
-						if (nativeFooter != null)
-						{
-							_flyoutFooterHost.Content = nativeFooter;
-						}
-						else
-						{
-							var platformFooter = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)footerView, MauiContext);
-							if (platformFooter is FrameworkElement fe)
-								fe.MinHeight = 80;
-							_flyoutFooterHost.Content = platformFooter;
-						}
-					}
-				}
-				catch { }
-			}
+			UpdateFlyoutTemplate(shell, header: true);
+			UpdateFlyoutTemplate(shell, header: false);
 
 			bool hasFlyoutItems = false;
-			bool hasTabs = false;
 			var itemTemplate = shell.ItemTemplate;
+			var nativeItems = new List<FrameworkElement>();
+			var retainedItems = new HashSet<ShellItem>();
 
 			foreach (var item in shell.Items)
 			{
-				if (item.FlyoutItemIsVisible)
+				if (item is not TabBar && item.FlyoutItemIsVisible)
 				{
 					hasFlyoutItems = true;
 					var capturedItem = item;
@@ -387,15 +345,29 @@ namespace Microsoft.Maui.Handlers.WPF
 					// Try to use the Shell.ItemTemplate (CustomFlyoutItem)
 					if (itemTemplate != null && MauiContext != null)
 					{
+						View? pendingView = null;
 						try
 						{
 							var resolved = itemTemplate;
 							if (itemTemplate is Microsoft.Maui.Controls.DataTemplateSelector selector)
 								resolved = selector.SelectTemplate(item, shell);
 
+							if (_flyoutTemplateItems.TryGetValue(item, out var existing))
+							{
+								if (existing.Matches(itemTemplate, resolved, item))
+								{
+									nativeItems.Add(existing.Native);
+									retainedItems.Add(item);
+									RegisterNativeElement(item, existing.Native, "ShellFlyout");
+									continue;
+								}
+								ReleaseFlyoutItem(item);
+							}
+
 							var content = resolved?.CreateContent() as View;
 							if (content != null)
 							{
+								pendingView = content;
 								content.BindingContext = item;
 								var platformItem = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)content, MauiContext);
 								// Use Button instead of Border for UIAutomation InvokePattern support
@@ -408,18 +380,35 @@ namespace Microsoft.Maui.Handlers.WPF
 									Padding = new WThickness(0, 4, 0, 4),
 									HorizontalContentAlignment = WHorizontalAlignment.Stretch,
 								};
-								container.Click += (s, e) =>
+								RoutedEventHandler onClick = (s, e) =>
 								{
 									OnShellItemSelected?.Invoke(capturedItem);
 									if (_currentBehavior != FlyoutBehavior.Locked)
 										ToggleFlyout(false);
 								};
+								container.Click += onClick;
+								_flyoutTemplateItems.Add(item, new FlyoutTemplateView(itemTemplate, resolved, item, content, container, onClick));
+								pendingView = null;
+								retainedItems.Add(item);
 								itemElement = container;
-								_flyoutItems.Children.Add(itemElement);
+								nativeItems.Add(itemElement);
+								RegisterNativeElement(capturedItem, itemElement, "ShellFlyout");
 								continue;
 							}
 						}
-						catch { }
+						catch (Exception ex)
+						{
+							MauiContext.Services.GetService<ILogger<ShellContainerView>>()?
+								.LogError(ex, "Creating Shell flyout item template failed.");
+						}
+						finally
+						{
+							if (pendingView != null)
+							{
+								FlyoutTemplateView.DisconnectView(pendingView);
+								pendingView.BindingContext = null;
+							}
+						}
 					}
 
 					// Fallback: simple button with icon if available
@@ -475,18 +464,22 @@ namespace Microsoft.Maui.Handlers.WPF
 						if (_currentBehavior != FlyoutBehavior.Locked)
 							ToggleFlyout(false);
 					};
-					_flyoutItems.Children.Add(btn);
+					nativeItems.Add(btn);
+					RegisterNativeElement(capturedItem, btn, "ShellFlyout");
 				}
+			}
 
-				if (item.Items.Count > 1)
-				{
-					hasTabs = true;
-					foreach (var section in item.Items)
-					{
-						var tabItem = new global::System.Windows.Controls.TabItem { Header = section.Title ?? section.Route ?? "Tab", Tag = section };
-						_tabControl.Items.Add(tabItem);
-					}
-				}
+			foreach (var removed in _flyoutTemplateItems.Keys.Except(retainedItems).ToArray())
+				ReleaseFlyoutItem(removed);
+			foreach (var removed in _flyoutItems.Children.Cast<FrameworkElement>().Except(nativeItems).ToArray())
+				_flyoutItems.Children.Remove(removed);
+			for (var index = 0; index < nativeItems.Count; index++)
+			{
+				var native = nativeItems[index];
+				if (index < _flyoutItems.Children.Count && ReferenceEquals(_flyoutItems.Children[index], native))
+					continue;
+				_flyoutItems.Children.Remove(native);
+				_flyoutItems.Children.Insert(index, native);
 			}
 
 			if (hasFlyoutItems)
@@ -494,16 +487,289 @@ namespace Microsoft.Maui.Handlers.WPF
 			else
 				SetFlyoutBehavior(FlyoutBehavior.Disabled);
 
-			_tabControl.Visibility = hasTabs ? WVisibility.Visible : WVisibility.Collapsed;
+			UpdateTabs(shell);
 
 			// Apply theme after building items
 			UpdateFlyoutTheme();
 			UpdateToolbarTheme();
 		}
 
+		void UpdateFlyoutTemplate(Shell shell, bool header)
+		{
+			var host = header ? _flyoutHeaderHost : _flyoutFooterHost;
+			var cached = header ? _flyoutHeader : _flyoutFooter;
+			var template = header ? shell.FlyoutHeaderTemplate : shell.FlyoutFooterTemplate;
+			var data = header ? shell.FlyoutHeader : shell.FlyoutFooter;
+			var context = data ?? shell.BindingContext;
+			if (MauiContext == null)
+				return;
+
+			View? pendingView = null;
+			var refreshProjection = new List<Action>();
+			var disconnectProjection = new List<Action>();
+			try
+			{
+				var resolved = template is Microsoft.Maui.Controls.DataTemplateSelector selector
+					? selector.SelectTemplate(context, shell) : template;
+				if (cached != null && cached.Matches(template, resolved, context))
+				{
+					cached.RefreshProjection();
+					return;
+				}
+				if (cached == null && template == null && header && data is View existingFallback &&
+					existingFallback.Handler?.PlatformView is FrameworkElement existingNative &&
+					ReferenceEquals(host.Content, existingNative))
+					return;
+
+				host.Content = null;
+				cached?.Disconnect();
+				if (header)
+					_flyoutHeader = null;
+				else
+					_flyoutFooter = null;
+
+				if (resolved?.CreateContent() is View view)
+				{
+					pendingView = view;
+					view.BindingContext = context;
+					var native = header ? BuildNativeHeader(view, refreshProjection)
+						: BuildNativeFooter(view, refreshProjection, disconnectProjection);
+					if (native == null)
+					{
+						native = (FrameworkElement)Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)view, MauiContext);
+						if (header)
+							native.Height = view.HeightRequest > 0 ? view.HeightRequest : 120;
+						else
+							native.MinHeight = 80;
+					}
+					host.Content = native;
+					var rendered = new FlyoutTemplateView(template, resolved, context, view, native,
+						refreshProjection: refreshProjection, disconnectProjection: disconnectProjection);
+					if (header)
+						_flyoutHeader = rendered;
+					else
+						_flyoutFooter = rendered;
+					pendingView = null;
+				}
+				else if (template == null && header && data is View fallback)
+					host.Content = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)fallback, MauiContext);
+			}
+			catch (Exception ex)
+			{
+				MauiContext.Services.GetService<ILogger<ShellContainerView>>()?
+					.LogError(ex, "Creating Shell flyout {Surface} template failed.", header ? "header" : "footer");
+			}
+			finally
+			{
+				if (pendingView != null)
+				{
+					foreach (var disconnect in disconnectProjection)
+						disconnect();
+					FlyoutTemplateView.DisconnectView(pendingView);
+					pendingView.BindingContext = null;
+				}
+			}
+		}
+
+		void ReleaseFlyoutItem(ShellItem item)
+		{
+			if (_flyoutTemplateItems.Remove(item, out var cached))
+			{
+				_flyoutItems.Children.Remove(cached.Native);
+				cached.Disconnect();
+			}
+		}
+
+		internal void ClearFlyoutTemplates()
+		{
+			if (_flyoutHeader != null)
+				_flyoutHeaderHost.Content = null;
+			if (_flyoutFooter != null)
+				_flyoutFooterHost.Content = null;
+			_flyoutHeader?.Disconnect();
+			_flyoutFooter?.Disconnect();
+			_flyoutHeader = null;
+			_flyoutFooter = null;
+			foreach (var item in _flyoutTemplateItems.Keys.ToArray())
+				ReleaseFlyoutItem(item);
+		}
+
+		sealed class FlyoutTemplateView(
+			Microsoft.Maui.Controls.DataTemplate? template,
+			Microsoft.Maui.Controls.DataTemplate? resolvedTemplate,
+			object? context, View view, FrameworkElement native, RoutedEventHandler? onClick = null,
+			List<Action>? refreshProjection = null, List<Action>? disconnectProjection = null)
+		{
+			public FrameworkElement Native { get; } = native;
+
+			public bool Matches(Microsoft.Maui.Controls.DataTemplate? candidate,
+				Microsoft.Maui.Controls.DataTemplate? resolved, object? data)
+				=> ReferenceEquals(template, candidate) && ReferenceEquals(resolvedTemplate, resolved) && ReferenceEquals(context, data);
+
+			public void RefreshProjection()
+			{
+				if (refreshProjection != null)
+					foreach (var refresh in refreshProjection)
+						refresh();
+			}
+
+			public void Disconnect()
+			{
+				if (Native is WButton button && onClick != null)
+					button.Click -= onClick;
+				if (disconnectProjection != null)
+					foreach (var disconnect in disconnectProjection)
+						disconnect();
+				DisconnectView(view);
+				view.BindingContext = null;
+			}
+
+			internal static void DisconnectView(IVisualTreeElement element)
+			{
+				foreach (var child in element.GetVisualChildren())
+					DisconnectView(child);
+				if (element is IElement { Handler: { } handler } mauiElement)
+				{
+					handler.DisconnectHandler();
+					mauiElement.Handler = null;
+				}
+			}
+		}
+
+		public void UpdateTabs(Shell shell)
+		{
+			var item = shell.CurrentItem;
+			var sections = item != null && shell.Items.Contains(item)
+				? ((IShellItemController)item).GetItems().ToArray()
+				: Array.Empty<ShellSection>();
+			bool hasTabs = sections.Length > 1;
+			if (!hasTabs)
+				sections = Array.Empty<ShellSection>();
+
+			_updatingTabs = true;
+			try
+			{
+				var tabs = _tabControl.Items.OfType<global::System.Windows.Controls.TabItem>().ToArray();
+				if (tabs.Length != sections.Length ||
+					tabs.Where((tab, index) => !ReferenceEquals(tab.Tag, sections[index])).Any())
+				{
+					RebuildTabs(sections);
+				}
+				else
+				{
+					foreach (var tab in tabs)
+					{
+						var section = (ShellSection)tab.Tag;
+						tab.Header = section.Title ?? section.Route ?? "Tab";
+						tab.IsEnabled = section.IsEnabled;
+						if (!_registeredNativeElements.Contains(tab))
+							RegisterNativeElement(section, tab, "ShellTab");
+					}
+				}
+				_tabControl.Visibility = hasTabs ? WVisibility.Visible : WVisibility.Collapsed;
+			}
+			finally
+			{
+				_updatingTabs = false;
+			}
+			UpdateTabSelection(shell);
+		}
+
+		void RebuildTabs(IEnumerable<ShellSection> sections)
+		{
+			foreach (global::System.Windows.Controls.TabItem tab in _tabControl.Items)
+			{
+				if (_registeredNativeElements.Remove(tab))
+					NativeElementDiagnosticsBridge.Unregister(tab);
+			}
+			_tabControl.Items.Clear();
+
+			foreach (var section in sections)
+			{
+				var tab = new global::System.Windows.Controls.TabItem
+				{
+					Header = section.Title ?? section.Route ?? "Tab",
+					Tag = section,
+					IsEnabled = section.IsEnabled,
+				};
+				_tabControl.Items.Add(tab);
+				RegisterNativeElement(section, tab, "ShellTab");
+			}
+		}
+
+		internal void UpdateTabIsEnabled(Shell shell, ShellSection section)
+		{
+			var item = shell.CurrentItem;
+			if (item == null || !shell.Items.Contains(item) ||
+				!((IShellItemController)item).GetItems().Contains(section))
+				return;
+
+			var tab = _tabControl.Items.OfType<global::System.Windows.Controls.TabItem>()
+				.FirstOrDefault(tab => ReferenceEquals(tab.Tag, section));
+			if (tab == null)
+				return;
+
+			var updatingTabs = _updatingTabs;
+			_updatingTabs = true;
+			try
+			{
+				tab.IsEnabled = section.IsEnabled;
+			}
+			finally
+			{
+				_updatingTabs = updatingTabs;
+			}
+		}
+
+		internal void UpdateTabSelection(Shell shell)
+		{
+			_updatingTabs = true;
+			try
+			{
+				_tabControl.SelectedItem = _tabControl.Items
+					.OfType<global::System.Windows.Controls.TabItem>()
+					.FirstOrDefault(tab => ReferenceEquals(tab.Tag, shell.CurrentItem?.CurrentItem));
+			}
+			finally
+			{
+				_updatingTabs = false;
+			}
+		}
+
+		void RegisterNativeElement(object owner, DependencyObject nativeElement, string role)
+		{
+			NativeElementDiagnosticsBridge.Register(owner, nativeElement, role);
+			_registeredNativeElements.Add(nativeElement);
+		}
+
+		public void UpdateBackButtonRegistration(Microsoft.Maui.Controls.Page? page)
+		{
+			if (ReferenceEquals(_backButtonOwner, page))
+				return;
+
+			if (_registeredNativeElements.Remove(_backButton))
+				NativeElementDiagnosticsBridge.Unregister(_backButton);
+			_backButtonOwner = page;
+			if (page is not null)
+				RegisterNativeElement(page, _backButton, "BackButton");
+		}
+
+		public void UnregisterNativeElements()
+		{
+			foreach (var nativeElement in _registeredNativeElements)
+				NativeElementDiagnosticsBridge.Unregister(nativeElement);
+			_registeredNativeElements.Clear();
+			_backButtonOwner = null;
+		}
+
 		static void SetIconSource(global::System.Windows.Controls.Image img, Microsoft.Maui.Controls.ImageSource? source, IMauiContext mauiContext)
 		{
 			if (source == null) return;
+			if (source is IFontImageSource fontSource)
+			{
+				img.Source = FontImageSourceHelper.RenderGlyph(fontSource, mauiContext);
+				return;
+			}
 			try
 			{
 				if (source is Microsoft.Maui.Controls.FileImageSource fileSource)
@@ -525,45 +791,6 @@ namespace Microsoft.Maui.Handlers.WPF
 						img.Source = new global::System.Windows.Media.Imaging.BitmapImage(new Uri(fileName, UriKind.RelativeOrAbsolute));
 					}
 				}
-				else if (source is Microsoft.Maui.Controls.FontImageSource fontSource)
-				{
-					// Render font glyph as text in the image's parent
-					if (img.Parent is WGrid grid)
-					{
-						var col = GetColumn(img);
-						grid.Children.Remove(img);
-						var tb = new global::System.Windows.Controls.TextBlock
-						{
-							Text = fontSource.Glyph,
-							FontSize = fontSource.Size > 0 ? fontSource.Size : 16,
-							HorizontalAlignment = WHorizontalAlignment.Center,
-							VerticalAlignment = WVerticalAlignment.Center,
-							Margin = new WThickness(5),
-						};
-						if (fontSource.Color != null)
-						{
-							var c = fontSource.Color;
-							tb.Foreground = new WSolidColorBrush(WColor.FromArgb(
-								(byte)(c.Alpha * 255), (byte)(c.Red * 255),
-								(byte)(c.Green * 255), (byte)(c.Blue * 255)));
-						}
-						if (!string.IsNullOrEmpty(fontSource.FontFamily))
-						{
-							try
-							{
-								var fontManager = mauiContext.Services.GetService<IFontManager>();
-								if (fontManager is WPFFontManager wpfFontManager)
-								{
-									var family = wpfFontManager.GetFontFamily(Microsoft.Maui.Font.OfSize(fontSource.FontFamily, fontSource.Size));
-									tb.FontFamily = family;
-								}
-							}
-							catch { }
-						}
-						SetColumn(tb, col);
-						grid.Children.Add(tb);
-					}
-				}
 			}
 			catch { }
 		}
@@ -574,42 +801,40 @@ namespace Microsoft.Maui.Handlers.WPF
 		/// causing the header image to render at 0x0 or broken coordinates.
 		/// This walks the MAUI view tree and creates native WPF Image controls.
 		/// </summary>
-		FrameworkElement? BuildNativeHeader(View headerView)
+		FrameworkElement? BuildNativeHeader(View headerView, List<Action> refreshProjection)
 		{
 			try
 			{
-				// Determine header height from the view (RowDefinitions="120" in the XAML)
-				double headerHeight = 120;
-				if (headerView.HeightRequest > 0)
-					headerHeight = headerView.HeightRequest;
-				else if (headerView is Microsoft.Maui.Controls.Grid grid && grid.RowDefinitions.Count > 0)
-				{
-					double total = 0;
-					foreach (var rd in grid.RowDefinitions)
-					{
-						if (rd.Height.IsAbsolute)
-							total += rd.Height.Value;
-					}
-					if (total > 0) headerHeight = total;
-				}
-
 				var container = new WGrid
 				{
-					Height = headerHeight,
 					HorizontalAlignment = WHorizontalAlignment.Stretch,
 				};
+				void RefreshHeight()
+				{
+					var height = headerView.HeightRequest;
+					if (!(height > 0) && headerView is Microsoft.Maui.Controls.Grid grid)
+						height = grid.RowDefinitions.Where(row => row.Height.IsAbsolute).Sum(row => row.Height.Value);
+					container.Height = height > 0 ? height : 120;
+				}
+				RefreshHeight();
+				refreshProjection.Add(RefreshHeight);
 
 				// Walk children to find images
-				WalkHeaderView(headerView, container);
+				WalkHeaderView(headerView, container, refreshProjection);
 
 				if (container.Children.Count > 0)
 					return container;
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				refreshProjection.Clear();
+				MauiContext?.Services.GetService<ILogger<ShellContainerView>>()?
+					.LogError(ex, "Creating Shell flyout header projection failed.");
+			}
 			return null;
 		}
 
-		void WalkHeaderView(Microsoft.Maui.Controls.Element element, WGrid container)
+		void WalkHeaderView(Microsoft.Maui.Controls.Element element, WGrid container, List<Action> refreshProjection)
 		{
 			if (element is Microsoft.Maui.Controls.Image img)
 			{
@@ -619,32 +844,34 @@ namespace Microsoft.Maui.Handlers.WPF
 					VerticalAlignment = WVerticalAlignment.Center,
 					Stretch = System.Windows.Media.Stretch.Uniform,
 				};
-				if (img.WidthRequest > 0) wpfImage.Width = img.WidthRequest;
-				if (img.HeightRequest > 0) wpfImage.Height = img.HeightRequest;
-
-				// Resolve image source
-				if (img.Source is Microsoft.Maui.Controls.FileImageSource fis && !string.IsNullOrEmpty(fis.File))
+				string? previousPath = null;
+				void RefreshImage()
 				{
-					var resolvedPath = ImageHandler.ResolveImagePath(fis.File);
+					wpfImage.Width = img.WidthRequest > 0 ? img.WidthRequest : double.NaN;
+					wpfImage.Height = img.HeightRequest > 0 ? img.HeightRequest : double.NaN;
+					var resolvedPath = img.Source is Microsoft.Maui.Controls.FileImageSource fis && !string.IsNullOrEmpty(fis.File)
+						? ImageHandler.ResolveImagePath(fis.File) : null;
+					if (string.Equals(previousPath, resolvedPath, StringComparison.Ordinal))
+						return;
+					wpfImage.Source = null;
 					if (resolvedPath != null)
 					{
-						try
+						if (resolvedPath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+							wpfImage.Source = ImageHandler.RenderSvgToBitmap(resolvedPath);
+						else
 						{
-							if (resolvedPath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
-							{
-								var svgSource = ImageHandler.RenderSvgToBitmap(resolvedPath);
-								if (svgSource != null)
-									wpfImage.Source = svgSource;
-							}
-							else
-							{
-								wpfImage.Source = new System.Windows.Media.Imaging.BitmapImage(
-									new Uri(resolvedPath, UriKind.Absolute));
-							}
+							var bitmap = new global::System.Windows.Media.Imaging.BitmapImage();
+							bitmap.BeginInit();
+							bitmap.CacheOption = global::System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+							bitmap.UriSource = new Uri(resolvedPath, UriKind.Absolute);
+							bitmap.EndInit();
+							wpfImage.Source = bitmap;
 						}
-						catch { }
 					}
+					previousPath = resolvedPath;
 				}
+				RefreshImage();
+				refreshProjection.Add(RefreshImage);
 
 				container.Children.Add(wpfImage);
 				return;
@@ -656,12 +883,12 @@ namespace Microsoft.Maui.Handlers.WPF
 				foreach (var child in layout.Children)
 				{
 					if (child is Microsoft.Maui.Controls.Element childElement)
-						WalkHeaderView(childElement, container);
+						WalkHeaderView(childElement, container, refreshProjection);
 				}
 			}
 			else if (element is Microsoft.Maui.Controls.ContentView cv && cv.Content is Microsoft.Maui.Controls.Element cvContent)
 			{
-				WalkHeaderView(cvContent, container);
+				WalkHeaderView(cvContent, container, refreshProjection);
 			}
 		}
 
@@ -670,7 +897,7 @@ namespace Microsoft.Maui.Handlers.WPF
 		/// This avoids MAUI LayoutPanel positioning issues in constrained flyout areas.
 		/// Looks for Picker controls with ItemsSource and creates a WPF ComboBox.
 		/// </summary>
-		FrameworkElement? BuildNativeFooter(View footerView)
+		FrameworkElement? BuildNativeFooter(View footerView, List<Action> refreshProjection, List<Action> disconnectProjection)
 		{
 			try
 			{
@@ -679,28 +906,42 @@ namespace Microsoft.Maui.Handlers.WPF
 					Margin = new WThickness(15),
 				};
 
-				WalkFooterView(footerView, stack);
+				WalkFooterView(footerView, stack, refreshProjection, disconnectProjection);
 
 				if (stack.Children.Count > 0)
 					return stack;
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				foreach (var disconnect in disconnectProjection)
+					disconnect();
+				disconnectProjection.Clear();
+				refreshProjection.Clear();
+				MauiContext?.Services.GetService<ILogger<ShellContainerView>>()?
+					.LogError(ex, "Creating Shell flyout footer projection failed.");
+			}
 			return null;
 		}
 
-		void WalkFooterView(Microsoft.Maui.Controls.Element element, global::System.Windows.Controls.StackPanel container)
+		void WalkFooterView(Microsoft.Maui.Controls.Element element, global::System.Windows.Controls.StackPanel container,
+			List<Action> refreshProjection, List<Action> disconnectProjection)
 		{
 			if (element is Microsoft.Maui.Controls.Label label)
 			{
-				bool dark = IsDarkTheme();
-				container.Children.Add(new global::System.Windows.Controls.TextBlock
+				var text = new global::System.Windows.Controls.TextBlock
 				{
-					Text = label.Text ?? string.Empty,
-					FontSize = label.FontSize > 0 ? label.FontSize : 14,
 					Margin = new WThickness(0, 0, 0, 4),
-					Foreground = dark ? new WSolidColorBrush(WColor.FromRgb(200, 200, 200))
-									  : new WSolidColorBrush(WColor.FromRgb(60, 60, 60)),
-				});
+				};
+				void RefreshLabel()
+				{
+					text.Text = label.Text ?? string.Empty;
+					text.FontSize = label.FontSize > 0 ? label.FontSize : 14;
+					text.Foreground = IsDarkTheme() ? new WSolidColorBrush(WColor.FromRgb(200, 200, 200))
+						: new WSolidColorBrush(WColor.FromRgb(60, 60, 60));
+				}
+				RefreshLabel();
+				refreshProjection.Add(RefreshLabel);
+				container.Children.Add(text);
 			}
 			else if (element is Microsoft.Maui.Controls.Picker picker)
 			{
@@ -710,38 +951,54 @@ namespace Microsoft.Maui.Handlers.WPF
 					Margin = new WThickness(0, 2, 0, 0),
 				};
 
-				// Populate items
-				if (picker.ItemsSource != null)
+				bool updating = false;
+				bool connected = true;
+				void RefreshPicker()
 				{
-					foreach (var item in picker.ItemsSource)
-						combo.Items.Add(item?.ToString() ?? string.Empty);
+					var items = picker.ItemsSource != null
+						? picker.ItemsSource.Cast<object?>().Select(item => item?.ToString() ?? string.Empty).ToArray()
+						: picker.Items.ToArray();
+					updating = true;
+					try
+					{
+						if (!combo.Items.Cast<string>().SequenceEqual(items))
+						{
+							combo.Items.Clear();
+							foreach (var item in items)
+								combo.Items.Add(item);
+						}
+						if (combo.SelectedIndex != picker.SelectedIndex)
+							combo.SelectedIndex = picker.SelectedIndex;
+					}
+					finally
+					{
+						updating = false;
+					}
 				}
-				else
+				RefreshPicker();
+				refreshProjection.Add(RefreshPicker);
+				SelectionChangedEventHandler onSelectionChanged = (s, e) =>
 				{
-					for (int i = 0; i < picker.Items.Count; i++)
-						combo.Items.Add(picker.Items[i]);
-				}
-
-				// Set initial selection
-				if (picker.SelectedIndex >= 0 && picker.SelectedIndex < combo.Items.Count)
-					combo.SelectedIndex = picker.SelectedIndex;
-
-				// Two-way sync: ComboBox → MAUI Picker
-				combo.SelectionChanged += (s, e) =>
-				{
-					if (combo.SelectedIndex >= 0)
+					if (!updating && combo.SelectedIndex >= 0)
 						picker.SelectedIndex = combo.SelectedIndex;
 				};
-
-				// MAUI Picker → ComboBox (for programmatic changes)
-				picker.PropertyChanged += (s, e) =>
+				System.ComponentModel.PropertyChangedEventHandler onPropertyChanged = (s, e) =>
 				{
 					if (e.PropertyName == nameof(Microsoft.Maui.Controls.Picker.SelectedIndex))
-					{
-						if (combo.SelectedIndex != picker.SelectedIndex && picker.SelectedIndex >= 0)
-							combo.Dispatcher.InvokeAsync(() => combo.SelectedIndex = picker.SelectedIndex);
-					}
+						combo.Dispatcher.InvokeAsync(() =>
+						{
+							if (connected)
+								RefreshPicker();
+						});
 				};
+				combo.SelectionChanged += onSelectionChanged;
+				picker.PropertyChanged += onPropertyChanged;
+				disconnectProjection.Add(() =>
+				{
+					connected = false;
+					combo.SelectionChanged -= onSelectionChanged;
+					picker.PropertyChanged -= onPropertyChanged;
+				});
 
 				container.Children.Add(combo);
 			}
@@ -752,12 +1009,12 @@ namespace Microsoft.Maui.Handlers.WPF
 				foreach (var child in layout.Children)
 				{
 					if (child is Microsoft.Maui.Controls.Element childElement)
-						WalkFooterView(childElement, container);
+						WalkFooterView(childElement, container, refreshProjection, disconnectProjection);
 				}
 			}
 			else if (element is Microsoft.Maui.Controls.ContentView cv && cv.Content is Microsoft.Maui.Controls.Element cvContent)
 			{
-				WalkFooterView(cvContent, container);
+				WalkFooterView(cvContent, container, refreshProjection, disconnectProjection);
 			}
 		}
 
@@ -777,6 +1034,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			new PropertyMapper<Shell, ShellHandler>(ViewMapper)
 			{
 				[nameof(Shell.FlyoutBehavior)] = MapFlyoutBehavior,
+				[nameof(Shell.FlyoutIsPresented)] = MapFlyoutIsPresented,
 				[nameof(Shell.FlyoutBackgroundColor)] = MapFlyoutBackground,
 				[nameof(Shell.FlyoutBackground)] = MapFlyoutBackgroundBrush,
 				[nameof(Shell.FlyoutWidth)] = MapFlyoutWidth,
@@ -790,11 +1048,31 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		public ShellHandler() : base(Mapper, CommandMapper) { }
 
+		public override void SetVirtualView(IView view)
+		{
+			if (!ReferenceEquals(((IElementHandler)this).VirtualView, view) &&
+				((IElementHandler)this).PlatformView is ShellContainerView container)
+				container.ClearFlyoutTemplates();
+			if (!ReferenceEquals(_observedShell, view))
+				DisconnectShellItems();
+			if (!ReferenceEquals(_selectionShell, view))
+				DisconnectShellSelection();
+
+			base.SetVirtualView(view);
+			ConnectShellSelection();
+			ConnectShellItems();
+		}
+
 		protected override ShellContainerView CreatePlatformView()
 		{
 			var container = new ShellContainerView();
 			container.OnShellItemSelected = OnShellItemSelected;
 			container.OnBackButtonClicked = OnBackButtonClicked;
+			container.OnFlyoutOpenChanged = open =>
+			{
+				if (VirtualView != null && VirtualView.FlyoutIsPresented != open)
+					VirtualView.FlyoutIsPresented = open;
+			};
 			container.MauiContext = MauiContext;
 			return container;
 		}
@@ -802,16 +1080,16 @@ namespace Microsoft.Maui.Handlers.WPF
 		protected override void ConnectHandler(ShellContainerView platformView)
 		{
 			base.ConnectHandler(platformView);
+			platformView.OnShellSectionSelected = OnShellSectionSelected;
+			ConnectShellSelection();
 			if (VirtualView != null)
 			{
-				VirtualView.Navigated += OnShellNavigated;
-				VirtualView.Navigating += OnShellNavigating;
-				VirtualView.PropertyChanged += OnShellPropertyChanged;
+				ConnectShellItems();
 				if (MauiContext != null)
 				{
 					platformView.MauiContext = MauiContext;
 					platformView.BuildFlyoutItems(VirtualView);
-					
+
 					// Ensure theme-related properties are applied after items built
 					MapFlyoutBackground(this, VirtualView);
 					MapFlyoutBackgroundBrush(this, VirtualView);
@@ -834,12 +1112,11 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		protected override void DisconnectHandler(ShellContainerView platformView)
 		{
-			if (VirtualView != null)
-			{
-				VirtualView.Navigated -= OnShellNavigated;
-				VirtualView.Navigating -= OnShellNavigating;
-				VirtualView.PropertyChanged -= OnShellPropertyChanged;
-			}
+			platformView.OnShellSectionSelected = null;
+			DisconnectShellSelection();
+			platformView.UnregisterNativeElements();
+			platformView.ClearFlyoutTemplates();
+			DisconnectShellItems();
 			ThemeManager.ThemeChanged -= OnThemeChanged;
 			base.DisconnectHandler(platformView);
 		}
@@ -860,27 +1137,39 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void OnShellNavigated(object? sender, ShellNavigatedEventArgs e)
 		{
-			PlatformView?.Dispatcher.InvokeAsync(() => ShowCurrentPage(), 
-				System.Windows.Threading.DispatcherPriority.Background);
+			QueueSelectionUpdate();
 		}
 
 		void OnShellPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 		{
 			if (e.PropertyName == "CurrentPage" || e.PropertyName == "CurrentItem")
 			{
-				PlatformView?.Dispatcher.InvokeAsync(() => ShowCurrentPage(),
-					System.Windows.Threading.DispatcherPriority.Background);
+				QueueSelectionUpdate();
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutBehavior))
 			{
 				PlatformView?.Dispatcher.InvokeAsync(() =>
-					PlatformView?.SetFlyoutBehavior(VirtualView!.FlyoutBehavior));
+				{
+					if (ReferenceEquals(sender, _selectionShell))
+						PlatformView.SetFlyoutBehavior(VirtualView.FlyoutBehavior);
+				});
+			}
+			else if (e.PropertyName == nameof(Shell.FlyoutIsPresented))
+			{
+				PlatformView?.Dispatcher.InvokeAsync(() =>
+				{
+					if (ReferenceEquals(sender, _selectionShell))
+						PlatformView.ToggleFlyout(VirtualView.FlyoutIsPresented);
+				});
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutWidth))
 			{
 				if (VirtualView != null && VirtualView.FlyoutWidth > 0)
 					PlatformView?.Dispatcher.InvokeAsync(() =>
-						PlatformView?.SetFlyoutWidth(VirtualView.FlyoutWidth));
+					{
+						if (ReferenceEquals(sender, _selectionShell))
+							PlatformView.SetFlyoutWidth(VirtualView.FlyoutWidth);
+					});
 			}
 			else if (e.PropertyName == nameof(Shell.FlyoutBackgroundColor))
 			{
@@ -891,12 +1180,21 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		void ShowCurrentPage()
 		{
-			if (VirtualView == null || MauiContext == null) return;
+			if (((IElementHandler)this).VirtualView == null || ((IElementHandler)this).PlatformView == null || MauiContext == null) return;
 
 			try
 			{
+				var item = VirtualView.CurrentItem;
+				var section = item?.CurrentItem;
+				if (item == null || !VirtualView.Items.Contains(item) ||
+					section == null || !item.Items.Contains(section))
+				{
+					PlatformView.UpdateBackButtonRegistration(null);
+					PlatformView.ShowPage(null, null, false);
+					return;
+				}
+
 				Microsoft.Maui.Controls.Page? currentPage = VirtualView.CurrentPage;
-				var section = VirtualView.CurrentItem?.CurrentItem;
 
 				if (currentPage == null)
 				{
@@ -904,39 +1202,69 @@ namespace Microsoft.Maui.Handlers.WPF
 					if (section?.Stack?.Count > 1)
 						currentPage = section.Stack[section.Stack.Count - 1];
 
-					// Fall back to ShellContent template
+					// Let Shell cache and parent the selected page so navigation and
+					// visual-tree inspection see the same instance that WPF displays.
 					if (currentPage == null)
 					{
 						var content = section?.CurrentItem;
 						if (content != null)
-						{
-							try { currentPage = ((IShellContentController)content).Page; }
-							catch { }
-
-							if (currentPage == null)
-							{
-								currentPage = content.ContentTemplate?.CreateContent() as Microsoft.Maui.Controls.Page
-									?? content.Content as Microsoft.Maui.Controls.Page;
-							}
-						}
+							currentPage = ((IShellContentController)content).GetOrCreateContent();
 					}
 				}
 
-				if (currentPage == null) return;
+				if (currentPage == null)
+				{
+					PlatformView.UpdateBackButtonRegistration(null);
+					PlatformView.ShowPage(null, null, false);
+					return;
+				}
 
 				var platformView = Microsoft.Maui.Platform.ElementExtensions.ToPlatform((IElement)currentPage, MauiContext);
 				var title = currentPage.Title ?? VirtualView.CurrentItem?.Title ?? string.Empty;
 				bool hasNavStack = section?.Stack?.Count > 1;
 
+				PlatformView.UpdateBackButtonRegistration(currentPage);
 				PlatformView.ShowPage(platformView as FrameworkElement, title, hasNavStack);
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				MauiContext.Services.GetService<ILogger<ShellHandler>>()?
+					.LogError(ex, "Showing current Shell page failed.");
+			}
+		}
+
+		void OnShellSectionSelected(ShellSection section)
+		{
+			var shell = _selectionShell;
+			var item = shell?.CurrentItem;
+			if (shell == null || item == null)
+				return;
+
+			try
+			{
+				var controller = (IShellItemController)item;
+				if (shell.Items.Contains(item) && controller.GetItems().Contains(section) &&
+					section.IsVisible && section.IsEnabled && !ReferenceEquals(item.CurrentItem, section))
+					controller.ProposeSection(section, true);
+			}
+			catch (Exception ex)
+			{
+				MauiContext?.Services.GetService<ILogger<ShellHandler>>()?
+					.LogError(ex, "Selecting Shell tab failed.");
+			}
+			finally
+			{
+				// Cancellation and deferrals leave the model on the previous tab.
+				// Accepted deferred navigation is synchronized by the selection observer.
+				if (ReferenceEquals(_selectionShell, shell))
+					PlatformView.UpdateTabSelection(shell);
+			}
 		}
 
 		async void OnShellItemSelected(ShellItem item)
 		{
 			if (VirtualView == null) return;
-			
+
 			try
 			{
 				// Use absolute route navigation to pop any pushed pages and show section root
@@ -975,6 +1303,9 @@ namespace Microsoft.Maui.Handlers.WPF
 
 		static void MapFlyoutBehavior(ShellHandler handler, Shell shell)
 			=> handler.PlatformView.SetFlyoutBehavior(shell.FlyoutBehavior);
+
+		static void MapFlyoutIsPresented(ShellHandler handler, Shell shell)
+			=> handler.PlatformView.ToggleFlyout(shell.FlyoutIsPresented);
 
 		static void MapFlyoutWidth(ShellHandler handler, Shell shell)
 		{
@@ -1036,10 +1367,16 @@ namespace Microsoft.Maui.Handlers.WPF
 		static void MapItems(ShellHandler handler, Shell shell)
 		{
 			handler.PlatformView.BuildFlyoutItems(shell);
+			handler.UpdateValue(nameof(Shell.BackgroundColor));
+			handler.UpdateValue(nameof(Shell.FlyoutBackgroundColor));
+			handler.UpdateValue(nameof(Shell.FlyoutBackground));
 			handler.ShowCurrentPage();
 		}
 
 		static void MapCurrentItem(ShellHandler handler, Shell shell)
-			=> handler.ShowCurrentPage();
+		{
+			handler.PlatformView.UpdateTabs(shell);
+			handler.ShowCurrentPage();
+		}
 	}
 }

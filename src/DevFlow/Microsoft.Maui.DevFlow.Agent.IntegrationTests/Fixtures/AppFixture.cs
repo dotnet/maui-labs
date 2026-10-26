@@ -28,6 +28,32 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
     public Task InitializeAsync() => _inner.InitializeAsync();
     public Task DisposeAsync() => _inner.DisposeAsync();
 
+    internal static async Task<JsonElement> ReadCaptureAsync(HttpClient http, string path, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        string? lastConflict = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            using var response = await http.GetAsync(path);
+            var body = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                using var document = JsonDocument.Parse(body);
+                return document.RootElement.Clone();
+            }
+            if (response.StatusCode != System.Net.HttpStatusCode.Conflict)
+                throw new HttpRequestException($"Capture read failed: {(int)response.StatusCode} {body}");
+            using var conflict = JsonDocument.Parse(body);
+            if (!conflict.RootElement.TryGetProperty("reason", out var reason)
+                || reason.ValueKind != JsonValueKind.String
+                || reason.GetString() != "capture-changed-during-read")
+                throw new HttpRequestException($"Capture read failed: {(int)response.StatusCode} {body}");
+            lastConflict = body;
+            await Task.Delay(100);
+        }
+        throw new TimeoutException($"Capture '{path}' did not stabilize within {timeoutMs}ms. Last conflict: {lastConflict}");
+    }
+
     /// <summary>
     /// Navigates to the //blazor Shell route (if not already there), waits for the
     /// BlazorWebView element to appear, and probes the CDP bridge with Runtime.evaluate
@@ -44,7 +70,8 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
             if (!await IsOnBlazorPageAsync())
             {
                 _blazorReady = false;
-                await Client.NavigateAsync("//blazor");
+                if (!await Client.NavigateAsync("//blazor"))
+                    throw new InvalidOperationException("Navigation to the Blazor page failed.");
                 await WaitForAutomationIdAsync("BlazorWebView", timeoutMs: 15000);
             }
 
@@ -82,9 +109,11 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
             // in-WebView route change. Force a fresh Shell navigation and retry using the
             // full cold-start budget instead of failing the next test on the warm-path cap.
             _blazorReady = false;
-            await Client.NavigateAsync("//native");
+            if (!await Client.NavigateAsync("//native"))
+                throw new InvalidOperationException("Navigation away from the Blazor page failed.");
             await Task.Delay(500);
-            await Client.NavigateAsync("//blazor");
+            if (!await Client.NavigateAsync("//blazor"))
+                throw new InvalidOperationException("Navigation back to the Blazor page failed.");
             await WaitForAutomationIdAsync("BlazorWebView", timeoutMs: 15000);
 
             var recoveryTimeoutMs = Platform switch
@@ -285,5 +314,5 @@ public sealed class AppFixture : IAppFixture, IAsyncLifetime
     public void InvalidateBlazorReady() => _blazorReady = false;
 }
 
-[CollectionDefinition("AgentIntegration")]
+[CollectionDefinition("AgentIntegration", DisableParallelization = true)]
 public class AgentIntegrationCollection : ICollectionFixture<AppFixture>;

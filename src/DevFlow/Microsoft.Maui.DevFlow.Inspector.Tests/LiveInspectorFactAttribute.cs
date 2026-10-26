@@ -18,6 +18,10 @@ namespace Microsoft.Maui.DevFlow.Inspector.Tests;
 ///
 /// Optionally set <c>INSPECTOR_URL</c> to point at a non-default broker, e.g.
 /// <c>http://localhost:19223/inspector/myapp/</c>.
+/// The deterministic <c>InspectorLayoutWorkspaceTests</c> instead use
+/// <c>InspectorBrowserFact</c> and a real local InspectorServer fixture. They need only
+/// Playwright Chromium installed, not this environment variable or a native app.
+/// See the test project's README for local verification and dedicated CI execution.
 /// </summary>
 public sealed class LiveInspectorFactAttribute : FactAttribute
 {

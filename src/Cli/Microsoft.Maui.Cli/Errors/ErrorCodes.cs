@@ -62,6 +62,7 @@ public static class ErrorCodes
 	public const string AppleSimulatorAddMediaFailed = "E2221";
 	public const string AppleSimulatorScreenshotFailed = "E2222";
 	public const string AppleSimulatorRecordVideoFailed = "E2223";
+	public const string AppleXcodeVersionMismatch = "E2224";
 
 	// Platform/SDK errors - Windows (E23xx)
 	public const string WindowsSdkNotFound = "E2301";

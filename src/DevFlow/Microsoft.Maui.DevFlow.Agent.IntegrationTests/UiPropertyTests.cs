@@ -41,15 +41,55 @@ public class UiPropertyTests : IntegrationTestBase
         var header = await FindElementAsync("HeaderLabel");
         var originalText = await Client.GetPropertyAsync(header.Id, "Text");
 
+        // Read before write. A backend that cannot read Text back cannot restore it either, and
+        // silently skipping the restore leaves the header stuck on "Modified Header" and fails
+        // unrelated text assertions later in the run -- which is exactly how one missing AppKit
+        // alias turned into five red tests. Fail here instead, where the cause is obvious.
+        Assert.True(originalText != null, "Text must be readable before it is overwritten, otherwise the original cannot be restored.");
+
         var result = await Client.SetPropertyAsync(header.Id, "Text", "Modified Header");
         Assert.True(result);
 
         await SettleAsync();
-        var newText = await Client.GetPropertyAsync(header.Id, "Text");
-        Assert.Equal("Modified Header", newText);
+        try
+        {
+            var newText = await Client.GetPropertyAsync(header.Id, "Text");
+            Assert.Equal("Modified Header", newText);
+        }
+        finally
+        {
+            await Client.SetPropertyAsync(header.Id, "Text", originalText!);
+        }
+    }
 
-        if (originalText != null)
-            await Client.SetPropertyAsync(header.Id, "Text", originalText);
+    /// <summary>
+    /// Every property name a backend's setter accepts has to be readable back from its getter.
+    /// Getters and setters drifted apart independently on AppKit and Android -- both shipped
+    /// properties you could write but not read -- and neither was caught, because the per-property
+    /// tests only covered the names that happened to already work on the platform being run.
+    ///
+    /// Only assert on properties whose value cannot legitimately be null, since the transport cannot
+    /// distinguish "unsupported" from "null". An empty Entry's Text is null on MAUI and empty-string
+    /// on the native backends, so it is unusable here; <c>Fill_Entry_SetsText</c> covers that path
+    /// instead, by filling before it reads.
+    /// </summary>
+    [Theory]
+    [InlineData("AddButton", "IsVisible")]
+    [InlineData("AddButton", "IsEnabled")]
+    [InlineData("AddButton", "Opacity")]
+    [InlineData("AddButton", "Text")]
+    [InlineData("HeaderLabel", "IsVisible")]
+    [InlineData("HeaderLabel", "Text")]
+    [InlineData("NewTodoEntry", "IsVisible")]
+    [InlineData("NewTodoEntry", "IsEnabled")]
+    public async Task GetProperty_CanonicalAlias_IsReadable(string automationId, string property)
+    {
+        await NavigateToMainPageAsync();
+        var element = await FindElementAsync(automationId);
+
+        var value = await Client.GetPropertyAsync(element.Id, property);
+
+        Assert.True(value != null, $"'{property}' is not readable on '{automationId}'. Backends must publish every name their setter accepts.");
     }
 
     [Fact]

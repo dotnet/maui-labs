@@ -1,0 +1,40 @@
+{
+    "$schema": "http://json.schemastore.org/template",
+    "author": "Microsoft",
+    "classifications": [ "Comet", "Android", "iOS", "Compose", "SwiftUI" ],
+    "identity": "Microsoft.Maui.Comet.NodeApp",
+    "groupIdentity": "Microsoft.Maui.Comet.Node",
+    "name": "Comet Node-Backend App",
+    "description": "A single-project Comet app rendered natively by the node backend (Jetpack Compose on Android, SwiftUI on iOS) — no MAUI in the render path.",
+    "shortName": "cometnode",
+    "tags": {
+      "language": "C#",
+      "type": "project"
+    },
+    "sourceName": "CometNodeApp1",
+    "preferNameDirectory": true,
+    "guids": [],
+    "sources": [
+      {
+        "modifiers": [
+          { "exclude": [ "README.md" ] }
+        ]
+      }
+    ],
+    "symbols": {
+      "applicationId": {
+        "type": "parameter",
+        "description": "Overrides the app id ($(ApplicationId) on Android, CFBundleIdentifier on iOS).",
+        "datatype": "string",
+        "replaces": "com.companyname.cometnodeapp1"
+      },
+      "cometPackageVersion": {
+        "type": "parameter",
+        "description": "Version of the Comet package to reference (restored from the local feed in nuget.config).",
+        "datatype": "string",
+        "defaultValue": "0.5.1-local",
+        "replaces": "COMET_PACKAGE_VERSION"
+      }
+    },
+    "defaultName": "CometNodeApp1"
+  }

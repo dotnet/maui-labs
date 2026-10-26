@@ -1,6 +1,68 @@
 version: 2
+
+# Every dependency manifest in the repo must be registered here.
+#
+# Dependabot *security* updates fire repo-wide without any config, but *version* updates only
+# run for the ecosystems and directories listed below. A manifest that is missing here therefore
+# never gets routine bumps — it silently drifts until a batch of advisories lands all at once
+# (see PRs #447 / #448 / #449, where npm advisories arrived together on src/DevFlow/js long after
+# the manifest was introduced in #397).
+#
+# When adding a new package manifest (package.json, etc.), register its directory below in the
+# same PR. See AGENTS.md → "Dependencies and Supply Chain".
+#
+# Deliberately NOT managed here:
+#   - nuget: .NET package versions are centralized in Directory.Packages.props and flow through
+#     Maestro/DARC dependency flow, so Dependabot would fight darc.
+#   - github-actions: action SHAs inside *.lock.yml are generated and pinned by gh-aw
+#     (.github/aw/actions-lock.json) and would be overwritten on the next `gh aw compile`.
+
 updates:
+  # .NET SDK version in global.json.
   - package-ecosystem: "dotnet-sdk"
     directory: "/"
     schedule:
       interval: "daily"
+
+  # DevFlow Inspector: shared client + VS Code host (npm workspaces).
+  # This ships — the VS Code host is packaged into a VSIX.
+  - package-ecosystem: "npm"
+    directory: "/src/DevFlow/js"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      devflow-js:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Comet tooling.
+  - package-ecosystem: "npm"
+    directory: "/src/Comet"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      comet-js:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Copilot Canvas extension host for DevFlow.
+  - package-ecosystem: "npm"
+    directory: "/.github/extensions/maui-devflow-canvas"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      devflow-canvas:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

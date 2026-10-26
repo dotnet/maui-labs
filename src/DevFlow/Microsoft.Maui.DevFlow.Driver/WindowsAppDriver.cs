@@ -13,7 +13,7 @@ namespace Microsoft.Maui.DevFlow.Driver;
 /// Direct localhost connection, no special setup needed.
 /// Uses Windows UI Automation (UIA) via COM interop to detect and dismiss native dialogs.
 /// </summary>
-public class WindowsAppDriver : AppDriverBase
+public class WindowsAppDriver : AppDriverBase, IAlertDriver
 {
     public override string Platform => "Windows";
 
@@ -311,33 +311,14 @@ public class WindowsAppDriver : AppDriverBase
 
     private static DialogCandidate? FindDialogCandidate(IReadOnlyList<IUIAutomationElement> windows)
     {
-        foreach (var window in windows)
-        {
-            var childWindows = UIAutomationInterop.FindChildWindows(window);
-            foreach (var childWindow in childWindows)
-            {
-                var buttons = UIAutomationInterop.FindButtons(childWindow);
-                if (buttons.Count > 0)
-                {
-                    var texts = UIAutomationInterop.FindTexts(childWindow);
-                    if (texts.Count > 0)
-                        return new DialogCandidate(buttons, texts);
-                }
-            }
-        }
-
-        foreach (var window in windows)
-        {
-            var buttons = UIAutomationInterop.FindNamedButtons(window, CommonDialogButtonLabels);
-            if (buttons.Count > 0)
-            {
-                var texts = UIAutomationInterop.FindTexts(window);
-                if (texts.Count > 0)
-                    return new DialogCandidate(buttons, texts);
-            }
-        }
-
-        return null;
+        var candidate = FindDedicatedDialogCandidate(
+            windows,
+            UIAutomationInterop.FindChildWindows,
+            UIAutomationInterop.FindButtons,
+            UIAutomationInterop.FindTexts);
+        return candidate is null
+            ? null
+            : new DialogCandidate(candidate.Buttons.ToList(), candidate.Texts.ToList());
     }
 
     private static AlertButton ToAlertButton((IUIAutomationElement element, string name) button)
@@ -351,11 +332,6 @@ public class WindowsAppDriver : AppDriverBase
     private sealed record DialogCandidate(
         List<(IUIAutomationElement element, string name)> Buttons,
         List<string> Texts);
-
-    private static readonly HashSet<string> CommonDialogButtonLabels = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "OK", "CANCEL", "YES", "NO", "CLOSE", "DISMISS", "RETRY", "ABORT", "IGNORE", "CONTINUE", "ALLOW", "DON'T ALLOW"
-    };
 
     private static (IUIAutomationElement element, string name) PickButton(
         List<(IUIAutomationElement element, string name)> buttons, string? buttonLabel)
@@ -384,6 +360,33 @@ public class WindowsAppDriver : AppDriverBase
     public Task<AlertInfo?> HandleAlertIfPresentAsync(string? buttonLabel = null) => throw new PlatformNotSupportedException("Windows operations require Windows.");
     public Task<string> GetAccessibilityTreeAsync() => throw new PlatformNotSupportedException("Windows operations require Windows.");
 #endif
+
+    internal static DialogCandidateData<TElement>? FindDedicatedDialogCandidate<TElement>(
+        IReadOnlyList<TElement> rootWindows,
+        Func<TElement, IReadOnlyList<TElement>> findChildWindows,
+        Func<TElement, IReadOnlyList<(TElement element, string name)>> findButtons,
+        Func<TElement, IReadOnlyList<string>> findTexts)
+    {
+        foreach (var rootWindow in rootWindows)
+        {
+            foreach (var childWindow in findChildWindows(rootWindow))
+            {
+                var buttons = findButtons(childWindow);
+                if (buttons.Count == 0)
+                    continue;
+
+                var texts = findTexts(childWindow);
+                if (texts.Count > 0)
+                    return new DialogCandidateData<TElement>(buttons, texts);
+            }
+        }
+
+        return null;
+    }
+
+    internal sealed record DialogCandidateData<TElement>(
+        IReadOnlyList<(TElement element, string name)> Buttons,
+        IReadOnlyList<string> Texts);
 
     private int ResolveProcessId()
     {

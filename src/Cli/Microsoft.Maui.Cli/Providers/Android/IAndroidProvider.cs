@@ -41,8 +41,23 @@ public interface IAndroidProvider : IDisposable
 	Task<List<HealthCheck>> CheckHealthAsync(CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// The platforms <see cref="GetDevicesAsync"/> can currently produce devices for.
+	/// </summary>
+	/// <remarks>
+	/// Declared by the provider rather than by its callers so the two cannot drift: a device
+	/// manager uses this to decide whether to query this provider at all, and then filters the
+	/// results on the same platform. If an implementation starts tagging devices with a new
+	/// platform it must list it here, otherwise those devices are never asked for.
+	/// </remarks>
+	IReadOnlyList<string> SupportedPlatforms { get; }
+
+	/// <summary>
 	/// Lists connected Android devices and running emulators.
 	/// </summary>
+	/// <remarks>
+	/// Every returned device must be tagged with a platform listed in
+	/// <see cref="SupportedPlatforms"/>, or it will be filtered out downstream.
+	/// </remarks>
 	Task<List<Device>> GetDevicesAsync(CancellationToken cancellationToken = default);
 
 	/// <summary>
@@ -76,6 +91,36 @@ public interface IAndroidProvider : IDisposable
 	/// Stops a running emulator.
 	/// </summary>
 	Task StopEmulatorAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Lists active <c>adb forward</c> (host → device) port rules for a device.
+	/// </summary>
+	Task<IReadOnlyList<AndroidPortMapping>> ListForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Lists active <c>adb reverse</c> (device → host) port rules for a device.
+	/// </summary>
+	Task<IReadOnlyList<AndroidPortMapping>> ListReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Adds an <c>adb forward tcp:hostPort tcp:devicePort</c> rule.
+	/// </summary>
+	Task AddForwardPortAsync(string deviceSerial, int hostPort, int devicePort, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Adds an <c>adb reverse tcp:devicePort tcp:hostPort</c> rule.
+	/// </summary>
+	Task AddReversePortAsync(string deviceSerial, int devicePort, int hostPort, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Removes all <c>adb forward</c> rules for a device.
+	/// </summary>
+	Task ClearForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Removes all <c>adb reverse</c> rules for a device.
+	/// </summary>
+	Task ClearReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Lists installed SDK packages.
@@ -151,6 +196,14 @@ public interface IAndroidProvider : IDisposable
 	/// Installs Android SDK command-line tools with structured progress reporting.
 	/// </summary>
 	Task InstallSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Ensures the Android SDK at <paramref name="targetPath"/> contains the latest
+	/// <c>cmdline-tools;latest</c> package, bootstrapping and/or updating from the Google
+	/// catalog as needed. Returns the resolved command-line tools revision, or
+	/// <see langword="null"/> when the revision could not be determined.
+	/// </summary>
+	Task<string?> EnsureLatestSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Overrides the Android SDK path for the current session.

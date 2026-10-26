@@ -57,7 +57,7 @@ public class ThemeAgentClientTests
             }
         });
 
-        using var agent = new AgentClient("localhost", port);
+        using var agent = new AgentClient("localhost", port) { AutoAcquireMutationLease = false };
 
         var current = await agent.GetThemeAsync();
         Assert.NotNull(current);

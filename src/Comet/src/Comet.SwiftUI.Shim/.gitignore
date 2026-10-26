@@ -1,0 +1,4 @@
+# Build outputs — regenerate the xcframework with ./build-xcframework.sh
+build/
+CometSwiftUIShim.xcframework/
+.build/

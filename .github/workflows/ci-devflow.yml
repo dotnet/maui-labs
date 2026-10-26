@@ -1,10 +1,19 @@
 name: CI - DevFlow
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'platforms/Linux.Gtk4/**'
+      - 'platforms/MacOS/**'
+      - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - '.github/extensions/maui-devflow-canvas/**'
+      - '.github/workflows/ci-devflow.yml'
+      - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -16,6 +25,14 @@ on:
     branches: [main]
     paths:
       - 'src/DevFlow/**'
+      - 'platforms/Linux.Gtk4/**'
+      - 'platforms/MacOS/**'
+      - 'platforms/Windows.WPF/**'
+      - 'platforms/Shared/**'
+      - 'src/Cli/Microsoft.Maui.Cli/DevFlow/**'
+      - '.github/extensions/maui-devflow-canvas/**'
+      - '.github/workflows/ci-devflow.yml'
+      - 'samples/DevFlow.Sample.Native/**'
       - 'eng/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
@@ -24,6 +41,15 @@ on:
       - 'NuGet.config'
 
 jobs:
+  gtk-publication-guard:
+    name: GTK publication closure guard
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reject incomplete GTK publication sets
+        shell: pwsh
+        run: ./eng/scripts/Test-GtkPackageClosure.Tests.ps1
+
   build:
     uses: ./.github/workflows/_build.yml
     with:
@@ -31,4 +57,244 @@ jobs:
       project-name: devflow
       run-tests: true
       pack: true
+      build-arguments: /p:PackDriverNuGet=true
       os: '["windows-latest"]'
+
+  inspector-layout-browser:
+    name: Deterministic Inspector Chromium regressions
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      MAUI_INSPECTOR_BROWSER_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Build real Inspector browser fixtures
+        shell: pwsh
+        run: dotnet build src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj --configuration Release -m:1 -nr:false
+
+      - name: Install Playwright Chromium
+        shell: pwsh
+        run: |
+          & .\artifacts\bin\Microsoft.Maui.DevFlow.Inspector.Tests\Release\net10.0\playwright.ps1 install chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run real Inspector browser regressions without a native agent
+        shell: pwsh
+        run: |
+          dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj `
+            --configuration Release --no-build --no-restore `
+            --filter "FullyQualifiedName~InspectorLayoutWorkspaceTests" `
+            --logger "console;verbosity=detailed" --logger "trx;LogFileName=layout-browser.trx" `
+            --results-directory artifacts\TestResults\InspectorBrowser
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml]$trx = Get-Content artifacts\TestResults\InspectorBrowser\layout-browser.trx
+          $results = @($trx.TestRun.Results.UnitTestResult)
+          if ($results.Count -ne 19 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+            throw 'All 19 existing and regression browser tests must execute and pass; skips are not allowed.'
+          }
+
+      - name: Repeat Inspector synchronization regressions on Windows
+        shell: pwsh
+        run: |
+          for ($iteration = 1; $iteration -le 5; $iteration++) {
+            dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj `
+              --configuration Release --no-build --no-restore `
+              --filter "FullyQualifiedName~ReadOnlyPropertyFilterRemainsUsable|FullyQualifiedName~NetworkTabRefreshesAutomaticallyAndKeepsDetailOpen" `
+              --logger "console;verbosity=normal" --logger "trx;LogFileName=synchronization-$iteration.trx" `
+              --results-directory artifacts\TestResults\InspectorBrowser
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\synchronization-$iteration.trx"
+            $results = @($trx.TestRun.Results.UnitTestResult)
+            if ($results.Count -ne 3 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+              throw "All three synchronization regressions must execute and pass on iteration $iteration."
+            }
+          }
+
+      - name: Repeat portable client retry regressions on both Windows runtimes
+        shell: pwsh
+        run: |
+          $project = 'src\DevFlow\Microsoft.Maui.DevFlow.Client.Tests\Microsoft.Maui.DevFlow.Client.Tests.csproj'
+          dotnet build $project --configuration Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($framework in @('net472', 'net10.0')) {
+            for ($iteration = 1; $iteration -le 5; $iteration++) {
+              $logName = "client-retry-$framework-$iteration.trx"
+              dotnet test $project --configuration Release --framework $framework --no-build --no-restore `
+                --filter "FullyQualifiedName~AgentClientRetryTests" `
+                --logger "console;verbosity=normal" --logger "trx;LogFileName=$logName" `
+                --results-directory artifacts\TestResults\InspectorBrowser
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\$logName"
+              $results = @($trx.TestRun.Results.UnitTestResult)
+              if ($results.Count -ne 20 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+                throw "All 20 retry regressions must execute and pass on $framework iteration $iteration."
+              }
+            }
+          }
+
+      - name: Repeat Windows profiling fixture regressions
+        shell: pwsh
+        run: |
+          $project = 'src\Cli\Microsoft.Maui.Cli.UnitTests\Microsoft.Maui.Cli.UnitTests.csproj'
+          dotnet build $project --configuration Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          for ($iteration = 1; $iteration -le 5; $iteration++) {
+            $logName = "profile-fixtures-$iteration.trx"
+            dotnet test $project --configuration Release --no-build --no-restore `
+              --filter "FullyQualifiedName~ProfileCommandTests.GetTargetFrameworks_|FullyQualifiedName~ConfigureDnxStartInfo_" `
+              --logger "console;verbosity=normal" --logger "trx;LogFileName=$logName" `
+              --results-directory artifacts\TestResults\InspectorBrowser
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            [xml]$trx = Get-Content "artifacts\TestResults\InspectorBrowser\$logName"
+            $results = @($trx.TestRun.Results.UnitTestResult)
+            if ($results.Count -ne 8 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+              throw "All eight profiling fixture regressions must pass on iteration $iteration."
+            }
+          }
+
+      - name: Upload browser and fixture runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: inspector-layout-browser-results
+          path: artifacts/TestResults/InspectorBrowser/*.trx
+          if-no-files-found: error
+
+  native-aot-smoke:
+    name: Reflection-disabled Native AOT smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Install Native AOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish and run agent smoke with headless MAUI backend
+        run: |
+          dotnet publish src/DevFlow/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+            -c Release -r linux-x64 -p:AotSmoke=true -p:IncludeMauiBackend=true \
+            -p:TrimmerSingleWarn=false -o artifacts/devflow-aot/agent
+          artifacts/devflow-aot/agent/Microsoft.Maui.DevFlow.Agent.AotSmoke \
+            artifacts/devflow-aot/evidence
+
+      - name: Publish and run logging smoke
+        run: |
+          dotnet publish src/DevFlow/tools/LoggingAotSmoke/LoggingAotSmoke.csproj \
+            -c Release -r linux-x64 -o artifacts/devflow-aot/logging
+          artifacts/devflow-aot/logging/LoggingAotSmoke
+
+  inspector-browser:
+    name: Inspector HTTP and Chromium fixture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TEST_PROJECT: src/DevFlow/Microsoft.Maui.DevFlow.Inspector.Tests/Microsoft.Maui.DevFlow.Inspector.Tests.csproj
+      DEVFLOW_INSPECTOR_BROWSER_FIXTURES: '1'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup pinned .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Build Inspector tests (no MAUI workloads or devices)
+        shell: pwsh
+        run: dotnet build $env:TEST_PROJECT -c Release
+
+      - name: Install test project's Chromium
+        shell: pwsh
+        run: |
+          $script = Get-ChildItem artifacts/bin/Microsoft.Maui.DevFlow.Inspector.Tests/Release -Recurse -Filter playwright.ps1 |
+            Select-Object -First 1
+          if (!$script) { throw 'Built Playwright install script was not found.' }
+          & $script.FullName install --with-deps chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # The real InspectorServer is bound to an isolated loopback mock agent.
+      # LiveInspectorFact tests still require a separately provisioned broker + native app.
+      - name: Run only self-contained browser fixtures
+        shell: pwsh
+        run: |
+          dotnet test $env:TEST_PROJECT -c Release --no-build --no-restore `
+            --filter "Category=BrowserFixture" `
+            --logger "trx;LogFileName=inspector-browser.trx" `
+            --results-directory artifacts/TestResults/inspector-browser
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml]$results = Get-Content artifacts/TestResults/inspector-browser/inspector-browser.trx -Raw
+          $counts = $results.TestRun.ResultSummary.Counters
+          if ($counts.total -ne '9' -or $counts.executed -ne '9' -or $counts.passed -ne '9' -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
+            throw 'All nine Inspector browser fixtures must execute and pass with zero skips.'
+          }
+
+      - name: Upload browser test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: inspector-browser-results
+          path: artifacts/TestResults/inspector-browser
+          if-no-files-found: warn
+
+  hosts:
+    name: JavaScript hosts and VSIX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            src/DevFlow/js/package-lock.json
+            .github/extensions/maui-devflow-canvas/package-lock.json
+
+      - name: Build and test shared client and VS Code host
+        working-directory: src/DevFlow/js
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npm run package:vsix
+
+      - name: Test Copilot Canvas host
+        working-directory: .github/extensions/maui-devflow-canvas
+        run: |
+          npm ci
+          npm test
+          npm run selftest:recorder
+
+  # The native samples are the executable proof that a plain .NET app can host the agent, so they
+  # are built even though samples are otherwise out of the product solution filter. They need a Mac:
+  # .NET for macOS and iOS app heads cannot be bundled on Windows.
+  native-samples:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: src/DevFlow/DevFlow.Samples.Native.slnf
+      project-name: devflow-samples-native
+      run-tests: false
+      pack: false
+      os: '["macos-latest"]'
+      # App heads enforce the Apple SDK's Xcode requirement, which libraries do not, so this job
+      # has to pin Xcode even though the library job above gets away without it. Keep in step with
+      # the version the pinned .NET for iOS/macOS asks for — see https://aka.ms/xcode-requirement.
+      xcode-version: '26.3'
+      android-project: samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj

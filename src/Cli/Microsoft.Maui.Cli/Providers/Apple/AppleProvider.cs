@@ -20,6 +20,7 @@ public class AppleProvider : IAppleProvider
 {
 	readonly XcodeManager? _xcodeManager;
 	readonly SimulatorService? _simulatorService;
+	readonly PhysicalDeviceService? _physicalDeviceService;
 	readonly RuntimeService? _runtimeService;
 	readonly CommandLineTools? _commandLineTools;
 	readonly EnvironmentChecker? _environmentChecker;
@@ -30,13 +31,22 @@ public class AppleProvider : IAppleProvider
 		if (!PlatformDetector.IsMacOS)
 			return;
 
-		var logger = ConsoleLogger.Instance;
+		// Deliberately not ConsoleLogger.Instance: it writes Info/Debug/Warning to stdout,
+		// which corrupts --json output. See StandardErrorToolsLogger.
+		var logger = new StandardErrorToolsLogger();
 		_xcodeManager = new XcodeManager(logger);
 		_simulatorService = new SimulatorService(logger);
+		_physicalDeviceService = new PhysicalDeviceService(logger);
 		_runtimeService = new RuntimeService(logger);
 		_commandLineTools = new CommandLineTools(logger);
 		_environmentChecker = new EnvironmentChecker(logger);
 		_appleInstaller = new AppleInstaller(logger);
+	}
+
+	// Test seam: lets tests supply devicectl output on any host.
+	internal AppleProvider(PhysicalDeviceService physicalDeviceService)
+	{
+		_physicalDeviceService = physicalDeviceService;
 	}
 
 	public List<XcodeInstallation> GetXcodeInstallations()
@@ -304,6 +314,13 @@ public class AppleProvider : IAppleProvider
 		if (result.Xcode is not null)
 			checks.Add(MapXcodeLicenseCheck());
 
+		// Xcode compatibility check for SDK packs
+		if (result.Xcode is not null)
+		{
+			var compatibilityChecker = new XcodeCompatibilityChecker(_xcodeManager);
+			checks.Add(compatibilityChecker.CheckXcodeCompatibility());
+		}
+
 		checks.Add(MapRuntimesCheck(result));
 
 		if (result.Platforms.Count > 0)
@@ -503,7 +520,28 @@ public class AppleProvider : IAppleProvider
 		}, cancellationToken);
 	}
 
+	/// <inheritdoc />
+	/// <remarks>
+	/// Scoped to iOS because <see cref="GetDevices"/> tags every simulator and physical device with
+	/// <see cref="Platforms.iOS"/>. tvOS/watchOS/visionOS simulators are returned by
+	/// <c>simctl</c> but are not yet recognized in the shared Platforms model; when they are,
+	/// add them both here and to the tagging below.
+	/// </remarks>
+	public IReadOnlyList<string> SupportedPlatforms { get; } = [Platforms.iOS];
+
 	public List<Device> GetDevices()
+	{
+		// Start devicectl first so it overlaps the slower, blocking simctl call.
+		var physical = _physicalDeviceService?.ListAsync();
+
+		var devices = GetSimulatorDevices();
+		if (physical is not null)
+			devices.AddRange(physical.GetAwaiter().GetResult().Devices.Where(IsConnectedIosDevice).Select(ToDevice));
+
+		return devices;
+	}
+
+	List<Device> GetSimulatorDevices()
 	{
 		if (_simulatorService is null)
 			return new List<Device>();
@@ -539,5 +577,37 @@ public class AppleProvider : IAppleProvider
 				}
 			};
 		}).ToList();
+	}
+
+	// devicectl also lists remembered devices that are not currently attached or reachable.
+	static bool IsConnectedIosDevice(PhysicalDeviceInfo d)
+		=> d.HasHardwareUdid && d.IsReachable && d.Kind is PhysicalDeviceKind.IPhone or PhysicalDeviceKind.IPad;
+
+	static Device ToDevice(PhysicalDeviceInfo d)
+	{
+		// An unpaired device is listed but unusable until trusted, like Android's "unauthorized".
+		var paired = string.Equals(d.PairingState, "paired", StringComparison.OrdinalIgnoreCase);
+
+		return new Device
+		{
+			// The hardware UDID, never the CoreDevice identifier, which changes between connections.
+			Id = d.HardwareUdid,
+			Name = d.Name,
+			Platforms = new[] { Platforms.iOS },
+			Type = DeviceType.Physical,
+			State = paired ? DeviceState.Connected : DeviceState.Disconnected,
+			IsRunning = paired,
+			ConnectionType = d.TransportType switch
+			{
+				"wired" => Models.ConnectionType.Usb,
+				"localNetwork" => Models.ConnectionType.Wifi,
+				_ => Models.ConnectionType.Unknown
+			},
+			Model = string.IsNullOrEmpty(d.MarketingName) ? d.ProductType : d.MarketingName,
+			Manufacturer = "Apple",
+			Version = d.OSVersion,
+			VersionName = $"{d.Platform} {d.OSVersion}",
+			Idiom = d.Kind == PhysicalDeviceKind.IPad ? DeviceIdiom.Tablet : DeviceIdiom.Phone
+		};
 	}
 }

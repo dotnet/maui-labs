@@ -8,7 +8,6 @@ using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Utils;
 using XatSdkManager = Xamarin.Android.Tools.SdkManager;
-using XatSdkPackage = Xamarin.Android.Tools.SdkPackage;
 
 namespace Microsoft.Maui.Cli.Providers.Android;
 
@@ -40,10 +39,15 @@ public partial class SdkManager : IDisposable
 	}
 
 	public SdkManager(Func<string?> getSdkPath, Func<string?> getJdkPath, bool verbose = false)
+		: this(getSdkPath, getJdkPath, new XatSdkManager(logger: CreateLogger(verbose)))
+	{
+	}
+
+	internal SdkManager(Func<string?> getSdkPath, Func<string?> getJdkPath, XatSdkManager sdkManager)
 	{
 		_getSdkPath = getSdkPath;
 		_getJdkPath = getJdkPath;
-		_sdkManager = new XatSdkManager(logger: CreateLogger(verbose));
+		_sdkManager = sdkManager;
 	}
 
 	(string? SdkPath, string? JdkPath) SyncPaths()
@@ -55,105 +59,11 @@ public partial class SdkManager : IDisposable
 		return (sdkPath, jdkPath);
 	}
 
-	public string? SdkManagerPath
-	{
-		get
-		{
-			var (sdkPath, _) = SyncPaths();
-			return ResolveSdkManagerPath(sdkPath) ?? _sdkManager.FindSdkManagerPath();
-		}
-	}
+	public string? SdkManagerPath => FindCommandLineTools()?.Path;
 
 	public bool IsAvailable => !string.IsNullOrEmpty(SdkManagerPath);
 
 	public void Dispose() => _sdkManager.Dispose();
-
-	internal static string? ResolveSdkManagerPath(string? sdkPath)
-	{
-		if (string.IsNullOrEmpty(sdkPath))
-			return null;
-
-		var ext = OperatingSystem.IsWindows() ? ".bat" : "";
-
-		static string? FindToolInDirectory(string directoryPath, string extension)
-		{
-			var toolPath = Path.Combine(directoryPath, "bin", "sdkmanager" + extension);
-			return File.Exists(toolPath) ? toolPath : null;
-		}
-
-		var cmdlineToolsDir = Path.Combine(sdkPath, "cmdline-tools");
-		if (Directory.Exists(cmdlineToolsDir))
-		{
-			var subdirs = new List<(string path, Version version)>();
-			foreach (var dir in Directory.GetDirectories(cmdlineToolsDir))
-			{
-				var name = Path.GetFileName(dir);
-				if (string.IsNullOrEmpty(name) || name.Equals("latest", StringComparison.OrdinalIgnoreCase))
-					continue;
-
-				Version.TryParse(name, out var version);
-				subdirs.Add((dir, version ?? new Version(0, 0)));
-			}
-
-			subdirs.Sort((a, b) => b.version.CompareTo(a.version));
-
-			foreach (var (dir, _) in subdirs)
-			{
-				var toolPath = FindToolInDirectory(dir, ext);
-				if (toolPath != null)
-					return toolPath;
-			}
-
-			var latestPath = FindToolInDirectory(Path.Combine(cmdlineToolsDir, "latest"), ext);
-			if (latestPath != null)
-				return latestPath;
-
-			var directPath = FindToolInDirectory(cmdlineToolsDir, ext);
-			if (directPath != null)
-				return directPath;
-		}
-
-		var legacyPath = Path.Combine(sdkPath, "tools", "bin", "sdkmanager" + ext);
-		return File.Exists(legacyPath) ? legacyPath : null;
-	}
-
-	public async Task<List<SdkPackage>> GetInstalledPackagesAsync(CancellationToken cancellationToken = default)
-	{
-		SyncPaths();
-		try
-		{
-			var (installed, _) = await _sdkManager.ListAsync(cancellationToken);
-			return installed.Select(MapToMauiPackage).ToList();
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Trace.WriteLine($"SDK GetInstalledPackagesAsync failed: {ex.Message}");
-			return new List<SdkPackage>();
-		}
-	}
-
-	public async Task<List<SdkPackage>> GetAvailablePackagesAsync(CancellationToken cancellationToken = default)
-	{
-		SyncPaths();
-		try
-		{
-			var (_, available) = await _sdkManager.ListAsync(cancellationToken);
-			return available.Select(MapToMauiPackage).ToList();
-		}
-		catch (Exception ex)
-		{
-			System.Diagnostics.Trace.WriteLine($"SDK GetAvailablePackagesAsync failed: {ex.Message}");
-			return new List<SdkPackage>();
-		}
-	}
-
-	static SdkPackage MapToMauiPackage(XatSdkPackage pkg) => new()
-	{
-		Path = pkg.Path,
-		Version = pkg.Version,
-		Description = pkg.Description,
-		IsInstalled = pkg.IsInstalled
-	};
 
 	public async Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses = false,
 		CancellationToken cancellationToken = default)
@@ -199,10 +109,10 @@ public partial class SdkManager : IDisposable
 				return;
 			}
 
-			// Reuse the already-synced sdkPath to resolve the sdkmanager path once (avoids the
-			// extra SyncPaths() call the SdkManagerPath property would trigger). EnsureAvailable()
-			// above guarantees this resolves to a non-null path.
-			var sdkManagerPath = ResolveSdkManagerPath(sdkPath) ?? _sdkManager.FindSdkManagerPath()!;
+			// The paths were already synced at the top of this method, so ask the upstream resolver
+			// directly for the sdkmanager it will invoke. EnsureAvailable() above guarantees this
+			// resolves to a non-null path.
+			var sdkManagerPath = _sdkManager.FindSdkManagerPath()!;
 
 			// Install one package at a time so we can report per-package progress. Installing
 			// individually also keeps the streamed percentage meaningful (it resets per package).
@@ -543,13 +453,43 @@ public partial class SdkManager : IDisposable
 		await _sdkManager.BootstrapAsync(targetPath, bootstrapProgress, cancellationToken);
 	}
 
-	void EnsureAvailable()
+	/// <summary>
+	/// Resolves sdkmanager and its revision, preferring <c>cmdline-tools/latest</c>,
+	/// then the highest installed revision reported by <c>source.properties</c>. Returns
+	/// <see langword="null"/> when no SDK path is configured or no sdkmanager is installed.
+	/// </summary>
+	public Xamarin.Android.Tools.CommandLineTool? FindCommandLineTools()
 	{
-		if (!IsAvailable)
+		SyncPaths();
+		return _sdkManager.FindSdkManager();
+	}
+
+	/// <summary>
+	/// Ensures the Android SDK at <paramref name="targetPath"/> contains the latest
+	/// <c>cmdline-tools;latest</c> package, bootstrapping and/or updating from the Google
+	/// catalog as needed. Returns the resolved sdkmanager executable and installed revision.
+	/// </summary>
+	public async Task<Xamarin.Android.Tools.CommandLineTool> EnsureLatestCommandLineToolsAsync(
+		string targetPath,
+		Action<Xamarin.Android.Tools.SdkBootstrapPhase, int, string>? onProgress = null,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+		SyncPaths();
+		var bootstrapProgress = new Progress<Xamarin.Android.Tools.SdkBootstrapProgress>(p =>
+			onProgress?.Invoke(p.Phase, p.PercentComplete, p.Message));
+		return await _sdkManager.EnsureLatestCommandLineToolsAsync(targetPath, bootstrapProgress, cancellationToken);
+	}
+
+	string EnsureAvailable()
+	{
+		var sdkManagerPath = SdkManagerPath;
+		if (string.IsNullOrEmpty(sdkManagerPath))
 			throw MauiToolException.AutoFixable(
 				ErrorCodes.AndroidSdkManagerNotFound,
 				"SDK Manager not found. Run 'maui android install' first.",
 				"maui android install");
+		return sdkManagerPath;
 	}
 
 	/// <summary>

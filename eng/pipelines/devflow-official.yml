@@ -13,7 +13,7 @@ pr: none
 
 parameters:
 - name: publishDevFlowNuget
-  displayName: 'Publish DevFlow packages to NuGet.org'
+  displayName: 'Publish DevFlow and required Linux GTK4 packages to NuGet.org'
   type: boolean
   default: false
 - name: publishCliNuget
@@ -46,6 +46,10 @@ parameters:
   default: false
 - name: publishEssentialsAINuget
   displayName: 'Publish EssentialsAI packages to NuGet.org'
+  type: boolean
+  default: false
+- name: publishTestingNuget
+  displayName: 'Publish MAUI Testing packages to NuGet.org'
   type: boolean
   default: false
 
@@ -133,6 +137,7 @@ extends:
                 -projects $(Build.SourcesDirectory)\src\DevFlow\DevFlow.slnf
                 $(_OfficialBuildArgs)
                 /p:PackDriverNuGet=true
+                /p:PackLinuxGtk4NuGet=false
               displayName: Build and Test DevFlow
 
           - job: Cli
@@ -173,7 +178,7 @@ extends:
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
-                -projects $(Build.SourcesDirectory)\src\AIExtensions\AIExtensions.slnf
+                -projects $(Build.SourcesDirectory)\src\AIExtensions\AIExtensions.Packages.slnf
                 $(_OfficialBuildArgs)
               displayName: Build and Test AI Extensions
 
@@ -202,6 +207,8 @@ extends:
           # using GirCore for GTK/WebKit bindings, so they build and pack on Windows.
           # Running on Windows is required so MicroBuild/ESRP can sign the DLLs —
           # signing does not execute on Linux agents.
+          # This job owns GTK4 packages; DevFlow builds them with packing disabled
+          # to avoid duplicate package and symbol entries in the merged manifest.
           - job: LinuxGtk4
             displayName: Linux GTK4 - Windows
             pool:
@@ -226,8 +233,9 @@ extends:
           - job: EssentialsAI_macOS
             displayName: EssentialsAI - macOS (native build)
             pool:
-              name: Azure Pipelines
-              vmImage: macos-latest-internal
+              name: AcesShared
+              demands:
+              - ImageOverride -equals ACES_VM_SharedPool_GoldenGate
               os: macOS
             templateContext:
               outputs:
@@ -248,9 +256,15 @@ extends:
                 # Force Arcade to provision repo-local .dotnet because the next
                 # step invokes .dotnet/dotnet directly.
                 DOTNET_INSTALL_DIR: $(Build.SourcesDirectory)/.dotnet
-            - script: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-              displayName: Select Xcode 26.3
-            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.203
+            - script: |
+                set -euo pipefail
+                export DEVELOPER_DIR=/Applications/Xcode_27.app/Contents/Developer
+                version=$(xcodebuild -version)
+                printf '%s\n' "$version"
+                printf '%s\n' "$version" | grep -Eq '^Xcode 27([.[:space:]]|$)'
+                echo "##vso[task.setvariable variable=DEVELOPER_DIR]$DEVELOPER_DIR"
+              displayName: Select and verify Xcode 27
+            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
             - script: |
                 ./eng/common/build.sh \
@@ -259,7 +273,8 @@ extends:
                   --build \
                   --prepareMachine \
                   --ci \
-                  --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf
+                  --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf \
+                  /p:ValidateXcodeVersion=false
               displayName: Build EssentialsAI (macOS)
               env:
                 # Use the same SDK root that received the workload installation.
@@ -293,7 +308,7 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
             - pwsh: |
                 $arguments = @(
@@ -432,7 +447,38 @@ extends:
                 -projects $(Build.SourcesDirectory)\platforms\Browser\src\Browser.Essentials\Browser.Essentials.csproj
                 $(_OfficialBuildArgs)
               displayName: Build and Pack Browser Essentials
-
+            
+          - job: Testing
+            displayName: MAUI Testing - Windows
+            pool:
+              name: NetCore1ESPool-Internal
+              demands: ImageOverride -equals windows.vs2026.amd64
+            strategy:
+              matrix:
+                Release:
+                  _BuildConfig: Release
+                  _OfficialBuildArgs: /p:DotNetSignType=$(_SignType)
+                    /p:TeamName=$(_TeamName)
+                    /p:OfficialBuildId=$(BUILD.BUILDNUMBER)
+            steps:
+            - task: UseDotNet@2
+              displayName: Install .NET 11 RC 2 SDK
+              inputs:
+                version: 11.0.x
+                includePreviewVersions: true
+            - powershell: |
+                dotnet workload install maui
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              displayName: Install MAUI workload
+              workingDirectory: $(Build.SourcesDirectory)\src\Testing
+            - script: $(Build.SourcesDirectory)\eng\common\cibuild.cmd
+                -configuration $(_BuildConfig)
+                -prepareMachine
+                -projects $(Build.SourcesDirectory)\src\Testing\Testing.slnx
+                $(_OfficialBuildArgs)
+              displayName: Build, Test and Pack MAUI Testing
+              workingDirectory: $(Build.SourcesDirectory)\src\Testing
+       
     - template: /eng/common/templates-official/post-build/post-build.yml@self
       parameters:
         enableSourceLinkValidation: false
@@ -446,6 +492,7 @@ extends:
         dependsOn:
         - Validate
         - publish_using_darc
+        - publish_linux_gtk4_nuget
         jobs:
         - job: PrepareArtifacts
           displayName: 'Prepare DevFlow Artifacts'
@@ -465,8 +512,10 @@ extends:
             artifact: PackageArtifacts
             displayName: Download PackageArtifacts
           - powershell: |
+              $ErrorActionPreference = 'Stop'
+              & '$(Build.SourcesDirectory)/eng/scripts/Test-GtkPackageClosure.ps1' -PackageDirectory '$(Pipeline.Workspace)/PackageArtifacts'
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/DevFlowPackages'
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.DevFlow.*.nupkg' '$(Pipeline.Workspace)/DevFlowPackages/' -Verbose
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.DevFlow.*.nupkg' '$(Pipeline.Workspace)/DevFlowPackages/' -Verbose -ErrorAction Stop
             displayName: Filter DevFlow packages
 
         - job: PublishNuGet
@@ -606,7 +655,7 @@ extends:
               publishFeedCredentials: 'nuget.org (dotnetframework)'
 
     # Publish Linux GTK4 packages to NuGet.org
-    - ${{ if eq(parameters.publishLinuxGtk4Nuget, true) }}:
+    - ${{ if or(eq(parameters.publishLinuxGtk4Nuget, true), eq(parameters.publishDevFlowNuget, true)) }}:
       - stage: publish_linux_gtk4_nuget
         displayName: 'Publish Linux GTK4 to NuGet.org'
         dependsOn:
@@ -632,7 +681,7 @@ extends:
             displayName: Download PackageArtifacts
           - powershell: |
               New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/LinuxGtk4Packages'
-              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg' '$(Pipeline.Workspace)/LinuxGtk4Packages/' -Verbose
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Platforms.Linux.Gtk4.*.nupkg' '$(Pipeline.Workspace)/LinuxGtk4Packages/' -Verbose -ErrorAction Stop
             displayName: Filter Linux GTK4 packages
 
         - job: PublishNuGet
@@ -932,5 +981,60 @@ extends:
               useDotNetTask: false
               packagesToPush: '$(Pipeline.Workspace)/MacOSPackages/*.nupkg'
               packageParentPath: '$(Pipeline.Workspace)/MacOSPackages'
+              nuGetFeedType: external
+              publishFeedCredentials: 'nuget.org (dotnetframework)'
+
+    # Publish MAUI Testing packages to NuGet.org
+    - ${{ if eq(parameters.publishTestingNuget, true) }}:
+      - stage: publish_testing_nuget
+        displayName: 'Publish MAUI Testing to NuGet.org'
+        dependsOn:
+        - Validate
+        - publish_using_darc
+        jobs:
+        - job: PrepareArtifacts
+          displayName: 'Prepare MAUI Testing Artifacts'
+          timeoutInMinutes: 15
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026.amd64
+            os: windows
+          templateContext:
+            outputs:
+            - output: pipelineArtifact
+              displayName: Publish MAUI Testing Packages
+              targetPath: '$(Pipeline.Workspace)/TestingPackages'
+              artifactName: TestingPackagesForNuGet
+          steps:
+          - download: current
+            artifact: PackageArtifacts
+            displayName: Download PackageArtifacts
+          - powershell: |
+              New-Item -ItemType Directory -Force -Path '$(Pipeline.Workspace)/TestingPackages'
+              Copy-Item '$(Pipeline.Workspace)/PackageArtifacts/Microsoft.Maui.Testing*.nupkg' '$(Pipeline.Workspace)/TestingPackages/' -Verbose -ErrorAction Stop
+            displayName: Filter MAUI Testing packages
+
+        - job: PublishNuGet
+          displayName: 'Push MAUI Testing to NuGet.org'
+          dependsOn: PrepareArtifacts
+          timeoutInMinutes: 30
+          pool:
+            name: NetCore1ESPool-Internal
+            image: windows.vs2026.amd64
+            os: windows
+          templateContext:
+            type: releaseJob
+            isProduction: true
+            inputs:
+            - input: pipelineArtifact
+              artifactName: TestingPackagesForNuGet
+              targetPath: '$(Pipeline.Workspace)/TestingPackages'
+          steps:
+          - task: 1ES.PublishNuget@1
+            displayName: 'Push MAUI Testing to NuGet.org'
+            inputs:
+              useDotNetTask: false
+              packagesToPush: '$(Pipeline.Workspace)/TestingPackages/*.nupkg'
+              packageParentPath: '$(Pipeline.Workspace)/TestingPackages'
               nuGetFeedType: external
               publishFeedCredentials: 'nuget.org (dotnetframework)'

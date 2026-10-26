@@ -44,12 +44,15 @@ public static class MauiProgram
 		{
 			options.Port = ResolveAgentPort();
 			options.EnableProfiler = true;
+			options.EnableLayoutDiagnostics = true;
+			// Lets gestures reach raw-touch views such as GraphicsView on iOS/Mac Catalyst.
+			options.EnableSyntheticTouch = true;
 
 			var diagnostics = options.RegisterExtension(
 				"com.example.diagnostics",
 				"Sample diagnostics extension",
 				"1.0.0",
-				new[] { "build_info", "echo" });
+				new[] { "build_info", "echo", "seed_pref" });
 
 			diagnostics.MapTool(
 				"build_info",
@@ -111,6 +114,8 @@ public static class MauiProgram
 					Idempotent = true,
 					Category = "diagnostics"
 				});
+
+			PreferenceDiagnostics.Register(diagnostics);
 		});
 		builder.AddMauiBlazorDevFlowTools();
 #endif

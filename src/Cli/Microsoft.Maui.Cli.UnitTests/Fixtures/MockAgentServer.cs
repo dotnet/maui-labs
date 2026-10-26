@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -12,9 +14,110 @@ public sealed class MockAgentServer : IAsyncDisposable
 {
     private readonly List<RecordedRequest> _recordedRequests = [];
     private readonly object _lock = new();
+    private readonly bool _supportsCaptureEpoch;
+    private readonly bool _failFirstHitTestCandidate;
+    private readonly bool _changeHitTestCandidates;
+    private readonly bool _staleFirstHitTestCandidate;
+    private readonly bool _staleFirstFill;
+    private readonly bool _failScreenshotsAfterFirst;
+    private readonly bool _useScrollableHitTestCandidate;
+    private readonly int _nativeProbeBusyHitTestCount;
+    private readonly bool _failTapWithServerError;
+    private readonly bool _staleFirstElementTap;
+    private readonly bool _staleFirstKey;
+    private readonly bool _includeDetachedNativeRoot;
+    private readonly bool _returnEmptyTree;
+    private readonly bool _rejectNativeProperty;
+    private readonly bool _malformedPropertyResponse;
+    private readonly bool _propertyFailureWithoutReason;
+    private readonly bool _propertyNotFound;
+    private readonly int _capabilitiesErrorResponseCount;
+    private readonly bool _supportMutationLease;
+    private readonly bool _mutationLeaseTransactionBlocked;
+    private readonly string? _webViewEvaluateResponse;
+    private readonly string? _webViewSourceResponse;
+    private readonly int _webViewResponseStatusCode;
+    private readonly object _mutationLeaseLock = new();
+    private string? _mockMutationLeaseId;
+    private string? _mockMutationHolderKind;
+    private string? _mockMutationLabel;
+    private int _capabilitiesRequestCount;
+    private int _hitTestCount;
+    private int _tapCount;
+    private int _fillCount;
+    private int _screenshotCount;
+    private int _keyCount;
     private WebApplication? _app;
 
+    public MockAgentServer(
+        bool supportsCaptureEpoch = true,
+        bool failFirstHitTestCandidate = false,
+        bool changeHitTestCandidates = false,
+        bool staleFirstHitTestCandidate = false,
+        bool staleFirstFill = false,
+        bool failScreenshotsAfterFirst = false,
+        bool useScrollableHitTestCandidate = false,
+        int nativeProbeBusyHitTestCount = 0,
+        bool failTapWithServerError = false,
+        bool staleFirstElementTap = false,
+        bool staleFirstKey = false,
+        bool includeDetachedNativeRoot = false,
+        bool returnEmptyTree = false,
+        bool rejectNativeProperty = false,
+        bool malformedPropertyResponse = false,
+        bool propertyFailureWithoutReason = false,
+        bool propertyNotFound = false,
+        int capabilitiesErrorResponseCount = 0,
+        bool supportMutationLease = false,
+        bool mutationLeaseHeldByOther = false,
+        bool mutationLeaseTransactionBlocked = false,
+        string? webViewEvaluateResponse = null,
+        string? webViewSourceResponse = null,
+        int webViewResponseStatusCode = 200)
+    {
+        _supportsCaptureEpoch = supportsCaptureEpoch;
+        _failFirstHitTestCandidate = failFirstHitTestCandidate;
+        _changeHitTestCandidates = changeHitTestCandidates;
+        _staleFirstHitTestCandidate = staleFirstHitTestCandidate;
+        _staleFirstFill = staleFirstFill;
+        _failScreenshotsAfterFirst = failScreenshotsAfterFirst;
+        _useScrollableHitTestCandidate = useScrollableHitTestCandidate;
+        _nativeProbeBusyHitTestCount = nativeProbeBusyHitTestCount;
+        _failTapWithServerError = failTapWithServerError;
+        _staleFirstElementTap = staleFirstElementTap;
+        _staleFirstKey = staleFirstKey;
+        _includeDetachedNativeRoot = includeDetachedNativeRoot;
+        _returnEmptyTree = returnEmptyTree;
+        _rejectNativeProperty = rejectNativeProperty;
+        _malformedPropertyResponse = malformedPropertyResponse;
+        _propertyFailureWithoutReason = propertyFailureWithoutReason;
+        _propertyNotFound = propertyNotFound;
+        _capabilitiesErrorResponseCount = capabilitiesErrorResponseCount;
+        _supportMutationLease = supportMutationLease;
+        _mutationLeaseTransactionBlocked = mutationLeaseTransactionBlocked;
+        _webViewEvaluateResponse = webViewEvaluateResponse;
+        _webViewSourceResponse = webViewSourceResponse;
+        _webViewResponseStatusCode = webViewResponseStatusCode;
+        if (mutationLeaseHeldByOther)
+        {
+            _mockMutationLeaseId = "other-lease";
+            _mockMutationHolderKind = "vscode";
+            _mockMutationLabel = "VS Code Inspector";
+        }
+    }
+
     public int Port { get; private set; }
+
+    public bool BindToLocalhost { get; init; }
+
+    public string? WebViewEvaluateResponse { get; set; }
+    public string? AgentStatusResponse { get; set; }
+    public string? FileDownloadResponse { get; set; }
+    public string BrokerHealthResponse { get; set; } = """{"agents":2}""";
+    public string LayoutResponse { get; set; } = """{"summary":{"incomplete":1}}""";
+    public int LayoutStatusCode { get; set; } = 200;
+    public Dictionary<string, string[]> StreamMessages { get; } = [];
+    public int StreamFragmentSize { get; set; } = 1024;
 
     public IReadOnlyList<RecordedRequest> RecordedRequests
     {
@@ -28,10 +131,25 @@ public sealed class MockAgentServer : IAsyncDisposable
     public async Task StartAsync()
     {
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            if (BindToLocalhost)
+            {
+                using var listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start();
+                var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                listener.Stop();
+                options.ListenLocalhost(port);
+            }
+            else
+            {
+                options.Listen(IPAddress.Loopback, 0);
+            }
+        });
         builder.Logging.ClearProviders();
 
         _app = builder.Build();
+        _app.UseWebSockets();
 
         _app.Use(async (context, next) =>
         {
@@ -65,6 +183,8 @@ public sealed class MockAgentServer : IAsyncDisposable
         RegisterWebViewEndpoints(_app);
         RegisterNetworkEndpoints(_app);
         RegisterExtensionEndpoints(_app);
+        RegisterStreamEndpoints(_app);
+        _app.MapGet("/api/health", () => Results.Content(BrokerHealthResponse, "application/json"));
 
         await _app.StartAsync();
         Port = _app.Urls.Select(url => new Uri(url).Port).First();
@@ -85,10 +205,92 @@ public sealed class MockAgentServer : IAsyncDisposable
             _recordedRequests.Clear();
     }
 
-    private static void RegisterAgentEndpoints(WebApplication app)
+    private void RegisterAgentEndpoints(WebApplication app)
     {
-        app.MapGet("/api/v1/agent/status", () => Results.Content(MockAgentResponses.AgentStatus, "application/json"));
-        app.MapGet("/api/v1/agent/capabilities", () => Results.Content(MockAgentResponses.AgentCapabilities, "application/json"));
+        app.MapGet("/api/v1/agent/status", () => Results.Content(AgentStatusResponse ?? MockAgentResponses.AgentStatus, "application/json"));
+        app.MapGet("/api/v1/agent/capabilities", () =>
+        {
+            if (Interlocked.Increment(ref _capabilitiesRequestCount) <= _capabilitiesErrorResponseCount)
+            {
+                return Results.Json(
+                    new { success = false, error = "Capabilities temporarily unavailable" },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            return Results.Content(
+                _supportsCaptureEpoch
+                    ? MockAgentResponses.AgentCapabilities
+                    : MockAgentResponses.LegacyAgentCapabilities,
+                "application/json");
+        });
+        if (_supportMutationLease)
+        {
+            app.MapPost("/api/v1/agent/lease", async (HttpContext context) =>
+            {
+                using var body = await JsonDocument.ParseAsync(context.Request.Body);
+                var action = body.RootElement.TryGetProperty("action", out var actionValue)
+                    ? actionValue.GetString()
+                    : null;
+                var force = body.RootElement.TryGetProperty("force", out var forceValue) &&
+                    forceValue.GetBoolean();
+                var requestedLeaseId = body.RootElement.TryGetProperty("leaseId", out var leaseId)
+                    ? leaseId.GetString()
+                    : null;
+                var requestedHolderKind = body.RootElement.TryGetProperty("holderKind", out var holderKind)
+                    ? holderKind.GetString()
+                    : null;
+                var requestedLabel = body.RootElement.TryGetProperty("label", out var label)
+                    ? label.GetString()
+                    : null;
+                bool allowed;
+                bool youHold;
+                bool heldByOther;
+                string? currentLeaseId;
+                string? currentHolderKind;
+                string? currentLabel;
+                lock (_mutationLeaseLock)
+                {
+                    if (action == "claim")
+                    {
+                        var available = _mockMutationLeaseId is null ||
+                            string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal);
+                        if (available || (force && !_mutationLeaseTransactionBlocked))
+                        {
+                            _mockMutationLeaseId = requestedLeaseId;
+                            _mockMutationHolderKind = requestedHolderKind;
+                            _mockMutationLabel = requestedLabel;
+                        }
+                    }
+                    else if (action == "release" &&
+                             string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal))
+                    {
+                        _mockMutationLeaseId = null;
+                        _mockMutationHolderKind = null;
+                        _mockMutationLabel = null;
+                    }
+
+                    currentLeaseId = _mockMutationLeaseId;
+                    currentHolderKind = _mockMutationHolderKind;
+                    currentLabel = _mockMutationLabel;
+                    youHold = currentLeaseId is not null &&
+                        string.Equals(currentLeaseId, requestedLeaseId, StringComparison.Ordinal);
+                    heldByOther = currentLeaseId is not null && !youHold;
+                    allowed = youHold;
+                }
+                return Results.Json(new
+                {
+                    ok = true,
+                    allowed,
+                    youHold,
+                    heldByOther,
+                    leaseId = youHold ? currentLeaseId : null,
+                    holderKind = currentHolderKind,
+                    label = currentLabel,
+                    expiresInMs = currentLeaseId is null ? 0 : 10000,
+                    authority = "mock"
+                });
+            });
+        }
     }
 
     private static void RegisterExtensionEndpoints(WebApplication app)
@@ -103,20 +305,238 @@ public sealed class MockAgentServer : IAsyncDisposable
         });
     }
 
-    private static void RegisterUiEndpoints(WebApplication app)
+    private void RegisterUiEndpoints(WebApplication app)
     {
-        app.MapGet("/api/v1/ui/tree", () => Results.Content(MockAgentResponses.VisualTree, "application/json"));
-        app.MapGet("/api/v1/ui/elements", () => Results.Content(MockAgentResponses.QueryElements, "application/json"));
+        app.MapPost("/api/v1/ui/diagnostics/layout", () =>
+            Results.Content(LayoutResponse, "application/json", statusCode: LayoutStatusCode));
+
+        app.MapGet("/api/v1/ui/tree", () => Results.Content(
+            _returnEmptyTree
+                ? "[]"
+                : _includeDetachedNativeRoot
+                ? MockAgentResponses.VisualTreeWithDetachedNativeRoot
+                : MockAgentResponses.VisualTree,
+            "application/json"));
+        app.MapGet("/api/v1/ui/elements", (HttpContext context) =>
+        {
+            var response =
+                string.Equals(
+                    context.Request.Query["automationId"],
+                    "DuplicateActionTarget",
+                    StringComparison.Ordinal)
+                    ? MockAgentResponses.DuplicateActionElements
+                    : string.Equals(
+                        context.Request.Query["text"],
+                        "Shared action",
+                        StringComparison.Ordinal)
+                        ? MockAgentResponses.DistinctActionElements
+                        : MockAgentResponses.QueryElements;
+            return Results.Content(response, "application/json");
+        });
         app.MapGet("/api/v1/ui/elements/{id}", (string id) => Results.Content(MockAgentResponses.SingleElement(id), "application/json"));
         app.MapGet("/api/v1/ui/elements/{id}/properties/{name}", (string id, string name) =>
-            Results.Content($$"""{"id":"{{id}}","property":"{{name}}","value":"Hello, World!"}""", "application/json"));
-        app.MapPut("/api/v1/ui/elements/{id}/properties/{name}", () =>
-            Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
-        app.MapGet("/api/v1/ui/hit-test", () => Results.Content(MockAgentResponses.HitTestResult, "application/json"));
-        app.MapGet("/api/v1/ui/screenshot", () => Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
+        {
+            if (_malformedPropertyResponse)
+            {
+                // Simulates a transport failure / unparsable response deterministically:
+                // an empty 200 body causes GetJsonAsync to return JsonValueKind.Undefined,
+                // without relying on brittle real network-failure timing.
+                return Results.Content(string.Empty, "application/json");
+            }
 
-        foreach (var action in new[] { "tap", "fill", "clear", "focus", "navigate", "scroll", "resize", "back", "key", "gesture", "batch" })
+            if (_propertyFailureWithoutReason)
+            {
+                // Mirrors server responses such as "Agent not bound to app" that report
+                // "success": false but omit the optional "reason" field entirely.
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "Agent not bound to app"
+                    },
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            if (_propertyNotFound)
+            {
+                // Mirrors the real agent's genuine "property not found" response: HTTP 404,
+                // "success": false, no "reason" field. This must still resolve to a null
+                // return (not an exception) to preserve the maui_get_property/maui_assert
+                // not-found contract.
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = $"Property '{name}' not found on element '{id}'"
+                    },
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+
+            if (_rejectNativeProperty)
+            {
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "Generic property reflection is not supported for native elements. Use the element metadata and advertised capabilities instead.",
+                        reason = "native-property-not-supported"
+                    },
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            return Results.Content($$"""{"id":"{{id}}","property":"{{name}}","value":"Hello, World!"}""", "application/json");
+        });
+        app.MapPut("/api/v1/ui/elements/{id}/properties/{name}", () =>
+        {
+            if (_rejectNativeProperty)
+            {
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "Generic property mutation is not supported for native elements. Use a native action advertised by the element capabilities instead.",
+                        reason = "native-property-not-supported"
+                    },
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
+        });
+        app.MapGet("/api/v1/ui/hit-test", () =>
+        {
+            var hitTestNumber = Interlocked.Increment(ref _hitTestCount);
+            if (hitTestNumber <= _nativeProbeBusyHitTestCount)
+            {
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "Native hit testing is busy.",
+                        reason = "native-probe-busy",
+                        details = new { retryable = true }
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var epoch = hitTestNumber + 40;
+            var parentId = _changeHitTestCandidates && epoch > 41
+                ? "hit-parent-refreshed"
+                : "hit-parent";
+            var response = _useScrollableHitTestCandidate
+                ? MockAgentResponses.ScrollableHitTestResult(epoch)
+                : MockAgentResponses.HitTestResult(epoch, parentId);
+            return Results.Content(response, "application/json");
+        });
+        app.MapGet("/api/v1/ui/screenshot", () =>
+        {
+            if (_failScreenshotsAfterFirst
+                && Interlocked.Increment(ref _screenshotCount) > 1)
+            {
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "The UI snapshot is stale.",
+                        reason = "stale-capture-epoch"
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            return Results.File(MockAgentResponses.ScreenshotPng, "image/png");
+        });
+
+        app.MapPost("/api/v1/ui/actions/tap", async (HttpContext context) =>
+        {
+            var tapNumber = Interlocked.Increment(ref _tapCount);
+            using var body = await JsonDocument.ParseAsync(context.Request.Body);
+            if (_failTapWithServerError)
+            {
+                return Results.Json(
+                    new { success = false, error = "Agent action failed." },
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            if (_staleFirstElementTap
+                && tapNumber == 1
+                && body.RootElement.TryGetProperty("elementId", out var directElementId)
+                && directElementId.GetString() == "element-42")
+            {
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "The UI snapshot is stale.",
+                        reason = "stale-capture-epoch"
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            if (_staleFirstHitTestCandidate
+                && tapNumber == 1
+                && body.RootElement.TryGetProperty("elementId", out var staleElementId)
+                && staleElementId.GetString() == "hit-child")
+            {
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "The UI snapshot is stale.",
+                        reason = "stale-capture-epoch"
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            if (_failFirstHitTestCandidate
+                && body.RootElement.TryGetProperty("elementId", out var elementId)
+                && elementId.GetString() == "hit-child")
+            {
+                return Results.BadRequest(new { success = false, error = "not tappable" });
+            }
+
+            return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
+        });
+
+        app.MapPost("/api/v1/ui/actions/fill", () =>
+        {
+            if (_staleFirstFill && Interlocked.Increment(ref _fillCount) == 1)
+            {
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "The UI snapshot is stale.",
+                        reason = "stale-capture-epoch"
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
+        });
+
+        app.MapPost("/api/v1/ui/actions/key", () =>
+        {
+            if (_staleFirstKey && Interlocked.Increment(ref _keyCount) == 1)
+            {
+                return Results.Json(
+                    new
+                    {
+                        success = false,
+                        error = "The UI snapshot is stale.",
+                        reason = "stale-capture-epoch"
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            return Results.Content(MockAgentResponses.ActionSuccess, "application/json");
+        });
+
+        foreach (var action in new[] { "clear", "focus", "navigate", "scroll", "resize", "back", "batch" })
             app.MapPost($"/api/v1/ui/actions/{action}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
+
+        // Gestures return a richer body than the shared ActionSuccess: callers need to know
+        // which tier serviced them.
+        app.MapPost("/api/v1/ui/actions/gesture", () =>
+            Results.Content(MockAgentResponses.GestureSuccess, "application/json"));
     }
 
     private static void RegisterDeviceEndpoints(WebApplication app)
@@ -154,7 +574,7 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapPost("/api/v1/device/sensors/{sensor}/stop", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
 
-    private static void RegisterStorageEndpoints(WebApplication app)
+    private void RegisterStorageEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/storage/preferences", () => Results.Content(MockAgentResponses.PreferencesList, "application/json"));
         app.MapGet("/api/v1/storage/preferences/{key}", () => Results.Content(MockAgentResponses.PreferenceValue, "application/json"));
@@ -169,18 +589,18 @@ public sealed class MockAgentServer : IAsyncDisposable
 
         app.MapGet("/api/v1/storage/roots", () => Results.Content(MockAgentResponses.StorageRoots, "application/json"));
         app.MapGet("/api/v1/storage/files", () => Results.Content(MockAgentResponses.FilesList, "application/json"));
-        app.MapGet("/api/v1/storage/files/{path}", (string path) => Results.Content(MockAgentResponses.FileDownload(path), "application/json"));
+        app.MapGet("/api/v1/storage/files/{path}", (string path) => Results.Content(FileDownloadResponse ?? MockAgentResponses.FileDownload(path), "application/json"));
         app.MapPut("/api/v1/storage/files/{path}", (string path) => Results.Content(MockAgentResponses.FileUpload(path), "application/json"));
         app.MapDelete("/api/v1/storage/files/{path}", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
     }
 
-    private static void RegisterWebViewEndpoints(WebApplication app)
+    private void RegisterWebViewEndpoints(WebApplication app)
     {
         app.MapGet("/api/v1/webview/contexts", () => Results.Content(MockAgentResponses.WebViews, "application/json"));
-        app.MapGet("/api/v1/webview/source", () => Results.Content(MockAgentResponses.WebViewSource, "text/html"));
+        app.MapGet("/api/v1/webview/source", () => Results.Content(
+            _webViewSourceResponse ?? MockAgentResponses.WebViewSource, "text/html", statusCode: _webViewResponseStatusCode));
         app.MapGet("/api/v1/webview/dom", () => Results.Content("""{"root":{"tag":"html"}}""", "application/json"));
         app.MapGet("/api/v1/webview/dom/query", () => Results.Content("""{"matches":[{"tag":"div","id":"app"}]}""", "application/json"));
-        app.MapGet("/api/v1/webview/network", () => Results.Content("""{"entries":[]}""", "application/json"));
         app.MapGet("/api/v1/webview/console", () => Results.Content("""{"entries":[]}""", "application/json"));
         app.MapGet("/api/v1/webview/screenshot", () => Results.File(MockAgentResponses.ScreenshotPng, "image/png"));
 
@@ -188,8 +608,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         {
             using var reader = new StreamReader(context.Request.Body);
             var body = await reader.ReadToEndAsync();
-            var method = JsonDocument.Parse(body).RootElement.GetProperty("method").GetString() ?? string.Empty;
-            return Results.Content(MockAgentResponses.WebViewEvaluate(method), "application/json");
+            using var document = JsonDocument.Parse(body);
+            var method = document.RootElement.GetProperty("method").GetString() ?? string.Empty;
+            return Results.Content(WebViewEvaluateResponse ?? _webViewEvaluateResponse ?? MockAgentResponses.WebViewEvaluate(method),
+                "application/json", statusCode: _webViewResponseStatusCode);
         });
     }
 
@@ -199,6 +621,40 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/network/requests/{id}", (string id) => Results.Content($$"""{"id":"{{id}}"}""", "application/json"));
         app.MapDelete("/api/v1/network/requests", () => Results.Content(MockAgentResponses.ActionSuccess, "application/json"));
         app.MapGet("/api/v1/logs", () => Results.Content("""[{"level":"info","message":"ok"}]""", "application/json"));
+    }
+
+    private void RegisterStreamEndpoints(WebApplication app)
+    {
+        foreach (var stream in new[] { "logs", "network", "sensors" })
+        {
+            app.MapGet($"/ws/v1/{stream}", async (HttpContext context) =>
+            {
+                using var ws = await context.WebSockets.AcceptWebSocketAsync();
+                foreach (var message in StreamMessages.GetValueOrDefault(stream) ?? [])
+                {
+                    var bytes = Encoding.UTF8.GetBytes(message);
+                    for (var offset = 0; offset < bytes.Length; offset += StreamFragmentSize)
+                    {
+                        var length = Math.Min(StreamFragmentSize, bytes.Length - offset);
+                        await ws.SendAsync(new ArraySegment<byte>(bytes, offset, length),
+                            WebSocketMessageType.Text, offset + length == bytes.Length, context.RequestAborted);
+                    }
+                }
+
+                try
+                {
+                    var buffer = new byte[1024];
+                    while (ws.State == WebSocketState.Open)
+                    {
+                        var result = await ws.ReceiveAsync(buffer, context.RequestAborted);
+                        if (result.MessageType == WebSocketMessageType.Close)
+                            break;
+                    }
+                }
+                catch (WebSocketException) { }
+                catch (OperationCanceledException) { }
+            });
+        }
     }
 }
 

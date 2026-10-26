@@ -17,7 +17,7 @@ public sealed class NetworkTool
 		[Description("Filter by HTTP method (GET, POST, etc.)")] string? method = null,
 		[Description("Filter by status: '4xx', '5xx', '200', etc.")] string? statusFilter = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var requests = await agent.GetNetworkRequestsAsync(limit, host, method);
 		if (requests == null || requests.Count == 0)
 			return "No network requests captured. Ensure DevFlowHttpHandler is configured in the app.";
@@ -44,7 +44,7 @@ public sealed class NetworkTool
 		[Description("The request ID from maui_network results")] string requestId,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var detail = await agent.GetNetworkRequestDetailAsync(requestId);
 		if (detail == null)
 			return $"Network request '{requestId}' not found.";
@@ -57,7 +57,7 @@ public sealed class NetworkTool
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.ClearNetworkRequestsAsync();
 		return success ? "Network request buffer cleared." : "Failed to clear network requests.";
 	}

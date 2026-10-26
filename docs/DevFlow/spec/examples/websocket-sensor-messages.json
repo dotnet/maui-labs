@@ -1,13 +1,7 @@
 [
   {
-    "_comment": "Client subscribes to accelerometer sensor on /ws/v1/sensors",
-    "direction": "client → server",
-    "message": {
-      "type": "subscribe",
-      "filter": {
-        "sensor": "accelerometer"
-      }
-    }
+    "_comment": "Precondition: the client starts accelerometer through POST /api/v1/device/sensors/accelerometer/start under its mutation lease, then connects to /ws/v1/sensors?sensor=accelerometer",
+    "direction": "HTTP then WebSocket connect"
   },
   {
     "_comment": "Server confirms sensor subscription",
@@ -19,7 +13,9 @@
         "name": "accelerometer",
         "available": true,
         "active": true
-      }
+      },
+      "sensorName": "accelerometer",
+      "throttleMs": 100
     }
   },
   {
@@ -27,14 +23,20 @@
     "direction": "server → client",
     "message": {
       "type": "reading",
-      "timestamp": "2025-01-15T10:31:00.050Z",
+      "timestamp": "2025-01-15T10:31:00.100Z",
+      "sensor": "accelerometer",
+      "data": {
+        "X": 0.0123,
+        "Y": -0.0045,
+        "Z": -9.7891
+      },
       "reading": {
         "sensor": "accelerometer",
-        "timestamp": "2025-01-15T10:31:00.048Z",
+        "timestamp": "2025-01-15T10:31:00.100Z",
         "values": {
-          "x": 0.0123,
-          "y": -0.0045,
-          "z": -9.7891
+          "X": 0.0123,
+          "Y": -0.0045,
+          "Z": -9.7891
         }
       }
     }
@@ -44,14 +46,20 @@
     "direction": "server → client",
     "message": {
       "type": "reading",
-      "timestamp": "2025-01-15T10:31:00.100Z",
+      "timestamp": "2025-01-15T10:31:00.200Z",
+      "sensor": "accelerometer",
+      "data": {
+        "X": 0.0156,
+        "Y": -0.0031,
+        "Z": -9.7924
+      },
       "reading": {
         "sensor": "accelerometer",
-        "timestamp": "2025-01-15T10:31:00.098Z",
+        "timestamp": "2025-01-15T10:31:00.200Z",
         "values": {
-          "x": 0.0156,
-          "y": -0.0031,
-          "z": -9.7924
+          "X": 0.0156,
+          "Y": -0.0031,
+          "Z": -9.7924
         }
       }
     }
@@ -61,14 +69,20 @@
     "direction": "server → client",
     "message": {
       "type": "reading",
-      "timestamp": "2025-01-15T10:31:00.150Z",
+      "timestamp": "2025-01-15T10:31:00.300Z",
+      "sensor": "accelerometer",
+      "data": {
+        "X": 0.0189,
+        "Y": -0.0058,
+        "Z": -9.7856
+      },
       "reading": {
         "sensor": "accelerometer",
-        "timestamp": "2025-01-15T10:31:00.149Z",
+        "timestamp": "2025-01-15T10:31:00.300Z",
         "values": {
-          "x": 0.0189,
-          "y": -0.0058,
-          "z": -9.7856
+          "X": 0.0189,
+          "Y": -0.0058,
+          "Z": -9.7856
         }
       }
     }

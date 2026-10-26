@@ -28,6 +28,8 @@ public abstract class MacOSMauiApplication : NSApplicationDelegate, IPlatformApp
     /// </summary>
     internal MacOSMauiContext? ApplicationContext => _applicationContext;
 
+    internal bool IsTerminating { get; private set; }
+
     protected abstract MauiApp CreateMauiApp();
 
     public override void DidFinishLaunching(NSNotification notification)
@@ -100,7 +102,18 @@ public abstract class MacOSMauiApplication : NSApplicationDelegate, IPlatformApp
     [Export("applicationWillTerminate:")]
     public void ApplicationWillTerminate(NSNotification notification)
     {
-        foreach (var w in _windows.ToArray()) w.Destroying();
+        IsTerminating = true;
+        foreach (var w in _windows.ToArray())
+        {
+            // Remove before notifying user code, which may close other windows re-entrantly.
+            if (_windows.Remove(w))
+            {
+                if (w.Handler is WindowHandler handler)
+                    handler.OnWindowClosed(null);
+                else
+                    w.Destroying();
+            }
+        }
         FireLifecycleEvents<MacOSLifecycle.WillTerminate>(del => del(notification));
     }
 

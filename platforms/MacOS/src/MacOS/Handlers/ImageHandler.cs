@@ -127,7 +127,7 @@ public partial class ImageHandler : MacOSViewHandler<IImage, NSImageView>
     /// then alternate extensions (.svg, .pdf) and subdirectories (Images/).
     /// MAUI MauiImage resources may be SVGs that aren't converted to PNGs on macOS.
     /// </summary>
-    static NSImage? FindBundleImage(string fileName)
+    internal static NSImage? FindBundleImage(string fileName)
     {
         var name = System.IO.Path.GetFileNameWithoutExtension(fileName);
         var ext = System.IO.Path.GetExtension(fileName)?.TrimStart('.');
