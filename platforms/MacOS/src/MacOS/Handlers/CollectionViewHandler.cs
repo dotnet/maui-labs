@@ -123,6 +123,8 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         var explicitSize = isHorizontal ? view.Width : view.Height;
         _measureContent = double.IsPositiveInfinity(isHorizontal ? widthConstraint : heightConstraint)
             && !(double.IsFinite(explicitSize) && explicitSize >= 0);
+        if (_flatItems.Count == 5)
+            Console.WriteLine($"CollectionView desired size: width={widthConstraint} height={heightConstraint} measureContent={_measureContent} base={size}");
         if (!_measureContent || _flatItems.Count == 0 || _itemsContainer == null)
             return size;
 
@@ -134,6 +136,11 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         InvalidateMeasurementsForConstraintChange(rect);
         CalculatePositions(rect);
         var extent = (double)_flatItems.Max(info => info.Position + info.Size);
+        if (_flatItems.Count == 5)
+        {
+            var measurements = string.Join(",", _flatItems.Select(info => $"{info.Size}:{info.Measured}"));
+            Console.WriteLine($"CollectionView desired extent: {extent} items={measurements}");
+        }
         var minimum = isHorizontal ? view.MinimumWidth : view.MinimumHeight;
         var maximum = isHorizontal ? view.MaximumWidth : view.MaximumHeight;
         extent = Math.Max(extent, double.IsFinite(minimum) && minimum >= 0 ? minimum : 0);
@@ -144,6 +151,8 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
     public override void PlatformArrange(Rect rect)
     {
+        if (_flatItems.Count == 5)
+            Console.WriteLine($"CollectionView arrange: rect={rect} measureContent={_measureContent} positionsCalculated={_positionsCalculated}");
         base.PlatformArrange(rect);
         if (rect.Width > 0 && rect.Height > 0 && !_isInLayout)
         {
@@ -458,6 +467,8 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                 var measuredSize = isHorizontal
                     ? MeasureItemWidth(platformView, availableHeight)
                     : MeasureItemHeight(platformView, availableWidth);
+                if (_flatItems.Count == 5 && idx == 4)
+                    Console.WriteLine($"CollectionView item measure: index={idx} oldSize={info.Size} measuredSize={measuredSize} measureContent={_measureContent} viewport={viewportOverride}");
 
                 if (Math.Abs(measuredSize - info.Size) > 1)
                 {
@@ -482,6 +493,8 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         {
             var rect = new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height);
             CalculatePositions(rect);
+            if (_flatItems.Count == 5)
+                Console.WriteLine($"CollectionView recalc: extent={_flatItems.Max(info => info.Position + info.Size)} measureContent={_measureContent} platformBounds={PlatformView.Bounds}");
             foreach (var kvp in _visibleViews)
             {
                 PositionItem(kvp.Value.platformView, _flatItems[kvp.Key], kvp.Key,
