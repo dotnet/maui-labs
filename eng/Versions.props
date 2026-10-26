@@ -13,7 +13,7 @@
   </PropertyGroup>
   <!-- Dependencies flowing via darc/maestro (match Version.Details.xml) -->
   <PropertyGroup Label="Dotnet MAUI">
-    <MicrosoftMauiControlsVersion>10.0.41</MicrosoftMauiControlsVersion>
+    <MicrosoftMauiControlsVersion>11.0.0-rc.2.26525.4</MicrosoftMauiControlsVersion>
     <!-- Minimum MAUI version required by DevFlow shipping packages.
          Kept low so consumers can use any compatible MAUI 10.0.x release. -->
     <DevFlowMauiMinVersion>10.0.20</DevFlowMauiMinVersion>
@@ -21,20 +21,20 @@
     <MicrosoftMauiEssentialsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiEssentialsVersion>
     <MicrosoftAspNetCoreComponentsWebViewVersion>10.0.3</MicrosoftAspNetCoreComponentsWebViewVersion>
     <MicrosoftMauiControlsMapsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsMapsVersion>
-    <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
+    <MicrosoftAspNetCoreComponentsWebViewMauiVersion>11.0.0-rc.2.26525.4</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
   </PropertyGroup>
   <PropertyGroup Label="Dotnet Runtime / Extensions">
     <MicrosoftExtensionsDependencyInjectionVersion>10.0.5</MicrosoftExtensionsDependencyInjectionVersion>
     <MicrosoftExtensionsConfigurationVersion>10.0.5</MicrosoftExtensionsConfigurationVersion>
-    <MicrosoftExtensionsHttpVersion>10.0.5</MicrosoftExtensionsHttpVersion>
-    <MicrosoftExtensionsHostingVersion>10.0.5</MicrosoftExtensionsHostingVersion>
-    <MicrosoftExtensionsLoggingAbstractionsVersion>10.0.5</MicrosoftExtensionsLoggingAbstractionsVersion>
+    <MicrosoftExtensionsHttpVersion>11.0.0</MicrosoftExtensionsHttpVersion>
+    <MicrosoftExtensionsHostingVersion>11.0.0</MicrosoftExtensionsHostingVersion>
+    <MicrosoftExtensionsLoggingAbstractionsVersion>11.0.0</MicrosoftExtensionsLoggingAbstractionsVersion>
     <MicrosoftExtensionsLoggingConsoleVersion>10.0.5</MicrosoftExtensionsLoggingConsoleVersion>
     <MicrosoftExtensionsLoggingVersion>10.0.5</MicrosoftExtensionsLoggingVersion>
     <MicrosoftExtensionsLoggingDebugVersion>10.0.5</MicrosoftExtensionsLoggingDebugVersion>
     <MicrosoftExtensionsConfigurationJsonVersion>10.0.5</MicrosoftExtensionsConfigurationJsonVersion>
     <MicrosoftExtensionsConfigurationUserSecretsVersion>10.0.5</MicrosoftExtensionsConfigurationUserSecretsVersion>
-    <SystemTextJsonVersion>10.0.5</SystemTextJsonVersion>
+    <SystemTextJsonVersion>11.0.0</SystemTextJsonVersion>
   </PropertyGroup>
   <PropertyGroup Label="AI">
     <MicrosoftExtensionsAIVersion>10.4.1</MicrosoftExtensionsAIVersion>
@@ -62,7 +62,7 @@
   </PropertyGroup>
   <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Android Tools">
-    <XamarinAndroidToolsAndroidSdkVersion>37.2.1-preview.14</XamarinAndroidToolsAndroidSdkVersion>
+    <XamarinAndroidToolsAndroidSdkVersion>37.2.1-preview.20</XamarinAndroidToolsAndroidSdkVersion>
   </PropertyGroup>
   <!-- Apple platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Apple Tools">
