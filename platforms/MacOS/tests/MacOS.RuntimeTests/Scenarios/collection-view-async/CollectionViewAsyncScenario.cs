@@ -147,7 +147,8 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
             context.Pass($"Async insertion and redraw cycle {cycle + 1}");
         }
 
-        var resizedRow = _rows[0];
+        var resizedRow = _rows.Last(row =>
+            row.Handler?.PlatformView is NSView view && view.Window == nativeWindow);
         var nativeResizedRow = (NSView)resizedRow.Handler!.PlatformView!;
         var previousListHeight = native.Bounds.Height;
         var previousRowHeight = resizedRow.HeightRequest;
