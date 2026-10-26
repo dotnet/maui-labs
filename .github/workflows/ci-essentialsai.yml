@@ -33,6 +33,13 @@ on:
       - 'NuGet.config'
 
 jobs:
+  native-apple-tests:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run Swift bridge tests
+        run: swift test --package-path src/AI/AppleNative
+
   # Step 1: Build on Xcode 27 — compiles Swift xcframeworks, produces .resources.zip,
   # and uploads them as native-apple-essentialsai artifact via _build.yml.
   build-macos:
