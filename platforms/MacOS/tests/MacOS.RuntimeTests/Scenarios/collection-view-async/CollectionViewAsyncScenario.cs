@@ -164,6 +164,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
             previousRowHeight,
             resizedRowHeight,
             measureInvalidationCount,
+            resizedRowRuntimeHash = RuntimeHelpers.GetHashCode(resizedRow),
             listHeight = native.Bounds.Height,
             rowBounds = nativeResizedRow.Bounds.ToString(),
             rowFrame = nativeResizedRow.Frame.ToString(),

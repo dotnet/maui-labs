@@ -503,6 +503,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         if (!_measuredItemViews.ContainsKey(visualElement))
             visualElement.MeasureInvalidated += OnItemMeasureInvalidated;
         _measuredItemViews[visualElement] = index;
+        Console.WriteLine($"CollectionView measurement observer: view={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(visualElement)} index={index}");
     }
 
     void UnobserveItemMeasurement(IView mauiView)
@@ -520,8 +521,12 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
 
     void OnItemMeasureInvalidated(object? sender, EventArgs args)
     {
-        if (_isReloading || sender is not VisualElement visualElement ||
-            !_measuredItemViews.TryGetValue(visualElement, out var index) ||
+        var visualElement = sender as VisualElement;
+        var index = -1;
+        var observed = visualElement != null && _measuredItemViews.TryGetValue(visualElement, out index);
+        var measured = observed && index >= 0 && index < _flatItems.Count && _flatItems[index].Measured;
+        Console.WriteLine($"CollectionView measure invalidated: view={(visualElement == null ? -1 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(visualElement))} observed={observed} index={index} measured={measured} layout={_isInLayout} reloading={_isReloading}");
+        if (_isReloading || visualElement is null || !observed ||
             index < 0 || index >= _flatItems.Count)
             return;
 
