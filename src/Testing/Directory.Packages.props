@@ -1,4 +1,4 @@
 <Project>
-  <Import Project="..\..\eng\Versions.props" />
+  <Import Project="..\..\eng\Versions.props" Condition="'$(_MauiLabsVersionsPropsImported)' != 'true'" />
   <Import Project="..\..\Directory.Packages.props" />
 </Project>
