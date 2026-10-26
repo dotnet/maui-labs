@@ -132,6 +132,112 @@ public class InspectorHtmlRendererTests
         Assert.Contains("left:30px", html);
     }
 
+    private static ElementInfo Overlay(string id, string type, double x, double y, double width, double height, params ElementInfo[] children) => new()
+    {
+        Id = id,
+        Type = type,
+        IsVisible = true,
+        WindowBounds = new BoundsInfo { X = x, Y = y, Width = width, Height = height },
+        Children = children.Length > 0 ? children.ToList() : null,
+    };
+
+    // RenderElements emits one div per line.
+    private static string OverlayDiv(string html, string id)
+        => html.Split('\n').Single(line => line.Contains($"data-id=\"{id}\""));
+
+    [Theory]
+    // Mac Catalyst: the closed flyout row is realized at x = -320 with its right edge at 0.
+    [InlineData(-320, 320, -270, 270)]
+    // iOS: fractional bounds put the right edge at +0.1.
+    [InlineData(-321.6, 321.7, -271.6, 271.7)]
+    public void RenderElements_ClosedShellFlyoutItems_AreMarkedOffscreenWhileKeepingAgentVisibility(
+        double rowX, double rowWidth, double labelX, double labelWidth)
+    {
+        var tree = new List<ElementInfo>
+        {
+            Overlay("shell", "Shell", 0, 0, 400, 800,
+                Overlay("page", "ContentPage", 0, 0, 400, 800),
+                Overlay("flyout-row", "Grid", rowX, 100, rowWidth, 50,
+                    Overlay("flyout-label", "Label", labelX, 110, labelWidth, 30))),
+        };
+
+        var html = HtmlRenderer.RenderElements(tree, viewportWidth: 400, viewportHeight: 800);
+
+        Assert.Contains("data-offscreen=\"true\"", OverlayDiv(html, "flyout-row"));
+        Assert.Contains("data-offscreen=\"true\"", OverlayDiv(html, "flyout-label"));
+        // The Agent's own displayed value is passed through untouched.
+        Assert.Contains("data-isVisible=\"true\"", OverlayDiv(html, "flyout-row"));
+        Assert.DoesNotContain("data-offscreen", OverlayDiv(html, "shell"));
+        Assert.DoesNotContain("data-offscreen", OverlayDiv(html, "page"));
+    }
+
+    [Theory]
+    [InlineData(0, 0, 400, 800, false)]     // fills the viewport
+    [InlineData(-50, 10, 100, 30, false)]   // straddles the left edge
+    [InlineData(380, 10, 100, 30, false)]   // straddles the right edge
+    [InlineData(10, -20, 100, 30, false)]   // straddles the top edge
+    [InlineData(10, 790, 100, 30, false)]   // straddles the bottom edge
+    [InlineData(-49, 10, 50, 30, false)]    // 1px sliver inside the left edge
+    [InlineData(399, 10, 50, 30, false)]    // 1px sliver inside the right edge
+    [InlineData(10, 10, 0, 30, false)]      // zero-width element inside the viewport
+    [InlineData(-320, 10, 320, 30, true)]   // right edge exactly at the left edge
+    [InlineData(-321.6, 10, 321.7, 30, true)] // right edge 0.1 inside the left edge
+    [InlineData(400, 10, 100, 30, true)]    // starts at the right edge
+    [InlineData(10, -30, 100, 30, true)]    // bottom edge at the top edge
+    [InlineData(10, 800, 100, 30, true)]    // starts at the bottom edge
+    public void RenderElements_MarksOffscreenOnlyWhenNoPartIsInsideTheViewport(
+        double x, double y, double width, double height, bool expectedOffscreen)
+    {
+        var html = HtmlRenderer.RenderElements(
+            [Overlay("target", "Grid", x, y, width, height)], viewportWidth: 400, viewportHeight: 800);
+
+        Assert.Equal(expectedOffscreen, OverlayDiv(html, "target").Contains("data-offscreen=\"true\""));
+    }
+
+    [Fact]
+    public void RenderElements_WithoutViewport_NeverMarksOffscreen()
+    {
+        var html = HtmlRenderer.RenderElements([Overlay("flyout-row", "Grid", -320, 100, 320, 50)]);
+
+        Assert.DoesNotContain("data-offscreen", html);
+    }
+
+    [Fact]
+    public void RenderElements_ChecksOffscreenAfterApplyingRootOffset()
+    {
+        // The modal screenshot starts at window y = 100, so "above" falls outside it even
+        // though its window y (50) is inside the window.
+        var html = HtmlRenderer.RenderElements(
+            [Overlay("inside", "Button", 20, 150, 100, 40), Overlay("above", "Button", 20, 50, 100, 40)],
+            rootOffsetY: 100, viewportWidth: 400, viewportHeight: 800);
+
+        Assert.DoesNotContain("data-offscreen", OverlayDiv(html, "inside"));
+        Assert.Contains("data-offscreen=\"true\"", OverlayDiv(html, "above"));
+    }
+
+    [Fact]
+    public void Render_MarksOffscreenAgainstTheScreenshotSize()
+    {
+        var html = HtmlRenderer.Render(
+            [Overlay("page", "ContentPage", 0, 0, 400, 800), Overlay("flyout-row", "Grid", -320, 100, 320, 50)],
+            hasScreenshot: true, screenshotWidth: 400, screenshotHeight: 800);
+
+        Assert.DoesNotContain("data-offscreen", OverlayDiv(html, "page"));
+        Assert.Contains("data-offscreen=\"true\"", OverlayDiv(html, "flyout-row"));
+    }
+
+    [Fact]
+    public void Render_WithoutScreenshot_DoesNotJudgeOverlaysAgainstThePlaceholderViewport()
+    {
+        // With no screenshot the inspector falls back to an 800x600 placeholder; a larger window's
+        // on-screen controls beyond it must not be marked off-screen.
+        var html = HtmlRenderer.Render(
+            [Overlay("page", "ContentPage", 0, 0, 1200, 900), Overlay("button", "Button", 900, 700, 100, 40)],
+            hasScreenshot: false, screenshotWidth: 800, screenshotHeight: 600);
+
+        Assert.DoesNotContain("data-offscreen", OverlayDiv(html, "button"));
+    }
+
     [Theory]
     [InlineData("Button", true, true, true)]
     [InlineData("CollectionView", true, true, true)]

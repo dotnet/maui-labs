@@ -25,6 +25,8 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: read
     env:
       Configuration: Release
     strategy:

@@ -23,10 +23,10 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.De
   --results-directory artifacts\TestResults\InspectorBrowser
 ```
 
-All **18** fixtures must execute and pass: the original eleven Layout workspace checks,
+All **19** fixtures must execute and pass: the original eleven Layout workspace checks,
 cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticInputsRevision`
 invalidation/Live rescanning with unchanged geometry, two queued Live cancellation checks,
-and three property/Network synchronization checks.
+three property/Network synchronization checks, and the disconnected overlay's "Retry now" check.
 Disabling Live cancels queued automatic rescans while preserving an explicit refresh requested
 during an active scan; it does not abort the in-flight scan.
 
@@ -37,7 +37,7 @@ while detail stays open. Response gates hold each loading state until asserted; 
 clock drives the real polling intervals instead of wall-clock sleeps.
 
 `ci-devflow.yml` provisions Chromium in its dedicated `inspector-layout-browser` Windows job and
-sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 18 passed results and fails
+sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 19 passed results and fails
 if any filtered test is skipped; adding another fixture requires updating the explicit count.
 It also repeats all three synchronization cases five times, failing immediately on any failure
 or skip. The Windows live integration job enables these browser fixtures alongside the native
@@ -87,7 +87,8 @@ is required.
 
 Coverage includes runtime property writes and rejection, source-button
 clean/pending/dirty states, selection preservation after real state refresh,
-property filtering, and numeric validation. Only the agent's controlled responses
+property filtering, numeric validation, color-editor alpha handling, and off-screen overlays (dimmed in the tree,
+not drawn or highlighted on the Preview). Only the agent's controlled responses
 are mocked; browser requests are not intercepted and HTML is not injected.
 Teardown stops browser timers and prevents a late pagehide keepalive request, then
 drains HTTP traffic before disposing the

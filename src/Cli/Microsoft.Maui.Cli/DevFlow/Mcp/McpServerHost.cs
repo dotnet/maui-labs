@@ -68,6 +68,7 @@ public static class McpServerHost
 			.WithTools<PreferencesTools>()
 			.WithTools<PlatformTools>()
 			.WithTools<ThemeTools>()
+			.WithTools<FoldTools>()
 			.WithTools<SensorTools>()
 			.WithTools<JobTools>()
 			.WithTools<MenuTools>()

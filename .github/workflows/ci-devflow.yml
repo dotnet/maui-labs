@@ -97,8 +97,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$trx = Get-Content artifacts\TestResults\InspectorBrowser\layout-browser.trx
           $results = @($trx.TestRun.Results.UnitTestResult)
-          if ($results.Count -ne 18 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
-            throw 'All 18 existing and regression browser tests must execute and pass; skips are not allowed.'
+          if ($results.Count -ne 19 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+            throw 'All 19 existing and regression browser tests must execute and pass; skips are not allowed.'
           }
 
       - name: Repeat Inspector synchronization regressions on Windows
@@ -240,8 +240,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$results = Get-Content artifacts/TestResults/inspector-browser/inspector-browser.trx -Raw
           $counts = $results.TestRun.ResultSummary.Counters
-          if ($counts.total -ne '5' -or $counts.executed -ne '5' -or $counts.passed -ne '5' -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
-            throw 'All five Inspector browser fixtures must execute and pass with zero skips.'
+          if ($counts.total -ne '10' -or $counts.executed -ne '10' -or $counts.passed -ne '10' -or $counts.notExecuted -ne '0' -or $counts.failed -ne '0') {
+            throw 'All ten Inspector browser fixtures must execute and pass with zero skips.'
           }
 
       - name: Upload browser test results

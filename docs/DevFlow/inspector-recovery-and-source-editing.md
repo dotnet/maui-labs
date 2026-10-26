@@ -61,6 +61,15 @@ device process ID as a host process. Multiple matches or an incomplete bounded s
 refuse to open or write a source file; an absolute registered project path is another option for
 explicit local-debug targeting.
 
+The captured workspace is shown by `maui devflow broker status` (including `--json`),
+[`/api/health`](broker.md#broker-http-api), and the broker log; `broker status` omits it when the
+broker reports none. A running broker keeps the workspace it captured, so one that was auto-started
+from another directory must be restarted: run `maui devflow broker stop`, then start it again from
+the app's workspace or with `MAUI_DEVFLOW_PROJECT_ROOT` set to that workspace or the project folder.
+When a project-relative source cannot be resolved, the error says why. If the workspace decided the
+outcome (no `.git` or `global.json` at or above it, no matching project beneath it, more than one
+match, or an incomplete bounded search), it also names the directory searched and repeats these steps.
+
 An invalid, missing, or unsupported source workspace is reported without stopping the broker.
 Workspace-based source discovery stays unavailable rather than falling back to another working
 directory; ordinary runtime inspection and independently resolvable local source paths remain

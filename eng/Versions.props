@@ -1,5 +1,6 @@
 <Project>
   <PropertyGroup>
+    <_MauiLabsVersionsPropsImported>true</_MauiLabsVersionsPropsImported>
     <!-- Product version -->
     <MajorVersion>0</MajorVersion>
     <MinorVersion>1</MinorVersion>
@@ -62,7 +63,7 @@
   </PropertyGroup>
   <!-- Android platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Android Tools">
-    <XamarinAndroidToolsAndroidSdkVersion>1.0.189-preview.59</XamarinAndroidToolsAndroidSdkVersion>
+    <XamarinAndroidToolsAndroidSdkVersion>37.2.1-preview.14</XamarinAndroidToolsAndroidSdkVersion>
   </PropertyGroup>
   <!-- Apple platform tooling (managed via darc/maestro — see eng/Version.Details.xml) -->
   <PropertyGroup Label="Apple Tools">
