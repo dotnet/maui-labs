@@ -121,13 +121,22 @@ public class InspectorPropertyEndpointTests
         string unavailableWorkspace, bool relativeProject)
         => await VerifySourceWorkspaceAsync("Android", relativeProject, unavailableWorkspace);
 
+    [Fact]
+    public async Task SourceWorkspace_ValidButWithoutProject_NamesSearchedDirectory()
+        => await VerifySourceWorkspaceAsync("Android", relativeProject: true, "empty");
+
     private static async Task VerifySourceWorkspaceAsync(
-        string platform, bool relativeProject, string? unavailableWorkspace = null)
+        string platform, bool relativeProject, string? workspaceKind = null)
     {
+        // Everything lives under tempRoot so the run is hermetic and cleans up after itself.
         var tempRoot = Path.Combine(Path.GetTempPath(), "devflow-source-endpoint", Guid.NewGuid().ToString("N"));
-        var projectRoot = Path.Combine(tempRoot, "samples", "TestApp");
+        var repoRoot = Path.Combine(tempRoot, "repo");
+        var emptyRoot = Path.Combine(tempRoot, "empty");
+        var projectRoot = Path.Combine(repoRoot, "samples", "TestApp");
         Directory.CreateDirectory(projectRoot);
-        await File.WriteAllTextAsync(Path.Combine(tempRoot, ".git"), "gitdir: test");
+        Directory.CreateDirectory(emptyRoot);
+        await File.WriteAllTextAsync(Path.Combine(repoRoot, ".git"), "gitdir: test");
+        await File.WriteAllTextAsync(Path.Combine(emptyRoot, ".git"), "gitdir: test");
         var projectPath = Path.Combine(projectRoot, "TestApp.csproj");
         var sourcePath = Path.Combine(projectRoot, "MainPage.xaml");
         await File.WriteAllTextAsync(projectPath, "<Project />");
@@ -142,14 +151,16 @@ public class InspectorPropertyEndpointTests
             SourceHash = "source-hash",
         });
         var port = FreePort();
-        var workspace = unavailableWorkspace switch
+        var workspace = workspaceKind switch
         {
-            null => tempRoot,
+            null => repoRoot,
+            "empty" => emptyRoot,
             "missing" => Path.Combine(tempRoot, "missing"),
             "unc" => @"\\devflow-invalid.example\share\workspace",
             "invalid" => "\0",
-            _ => throw new ArgumentOutOfRangeException(nameof(unavailableWorkspace)),
+            _ => throw new ArgumentOutOfRangeException(nameof(workspaceKind)),
         };
+        var workspaceAvailable = workspaceKind is null or "empty";
         var logs = new List<string>();
         using var broker = new BrokerServer(log: logs.Add, workspaceStartPath: workspace);
         using var inspector = broker.CreateInspector(new AgentRegistration
@@ -186,7 +197,7 @@ public class InspectorPropertyEndpointTests
             using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            if (unavailableWorkspace is null || !relativeProject)
+            if (workspaceKind is null || !relativeProject)
             {
                 Assert.True(body.RootElement.GetProperty("ok").GetBoolean());
                 Assert.Equal(sourcePath, body.RootElement.GetProperty("file").GetString());
@@ -195,12 +206,18 @@ public class InspectorPropertyEndpointTests
             else
             {
                 Assert.False(body.RootElement.GetProperty("ok").GetBoolean());
-                Assert.Contains("MAUI_DEVFLOW_PROJECT_ROOT", body.RootElement.GetProperty("error").GetString());
+                var error = body.RootElement.GetProperty("error").GetString();
+                Assert.Contains("MAUI_DEVFLOW_PROJECT_ROOT", error);
+                if (workspaceKind == "empty")
+                    Assert.Contains($"no 'TestApp.csproj' for this app found under '{workspace}'", error);
                 Assert.False(body.RootElement.TryGetProperty("file", out _));
             }
 
-            if (unavailableWorkspace is not null)
+            if (!workspaceAvailable)
                 Assert.Contains(logs, message => message.Contains("MAUI_DEVFLOW_PROJECT_ROOT", StringComparison.Ordinal));
+
+            using var health = JsonDocument.Parse(broker.HandleHealth());
+            Assert.Equal(workspaceAvailable ? workspace : null, health.RootElement.GetProperty("sourceWorkspace").GetString());
         }
         finally
         {

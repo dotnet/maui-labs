@@ -11,6 +11,28 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
         "maui-devflow-source-edit-tests",
         Guid.NewGuid().ToString("N"));
 
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    public async Task PersistAsync_OldOrInvalidHash_RequiresRebuildWithoutWriting(int length)
+    {
+        var (sourcePath, xaml) = await CreateProjectAsync("""
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
+                <Label Text="Original" />
+            </ContentPage>
+            """);
+        var element = CreateElement(sourcePath, xaml, "<Label");
+        element.SourceHash = length == 16
+            ? XamlSourcePropertyEditor.ComputeSourceHash(xaml)[..16]
+            : new string(length == 32 ? 'g' : 'a', length);
+
+        var result = await CreateEditor(sourcePath).PersistAsync(element, "Text", "Changed");
+
+        Assert.Equal(XamlSourceEditStatus.SourceUnavailable, result.Status);
+        Assert.Contains("Rebuild", result.Error);
+        Assert.Equal(xaml, await File.ReadAllTextAsync(sourcePath));
+    }
+
     [Fact]
     public async Task PersistAsync_DirectLiteral_ReplacesOnlyValueAndPreservesUtf8Bom()
     {
@@ -350,7 +372,76 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
             workspace: workspace);
 
         Assert.Null(editor.ResolveSourcePath("MainPage.xaml", out var error));
+        Assert.Contains($"'{workspacePath}' is not an existing local directory", error);
         Assert.Contains("MAUI_DEVFLOW_PROJECT_ROOT", error);
+    }
+
+    [Theory]
+    [InlineData(false, "no .git or global.json found at or above")]
+    [InlineData(true, "no 'TestApp.csproj' for this app found under")]
+    public async Task ResolveSourcePath_WorkspaceWithoutProject_ExplainsWhatWasSearched(
+        bool workspaceHasMarker, string expectedReason)
+    {
+        var (sourcePath, _) = await CreateProjectAsync("<ContentPage />");
+        var projectPath = Path.Combine(Path.GetDirectoryName(sourcePath)!, "TestApp.csproj");
+        var workspacePath = Path.Combine(_tempRoot, "other-workspace");
+        Directory.CreateDirectory(workspacePath);
+        if (workspaceHasMarker)
+            await File.WriteAllTextAsync(Path.Combine(workspacePath, ".git"), "gitdir: test");
+        else if (HasWorkspaceMarkerAtOrAbove(workspacePath))
+            return; // The temp directory sits inside a repository. xUnit v2 lacks a runtime Assert.Skip.
+        var editor = new XamlSourcePropertyEditor(
+            "TestApp.csproj",
+            XamlSourcePropertyEditor.ComputeDefaultSessionId(projectPath),
+            workspace: XamlSourceWorkspace.Capture(workspacePath));
+
+        Assert.Null(editor.ResolveSourcePath("MainPage.xaml", out var error));
+        Assert.Contains($"{expectedReason} '{workspacePath}'", error);
+        Assert.Contains("maui devflow broker stop", error);
+        Assert.Contains("MAUI_DEVFLOW_PROJECT_ROOT", error);
+    }
+
+    // Restarting the broker with another workspace cannot change these outcomes, so the message must not suggest it.
+    [Theory]
+    [InlineData(true, "the registered project file")]
+    [InlineData(false, "the app registered no project name or session identity")]
+    public void ResolveSourcePath_FailureNotDecidedByWorkspace_DoesNotSuggestRestartingBroker(
+        bool absoluteProjectMissing, string expectedReason)
+    {
+        var editor = absoluteProjectMissing
+            ? new XamlSourcePropertyEditor(Path.Combine(_tempRoot, "gone", "TestApp.csproj"))
+            : new XamlSourcePropertyEditor("TestApp.csproj");
+
+        Assert.Null(editor.ResolveSourcePath("MainPage.xaml", out var error));
+        Assert.Contains(expectedReason, error);
+        Assert.DoesNotContain("maui devflow broker stop", error);
+    }
+
+    [Fact]
+    public void ResolveSourcePath_UnavailableWorkspace_DoesNotHideFailureItDidNotDecide()
+    {
+        var editor = new XamlSourcePropertyEditor(
+            "TestApp.csproj",
+            workspace: XamlSourceWorkspace.Capture(Path.Combine(_tempRoot, "missing")));
+
+        Assert.Null(editor.ResolveSourcePath("MainPage.xaml", out var error));
+        Assert.Contains("the app registered no project name or session identity", error);
+        Assert.DoesNotContain("MAUI_DEVFLOW_PROJECT_ROOT", error);
+    }
+
+    // The remedy the message names: a workspace that is the project folder needs no .git or global.json.
+    [Fact]
+    public async Task ResolveSourcePath_WorkspaceIsProjectFolder_ResolvesWithoutMarker()
+    {
+        var (sourcePath, _) = await CreateProjectAsync("<ContentPage />");
+        var projectRoot = Path.GetDirectoryName(sourcePath)!;
+        var editor = new XamlSourcePropertyEditor(
+            "TestApp.csproj",
+            XamlSourcePropertyEditor.ComputeDefaultSessionId(Path.Combine(projectRoot, "TestApp.csproj")),
+            workspace: XamlSourceWorkspace.Capture(projectRoot));
+
+        Assert.Equal(sourcePath, editor.ResolveSourcePath("MainPage.xaml", out var error));
+        Assert.Null(error);
     }
 
     [Fact]
@@ -407,7 +498,7 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task FindRelativeProjectRoot_AmbiguousWorkspaceReturnsNull(bool hostLocalProcess)
+    public async Task FindRelativeProjectRoot_AmbiguousWorkspaceIsUnsafe(bool hostLocalProcess)
     {
         var workspaceRoot = Path.Combine(_tempRoot, "ambiguous-workspace");
         Directory.CreateDirectory(workspaceRoot);
@@ -437,7 +528,10 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
             appExecutablePath: hostLocalProcess ? Path.Combine(appDirectory, "TestApp.exe") : null,
             currentDirectory: hostLocalProcess ? firstProjectRoot : workspaceRoot);
 
-        Assert.Null(result);
+        Assert.Equal(XamlSourcePropertyEditor.ProjectRootSearchStatus.Unsafe, result.Status);
+        Assert.Null(result.ProjectRoot);
+        Assert.Equal(!hostLocalProcess, result.FromWorkspace);
+        Assert.Contains($"more than one 'TestApp.csproj' for this app found under '{workspaceRoot}'", result.Reason);
     }
 
     [Theory]
@@ -501,6 +595,17 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
 
     private static XamlSourcePropertyEditor CreateEditor(string sourcePath) =>
         new(Path.Combine(Path.GetDirectoryName(sourcePath)!, "TestApp.csproj"));
+
+    private static bool HasWorkspaceMarkerAtOrAbove(string directory)
+    {
+        for (var current = new DirectoryInfo(directory); current is not null; current = current.Parent)
+        {
+            if (XamlSourcePropertyEditor.IsWorkspaceRoot(current.FullName))
+                return true;
+        }
+
+        return false;
+    }
 
     private static ElementInfo CreateElement(string sourcePath, string xaml, string marker, int occurrence = 0)
     {

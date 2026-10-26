@@ -72,6 +72,11 @@
     <Project Path="src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference/Microsoft.Maui.Build.AppProjectReference.csproj" />
     <Project Path="src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/Microsoft.Maui.Build.AppProjectReference.Tests.csproj" />
   </Folder>
+  <Folder Name="/src/Testing/">
+    <Project Path="src/Testing/Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj" />
+    <Project Path="src/Testing/Microsoft.Maui.Testing.Tests/Microsoft.Maui.Testing.Tests.csproj" />
+    <Project Path="src/Testing/templates/Microsoft.Maui.Testing.Templates.csproj" />
+  </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/AI/">
     <Project Path="tests/AI/Microsoft.Maui.Essentials.AI.Benchmarks/Microsoft.Maui.Essentials.AI.Benchmarks.csproj" />

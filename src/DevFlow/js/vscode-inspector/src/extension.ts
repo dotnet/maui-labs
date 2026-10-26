@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import type { AgentRegistration } from "@maui-devflow/client";
 import { PanelContextStore } from "./panel-context";
-import { isInside, resolveLocalSourceFile } from "./source-path";
+import { isInside, resolveLocalSourceFile, sourceHashMatches } from "./source-path";
 import {
   createReconnectController,
   inspectorTitle,
@@ -539,8 +539,7 @@ async function openSource(
   try {
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fsPath));
     if (sourceHash) {
-      const currentHash = createHash("sha256").update(doc.getText(), "utf8").digest("hex").slice(0, 16);
-      if (currentHash !== sourceHash.toLowerCase()) {
+      if (!sourceHashMatches(doc.getText(), sourceHash)) {
         const choice = await vscode.window.showWarningMessage(
           "DevFlow: this XAML file changed after the running app was built, so the recorded source line may be stale.",
           { modal: true },

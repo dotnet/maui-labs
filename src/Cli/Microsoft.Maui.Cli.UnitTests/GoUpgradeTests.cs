@@ -229,12 +229,14 @@ public class GoUpgradeTests : IDisposable
 		Assert.Contains("<PackageReference Include=\"Acme.Lib\" Version=\"1.2.3\" />", csproj);
 	}
 
-	[Fact]
-	public async Task PropertyDirective_RendersInPropertyGroup()
+	[Theory]
+	[InlineData("LangVersion", "preview")]
+	[InlineData("ApplicationId", "com.cometgo.appc12140a0")]
+	public async Task PropertyDirective_RendersInPropertyGroup(string name, string value)
 	{
-		WriteUserFile("""
+		WriteUserFile($$"""
 			#:package Comet
-			#:property LangVersion=preview
+			#:property {{name}}={{value}}
 			using Comet;
 			namespace MyGoApp;
 			public class MainPage : View { [Body] View body() => Text("x"); }
@@ -243,7 +245,7 @@ public class GoUpgradeTests : IDisposable
 		var result = await GoUpgradeRunner.RunAsync(Options(), null, CancellationToken.None);
 		Assert.Equal(0, result.ExitCode);
 		var csproj = File.ReadAllText(Path.Combine(_projectDir, "MyGoApp.csproj"));
-		Assert.Contains("<LangVersion>preview</LangVersion>", csproj);
+		Assert.Contains($"<{name}>{value}</{name}>", csproj);
 	}
 
 	[Fact]
@@ -427,20 +429,41 @@ public class GoUpgradeTests : IDisposable
 		Assert.Equal("MainPage", result.Detection!.RootViewClassName);
 	}
 
-	[Fact]
-	public void ToApplicationId_StripsNonAsciiCharacters()
+	[Theory]
+	[InlineData("MiAño", "com.cometgo.miao")]
+	[InlineData("MyGoApp", "com.cometgo.mygoapp")]
+	[InlineData("My Go-App_123", "com.cometgo.mygoapp123")]
+	[InlineData("123App", "com.cometgo.app123app")]
+	[InlineData("日本語", "com.cometgo.app77710aedc74ecfa33685e33a6c7df5cc")]
+	[InlineData("---", "com.cometgo.appcb3f91d54eee30e53e35b2b99905f70f")]
+	public void ToApplicationId_PreservesAsciiSlugsAndUses128BitFallback(string name, string expected)
 	{
-		var id = GoFileBasedDetector.ToApplicationId("MiAño");
-		Assert.Equal("com.cometgo.miao", id);
-		Assert.DoesNotMatch("[^a-z0-9.]", id);
+		var id = GoFileBasedDetector.ToApplicationId(name);
+		Assert.Equal(expected, id);
+		Assert.Equal(id, GoFileBasedDetector.ToApplicationId(name));
 	}
 
-	[Fact]
-	public void ToApplicationId_AllNonAscii_FallsBackToHash()
+	[Theory]
+	[InlineData("日本語", true)]
+	[InlineData("---", true)]
+	[InlineData("MyGoApp", false)]
+	public void Detect_ExistingProject_ForceRefusesOnlyFallbackNames(string name, bool refuses)
 	{
-		var id = GoFileBasedDetector.ToApplicationId("日本語");
-		Assert.StartsWith("com.cometgo.app", id);
-		Assert.Matches("^com\\.cometgo\\.app[0-9a-f]{8}$", id);
+		var cwd = Path.Combine(_fakeRepoRoot, "samples", name);
+		Directory.CreateDirectory(cwd);
+		var userFile = Path.Combine(cwd, "App.cs");
+		File.WriteAllText(userFile, DefaultGoSource);
+		// A different project name must not bypass the identity check.
+		var projectFile = Path.Combine(cwd, "Existing.csproj");
+		const string project = "<Project><PropertyGroup><ApplicationId>com.cometgo.appc12140a0</ApplicationId></PropertyGroup></Project>";
+		File.WriteAllText(projectFile, project);
+
+		var (detection, errors) = GoFileBasedDetector.Detect(cwd, force: true);
+
+		Assert.Equal(refuses, detection is null);
+		Assert.Equal(refuses, errors.Any());
+		Assert.Equal(project, File.ReadAllText(projectFile));
+		Assert.Equal(DefaultGoSource, File.ReadAllText(userFile));
 	}
 
 	[Fact]

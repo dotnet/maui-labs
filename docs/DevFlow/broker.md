@@ -179,7 +179,7 @@ For troubleshooting, you can manage the broker directly:
 maui devflow broker start              # Start detached (same as auto-start)
 maui devflow broker start --foreground # Start in current terminal (debug mode)
 maui devflow broker stop               # Graceful shutdown
-maui devflow broker status             # Show PID, port, uptime, connected agents
+maui devflow broker status             # Show port, connected agents, XAML source workspace
 maui devflow broker log                # Show last 50 lines of broker.log
 ```
 
@@ -305,7 +305,7 @@ The broker exposes a simple HTTP API on port 19223 for CLI and diagnostic use:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/health` | GET | Health check. Returns `{"status":"ok","agents":N}` |
+| `/api/health` | GET | Health check. Returns `{"status":"ok","agents":N,"sourceWorkspace":"<path>"}`; `sourceWorkspace` is the directory searched for project-relative XAML sources, or `null` when unavailable |
 | `/api/agents` | GET | List all connected agents with full metadata |
 | `/api/shutdown` | POST | Request graceful shutdown |
 | `/ws/agent` | WebSocket | Agent registration endpoint |

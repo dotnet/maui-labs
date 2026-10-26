@@ -19,6 +19,7 @@ At a glance:
 | [WPF Backend](#wpf-backend) | WPF-based Windows desktop backend for .NET MAUI apps. |
 | [Essentials.AI](#essentialsai) | On-device AI APIs for chat completion, embeddings, and tool calling in MAUI apps. |
 | [AppProjectReference](#appprojectreference) | MSBuild package for referencing MAUI app projects and consuming their platform artifacts. |
+| [MAUI Testing](#maui-testing) | MTP-based Android, iOS, and Mac Catalyst test lifecycle and single-project template. |
 
 ### Cli
 
@@ -33,6 +34,7 @@ A command-line tool for .NET MAUI development environment setup, device manageme
 - **AI-powered development bootstrap** (`maui ai init`) — install MAUI Copilot skills, DevFlow skills, Copilot agents, and MCP configuration for the current project
 - **MAUI Go** (`maui go`) — create, serve, and upgrade single-file Comet Go projects for rapid prototyping
 - **Version info** (`maui version`)
+- **Self-update** (`maui update --self`) with daily interactive update notices
 - **Global options** — `--json` for CI pipelines, `--verbose`, `--dry-run`, `--ci`
 
 | Package | Description |
@@ -137,12 +139,10 @@ A WPF-based alternative to the official WinUI backend for .NET MAUI. Run MAUI ap
 
 ### Essentials.AI
 
-On-device AI capabilities for .NET MAUI via `Microsoft.Extensions.AI` abstractions. On Apple platforms, wraps Apple Intelligence (Foundation Models) for chat completion with streaming and tool calling, and Apple NaturalLanguage APIs for on-device embeddings.
-
-- **`IChatClient`** backed by Apple Intelligence on iOS, macOS, and Mac Catalyst
-- **Streaming infrastructure** — progressive JSON deserialization of LLM responses
-- **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
-- **Tool calling** — function-calling support for on-device models
+On-device chat and embeddings through `Microsoft.Extensions.AI`, backed by Apple
+Intelligence and NaturalLanguage on Apple platforms. Chat includes streaming,
+structured responses, tool calling, and image input on supported systems.
+See [Essentials.AI](src/AI/README.md) for documentation and samples.
 
 | Package | Description |
 |---------|-------------|
@@ -161,6 +161,22 @@ Built artifacts are exposed as `@(MauiAppArtifact)` items with `ArtifactType`, `
 | Package | Description |
 |---------|-------------|
 | [![NuGet: Microsoft.Maui.Build.AppProjectReference](https://img.shields.io/nuget/v/Microsoft.Maui.Build.AppProjectReference.svg?label=Microsoft.Maui.Build.AppProjectReference)](https://www.nuget.org/packages/Microsoft.Maui.Build.AppProjectReference/) | Build-time app project reference with artifact discovery |
+
+### MAUI Testing
+
+Framework-neutral Microsoft.Testing.Platform lifecycle support for device tests, with a `mauitest` single-project template modeled after `dotnet new maui`.
+
+- Shared `MauiProgram.CreateMauiTestApp()` and dependency-injection builder
+- Android instrumentation and native Apple status UI
+- MSTest by default, with an NUnit configuration path and framework-neutral builder
+- Requires .NET 11
+
+| Package | Description |
+|---------|-------------|
+| [![NuGet: Microsoft.Maui.Testing](https://img.shields.io/nuget/v/Microsoft.Maui.Testing.svg?label=Microsoft.Maui.Testing)](https://www.nuget.org/packages/Microsoft.Maui.Testing/) | Runtime builder and platform lifecycle |
+| [![NuGet: Microsoft.Maui.Testing.Templates](https://img.shields.io/nuget/v/Microsoft.Maui.Testing.Templates.svg?label=Microsoft.Maui.Testing.Templates)](https://www.nuget.org/packages/Microsoft.Maui.Testing.Templates/) | `dotnet new mauitest` template pack |
+
+See [src/Testing/README.md](src/Testing/README.md) for installation, execution, and framework conversion instructions.
 
 ## Agent Skills
 

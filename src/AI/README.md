@@ -1,89 +1,74 @@
-# Microsoft.Maui.Essentials.AI
+# Essentials.AI
 
-On-device AI capabilities for .NET MAUI via [`Microsoft.Extensions.AI`](https://www.nuget.org/packages/Microsoft.Extensions.AI.Abstractions) abstractions.
+On-device chat and embeddings for .NET MAUI through `Microsoft.Extensions.AI`.
+This is the contributor README; see the package documentation below for consumer APIs.
 
-> **Note:** This is the contributor/repo-browsing README. The NuGet consumer README with install instructions and full usage examples is at [`Microsoft.Maui.Essentials.AI/README.md`](Microsoft.Maui.Essentials.AI/README.md).
+> **Experimental:** packages ship as previews; APIs may change.
 
-## Features
+## Package and usage
 
-- **`IChatClient`** — backed by Apple Intelligence (Foundation Models) on iOS, macOS, and Mac Catalyst
-- **Streaming** — progressive JSON deserialization of LLM responses via `JsonStreamChunker` and `PlainTextStreamChunker`
-- **Native token usage** — standard `ChatResponse.Usage` and streaming `UsageContent` on Apple OS 27+, without estimated counts
-- **Telemetry** — compatible with M.E.AI's built-in `UseOpenTelemetry` spans, token metrics, and streaming timings
-- **Tool calling** — function-calling support for on-device models
-- **NL embeddings** — on-device semantic search via Apple's NaturalLanguage framework (`NLEmbeddingGenerator`)
+| Package | Consumer documentation |
+|---------|------------------------|
+| `Microsoft.Maui.Essentials.AI` | [Install and use the package](Microsoft.Maui.Essentials.AI/README.md) |
 
-### Platform Support
+The package README owns platform requirements, setup, and API examples.
 
-| Platform | Chat (IChatClient) | Image input | Embeddings (IEmbeddingGenerator) |
-|----------|-------------------|-------------|----------------------------------|
-| iOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| Mac Catalyst 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| macOS 26+ | ✅ Apple Intelligence | 27+ with vision-capable model | ✅ NL Embeddings |
-| Android | 🔜 Coming soon | Not available | 🔜 Coming soon |
-| Windows | 🔜 Coming soon | Not available | 🔜 Coming soon |
+The [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md)
+compares providers interactively.
 
-## Quick Start
+## Build
 
-```csharp
-using Microsoft.Extensions.AI;
-using Microsoft.Maui.Essentials.AI;
+Use the .NET 10 SDK pinned in the repository's `global.json` and matching
+MAUI workloads. Apple native bindings require Xcode.
 
-// Register in MauiProgram.cs
-builder.Services.AddSingleton<IChatClient>(new AppleIntelligenceChatClient());
+The library always targets `net10.0` and Android. Apple targets are added on
+non-Linux hosts, using either the default reference packs or the OS 27 packs
+when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
+The Chat Playground and device tests use the same platform conditions, without
+the portable `net10.0` target or native macOS app target.
 
-// Use via DI
-var client = serviceProvider.GetRequiredService<IChatClient>();
-var response = await client.GetResponseAsync("Plan a weekend trip to Portland");
-```
-
-## Packages
-
-| Package | Description |
-|---------|-------------|
-| `Microsoft.Maui.Essentials.AI` | On-device AI APIs for MAUI |
-
-## Building
-
-```bash
-# macOS (builds Swift bindings + .NET library)
+```sh
+# macOS: native Swift bindings and managed projects
 dotnet build src/AI/EssentialsAI.slnf
 
-# Windows (CI only — the Azure DevOps pipeline downloads macOS-built
-# native artifacts automatically. Local Windows builds require CI=true
-# or TF_BUILD=true for the pre-built artifact path to activate.)
+# Apple 27 reference packs, with Xcode 27 and matching workloads installed
+dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
+  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-The CI pipeline handles the macOS → Windows artifact flow automatically. See `.github/workflows/ci-essentialsai.yml` for details.
+Use the corresponding `ios27.0` or `macos27.0` framework for those platforms.
+`UseXcode27Preview` selects this repository's target-framework list; it does not
+install or select Xcode. When Xcode 27 is the default, no `DEVELOPER_DIR` override
+is needed. For normal Apple 26.x reference packs with Xcode 27, the native CI job
+passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode version check.
 
-### Xcode 27 builds
+Full solution builds on Windows require prebuilt Apple native artifacts.
+The prebuilt-artifact path activates only with `CI=true` or `TF_BUILD=true`;
+setting a flag alone does not supply the artifacts. CI builds them on macOS
+before packing/signing on Windows. See
+[ci-essentialsai.yml](../../.github/workflows/ci-essentialsai.yml) and the
+[official pipeline](../../eng/pipelines/devflow-official.yml) for the artifact flow.
 
-CI builds the native Swift library on an Xcode 27 runner while keeping the
-package's normal Apple target frameworks unchanged. To opt into Apple 27
-reference packs locally, install the .NET 10.0.401 SDK and matching workloads,
-use Xcode 27 (no `DEVELOPER_DIR` override when it is the default), and build with
-`-p:UseXcode27Preview=true -f net10.0-maccatalyst27.0` (or the corresponding
-`ios27.0` / `macos27.0` framework). `UseXcode27Preview` only changes this
-repo's target-framework list; it does not install or select Xcode. When
-building the normal Apple 26.x reference packs with Xcode 27, the native
-CI job passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode
-version check.
+## Tests and implementation
 
-## Architecture
+Portable tests live in `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests`:
 
-- **Native Swift bindings** (`AppleNative/EssentialsAI/`) compiled via Xcode, producing `.xcframework` bundles
-- **`AppleBindings.targets`** — MSBuild targets for cross-platform native artifact flow
-- **Streaming infrastructure** — `JsonStreamChunker`, `PlainTextStreamChunker`, `StreamingResponseHandler` for progressive deserialization
+```sh
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj \
+  -p:TargetFrameworks=net10.0 -p:IsTestProject=true
+```
 
-## Documentation
+The overrides keep the build portable and enable Arcade's test infrastructure
+for this existing test project without building the Apple targets.
+Device tests use DeviceRunners with `dotnet test` and live in
+`tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
+Apple device/runtime and model availability; portable tests do not run a model.
 
-- [JSON Stream Chunker Design](../../docs/ai/json-stream-chunker-design.md)
-- [Apple Foundation Models Image Input](../../docs/ai/apple-foundation-models-image-input.md)
+- `AppleNative/EssentialsAI/`: Swift bridge and binding definitions, producing `.xcframework` bundles.
+- `Microsoft.Maui.Essentials.AI/Platform/`: platform clients and streaming helpers.
+- `JsonStreamChunker`, `PlainTextStreamChunker`, and `StreamingResponseHandler`: cumulative-response deltas and streaming updates.
+- `AppleBindings.targets`: native artifact build and packaging.
 
-## Requirements
-
-- .NET 10
-- MAUI workload (`dotnet workload install maui`)
-- Apple Intelligence features require iOS 26+, Mac Catalyst 26+, or macOS 26+
-
-> ⚠️ **This package is experimental** (always ships as `-preview`). APIs may change between releases.
+Further design documentation:
+[Apple image input](../../docs/ai/apple-foundation-models-image-input.md) and
+[JSON stream chunking](../../docs/ai/json-stream-chunker-design.md).

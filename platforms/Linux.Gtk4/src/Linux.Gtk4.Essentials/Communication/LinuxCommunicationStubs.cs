@@ -2,20 +2,6 @@ using Microsoft.Maui.ApplicationModel.Communication;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Communication;
 
-public class LinuxPhoneDialer : IPhoneDialer
-{
-	public bool IsSupported => false;
-	public void Open(string number) =>
-		throw new PlatformNotSupportedException("Phone dialer is not available on Linux desktop.");
-}
-
-public class LinuxSms : ISms
-{
-	public bool IsComposeSupported => false;
-	public Task ComposeAsync(SmsMessage? message) =>
-		throw new PlatformNotSupportedException("SMS is not available on Linux desktop.");
-}
-
 public class LinuxContacts : IContacts
 {
 	public Task<Contact?> PickContactAsync() =>

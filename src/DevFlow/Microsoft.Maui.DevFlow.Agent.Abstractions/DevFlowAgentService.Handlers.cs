@@ -398,7 +398,6 @@ public partial class DevFlowAgentService
         _server.MapPost("/api/v1/webview/input/click", request => ExecuteUiMutationAsync(request, HandleWebViewInputClick));
         _server.MapPost("/api/v1/webview/input/fill", request => ExecuteUiMutationAsync(request, HandleWebViewInputFill));
         _server.MapPost("/api/v1/webview/input/text", request => ExecuteUiMutationAsync(request, HandleWebViewInputText));
-        _server.MapGet("/api/v1/webview/network", HandleWebViewNetwork);
         _server.MapGet("/api/v1/webview/console", HandleWebViewConsole);
         _server.MapGet("/api/v1/webview/screenshot", HandleWebViewScreenshot);
 
@@ -1891,15 +1890,95 @@ public partial class DevFlowAgentService
 
     protected static string? TryGetCdpError(JsonElement root)
     {
+        if (root.ValueKind != JsonValueKind.Object)
+            return "Invalid CDP response";
+
+        if (root.TryGetProperty("result", out var result)
+            && result.ValueKind == JsonValueKind.Object
+            && result.TryGetProperty("exceptionDetails", out var exception))
+        {
+            if (exception.ValueKind == JsonValueKind.Object)
+            {
+                if (exception.TryGetProperty("exception", out var value)
+                    && value.ValueKind == JsonValueKind.Object
+                    && value.TryGetProperty("description", out var description)
+                    && !string.IsNullOrWhiteSpace(description.ToString()))
+                    return description.ToString();
+                if (exception.TryGetProperty("text", out var text)
+                    && !string.IsNullOrWhiteSpace(text.ToString()))
+                    return text.ToString();
+            }
+            return $"JavaScript exception: {exception.GetRawText()}";
+        }
+        if (root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False
+            && !root.TryGetProperty("error", out _))
+            return $"CDP command failed: {root.GetRawText()}";
         if (!root.TryGetProperty("error", out var errorElement))
             return null;
 
         return errorElement.ValueKind switch
         {
-            JsonValueKind.String => errorElement.GetString(),
-            JsonValueKind.Object when errorElement.TryGetProperty("message", out var messageElement) => messageElement.GetString(),
-            _ => errorElement.GetRawText()
+            JsonValueKind.String when !string.IsNullOrWhiteSpace(errorElement.GetString()) => errorElement.GetString(),
+            JsonValueKind.Object when errorElement.TryGetProperty("message", out var messageElement)
+                && !string.IsNullOrWhiteSpace(messageElement.ToString()) => messageElement.ToString(),
+            _ => $"CDP error: {errorElement.GetRawText()}"
         };
+    }
+
+    protected async Task<string> SendCdpCommandWithErrorDetailsAsync(CdpWebViewInfo webView, string command)
+    {
+        var response = await webView.CommandHandler(command);
+        using var document = JsonDocument.Parse(response);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("result", out var result)
+            || result.ValueKind != JsonValueKind.Object
+            || !result.TryGetProperty("exceptionDetails", out var details)
+            || details.ValueKind != JsonValueKind.Object
+            || !details.TryGetProperty("exception", out var exception)
+            || exception.ValueKind != JsonValueKind.Object
+            || !exception.TryGetProperty("objectId", out var objectId)
+            || objectId.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(objectId.GetString()))
+            return response;
+
+        // WebKit descriptions can contain only a stack. Inspect the original error,
+        // never replay the expression that threw.
+        try
+        {
+            var propertiesResponse = await webView.CommandHandler(BuildCdpCommand(99993, "Runtime.getProperties",
+                new Dictionary<string, object?> { ["objectId"] = objectId.GetString(), ["ownProperties"] = true }));
+            using var properties = JsonDocument.Parse(propertiesResponse);
+            var propertiesError = TryGetCdpError(properties.RootElement);
+            if (!string.IsNullOrWhiteSpace(propertiesError))
+                throw new InvalidOperationException(propertiesError);
+            if (!properties.RootElement.TryGetProperty("result", out var propertiesResult)
+                || propertiesResult.ValueKind != JsonValueKind.Object
+                || !propertiesResult.TryGetProperty("result", out var entries)
+                || entries.ValueKind != JsonValueKind.Array)
+                throw new InvalidOperationException("Invalid error-properties response.");
+
+            foreach (var entry in entries.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object
+                    || !entry.TryGetProperty("name", out var name) || name.ToString() != "message"
+                    || !entry.TryGetProperty("value", out var remoteValue)
+                    || remoteValue.ValueKind != JsonValueKind.Object
+                    || !remoteValue.TryGetProperty("value", out var message)
+                    || message.ValueKind != JsonValueKind.String)
+                    continue;
+
+                var className = exception.TryGetProperty("className", out var type) ? type.ToString() : "Error";
+                var normalized = System.Text.Json.Nodes.JsonNode.Parse(response)!;
+                normalized["result"]!["exceptionDetails"]!["exception"]!["description"] = $"{className}: {message.GetString()}";
+                return normalized.ToJsonString();
+            }
+            throw new InvalidOperationException("Error object has no message.");
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"{TryGetCdpError(root)}; error details failed: {ex.Message}", ex);
+        }
     }
 
     protected static bool TryGetCdpValue(JsonElement root, out JsonElement value)
@@ -1912,7 +1991,7 @@ public partial class DevFlowAgentService
 
     protected async Task<JsonElement?> EvaluateWebViewExpressionAsync(CdpWebViewInfo webView, string expression, int id = 99996)
     {
-        var resultJson = await webView.CommandHandler(BuildCdpCommand(id, "Runtime.evaluate", new Dictionary<string, object?>
+        var resultJson = await SendCdpCommandWithErrorDetailsAsync(webView, BuildCdpCommand(id, "Runtime.evaluate", new Dictionary<string, object?>
         {
             ["expression"] = $"JSON.stringify(({expression}))",
             ["returnByValue"] = true
@@ -1949,7 +2028,7 @@ public partial class DevFlowAgentService
 
         try
         {
-            var result = await webView.CommandHandler(request.Body);
+            var result = await SendCdpCommandWithErrorDetailsAsync(webView, request.Body);
             return new HttpResponse
             {
                 ContentType = "application/json",
@@ -2217,9 +2296,6 @@ public partial class DevFlowAgentService
         }
     }
 
-    protected Task<HttpResponse> HandleWebViewNetwork(HttpRequest request)
-        => HandleNetworkList(request);
-
     protected Task<HttpResponse> HandleWebViewConsole(HttpRequest request)
     {
         request.QueryParams["source"] = "webview";
@@ -2307,9 +2383,12 @@ public partial class DevFlowAgentService
                 ["params"] = new Dictionary<string, object?> { ["expression"] = "document.documentElement.outerHTML", ["returnByValue"] = true }
             });
 
-            var resultJson = await webView.CommandHandler(cdpCommand);
+            var resultJson = await SendCdpCommandWithErrorDetailsAsync(webView, cdpCommand);
             using var doc = System.Text.Json.JsonDocument.Parse(resultJson);
             var root = doc.RootElement;
+            var cdpError = TryGetCdpError(root);
+            if (!string.IsNullOrWhiteSpace(cdpError))
+                return HttpResponse.Error($"Failed to get page source: {cdpError}");
 
             if (root.TryGetProperty("result", out var result) &&
                 result.TryGetProperty("result", out var innerResult) &&

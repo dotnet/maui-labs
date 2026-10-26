@@ -85,9 +85,14 @@ public class AgentClient : IDisposable
     public TimeSpan TransientFailureRetryDelay { get; set; } = TimeSpan.FromMilliseconds(250);
 
     public AgentClient(string host = "localhost", int port = 9223)
+        : this(host, port, CreateTransportHandler(host))
+    {
+    }
+
+    internal AgentClient(string host, int port, HttpMessageHandler transportHandler)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = CreateHttpClient(host, GetCurrentMutationLease);
+        _http = CreateHttpClient(transportHandler, GetCurrentMutationLease);
     }
 
     /// <summary>
@@ -292,8 +297,19 @@ public class AgentClient : IDisposable
             throw new MutationLeaseException(status);
     }
 
+    private static HttpClient CreateHttpClient(
+        HttpMessageHandler transportHandler,
+        Func<MutationLeaseIdentity?> mutationLeaseProvider)
+    {
+        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
+        {
+            InnerHandler = transportHandler
+        };
+        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
     /// <summary>
-    /// Builds the underlying <see cref="HttpClient"/>. When <paramref name="host"/> is the
+    /// Builds the underlying HTTP transport. When <paramref name="host"/> is the
     /// <c>localhost</c> alias, the IPv4 (<c>127.0.0.1</c>) loopback used by the built-in agent is
     /// preferred, with IPv6 (<c>::1</c>) kept as a fallback.
     /// </summary>
@@ -312,17 +328,6 @@ public class AgentClient : IDisposable
     /// between the two.
     /// </para>
     /// </remarks>
-    private static HttpClient CreateHttpClient(
-        string host,
-        Func<MutationLeaseIdentity?> mutationLeaseProvider)
-    {
-        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
-        {
-            InnerHandler = CreateTransportHandler(host)
-        };
-        return new HttpClient(leaseHandler) { Timeout = TimeSpan.FromSeconds(30) };
-    }
-
     private static HttpMessageHandler CreateTransportHandler(string host)
     {
         if (!IsLoopbackAlias(host))
@@ -1715,7 +1720,56 @@ public class AgentClient : IDisposable
             return await _http.PostAsync($"{_baseUrl}{path}", content);
         });
         var responseBody = await response.Content.ReadAsStringAsync();
-        return ProtocolJson.ParseElement(responseBody);
+        if (!response.IsSuccessStatusCode)
+            throw CreateHttpRequestException(
+                $"WebView command '{method}' failed with HTTP {(int)response.StatusCode}: {responseBody}",
+                null, response.StatusCode);
+
+        var result = ParseWebViewResponse(responseBody, method);
+        ThrowIfCdpFailed(result, method);
+        return result;
+    }
+
+    private static JsonElement ParseWebViewResponse(string body, string operation)
+    {
+        try
+        {
+            return ProtocolJson.ParseElement(body);
+        }
+        catch (JsonException ex)
+        {
+            throw new JsonException($"WebView operation '{operation}' returned invalid JSON: {body}", ex);
+        }
+    }
+
+    private static void ThrowIfCdpFailed(JsonElement response, string method)
+    {
+        if (response.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException($"WebView command '{method}' returned an invalid CDP response.");
+
+        if (response.TryGetProperty("error", out var error))
+        {
+            var message = error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out var detail)
+                ? detail.ToString() : error.ToString();
+            throw new InvalidOperationException($"WebView command '{method}' failed: {message}; response: {response.GetRawText()}");
+        }
+        if (response.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False)
+            throw new InvalidOperationException($"WebView command '{method}' failed: {response.GetRawText()}");
+
+        if (response.TryGetProperty("result", out var result)
+            && result.ValueKind == JsonValueKind.Object
+            && result.TryGetProperty("exceptionDetails", out var exception))
+        {
+            var message = exception.ValueKind == JsonValueKind.Object
+                && exception.TryGetProperty("exception", out var exceptionValue)
+                && exceptionValue.ValueKind == JsonValueKind.Object
+                && exceptionValue.TryGetProperty("description", out var description)
+                && !string.IsNullOrWhiteSpace(description.ToString())
+                    ? description.ToString()
+                    : exception.ValueKind == JsonValueKind.Object && exception.TryGetProperty("text", out var text)
+                        ? text.ToString() : exception.GetRawText();
+            throw new InvalidOperationException($"WebView command '{method}' threw: {message}");
+        }
     }
 
     /// <summary>
@@ -1731,7 +1785,12 @@ public class AgentClient : IDisposable
         var path = $"{WebViewApi}/source";
         if (!string.IsNullOrEmpty(webviewId))
             path += $"?webview={Uri.EscapeDataString(webviewId)}";
-        return await GetStringWithTransientRetriesAsync($"{_baseUrl}{path}");
+        using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync($"{_baseUrl}{path}"));
+        var body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw CreateHttpRequestException(
+                $"WebView source failed with HTTP {(int)response.StatusCode}: {body}", null, response.StatusCode);
+        return body;
     }
 
     public async Task<bool> NavigateWebViewAsync(string url, string? contextId = null)
@@ -1744,7 +1803,7 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrWhiteSpace(contextId))
             payload["contextId"] = contextId;
 
-        return await PostActionAsync($"{WebViewApi}/navigate", payload);
+        return await PostWebViewActionAsync($"{WebViewApi}/navigate", payload);
     }
 
     public async Task<bool> ClickWebViewAsync(string selector, string? contextId = null)
@@ -1757,7 +1816,7 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrWhiteSpace(contextId))
             payload["contextId"] = contextId;
 
-        return await PostActionAsync($"{WebViewApi}/input/click", payload);
+        return await PostWebViewActionAsync($"{WebViewApi}/input/click", payload);
     }
 
     public async Task<bool> FillWebViewAsync(string selector, string text, string? contextId = null)
@@ -1771,7 +1830,7 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrWhiteSpace(contextId))
             payload["contextId"] = contextId;
 
-        return await PostActionAsync($"{WebViewApi}/input/fill", payload);
+        return await PostWebViewActionAsync($"{WebViewApi}/input/fill", payload);
     }
 
     public async Task<bool> InsertWebViewTextAsync(string text, string? contextId = null)
@@ -1784,7 +1843,27 @@ public class AgentClient : IDisposable
         if (!string.IsNullOrWhiteSpace(contextId))
             payload["contextId"] = contextId;
 
-        return await PostActionAsync($"{WebViewApi}/input/text", payload);
+        return await PostWebViewActionAsync($"{WebViewApi}/input/text", payload);
+    }
+
+    private async Task<bool> PostWebViewActionAsync(string path, JsonNode body)
+    {
+        using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+        {
+            using var content = ProtocolJson.CreateJsonContent(body);
+            return await _http.PostAsync($"{_baseUrl}{path}", content);
+        });
+        var responseBody = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw CreateHttpRequestException(
+                $"WebView action '{path}' failed with HTTP {(int)response.StatusCode}: {responseBody}",
+                null, response.StatusCode);
+
+        var result = ParseWebViewResponse(responseBody, path);
+        ThrowIfCdpFailed(result, path);
+        if (!result.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True)
+            throw new InvalidOperationException($"WebView action '{path}' did not report success: {responseBody}");
+        return true;
     }
 
     public async Task<string> HitTestAsync(double x, double y, int? window = null)

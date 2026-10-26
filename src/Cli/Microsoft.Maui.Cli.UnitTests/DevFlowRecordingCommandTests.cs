@@ -68,6 +68,33 @@ public sealed class DevFlowRecordingCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Operations_Stop_UsesPersistedDriverAndReturnsFileSize()
+    {
+        var output = Path.Combine(_directory, "capture.mp4");
+        SaveState("android", "emulator-5556", output);
+        var operations = new RecordingOperations(DevFlowCommands.CreateRecordingDriver, LoadState);
+
+        var result = await operations.StopAsync();
+
+        Assert.Equal(output, result.Path);
+        Assert.Equal(new FileInfo(output).Length, result.Size);
+        Assert.Equal(("android", "emulator-5556"), Assert.Single(_stops));
+        Assert.Null(LoadState());
+    }
+
+    [Fact]
+    public async Task Operations_StartMissingIosDevice_FailsBeforeDriverCreation()
+    {
+        var operations = new RecordingOperations(DevFlowCommands.CreateRecordingDriver, LoadState);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            operations.StartAsync("ios", null, Path.Combine(_directory, "capture.mp4"), 30));
+
+        Assert.Empty(_createdPlatforms);
+        Assert.Null(LoadState());
+    }
+
+    [Fact]
     public async Task Stop_NoSavedRecording_ReportsErrorWithoutCreatingDriver()
     {
         var stop = await new CliTestHarness(65534).InvokeAsync("devflow", "recording", "stop");

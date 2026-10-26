@@ -18,6 +18,63 @@ A command-line tool for .NET MAUI development environment setup and device manag
 dotnet tool install -g Microsoft.Maui.Cli --prerelease
 ```
 
+### Updating the CLI
+
+```bash
+maui update --self
+maui update --self --prerelease
+maui update --self --dry-run
+```
+
+The `--self` flag explicitly targets the CLI. Bare `maui update` displays
+guidance without updating anything; project updates are not implemented by
+this command.
+
+Self-update supports the default **global .NET tool** installation only, not
+local tool manifests, custom `--tool-path` installs, or source builds.
+Preview installations automatically include prereleases; stable installations
+require `--prerelease` to include them. The SDK chooses the latest eligible
+version; the command does not request downgrades.
+
+Updates preserve the current directory's normal SDK selection (`global.json`)
+and NuGet configuration. An installed .NET SDK is required; missing SDKs,
+unreachable feeds, and permissions failures must be resolved before retrying.
+No feeds or configuration files are changed.
+
+Only run self-update from a trusted directory: repository-local `NuGet.config`
+files can select feeds and influence the CLI package installed by the SDK.
+To avoid a repository's configuration, run the command from a trusted directory
+outside that repository. Public update notices do not validate or override the
+feeds used for installation.
+
+On Windows, the running tool cannot uninstall its own loaded package.
+`maui update --self` starts a one-shot PowerShell handoff that waits for this process
+to exit before running the SDK updater. In an interactive terminal, the updater
+prints progress and a final completion or failure message in the same terminal.
+The shell prompt may return before these messages appear. **Started is not
+completed**: wait for the completion message before running the CLI again.
+The printed log path also records SDK output and `SDK_EXIT=0` on success if
+you miss the terminal message. Keep the terminal open until completion;
+closing it may interrupt the updater. A nonzero `SDK_EXIT` indicates failure. The updater waits at most one
+minute for the original process to exit. On macOS/Linux the command waits for
+the SDK and reports its result directly.
+
+Existing `--json`, `--ci`, `--verbose`, and `--dry-run` flags apply. JSON reports
+`started` with a log path for the Windows handoff, not a successful completed
+installation; its exit code confirms handoff only. Dry-run invokes no updater
+and performs no network checks or state writes. JSON, CI, and redirected
+invocations receive no delayed terminal messages; use the log for completion.
+
+Ordinary interactive commands can show an update notice after successful
+completion. The first eligible invocation each UTC day checks listed versions on
+NuGet.org through its version autocomplete service in-process, with a two-second
+timeout covering service discovery and version retrieval; later invocations use a
+small user cache. Failed attempts are cached too. There is **no daemon or
+notification subprocess**. Checks are suppressed in CI, JSON, redirected
+output, help, dry-run, and protocol/server commands. Set
+`MAUI_CLI_NO_UPDATE_CHECK=1` to disable checks and notices. Notifications use
+public package metadata; actual updates still use your configured feeds.
+
 ### 2. Check your environment
 
 ```bash
@@ -120,6 +177,13 @@ new commits. See the automation contract for pipeline examples and limitations.
 
 Skills retain their existing owner metadata (`.skill-version` or DevFlow state). Agent/project MCP ownership uses `.maui/ai-assets.json` under the project root; user MCP ownership is separate under the user's `.maui`. Registries record identity, origin, and managed-content hashes, not raw credentials/configuration. These are mutable local installation records; consider excluding them from version control. Commands do not silently change `.gitignore`.
 
+New DevFlow skill workspace IDs and custom-path target keys use 32 lowercase hex
+characters from SHA-256. Existing shorter state directories, target keys, and lock
+files stay in use so installed skills keep their ownership records. If both old
+and new state locations exist, the CLI stops instead of merging or replacing
+records. Resolve that conflict before continuing. Do not use an older CLI to
+manage a target first created with the longer state keys.
+
 **Breaking changes from earlier versions of this unmerged PR:** use `add skill <name>` instead of `add <name>`; `-y` now means yes, not force; adding skills no longer configures MCP; selectors no longer expand bundled groups or target another kind; list defaults to all asset kinds; update never installs missing recommendations; JSON output uses the typed result envelope instead of the earlier command-specific arrays/records. No hook/canvas commands or executable stubs are provided.
 
 Skill replacement stages downloads and restores the previous directory on ordinary write failures. It is not crash-atomic: interruption between directory renames can leave `<skill>.<id>.bak` alongside the skills directory. If the skill directory is missing, inspect that backup and rename it back before retrying. Concurrent installations into the same destination are not supported. Path/symlink checks are not handle-based isolation against concurrent filesystem changes; use trusted, locally controlled destinations. Repository-hosted Copilot agents are currently single-file assets; writes across multiple assets are not one transaction.
@@ -156,6 +220,10 @@ maui android install
 maui android sdk list
 maui android sdk install "platforms;android-35"
 
+# Ensure the latest Android command-line tools are installed
+maui android sdk update-tools
+maui android sdk update-tools --json
+
 # Manage JDK installations
 maui android jdk install
 
@@ -163,6 +231,26 @@ maui android jdk install
 maui android emulator create --name MyEmulator
 maui android emulator start --name MyEmulator
 ```
+
+SDK package listing supports both the legacy `sdkmanager` table and the Android
+CLI table produced by Command-line Tools 23. JSON retains
+semicolon-separated package IDs, including dotted API levels such as
+`platforms;android-37.0`. Installed Command-line Tools omitted by the inventory
+are detected from their executable and `source.properties` revision.
+Listed revisions are preserved when `source.properties` or its revision is
+missing; unlisted tools without revision metadata keep an unknown version.
+Inventory execution or parsing failures return an error rather than an empty
+successful package list.
+
+`sdk update-tools` checks Google's catalog and bootstraps or updates
+`cmdline-tools;latest` as needed. It uses the configured SDK path (or the default
+SDK location) and requires a working JDK. `--dry-run` only previews the target
+path. JSON success reports `status: "ready"` whether the tools were already
+current or were installed; it does not claim an update occurred.
+`maui doctor` reports the selected tool's path and revision when available.
+The resolver prefers `cmdline-tools/latest`, then the highest installed
+command-line tools revision. Legacy `tools/bin` installations are no longer
+supported; run `maui android sdk update-tools` to install modern tools.
 
 ### 6. Set up Apple development (macOS only)
 
@@ -198,7 +286,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | Command | Description |
 |---------|-------------|
 | `maui doctor` | Run environment diagnostics and auto-fix issues |
-| `maui device list` | List connected devices and emulators |
+| `maui device list` | List connected devices, emulators, and simulators (including physical iPhones and iPads on macOS) |
 | `maui project version` | Show the effective .NET MAUI version for a project |
 | `maui project version list` | List available .NET MAUI package versions |
 | `maui project version set` | Pin a project to a specific, latest stable, nightly, or custom-source MAUI version |
@@ -219,6 +307,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui android sdk check` | Check Android SDK installation status |
 | `maui android sdk uninstall` | Uninstall Android SDK packages |
 | `maui android sdk accept-licenses` | Accept Android SDK licenses interactively |
+| `maui android sdk update-tools` | Ensure the latest Android SDK command-line tools are installed |
 | `maui android jdk install` | Install and manage JDK versions |
 | `maui android jdk check` | Check JDK installation status |
 | `maui android jdk list` | List available JDK versions |
@@ -238,6 +327,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui devflow init` | Install project-scoped DevFlow onboarding/debugging skills |
 | `maui devflow skills` | Manage bundled DevFlow skill installs and updates |
 | `maui devflow ui` | Visual tree inspection, interaction, and screenshots |
+| `maui devflow device fold` | [Foldable emulator/simulator modes, hinge angles, and verified transitions](https://github.com/dotnet/maui-labs/blob/main/docs/DevFlow/foldables.md) (iOS requires experimental opt-in) |
 | `maui devflow ui diagnostics` | Detect clipping, overflow, text truncation, overlap, and occlusion |
 | `maui devflow recording` | Manage UI recording sessions (start, stop, status) |
 | `maui devflow webview` | Blazor WebView automation via Chrome DevTools Protocol |
@@ -258,6 +348,14 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui go create` | Create a new MAUI Go single-file project |
 | `maui go serve` | Start the dev server with hot reload |
 | `maui go upgrade` | Graduate a Go project to a full MAUI project |
+
+`maui go upgrade` keeps the existing ASCII name rules for generated application IDs.
+If the directory name has no ASCII letters or digits, a new ID uses `com.cometgo.app`
+followed by the first 32 lowercase hex characters of SHA-256 of the UTF-8 directory name.
+An explicit `#:property ApplicationId=...` remains unchanged.
+For these directory names, upgrade refuses to overwrite an existing `.csproj`, even with
+`--force`. Keep the existing project and its `ApplicationId` to preserve the app identity,
+including IDs generated with the previous eight-character fallback.
 
 Run `maui <command> --help` for detailed options on any command.
 
@@ -294,6 +392,24 @@ maui devflow storage files download logs/app.log --output ./downloads/
 # Download to an explicit local file name
 maui devflow storage files download logs/app.log --output ./downloads/app-copy.log
 ```
+
+DevFlow WebView DOM and input helpers accept `--webview` (or `-w`) to select a
+WebView by index, AutomationId, or element ID; omitting it selects the first
+WebView. The `cdp` alias accepts the same options. The target is sent with the
+request, not inserted into the generated JavaScript:
+
+```bash
+maui devflow webview webviews
+maui devflow webview --webview Right DOM querySelector "#name"
+maui devflow webview -w Right snapshot
+maui devflow webview -w Right Input fill "#name" "Hello"
+maui devflow webview -w Right Input dispatchClickEvent "#submit"
+maui devflow webview -w Right Input insertText "More text"
+```
+
+`fill` sets the matching field's value and dispatches input/change events;
+`insertText` inserts at the cursor in the selected WebView. These DOM helpers
+are separate from native `ui query --selector` and MCP `maui_query_css`.
 
 ## Global Options
 
@@ -445,6 +561,13 @@ For Inspector reconnect behavior, control handoff, and XAML workspace recovery, 
 | Linux | ✅ | Android commands |
 
 ## Development
+
+DevFlow command registration, argument validation, presentation, exit codes, and batch
+parser re-entry live in `DevFlowCommands`. Internal instance operations under the
+`DevFlow/Operations/` directory own native UI, WebView/CDP, storage/device, streaming, theme,
+extensions, capture/recording, host alerts/permissions, and broker/discovery execution.
+Command-side helpers prepare and own agent connections; operations borrow clients and
+do not dispose them. Stream cancellation subscriptions and rendering stay at the CLI boundary.
 
 ```bash
 # Open just the CLI in your IDE
