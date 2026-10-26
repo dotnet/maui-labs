@@ -203,6 +203,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         public nfloat Position { get; set; }
         public nfloat Size { get; set; }
         public bool Measured { get; set; }
+        public bool HasMeasurement { get; set; }
         public int CrossPosition { get; set; }
 
         public bool SpansGrid => IsHeader || IsFooter;
@@ -261,7 +262,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         foreach (var info in _flatItems)
         {
             info.Position = offset;
-            if (!info.Measured)
+            if (!info.HasMeasurement)
                 info.Size = _estimatedItemHeight;
             offset += info.Size + spacing;
         }
@@ -287,7 +288,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                     }
                     info.Position = x;
                     info.CrossPosition = 0;
-                    if (!info.Measured)
+                    if (!info.HasMeasurement)
                         info.Size = _estimatedItemHeight;
                     x += info.Size + hSpacing;
                     continue;
@@ -301,7 +302,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                 }
                 info.Position = x;
                 info.CrossPosition = columnCount++;
-                if (!info.Measured)
+                if (!info.HasMeasurement)
                     info.Size = _estimatedItemHeight;
                 if (info.Size > columnWidth)
                     columnWidth = info.Size;
@@ -329,7 +330,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                     }
                     info.Position = y;
                     info.CrossPosition = 0;
-                    if (!info.Measured)
+                    if (!info.HasMeasurement)
                         info.Size = _estimatedItemHeight;
                     y += info.Size + vSpacing;
                     continue;
@@ -343,7 +344,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                 }
                 info.Position = y;
                 info.CrossPosition = rowCount++;
-                if (!info.Measured)
+                if (!info.HasMeasurement)
                     info.Size = _estimatedItemHeight;
                 if (info.Size > rowHeight)
                     rowHeight = info.Size;
@@ -463,11 +464,13 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
                 {
                     info.Size = measuredSize;
                     info.Measured = true;
+                    info.HasMeasurement = true;
                     needsRecalc = true;
                 }
                 else
                 {
                     info.Measured = true;
+                    info.HasMeasurement = true;
                 }
             }
 
@@ -532,7 +535,6 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
             return;
 
         info.Measured = false;
-        info.Size = _estimatedItemHeight;
         _positionsCalculated = false;
         ((IView)VirtualView).InvalidateMeasure();
     }
@@ -678,6 +680,7 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         foreach (var info in _flatItems)
         {
             info.Measured = false;
+            info.HasMeasurement = false;
             info.Size = _estimatedItemHeight;
         }
         _positionsCalculated = false;
