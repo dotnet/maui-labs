@@ -148,6 +148,8 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
 
         var resizedRow = _rows.Last(row =>
             row.Handler?.PlatformView is NSView view && view.Window == nativeWindow);
+        var resizedLabel = _labels.Last(label =>
+            label.Handler?.PlatformView is NSView view && view.Window == nativeWindow);
         var nativeResizedRow = (NSView)resizedRow.Handler!.PlatformView!;
         var previousListHeight = native.Bounds.Height;
         var previousRowHeight = resizedRow.HeightRequest;
@@ -179,7 +181,7 @@ sealed class CollectionViewAsyncScenario : MauiRuntimeScenario
             "A measured row updates its native height after its requested size changes.");
         context.Assert(Math.Abs(native.Bounds.Height - expectedListHeight) < 1,
             "The content-sized document extent includes a later measured-row size change.");
-        context.Assert(CountPixels(resizedImage, nativeWindow, Native(_labels[0]), cyan: false) > 5,
+        context.Assert(CountPixels(resizedImage, nativeWindow, Native(resizedLabel), cyan: false) > 5,
             "The resized row remains visibly rendered after its measurement changes.");
 
         void OnResizedRowMeasureInvalidated(object? sender, EventArgs args) => measureInvalidationCount++;
