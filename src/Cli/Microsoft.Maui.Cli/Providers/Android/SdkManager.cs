@@ -59,16 +59,7 @@ public partial class SdkManager : IDisposable
 		return (sdkPath, jdkPath);
 	}
 
-	public string? SdkManagerPath
-	{
-		get
-		{
-			SyncPaths();
-			// Availability must use the same resolver as install/list/license operations,
-			// or an unsupported layout can incorrectly bypass bootstrap.
-			return _sdkManager.FindSdkManagerPath();
-		}
-	}
+	public string? SdkManagerPath => FindCommandLineTools()?.Path;
 
 	public bool IsAvailable => !string.IsNullOrEmpty(SdkManagerPath);
 
@@ -460,6 +451,34 @@ public partial class SdkManager : IDisposable
 		var bootstrapProgress = new Progress<Xamarin.Android.Tools.SdkBootstrapProgress>(p =>
 			onProgress?.Invoke(p.Phase, p.PercentComplete, p.Message));
 		await _sdkManager.BootstrapAsync(targetPath, bootstrapProgress, cancellationToken);
+	}
+
+	/// <summary>
+	/// Resolves sdkmanager and its revision, preferring <c>cmdline-tools/latest</c>,
+	/// then the highest installed revision reported by <c>source.properties</c>. Returns
+	/// <see langword="null"/> when no SDK path is configured or no sdkmanager is installed.
+	/// </summary>
+	public Xamarin.Android.Tools.CommandLineTool? FindCommandLineTools()
+	{
+		SyncPaths();
+		return _sdkManager.FindSdkManager();
+	}
+
+	/// <summary>
+	/// Ensures the Android SDK at <paramref name="targetPath"/> contains the latest
+	/// <c>cmdline-tools;latest</c> package, bootstrapping and/or updating from the Google
+	/// catalog as needed. Returns the resolved sdkmanager executable and installed revision.
+	/// </summary>
+	public async Task<Xamarin.Android.Tools.CommandLineTool> EnsureLatestCommandLineToolsAsync(
+		string targetPath,
+		Action<Xamarin.Android.Tools.SdkBootstrapPhase, int, string>? onProgress = null,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+		SyncPaths();
+		var bootstrapProgress = new Progress<Xamarin.Android.Tools.SdkBootstrapProgress>(p =>
+			onProgress?.Invoke(p.Phase, p.PercentComplete, p.Message));
+		return await _sdkManager.EnsureLatestCommandLineToolsAsync(targetPath, bootstrapProgress, cancellationToken);
 	}
 
 	string EnsureAvailable()

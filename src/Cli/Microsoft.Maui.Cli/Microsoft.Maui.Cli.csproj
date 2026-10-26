@@ -79,6 +79,9 @@
     <Content Include="Build\MauiProfilingHelperInjection.targets" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Build\MauiProfilingHelper.AutoInitialize.cs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="..\README.md" Link="README.md" Pack="true" PackagePath="/" />
+    <None Include="..\..\..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+          Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <ItemGroup>

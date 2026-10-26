@@ -499,6 +499,12 @@ handler cleanup on disposal.
 `ContentViewRootLayoutTests` covers child-size changes without window resizing,
 measure invalidation and idle layout convergence.
 
+`StartupLayoutTests` starts the first window with a Shell root page containing a
+ScrollView, stacked heading, initially hidden button row, and CollectionView.
+It checks managed and native allocations when background-loaded cards arrive and
+the hidden content becomes visible, without navigation or window resizing, then
+expands the collection viewport to check both realized cards.
+
 The Picker regression checks item replacement, no selection, collection
 mutations, managed selection mapping, native selection notifications, and
 disconnect/reconnect behavior.
@@ -517,6 +523,7 @@ pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkBlazorW
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass ContentViewRootLayoutTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass StartupLayoutTests -MauiVersion 10.0.70
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransformTests
 ```
 

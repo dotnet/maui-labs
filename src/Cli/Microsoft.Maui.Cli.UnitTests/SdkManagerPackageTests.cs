@@ -218,7 +218,45 @@ public class SdkManagerPackageTests : IDisposable
         Assert.DoesNotContain(sdkPath, startInfo.Arguments);
     }
 
-    SdkManager CreateManager(string output, string error = "", int exitCode = 0)
+    [Theory]
+    [InlineData("23.0")]
+    [InlineData("22.0")]
+    public async Task EnsureLatestCommandLineToolsAsync_CurrentTools_ReturnsInstalledRevision(string catalogRevision)
+    {
+        using var manager = CreateManager($"""
+            Installed packages:
+              Path | Version | Description
+              cmdline-tools;latest | 23.0 | Android SDK Command-line Tools
+            Available Packages:
+              cmdline-tools;latest | {catalogRevision} | Android SDK Command-line Tools
+            """);
+
+        var tool = await manager.EnsureLatestCommandLineToolsAsync(_sdkPath);
+
+        Assert.Equal(manager.SdkManagerPath, tool.Path);
+        Assert.Equal("23.0", tool.Revision);
+        var invocation = File.ReadAllLines(Path.Combine(_sdkPath, "cmdline-tools", "latest", "bin", "invocation.txt"));
+        Assert.Contains("--list", invocation);
+        Assert.DoesNotContain("--install", invocation);
+    }
+
+    [Fact]
+    public async Task EnsureLatestCommandLineToolsAsync_SynchronizesJdkPath()
+    {
+        using var manager = CreateManager("""
+            Installed packages:
+              Path | Version | Description
+              cmdline-tools;latest | 23.0 | Android SDK Command-line Tools
+            Available Packages:
+            """, jdkPath: Path.Combine(_sdkPath, "jdk"));
+
+        await manager.EnsureLatestCommandLineToolsAsync(_sdkPath);
+
+        var javaHome = File.ReadAllText(Path.Combine(_sdkPath, "cmdline-tools", "latest", "bin", "java-home.txt")).Trim();
+        Assert.Equal(Path.Combine(_sdkPath, "jdk"), javaHome);
+    }
+
+    SdkManager CreateManager(string output, string error = "", int exitCode = 0, string? jdkPath = null)
     {
         var toolRoot = Path.Combine(_sdkPath, "cmdline-tools", "latest");
         var binPath = Path.Combine(toolRoot, "bin");
@@ -228,14 +266,14 @@ public class SdkManagerPackageTests : IDisposable
         File.WriteAllText(Path.Combine(binPath, "inventory-error.txt"), error);
         var toolPath = Path.Combine(binPath, OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
         var script = OperatingSystem.IsWindows()
-            ? $"@echo off\r\n(for %%a in (%*) do @echo %%~a)>\"%~dp0invocation.txt\"\r\n" +
+            ? $"@echo off\r\n(for %%a in (%*) do @echo %%~a)>\"%~dp0invocation.txt\"\r\necho %JAVA_HOME%>\"%~dp0java-home.txt\"\r\n" +
                 $"type \"%~dp0inventory.txt\"\r\ntype \"%~dp0inventory-error.txt\" 1>&2\r\nexit /b {exitCode}\r\n"
-            : "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/invocation.txt\"\n" +
+            : "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/invocation.txt\"\nprintf '%s\\n' \"$JAVA_HOME\" > \"$(dirname \"$0\")/java-home.txt\"\n" +
                 $"cat \"$(dirname \"$0\")/inventory.txt\"\ncat \"$(dirname \"$0\")/inventory-error.txt\" >&2\nexit {exitCode}\n";
         File.WriteAllText(toolPath, script);
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(toolPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        return new SdkManager(() => _sdkPath, () => null);
+        return new SdkManager(() => _sdkPath, () => jdkPath);
     }
 
     public void Dispose()
