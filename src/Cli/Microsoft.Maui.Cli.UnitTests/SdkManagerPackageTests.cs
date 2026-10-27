@@ -261,6 +261,20 @@ public class SdkManagerPackageTests : IDisposable
     }
 
     [Theory]
+    [InlineData("platform-tools\" & echo injected")]
+    [InlineData("platform-tools&echo injected")]
+    [InlineData("platform-tools\r\necho injected")]
+    public void CreatePackageInstallStartInfo_WindowsBatch_RejectsUnsafePackageIds(string package)
+    {
+        var toolPath = Path.Combine(_sdkPath, "cmdline-tools", "latest", "bin", "sdkmanager.bat");
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            SdkManager.CreatePackageInstallStartInfo(toolPath, package, _sdkPath, null, isWindows: true));
+
+        Assert.Equal("package", exception.ParamName);
+    }
+
+    [Theory]
     [InlineData("23.0")]
     [InlineData("22.0")]
     public async Task EnsureLatestCommandLineToolsAsync_CurrentTools_ReturnsInstalledRevision(string catalogRevision)

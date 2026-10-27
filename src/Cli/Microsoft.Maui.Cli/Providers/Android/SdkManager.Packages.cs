@@ -84,8 +84,17 @@ public partial class SdkManager
         if ((isWindows ?? OperatingSystem.IsWindows()) &&
             sdkManagerPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.IsNullOrEmpty(package) ||
+                package.Any(character =>
+                    !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_' or ';')))
+            {
+                throw new ArgumentException(
+                    "Android SDK package IDs may contain only ASCII letters, digits, '.', '-', '_', and ';'.",
+                    nameof(package));
+            }
+
             startInfo.FileName = "cmd.exe";
-            // cmd.exe does not use argv quoting. Expand paths and package IDs inside quotes, with delayed expansion disabled.
+            // cmd.exe does not use argv quoting. Expand validated package IDs and paths inside quotes, with delayed expansion disabled.
             var sdkRootArgument = string.IsNullOrEmpty(sdkPath) ? string.Empty : " \"--sdk_root=%ANDROID_HOME%\"";
             startInfo.Arguments =
                 $"/d /s /v:off /c \"\"%MAUI_SDK_MANAGER_PATH%\" \"%MAUI_SDK_PACKAGE%\"{sdkRootArgument}\"";
