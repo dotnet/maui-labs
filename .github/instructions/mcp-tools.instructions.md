@@ -81,6 +81,7 @@ If the tool calls a new agent endpoint, add the client method in `Microsoft.Maui
 | `CdpTools.cs` | `maui_cdp_evaluate`, `maui_cdp_screenshot`, `maui_cdp_source`, `maui_cdp_webviews` | Blazor WebView CDP |
 | `ExtensionTools.cs` | `maui_extension_list`, `maui_extension_call` | Agent extensions |
 | `FileTools.cs` | `maui_storage_roots`, `maui_files_list`, `maui_files_download`, `maui_files_upload`, `maui_files_delete` | File storage |
+| `FoldTools.cs` | `maui_fold_capabilities`, `maui_get_fold_state`, `maui_set_fold_state` | Device fold/hinge control |
 | `InteractionTools.cs` | `maui_tap`, `maui_fill`, `maui_clear`, `maui_key`, `maui_gesture`, `maui_scroll` | User interactions |
 | `InvokeTools.cs` | `maui_list_actions`, `maui_invoke_action` | DevFlow Actions |
 | `JobTools.cs` | `maui_jobs_list`, `maui_jobs_run` | Background jobs |

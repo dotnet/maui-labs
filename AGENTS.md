@@ -459,8 +459,10 @@ DevFlow exposes 73 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_files_upload` | Upload a file to an advertised app storage root |
 | `maui_fill` | Fill text into Entry/Editor |
 | `maui_focus` | Set focus to an element |
+| `maui_fold_capabilities` | Discover fold/hinge support on Android emulator or iOS simulator (no app agent required) |
 | `maui_geolocation` | GPS coordinates |
 | `maui_gesture` | Pinch/zoom, rotate, pan, swipe, double-tap, long-press |
+| `maui_get_fold_state` | Read hinge angles in degrees and observed fold mode (no app agent required) |
 | `maui_get_property` | Read any element property |
 | `maui_get_theme` | Get the current app-scoped light/dark theme |
 | `maui_hittest` | Find elements at screen coordinates |
@@ -500,6 +502,7 @@ DevFlow exposes 73 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_sensors_list` | List available device sensors |
 | `maui_sensors_start` | Start a sensor |
 | `maui_sensors_stop` | Stop a sensor |
+| `maui_set_fold_state` | Set and verify emulator/simulator hinge mode or angle (no app agent required) |
 | `maui_set_property` | Live-edit element properties |
 | `maui_set_theme` | Set the app or emulator/simulator to light, dark, or system theme |
 | `maui_status` | Agent connection status, platform, app name |
