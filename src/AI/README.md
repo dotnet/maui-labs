@@ -1,90 +1,74 @@
-# Essentials.AI contributor guide
+# Essentials.AI
 
-Build, test, and contribute to `Microsoft.Maui.Essentials.AI`, which provides
-on-device chat and embeddings through `Microsoft.Extensions.AI`.
+On-device chat and embeddings for .NET MAUI through `Microsoft.Extensions.AI`.
+This is the contributor README; see the package documentation below for consumer APIs.
 
 > **Experimental:** packages ship as previews; APIs may change.
 
-## Documentation
+## Package and usage
 
-| Document | Purpose |
-|----------|---------|
-| [Package README](Microsoft.Maui.Essentials.AI/README.md) | Consumer installation, setup, examples, and capability tables |
-| [Chat provider implementation guide](../../docs/ai/local-chat-provider.md) | Shared provider rules and Apple implementation targets |
-| [Apple Foundation Models](../../docs/ai/apple-foundation-models.md) | Apple toolchain, availability, images, native bridge, and validation |
-| [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md) | Interactive provider comparison and diagnostics |
+| Package | Consumer documentation |
+|---------|------------------------|
+| `Microsoft.Maui.Essentials.AI` | [Install and use the package](Microsoft.Maui.Essentials.AI/README.md) |
 
-Apple chat is supported on iOS, Mac Catalyst, and macOS 26+ with Apple Intelligence
-enabled. NaturalLanguage embeddings require iOS 13+, Mac Catalyst 13.1+, or
-macOS 10.15+. Windows and Android chat providers are **coming soon**; their behavior
-remains **To be determined** in the shared implementation guide.
+The package README owns platform requirements, setup, and API examples.
 
-| Package | Purpose |
-|---------|---------|
-| `Microsoft.Maui.Essentials.AI` | Apple on-device chat, tools, structured output, and text embeddings |
-
-For installation and a quick start, see the [package README](Microsoft.Maui.Essentials.AI/README.md).
-
-## Prerequisites
-
-- The .NET SDK pinned in the repository `global.json`.
-- Matching MAUI workloads.
-- macOS with Xcode 27 for the Apple native bridge and OS 27 APIs.
+The [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md)
+compares providers interactively.
 
 ## Build
 
-### Apple
+Use the .NET 10 SDK pinned in the repository's `global.json` and matching
+MAUI workloads. Apple native bindings require Xcode.
 
-```bash
+The library always targets `net10.0` and Android. Apple targets are added on
+non-Linux hosts, using either the default reference packs or the OS 27 packs
+when `UseXcode27Preview=true`. Windows is appended only on Windows hosts.
+The Chat Playground and device tests use the same platform conditions, without
+the portable `net10.0` target or native macOS app target.
+
+```sh
+# macOS: native Swift bindings and managed projects
+dotnet build src/AI/EssentialsAI.slnf
+
+# Apple 27 reference packs, with Xcode 27 and matching workloads installed
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
   -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-Use `net10.0-ios27.0` or `net10.0-macos27.0` for those platforms.
-`UseXcode27Preview` selects the OS 27 reference packs; it does not install or
-select Xcode.
+Use the corresponding `ios27.0` or `macos27.0` framework for those platforms.
+`UseXcode27Preview` selects this repository's target-framework list; it does not
+install or select Xcode. When Xcode 27 is the default, no `DEVELOPER_DIR` override
+is needed. For normal Apple 26.x reference packs with Xcode 27, the native CI job
+passes `ValidateXcodeVersion=false` to bypass the older packs' Xcode version check.
 
-### Full product
+Full solution builds on Windows require prebuilt Apple native artifacts.
+The prebuilt-artifact path activates only with `CI=true` or `TF_BUILD=true`;
+setting a flag alone does not supply the artifacts. CI builds them on macOS
+before packing/signing on Windows. See
+[ci-essentialsai.yml](../../.github/workflows/ci-essentialsai.yml) and the
+[official pipeline](../../eng/pipelines/devflow-official.yml) for the artifact flow.
 
-```bash
-dotnet build src/AI/EssentialsAI.slnf
-```
+## Tests and implementation
 
-Official Windows packing consumes Apple native artifacts built by the macOS
-job. `CI=true` or `TF_BUILD=true` selects the prebuilt path but does not create
-or download those artifacts by itself.
+Portable tests live in `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests`:
 
-## Test
-
-### Portable
-
-```bash
+```sh
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/Microsoft.Maui.Essentials.AI.UnitTests.csproj \
-  -p:TargetFrameworks=net10.0
+  -p:TargetFrameworks=net10.0 -p:IsTestProject=true
 ```
 
-### Apple native
+The overrides keep the build portable and enable Arcade's test infrastructure
+for this existing test project without building the Apple targets.
+Device tests use DeviceRunners with `dotnet test` and live in
+`tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`. They require an appropriate
+Apple device/runtime and model availability; portable tests do not run a model.
 
-```bash
-swift test --package-path src/AI/AppleNative
-```
+Run every model-free provider binding on Mac Catalyst:
 
-Run live Foundation Models tests on supported hardware:
-
-```bash
-ESSENTIALSAI_LIVE_TESTS=1 swift test --package-path src/AI/AppleNative
-```
-
-### Device tests
-
-DeviceRunners-based tests live in
-`tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests`.
-Use the appropriate Apple target. Model-dependent cases are tagged
-`RequiresModel=true`; exclude them with:
-
-```bash
+```sh
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true \
+  -f net10.0-maccatalyst -c Release \
   --filter "RequiresModel!=true" --logger trx
 ```
 
@@ -97,30 +81,28 @@ For live OpenAI baseline tests, configure the device-test user secrets:
 
 `EnableOpenAIClient=true` and `EnableOpenAITests=true` both compile the OpenAI
 fixtures. Use a Debug test run so the user-secrets file is embedded. The
-unfiltered command runs the complete Apple and live OpenAI device assembly:
+unfiltered command runs the complete Apple and live OpenAI device assembly and
+makes real requests against the configured deployments:
 
-```bash
+```sh
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true \
-  -p:EnableOpenAITests=true --logger trx
+  -f net10.0-maccatalyst -c Debug -p:EnableOpenAITests=true --logger trx
 ```
 
-Use filters only for diagnosis, never as the final validation result.
+Use a filter only for diagnosis, never as the final validation result:
 
-## Architecture
+```sh
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
+  -f net10.0-maccatalyst -c Debug -p:EnableOpenAIClient=true \
+  --filter "FullyQualifiedName~OpenAIChatClient" --logger trx
+```
 
-- `Microsoft.Maui.Essentials.AI/Platform/MaciOS/` — managed Apple chat and
-  embedding clients.
-- `AppleNative/EssentialsAI/` — Swift Foundation Models bridge.
-- `AppleNative/ApiDefinitions.cs` and `AppleBindings.targets` — bindings and
-  native artifact packaging.
-- `AppleNative/EssentialsAI/PlainTextDeltas.swift` and
-  `StructuredJsonDeltas.swift` — native append-only streaming conversion.
-- `Microsoft.Maui.Essentials.AI/Platform/StreamingResponseHandler.cs` —
-  managed streaming update transport.
-- `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Tests/` — shared
-  OpenAI-baseline suites and provider-specific overrides.
+- `AppleNative/EssentialsAI/`: Swift bridge and binding definitions, producing `.xcframework` bundles.
+- `Microsoft.Maui.Essentials.AI/Platform/`: platform clients and streaming helpers.
+- `JsonStreamChunker`, `PlainTextStreamChunker`, and `StreamingResponseHandler`: cumulative-response deltas and streaming updates.
+- `AppleBindings.targets`: native artifact build and packaging.
 
-Keep provider-neutral behavior in the shared test bases. Put native SDK,
-marshalling, OS-version, availability, and provider-policy checks in the
-provider-specific suites.
+Further design documentation:
+[Local chat provider contract](../../docs/ai/local-chat-provider.md),
+[Apple image input](../../docs/ai/apple-foundation-models-image-input.md) and
+[JSON stream chunking](../../docs/ai/json-stream-chunker-design.md).

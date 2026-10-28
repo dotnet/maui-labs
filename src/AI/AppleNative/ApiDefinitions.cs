@@ -110,13 +110,6 @@ interface CancellationTokenNative
 [Internal]
 interface ChatClientNative
 {
-	[Static, Export("getModelAvailability")]
-	string GetModelAvailability();
-
-	[Static, Export("getModelCapabilities")]
-	[return: NullAllowed]
-	NSNumber GetModelCapabilities();
-
 	// - (CancellationTokenNative * _Nullable)streamResponseWithMessages:(NSArray<ChatMessageNative *> * _Nonnull)messages options:(ChatOptionsNative * _Nullable)options onUpdate:(void (^ _Nonnull)(ResponseUpdateNative * _Nonnull))onUpdate onComplete:(void (^ _Nonnull)(ChatResponseNative * _Nullable, NSError * _Nullable))onComplete SWIFT_WARN_UNUSED_RESULT;
 	[Export("streamResponseWithMessages:options:onUpdate:onComplete:")]
 	[return: NullAllowed]
@@ -155,15 +148,9 @@ interface ChatMessageNative
 [Internal]
 interface ChatOptionsNative
 {
-	[Export("toolCallingMode", ArgumentSemantic.Assign)]
-	ToolCallingModeNative ToolCallingMode { get; set; }
-
 	// @property (nonatomic, strong) NSNumber * _Nullable topK;
 	[NullAllowed, Export("topK", ArgumentSemantic.Strong)]
 	NSNumber TopK { get; set; }
-
-	[NullAllowed, Export("topP", ArgumentSemantic.Strong)]
-	NSNumber TopP { get; set; }
 
 	// @property (nonatomic, strong) NSNumber * _Nullable seed;
 	[NullAllowed, Export("seed", ArgumentSemantic.Strong)]

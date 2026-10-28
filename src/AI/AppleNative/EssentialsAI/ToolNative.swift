@@ -9,12 +9,13 @@ final class ToolNative: Tool {
     let name: String
     let description: String
     let parameters: GenerationSchema
+    let output: GenerationSchema
 
     init(
         _ tool: AIToolNative,
         _ onToolCall: (@Sendable (String, String, String) -> Void)?,
         _ onToolResult: (@Sendable (String, String, String) -> Void)?
-    ) throws {
+    ) {
         self.tool = tool
         self.onToolCall = onToolCall
         self.onToolResult = onToolResult
@@ -22,20 +23,20 @@ final class ToolNative: Tool {
         self.name = tool.name
         self.description = tool.desc
 
-        self.parameters = try Self.parseSchema(tool.argumentsSchema, toolName: tool.name, role: "arguments")
-    }
-
-    private static func parseSchema(_ json: String, toolName: String, role: String) throws -> GenerationSchema {
+        // Parse the JSON schema for parameters
         do {
-            guard let schema = try JsonSchemaDecoder.parse(json) else {
-                throw JsonSchemaDecoder.SchemaError(path: "$", reason: "A schema is required.")
-            }
-            return schema
+            self.parameters =
+                try JsonSchemaDecoder.parse(tool.argumentsSchema) ?? JsonSchemaDecoder.StringGenerationSchema
         } catch {
-            throw NSError(domain: "EssentialsAI.ToolSchema", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Tool '\(toolName)' \(role) schema cannot be represented: \(error.localizedDescription)",
-                NSUnderlyingErrorKey: error
-            ])
+            self.parameters = JsonSchemaDecoder.StringGenerationSchema
+        }
+
+        // Parse the JSON schema for output
+        do {
+            self.output =
+                try JsonSchemaDecoder.parse(tool.outputSchema) ?? JsonSchemaDecoder.StringGenerationSchema
+        } catch {
+            self.output = JsonSchemaDecoder.StringGenerationSchema
         }
     }
 
