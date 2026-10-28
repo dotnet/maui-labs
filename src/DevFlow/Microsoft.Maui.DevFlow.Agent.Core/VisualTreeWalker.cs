@@ -210,6 +210,13 @@ public partial class VisualTreeWalker
                 HitTestByBoundsRecursive(modal, x, y, hits);
         }
 
+        // And pages a library hosts directly in the native window (popups).
+        foreach (var hosted in GetChildren(window).Except(((IVisualTreeElement)window).GetVisualChildren()))
+        {
+            if (hosted is Element hostedElement)
+                HitTestByBoundsRecursive(hostedElement, x, y, hits);
+        }
+
         return hits;
     }
 
@@ -1241,6 +1248,91 @@ public partial class VisualTreeWalker
     }
 
     /// <summary>
+    /// The children the walker visits: the element's visual children, plus — for a
+    /// <see cref="Window"/> — MAUI pages that a library hosts directly in the native
+    /// window instead of in <see cref="Window.Page"/> or the modal stack. Popup
+    /// libraries do this (for example UXDivers.Popups adds its PopupPage as a subview
+    /// of the UIWindow), and without it their content cannot be found, queried, or tapped.
+    /// </summary>
+    protected IReadOnlyList<IVisualTreeElement> GetChildren(IVisualTreeElement element)
+    {
+        var children = element.GetVisualChildren();
+        if (element is not Window window)
+            return children;
+
+        IReadOnlyList<IVisualTreeElement> hosted;
+        try
+        {
+            hosted = GetHostedRoots(window);
+        }
+        catch (Exception)
+        {
+            // Discovery is best effort; never let it break the regular tree.
+            return children;
+        }
+
+        if (hosted.Count == 0)
+            return children;
+
+        var combined = new List<IVisualTreeElement>(children);
+        foreach (var root in hosted)
+        {
+            if (!combined.Contains(root))
+                combined.Add(root);
+        }
+
+        return combined;
+    }
+
+    /// <summary>
+    /// MAUI elements that are attached to the native window of <paramref name="window"/>
+    /// but are not reachable from it through the MAUI tree. Platform walkers override this.
+    /// </summary>
+    protected virtual IReadOnlyList<IVisualTreeElement> GetHostedRoots(Window window) => Array.Empty<IVisualTreeElement>();
+
+    /// <summary>
+    /// Returns the element the regular walk cannot reach on the way from
+    /// <paramref name="element"/> up to <paramref name="window"/>, or null when every
+    /// step is reachable. A step is reachable when the parent lists the child among its
+    /// visual children. Popup libraries often set a popup page's <c>Parent</c> to the
+    /// window or the current page so that it inherits resources, without the parent
+    /// listing it as a child — so following parents alone would wrongly say "reachable".
+    /// </summary>
+    protected static IVisualTreeElement? FindDetachedRoot(IVisualTreeElement element, Window window)
+    {
+        var current = element;
+        for (var depth = 0; depth < 512; depth++)
+        {
+            var parent = current.GetVisualParent();
+            if (parent is null || parent is Application)
+                return current;
+
+            if (!IsListedChild(parent, current))
+                return current;
+
+            if (ReferenceEquals(parent, window))
+                return null;
+
+            current = parent;
+        }
+
+        return null;
+    }
+
+    private static bool IsListedChild(IVisualTreeElement parent, IVisualTreeElement child)
+    {
+        // The walk adds ShellContent pages explicitly (see WalkElement), and the window's
+        // page and modal pages are always walked.
+        if (parent is ShellContent shellContent && ReferenceEquals(shellContent.Content, child))
+            return true;
+        if (parent is Window window && child is Page page
+            && (ReferenceEquals(window.Page, page) || window.Navigation?.ModalStack.Contains(page) == true))
+            return true;
+
+        return parent.GetVisualChildren().Contains(child);
+    }
+
+    /// <summary>
     /// Walks from a specific element.
     /// </summary>
     public ElementInfo? WalkElement(IVisualTreeElement element, string? parentId, int currentDepth, int maxDepth)
@@ -1253,7 +1345,7 @@ public partial class VisualTreeWalker
 
         info.Children ??= new List<ElementInfo>();
 
-        var children = element.GetVisualChildren();
+        var children = GetChildren(element);
         foreach (var child in children)
         {
             var childInfo = WalkElement(child, id, currentDepth + 1, maxDepth);
@@ -1362,7 +1454,7 @@ public partial class VisualTreeWalker
 
         MatchAndAdd(info, type, automationId, text, results);
 
-        var children = element.GetVisualChildren();
+        var children = GetChildren(element);
         foreach (var child in children)
             QueryRecursive(child, type, automationId, text, id, results);
 
@@ -1582,7 +1674,7 @@ public partial class VisualTreeWalker
         var id = GenerateId(element);
         if (id == targetId) return element;
 
-        var children = element.GetVisualChildren();
+        var children = GetChildren(element);
 
         // Check synthetics on Pages
         if (element is Page page)
