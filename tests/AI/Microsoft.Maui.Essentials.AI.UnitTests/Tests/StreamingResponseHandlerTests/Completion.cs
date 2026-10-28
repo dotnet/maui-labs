@@ -11,9 +11,9 @@ public partial class StreamingResponseHandlerTests
 	public class CompletionTests
 	{
 		[Fact]
-		public async Task Complete_FlushesRemainingContent()
+		public async Task Complete_AfterContent_PreservesUpdate()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessContent("Hello");
 			handler.Complete();
@@ -27,7 +27,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task CompleteWithError_SurfacesExceptionToReader()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessContent("Hello");
 			handler.CompleteWithError(new InvalidOperationException("test error"));
@@ -38,35 +38,11 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public void DoubleComplete_DoesNotThrow()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.CompleteWithError(new InvalidOperationException("first error"));
 			handler.Complete();
 			handler.CompleteWithError(new InvalidOperationException("second error"));
-		}
-
-		[Fact]
-		public async Task Complete_WithJsonChunker_FlushesRemainingJsonContent()
-		{
-			// Use JsonStreamChunker to ensure the Flush()-on-Complete path is exercised.
-			// JsonStreamChunker expects complete valid JSON at each step and tracks partial state.
-			var handler = new StreamingResponseHandler(new JsonStreamChunker());
-
-			// Feed progressive complete JSON snapshots — the chunker tracks partial strings
-			handler.ProcessContent("{\"greeting\":\"Hello\"}");
-			handler.ProcessContent("{\"greeting\":\"Hello world\"}");
-
-			// Complete should flush remaining content from JsonStreamChunker
-			handler.Complete();
-
-			var updates = await ReadAll(handler);
-
-			// Should have text updates from the progressive JSON
-			Assert.NotEmpty(updates);
-			var allText = string.Concat(updates
-				.SelectMany(u => u.Contents.OfType<Microsoft.Extensions.AI.TextContent>())
-				.Select(tc => tc.Text));
-			Assert.Contains("Hello", allText, StringComparison.Ordinal);
 		}
 
 		[Theory]
@@ -75,7 +51,7 @@ public partial class StreamingResponseHandlerTests
 		[InlineData("another-model")]
 		public async Task Complete_WithUsage_EmitsUsageContent(string? modelId)
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker(), modelId);
+			var handler = new StreamingResponseHandler(modelId);
 			var usage = new UsageDetails
 			{
 				InputTokenCount = 12,
