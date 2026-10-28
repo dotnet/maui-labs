@@ -136,18 +136,6 @@ public partial class VisualTreeWalker
                 return null;
         }
 
-        var ambiguousExpected = new bool[expected.Length];
-        for (var first = 0; first < expected.Length; first++)
-        {
-            for (var second = first + 1; second < expected.Length; second++)
-            {
-                if (!HasSameStaticIdentity(expected[first], expected[second]))
-                    continue;
-                ambiguousExpected[first] = true;
-                ambiguousExpected[second] = true;
-            }
-        }
-
         var runtime = new List<(int OriginalIndex, ElementInfo Info)>();
         for (var index = 0; index < children.Count; index++)
         {
@@ -194,8 +182,13 @@ public partial class VisualTreeWalker
 
             if (takeWays == 1 && skipWays == 0)
             {
-                if (!ambiguousExpected[expectedPosition])
+                if (CanAttachToAlignedChild(
+                    expected,
+                    expectedPosition,
+                    runtime[runtimePosition].Info))
+                {
                     alignment[runtime[runtimePosition].OriginalIndex] = expectedPosition;
+                }
                 expectedPosition++;
                 runtimePosition++;
             }
@@ -212,11 +205,47 @@ public partial class VisualTreeWalker
         return alignment;
     }
 
+    // Same-type siblings are interchangeable by type alone and code-behind may reorder them, so an
+    // entry that shares its static identity is only attached when its literal Text is unique among
+    // those siblings and the aligned runtime element still shows it. Anything unverifiable stays
+    // unmapped: a wrong line would make Apply-to-XAML edit a different element.
+    private static bool CanAttachToAlignedChild(
+        XamlSourceEntry[] expected,
+        int index,
+        ElementInfo runtime)
+    {
+        var entry = expected[index];
+        var hasSameTypeSibling = false;
+        for (var other = 0; other < expected.Length; other++)
+        {
+            if (other == index || !HasSameStaticIdentity(entry, expected[other]))
+                continue;
+
+            hasSameTypeSibling = true;
+            // A bound or missing Text can show anything at runtime, including this entry's text.
+            if (entry.Text is null
+                || expected[other].Text is null
+                || string.Equals(entry.Text, expected[other].Text, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        // Every password Entry reports the redaction marker whatever it holds, so it proves nothing.
+        return !hasSameTypeSibling
+            || (string.Equals(entry.Text, runtime.Text, StringComparison.Ordinal)
+                && !string.Equals(runtime.Text, SensitiveValueRedactor.RedactedValue, StringComparison.Ordinal));
+    }
+
+    // An unresolved FullTypeName (default xmlns) matches any runtime type with that short name, so
+    // it may describe the same element as a resolved one.
     private static bool HasSameStaticIdentity(
         XamlSourceEntry left,
         XamlSourceEntry right)
         => string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal)
-            && string.Equals(left.FullTypeName, right.FullTypeName, StringComparison.Ordinal)
+            && (string.IsNullOrEmpty(left.FullTypeName)
+                || string.IsNullOrEmpty(right.FullTypeName)
+                || string.Equals(left.FullTypeName, right.FullTypeName, StringComparison.Ordinal))
             && string.Equals(left.AutomationId, right.AutomationId, StringComparison.Ordinal);
 
     private static void AttachLocation(

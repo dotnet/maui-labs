@@ -6,6 +6,8 @@ using AppKit;
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
 
+#pragma warning disable CS0618 // This handler provides compatibility for MAUI's obsolete TableView and cell types.
+
 namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 
 public partial class TableViewHandler : MacOSViewHandler<TableView, NSScrollView>
@@ -136,7 +138,7 @@ public partial class TableViewHandler : MacOSViewHandler<TableView, NSScrollView
 				DrawsBackground = true,
 				BackgroundColor = NSColor.FromRgba(245, 245, 245, 255),
 				TextColor = NSColor.Gray,
-				Font = NSFont.BoldSystemFontOfSize(12),
+				Font = NSFont.BoldSystemFontOfSize(12)!,
 			};
 			// Wrap in a container with padding
 			var headerContainer = new NSView();

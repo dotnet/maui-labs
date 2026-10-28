@@ -138,6 +138,7 @@ public class DeviceTests : IntegrationTestBase
     public async Task Jobs_ReturnsSupportedFlagAndJobArray()
     {
         var json = await Client.GetJobsAsync();
+        Output.WriteLine($"jobs payload: {json}");
 
         Assert.Equal(JsonValueKind.Object, json.ValueKind);
         Assert.True(json.TryGetProperty("supported", out var supported));
@@ -145,7 +146,71 @@ public class DeviceTests : IntegrationTestBase
         Assert.True(json.TryGetProperty("jobs", out var jobs));
         Assert.Equal(JsonValueKind.Array, jobs.ValueKind);
 
-        if (Platform is "android" or "ios" or "maccatalyst")
+        // BGTaskScheduler ships with the OS and the sample references WorkManager, so both
+        // platforms must report the capability as present.
+        if (Platform is "ios" or "maccatalyst" or "android")
             Assert.True(supported.GetBoolean());
+
+        // An empty list must never be the result of a failed query — if the query could not
+        // complete, the payload has to say so rather than looking like an idle queue.
+        if (json.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
+            Assert.Fail($"Jobs query reported an error: {error.GetString()}");
+    }
+
+    [Fact]
+    public async Task Jobs_Android_ListsTheSampleWorker()
+    {
+        if (Platform != "android")
+            return;
+
+        // The sample enqueues SampleSyncWorker on every launch, so a working WorkManager query
+        // must return it. This is the assertion that actually exercises the reflection path —
+        // shape-only checks passed for months while the query silently returned nothing.
+        var json = await Client.GetJobsAsync();
+        Output.WriteLine($"jobs payload: {json}");
+
+        var jobs = json.GetProperty("jobs").EnumerateArray().ToList();
+        Assert.NotEmpty(jobs);
+
+        var sampleJob = jobs.FirstOrDefault(j =>
+            j.TryGetProperty("tags", out var tags) &&
+            tags.EnumerateArray().Any(t => t.GetString() == "devflow-sample-sync") &&
+            j.GetProperty("state").GetString() == "ENQUEUED");
+
+        Assert.True(sampleJob.ValueKind == JsonValueKind.Object,
+            "No job tagged 'devflow-sample-sync' was returned by WorkManager.");
+
+        // A real WorkInfo carries a UUID and a state; empty strings mean the reflected
+        // accessors silently returned nothing.
+        Assert.False(string.IsNullOrWhiteSpace(sampleJob.GetProperty("identifier").GetString()));
+        Assert.Contains(sampleJob.GetProperty("state").GetString(),
+            new[] { "ENQUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "CANCELLED" });
+
+        var mappings = json.GetProperty("scheduledJobs").EnumerateArray().Where(m =>
+            m.GetProperty("workSpecId").GetString() == sampleJob.GetProperty("identifier").GetString()).ToArray();
+        Assert.NotEmpty(mappings);
+        Assert.All(mappings, mapping =>
+        {
+            Assert.True(int.TryParse(mapping.GetProperty("jobId").GetString(), out _));
+            Assert.Equal(sampleJob.GetProperty("generation").GetInt32(), mapping.GetProperty("generation").GetInt32());
+            Assert.True(mapping.GetProperty("namespace").ValueKind is JsonValueKind.String or JsonValueKind.Null);
+        });
+        Assert.True(Guid.TryParse(json.GetProperty("agentInstanceId").GetString(), out _));
+        Assert.InRange(json.GetProperty("agentPort").GetInt32(), 1, 65535);
+    }
+
+    [Fact]
+    public async Task Jobs_UnsupportedCapability_IsReportedConsistently()
+    {
+        // The jobs list and the capabilities document must not disagree about whether
+        // background jobs are available, or a caller feature-detecting via capabilities
+        // gets a different answer than one reading the list.
+        var jobs = await Client.GetJobsAsync();
+        var caps = await GetJsonAsync("/api/v1/agent/capabilities");
+
+        var listSupported = jobs.GetProperty("supported").GetBoolean();
+        var capsSupported = caps.GetProperty("capabilities").GetProperty("device.jobs").GetProperty("supported").GetBoolean();
+
+        Assert.Equal(listSupported, capsSupported);
     }
 }

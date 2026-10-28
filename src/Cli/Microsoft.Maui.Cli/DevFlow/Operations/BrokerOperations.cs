@@ -3,7 +3,8 @@ using Microsoft.Maui.Cli.DevFlow.Broker;
 
 namespace Microsoft.Maui.Cli.DevFlow;
 
-internal sealed record BrokerStatusResult(bool Running, int? Port = null, int Agents = 0, bool? StateFile = null, bool Stale = false);
+internal sealed record BrokerStatusResult(
+    bool Running, int? Port = null, int Agents = 0, bool? StateFile = null, bool Stale = false, string? SourceWorkspace = null);
 
 internal sealed class BrokerOperations
 {
@@ -31,8 +32,12 @@ internal sealed class BrokerOperations
             var response = await http.GetStringAsync($"http://localhost:{port}/api/health");
             using var doc = JsonDocument.Parse(response);
 
+            // Brokers that predate the field omit it; the workspace is also null when it was unavailable.
+            var workspace = doc.RootElement.TryGetProperty("sourceWorkspace", out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
             return new(true, port, doc.RootElement.GetProperty("agents").GetInt32(),
-                StateFile: statePort is null ? false : null);
+                StateFile: statePort is null ? false : null, SourceWorkspace: workspace);
         }
         catch
         {

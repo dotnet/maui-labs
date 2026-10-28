@@ -105,6 +105,52 @@ public class AgentClientTapTests
     }
 
     [Fact]
+    public async Task TapResultAsync_AtAPoint_PostsTheCoordinatesWithTheElement()
+    {
+        using var agent = FakeAgent.StartJson("""{ "success": true }""");
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
+
+        var result = await client.TapResultAsync("canvas-1", 12.5, 40, captureEpoch: 3, registryGeneration: 1);
+
+        Assert.True(result.Success);
+        var request = Assert.Single(agent.Requests);
+        Assert.Equal("/api/v1/ui/actions/tap", request.Path);
+        using var body = JsonDocument.Parse(request.Body);
+        Assert.Equal("canvas-1", body.RootElement.GetProperty("elementId").GetString());
+        Assert.Equal(12.5, body.RootElement.GetProperty("x").GetDouble());
+        Assert.Equal(40, body.RootElement.GetProperty("y").GetDouble());
+        Assert.Equal(3, body.RootElement.GetProperty("captureEpoch").GetInt64());
+    }
+
+    [Fact]
+    public async Task TapResultAsync_AtAPoint_SurfacesTheAgentsReason()
+    {
+        using var agent = FakeAgent.Start(_ => FakeAgent.Response.Json(
+            """{ "success": false, "error": "Point (500, 5) is outside the element's 300x120 bounds" }""",
+            statusCode: 400));
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
+
+        var result = await client.TapResultAsync("canvas-1", 500, 5, captureEpoch: null, registryGeneration: null);
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("outside the element", result.Error);
+    }
+
+    [Fact]
+    public async Task TapAsync_WithoutAPoint_SendsNoCoordinates()
+    {
+        using var agent = FakeAgent.StartJson("""{ "success": true }""");
+        using var client = new AgentClient("localhost", agent.Port) { AutoAcquireMutationLease = false };
+
+        await client.TapAsync("el-1");
+
+        using var body = JsonDocument.Parse(Assert.Single(agent.Requests).Body);
+        Assert.False(body.RootElement.TryGetProperty("x", out _));
+        Assert.False(body.RootElement.TryGetProperty("y", out _));
+    }
+
+    [Fact]
     public async Task FillAsync_PostsTextPayload()
     {
         using var agent = FakeAgent.StartJson("""{ "success": true }""");

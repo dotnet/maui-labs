@@ -25,7 +25,6 @@ class BatteryImplementation : IBattery
     bool _listening;
     IOPowerSourceCallback? _callbackDelegate; // prevent GC collection
     event EventHandler<BatteryInfoChangedEventArgs>? _batteryInfoChanged;
-    event EventHandler<EnergySaverStatusChangedEventArgs>? _energySaverStatusChanged;
 
     double _currentLevel;
     BatteryPowerSource _currentSource;
@@ -62,8 +61,8 @@ class BatteryImplementation : IBattery
 
     public event EventHandler<EnergySaverStatusChangedEventArgs> EnergySaverStatusChanged
     {
-        add => _energySaverStatusChanged += value;
-        remove => _energySaverStatusChanged -= value;
+        add { }
+        remove { }
     }
 
     void StartBatteryListeners()
@@ -136,9 +135,12 @@ class BatteryImplementation : IBattery
 
             infoHandle = IOPSCopyPowerSourcesInfo();
             sourcesRef = IOPSCopyPowerSourcesList(infoHandle);
-            var sources = NSArray.ArrayFromHandle<NSObject>(sourcesRef);
+            var sources = NSArray.ArrayFromHandle<NSObject>(sourcesRef) ?? Array.Empty<NSObject>();
             foreach (var source in sources)
             {
+                if (source is null)
+                    continue;
+
                 var dicRef = IOPSGetPowerSourceDescription(infoHandle, source.Handle);
                 var dic = Runtime.GetNSObject<NSDictionary>(dicRef, false);
                 if (dic is null) continue;
@@ -189,9 +191,12 @@ class BatteryImplementation : IBattery
 
             infoHandle = IOPSCopyPowerSourcesInfo();
             sourcesRef = IOPSCopyPowerSourcesList(infoHandle);
-            var sources = NSArray.ArrayFromHandle<NSObject>(sourcesRef);
+            var sources = NSArray.ArrayFromHandle<NSObject>(sourcesRef) ?? Array.Empty<NSObject>();
             foreach (var source in sources)
             {
+                if (source is null)
+                    continue;
+
                 var dicRef = IOPSGetPowerSourceDescription(infoHandle, source.Handle);
                 var dic = Runtime.GetNSObject<NSDictionary>(dicRef, false);
                 if (dic is null) continue;

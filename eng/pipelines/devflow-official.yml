@@ -434,10 +434,26 @@ extends:
               inputs:
                 version: 11.0.x
                 includePreviewVersions: true
+                # Arcade installs the root .NET 10 SDK here; keep .NET 11 and its workloads in the same host.
+                installationPath: $(Build.SourcesDirectory)\.dotnet
             - powershell: |
                 dotnet workload install maui
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               displayName: Install MAUI workload
+              workingDirectory: $(Build.SourcesDirectory)\src\Testing
+            - pwsh: |
+                $arguments = @(
+                  'build'
+                  '-t:InstallAndroidDependencies'
+                  '-f'
+                  'net11.0-android'
+                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
+                  '-p:AcceptAndroidSDKLicenses=true'
+                  'Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj'
+                )
+                & dotnet @arguments
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              displayName: Install Android SDK dependencies
               workingDirectory: $(Build.SourcesDirectory)\src\Testing
             - script: $(Build.SourcesDirectory)\eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)

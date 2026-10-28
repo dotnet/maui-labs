@@ -28,9 +28,12 @@ public partial class JsonStreamChunkerTests
 				chunks.Add(chunker.Process(line));
 			chunks.Add(chunker.Flush());
 
-			// For debugging - write chunks to .txt file
-			var txtPath = DataStreamsHelper.GetTxtItinerary(fileName);
-			File.WriteAllLines(txtPath, chunks);
+			// For debugging - write chunks to a .txt file. Not over the checked-in .txt next to the
+			// .jsonl: StreamingJsonDeserializerTests read those in parallel, and Windows fails
+			// a read that overlaps the write.
+			var debugDirectory = Path.Combine(Path.GetTempPath(), "Microsoft.Maui.Essentials.AI.UnitTests", "Itinerary");
+			Directory.CreateDirectory(debugDirectory);
+			File.WriteAllLines(Path.Combine(debugDirectory, Path.ChangeExtension(fileName, ".txt")), chunks);
 
 			var concatenated = string.Concat(chunks);
 			var finalLine = lines[^1];

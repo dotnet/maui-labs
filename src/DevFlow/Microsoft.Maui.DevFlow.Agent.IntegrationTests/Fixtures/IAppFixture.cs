@@ -11,4 +11,7 @@ public interface IAppFixture : IAsyncLifetime
     int AgentPort { get; }
     string AgentBaseUrl { get; }
     string Platform { get; }
+    string? DeviceId { get; }
+    string? AppIdentifier { get; }
+    Task ResetPermissionAsync(Driver.PermissionService permission);
 }

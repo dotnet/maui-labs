@@ -3,6 +3,8 @@ using CoreFoundation;
 using SystemConfiguration;
 using Microsoft.Maui.Networking;
 
+#pragma warning disable CA1422 // NetworkReachability provides the existing synchronous IConnectivity implementation.
+
 namespace Microsoft.Maui.Platforms.MacOS.Essentials;
 
 class ConnectivityImplementation : IConnectivity
@@ -63,17 +65,13 @@ class ConnectivityImplementation : IConnectivity
     {
         var ip = new IPAddress(0);
         _defaultRouteReachability = new NetworkReachability(ip);
-#pragma warning disable CA1422
         _defaultRouteReachability.SetNotification(OnReachabilityChanged);
         _defaultRouteReachability.Schedule(CFRunLoop.Main, CFRunLoop.ModeDefault);
-#pragma warning restore CA1422
 
         _remoteHostReachability = new NetworkReachability("www.microsoft.com");
         _remoteHostReachability.TryGetFlags(out _);
-#pragma warning disable CA1422
         _remoteHostReachability.SetNotification(OnReachabilityChanged);
         _remoteHostReachability.Schedule(CFRunLoop.Main, CFRunLoop.ModeDefault);
-#pragma warning restore CA1422
     }
 
     void StopListeners()

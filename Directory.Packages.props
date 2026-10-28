@@ -16,6 +16,15 @@
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftAspNetCoreComponentsWebViewMauiVersion)" />
   </ItemGroup>
 
+  <ItemGroup Label="AndroidX">
+    <PackageVersion Include="Xamarin.AndroidX.Work.Runtime" Version="$(XamarinAndroidXWorkRuntimeVersion)" />
+    <PackageVersion Include="Xamarin.AndroidX.Concurrent.Futures.Ktx" Version="$(XamarinAndroidXKtxFacadeVersion)" />
+    <PackageVersion Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" Version="$(XamarinAndroidXKtxFacadeVersion)" />
+    <!-- Work.Runtime pins Lifecycle.Service to the 2.8.7 line while the MAUI baseline resolves
+         Lifecycle.Runtime 2.9.x; matching the two keeps restore warning-free. -->
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Service" Version="$(XamarinAndroidXLifecycleServiceVersion)" />
+  </ItemGroup>
+
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="Extensions">
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="$(MicrosoftExtensionsConfigurationVersion)" />
@@ -59,6 +68,12 @@
     <PackageVersion Include="ModelContextProtocol" Version="$(ModelContextProtocolVersion)" />
     <PackageVersion Include="Interop.UIAutomationClient" Version="$(InteropUIAutomationClientVersion)" />
     <PackageVersion Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="$(AathifMahirMauiIconsCupertinoVersion)" />
+  </ItemGroup>
+
+  <!-- Samples only (not shipped): canvas controls the DevFlow sample drives with taps at a point -->
+  <ItemGroup Label="Samples">
+    <PackageVersion Include="SkiaSharp.Views.Maui.Controls" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="Syncfusion.Maui.Toolkit" Version="$(SyncfusionMauiToolkitVersion)" />
   </ItemGroup>
 
   <!-- MAUI Cli Tool dependencies -->

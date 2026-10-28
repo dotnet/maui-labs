@@ -106,6 +106,8 @@ public class BrokerServer : IDisposable
         }
 
         Log($"Broker started on port {_port} (PID {Environment.ProcessId})");
+        if (_sourceWorkspace.StartPath is { } sourceWorkspace)
+            Log($"XAML source workspace: {sourceWorkspace}");
 
         // Write state file
         WriteBrokerState();
@@ -203,11 +205,7 @@ public class BrokerServer : IDisposable
 
             var (statusCode, body) = (method, path) switch
             {
-                ("GET", "/api/health") => (200, CliJson.SerializeUntyped(new JsonObject
-                {
-                    ["status"] = "ok",
-                    ["agents"] = _agents.Count
-                }, indented: false)),
+                ("GET", "/api/health") => (200, HandleHealth()),
                 ("GET", "/api/agents") => (200, HandleListAgents()),
                 ("POST", "/api/shutdown") => HandleShutdown(),
                 // Browsers auto-request /favicon.ico; answer 204 so the inspector page doesn't log a 404.
@@ -449,6 +447,13 @@ public class BrokerServer : IDisposable
 
     private SemaphoreSlim AgentStateGate(string agentId)
         => _agentStateGates.GetOrAdd(agentId, static _ => new SemaphoreSlim(1, 1));
+
+    internal string HandleHealth() => CliJson.SerializeUntyped(new JsonObject
+    {
+        ["status"] = "ok",
+        ["agents"] = _agents.Count,
+        ["sourceWorkspace"] = _sourceWorkspace.StartPath
+    }, indented: false);
 
     private string HandleListAgents()
     {

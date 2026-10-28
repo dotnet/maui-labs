@@ -52,8 +52,8 @@ authenticated host bridge for source navigation, recording persistence, and Copi
 The shared inspector keeps one interaction model while adapting its chrome to the host viewport:
 
 - **Wide browser/editor:** tree, screenshot, and properties are docked as three panes.
-- **Compact editor:** the tree remains available while properties open as a drawer, preserving
-  screenshot width.
+- **Compact editor:** the tree stays docked and properties dock beside the screenshot, so Fit
+  re-fits around them instead of a drawer covering the preview.
 - **Narrow Canvas/editor:** the screenshot is primary; tree and properties become coordinated
   full-height drawers with a scrim.
 - **Short host:** drawers and overlay Data/timeline sheets protect the screenshot's vertical budget.
@@ -82,6 +82,12 @@ from producing negative offsets.
 
 Browser coordinates are converted from the fit-scaled viewport back to screenshot coordinates,
 then translated to window coordinates with the frame's root offset before hit testing.
+
+Elements the Agent reports as displayed can still lie wholly outside the frame (a closed Shell
+flyout is realized left of the window). The renderer marks those overlays `data-offscreen="true"`
+after the root offset is applied; the client dims their tree rows, does not draw or hover-highlight
+them on the Preview, and tags the selected element's status line `(off-screen)` while it stays
+outside the frame. `data-isVisible` keeps the Agent's value.
 
 ## Global mutation lease
 
@@ -119,8 +125,11 @@ elements to source file, line, column, and a build-time content hash. VS Code co
 file hash before opening the recorded line and warns when the file changed after the app was built.
 
 Source locations are emitted only when the runtime element can be matched conservatively to its
-XAML declaration. Repeated same-type siblings need sibling-unique `AutomationId` values; otherwise
-their source actions are withheld rather than risk opening or editing the wrong declaration.
+XAML declaration. Repeated same-type siblings, such as the two `Label`s in the default template,
+are told apart by a sibling-unique `AutomationId`, or when every one of them declares a different
+literal `Text` that the runtime element still shows. Otherwise (bound, duplicated, or
+code-behind-changed text) their source actions are withheld rather than risk opening or editing
+the wrong declaration; give those elements a unique `AutomationId` to map them.
 
 Source maps are disabled outside Debug by default because they embed XAML text and source paths.
 They can be disabled explicitly:
