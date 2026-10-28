@@ -2677,6 +2677,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             try
             {
                 var converted = ConvertPropertyValue(prop.PropertyType, body.Value);
+                var sourceBeforeTextEdit = prop.Name == "Text" && _treeWalker.HasActiveSourceMaps
+                    ? VisualTreeWalker.FlattenElementInfos(_treeWalker.WalkTree(_app, 0, null))
+                        .FirstOrDefault(info => ReferenceEquals(info.IdentityToken, _treeWalker.GetElementIdentity(el)))
+                    : null;
 
                 // Use BindableObject.SetValue when possible so the handler mapper
                 // propagates the change to the native platform view.
@@ -2684,10 +2688,12 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     FindBindableProperty(type, prop) is BindableProperty bp)
                 {
                     bindable.SetValue(bp, converted);
-                    return "ok";
                 }
-
-                prop.SetValue(el, converted);
+                else
+                {
+                    prop.SetValue(el, converted);
+                }
+                _treeWalker.RetainSourceForTextEdit(el, sourceBeforeTextEdit);
                 return "ok";
             }
             catch (Exception ex)
