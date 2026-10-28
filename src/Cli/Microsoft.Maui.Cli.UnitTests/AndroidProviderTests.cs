@@ -494,8 +494,14 @@ public class AndroidProviderTests
 	public async Task InstallAsync_ReportsProgress()
 	{
 		// Arrange
-		var progressMessages = new List<string>();
-		var progress = new Progress<string>(msg => progressMessages.Add(msg));
+		var progressMessages = new System.Collections.Concurrent.ConcurrentQueue<string>();
+		var progressCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var progress = new Progress<string>(msg =>
+		{
+			progressMessages.Enqueue(msg);
+			if (progressMessages.Count == 4)
+				progressCompleted.TrySetResult();
+		});
 
 		var provider = new FakeAndroidProvider
 		{
@@ -511,8 +517,7 @@ public class AndroidProviderTests
 		// Act
 		await provider.InstallAsync(progress: progress);
 
-		// Allow progress callbacks to complete
-		await Task.Delay(100);
+		await progressCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
 		// Assert
 		Assert.Contains(progressMessages, m => m.Contains("Step 1/4"));

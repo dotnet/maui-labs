@@ -47,6 +47,16 @@ The broker discovers agents and serves the HTML/CSS/JavaScript bundle. Inspector
 proxied to the selected in-app agent. VS Code and Canvas embed the same page and add an
 authenticated host bridge for source navigation, recording persistence, and Copilot context.
 
+## Connection recovery
+
+State requests time out after 10 seconds, including reading the response body. While disconnected,
+the visible Inspector checks again every 3 seconds even if the event WebSocket remains open.
+Polling pauses while the Inspector is hidden or replaying a workflow.
+
+The disconnected overlay marks active state checks with `aria-busy` and a spinning refresh icon.
+**Retry now** shows a checking label until its check settles, then becomes available again on
+failure. The icon does not animate when reduced motion is preferred.
+
 ## Host-adaptive layout
 
 The shared inspector keeps one interaction model while adapting its chrome to the host viewport:

@@ -254,6 +254,11 @@ body.df-tree-hidden #df-tree-pane { display: none; }
 .df-connection-card p { margin: 0 0 12px; color: var(--df-muted); line-height: 1.45; }
 .df-connection-icon { width: 28px; height: 28px; color: var(--df-warn); fill: none; stroke: currentColor; stroke-width: 2; }
 .df-connection-card .df-tool-btn { margin-inline: auto; }
+.df-connection-overlay[aria-busy="true"] .df-connection-icon { animation: df-connection-spin 1.2s linear infinite; }
+@keyframes df-connection-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .df-connection-overlay[aria-busy="true"] .df-connection-icon { animation: none; }
+}
 body.df-disconnected #df-viewport-wrap {
   opacity: .38;
   filter: grayscale(.35);

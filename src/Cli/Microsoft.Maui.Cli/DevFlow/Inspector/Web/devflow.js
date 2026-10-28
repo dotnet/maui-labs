@@ -95,6 +95,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let isGesturing = false;
   let isDragging = false;
   let refreshPromise = null;
+  const STATE_FETCH_TIMEOUT_MS = 10000;
 
   // Inspector selection and tree state. Declared early so the event
   // handlers registered below can read them (they only run after init has set them).
@@ -207,8 +208,11 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     }
 
     const currentRefresh = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), STATE_FETCH_TIMEOUT_MS);
+      disconnectedOverlay?.setAttribute('aria-busy', 'true');
       try {
-        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`);
+        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: controller.signal });
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();
         markConnected(true);
@@ -250,6 +254,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         markConnected(false);
         console.error('State refresh failed:', err);
         return null;
+      } finally {
+        clearTimeout(timeout);
+        disconnectedOverlay?.removeAttribute('aria-busy');
       }
     })();
     refreshPromise = currentRefresh;
@@ -291,13 +298,16 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     updateFlowButtons();
   }
   if (retryConnectionBtn) retryConnectionBtn.addEventListener('click', async () => {
+    const label = retryConnectionBtn.querySelector('span');
     retryConnectionBtn.disabled = true;
+    if (label) label.textContent = 'Checking…';
     setStatus(checkingStatus);
     try {
       // Forced: wait for any in-flight poll, then check again rather than reusing its result.
       await refreshState(true);
     } finally {
       retryConnectionBtn.disabled = false;
+      if (label) label.textContent = 'Retry now';
       // markConnected() ignores an unchanged state, so settle our own status here unless something newer replaced it.
       if (tb.status?.textContent === checkingStatus) setStatus(connected ? '' : disconnectedStatus);
     }
@@ -860,8 +870,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // ── Live updates: a WebSocket to the broker-proxied /ws/events makes the mirror react instantly
   // to app-side changes. The 3s poll below stays as a zero-regression fallback and only refreshes
-  // when the socket is NOT live (wsLive), or Layout is visible: an open event stream does not
-  // guarantee every native scroll or layout change emits an event. This poll never analyzes layout.
+  // when the socket is NOT live (wsLive), the app is disconnected, or Layout is visible: an open
+  // event stream does not guarantee app reachability or every native layout change emits an event.
+  // This poll never analyzes layout.
   let wsLive = false;
   let eventsWs = null;
   let eventConnectTimer = null;
@@ -937,11 +948,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   });
 
   // ── Periodic safety refresh for app-side changes (AJAX, no flash) ──
-  let pollInterval = setInterval(() => {
-    if (!document.hidden && !refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) {
+  function pollState() {
+    if (!document.hidden && !replaying && !refreshTimer && (!wsLive || !connected || isDiagnosticsPaneVisible())) {
       refreshState();
     }
-  }, 3000);
+  }
+  let pollInterval = setInterval(pollState, 3000);
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -949,9 +961,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       pollInterval = null;
     } else if (!pollInterval) {
       if (!replaying) scheduleRefresh(0);
-      pollInterval = setInterval(() => {
-        if (!refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) refreshState();
-      }, 3000);
+      pollInterval = setInterval(pollState, 3000);
     }
   });
 
@@ -1887,7 +1897,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     updateFlowButtons();
     // Pause the 3s poll while replaying so the screenshot doesn't churn under the driven app.
     if (on && pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-    else if (!on && !pollInterval) { pollInterval = setInterval(() => { if (!refreshTimer && (!wsLive || isDiagnosticsPaneVisible())) refreshState(); }, 3000); }
+    else if (!on && !pollInterval) { pollInterval = setInterval(pollState, 3000); }
   }
 
   async function captureCheckpoint(label) {
