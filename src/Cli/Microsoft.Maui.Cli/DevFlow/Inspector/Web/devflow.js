@@ -198,6 +198,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     return null;
   }
 
+  function previewStateSignature() {
+    return JSON.stringify([...viewport.querySelectorAll('.devflow-element')].map(element =>
+      ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
+        .map(attribute => element.getAttribute(attribute))));
+  }
+
   // Refresh state via AJAX (no full page reload — avoids flash)
   async function refreshState(force = false) {
     if (refreshPromise) {
@@ -222,6 +228,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           const image = new Image();
           image.src = state.screenshotUrl;
           await image.decode();
+          if (!navigator.onLine) return null;
           screenshot.src = image.src;
         }
         markConnected(true);
@@ -254,8 +261,14 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
             .map(attribute => element.getAttribute(attribute)));
         layoutPanel?.frameChanged(JSON.stringify([treeRevision, diagnosticInputsRevision, renderedState]));
         if (tap !== null && tap === latestTap) {
-          latestTap = null;
-          renderPreviewPending();
+          const renderedStateSignature = JSON.stringify(renderedState);
+          if (renderedStateSignature !== tap.previewStateSignature || tap.unchangedCaptures > 0) {
+            latestTap = null;
+            renderPreviewPending();
+          } else {
+            tap.unchangedCaptures++;
+            scheduleRefresh(300);
+          }
         }
         return state;
       } catch (err) {
@@ -710,6 +723,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const targetLabel = targetEl ? elementLabel(targetEl) : null;
     const payload = { x, y, ...getElementCaptureMetadata(targetEl) };
     if (targetId) payload.elementId = targetId;
+    const previewSignature = previewStateSignature();
 
     pendingTapRequests++;
     renderPreviewPending();
@@ -728,7 +742,13 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       pulseActionTarget(actual);
       const label = actual ? elementLabel(actual) : targetLabel;
       setStatus(label ? `Tap sent to ${label}.` : 'Tap sent to the app.');
-      const tap = { ok: true, result, target: actual || targetEl };
+      const tap = {
+        ok: true,
+        result,
+        target: actual || targetEl,
+        previewStateSignature: previewSignature,
+        unchangedCaptures: 0,
+      };
       latestTap = tap;
       return tap;
     } finally {

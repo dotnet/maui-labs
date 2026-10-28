@@ -448,6 +448,43 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task Tap_UnchangedImmediateCaptureRetriesDelayedUiMutation()
+    {
+        var firstStateCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var retryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requests = 0;
+        await Page.RouteAsync("**/api/tap", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = """{"ok":true,"elementId":"fixture-button"}"""
+        }));
+        await Page.RouteAsync("**/api/state", async route =>
+        {
+            if (Interlocked.Increment(ref requests) == 1)
+            {
+                await route.ContinueAsync();
+                firstStateCompleted.TrySetResult();
+                return;
+            }
+
+            retryStarted.TrySetResult();
+            await route.ContinueAsync();
+        });
+
+        await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+        await firstStateCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+        await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+
+        Volatile.Write(ref _text, "Tapped");
+        await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+        await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task SourceState_RequiresSuccessfulRuntimeEditBeforeEnablingPersistence()
     {
         await Expect(SourceButton).ToHaveAttributeAsync("data-state", "clean");
@@ -680,6 +717,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 // Do not dispose Inspector semaphores while its untracked HTTP handlers run.
                 // With polling stopped, network-idle drains real requests before browser closure.
                 await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                for (var attempt = 0; attempt < 20 && !_pendingRequests.IsEmpty; attempt++)
+                    await Task.Delay(50);
                 Assert.Empty(_pendingRequests);
             }
         }
