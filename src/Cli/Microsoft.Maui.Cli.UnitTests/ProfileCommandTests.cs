@@ -10,6 +10,8 @@ using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Models;
 using Microsoft.Maui.Cli.Output;
+using Microsoft.Maui.Cli.Services;
+using Microsoft.Maui.Cli.UnitTests.Fakes;
 using Microsoft.Maui.Cli.Utils;
 using Xunit;
 
@@ -1863,6 +1865,37 @@ public class ProfileCommandTests
 			CreateDevice(Platforms.iOS, isEmulator: false));
 
 		Assert.Equal("ios", transport.DsrouterKind);
+	}
+
+	// `maui device list` reports connected physical iOS devices, but startup profiling only
+	// supports simulators, so the resolver must not hand it a physical device.
+	[Fact]
+	public async Task ResolveProfileDeviceAsync_Ios_PrefersSimulatorOverPhysicalDevice()
+	{
+		var simulator = CreateDevice(Platforms.iOS, isEmulator: true);
+		var manager = new DeviceManager(appleProvider: new FakeAppleProvider
+		{
+			Devices = [CreateDevice(Platforms.iOS, isEmulator: false), simulator]
+		});
+
+		var device = await ProfileTargetResolver.ResolveProfileDeviceAsync(
+			Platforms.iOS, requestedDevice: null, manager, nonInteractive: true, spectre: null, CancellationToken.None);
+
+		Assert.Equal(simulator.Id, device.Id);
+	}
+
+	[Fact]
+	public async Task ResolveProfileDeviceAsync_Ios_OnlyPhysicalDeviceConnected_ThrowsDeviceNotFound()
+	{
+		var manager = new DeviceManager(appleProvider: new FakeAppleProvider
+		{
+			Devices = [CreateDevice(Platforms.iOS, isEmulator: false)]
+		});
+
+		var exception = await Assert.ThrowsAsync<MauiToolException>(() => ProfileTargetResolver.ResolveProfileDeviceAsync(
+			Platforms.iOS, requestedDevice: null, manager, nonInteractive: true, spectre: null, CancellationToken.None));
+
+		Assert.Equal(ErrorCodes.DeviceNotFound, exception.Code);
 	}
 
 	[Fact]

@@ -81,24 +81,62 @@ jobs:
         if: inputs.install-workloads
         run: dotnet workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
-      - name: Build device tests
+      - name: Build and run device tests
+        shell: pwsh
+        env:
+          DEVICE_TEST_PROJECT: ${{ inputs.project-path }}
+          DEVICE_TEST_TFM: ${{ inputs.target-framework }}
+          DEVICE_TEST_FILTER: ${{ inputs.filter }}
+          DEVICE_TEST_DOTNET_ARGS: ${{ inputs.dotnet-args }}
         run: |
-          cd "$(dirname "${{ inputs.project-path }}")"
-          dotnet restore "$(basename "${{ inputs.project-path }}")"
-          dotnet build "$(basename "${{ inputs.project-path }}")" -f ${{ inputs.target-framework }} -c Release --no-restore
+          $ErrorActionPreference = 'Stop'
+          & dotnet restore $env:DEVICE_TEST_PROJECT -p:TargetFrameworks=$env:DEVICE_TEST_TFM
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          & dotnet build $env:DEVICE_TEST_PROJECT -f $env:DEVICE_TEST_TFM -c Release --no-restore -p:TargetFrameworks=$env:DEVICE_TEST_TFM
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
-      - name: Run device tests
+          $arguments = @(
+            'test', $env:DEVICE_TEST_PROJECT,
+            '-f', $env:DEVICE_TEST_TFM,
+            '-c', 'Release',
+            '--no-build',
+            '--no-restore',
+            "-p:TargetFrameworks=$env:DEVICE_TEST_TFM",
+            '--logger', 'trx',
+            '--results-directory', (Join-Path $env:GITHUB_WORKSPACE 'artifacts/TestResults')
+          )
+          if ($env:DEVICE_TEST_FILTER) {
+            $arguments += @('--filter', $env:DEVICE_TEST_FILTER)
+          }
+          if ($env:DEVICE_TEST_DOTNET_ARGS) {
+            $arguments += $env:DEVICE_TEST_DOTNET_ARGS -split '\s+'
+          }
+          & dotnet @arguments
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Verify device tests executed
+        shell: pwsh
         run: |
-          cd "$(dirname "${{ inputs.project-path }}")"
-          dotnet test "$(basename "${{ inputs.project-path }}")" \
-            -f ${{ inputs.target-framework }} \
-            -c Release \
-            --no-build \
-            --no-restore \
-            --logger trx \
-            --results-directory ${{ github.workspace }}/artifacts/TestResults \
-            ${{ inputs.filter != '' && format('--filter "{0}"', inputs.filter) || '' }} \
-            ${{ inputs.dotnet-args }}
+          $ErrorActionPreference = 'Stop'
+          $results = @(Get-ChildItem -Path artifacts/TestResults -Recurse -Filter *.trx)
+          if ($results.Count -eq 0) {
+            throw 'Device tests produced no TRX results.'
+          }
+          foreach ($result in $results) {
+            [xml]$document = Get-Content -LiteralPath $result.FullName -Raw
+            $counts = $document.TestRun.ResultSummary.Counters
+            if ([int]$counts.total -le 0 -or [int]$counts.executed -ne [int]$counts.total -or
+                [int]$counts.passed -ne [int]$counts.total -or [int]$counts.failed -ne 0 -or
+                [int]$counts.notExecuted -ne 0) {
+              throw "Device tests must all execute and pass without skips: $($result.Name)"
+            }
+          }
 
       - name: Upload test results
         if: always()
@@ -106,3 +144,4 @@ jobs:
         with:
           name: test-results-${{ inputs.project-name }}-device-${{ inputs.target-framework }}
           path: artifacts/TestResults/**/*.trx
+          if-no-files-found: error

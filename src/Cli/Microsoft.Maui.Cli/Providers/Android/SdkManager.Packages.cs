@@ -70,6 +70,46 @@ public partial class SdkManager
         return startInfo;
     }
 
+    internal static ProcessStartInfo CreatePackageInstallStartInfo(
+        string sdkManagerPath, string package, string? sdkPath, string? jdkPath, bool? isWindows = null)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = sdkManagerPath,
+            UseShellExecute = false,
+        };
+        foreach (var variable in AndroidEnvironment.BuildEnvironmentVariables(sdkPath, jdkPath))
+            startInfo.Environment[variable.Key] = variable.Value;
+
+        if ((isWindows ?? OperatingSystem.IsWindows()) &&
+            sdkManagerPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrEmpty(package) ||
+                package.Any(character =>
+                    !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_' or ';')))
+            {
+                throw new ArgumentException(
+                    "Android SDK package IDs may contain only ASCII letters, digits, '.', '-', '_', and ';'.",
+                    nameof(package));
+            }
+
+            startInfo.FileName = "cmd.exe";
+            // cmd.exe does not use argv quoting. Expand validated package IDs and paths inside quotes, with delayed expansion disabled.
+            var sdkRootArgument = string.IsNullOrEmpty(sdkPath) ? string.Empty : " \"--sdk_root=%ANDROID_HOME%\"";
+            startInfo.Arguments =
+                $"/d /s /v:off /c \"\"%MAUI_SDK_MANAGER_PATH%\" \"%MAUI_SDK_PACKAGE%\"{sdkRootArgument}\"";
+            startInfo.Environment["MAUI_SDK_MANAGER_PATH"] = sdkManagerPath;
+            startInfo.Environment["MAUI_SDK_PACKAGE"] = package;
+        }
+        else
+        {
+            startInfo.ArgumentList.Add(package);
+            if (!string.IsNullOrEmpty(sdkPath))
+                startInfo.ArgumentList.Add($"--sdk_root={sdkPath}");
+        }
+        return startInfo;
+    }
+
     static (List<SdkPackage> Installed, List<SdkPackage> Available) ParsePackageList(string output)
     {
         var installed = new List<SdkPackage>();

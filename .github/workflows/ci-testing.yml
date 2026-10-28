@@ -25,11 +25,16 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: read
     env:
       Configuration: Release
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
+        # The .NET 11 iOS/Mac Catalyst packs the template restores need Xcode 27, which
+        # macos-latest does not have yet. The runner's minor (27.1) is newer than the one
+        # the packs pin (27.0), so the smoke build skips that exact-version check.
+        os: [xcode-27, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -74,7 +79,7 @@ jobs:
           dotnet restore (Join-Path $project 'MauiTestingSmoke.csproj') `
             --configfile ../../NuGet.config `
             "-p:RestoreAdditionalProjectSources=$localPackages"
-          dotnet build (Join-Path $project 'MauiTestingSmoke.csproj') --no-restore
+          dotnet build (Join-Path $project 'MauiTestingSmoke.csproj') --no-restore -p:ValidateXcodeVersion=false
 
       - name: Upload packages
         uses: actions/upload-artifact@v7

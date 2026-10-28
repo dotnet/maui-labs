@@ -59,16 +59,7 @@ public partial class SdkManager : IDisposable
 		return (sdkPath, jdkPath);
 	}
 
-	public string? SdkManagerPath
-	{
-		get
-		{
-			SyncPaths();
-			// Availability must use the same resolver as install/list/license operations,
-			// or an unsupported layout can incorrectly bypass bootstrap.
-			return _sdkManager.FindSdkManagerPath();
-		}
-	}
+	public string? SdkManagerPath => FindCommandLineTools()?.Path;
 
 	public bool IsAvailable => !string.IsNullOrEmpty(SdkManagerPath);
 
@@ -174,39 +165,14 @@ public partial class SdkManager : IDisposable
 	async Task RunSdkManagerInstallAsync(string sdkManagerPath, string package, bool acceptLicenses,
 		string? sdkPath, string? jdkPath, Action<string, int> onProgress, CancellationToken cancellationToken)
 	{
-		var psi = new ProcessStartInfo
-		{
-			UseShellExecute = false,
-			CreateNoWindow = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true,
-			RedirectStandardInput = acceptLicenses,
-		};
+		var psi = CreatePackageInstallStartInfo(sdkManagerPath, package, sdkPath, jdkPath);
+		psi.CreateNoWindow = true;
+		psi.RedirectStandardOutput = true;
+		psi.RedirectStandardError = true;
+		psi.RedirectStandardInput = acceptLicenses;
 
-		// On Windows, sdkmanager resolves to a .bat wrapper. Executing a .bat with
-		// UseShellExecute=false is not universally reliable (it is not a PE image), so run it
-		// through cmd.exe /c. Other platforms exec the shell script directly.
-		if (OperatingSystem.IsWindows() && sdkManagerPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
-		{
-			psi.FileName = "cmd.exe";
-			psi.ArgumentList.Add("/c");
-			psi.ArgumentList.Add(sdkManagerPath);
-		}
-		else
-		{
-			psi.FileName = sdkManagerPath;
-		}
-
-		psi.ArgumentList.Add(package);
-
-		// The upstream wrapper passes --sdk_root explicitly; mirror that so the install targets the
-		// resolved SDK even when ANDROID_HOME/ANDROID_SDK_ROOT aren't set in the ambient environment.
-		if (!string.IsNullOrEmpty(sdkPath))
-			psi.ArgumentList.Add($"--sdk_root={sdkPath}");
-
-		foreach (var kvp in AndroidEnvironment.BuildEnvironmentVariables(sdkPath, jdkPath))
-			psi.Environment[kvp.Key] = kvp.Value;
-
+		// On Windows, sdkmanager resolves to a .bat wrapper. The start-info helper invokes it
+		// through cmd.exe while keeping paths and the package ID out of the command text.
 		using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 		var stderr = new System.Text.StringBuilder();
 
@@ -460,6 +426,34 @@ public partial class SdkManager : IDisposable
 		var bootstrapProgress = new Progress<Xamarin.Android.Tools.SdkBootstrapProgress>(p =>
 			onProgress?.Invoke(p.Phase, p.PercentComplete, p.Message));
 		await _sdkManager.BootstrapAsync(targetPath, bootstrapProgress, cancellationToken);
+	}
+
+	/// <summary>
+	/// Resolves sdkmanager and its revision, preferring <c>cmdline-tools/latest</c>,
+	/// then the highest installed revision reported by <c>source.properties</c>. Returns
+	/// <see langword="null"/> when no SDK path is configured or no sdkmanager is installed.
+	/// </summary>
+	public Xamarin.Android.Tools.CommandLineTool? FindCommandLineTools()
+	{
+		SyncPaths();
+		return _sdkManager.FindSdkManager();
+	}
+
+	/// <summary>
+	/// Ensures the Android SDK at <paramref name="targetPath"/> contains the latest
+	/// <c>cmdline-tools;latest</c> package, bootstrapping and/or updating from the Google
+	/// catalog as needed. Returns the resolved sdkmanager executable and installed revision.
+	/// </summary>
+	public async Task<Xamarin.Android.Tools.CommandLineTool> EnsureLatestCommandLineToolsAsync(
+		string targetPath,
+		Action<Xamarin.Android.Tools.SdkBootstrapPhase, int, string>? onProgress = null,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+		SyncPaths();
+		var bootstrapProgress = new Progress<Xamarin.Android.Tools.SdkBootstrapProgress>(p =>
+			onProgress?.Invoke(p.Phase, p.PercentComplete, p.Message));
+		return await _sdkManager.EnsureLatestCommandLineToolsAsync(targetPath, bootstrapProgress, cancellationToken);
 	}
 
 	string EnsureAvailable()

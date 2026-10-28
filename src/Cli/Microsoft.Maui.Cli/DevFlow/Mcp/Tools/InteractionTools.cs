@@ -7,15 +7,33 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class InteractionTools
 {
-	[McpServerTool(Name = "maui_tap"), Description("Tap a UI element by its visual tree ID. Use maui_tree to discover element IDs.")]
+	[McpServerTool(Name = "maui_tap"), Description("Tap a UI element by its visual tree ID. Use maui_tree to discover element IDs. " +
+		"Pass x and y to tap a point inside the element instead: this is how to tap content drawn on a canvas — " +
+		"SkiaSharp's SKCanvasView, GraphicsView, Syncfusion charts and other drawn controls — which has no element ID of its own. " +
+		"Use the element's bounds from maui_tree (and a screenshot) to pick the point. " +
+		"On iOS and Mac Catalyst a point tap needs the app to enable synthetic touch; check agent status capabilities.syntheticTouch.")]
 	public static async Task<string> Tap(
 		McpAgentSession session,
 		[Description("Element ID from the visual tree")] string elementId,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
-		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null,
+		[Description("Tap at this X inside the element, in device-independent units from its left edge. Requires y.")] double? x = null,
+		[Description("Tap at this Y inside the element, in device-independent units from its top edge. Requires x.")] double? y = null)
 	{
+		if (x.HasValue != y.HasValue)
+			return "Tap at a point needs both 'x' and 'y'.";
+
 		using var agent = await session.GetAgentClientAsync(agentPort);
+		if (x is { } px && y is { } py)
+		{
+			var pointResult = await agent.TapResultAsync(elementId, px, py, captureEpoch, registryGeneration);
+			return McpActionResult.RequireSuccess(
+				pointResult,
+				$"Tapped element '{elementId}' at ({px:0.#}, {py:0.#}).",
+				$"Failed to tap element '{elementId}' at ({px:0.#}, {py:0.#}). {pointResult.Error}".TrimEnd());
+		}
+
 		var result = await agent.TapResultAsync(elementId, captureEpoch, registryGeneration);
 		return McpActionResult.RequireSuccess(
 			result,
@@ -86,12 +104,15 @@ public sealed class InteractionTools
 			$"Failed to send key '{key}'. The target element may not support keyboard input, or no target element was provided.");
 	}
 
-	private static readonly string[] ValidGestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+	private static readonly string[] ValidGestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "drag", "pinch", "rotate"];
 	private static readonly string[] ValidGestureDirections = ["up", "down", "left", "right"];
 
 	[McpServerTool(Name = "maui_gesture"), Description(
 		"Perform a touch gesture on the app. Types: 'pinch' (zoom — use 'scale', e.g. 2.0 to zoom in, 0.5 to zoom out), " +
 		"'rotate' (use 'rotation' in degrees), 'pan' (drag — use deltaX/deltaY, or direction + distance), " +
+		"'drag' with x/y (a real touch pressed at that point on the element and moved to toX/toY, to a drop target toElementId, " +
+		"or by deltaX/deltaY — use it to move a custom slider's thumb, reorder items, or drop onto a target, and to test what a " +
+		"finger really does: a plain 'pan' may invoke the MAUI recognizer directly, skipping the touch pipeline), " +
 		"'swipe' (flick — requires direction), 'doubletap', 'longpress', and 'tap'. " +
 		"Use maui_tap for simple taps and maui_scroll for scrolling a list; this tool is for real gestures. " +
 		"Each gesture is first sent to a matching MAUI gesture recognizer on the element or its ancestors, and if there is " +
@@ -116,10 +137,46 @@ public sealed class InteractionTools
 		[Description("Number of interpolation steps between gesture start and end. More steps are smoother. Defaults to 10.")] int? steps = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
 		[Description("Capture epoch from maui_tree or maui_hittest; stale epochs are rejected")] long? captureEpoch = null,
-		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null)
+		[Description("Native registry generation from maui_tree or maui_hittest")] long? registryGeneration = null,
+		[Description("drag: press at this X on the element, device-independent units from its left edge. Requires y.")] double? x = null,
+		[Description("drag: press at this Y on the element, device-independent units from its top edge. Requires x.")] double? y = null,
+		[Description("drag: release at this X — on toElementId if given, otherwise on the element (may lie past its edge). Requires toY.")] double? toX = null,
+		[Description("drag: release at this Y — on toElementId if given, otherwise on the element. Requires toX.")] double? toY = null,
+		[Description("drag: element ID to drop onto; released at its centre unless toX/toY are given.")] string? toElementId = null,
+		[Description("drag: hold the press this many milliseconds before moving, for long-press-to-drag.")] int? holdMs = null)
 	{
 		var normalizedType = (type ?? string.Empty).Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
 		if (normalizedType == "zoom") normalizedType = "pinch";
+
+		if (x.HasValue || y.HasValue || toX.HasValue || toY.HasValue || toElementId != null || holdMs.HasValue)
+		{
+			if (normalizedType is not ("drag" or "pan"))
+				return "x, y, toX, toY, toElementId and holdMs apply to the 'drag' gesture only.";
+			if (string.IsNullOrWhiteSpace(elementId))
+				return "A drag from a point requires an 'elementId': x and y are measured from that element.";
+			if (x is not { } px || y is not { } py)
+				return "A drag from a point needs both 'x' and 'y'.";
+			if (toX.HasValue != toY.HasValue)
+				return "'toX' and 'toY' must be given together.";
+			if (!string.IsNullOrEmpty(direction))
+				return "A drag from a point takes toX/toY, toElementId, or deltaX/deltaY; not 'direction'.";
+			if ((deltaX.HasValue || deltaY.HasValue) && (toX.HasValue || toElementId != null))
+				return "Give the end of a drag once: toX/toY, toElementId, or deltaX/deltaY.";
+			if (!deltaX.HasValue && !deltaY.HasValue && !toX.HasValue && toElementId == null)
+				return "A drag from a point needs an end: toX/toY, toElementId, or deltaX/deltaY.";
+
+			var endX = toX ?? (toElementId == null ? px + (deltaX ?? 0) : null);
+			var endY = toY ?? (toElementId == null ? py + (deltaY ?? 0) : null);
+			using var dragAgent = await session.GetAgentClientAsync(agentPort);
+			var dragged = await dragAgent.DragAsync(
+				elementId, px, py, endX, endY, toElementId, holdMs, durationMs, steps,
+				captureEpoch, registryGeneration);
+			var onto = toElementId != null ? $" onto '{toElementId}'" : "";
+			return dragged.Success
+				? $"Dragged element '{elementId}' from ({px:0.#}, {py:0.#}){onto} — injected natively on {dragged.Platform} ({dragged.Detail})."
+				: $"Failed to drag element '{elementId}' from ({px:0.#}, {py:0.#}){onto}. {dragged.Error}".TrimEnd();
+		}
+
 		if (normalizedType == "drag") normalizedType = "pan";
 
 		if (Array.IndexOf(ValidGestureTypes, normalizedType) < 0)

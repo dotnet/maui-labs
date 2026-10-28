@@ -976,12 +976,13 @@ public partial class InspectorPageTests : IAsyncLifetime
         await Expect(_page.Locator("#df-props-pane")).ToBeVisibleAsync();
         await Expect(_page.Locator("#df-tree-pane")).ToBeVisibleAsync();
         Assert.False(await _page.Locator("body").EvaluateAsync<bool>("body => body.classList.contains('df-tree-hidden')"));
-        var compactTree = await _page.Locator("#df-tree-pane").BoundingBoxAsync();
-        var compactScrim = await _page.Locator("#df-pane-scrim").BoundingBoxAsync();
-        Assert.NotNull(compactTree);
-        Assert.NotNull(compactScrim);
-        Assert.True(compactScrim.X >= compactTree.X + compactTree.Width - 1,
-            $"Expected compact properties scrim to preserve the tree, tree right={compactTree.X + compactTree.Width}, scrim left={compactScrim.X}");
+        var compactView = await _page.Locator("#df-view-pane").BoundingBoxAsync();
+        var compactProps = await _page.Locator("#df-props-pane").BoundingBoxAsync();
+        Assert.NotNull(compactView);
+        Assert.NotNull(compactProps);
+        await Expect(_page.Locator("#df-pane-scrim")).ToBeHiddenAsync();
+        Assert.True(compactView.X + compactView.Width <= compactProps.X + 1,
+            $"Expected compact properties to dock beside the preview, preview right={compactView.X + compactView.Width}, properties left={compactProps.X}");
         await _page.Keyboard.PressAsync("Escape");
 
         await _page.SetViewportSizeAsync(700, 450);

@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics;
+
 using Microsoft.Maui.Cli.Providers.Android;
 using Xunit;
 
@@ -218,7 +220,99 @@ public class SdkManagerPackageTests : IDisposable
         Assert.DoesNotContain(sdkPath, startInfo.Arguments);
     }
 
-    SdkManager CreateManager(string output, string error = "", int exitCode = 0)
+    [Fact]
+    public async Task CreatePackageInstallStartInfo_WindowsBatch_HandlesPathsWithSpaces()
+    {
+        if (!OperatingSystem.IsWindows())
+            return; // Windows batch invocation can only be verified on Windows.
+
+        var sdkPath = Path.Combine(Path.GetTempPath(), $"maui sdk {Guid.NewGuid():N}");
+        var toolPath = Path.Combine(sdkPath, "cmdline-tools", "latest", "bin", "sdkmanager.bat");
+        var invocationPath = Path.Combine(Path.GetDirectoryName(toolPath)!, "invocation.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(toolPath)!);
+        File.WriteAllText(toolPath,
+            "@echo off\r\n" +
+            ">\"%~dp0invocation.txt\" echo %~1\r\n" +
+            ">>\"%~dp0invocation.txt\" echo %~2\r\n");
+
+        try
+        {
+            var startInfo = SdkManager.CreatePackageInstallStartInfo(
+                toolPath, "platform-tools", sdkPath, null, isWindows: true);
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            using var process = Process.Start(startInfo)!;
+            var standardOutput = await process.StandardOutput.ReadToEndAsync();
+            var standardError = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.True(process.ExitCode == 0,
+                $"cmd.exe exited with {process.ExitCode}.{Environment.NewLine}{standardOutput}{standardError}");
+            Assert.Equal(
+                ["platform-tools", $"--sdk_root={sdkPath}"],
+                File.ReadAllLines(invocationPath));
+            Assert.DoesNotContain(sdkPath, startInfo.Arguments);
+        }
+        finally
+        {
+            if (Directory.Exists(sdkPath))
+                Directory.Delete(sdkPath, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("platform-tools\" & echo injected")]
+    [InlineData("platform-tools&echo injected")]
+    [InlineData("platform-tools\r\necho injected")]
+    public void CreatePackageInstallStartInfo_WindowsBatch_RejectsUnsafePackageIds(string package)
+    {
+        var toolPath = Path.Combine(_sdkPath, "cmdline-tools", "latest", "bin", "sdkmanager.bat");
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            SdkManager.CreatePackageInstallStartInfo(toolPath, package, _sdkPath, null, isWindows: true));
+
+        Assert.Equal("package", exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData("23.0")]
+    [InlineData("22.0")]
+    public async Task EnsureLatestCommandLineToolsAsync_CurrentTools_ReturnsInstalledRevision(string catalogRevision)
+    {
+        using var manager = CreateManager($"""
+            Installed packages:
+              Path | Version | Description
+              cmdline-tools;latest | 23.0 | Android SDK Command-line Tools
+            Available Packages:
+              cmdline-tools;latest | {catalogRevision} | Android SDK Command-line Tools
+            """);
+
+        var tool = await manager.EnsureLatestCommandLineToolsAsync(_sdkPath);
+
+        Assert.Equal(manager.SdkManagerPath, tool.Path);
+        Assert.Equal("23.0", tool.Revision);
+        var invocation = File.ReadAllLines(Path.Combine(_sdkPath, "cmdline-tools", "latest", "bin", "invocation.txt"));
+        Assert.Contains("--list", invocation);
+        Assert.DoesNotContain("--install", invocation);
+    }
+
+    [Fact]
+    public async Task EnsureLatestCommandLineToolsAsync_SynchronizesJdkPath()
+    {
+        using var manager = CreateManager("""
+            Installed packages:
+              Path | Version | Description
+              cmdline-tools;latest | 23.0 | Android SDK Command-line Tools
+            Available Packages:
+            """, jdkPath: Path.Combine(_sdkPath, "jdk"));
+
+        await manager.EnsureLatestCommandLineToolsAsync(_sdkPath);
+
+        var javaHome = File.ReadAllText(Path.Combine(_sdkPath, "cmdline-tools", "latest", "bin", "java-home.txt")).Trim();
+        Assert.Equal(Path.Combine(_sdkPath, "jdk"), javaHome);
+    }
+
+    SdkManager CreateManager(string output, string error = "", int exitCode = 0, string? jdkPath = null)
     {
         var toolRoot = Path.Combine(_sdkPath, "cmdline-tools", "latest");
         var binPath = Path.Combine(toolRoot, "bin");
@@ -228,14 +322,14 @@ public class SdkManagerPackageTests : IDisposable
         File.WriteAllText(Path.Combine(binPath, "inventory-error.txt"), error);
         var toolPath = Path.Combine(binPath, OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
         var script = OperatingSystem.IsWindows()
-            ? $"@echo off\r\n(for %%a in (%*) do @echo %%~a)>\"%~dp0invocation.txt\"\r\n" +
+            ? $"@echo off\r\n(for %%a in (%*) do @echo %%~a)>\"%~dp0invocation.txt\"\r\necho %JAVA_HOME%>\"%~dp0java-home.txt\"\r\n" +
                 $"type \"%~dp0inventory.txt\"\r\ntype \"%~dp0inventory-error.txt\" 1>&2\r\nexit /b {exitCode}\r\n"
-            : "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/invocation.txt\"\n" +
+            : "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/invocation.txt\"\nprintf '%s\\n' \"$JAVA_HOME\" > \"$(dirname \"$0\")/java-home.txt\"\n" +
                 $"cat \"$(dirname \"$0\")/inventory.txt\"\ncat \"$(dirname \"$0\")/inventory-error.txt\" >&2\nexit {exitCode}\n";
         File.WriteAllText(toolPath, script);
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(toolPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        return new SdkManager(() => _sdkPath, () => null);
+        return new SdkManager(() => _sdkPath, () => jdkPath);
     }
 
     public void Dispose()

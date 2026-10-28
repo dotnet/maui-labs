@@ -288,15 +288,19 @@ internal sealed class XamlSourcePropertyEditor
             // validating; the containment check below still confines writes to that project.
             if (sourceWasRelative)
             {
-                projectRoot = FindRelativeProjectRoot(
+                var search = FindRelativeProjectRoot(
                     _project,
                     _sessionId,
                     sourceFile,
                     _appExecutablePath,
                     _workspace.StartPath);
+                projectRoot = search.ProjectRoot;
                 if (projectRoot is null)
-                    return new(false, Error: _workspace.Error ??
-                        "A unique local project could not be resolved within the source search limits. Start the broker from the app workspace or set MAUI_DEVFLOW_PROJECT_ROOT before starting it.");
+                {
+                    // The workspace capture error explains only a failure the workspace decided.
+                    var workspaceError = search.FromWorkspace ? _workspace.Error : null;
+                    return new(false, Error: workspaceError ?? DescribeUnresolvedProject(_project, search));
+                }
                 sourcePath = Path.GetFullPath(Path.Combine(projectRoot, sourceFile));
             }
             else
@@ -395,7 +399,7 @@ internal sealed class XamlSourcePropertyEditor
         return null;
     }
 
-    internal static string? FindRelativeProjectRoot(
+    internal static ProjectRootSearchResult FindRelativeProjectRoot(
         string project,
         string? sessionId,
         string sourceFile,
@@ -405,13 +409,15 @@ internal sealed class XamlSourcePropertyEditor
         if (Path.IsPathFullyQualified(project))
         {
             var fullProjectPath = Path.GetFullPath(project);
-            return File.Exists(fullProjectPath) ? Path.GetDirectoryName(fullProjectPath) : null;
+            return File.Exists(fullProjectPath)
+                ? new(ProjectRootSearchStatus.Found, Path.GetDirectoryName(fullProjectPath))
+                : new(ProjectRootSearchStatus.NotFound, Reason: $"the registered project file '{fullProjectPath}' does not exist");
         }
 
         var projectName = Path.GetFileName(project);
         var normalizedSessionId = SanitizeIdentity(sessionId);
         if (string.IsNullOrWhiteSpace(projectName) || normalizedSessionId.Length == 0)
-            return null;
+            return new(ProjectRootSearchStatus.NotFound, Reason: "the app registered no project name or session identity");
 
         var appSearch = FindProjectRootFromStart(
             appExecutablePath,
@@ -420,21 +426,31 @@ internal sealed class XamlSourcePropertyEditor
             sourceFile,
             searchWorkspace: true);
         if (appSearch.Status != ProjectRootSearchStatus.NotFound)
-            return appSearch.ProjectRoot;
+            return appSearch;
 
         if (string.IsNullOrWhiteSpace(currentDirectory) ||
             IsUnsafeAbsoluteSourcePath(currentDirectory) || !Directory.Exists(currentDirectory))
-            return null;
+            return new(
+                ProjectRootSearchStatus.NotFound,
+                Reason: $"the source workspace '{currentDirectory}' is not an existing local directory",
+                FromWorkspace: true);
 
-        var currentDirectorySearch = FindProjectRootFromStart(
+        return FindProjectRootFromStart(
             currentDirectory,
             projectName,
             normalizedSessionId,
             sourceFile,
-            searchWorkspace: true);
-        return currentDirectorySearch.Status == ProjectRootSearchStatus.Found
-            ? currentDirectorySearch.ProjectRoot
-            : null;
+            searchWorkspace: true) with { FromWorkspace = true };
+    }
+
+    // A running broker keeps the workspace it started in, so the remedy has to include stopping it.
+    // Failures decided before the workspace is consulted are not fixed by restarting the broker.
+    private static string DescribeUnresolvedProject(string project, ProjectRootSearchResult search)
+    {
+        var message = $"Could not resolve the local source for '{project}': {search.Reason}.";
+        return search.FromWorkspace
+            ? $"{message} Run 'maui devflow broker stop', then start the broker from the app workspace, or set MAUI_DEVFLOW_PROJECT_ROOT to the app workspace or project folder before starting it."
+            : message;
     }
 
     private static ProjectRootSearchResult FindProjectRootFromStart(
@@ -453,7 +469,8 @@ internal sealed class XamlSourcePropertyEditor
         if (string.IsNullOrWhiteSpace(startDirectory))
             return new(ProjectRootSearchStatus.NotFound);
 
-        var directory = new DirectoryInfo(Path.GetFullPath(startDirectory));
+        var start = Path.GetFullPath(startDirectory);
+        var directory = new DirectoryInfo(start);
         while (directory is not null)
         {
             if (IsMatchingProjectRoot(
@@ -477,7 +494,7 @@ internal sealed class XamlSourcePropertyEditor
             directory = directory.Parent;
         }
 
-        return new(ProjectRootSearchStatus.NotFound);
+        return new(ProjectRootSearchStatus.NotFound, Reason: $"no .git or global.json found at or above '{start}'");
     }
 
     private static bool IsMatchingProjectRoot(
@@ -524,7 +541,9 @@ internal sealed class XamlSourcePropertyEditor
             if (IsMatchingProjectRoot(directory, projectName, normalizedSessionId, sourceFile))
             {
                 if (match is not null && !PathComparer.Equals(match, directory))
-                    return new(ProjectRootSearchStatus.Unsafe);
+                    return new(
+                        ProjectRootSearchStatus.Unsafe,
+                        Reason: $"more than one '{projectName}' for this app found under '{workspaceRoot}'");
                 match = directory;
             }
 
@@ -543,7 +562,9 @@ internal sealed class XamlSourcePropertyEditor
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
-                        return new(ProjectRootSearchStatus.Unsafe);
+                        return new(
+                            ProjectRootSearchStatus.Unsafe,
+                            Reason: $"'{child}' could not be read while searching '{workspaceRoot}'");
                     }
                     if ((attributes & FileAttributes.ReparsePoint) != 0)
                         continue;
@@ -552,32 +573,39 @@ internal sealed class XamlSourcePropertyEditor
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                return new(ProjectRootSearchStatus.Unsafe);
+                return new(
+                    ProjectRootSearchStatus.Unsafe,
+                    Reason: $"'{directory}' could not be read while searching '{workspaceRoot}'");
             }
         }
 
         if (pending.Count > 0)
-            return new(ProjectRootSearchStatus.Unsafe);
+            return new(
+                ProjectRootSearchStatus.Unsafe,
+                Reason: $"searching '{workspaceRoot}' stopped after {maxDirectories} directories");
         return match is null
-            ? new(ProjectRootSearchStatus.NotFound)
+            ? new(ProjectRootSearchStatus.NotFound, Reason: $"no '{projectName}' for this app found under '{workspaceRoot}'")
             : new(ProjectRootSearchStatus.Found, match);
     }
 
-    private static bool IsWorkspaceRoot(string directory)
+    internal static bool IsWorkspaceRoot(string directory)
         => Directory.Exists(Path.Combine(directory, ".git")) ||
            File.Exists(Path.Combine(directory, ".git")) ||
            File.Exists(Path.Combine(directory, "global.json"));
 
-    private enum ProjectRootSearchStatus
+    internal enum ProjectRootSearchStatus
     {
         NotFound,
         Found,
         Unsafe,
     }
 
-    private readonly record struct ProjectRootSearchResult(
+    // FromWorkspace: the outcome came from searching the broker's source workspace, so a different workspace could change it.
+    internal readonly record struct ProjectRootSearchResult(
         ProjectRootSearchStatus Status,
-        string? ProjectRoot = null);
+        string? ProjectRoot = null,
+        string? Reason = null,
+        bool FromWorkspace = false);
 
     internal static string ComputeDefaultSessionId(string projectPath)
     {
