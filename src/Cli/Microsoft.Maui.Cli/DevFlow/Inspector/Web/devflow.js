@@ -208,6 +208,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     }
 
     const currentRefresh = (async () => {
+      const tap = latestTap;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), STATE_FETCH_TIMEOUT_MS);
       disconnectedOverlay?.setAttribute('aria-busy', 'true');
@@ -215,12 +216,15 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: controller.signal });
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();
-        markConnected(true);
 
-        // Update screenshot without flash
+        // Keep the previous frame intact until its replacement image is ready.
         if (screenshot && state.screenshotUrl) {
-          screenshot.src = state.screenshotUrl;
+          const image = new Image();
+          image.src = state.screenshotUrl;
+          await image.decode();
+          screenshot.src = image.src;
         }
+        markConnected(true);
 
         // Update viewport size if changed
         if (state.viewportWidth && state.viewportHeight) {
@@ -249,6 +253,10 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
             .map(attribute => element.getAttribute(attribute)));
         layoutPanel?.frameChanged(JSON.stringify([treeRevision, diagnosticInputsRevision, renderedState]));
+        if (tap !== null && tap === latestTap) {
+          latestTap = null;
+          renderPreviewPending();
+        }
         return state;
       } catch (err) {
         markConnected(false);
@@ -421,22 +429,19 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Debounced refresh — coalesce rapid calls
   let refreshTimer = null;
-  let pendingTap = null; // accepted tap whose post-tap refresh has not started
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
-  function scheduleRefresh(delayMs) {
+  let pendingTapRequests = 0;
+  function renderPreviewPending() {
+    previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
+  }
+  function scheduleRefresh(delayMs = 300) {
     if (refreshTimer) clearTimeout(refreshTimer);
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
-      const tap = pendingTap;
-      pendingTap = null;
       // A refresh already in flight may predate the tap, so wait for it and capture again.
-      await refreshState(tap !== null);
-      // A newer tap keeps the hint until its own refresh lands.
-      if (tap !== null && tap === latestTap) {
-        latestTap = null;
-        previewPending.classList.add('df-hidden');
-      }
-    }, delayMs || 300);
+      const state = await refreshState(latestTap !== null);
+      if (!state && latestTap !== null) scheduleRefresh(3000);
+    }, delayMs);
   }
   if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(3000));
 
@@ -706,21 +711,31 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const payload = { x, y, ...getElementCaptureMetadata(targetEl) };
     if (targetId) payload.elementId = targetId;
 
-    const response = await inspectorApi.postDetailed('/api/tap', payload);
-    const result = response.body;
-    if (!response.ok || !result || result.ok !== true) {
-      const reason = result && typeof result.reason === 'string'
-        ? result.reason
-        : 'The app did not accept the tap.';
-      setStatus(`Tap did not run — ${reason}`);
-      return { ok: false, result, target: targetEl };
-    }
+    pendingTapRequests++;
+    renderPreviewPending();
+    try {
+      const response = await inspectorApi.postDetailed('/api/tap', payload);
+      const result = response.body;
+      if (!response.ok || !result || result.ok !== true) {
+        const reason = result && typeof result.reason === 'string'
+          ? result.reason
+          : 'The app did not accept the tap.';
+        setStatus(`Tap did not run — ${reason}`);
+        return { ok: false, result, target: targetEl };
+      }
 
-    const actual = result.elementId ? (elById(result.elementId) || targetEl) : targetEl;
-    pulseActionTarget(actual);
-    const label = actual ? elementLabel(actual) : targetLabel;
-    setStatus(label ? `Tap sent to ${label}.` : 'Tap sent to the app.');
-    return { ok: true, result, target: actual || targetEl };
+      const actual = result.elementId ? (elById(result.elementId) || targetEl) : targetEl;
+      pulseActionTarget(actual);
+      const label = actual ? elementLabel(actual) : targetLabel;
+      setStatus(label ? `Tap sent to ${label}.` : 'Tap sent to the app.');
+      const tap = { ok: true, result, target: actual || targetEl };
+      latestTap = tap;
+      return tap;
+    } finally {
+      pendingTapRequests--;
+      renderPreviewPending();
+      scheduleRefresh(0);
+    }
   }
 
   viewport.addEventListener('click', async (e) => {
@@ -768,12 +783,6 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         if (tap.ok && tap.target) await recordStep('tap', tap.target);
         else if (!tap.target) setStatus('Tap not recorded — no element under the cursor.');
       }
-      // An accepted tap leaves the Preview stale until a refresh issued after it lands.
-      if (tap.ok) {
-        pendingTap = latestTap = tap;
-        previewPending.classList.remove('df-hidden');
-      }
-      scheduleRefresh(400);
     } catch (err) {
       console.error('Tap failed:', err);
       setStatus('Tap did not run — the Inspector could not reach the app.');

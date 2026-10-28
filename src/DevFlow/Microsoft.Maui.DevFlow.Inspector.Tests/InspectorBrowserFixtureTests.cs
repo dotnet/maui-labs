@@ -261,6 +261,193 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task Tap_ShowsUpdatingHintBeforeAcknowledgement_AndClearsRejectedTap()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/api/tap", async route =>
+        {
+            started.TrySetResult();
+            await release.Task;
+            await route.FulfillAsync(new()
+            {
+                Status = 400,
+                ContentType = "application/json",
+                Body = """{"ok":false,"reason":"Fixture rejected the tap."}"""
+            });
+        });
+        try
+        {
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync(new() { Timeout = 1000 });
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            release.TrySetResult();
+            await Expect(Page.Locator("#df-status")).ToContainTextAsync("Fixture rejected the tap.");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_FailedRefreshKeepsHintUntilAutomaticRetryRenders()
+    {
+        var requests = 0;
+        var retryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/api/state", async route =>
+        {
+            if (Interlocked.Increment(ref requests) == 1)
+            {
+                await route.FulfillAsync(new()
+                {
+                    Status = 503,
+                    ContentType = "application/json",
+                    Body = """{"ok":false,"retryable":true}"""
+                });
+                return;
+            }
+            retryStarted.TrySetResult();
+            await release.Task;
+            await route.ContinueAsync();
+        });
+        try
+        {
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync(new() { Timeout = 1000 });
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            release.TrySetResult();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_KeepsHintAndPreviousFrameUntilScreenshotLoads()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/screenshot.png?frame=*", async route =>
+        {
+            started.TrySetResult();
+            await release.Task;
+            await route.ContinueAsync();
+        });
+        try
+        {
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync(new() { Timeout = 1000 });
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            release.TrySetResult();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_FailedScreenshotKeepsPreviousFrameUntilRetryLoads()
+    {
+        var requests = 0;
+        var retryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/screenshot.png?frame=*", async route =>
+        {
+            if (Interlocked.Increment(ref requests) == 1)
+            {
+                await route.FulfillAsync(new() { Status = 404, Body = "Inspector frame expired" });
+                return;
+            }
+            retryStarted.TrySetResult();
+            await release.Task;
+            await route.ContinueAsync();
+        });
+        try
+        {
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            release.TrySetResult();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_RejectedLaterTapDoesNotClearAcceptedTapPendingCapture()
+    {
+        _screenshotGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var button = Page.Locator(".devflow-element[data-id='fixture-button']");
+            await button.ClickAsync();
+            await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Page.RouteAsync("**/api/tap", route => route.FulfillAsync(new()
+            {
+                Status = 400,
+                ContentType = "application/json",
+                Body = """{"ok":false,"reason":"Fixture rejected the later tap."}"""
+            }));
+            await button.ClickAsync();
+            await Expect(Page.Locator("#df-status")).ToContainTextAsync("Fixture rejected the later tap.");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            _screenshotGate.TrySetResult();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            _screenshotGate.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_StartsPostAcknowledgementCaptureWithoutFixedWait()
+    {
+        await Page.Clock.InstallAsync();
+        await Page.Clock.PauseAtAsync(DateTime.UtcNow.AddSeconds(1));
+        _screenshotGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Page.Locator("#df-status")).ToContainTextAsync("Tap sent to");
+            await Page.Clock.RunForAsync(50);
+            await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            _screenshotGate.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task SourceState_RequiresSuccessfulRuntimeEditBeforeEnablingPersistence()
     {
         await Expect(SourceButton).ToHaveAttributeAsync("data-state", "clean");
