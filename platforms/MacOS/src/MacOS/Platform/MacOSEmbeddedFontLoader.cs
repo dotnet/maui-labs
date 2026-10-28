@@ -52,7 +52,8 @@ public class MacOSEmbeddedFontLoader : IEmbeddedFontLoader
             if (cgFont == null)
                 throw new InvalidOperationException("Unable to load font from the stream.");
 
-            var name = cgFont.PostScriptName;
+            var name = cgFont.PostScriptName
+                ?? throw new InvalidOperationException("The font does not define a PostScript name.");
 
 #pragma warning disable CA1416
 #pragma warning disable CA1422

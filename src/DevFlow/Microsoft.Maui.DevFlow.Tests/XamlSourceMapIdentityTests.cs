@@ -1,3 +1,5 @@
+using System.Reflection;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 
@@ -69,6 +71,21 @@ public class XamlSourceMapIdentityTests
         Assert.NotEqual(h1, h2);
     }
 
+    [Theory]
+    [InlineData("<Label Text=\"Hello\" />", "Hello")]
+    [InlineData("<Label Text=\"Line one&#10;line two\" />", "Line one\nline two")]
+    [InlineData("<Label Text=\"{Binding Name}\" />", null)]
+    [InlineData("<Label Text=\" {StaticResource Name}\" />", null)]
+    [InlineData("<Label Text=\"{}{escaped}\" />", null)]
+    [InlineData("<Label />", null)]
+    public void Parse_ExtractsLiteralText_ButNotMarkupExtensions(string element, string? expected)
+    {
+        var map = XamlSourceMap.Parse($"<ContentPage {Ns}>{element}</ContentPage>", "f.xaml")!;
+
+        Assert.True(map.TryGet("0", out var label));
+        Assert.Equal(expected, label.Text);
+    }
+
     // ── walker: reorder closed for named siblings ──
 
     [Fact]
@@ -96,7 +113,7 @@ public class XamlSourceMapIdentityTests
     }
 
     [Fact]
-    public void UnnamedSameTypeSiblings_AreWithheldBecauseOrderCannotBeVerified()
+    public void UnnamedSameTypeSiblings_WithoutLiteralText_AreWithheldBecauseOrderCannotBeVerified()
     {
         var map = MapWith("MainPage.xaml", "hash1",
             ("", Entry(1, "ContentPage", 1)),
@@ -136,6 +153,170 @@ public class XamlSourceMapIdentityTests
         Assert.Null(root.Children![0].Children![0].SourceLine);
         Assert.Null(root.Children[0].Children![1].SourceLine);
         Assert.Equal(6, root.Children[0].Children![2].SourceLine);
+    }
+
+    // ── walker: same-type siblings told apart by a verified literal Text ──
+
+    [Fact]
+    public void DefaultTemplate_UnnamedLabels_MapWhenTextMatchesRuntime()
+    {
+        const string xaml = """
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                         x:Class="MyApp.MainPage">
+              <VerticalStackLayout>
+                <Image Source="dotnet_bot.png" />
+                <Label Text="Hello, World!" />
+                <Label Text="Welcome to &#10;.NET Multi-platform App UI" />
+                <Button x:Name="CounterBtn" Text="Click me" />
+              </VerticalStackLayout>
+            </ContentPage>
+            """;
+        var map = XamlSourceMap.Parse(xaml, "MainPage.xaml")!;
+
+        var root = IdNode("MyApp.MainPage", "ContentPage", "MyApp.MainPage", null,
+            IdNode("vsl", "VerticalStackLayout", "Microsoft.Maui.Controls.VerticalStackLayout", null,
+                IdNode("image", "Image", "Microsoft.Maui.Controls.Image", null),
+                TextNode("headline", "Label", "Hello, World!"),
+                TextNode("subtitle", "Label", "Welcome to \n.NET Multi-platform App UI"),
+                TextNode("counter", "Button", "Clicked 3 times"))); // runtime text may differ for a uniquely typed element
+
+        WalkerWith("MyApp.MainPage", map).ApplySourceMap(new[] { root });
+
+        var children = root.Children![0].Children!;
+        Assert.Equal(new int?[] { 5, 6, 7, 8 }, children.Select(child => child.SourceLine));
+    }
+
+    [Fact]
+    public void SameTypeSiblings_ReorderedAtRuntime_ResolveToNull_NotWrongLine()
+    {
+        var map = LabelSiblingsMap(("First", 4), ("Second", 5));
+
+        var root = LabelSiblingsRoot("Second", "First");
+
+        WalkerWith("MyApp.MainPage", map).ApplySourceMap(new[] { root });
+
+        Assert.Equal(new int?[] { null, null }, LabelLines(root));
+    }
+
+    [Fact]
+    public void SameTypeSiblings_WithChangedRuntimeText_UnmapOnlyTheChangedOne()
+    {
+        var map = LabelSiblingsMap(("Clicks: 0", 4), ("Static", 5));
+
+        var root = LabelSiblingsRoot("Clicks: 3", "Static");
+
+        WalkerWith("MyApp.MainPage", map).ApplySourceMap(new[] { root });
+
+        Assert.Equal(new int?[] { null, 5 }, LabelLines(root));
+    }
+
+    [Fact]
+    public void SameTypeSiblings_SharingLiteralText_AreWithheld()
+    {
+        var map = LabelSiblingsMap(("Same", 4), ("Other", 5), ("Same", 6));
+
+        var root = LabelSiblingsRoot("Same", "Other", "Same");
+
+        WalkerWith("MyApp.MainPage", map).ApplySourceMap(new[] { root });
+
+        Assert.Equal(new int?[] { null, 5, null }, LabelLines(root));
+    }
+
+    [Fact]
+    public void SameTypeSiblings_WithBoundSibling_AreWithheld()
+    {
+        // The bound sibling can show any text at runtime, including the literal one.
+        var map = LabelSiblingsMap(("Total", 4), (null, 5));
+
+        var root = LabelSiblingsRoot("Total", "Total");
+
+        WalkerWith("MyApp.MainPage", map).ApplySourceMap(new[] { root });
+
+        Assert.Equal(new int?[] { null, null }, LabelLines(root));
+    }
+
+    [Fact]
+    public void SameTypeSiblings_WithBoundSiblingInAnotherNamespaceSpelling_AreWithheld()
+    {
+        // <c:Label> resolves to a full type name and <Label> does not, yet both are a MAUI Label.
+        const string xaml = """
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:c="clr-namespace:Microsoft.Maui.Controls;assembly=Microsoft.Maui.Controls">
+              <VerticalStackLayout>
+                <Label Text="A" />
+                <Label Text="B" />
+                <c:Label Text="{Binding Title}" />
+              </VerticalStackLayout>
+            </ContentPage>
+            """;
+        var map = XamlSourceMap.Parse(xaml, "MainPage.xaml")!;
+
+        // Title shows "A" and code-behind moved the bound label to the front.
+        var root = LabelSiblingsRoot("A", "B", "A");
+
+        WalkerWith("MyApp.MainPage", map).ApplySourceMap(new[] { root });
+
+        Assert.Equal(new int?[] { null, null, null }, LabelLines(root));
+    }
+
+    [Fact]
+    public void SameTypeSiblings_WithExtraRuntimeSibling_AreWithheld()
+    {
+        var map = LabelSiblingsMap(("First", 4), ("Second", 5));
+
+        var root = LabelSiblingsRoot("First", "Second", "Added in code-behind");
+
+        WalkerWith("MyApp.MainPage", map).ApplySourceMap(new[] { root });
+
+        Assert.Equal(new int?[] { null, null, null }, LabelLines(root));
+    }
+
+    [Fact]
+    public void WalkTree_RealLabels_MapOnlyWhileRuntimeTextsMatchTheXaml()
+    {
+        const string xaml = """
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
+              <VerticalStackLayout>
+                <Label Text="First" />
+                <Label Text="Second" />
+              </VerticalStackLayout>
+            </ContentPage>
+            """;
+        var provider = new TestMapProvider();
+        provider.Add(typeof(SiblingsPage).FullName!, XamlSourceMap.Parse(xaml, "SiblingsPage.xaml")!);
+
+        Assert.Equal(
+            new int?[] { 3, 4 },
+            WalkSiblingLines(provider, "Label", new Label { Text = "First" }, new Label { Text = "Second" }));
+        Assert.Equal(
+            new int?[] { null, null },
+            WalkSiblingLines(provider, "Label", new Label { Text = "Second" }, new Label { Text = "First" }));
+    }
+
+    [Fact]
+    public void WalkTree_RealEntries_RedactedPasswordTextDoesNotIdentifyASibling()
+    {
+        // A password Entry reports the redaction marker, so it looks like an Entry that literally shows it.
+        const string xaml = """
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
+              <VerticalStackLayout>
+                <Entry Text="[REDACTED]" />
+                <Entry Text="secret" IsPassword="True" />
+              </VerticalStackLayout>
+            </ContentPage>
+            """;
+        var provider = new TestMapProvider();
+        provider.Add(typeof(SiblingsPage).FullName!, XamlSourceMap.Parse(xaml, "SiblingsPage.xaml")!);
+
+        // Code-behind put the password Entry first.
+        Assert.Equal(
+            new int?[] { null, null },
+            WalkSiblingLines(
+                provider,
+                "Entry",
+                new Entry { Text = "secret", IsPassword = true },
+                new Entry { Text = "[REDACTED]" }));
     }
 
     [Fact]
@@ -194,6 +375,63 @@ public class XamlSourceMapIdentityTests
 
     private static XamlSourceEntry EntryId(int line, string type, string automationId, int childCount = 0)
         => new(line, 1, type, childCount, automationId, null);
+
+    private static ElementInfo TextNode(string id, string type, string? text) => new()
+    {
+        Id = id,
+        Type = type,
+        FullType = $"Microsoft.Maui.Controls.{type}",
+        Text = text,
+    };
+
+    // A page with one VerticalStackLayout holding unnamed Labels declared with these literal texts
+    // (null = bound or missing) at these XAML lines.
+    private static XamlSourceMap LabelSiblingsMap(params (string? Text, int Line)[] labels)
+    {
+        var entries = new List<(string Path, XamlSourceEntry Entry)>
+        {
+            ("", Entry(1, "ContentPage", 1)),
+            ("0", Entry(3, "VerticalStackLayout", labels.Length)),
+        };
+        for (var index = 0; index < labels.Length; index++)
+            entries.Add(($"0/{index}", new XamlSourceEntry(labels[index].Line, 1, "Label", 0) { Text = labels[index].Text }));
+        return MapWith("MainPage.xaml", "h", entries.ToArray());
+    }
+
+    private static ElementInfo LabelSiblingsRoot(params string[] runtimeTexts)
+        => IdNode("MyApp.MainPage", "ContentPage", "MyApp.MainPage", null,
+            IdNode("vsl", "VerticalStackLayout", "Microsoft.Maui.Controls.VerticalStackLayout", null,
+                runtimeTexts.Select((text, index) => TextNode($"label{index}", "Label", text)).ToArray()));
+
+    private static int?[] LabelLines(ElementInfo root)
+        => root.Children![0].Children!.Select(label => label.SourceLine).ToArray();
+
+    private sealed class SiblingsPage : ContentPage
+    {
+        public SiblingsPage(View[] siblings)
+        {
+            var layout = new VerticalStackLayout();
+            foreach (var sibling in siblings)
+                layout.Children.Add(sibling);
+            Content = layout;
+        }
+    }
+
+    // Walks real controls, so the runtime text is exactly what ExtractText reports in production.
+    private static int?[] WalkSiblingLines(IXamlSourceMapProvider provider, string type, params View[] siblings)
+    {
+        var app = new Application();
+        typeof(Application)
+            .GetMethod("AddWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [new Window(new SiblingsPage(siblings))]);
+
+        var tree = new VisualTreeWalker { SourceMapProvider = provider }.WalkTree(app);
+
+        return VisualTreeWalker.FlattenElementInfos(tree)
+            .Where(element => element.Type == type)
+            .Select(element => element.SourceLine)
+            .ToArray();
+    }
 
     private static XamlSourceMap MapWith(string file, string? hash, params (string Path, XamlSourceEntry Entry)[] entries)
         => new(file, entries.ToDictionary(e => e.Path, e => e.Entry, StringComparer.Ordinal), hash);

@@ -153,7 +153,7 @@ internal class SidebarOutlineViewDelegate : NSOutlineViewDelegate
 			Editable = false,
 			Bordered = false,
 			DrawsBackground = false,
-			Font = NSFont.BoldSystemFontOfSize(11),
+			Font = NSFont.BoldSystemFontOfSize(11)!,
 			TextColor = NSColor.SecondaryLabel,
 			TranslatesAutoresizingMaskIntoConstraints = false,
 		};
@@ -186,7 +186,7 @@ internal class SidebarOutlineViewDelegate : NSOutlineViewDelegate
 			Editable = false,
 			Bordered = false,
 			DrawsBackground = false,
-			Font = NSFont.SystemFontOfSize(13),
+			Font = NSFont.SystemFontOfSize(13)!,
 			TextColor = NSColor.Label,
 			LineBreakMode = NSLineBreakMode.TruncatingTail,
 			TranslatesAutoresizingMaskIntoConstraints = false,

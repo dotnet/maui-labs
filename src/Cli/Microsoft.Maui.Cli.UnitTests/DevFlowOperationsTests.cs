@@ -99,6 +99,42 @@ public sealed class NativeUiOperationsTests
     }
 
     [Fact]
+    public async Task Drag_OntoAnotherElement_SendsBothFromOneTreeCapture()
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+        // Resolved by a query that never saw the drop target: its capture cannot validate both.
+        var source = new ElementInfo { Id = "el-root", CaptureEpoch = 42, RegistryGeneration = 7 };
+
+        var result = await new NativeUiOperations(client).DragAsync(source, 10, 10, null, null, "el-1", null, null, null);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/tree");
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+        using var document = JsonDocument.Parse(request.Body!);
+        Assert.Equal("el-root", document.RootElement.GetProperty("elementId").GetString());
+        Assert.Equal("el-1", document.RootElement.GetProperty("toElementId").GetString());
+        // The tree's capture replaces the query's, so the stale epoch is not forwarded.
+        Assert.False(document.RootElement.TryGetProperty("captureEpoch", out _));
+    }
+
+    [Fact]
+    public async Task Drag_OntoAnElementNotInTheTree_FailsWithoutTouching()
+    {
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+        var source = new ElementInfo { Id = "el-root", CaptureEpoch = 42, RegistryGeneration = 7 };
+
+        var result = await new NativeUiOperations(client).DragAsync(source, 10, 10, null, null, "el-gone", null, null, null);
+
+        Assert.False(result.Success);
+        Assert.Contains("el-gone", result.Error);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
+    [Fact]
     public async Task Query_WaitGoneWithMatches_TimesOutWithoutChangingSelection()
     {
         await using var server = new MockAgentServer();

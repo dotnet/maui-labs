@@ -496,8 +496,19 @@ and visual-state controller replacement.
 `GtkBlazorWebViewLifetimeTests` requires WebKitGTK 6.0 and covers script-message
 handler cleanup on disposal.
 
+`GtkSignalLifetimeTests` repeatedly connects real MAUI button and layout handlers,
+forces collection, emits native clicks, and verifies that click and visual-state
+controller signals are disconnected before retiring their owners. It pumps GTK
+during finalization to exercise closure/native teardown lifetime boundaries.
+
 `ContentViewRootLayoutTests` covers child-size changes without window resizing,
 measure invalidation and idle layout convergence.
+
+`StartupLayoutTests` starts the first window with a Shell root page containing a
+ScrollView, stacked heading, initially hidden button row, and CollectionView.
+It checks managed and native allocations when background-loaded cards arrive and
+the hidden content becomes visible, without navigation or window resizing, then
+expands the collection viewport to check both realized cards.
 
 The Picker regression checks item replacement, no selection, collection
 mutations, managed selection mapping, native selection notifications, and
@@ -514,9 +525,11 @@ From the repository root on Linux, use the shared class runner (PowerShell 7,
 ```bash
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass CollectionViewHandlerTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkBlazorWebViewLifetimeTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSignalLifetimeTests -MauiVersion 10.0.70
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass PickerSelectionTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkSynchronizationContextTests
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass ContentViewRootLayoutTests
+pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass StartupLayoutTests -MauiVersion 10.0.70
 pwsh -File platforms/Linux.Gtk4/tests/run-native-tests.ps1 -TestClass GtkTransformTests
 ```
 

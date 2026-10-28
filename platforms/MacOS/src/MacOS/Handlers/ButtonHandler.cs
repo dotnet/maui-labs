@@ -140,6 +140,9 @@ class MauiNSButton : NSButton
                         locations[i] = stops[i].Offset;
                     }
                     using var colorSpace = CGColorSpace.CreateSrgb();
+                    if (colorSpace == null)
+                        return;
+
                     using var gradient = new CGGradient(colorSpace, colors, locations);
 
                     if (_linearGradient != null)

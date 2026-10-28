@@ -139,16 +139,18 @@ jobs:
   runtime:
     name: Native GTK runtime (${{ matrix.test-class }}${{ matrix.maui && format(', MAUI {0}', matrix.maui) || '' }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
         # Each class gets its own process: GTK initialization is thread-affine.
-        test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, PickerSelectionTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests]
+        test-class: [CollectionViewHandlerTests, GtkBlazorWebViewLifetimeTests, PickerSelectionTests, GtkSignalLifetimeTests, GtkSynchronizationContextTests, ContentViewTransformTests, ContentViewClippingTests, ContentViewRootLayoutTests, GtkRootLayoutDriverTests, WindowSizingTests, GtkTransformTests, StartupLayoutTests]
         maui: ['']
         include:
+          - test-class: GtkSignalLifetimeTests
+            maui: '10.0.70'
           - test-class: GtkWebViewSnapshotRuntimeTests
             maui: ''
             test-project: src/DevFlow/Microsoft.Maui.DevFlow.Agent.Gtk.Tests/Microsoft.Maui.DevFlow.Agent.Gtk.Tests.csproj
@@ -157,6 +159,8 @@ jobs:
             maui: '10.0.70'
           - test-class: WindowSizingTests
             maui: '10.0.110'
+          - test-class: StartupLayoutTests
+            maui: '10.0.70'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
