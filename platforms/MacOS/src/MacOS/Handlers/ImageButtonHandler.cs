@@ -54,8 +54,7 @@ public partial class ImageButtonHandler : MacOSViewHandler<IImageButton, NSButto
     {
         if (imageButton.Source is IFileImageSource fileSource)
         {
-            var image = new NSImage(fileSource.File);
-            handler.PlatformView.Image = image;
+            handler.PlatformView.Image = ImageHandler.FindBundleImage(fileSource.File);
         }
         else if (imageButton.Source is IUriImageSource uriSource)
         {
