@@ -204,6 +204,29 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         .map(attribute => element.getAttribute(attribute))));
   }
 
+  function loadDecodedImage(url, signal) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      const finish = (callback, value) => {
+        signal.removeEventListener('abort', onAbort);
+        callback(value);
+      };
+      const onAbort = () => {
+        image.removeAttribute('src');
+        finish(reject, signal.reason || new DOMException('Image load aborted.', 'AbortError'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      image.src = url;
+      image.decode().then(
+        () => finish(resolve, image),
+        error => finish(reject, error));
+    });
+  }
+
   // Refresh state via AJAX (no full page reload — avoids flash)
   async function refreshState(force = false) {
     if (refreshPromise) {
@@ -225,9 +248,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
         // Keep the previous frame intact until its replacement image is ready.
         if (screenshot && state.screenshotUrl) {
-          const image = new Image();
-          image.src = state.screenshotUrl;
-          await image.decode();
+          const image = await loadDecodedImage(state.screenshotUrl, controller.signal);
           if (!navigator.onLine) return null;
           screenshot.src = image.src;
         }

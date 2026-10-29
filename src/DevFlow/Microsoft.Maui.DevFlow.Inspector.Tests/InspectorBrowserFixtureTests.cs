@@ -397,6 +397,51 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task Tap_StalledScreenshotDecodeObservesStateDeadline()
+    {
+        await Page.Clock.InstallAsync();
+        await Page.Clock.PauseAtAsync(DateTime.UtcNow.AddSeconds(1));
+        await Page.EvaluateAsync("""
+            () => {
+              window.fixtureOriginalImageDecode = HTMLImageElement.prototype.decode;
+              window.fixtureDecodeStarted = false;
+              HTMLImageElement.prototype.decode = function () {
+                if (!this.id && !window.fixtureDecodeStarted) {
+                  window.fixtureDecodeStarted = true;
+                  document.body.dataset.fixtureDecodeStarted = 'true';
+                  return new Promise(() => {});
+                }
+                return window.fixtureOriginalImageDecode.call(this);
+              };
+            }
+            """);
+        try
+        {
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Page.Locator("#df-status")).ToContainTextAsync("Tap sent to");
+            await Page.Clock.RunForAsync(50);
+            await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-decode-started", "true");
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToHaveAttributeAsync("aria-busy", "true");
+            await Page.Clock.RunForAsync(10_100);
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-disconnected-overlay")).Not.ToHaveAttributeAsync("aria-busy", "true");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            await Page.EvaluateAsync("""
+                () => {
+                  if (window.fixtureOriginalImageDecode) {
+                    HTMLImageElement.prototype.decode = window.fixtureOriginalImageDecode;
+                  }
+                }
+                """);
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task Tap_RejectedLaterTapDoesNotClearAcceptedTapPendingCapture()
     {
         _screenshotGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -450,6 +495,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     [InspectorBrowserFixtureFact]
     public async Task Tap_UnchangedImmediateCaptureRetriesDelayedUiMutation()
     {
+        await Page.Clock.InstallAsync();
+        await Page.Clock.PauseAtAsync(DateTime.UtcNow.AddSeconds(1));
         var firstStateCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var retryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var requests = 0;
@@ -463,7 +510,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         {
             if (Interlocked.Increment(ref requests) == 1)
             {
-                await route.ContinueAsync();
+                var response = await route.FetchAsync();
+                await route.FulfillAsync(new() { Response = response });
                 firstStateCompleted.TrySetResult();
                 return;
             }
@@ -473,11 +521,17 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         });
 
         await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+        await Expect(Page.Locator("#df-status")).ToContainTextAsync("Tap sent to");
+        await Page.Clock.RunForAsync(50);
         await firstStateCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
         await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+        await Expect(Page.Locator("#df-disconnected-overlay")).Not.ToHaveAttributeAsync("aria-busy", "true");
 
         Volatile.Write(ref _text, "Tapped");
+        await Page.Clock.RunForAsync(299);
+        Assert.False(retryStarted.Task.IsCompleted);
+        await Page.Clock.RunForAsync(51);
         await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
         await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
