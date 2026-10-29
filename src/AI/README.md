@@ -72,3 +72,8 @@ Apple device/runtime and model availability; portable tests do not run a model.
 Further design documentation:
 [Apple image input](../../docs/ai/apple-foundation-models-image-input.md) and
 [JSON stream chunking](../../docs/ai/json-stream-chunker-design.md).
+
+- [Chat usage, provider comparison, and Apple guidance](https://github.com/dotnet/docs-maui/blob/main/docs/ai/chat.md)
+- [Embedding usage, provider comparison, and Apple guidance](https://github.com/dotnet/docs-maui/blob/main/docs/ai/embeddings.md)
+- [Repeatable Apple embedding evaluation](../../tests/AI/AppleEmbeddingEvaluation/README.md)
+- [Apple AI evaluation findings and reproduction](../../docs/ai/apple-ai-evaluation.md)

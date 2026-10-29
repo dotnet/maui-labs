@@ -34,9 +34,26 @@
             </HorizontalStackLayout>
             <Entry Text="{Binding Dimensions}" Placeholder="Model default" Keyboard="Numeric"
                    IsEnabled="{Binding IsIdle}" AutomationId="EmbeddingDimensionsEntry" />
+            <BoxView HeightRequest="1"
+                     Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
+            <Label Text="CHUNKING" Style="{StaticResource SectionHeading}" />
+            <Picker Title="Chunking mode" ItemsSource="{Binding ChunkingModes}"
+                    SelectedItem="{Binding ChunkingMode, Mode=TwoWay}"
+                    IsEnabled="{Binding IsIdle}" AutomationId="EmbeddingChunkingModePicker" />
+            <Label Text="{Binding ChunkingDescription}" Style="{StaticResource MutedLabel}"
+                   FontSize="12" />
+            <VerticalStackLayout Spacing="6" IsVisible="{Binding HasChunkParameters}"
+                                 IsEnabled="{Binding IsIdle}">
+                <Label Text="{Binding ChunkSizeLabel}" Style="{StaticResource SectionHeading}" />
+                <Entry Text="{Binding ChunkSize, Mode=TwoWay}" Keyboard="Numeric"
+                       AutomationId="EmbeddingChunkSizeEntry" />
+                <Label Text="{Binding ChunkOverlapLabel}" Style="{StaticResource SectionHeading}" />
+                <Entry Text="{Binding ChunkOverlap, Mode=TwoWay}" Keyboard="Numeric"
+                       AutomationId="EmbeddingChunkOverlapEntry" />
+            </VerticalStackLayout>
             <HorizontalStackLayout Spacing="4">
                 <Label Text="DOCUMENTS" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
-                <local:InfoTip Text="Import Markdown or plain text from the header. Index documents sends text to the selected generator. Search reads that model's saved vectors; Clear index keeps your documents." />
+                <local:InfoTip Text="Import Markdown or plain text, or explicitly load three synthetic sample documents from the header. Index documents sends chunks to the selected generator. Every model, dimensions and chunking configuration has a separate index. Clear index keeps your documents." />
             </HorizontalStackLayout>
             <FlexLayout Wrap="Wrap" AlignItems="Center">
                 <Button Text="Index documents" Command="{Binding IndexDocuments}"

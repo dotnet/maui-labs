@@ -4,70 +4,122 @@
              xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
              x:Class="AIExtensions.Sample.ChatPlayground.EmbeddingArea"
              x:DataType="local:EmbeddingPlaygroundViewModel">
-    <Border Style="{StaticResource ComposerPanel}">
-        <Grid RowDefinitions="Auto,*" RowSpacing="6">
-            <Label Text="{Binding ResultsHeading}" Style="{StaticResource SectionHeading}" />
-            <Grid Grid.Row="1">
-                <CollectionView ItemsSource="{Binding Documents}"
-                                ItemSizingStrategy="MeasureAllItems"
-                                AutomationId="ImportedDocuments">
-                    <CollectionView.Triggers>
-                        <DataTrigger TargetType="CollectionView"
-                                     Binding="{Binding ShowingSearchResults}" Value="True">
-                            <Setter Property="IsVisible" Value="False" />
-                        </DataTrigger>
-                    </CollectionView.Triggers>
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="local:ImportedDocument">
-                            <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
-                                <VerticalStackLayout Spacing="2">
-                                    <Label Text="{Binding Name}" FontAttributes="Bold"
-                                           LineBreakMode="TailTruncation" />
-                                    <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
-                                           FontSize="11" />
-                                </VerticalStackLayout>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                    <CollectionView.EmptyView>
-                        <Label Text="Import a Markdown or plain text document to begin."
-                               Style="{StaticResource MutedLabel}" Margin="12"
-                               HorizontalTextAlignment="Center"
-                               AutomationId="DocumentsEmptyLabel" />
-                    </CollectionView.EmptyView>
-                </CollectionView>
-                <CollectionView ItemsSource="{Binding Results}"
-                                IsVisible="{Binding ShowingSearchResults}"
-                                ItemSizingStrategy="MeasureAllItems"
-                                AutomationId="EmbeddingSearchResults">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="local:DocumentSearchHit">
-                            <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
-                                <VerticalStackLayout Spacing="2">
-                                    <Label Text="{Binding Name}" FontAttributes="Bold"
-                                           LineBreakMode="TailTruncation" />
-                                    <Label Text="{Binding Snippet}" Style="{StaticResource MutedLabel}"
-                                           MaxLines="2" LineBreakMode="TailTruncation" />
-                                    <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
-                                           FontSize="11" />
-                                </VerticalStackLayout>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                    <CollectionView.EmptyView>
-                        <Label Text="No indexed documents match."
-                               Style="{StaticResource MutedLabel}" Margin="12"
-                               HorizontalTextAlignment="Center"
-                               AutomationId="EmbeddingResultsEmptyLabel" />
-                    </CollectionView.EmptyView>
-                </CollectionView>
-                <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
-                                   Color="{StaticResource Primary}"
-                                   HorizontalOptions="Center" VerticalOptions="Center"
-                                   AutomationId="EmbeddingLoading" />
+    <Grid x:Name="ResultsLayout" ColumnDefinitions="*,*" ColumnSpacing="12" RowSpacing="12">
+        <Border Style="{StaticResource ComposerPanel}">
+            <Grid RowDefinitions="Auto,*" RowSpacing="6">
+                <Label Text="{Binding ResultsHeading}" Style="{StaticResource SectionHeading}" />
+                <Grid Grid.Row="1">
+                    <CollectionView ItemsSource="{Binding Documents}"
+                                    ItemSizingStrategy="MeasureAllItems"
+                                    AutomationId="ImportedDocuments">
+                        <CollectionView.Triggers>
+                            <DataTrigger TargetType="CollectionView"
+                                         Binding="{Binding ShowingSearchResults}" Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </CollectionView.Triggers>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="local:ImportedDocument">
+                                <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label Text="{Binding Name}" FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation" />
+                                        <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
+                                               FontSize="11" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <Label Text="Import text or explicitly load the sample documents, then index them in settings."
+                                   Style="{StaticResource MutedLabel}" Margin="12"
+                                   HorizontalTextAlignment="Center"
+                                   AutomationId="DocumentsEmptyLabel" />
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+                    <CollectionView ItemsSource="{Binding Results}"
+                                    SelectedItem="{Binding SelectedResult, Mode=TwoWay}"
+                                    SelectionMode="Single"
+                                    IsVisible="{Binding ShowingSearchResults}"
+                                    ItemSizingStrategy="MeasureAllItems"
+                                    AutomationId="EmbeddingSearchResults">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="local:DocumentSearchHit">
+                                <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
+                                        AutomationId="{Binding AutomationId}"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="DocumentTapped" />
+                                    </Border.GestureRecognizers>
+                                    <VisualStateManager.VisualStateGroups>
+                                        <VisualStateGroup Name="CommonStates">
+                                            <VisualState Name="Normal">
+                                                <VisualState.Setters>
+                                                    <Setter Property="Stroke" Value="Transparent" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState Name="Selected">
+                                                <VisualState.Setters>
+                                                    <Setter Property="Stroke" Value="{StaticResource Primary}" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                        </VisualStateGroup>
+                                    </VisualStateManager.VisualStateGroups>
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label Text="{Binding Name}" FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation" />
+                                        <Label Text="{Binding Snippet}" Style="{StaticResource MutedLabel}"
+                                               MaxLines="2" LineBreakMode="TailTruncation" />
+                                        <Label Text="{Binding Details}" Style="{StaticResource MutedLabel}"
+                                               FontSize="11" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <Label Text="No indexed documents. Import and index documents first."
+                                   Style="{StaticResource MutedLabel}" Margin="12"
+                                   HorizontalTextAlignment="Center"
+                                   AutomationId="EmbeddingResultsEmptyLabel" />
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+                    <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
+                                       Color="{StaticResource Primary}"
+                                       HorizontalOptions="Center" VerticalOptions="Center"
+                                       AutomationId="EmbeddingLoading" />
+                </Grid>
             </Grid>
-        </Grid>
-    </Border>
+        </Border>
+        <Border x:Name="ChunksPanel" Grid.Column="1" Style="{StaticResource ComposerPanel}">
+            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="6">
+                <Label Text="{Binding ChunksHeading}" Style="{StaticResource SectionHeading}"
+                       AutomationId="EmbeddingChunksHeading" />
+                <Label Grid.Row="1" Text="Ranked by cosine similarity, not confidence. Chunk numbers show source order."
+                       Style="{StaticResource MutedLabel}" FontSize="11" />
+                <CollectionView Grid.Row="2" ItemsSource="{Binding SelectedChunks}"
+                                SelectionMode="None" ItemSizingStrategy="MeasureAllItems"
+                                AutomationId="EmbeddingRankedChunks">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="local:DocumentChunkHit">
+                            <Border Margin="0,3" Padding="10" StrokeShape="RoundRectangle 8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource InputBackground}, Dark={StaticResource InputBackgroundDark}}">
+                                <VerticalStackLayout Spacing="6">
+                                    <Label Text="{Binding Details}" FontAttributes="Bold"
+                                           AutomationId="EmbeddingChunkScore" />
+                                    <Label Text="{Binding Text}" LineBreakMode="WordWrap"
+                                           AutomationId="{Binding AutomationId}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                    <CollectionView.EmptyView>
+                        <Label Text="Search, then select a document to inspect all of its ranked chunks."
+                               Style="{StaticResource MutedLabel}" Margin="12"
+                               HorizontalTextAlignment="Center" AutomationId="EmbeddingChunksEmptyLabel" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+            </Grid>
+        </Border>
+    </Grid>
 </ContentView>

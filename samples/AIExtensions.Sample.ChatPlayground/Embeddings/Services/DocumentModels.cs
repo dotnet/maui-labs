@@ -37,10 +37,20 @@ public sealed record DocumentSearchHit(
     string Name,
     string Snippet,
     float Score,
-    DateTimeOffset ImportedAtUtc)
+    DateTimeOffset ImportedAtUtc,
+    IReadOnlyList<DocumentChunkHit>? RankedChunks = null)
 {
+    public IReadOnlyList<DocumentChunkHit> Chunks => RankedChunks ?? [];
+    public string AutomationId => $"EmbeddingDocument_{Id}";
     public string Details =>
-        $"Similarity {Score:F2} - imported {ImportedAtUtc.ToLocalTime():g}";
+        $"Max chunk cosine {Score:F4} - {Chunks.Count} chunks";
+}
+
+public sealed record DocumentChunkHit(
+    string DocumentId, string DocumentName, int Ordinal, string Text, float Score)
+{
+    public string Details => $"Chunk {Ordinal} · cosine {Score:F4}";
+    public string AutomationId => $"EmbeddingChunk_{DocumentId}_{Ordinal}";
 }
 
 public sealed record DocumentSearchResults(

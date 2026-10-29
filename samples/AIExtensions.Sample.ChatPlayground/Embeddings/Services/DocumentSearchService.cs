@@ -3,7 +3,6 @@ using System.Numerics.Tensors;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -12,8 +11,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 /// <summary>Indexes imported text with the selected generator and searches only that generator's vectors.</summary>
 public sealed class DocumentSearchService : IDisposable
 {
-    private const int IndexVersion = 1;
-    private const int MaxChunkCharacters = 360;
+    private const int IndexVersion = 2;
     private readonly DocumentStore _documents;
     private readonly ILogger<DocumentSearchService> _logger;
     private readonly string _indexDirectory;
@@ -33,10 +31,11 @@ public sealed class DocumentSearchService : IDisposable
     public async Task<DocumentIndexResult> IndexDocumentsAsync(
         IEmbeddingGenerator<string, Embedding<float>> generator, string generatorId,
         int? dimensions = null, IProgress<DocumentIndexProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, DocumentChunkingOptions? chunking = null)
     {
         ArgumentNullException.ThrowIfNull(generator);
-        var key = GetIndexKey(generatorId, dimensions);
+        chunking ??= new();
+        var key = GetIndexKey(generatorId, dimensions, chunking);
         var options = dimensions is { } count ? new EmbeddingGenerationOptions { Dimensions = count } : null;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -49,7 +48,7 @@ public sealed class DocumentSearchService : IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 var info = documents[i];
                 var document = await _documents.ReadAsync(info.Id, cancellationToken).ConfigureAwait(false);
-                if (await EnsureIndexAsync(document, key, generator, options, notices,
+                if (await EnsureIndexAsync(document, key, generator, options, chunking, notices,
                     (chunks, total) => progress?.Report(new DocumentIndexProgress(
                         i, documents.Count, info.Name, chunks, total)), cancellationToken).ConfigureAwait(false))
                     updated++;
@@ -66,11 +65,13 @@ public sealed class DocumentSearchService : IDisposable
 
     public async Task<DocumentSearchResults> SearchAsync(
         string query, IEmbeddingGenerator<string, Embedding<float>> generator,
-        string generatorId, int? dimensions = null, CancellationToken cancellationToken = default)
+        string generatorId, int? dimensions = null, CancellationToken cancellationToken = default,
+        DocumentChunkingOptions? chunking = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
         ArgumentNullException.ThrowIfNull(generator);
-        var key = GetIndexKey(generatorId, dimensions);
+        chunking ??= new();
+        var key = GetIndexKey(generatorId, dimensions, chunking);
         var options = dimensions is { } count ? new EmbeddingGenerationOptions { Dimensions = count } : null;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -101,12 +102,12 @@ public sealed class DocumentSearchService : IDisposable
             }
 
             if (indexed.Count == 0 && documents.Count > 0)
-                throw new InvalidOperationException("No documents are indexed for this generator. Use Index documents in Embeddings settings first.");
+                throw new InvalidOperationException("No documents are indexed for this model, dimensions and chunking configuration. Use Index documents in Embeddings settings first.");
             if (indexed.Count == 0)
                 return new DocumentSearchResults([], 0, null);
 
             var queryVector = await Task.Run(
-                () => generator.GenerateVectorAsync(query.Trim(), options, cancellationToken),
+                () => generator.GenerateVectorAsync(DocumentChunker.Normalize(query), options, cancellationToken),
                 cancellationToken).ConfigureAwait(false);
             ValidateVector(queryVector.Span, 0);
             var hits = new List<DocumentSearchHit>(indexed.Count);
@@ -117,15 +118,22 @@ public sealed class DocumentSearchService : IDisposable
                         $"The vectors for {info.Name} do not match the selected generator. " +
                         "Clear this index and then use Index documents with the selected generator.");
 
-                var best = index.Chunks
-                    .Select(chunk => (chunk.Text, Score: TensorPrimitives.CosineSimilarity(queryVector.Span, chunk.Vector)))
-                    .OrderByDescending(chunk => chunk.Score).First();
+                var chunks = index.Chunks
+                    .Select((chunk, ordinal) => new DocumentChunkHit(info.Id, info.Name, ordinal + 1, chunk.Text,
+                        TensorPrimitives.CosineSimilarity(queryVector.Span, chunk.Vector)))
+                    .OrderByDescending(chunk => chunk.Score).ThenBy(chunk => chunk.Ordinal).ToArray();
+                var best = chunks[0];
+                var snippetLength = Math.Min(180, best.Text.Length);
+                if (snippetLength < best.Text.Length && char.IsHighSurrogate(best.Text[snippetLength - 1]) &&
+                    char.IsLowSurrogate(best.Text[snippetLength]))
+                    snippetLength--;
                 hits.Add(new DocumentSearchHit(info.Id, info.Name,
-                    best.Text.Length > 180 ? best.Text[..180] + "..." : best.Text,
-                    best.Score, info.ImportedAtUtc));
+                    best.Text.Length > snippetLength ? best.Text[..snippetLength] + "..." : best.Text,
+                    best.Score, info.ImportedAtUtc, chunks));
             }
             return new DocumentSearchResults(
                 hits.OrderByDescending(hit => hit.Score).ThenByDescending(hit => hit.ImportedAtUtc)
+                    .ThenBy(hit => hit.Id, StringComparer.Ordinal)
                     .Take(40).ToArray(),
                 queryVector.Length, indexed.Count == documents.Count ? null :
                     $"{documents.Count - indexed.Count} new or changed documents need indexing.");
@@ -136,9 +144,10 @@ public sealed class DocumentSearchService : IDisposable
         }
     }
 
-    public async Task<bool> ClearIndexAsync(string generatorId, int? dimensions = null, CancellationToken cancellationToken = default)
+    public async Task<bool> ClearIndexAsync(string generatorId, int? dimensions = null,
+        CancellationToken cancellationToken = default, DocumentChunkingOptions? chunking = null)
     {
-        var key = GetIndexKey(generatorId, dimensions);
+        var key = GetIndexKey(generatorId, dimensions, chunking ?? new());
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -175,7 +184,7 @@ public sealed class DocumentSearchService : IDisposable
 
     private async Task<bool> EnsureIndexAsync(
         StoredDocument document, string key, IEmbeddingGenerator<string, Embedding<float>> generator,
-        EmbeddingGenerationOptions? options, List<string> notices,
+        EmbeddingGenerationOptions? options, DocumentChunkingOptions chunking, List<string> notices,
         Action<int, int>? report, CancellationToken cancellationToken)
     {
         StoredIndex? index = null;
@@ -193,7 +202,7 @@ public sealed class DocumentSearchService : IDisposable
         var hash = HashText(document.Text);
         if (index?.TextHash == hash)
             return false;
-        var texts = Chunk(document.Text).ToArray();
+        var texts = DocumentChunker.Chunk(document.Text, chunking).ToArray();
         report?.Invoke(0, texts.Length);
         var updated = new StoredIndex { ModelKey = key, TextHash = hash };
         foreach (var batch in texts.Chunk(32))
@@ -243,25 +252,6 @@ public sealed class DocumentSearchService : IDisposable
         return index;
     }
 
-    private static IEnumerable<string> Chunk(string text)
-    {
-        var normalized = Regex.Replace(text, @"\s+", " ").Trim();
-        for (var start = 0; start < normalized.Length;)
-        {
-            var end = Math.Min(start + MaxChunkCharacters, normalized.Length);
-            if (end < normalized.Length)
-            {
-                var space = normalized.LastIndexOf(' ', end - 1, end - start);
-                if (space > start + MaxChunkCharacters / 2)
-                    end = space;
-            }
-            yield return normalized[start..end].Trim();
-            start = end;
-            while (start < normalized.Length && normalized[start] == ' ')
-                start++;
-        }
-    }
-
     private static void ValidateVector(ReadOnlySpan<float> vector, int dimension)
     {
         if (vector.IsEmpty)
@@ -274,13 +264,18 @@ public sealed class DocumentSearchService : IDisposable
     private static string HashText(string text) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
-    private static string GetIndexKey(string generatorId, int? dimensions)
+    private static string GetIndexKey(string generatorId, int? dimensions, DocumentChunkingOptions chunking)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(generatorId);
         if (dimensions is <= 0)
             throw new ArgumentOutOfRangeException(nameof(dimensions), "Embedding dimensions must be positive.");
+        DocumentChunker.ValidateOptions(chunking);
         var identity = generatorId.Length.ToString(CultureInfo.InvariantCulture) + ":" +
-            generatorId + "\0" + (dimensions?.ToString(CultureInfo.InvariantCulture) ?? "default");
+            generatorId + "\0" + (dimensions?.ToString(CultureInfo.InvariantCulture) ?? "default") +
+            "\0chunker-v2:" + chunking.Mode +
+            (chunking.Mode == DocumentChunkingMode.WholeDocument ? string.Empty :
+                ":" + chunking.Size.ToString(CultureInfo.InvariantCulture) +
+                ":" + chunking.Overlap.ToString(CultureInfo.InvariantCulture));
         return HashText(identity);
     }
 

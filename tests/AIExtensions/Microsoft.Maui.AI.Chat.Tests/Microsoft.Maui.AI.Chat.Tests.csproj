@@ -66,6 +66,10 @@
              Link="Chat\ViewModels\SettingsPaneViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentModels.cs"
              Link="Embeddings\Services\DocumentModels.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentChunker.cs"
+             Link="Embeddings\Services\DocumentChunker.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\EmbeddingSampleDocuments.cs"
+             Link="Embeddings\Services\EmbeddingSampleDocuments.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentSearchService.cs"
              Link="Embeddings\Services\DocumentSearchService.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Embeddings\Services\DocumentStore.cs"
