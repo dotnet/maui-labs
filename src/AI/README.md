@@ -65,6 +65,9 @@ The official pipeline's Android dependency step queries the SDK path resolved by
 build use the same SDK as .NET, even when the agent does not predefine those
 environment variables. The step checks for the bridge's Android 36 platform
 before running Gradle.
+On Windows, it also queries `JavaSdkDirectory`, verifies the resolved
+`bin/java.exe` can run, and exports `JAVA_HOME`. Standalone Gradle therefore
+does not depend on Java being present on the agent's `PATH`.
 
 ### Windows
 

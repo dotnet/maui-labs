@@ -335,17 +335,28 @@ extends:
                   '-f'
                   'net10.0-android'
                   '-p:AcceptAndroidSDKLicenses=true'
-                  '-getProperty:AndroidSdkDirectory'
+                  '-getProperty:AndroidSdkDirectory,JavaSdkDirectory'
                   'src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj'
                 )
-                $androidSdk = & eng/common/dotnet.ps1 @arguments
+                $toolchainJson = & eng/common/dotnet.ps1 @arguments
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                $toolchain = ($toolchainJson -join "`n" | ConvertFrom-Json).Properties
+                $androidSdk = $toolchain.AndroidSdkDirectory
+                $javaSdk = $toolchain.JavaSdkDirectory
                 if (!(Test-Path -LiteralPath "$androidSdk/platforms/android-36/android.jar" -PathType Leaf)) {
                   throw "Android SDK platform 36 was not installed at '$androidSdk'."
                 }
+                if ([string]::IsNullOrWhiteSpace($javaSdk) -or
+                    !(Test-Path -LiteralPath "$javaSdk/bin/java.exe" -PathType Leaf)) {
+                  throw "The resolved Java SDK does not contain bin/java.exe: '$javaSdk'."
+                }
+                & "$javaSdk/bin/java.exe" -version
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                 Write-Host "Resolved Android SDK: $androidSdk"
+                Write-Host "Resolved Java SDK: $javaSdk"
                 Write-Host "##vso[task.setvariable variable=ANDROID_HOME]$androidSdk"
                 Write-Host "##vso[task.setvariable variable=ANDROID_SDK_ROOT]$androidSdk"
+                Write-Host "##vso[task.setvariable variable=JAVA_HOME]$javaSdk"
               displayName: Install Android SDK dependencies
             - script: gradlew.bat --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
               displayName: Build and Test EssentialsAI Kotlin Bridge
