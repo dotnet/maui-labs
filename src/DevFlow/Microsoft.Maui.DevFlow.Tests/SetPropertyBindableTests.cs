@@ -3,9 +3,12 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Maui;
+using Microsoft.Maui.Cli.DevFlow.Inspector;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
+using Microsoft.Maui.DevFlow.Agent.Core.SourceMapping;
 using Microsoft.Maui.DevFlow.Driver;
 using Microsoft.Maui.Dispatching;
 
@@ -13,6 +16,15 @@ namespace Microsoft.Maui.DevFlow.Tests;
 
 public class SetPropertyBindableTests
 {
+    private const string SiblingXaml = """
+        <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui">
+          <VerticalStackLayout>
+            <Label Text="First" />
+            <Label Text="Second" />
+          </VerticalStackLayout>
+        </ContentView>
+        """;
+
     [Fact]
     public async Task GetPropertyAsync_AutomationIdWithSpace_ResolvesBindingContext()
     {
@@ -116,6 +128,107 @@ public class SetPropertyBindableTests
         Assert.Equal(1, opacity.GetProperty("max").GetDouble());
         Assert.Equal(0.05, opacity.GetProperty("step").GetDouble());
         Assert.Equal("0.5", opacity.GetProperty("value").GetString());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task SetPropertyThenPersist_SiblingText_UpdatesOnlyItsSourceAttribute(int index)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"devflow-sibling-edit-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var project = Path.Combine(root, "App.csproj");
+        var source = Path.Combine(root, "MainPage.xaml");
+        await File.WriteAllTextAsync(project, "<Project />");
+        await File.WriteAllTextAsync(source, SiblingXaml);
+        var labels = new[] { new Label { Text = "First" }, new Label { Text = "Second" } };
+        var view = new SourceMappedView
+        {
+            Content = new VerticalStackLayout { Children = { labels[0], labels[1] } }
+        };
+        using var harness = await SetPropertyTestHarness.CreateAsync(
+            new SiblingMapProvider(XamlSourceMap.Parse(SiblingXaml, "MainPage.xaml")!), view);
+        using var inspector = new InspectorServer(
+            SetPropertyTestHarness.GetFreePort(), "127.0.0.1", harness.Port,
+            embedToken: null, agentId: null, appName: null, platform: null, project, sessionId: null);
+        inspector.Start();
+        try
+        {
+            var siblings = (await harness.Client.QueryAsync(type: "Label")).ToArray();
+            for (var sibling = 0; sibling < siblings.Length; sibling++)
+            {
+                var detail = await harness.Client.GetElementAsync(siblings[sibling].Id);
+                Assert.NotNull(detail);
+                siblings[sibling] = detail;
+            }
+            Assert.Equal(new int?[] { 3, 4 }, siblings.Select(element => element.SourceLine));
+            var id = siblings[index].Id;
+            using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{inspector.Port}/") };
+            var html = await http.GetStringAsync("");
+            var token = Regex.Match(html, "<meta\\s+name=\"devflow-inspector-token\"\\s+content=\"([^\"]+)\"").Groups[1].Value;
+            Assert.NotEmpty(token);
+            http.DefaultRequestHeaders.Add("X-DevFlow-Inspector-Token", token);
+            var original = labels[index].Text;
+
+            // Even an edit to the other sibling's literal must retain the original declaration.
+            foreach (var value in new[] { labels[1 - index].Text, "Saved twice" })
+            {
+                var json = JsonSerializer.Serialize(new { elementId = id, name = "Text", value });
+                using var live = await http.PostAsync("api/setProperty", new StringContent(json, Encoding.UTF8, "application/json"));
+                Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+                var edited = await harness.Client.GetElementAsync(id);
+                using var saved = await http.PostAsync("api/persistProperty", new StringContent(json, Encoding.UTF8, "application/json"));
+                var response = await saved.Content.ReadAsStringAsync();
+
+                Assert.True(saved.IsSuccessStatusCode,
+                    $"Apply to XAML returned {(int)saved.StatusCode}: {response}; source before edit: " +
+                    $"{siblings[index].SourceFile}:{siblings[index].SourceLine}; after edit: {edited?.SourceFile}:{edited?.SourceLine}");
+                Assert.Equal(siblings[index].SourceLine, edited?.SourceLine);
+                Assert.Equal(SiblingXaml.Replace($"Text=\"{original}\"", $"Text=\"{value}\"", StringComparison.Ordinal),
+                    await File.ReadAllTextAsync(source));
+                Assert.Equal(value, labels[index].Text);
+            }
+
+            var external = await File.ReadAllTextAsync(source) + "\n<!-- external edit -->";
+            await File.WriteAllTextAsync(source, external);
+            var blocked = JsonSerializer.Serialize(new { elementId = id, name = "Text", value = "Stale edit" });
+            using var staleLive = await http.PostAsync("api/setProperty", new StringContent(blocked, Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, staleLive.StatusCode);
+            using var staleSave = await http.PostAsync("api/persistProperty", new StringContent(blocked, Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.Conflict, staleSave.StatusCode);
+            Assert.Equal(external, await File.ReadAllTextAsync(source));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("First")]
+    [InlineData("{Binding Title}")]
+    public async Task SetPropertyAsync_AmbiguousSiblingText_DoesNotCreateSourceMetadata(string otherText)
+    {
+        var xaml = SiblingXaml.Replace("Text=\"Second\"", $"Text=\"{otherText}\"", StringComparison.Ordinal);
+        var labels = new[] { new Label { Text = "First" }, new Label { Text = "First" } };
+        var view = new SourceMappedView
+        {
+            Content = new VerticalStackLayout { Children = { labels[0], labels[1] } }
+        };
+        using var harness = await SetPropertyTestHarness.CreateAsync(
+            new SiblingMapProvider(XamlSourceMap.Parse(xaml, "MainPage.xaml")!), view);
+        var siblings = (await harness.Client.QueryAsync(type: "Label")).ToArray();
+        Assert.Equal(2, siblings.Length);
+
+        Assert.True(await harness.Client.SetPropertyAsync(siblings[0].Id, "Text", "Edited"));
+
+        foreach (var sibling in siblings)
+        {
+            var detail = await harness.Client.GetElementAsync(sibling.Id);
+            Assert.NotNull(detail);
+            Assert.Null(detail.SourceFile);
+        }
     }
 
     [Fact]
@@ -231,11 +344,16 @@ public class SetPropertyBindableTests
             Client = client;
         }
 
-        public static async Task<SetPropertyTestHarness> CreateAsync(params View[] views)
+        public static Task<SetPropertyTestHarness> CreateAsync(params View[] views)
+            => CreateAsync(null, views);
+
+        public static async Task<SetPropertyTestHarness> CreateAsync(IXamlSourceMapProvider? sourceMaps, params View[] views)
         {
             var app = new TestApplication(views);
 
-            var service = new MauiDevFlowAgentService(new AgentOptions { Port = GetFreePort() });
+            var service = new TestAgentService(new AgentOptions { Port = GetFreePort() });
+            if (sourceMaps is not null)
+                service.Walker.SourceMapProvider = sourceMaps;
             var client = new AgentClient("localhost", service.Port);
 
             service.StartServerOnly(new ImmediateDispatcher());
@@ -283,12 +401,27 @@ public class SetPropertyBindableTests
             return null;
         }
 
-        private static int GetFreePort()
+        public static int GetFreePort()
         {
             using var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
             return ((IPEndPoint)listener.LocalEndpoint).Port;
         }
+    }
+
+    private sealed class TestAgentService(AgentOptions options) : MauiDevFlowAgentService(options)
+    {
+        public VisualTreeWalker Walker { get; private set; } = null!;
+
+        protected override VisualTreeWalker CreateTreeWalker() => Walker = base.CreateTreeWalker();
+    }
+
+    private sealed class SourceMappedView : ContentView;
+
+    private sealed class SiblingMapProvider(XamlSourceMap map) : IXamlSourceMapProvider
+    {
+        public XamlSourceMap? GetMap(string fullTypeName)
+            => fullTypeName == typeof(SourceMappedView).FullName ? map : null;
     }
 
     private static async Task<MemoryStream> ReceiveMessageAsync(ClientWebSocket socket, CancellationToken cancellationToken)

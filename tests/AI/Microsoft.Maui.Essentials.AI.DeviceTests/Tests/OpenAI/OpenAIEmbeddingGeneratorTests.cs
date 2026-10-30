@@ -1,6 +1,7 @@
 #if ENABLE_OPENAI_CLIENT
 
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 
 namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
@@ -26,7 +27,9 @@ public class OpenAIEmbeddingGeneratorGenerateTests : EmbeddingGeneratorGenerateT
 public class OpenAIEmbeddingGeneratorGetServiceTests : EmbeddingGeneratorGetServiceTestsBase<OpenAIEmbeddingGenerator>
 {
 	protected override string ExpectedProviderName => "openai";
-	protected override string ExpectedDefaultModelId => "text-embedding-3-small";
+	protected override string ExpectedDefaultModelId =>
+		IPlatformApplication.Current!.Services.GetRequiredService<IConfiguration>()["AI:EmbeddingDeploymentName"]
+			?? throw new InvalidOperationException("AI:EmbeddingDeploymentName is required by the OpenAI test fixture.");
 }
 public class OpenAIEmbeddingGeneratorInstantiationTests : EmbeddingGeneratorInstantiationTestsBase<OpenAIEmbeddingGenerator>
 {

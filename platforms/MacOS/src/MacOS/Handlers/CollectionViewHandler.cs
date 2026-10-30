@@ -516,7 +516,10 @@ public partial class CollectionViewHandler : MacOSViewHandler<CollectionView, NS
         if (mauiView == null)
             mauiView = CreateItemView(info.DataItem, info.Template, VirtualView);
 
-        var pView = mauiView!.ToMacOSPlatform(MauiContext!);
+        if (mauiView == null)
+            throw new InvalidOperationException("The collection item template did not create a view.");
+
+        var pView = mauiView.ToMacOSPlatform(MauiContext!);
 
         // Add selection gesture if not a header/footer/group header/footer
         if (!info.IsGroupHeader && !info.IsGroupFooter && !info.IsHeader && !info.IsFooter)

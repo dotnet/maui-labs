@@ -2,6 +2,8 @@ using System.Reflection;
 using AppKit;
 using Microsoft.Maui.Media;
 
+#pragma warning disable CA1422 // NSSpeechSynthesizer remains the AppKit backend until AVSpeechSynthesizer parity is implemented.
+
 namespace Microsoft.Maui.Platforms.MacOS.Essentials;
 
 class TextToSpeechImplementation : ITextToSpeech

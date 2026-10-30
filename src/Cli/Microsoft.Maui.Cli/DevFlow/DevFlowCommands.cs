@@ -487,7 +487,9 @@ public partial class DevFlowCommands
 
         // MAUI tap
         var tapIdArg = new Argument<string?>("elementId") { Description = "Element ID to tap (optional if --automationId, --type, or --text is used)", DefaultValueFactory = _ => null };
-        var mauiTapCmd = new Command("tap", "Tap element") { tapIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
+        var tapXOption = new Option<double?>("--x") { Description = "Tap at this X inside the element (device-independent units from its left edge); use with --y to tap content drawn on a canvas" };
+        var tapYOption = new Option<double?>("--y") { Description = "Tap at this Y inside the element (device-independent units from its top edge); use with --x" };
+        var mauiTapCmd = new Command("tap", "Tap element, or a point inside it with --x/--y") { tapIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption, tapXOption, tapYOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
         mauiTapCmd.SetAction(async (ctx, ct) =>
         {
             var host = ctx.GetValue(agentHostOption)!;
@@ -502,6 +504,14 @@ public partial class DevFlowCommands
             var hasAndScreenshot = ctx.GetResult(andScreenshotOption) != null;
             var andTree = ctx.GetValue(andTreeOption);
             var andTreeDepth = ctx.GetValue(andTreeDepthOption);
+            var tapX = ctx.GetValue(tapXOption);
+            var tapY = ctx.GetValue(tapYOption);
+            if (tapX.HasValue != tapY.HasValue)
+            {
+                Output.WriteError("--x and --y must be given together", isJson, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
             var target = await ResolveElementTargetAsync(
                 host,
                 port,
@@ -514,7 +524,10 @@ public partial class DevFlowCommands
                 ElementActionKind.Tap,
                 preferActionable: ctx.GetResult(resolveIndexOption)?.Tokens.Count == 0);
             if (target == null) return;
-            await MauiTapAsync(host, port, isJson, target);
+            if (tapX is { } x && tapY is { } y)
+                await MauiTapAtAsync(host, port, isJson, target, x, y);
+            else
+                await MauiTapAsync(host, port, isJson, target);
             await HandlePostActionFlags(host, port, isJson, hasAndScreenshot, andScreenshot, andTree, andTreeDepth);
         });
         mauiCommand.Add(mauiTapCmd);
@@ -748,7 +761,7 @@ public partial class DevFlowCommands
         // already taken by element resolution.
         var gestureTypeArg = new Argument<string>("gestureType")
         {
-            Description = "Gesture: pinch, rotate, pan, swipe, doubletap, longpress, or tap"
+            Description = "Gesture: pinch, rotate, pan, drag, swipe, doubletap, longpress, or tap"
         };
         var gestureElementOption = new Option<string?>("--element") { Description = "Target element ID (required for tap; other gestures default to the current page)" };
         var gestureDirectionOption = new Option<string?>("--direction") { Description = "Direction for swipe/pan: up, down, left, right" };
@@ -761,12 +774,19 @@ public partial class DevFlowCommands
         var gestureOriginYOption = new Option<double?>("--origin-y") { Description = "Focal point Y, element-relative 0..1 (default: 0.5)" };
         var gestureDurationOption = new Option<int?>("--duration") { Description = "Gesture duration in milliseconds (default: 200)" };
         var gestureStepsOption = new Option<int?>("--steps") { Description = "Interpolation steps between start and end (default: 10)" };
-        var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, swipe, doubletap, longpress, tap")
+        var gestureXOption = new Option<double?>("--x") { Description = "drag: press at this X on the element (device-independent units from its left edge); with --y, makes the drag a real touch from that point" };
+        var gestureYOption = new Option<double?>("--y") { Description = "drag: press at this Y on the element (device-independent units from its top edge); use with --x" };
+        var gestureToXOption = new Option<double?>("--to-x") { Description = "drag: release at this X, on --to-element if given, otherwise on the element (may lie past its edge)" };
+        var gestureToYOption = new Option<double?>("--to-y") { Description = "drag: release at this Y, on --to-element if given, otherwise on the element; use with --to-x" };
+        var gestureToElementOption = new Option<string?>("--to-element") { Description = "drag: element ID to drop onto; released at its centre unless --to-x/--to-y are given" };
+        var gestureHoldOption = new Option<int?>("--hold") { Description = "drag: hold the press this many milliseconds before moving (long-press-to-drag)" };
+        var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, drag, swipe, doubletap, longpress, tap")
         {
             gestureTypeArg, gestureElementOption, resolveAutoIdOption, resolveTextOption, resolveIndexOption,
             gestureDirectionOption, gestureDistanceOption, gestureScaleOption, gestureRotationOption,
             gestureDxOption, gestureDyOption, gestureOriginXOption, gestureOriginYOption,
-            gestureDurationOption, gestureStepsOption
+            gestureDurationOption, gestureStepsOption,
+            gestureXOption, gestureYOption, gestureToXOption, gestureToYOption, gestureToElementOption, gestureHoldOption
         };
         mauiGestureCmd.SetAction(async (ctx, ct) =>
         {
@@ -809,7 +829,14 @@ public partial class DevFlowCommands
                 ctx.GetValue(gestureDyOption),
                 ctx.GetValue(gestureOriginXOption),
                 ctx.GetValue(gestureOriginYOption),
-                ctx.GetValue(gestureStepsOption));
+                ctx.GetValue(gestureStepsOption),
+                new PointDragOptions(
+                    ctx.GetValue(gestureXOption),
+                    ctx.GetValue(gestureYOption),
+                    ctx.GetValue(gestureToXOption),
+                    ctx.GetValue(gestureToYOption),
+                    ctx.GetValue(gestureToElementOption),
+                    ctx.GetValue(gestureHoldOption)));
         });
         mauiCommand.Add(mauiGestureCmd);
 
@@ -859,6 +886,53 @@ public partial class DevFlowCommands
         });
         mauiCommand.Add(mauiResizeCmd);
 
+        // MAUI background jobs — Android WorkManager, iOS BGTaskScheduler
+        var jobsCommand = new Command("jobs", "List and run background jobs (Android WorkManager, iOS BGTask)");
+
+        var jobsListCmd = new Command("list", "List registered background jobs");
+        jobsListCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            await MauiJobsListAsync(host, port, isJson);
+        });
+        jobsCommand.Add(jobsListCmd);
+
+        var jobRunIdArg = new Argument<string>("identifier")
+        {
+            Description = "Android WorkSpec UUID, unambiguous worker/tag or JobScheduler id; iOS BGTask identifier"
+        };
+        var jobRunTypeOption = new Option<string?>("--type") { Description = "iOS BGTask type: processing or refresh" };
+        var jobRunSerialOption = new Option<string?>("--serial") { Description = "Android device/emulator serial (adb -s)" };
+        var jobRunPackageOption = new Option<string?>("--package") { Description = "Android package name (auto-detected from the agent if omitted)" };
+        var jobRunTimeoutOption = new Option<int>("--timeout") { Description = "Android: overall timeout in seconds for target verification, triggering, and observing one-time work", DefaultValueFactory = _ => 30 };
+        jobRunTimeoutOption.Validators.Add(result =>
+        {
+            if (result.GetValueOrDefault<int>() <= 0)
+                result.AddError("--timeout must be greater than zero.");
+        });
+        var jobsRunCmd = new Command("run", "Android: force work and report its outcome; iOS: request a debug BGTask launch (not completion)")
+        {
+            jobRunIdArg, jobRunTypeOption, jobRunSerialOption, jobRunPackageOption, jobRunTimeoutOption
+        };
+        // Android exit status verifies completion; iOS only acknowledges the launch request.
+        jobsRunCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var isJson = output.ResolveJsonMode(ctx.GetValue(jsonOption), ctx.GetValue(noJsonOption));
+            var succeeded = await MauiJobsRunAsync(host, port, isJson,
+                ctx.GetValue(jobRunIdArg)!,
+                ctx.GetValue(jobRunTypeOption),
+                ctx.GetValue(jobRunSerialOption),
+                ctx.GetValue(jobRunPackageOption),
+                ctx.GetValue(jobRunTimeoutOption), ct);
+            return succeeded ? 0 : 1;
+        });
+        jobsCommand.Add(jobsRunCmd);
+        mauiCommand.Add(jobsCommand);
+
         // System/app alert subcommands — platform drivers cover Android, iOS simulator,
         // Mac Catalyst, and Windows.
         var alertCommand = new Command("alert", "Detect and dismiss system/app dialogs");
@@ -882,7 +956,7 @@ public partial class DevFlowCommands
         // dismiss
         var dismissUdid = new Option<string?>("--udid") { Description = "iOS simulator UDID or Android serial (also accepts global --device)" };
         var dismissPid = new Option<int?>("--pid") { Description = "Mac Catalyst app PID (auto-detects if omitted)" };
-        var dismissButtonArg = new Argument<string?>("button") { Description = "Button label to tap (default: first accept-style button)", DefaultValueFactory = _ => null };
+        var dismissButtonArg = new Argument<string?>("button") { Description = "Exact visible button label to invoke (required on macOS)", DefaultValueFactory = _ => null };
         var alertDismissCmd = new Command("dismiss", "Dismiss the current alert/dialog") { dismissButtonArg, dismissUdid, dismissPid };
         alertDismissCmd.SetAction(async (ctx, ct) =>
         {
@@ -3158,6 +3232,28 @@ public partial class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
     }
 
+    private static async Task MauiTapAtAsync(string host, int port, bool json, ElementInfo element, double x, double y)
+    {
+        try
+        {
+            var result = await SendNativeUiCommandAsync(host, port, operations => operations.TapAtAsync(element, x, y));
+            if (result.Success)
+            {
+                Output.WriteActionResult(true, "Tapped", element.Id, json, $"Tapped: {element.Id} at ({x:0.#}, {y:0.#})");
+                return;
+            }
+
+            // The agent's reason is the useful part — outside the bounds, covered, synthetic
+            // touch not enabled — so it goes out as a structured error rather than a bare false.
+            Output.WriteError(
+                $"Failed to tap {element.Id} at ({x:0.#}, {y:0.#}): {result.Error ?? result.Reason ?? "unknown error"}",
+                json,
+                retryable: result.Retryable);
+            _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json, suggestions: new[] { "Run 'ui tree' to refresh element IDs" }); _errorOccurred = true; }
+    }
+
     private static async Task MauiFillAsync(string host, int port, bool json, ElementInfo element, string text)
     {
         try
@@ -3384,15 +3480,94 @@ public partial class DevFlowCommands
         catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
     }
 
-    private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"];
+    internal static Func<AndroidAppDriver> JobDriverFactory { get; set; } = () => new AndroidAppDriver();
+
+    private static async Task MauiJobsListAsync(string host, int port, bool json)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var result = await client.GetJobsAsync();
+
+            if (result.TryGetProperty("error", out var queryError))
+                throw new InvalidOperationException($"Could not read jobs: {queryError.GetString()}");
+            if (json) { Output.WriteJsonElement(result, json); return; }
+
+            var platform = result.TryGetProperty("platform", out var p) ? p.GetString() : "unknown";
+            var kind = result.TryGetProperty("type", out var t) ? t.GetString() : "";
+            var supported = result.TryGetProperty("supported", out var s) && s.GetBoolean();
+
+            if (!supported)
+            {
+                Console.WriteLine($"Background jobs are not available on {platform}.");
+                if (result.TryGetProperty("reason", out var reason))
+                    Console.WriteLine(reason.GetString());
+                return;
+            }
+
+            var jobs = result.TryGetProperty("jobs", out var j) && j.ValueKind == JsonValueKind.Array
+                ? j.EnumerateArray().ToList()
+                : [];
+
+            if (jobs.Count == 0)
+            {
+                Console.WriteLine($"{platform} / {kind}: no jobs scheduled.");
+                return;
+            }
+
+            Console.WriteLine($"{platform} / {kind}: {jobs.Count} job(s)");
+            foreach (var job in jobs)
+            {
+                Console.WriteLine($"  {(job.TryGetProperty("identifier", out var i) ? i.GetString() : "?")}");
+                if (job.TryGetProperty("state", out var st))
+                    Console.WriteLine($"    state:    {st.GetString()}");
+                if (job.TryGetProperty("runAttemptCount", out var rc))
+                    Console.WriteLine($"    attempts: {rc}");
+                if (job.TryGetProperty("type", out var ty))
+                    Console.WriteLine($"    type:     {ty.GetString()}");
+                if (job.TryGetProperty("earliestBeginDate", out var eb) && !string.IsNullOrWhiteSpace(eb.GetString()))
+                    Console.WriteLine($"    earliest: {eb.GetString()}");
+                if (job.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array)
+                    Console.WriteLine($"    tags:     {string.Join(", ", tg.EnumerateArray().Select(x => x.GetString()))}");
+            }
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static readonly string[] GestureTypes = ["tap", "doubletap", "longpress", "swipe", "pan", "drag", "pinch", "rotate"];
+
+    /// <summary>The options that turn a drag into a real touch from a point.</summary>
+    private sealed record PointDragOptions(
+        double? X, double? Y, double? ToX, double? ToY, string? ToElementId, int? HoldMs)
+    {
+        public bool Requested => X.HasValue || Y.HasValue || ToX.HasValue || ToY.HasValue
+            || ToElementId != null || HoldMs.HasValue;
+    }
 
     private static async Task MauiGestureAsync(
         string host, int port, bool json, string gestureType, ElementInfo? element,
         string? direction, double? distance, int? durationMs, double? scale, double? rotation,
-        double? deltaX, double? deltaY, double? originX, double? originY, int? steps)
+        double? deltaX, double? deltaY, double? originX, double? originY, int? steps,
+        PointDragOptions? pointDrag = null)
     {
         var normalizedType = gestureType.Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
         if (normalizedType == "zoom") normalizedType = "pinch";
+
+        if (pointDrag is { Requested: true })
+        {
+            if (normalizedType is not ("drag" or "pan"))
+            {
+                Output.WriteError(
+                    "--x, --y, --to-x, --to-y, --to-element and --hold apply to the drag gesture only.",
+                    json, "ValidationError");
+                _errorOccurred = true;
+                return;
+            }
+
+            await MauiPointDragAsync(host, port, json, element, deltaX, deltaY, direction, durationMs, steps, pointDrag);
+            return;
+        }
+
         if (normalizedType == "drag") normalizedType = "pan";
 
         if (Array.IndexOf(GestureTypes, normalizedType) < 0)
@@ -3468,6 +3643,149 @@ public partial class DevFlowCommands
                 {
                     Console.WriteLine($"Failed to perform {normalizedType}{target}: {result.Error}");
                 }
+            }
+
+            if (!result.Success) _errorOccurred = true;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; }
+    }
+
+    private static async Task<bool> MauiJobsRunAsync(
+        string host, int port, bool json, string identifier,
+        string? type, string? serial, string? package, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var jobs = await client.GetJobsAsync();
+            var platform = jobs.TryGetProperty("platform", out var p) ? p.GetString() ?? "" : "";
+
+            if (platform.Equals("Android", StringComparison.OrdinalIgnoreCase))
+                return await RunAndroidJobAsync(client, json, identifier, serial, package, timeoutSeconds, cancellationToken);
+
+            // iOS / Mac Catalyst: the agent schedules the request and forces the launch in-process.
+            var result = await client.RunJobAsync(identifier, type);
+            var ok = result.TryGetProperty("success", out var okFlag) && okFlag.GetBoolean();
+
+            if (json) Output.WriteJsonElement(result, json);
+            else
+            {
+                var msg = result.TryGetProperty("message", out var m) ? m.GetString() : null;
+                var error = result.TryGetProperty("error", out var e) ? e.GetString() : null;
+                var launchRequested = result.TryGetProperty("launchRequested", out var requested) && requested.GetBoolean();
+                Console.WriteLine(ok
+                    ? $"{(launchRequested ? "LAUNCH REQUESTED" : "SUCCESS")}: {msg ?? identifier}"
+                    : $"FAILED: {error ?? "unknown error"}");
+                if (ok && result.TryGetProperty("note", out var note)) Console.WriteLine($"  note: {note.GetString()}");
+            }
+
+            if (!ok) _errorOccurred = true;
+            return ok;
+        }
+        catch (Exception ex) { Output.WriteError(ex.Message, json); _errorOccurred = true; return false; }
+    }
+
+    private static async Task<bool> RunAndroidJobAsync(
+        Microsoft.Maui.DevFlow.Driver.AgentClient client, bool json,
+        string identifier, string? serial, string? package, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        using var driver = JobDriverFactory();
+        driver.Serial = serial;
+        var result = await new Jobs.AndroidJobRunner(client, driver).RunAsync(
+            identifier, package, TimeSpan.FromSeconds(timeoutSeconds), cancellationToken);
+        var target = result.Target.Job;
+
+        if (json)
+        {
+            Output.WriteRawJson(CliJson.SerializeUntyped(new JsonObject
+            {
+                ["success"] = result.Success,
+                ["identifier"] = result.Target.WorkSpecId,
+                ["generation"] = result.Target.Generation,
+                ["requestedIdentifier"] = identifier,
+                ["jobId"] = target.JobId,
+                ["worker"] = target.Worker,
+                ["namespace"] = target.Namespace,
+                ["stateBefore"] = result.StateBefore,
+                ["state"] = result.State,
+                ["timedOut"] = result.TimedOut,
+                ["error"] = result.TimedOut ? $"No terminal state reported within {timeoutSeconds}s." : null,
+                ["runAttemptCount"] = result.Attempts,
+                ["triggeredVia"] = "adb cmd jobscheduler run -f",
+                ["adbOutput"] = result.AdbOutput
+            }, indented: false));
+        }
+        else
+        {
+            Console.WriteLine($"Forced job {target.JobId} ({target.Worker ?? identifier}) via adb — {result.AdbOutput}");
+            if (result.TimedOut)
+                Console.WriteLine($"FAILED: no terminal state reported within {timeoutSeconds}s (state: {result.State})");
+            else
+                Console.WriteLine($"{(result.Success ? "SUCCESS" : "FAILED")}: {result.State} after {result.Attempts} attempt(s)");
+        }
+
+        if (!result.Success) _errorOccurred = true;
+        return result.Success;
+    }
+
+    private static async Task MauiPointDragAsync(
+        string host, int port, bool json, ElementInfo? element, double? deltaX, double? deltaY,
+        string? direction, int? durationMs, int? steps, PointDragOptions drag)
+    {
+        string? invalid = null;
+        if (element is null)
+            invalid = "drag from a point requires --element, --automationId, or --text: --x/--y are measured from it.";
+        else if (drag.X is null || drag.Y is null)
+            invalid = "drag from a point requires both --x and --y.";
+        else if (drag.ToX.HasValue != drag.ToY.HasValue)
+            invalid = "--to-x and --to-y must be given together.";
+        else if (direction != null)
+            invalid = "drag from a point takes --to-x/--to-y, --to-element, or --dx/--dy; not --direction.";
+        else if ((deltaX.HasValue || deltaY.HasValue) && (drag.ToX.HasValue || drag.ToElementId != null))
+            invalid = "Give the end of a drag once: --to-x/--to-y, --to-element, or --dx/--dy.";
+        else if (!deltaX.HasValue && !deltaY.HasValue && !drag.ToX.HasValue && drag.ToElementId == null)
+            invalid = "drag from a point needs an end: --to-x/--to-y, --to-element, or --dx/--dy.";
+
+        if (invalid != null)
+        {
+            Output.WriteError(invalid, json, "ValidationError");
+            _errorOccurred = true;
+            return;
+        }
+
+        var x = drag.X!.Value;
+        var y = drag.Y!.Value;
+        // A vector from the start is the same drag as an end point on the element itself.
+        var toX = drag.ToX ?? (drag.ToElementId == null ? x + (deltaX ?? 0) : null);
+        var toY = drag.ToY ?? (drag.ToElementId == null ? y + (deltaY ?? 0) : null);
+
+        try
+        {
+            var result = await SendNativeUiCommandAsync(host, port, operations => operations.DragAsync(
+                element!, x, y, toX, toY, drag.ToElementId, drag.HoldMs, durationMs, steps));
+
+            if (json)
+            {
+                Output.WriteRawJson(CliJson.SerializeUntyped(new JsonObject
+                {
+                    ["success"] = result.Success,
+                    ["action"] = "gesture",
+                    ["type"] = result.Type ?? "drag",
+                    ["elementId"] = element!.Id,
+                    ["toElementId"] = drag.ToElementId,
+                    ["handledBy"] = result.HandledBy,
+                    ["platform"] = result.Platform,
+                    ["detail"] = result.Detail,
+                    ["error"] = result.Error
+                }, indented: false));
+            }
+            else if (result.Success)
+            {
+                Console.WriteLine($"Dragged {element!.Id} via native {result.Platform} — {result.Detail}");
+            }
+            else
+            {
+                Console.WriteLine($"Failed to drag {element!.Id}: {result.Error}");
             }
 
             if (!result.Success) _errorOccurred = true;
@@ -3967,11 +4285,20 @@ public partial class DevFlowCommands
             Output.WriteResult(new JsonObject
             {
                 ["detected"] = true,
+                ["promptId"] = alert.PromptId,
                 ["title"] = alert.Title,
-                ["buttons"] = buttons
+                ["text"] = new JsonArray(alert.Text.Select(text => (JsonNode)text).ToArray()),
+                ["buttons"] = buttons,
+                ["sourceProcessId"] = alert.SourceProcessId,
+                ["sourceProcessName"] = alert.SourceProcessName,
+                ["isSystemDialog"] = alert.IsSystemDialog,
+                ["requiresUserConfirmation"] = alert.RequiresUserConfirmation,
+                ["canRespond"] = alert.CanRespond
             }, json, _ =>
             {
                 Console.WriteLine($"Alert: {alert.Title ?? "(no title)"}");
+                if (!string.IsNullOrEmpty(alert.SourceProcessName))
+                    Console.WriteLine($"  Source: {alert.SourceProcessName} ({alert.SourceProcessId})");
                 foreach (var btn in alert.Buttons)
                     Console.WriteLine($"  Button: \"{btn.Label}\"");
             });

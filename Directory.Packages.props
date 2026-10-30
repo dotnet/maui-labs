@@ -16,6 +16,15 @@
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MicrosoftAspNetCoreComponentsWebViewMauiVersion)" />
   </ItemGroup>
 
+  <ItemGroup Label="AndroidX">
+    <PackageVersion Include="Xamarin.AndroidX.Work.Runtime" Version="$(XamarinAndroidXWorkRuntimeVersion)" />
+    <PackageVersion Include="Xamarin.AndroidX.Concurrent.Futures.Ktx" Version="$(XamarinAndroidXKtxFacadeVersion)" />
+    <PackageVersion Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" Version="$(XamarinAndroidXKtxFacadeVersion)" />
+    <!-- Work.Runtime pins Lifecycle.Service to the 2.8.7 line while the MAUI baseline resolves
+         Lifecycle.Runtime 2.9.x; matching the two keeps restore warning-free. -->
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Service" Version="$(XamarinAndroidXLifecycleServiceVersion)" />
+  </ItemGroup>
+
   <!-- Microsoft Extensions (versions from eng/Versions.props, flowing via maestro) -->
   <ItemGroup Label="Extensions">
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="$(MicrosoftExtensionsConfigurationVersion)" />
@@ -61,6 +70,12 @@
     <PackageVersion Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="$(AathifMahirMauiIconsCupertinoVersion)" />
   </ItemGroup>
 
+  <!-- Samples only (not shipped): canvas controls the DevFlow sample drives with taps at a point -->
+  <ItemGroup Label="Samples">
+    <PackageVersion Include="SkiaSharp.Views.Maui.Controls" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="Syncfusion.Maui.Toolkit" Version="$(SyncfusionMauiToolkitVersion)" />
+  </ItemGroup>
+
   <!-- MAUI Cli Tool dependencies -->
   <ItemGroup Label="Cli">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsDependencyInjectionVersion)" />
@@ -74,6 +89,27 @@
   </ItemGroup>
 
   <!-- EssentialsAI dependencies -->
+  <ItemGroup Label="EssentialsAI Android UI"
+             Condition="$(MSBuildProjectName.StartsWith('Microsoft.Maui.Essentials.AI')) or '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground' or '$(MSBuildProjectName)' == 'EssentialsAISample'">
+    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.8.9" />
+  </ItemGroup>
+  <ItemGroup Label="EssentialsAI Android"
+             Condition="$(MSBuildProjectName.StartsWith('Microsoft.Maui.Essentials.AI')) or '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground'">
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.9.2.1" />
+    <PackageVersion Include="Xamarin.Firebase.Encoders" Version="117.0.0.21" />
+    <PackageVersion Include="Xamarin.Firebase.Encoders.JSON" Version="118.0.1.13" />
+    <PackageVersion Include="Xamarin.Google.Android.DataTransport.TransportApi" Version="4.0.0.3" />
+    <PackageVersion Include="Xamarin.Google.Android.DataTransport.TransportBackendCct" Version="4.0.0.3" />
+    <PackageVersion Include="Xamarin.Google.Android.DataTransport.TransportRuntime" Version="4.0.0.3" />
+    <PackageVersion Include="Xamarin.Google.Guava" Version="33.6.0.1" />
+    <PackageVersion Include="Xamarin.Google.MLKit.Common" Version="118.11.0.3" />
+    <PackageVersion Include="Xamarin.GooglePlayServices.Basement" Version="118.9.0" />
+    <PackageVersion Include="Xamarin.GooglePlayServices.Tasks" Version="118.3.0.1" />
+    <PackageVersion Include="Xamarin.Kotlin.StdLib" Version="2.4.0.1" />
+    <PackageVersion Include="Xamarin.KotlinX.Coroutines.Core" Version="1.11.0.1" />
+    <PackageVersion Include="Xamarin.KotlinX.Coroutines.Guava" Version="1.11.0.1" />
+    <PackageVersion Include="Xamarin.KotlinX.Coroutines.Reactive" Version="1.11.0.1" />
+  </ItemGroup>
   <ItemGroup Label="EssentialsAI">
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="$(MicrosoftExtensionsAIAbstractionsVersion)" />
     <!-- Sample app: Microsoft Agents AI -->
@@ -94,6 +130,8 @@
     <PackageVersion Include="DeviceRunners.VisualRunners.Xunit" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
+    <!-- Windows: enables dotnet run for packaged MSIX apps -->
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="$(MicrosoftWindowsSDKBuildToolsWinAppVersion)" />
   </ItemGroup>
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are

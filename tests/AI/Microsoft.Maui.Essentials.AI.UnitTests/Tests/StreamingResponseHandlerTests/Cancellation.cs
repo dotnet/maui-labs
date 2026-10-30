@@ -12,7 +12,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task ReadAllAsync_WithPreCancelledToken_ThrowsOperationCanceled()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 			handler.ProcessContent("Hello");
 			handler.Complete();
 
@@ -30,7 +30,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task ReadAllAsync_CancelledDuringRead_ThrowsOperationCanceled()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			// Write one update but don't complete — the reader will block waiting for more
 			handler.ProcessContent("Hello");
@@ -56,7 +56,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task ReadAllAsync_CancelledAfterToolCall_ThrowsOperationCanceled()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 
 			handler.ProcessContent("Checking weather...");
 			handler.ProcessToolCall("call-1", "GetWeather", "{\"location\":\"Boston\"}");
@@ -83,7 +83,7 @@ public partial class StreamingResponseHandlerTests
 		[Fact]
 		public async Task ReadAllAsync_WithTimeout_ThrowsWhenNeverCompleted()
 		{
-			var handler = new StreamingResponseHandler(new PlainTextStreamChunker());
+			var handler = new StreamingResponseHandler();
 			// Handler is never completed — simulates a hung tool or stalled response
 
 			using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));

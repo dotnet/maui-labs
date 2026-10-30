@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics;
+
 using Microsoft.Maui.Cli.Providers.Android;
 using Xunit;
 
@@ -216,6 +218,60 @@ public class SdkManagerPackageTests : IDisposable
         Assert.Equal(toolPath, startInfo.Environment["MAUI_SDK_MANAGER_PATH"]);
         Assert.Equal(sdkPath, startInfo.Environment["ANDROID_HOME"]);
         Assert.DoesNotContain(sdkPath, startInfo.Arguments);
+    }
+
+    [Fact]
+    public async Task CreatePackageInstallStartInfo_WindowsBatch_HandlesPathsWithSpaces()
+    {
+        if (!OperatingSystem.IsWindows())
+            return; // Windows batch invocation can only be verified on Windows.
+
+        var sdkPath = Path.Combine(Path.GetTempPath(), $"maui sdk {Guid.NewGuid():N}");
+        var toolPath = Path.Combine(sdkPath, "cmdline-tools", "latest", "bin", "sdkmanager.bat");
+        var invocationPath = Path.Combine(Path.GetDirectoryName(toolPath)!, "invocation.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(toolPath)!);
+        File.WriteAllText(toolPath,
+            "@echo off\r\n" +
+            ">\"%~dp0invocation.txt\" echo %~1\r\n" +
+            ">>\"%~dp0invocation.txt\" echo %~2\r\n");
+
+        try
+        {
+            var startInfo = SdkManager.CreatePackageInstallStartInfo(
+                toolPath, "platform-tools", sdkPath, null, isWindows: true);
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            using var process = Process.Start(startInfo)!;
+            var standardOutput = await process.StandardOutput.ReadToEndAsync();
+            var standardError = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.True(process.ExitCode == 0,
+                $"cmd.exe exited with {process.ExitCode}.{Environment.NewLine}{standardOutput}{standardError}");
+            Assert.Equal(
+                ["platform-tools", $"--sdk_root={sdkPath}"],
+                File.ReadAllLines(invocationPath));
+            Assert.DoesNotContain(sdkPath, startInfo.Arguments);
+        }
+        finally
+        {
+            if (Directory.Exists(sdkPath))
+                Directory.Delete(sdkPath, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("platform-tools\" & echo injected")]
+    [InlineData("platform-tools&echo injected")]
+    [InlineData("platform-tools\r\necho injected")]
+    public void CreatePackageInstallStartInfo_WindowsBatch_RejectsUnsafePackageIds(string package)
+    {
+        var toolPath = Path.Combine(_sdkPath, "cmdline-tools", "latest", "bin", "sdkmanager.bat");
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            SdkManager.CreatePackageInstallStartInfo(toolPath, package, _sdkPath, null, isWindows: true));
+
+        Assert.Equal("package", exception.ParamName);
     }
 
     [Theory]

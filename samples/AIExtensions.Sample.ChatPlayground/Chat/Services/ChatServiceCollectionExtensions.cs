@@ -1,11 +1,11 @@
 using System.ClientModel;
+using System.Runtime.Versioning;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 
-#if IOS || MACCATALYST
-using System.Runtime.Versioning;
+#if IOS || MACCATALYST || ANDROID || WINDOWS
 using Microsoft.Maui.Essentials.AI;
 #endif
 
@@ -28,9 +28,17 @@ internal static class ChatServiceCollectionExtensions
         services.AddSingleton<ChatViewModel>();
         services.AddTransient<Page, ChatPage>();
 
+#if WINDOWS
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
+            services.AddSingleton<IChatClient>(CreateWindowsChatClient);
+#endif
+
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
             services.AddSingleton<IChatClient>(CreateAppleChatClient);
+#endif
+#if ANDROID
+        services.AddSingleton<IChatClient>(CreateGeminiChatClient);
 #endif
 
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
@@ -40,6 +48,21 @@ internal static class ChatServiceCollectionExtensions
 
         return services;
     }
+
+#if WINDOWS
+    [SupportedOSPlatform("windows10.0.26100.0")]
+    private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider) =>
+        new WindowsAIChatClient()
+            .AsBuilder()
+            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
+            .UseDescriptor(new ChatClientDescriptor(
+                "windows-ai-chat",
+                "Windows AI",
+                "Windows AI checks model readiness on first use. Tool calling and image input are unavailable."))
+            .UsePlaygroundTelemetry()
+            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+#endif
 
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
@@ -57,6 +80,28 @@ internal static class ChatServiceCollectionExtensions
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+#endif
+
+#if ANDROID
+    [SupportedOSPlatform("android26.0")]
+    private static IChatClient CreateGeminiChatClient(IServiceProvider serviceProvider) =>
+        new GeminiNanoChatClient()
+            .AsBuilder()
+            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
+            .UseDescriptor(new ChatClientDescriptor(
+                "gemini-nano-chat",
+                "Gemini Nano",
+                "Gemini Nano includes the supplied conversation in each text/image request. " +
+                    "No tools or structured JSON. System instructions require Nano V3+. Requests never download models; " +
+                    "start and monitor GeminiNanoChatClient.DownloadModelAsync explicitly before chatting.",
+                SupportsImageInput: true,
+                SupportsReasoningSummary: false,
+                SupportsImageGeneration: false,
+                SupportsToolCalling: false,
+                SupportsStructuredOutput: false))
+            .UsePlaygroundTelemetry()
+            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif
 

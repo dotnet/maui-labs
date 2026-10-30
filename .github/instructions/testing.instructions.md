@@ -97,6 +97,14 @@ Use descriptive names that communicate the scenario:
 - `MethodName_Condition_ExpectedResult` — e.g., `ParseVersion_InvalidInput_ThrowsArgumentException`
 - Or descriptive `[Fact]` — e.g., `Should_return_all_connected_agents_when_multiple_registered`
 
+### Shared AI Backend Coverage
+
+The canonical provider-neutral behavior and shared AI testing rules live in
+[`docs/ai/local-chat-provider.md`](../../docs/ai/local-chat-provider.md),
+especially its **Conformance testing** section. Follow that guide for generic
+test placement, capability hooks, model-free rejection paths, usage assertions,
+sampling controls, live provider validation, and provider-only test rationale.
+
 ### What to Test
 
 - **Do test**: Public API methods, edge cases, error handling, serialization/deserialization
