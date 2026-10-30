@@ -11,17 +11,15 @@ in-memory image input. No cloud service is used.
 
 ## Requirements and platform support
 
-| Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
-|----------|---------------------|-------------|-----------------------------------|
-| iOS / Mac Catalyst / macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | Apple NaturalLanguage |
-| Windows 11 24H2+ | Windows AI on supported Copilot+ hardware, including structured responses | Not supported | Not supported |
-| Android API 26+ | Gemini Nano on a supported AICore device | In-memory images | Not supported |
-
 Requires .NET 10 and matching MAUI workloads.
 
-The Apple chat client does not generate images. On-device models must be
-enabled and available on a supported device. Gemini Nano model assets must be
-prepared explicitly; ordinary chat requests never initiate a download.
+| Platform | Chat (`IChatClient`) | Image input | Embeddings (`IEmbeddingGenerator`) |
+|----------|---------------------|-------------|-----------------------------------|
+| iOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 13+ |
+| Mac Catalyst 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 13.1+ |
+| macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 10.15+ |
+| Windows 11 24H2+ | Windows AI on supported Copilot+ hardware, including structured responses | Not supported | Not supported |
+| Android API 26+ | Gemini Nano on a supported AICore device | In-memory images | Not supported |
 
 Chat requires supported hardware with Apple Intelligence available and enabled.
 Image input, token usage metadata, and explicit native tool-calling modes require
@@ -77,6 +75,8 @@ are ignored and historical calls/results are replayed as text. Download
 enumeration reports ML Kit's native progress; query model status again afterward
 when the app wants to enable generation.
 
+## Quick start
+
 Check availability with the concrete client before offering chat:
 
 ```csharp
@@ -103,8 +103,6 @@ if (status.Availability == ChatModelAvailability.NotReady)
 ```
 
 Ordinary generation never initiates Windows model setup or download.
-
-## Chat
 
 Use the injected `IChatClient` (`chat`) for requests:
 

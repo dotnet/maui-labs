@@ -101,8 +101,6 @@ The first request never downloads assets: explicitly enumerate
 status again before chatting. There is no download UI or automatic cloud fallback.
 See the [Android guide](../../docs/ai/gemini-nano-android.md).
 
-With Java and the Android SDK installed:
-
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
   -f net10.0-android --device <device-id>
