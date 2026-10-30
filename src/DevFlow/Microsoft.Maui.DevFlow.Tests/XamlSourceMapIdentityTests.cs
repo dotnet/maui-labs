@@ -211,6 +211,76 @@ public class XamlSourceMapIdentityTests
         Assert.Equal(new int?[] { null, 5 }, LabelLines(root));
     }
 
+    [Theory]
+    [InlineData("Edited")]
+    [InlineData("Second")]
+    public void AgentTextEdit_ReorderedSiblings_DoNotClaimAnotherDeclaration(string text)
+    {
+        var walker = WalkerWith("MyApp.MainPage", LabelSiblingsMap(("First", 4), ("Second", 5)));
+        var labels = new[] { new Label { Text = "First" }, new Label { Text = "Second" } };
+        RetainTextEdit(walker, labels, text);
+
+        Assert.Equal(new int?[] { 4, 5 }, MappedLabelLines(walker, labels));
+        Assert.Equal(new int?[] { null, null }, MappedLabelLines(walker, labels[1], labels[0]));
+        Assert.Equal(new int?[] { 4, 5 }, MappedLabelLines(walker, labels));
+    }
+
+    [Fact]
+    public void AgentTextEdit_UnobservedRuntimeText_IsNotTrusted()
+    {
+        var walker = WalkerWith("MyApp.MainPage", LabelSiblingsMap(("First", 4), ("Second", 5)));
+        var labels = new[] { new Label { Text = "First" }, new Label { Text = "Second" } };
+        RetainTextEdit(walker, labels, "Edited");
+
+        labels[0].Text = "Changed by code-behind";
+        Assert.Equal(new int?[] { null, 5 }, MappedLabelLines(walker, labels));
+        labels[0].Text = "First";
+        Assert.Equal(new int?[] { 4, 5 }, MappedLabelLines(walker, labels));
+    }
+
+    [Fact]
+    public void AgentTextEdit_NewObjectWithReusedExternalId_DoesNotInheritSource()
+    {
+        var walker = WalkerWith("MyApp.MainPage", LabelSiblingsMap(("First", 4), ("Second", 5)));
+        var labels = new[] { new Label { Text = "First" }, new Label { Text = "Second" } };
+        RetainTextEdit(walker, labels, "Edited");
+
+        Assert.Equal(new int?[] { null, 5 },
+            MappedLabelLines(walker, new Label { Text = "Edited" }, labels[1]));
+    }
+
+    [Fact]
+    public void AgentTextEdit_ExtraRuntimeSibling_RemainsAmbiguous()
+    {
+        var walker = WalkerWith("MyApp.MainPage", LabelSiblingsMap(("First", 4), ("Second", 5)));
+        var labels = new[] { new Label { Text = "First" }, new Label { Text = "Second" } };
+        RetainTextEdit(walker, labels, "Edited");
+
+        Assert.Equal(new int?[] { null, null, null },
+            MappedLabelLines(walker, labels[0], labels[1], new Label { Text = "Added" }));
+    }
+
+    [Theory]
+    [InlineData("OtherPage.xaml", "h", 4, 1)]
+    [InlineData("MainPage.xaml", "other-hash", 4, 1)]
+    [InlineData("MainPage.xaml", "h", 40, 1)]
+    [InlineData("MainPage.xaml", "h", 4, 2)]
+    public void AgentTextEdit_ChangedSourceMap_DoesNotReuseSource(string file, string hash, int line, int column)
+    {
+        var provider = new TestMapProvider();
+        provider.Add("MyApp.MainPage", LabelSiblingsMap(("First", 4), ("Second", 5)));
+        var walker = new VisualTreeWalker { SourceMapProvider = provider };
+        var labels = new[] { new Label { Text = "First" }, new Label { Text = "Second" } };
+        RetainTextEdit(walker, labels, "Edited");
+        provider.Add("MyApp.MainPage", MapWith(file, hash,
+            ("", Entry(1, "ContentPage", 1)),
+            ("0", Entry(3, "VerticalStackLayout", 2)),
+            ("0/0", new XamlSourceEntry(line, column, "Label", 0) { Text = "First" }),
+            ("0/1", new XamlSourceEntry(5, 1, "Label", 0) { Text = "Second" })));
+
+        Assert.Equal(new int?[] { null, 5 }, MappedLabelLines(walker, labels));
+    }
+
     [Fact]
     public void SameTypeSiblings_SharingLiteralText_AreWithheld()
     {
@@ -398,10 +468,34 @@ public class XamlSourceMapIdentityTests
         return MapWith("MainPage.xaml", "h", entries.ToArray());
     }
 
-    private static ElementInfo LabelSiblingsRoot(params string[] runtimeTexts)
+    private static ElementInfo LabelSiblingsRoot(params string?[] runtimeTexts)
         => IdNode("MyApp.MainPage", "ContentPage", "MyApp.MainPage", null,
             IdNode("vsl", "VerticalStackLayout", "Microsoft.Maui.Controls.VerticalStackLayout", null,
                 runtimeTexts.Select((text, index) => TextNode($"label{index}", "Label", text)).ToArray()));
+
+    private static ElementInfo LabelSiblingsRoot(params Label[] labels)
+    {
+        var root = LabelSiblingsRoot(labels.Select(label => label.Text).ToArray());
+        for (var index = 0; index < labels.Length; index++)
+            root.Children![0].Children![index].IdentityToken = labels[index];
+        return root;
+    }
+
+    private static void RetainTextEdit(VisualTreeWalker walker, Label[] labels, string text)
+    {
+        var before = LabelSiblingsRoot(labels);
+        walker.ApplySourceMap(new[] { before });
+        Assert.Equal(new int?[] { 4, 5 }, LabelLines(before));
+        labels[0].Text = text;
+        walker.RetainSourceForTextEdit(labels[0], before.Children![0].Children![0]);
+    }
+
+    private static int?[] MappedLabelLines(VisualTreeWalker walker, params Label[] labels)
+    {
+        var root = LabelSiblingsRoot(labels);
+        walker.ApplySourceMap(new[] { root });
+        return LabelLines(root);
+    }
 
     private static int?[] LabelLines(ElementInfo root)
         => root.Children![0].Children!.Select(label => label.SourceLine).ToArray();

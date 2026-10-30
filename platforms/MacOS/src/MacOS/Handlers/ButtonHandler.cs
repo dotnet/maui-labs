@@ -403,7 +403,7 @@ public partial class ButtonHandler : MacOSViewHandler<IButton, NSButton>
 
         if (imageButton.Source is IFileImageSource fileSource)
         {
-            handler.PlatformView.Image = new AppKit.NSImage(fileSource.File);
+            handler.PlatformView.Image = ImageHandler.FindBundleImage(fileSource.File);
         }
         else if (imageButton.Source is IFontImageSource fontSource)
         {

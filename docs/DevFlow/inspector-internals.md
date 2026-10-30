@@ -139,7 +139,10 @@ XAML declaration. Repeated same-type siblings, such as the two `Label`s in the d
 are told apart by a sibling-unique `AutomationId`, or when every one of them declares a different
 literal `Text` that the runtime element still shows. Otherwise (bound, duplicated, or
 code-behind-changed text) their source actions are withheld rather than risk opening or editing
-the wrong declaration; give those elements a unique `AutomationId` to map them.
+the wrong declaration; give those elements a unique `AutomationId` to map them. A successful agent
+`setProperty` mutation of `Text` retains an already verified declaration for the same live object and value,
+so changing the identity literal in Inspector does not remove **Apply to XAML**. This does not
+bypass sibling alignment, literal uniqueness, or source-version checks.
 
 Source maps are disabled outside Debug by default because they embed XAML text and source paths.
 They can be disabled explicitly:
@@ -159,6 +162,11 @@ The write is rejected when the property comes from a binding, resource, markup e
 property element, template, or code-created element. It is also rejected when the source changed
 outside Inspector after the app was built or after the previous Inspector write. Rebuild the app
 to refresh stale source maps.
+
+The property's presence in the runtime grid does not prove it has a direct XAML attribute.
+Supported style/default-backed properties can still offer **Apply to XAML**, but saving them
+reports that the property is not declared as a direct XAML attribute and leaves the file unchanged.
+Declare a direct literal explicitly in XAML and rebuild to make that property writable.
 
 The broker validates the value against the running element before writing and restricts edits to
 the agent-advertised property grid. Current agents describe editor kind, current value, writability,

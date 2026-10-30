@@ -12,6 +12,12 @@ data, and workflow tools. The same broker-hosted Inspector can be opened in:
 
 Set up the app once, then choose the host that fits your workflow.
 
+In Interact mode, the Preview shows **Updating…** as soon as a tap is sent. The Inspector requests
+a fresh frame immediately after the app acknowledges the tap, without a fixed settling delay.
+The hint stays until the new screenshot is decoded and its matching tree is displayed. A rejected
+tap clears its pending hint; a failed refresh keeps the previous frame and retries while the hint
+remains visible.
+
 ## Choose a host
 
 | Host | Open it | Best for | Availability |

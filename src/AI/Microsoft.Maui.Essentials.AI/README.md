@@ -4,7 +4,8 @@ On-device chat and text embeddings through
 [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions),
 backed by Apple Intelligence, Apple NaturalLanguage, and Windows AI. Chat
 supports streaming and structured JSON; Apple also supports native tool
-execution and image input on eligible systems. No cloud service is used.
+execution and image input on eligible systems.
+No cloud service is used.
 
 > **Experimental:** this package ships as a preview. APIs may change.
 
