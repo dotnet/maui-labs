@@ -7,7 +7,7 @@
     <PatchVersion>0</PatchVersion>
     <VersionPrefix>$(MajorVersion).$(MinorVersion).$(PatchVersion)</VersionPrefix>
     <PreReleaseVersionLabel>preview</PreReleaseVersionLabel>
-    <PreReleaseVersionIteration>13</PreReleaseVersionIteration>
+    <PreReleaseVersionIteration>14</PreReleaseVersionIteration>
     <StabilizePackageVersion>false</StabilizePackageVersion>
     <!-- Arcade features -->
     <UsingToolXliff>false</UsingToolXliff>
@@ -99,7 +99,7 @@
     <EssentialsAIMinorVersion>0</EssentialsAIMinorVersion>
     <EssentialsAIPatchVersion>0</EssentialsAIPatchVersion>
     <EssentialsAIPreReleaseVersionLabel>preview</EssentialsAIPreReleaseVersionLabel>
-    <EssentialsAIPreviewVersionIteration>7</EssentialsAIPreviewVersionIteration>
+    <EssentialsAIPreviewVersionIteration>8</EssentialsAIPreviewVersionIteration>
     <!-- Microsoft Extensions AI -->
     <MicrosoftExtensionsAIAbstractionsVersion>10.4.1</MicrosoftExtensionsAIAbstractionsVersion>
     <!-- Microsoft Agents AI (sample only) -->
