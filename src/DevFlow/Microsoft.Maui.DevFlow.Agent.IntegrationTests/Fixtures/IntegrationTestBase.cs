@@ -83,11 +83,9 @@ public abstract class IntegrationTestBase
         }
         finally
         {
-            var cliLeaseId = (string)typeof(DevFlowCommands)
-                .GetField("s_cliMutationLeaseId", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
             try
             {
-                var cliReleased = await Client.ControlMutationLeaseAsync("release", leaseId: cliLeaseId);
+                var cliReleased = await Client.ControlMutationLeaseAsync("release", leaseId: CliMutationLease.Id);
                 Assert.True(cliReleased.Ok, cliReleased.Error);
             }
             finally

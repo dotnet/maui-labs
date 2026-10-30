@@ -1981,7 +1981,6 @@ public partial class DevFlowCommands
     
     // ===== Agent connection preparation =====
 
-    private static readonly string s_cliMutationLeaseId = Guid.NewGuid().ToString("N");
 
     private static async Task<Microsoft.Maui.DevFlow.Driver.AgentClient> CreateAgentClientAsync(string host, int port)
     {
@@ -2003,7 +2002,7 @@ public partial class DevFlowCommands
 
         return new Microsoft.Maui.DevFlow.Driver.AgentClient(host, port)
         {
-            MutationLeaseId = s_cliMutationLeaseId,
+            MutationLeaseId = CliMutationLease.Id,
             MutationLeaseHolderKind = "cli",
             MutationLeaseLabel = "MAUI CLI"
         };
