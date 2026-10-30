@@ -55,7 +55,19 @@ namespace Comet
 
 		public Color Color { get; set; } = Colors.Black;
 
-		public Font Font { get; set; } = Font.Default;
+		public Font Font { get; set; } = Font.SystemFontOfSize(24);
+
+		public string FontFamily
+		{
+			get => Font.Family;
+			set => Font = CreateFont(value, Font.Size);
+		}
+
+		public double Size
+		{
+			get => Font.Size;
+			set => Font = CreateFont(Font.Family, value);
+		}
 
 		public string Glyph { get; set; }
 
@@ -66,6 +78,16 @@ namespace Comet
 			Glyph = glyph;
 			Font = Font.OfSize(fontFamily, size);
 			Color = color ?? Colors.Black;
+		}
+
+		Font CreateFont(string fontFamily, double size)
+		{
+			var effectiveSize = size > 0 ? size : 24;
+			return string.IsNullOrWhiteSpace(fontFamily)
+				? Font.SystemFontOfSize(
+					effectiveSize, Font.Weight, Font.Slant, Font.AutoScalingEnabled)
+				: Font.OfSize(
+					fontFamily, effectiveSize, Font.Weight, Font.Slant, Font.AutoScalingEnabled);
 		}
 	}
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 
 namespace Comet
@@ -9,6 +10,7 @@ namespace Comet
 		private static CometShell _current;
 		private static readonly Dictionary<string, Type> _routes = new Dictionary<string, Type>(StringComparer.Ordinal);
 		private static readonly Dictionary<Type, string> _typedRoutes = new Dictionary<Type, string>();
+		private static readonly Dictionary<string, Func<View>> _routeFactories = new Dictionary<string, Func<View>>(StringComparer.Ordinal);
 		private readonly Stack<string> _navigationStack = new Stack<string>();
 
 		public static CometShell Current
@@ -60,7 +62,9 @@ namespace Comet
 			base.Dispose(disposing);
 		}
 
-		public static void RegisterRoute(string route, Type type)
+		public static void RegisterRoute(
+			string route,
+			[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type type)
 		{
 			if (string.IsNullOrWhiteSpace(route))
 				throw new ArgumentException("Route cannot be null or empty.", nameof(route));
@@ -71,11 +75,23 @@ namespace Comet
 			if (!typeof(View).IsAssignableFrom(type))
 				throw new ArgumentException($"Route type must inherit from View. Type: {type.Name}");
 
+			var factory = NavigationParameterHelper.CreateRouteFactory(type);
+			if (_routes.TryGetValue(route, out var previousType) &&
+				_typedRoutes.TryGetValue(previousType, out var previousRoute) &&
+				string.Equals(previousRoute, route, StringComparison.Ordinal))
+			{
+				_typedRoutes.Remove(previousType);
+			}
+
 			_routes[route] = type;
 			_typedRoutes[type] = route;
+			_routeFactories[route] = factory;
 		}
 
-		public static void RegisterRoute<TView>(string route) where TView : View
+		public static void RegisterRoute<
+			[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TView>(
+			string route)
+			where TView : View
 			=> RegisterRoute(route, typeof(TView));
 
 		public static void UnregisterRoute(string route)
@@ -86,6 +102,7 @@ namespace Comet
 			if (_routes.TryGetValue(route, out var type))
 			{
 				_routes.Remove(route);
+				_routeFactories.Remove(route);
 				if (_typedRoutes.TryGetValue(type, out var registeredRoute) && string.Equals(registeredRoute, route, StringComparison.Ordinal))
 					_typedRoutes.Remove(type);
 			}
@@ -167,21 +184,53 @@ namespace Comet
 		}
 
 		public Task GoToAsync<TView>() where TView : View
-			=> GoToAsync<TView>(parameters: null);
+			=> GoToAsyncRoute(ResolveRoute(typeof(TView)));
 
+		[RequiresUnreferencedCode(
+			"Property-based navigation parameters require runtime property metadata. " +
+			"Use GoToAsync<TView, TParameters> in trimmed applications.")]
 		public Task GoToAsync<TView>(object parameters) where TView : View
-		{
-			var route = NavigationParameterHelper.BuildRoute(ResolveRoute(typeof(TView)), parameters);
-			return GoToAsync(route, parameters);
-		}
+			=> NavigationParameterHelper.NavigateLegacy(
+				this,
+				ResolveRoute(typeof(TView)),
+				parameters);
 
-		public Task GoToAsync<TView, TParameters>(TParameters parameters) where TView : View
-			=> GoToAsync<TView>((object)parameters);
+		public Task GoToAsync<TView,
+			[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TParameters>(
+			TParameters parameters)
+			where TView : View
+			=> GoToAsync(ResolveRoute(typeof(TView)), parameters);
 
 		public Task GoToAsync(string route)
-			=> GoToAsync(route, parameters: null);
+			=> GoToAsyncRoute(route);
 
-		async Task GoToAsync(string route, object parameters)
+		async Task GoToAsyncRoute(string route)
+		{
+			if (route == "..")
+			{
+				if (_navigationStack.Count > 0)
+				{
+					_navigationStack.Pop();
+					await NavigateBack();
+				}
+				return;
+			}
+
+			var (routePath, queryParams) = ParseRouteInternal(route);
+			if (!_routeFactories.TryGetValue(routePath, out var pageFactory))
+				throw new InvalidOperationException($"Route '{routePath}' is not registered. Use CometShell.RegisterRoute() to register it.");
+
+			var page = CreateView(pageFactory);
+			NavigationParameterHelper.ApplyQueryAttributes(page, queryParams);
+
+			_navigationStack.Push(routePath);
+			await NavigateTo(page);
+		}
+
+		internal async Task GoToLegacyCore(
+			string route,
+			object parameters,
+			Func<Dictionary<string, string>> queryParameterFactory)
 		{
 			// Handle back navigation
 			if (route == "..")
@@ -198,16 +247,44 @@ namespace Comet
 			// Parse query parameters
 			var (routePath, queryParams) = ParseRouteInternal(route);
 
-			if (!_routes.TryGetValue(routePath, out var pageType))
+			if (!_routeFactories.TryGetValue(routePath, out var pageFactory))
 			{
 				throw new InvalidOperationException($"Route '{routePath}' is not registered. Use CometShell.RegisterRoute() to register it.");
 			}
 
-			var page = CreateView(pageType, queryParams, parameters);
+			var page = CreateView(pageFactory);
+			if (parameters is not null)
+				NavigationParameterHelper.TryApplyProps(page, parameters);
+			if (page is IQueryAttributable)
+			{
+				var values = queryParams.Count > 0
+					? queryParams
+					: parameters is null
+						? null
+						: queryParameterFactory();
+				NavigationParameterHelper.ApplyQueryAttributes(page, values);
+			}
 
 			_navigationStack.Push(routePath);
 
 			// Perform the actual navigation
+			await NavigateTo(page);
+		}
+
+		async Task GoToAsync<
+			[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TParameters>(
+			string route,
+			TParameters parameters)
+		{
+			var (routePath, queryParams) = ParseRouteInternal(route);
+
+			if (!_routeFactories.TryGetValue(routePath, out var pageFactory))
+				throw new InvalidOperationException($"Route '{routePath}' is not registered. Use CometShell.RegisterRoute() to register it.");
+
+			var page = CreateView(pageFactory);
+			NavigationParameterHelper.Apply(page, parameters, queryParams);
+
+			_navigationStack.Push(routePath);
 			await NavigateTo(page);
 		}
 
@@ -233,13 +310,11 @@ namespace Comet
 			return (routePath, queryParams);
 		}
 
-		static View CreateView(Type pageType, Dictionary<string, string> queryParams, object parameters)
+		static View CreateView(Func<View> pageFactory)
 		{
-			var page = Activator.CreateInstance(pageType) as View;
+			var page = pageFactory();
 			if (page is null)
-				throw new InvalidOperationException($"Failed to create instance of {pageType.Name}");
-
-			NavigationParameterHelper.Apply(page, parameters, queryParams);
+				throw new InvalidOperationException("Registered route factory returned null.");
 			return page;
 		}
 
@@ -499,10 +574,17 @@ namespace Comet
 		public static Task GoToAsync<TView>(this View view) where TView : View
 			=> GetCurrentShell().GoToAsync<TView>();
 
+		[RequiresUnreferencedCode(
+			"Property-based navigation parameters require runtime property metadata. " +
+			"Use GoToAsync<TView, TParameters> in trimmed applications.")]
 		public static Task GoToAsync<TView>(this View view, object parameters) where TView : View
 			=> GetCurrentShell().GoToAsync<TView>(parameters);
 
-		public static Task GoToAsync<TView, TParameters>(this View view, TParameters parameters) where TView : View
+		public static Task GoToAsync<TView,
+			[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TParameters>(
+			this View view,
+			TParameters parameters)
+			where TView : View
 			=> GetCurrentShell().GoToAsync<TView, TParameters>(parameters);
 
 		public static Task GoBackAsync(this View view)

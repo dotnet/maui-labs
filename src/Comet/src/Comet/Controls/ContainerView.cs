@@ -194,6 +194,8 @@ namespace Comet
 			base.OnParentChange(parent);
 			foreach (var view in Views)
 			{
+				if (view is null)
+					continue;
 				view.Parent = this;
 				view.Navigation = parent as NavigationView ?? parent?.Navigation;
 			}
@@ -205,7 +207,7 @@ namespace Comet
 				return;
 			foreach (var view in Views)
 			{
-				view.ContextPropertyChanged(property, value, cascades);
+				view?.ContextPropertyChanged(property, value, cascades);
 			}
 		}
 
@@ -213,7 +215,8 @@ namespace Comet
 		{
 			foreach (var view in Views)
 			{
-				view.Dispose();
+				if (view is not null && ReferenceEquals(view.Parent, this))
+					view.Dispose();
 			}
 			Views?.Clear();
 			base.Dispose(disposing);
@@ -221,24 +224,24 @@ namespace Comet
 
 		public override void ViewDidAppear()
 		{
-			Views?.ForEach(v => v.ViewDidAppear());
+			Views?.ForEach(v => v?.ViewDidAppear());
 			base.ViewDidAppear();
 		}
 
 		public override void ViewDidDisappear()
 		{
-			Views?.ForEach(v => v.ViewDidDisappear());
+			Views?.ForEach(v => v?.ViewDidDisappear());
 			base.ViewDidDisappear();
 		}
 
 		public override void PauseAnimations()
 		{
-			Views?.ForEach(v => v.PauseAnimations());
+			Views?.ForEach(v => v?.PauseAnimations());
 			base.PauseAnimations();
 		}
 		public override void ResumeAnimations()
 		{
-			Views?.ForEach(v => v.ResumeAnimations());
+			Views?.ForEach(v => v?.ResumeAnimations());
 			base.ResumeAnimations();
 		}
 
@@ -248,7 +251,8 @@ namespace Comet
 		{
 			int hashCode = base.GetContentTypeHashCode();
 			foreach (var v in Views)
-				hashCode = (hashCode, v.GetType().GetHashCode()).GetHashCode();
+				if (v is not null)
+					hashCode = (hashCode, v.GetType().GetHashCode()).GetHashCode();
 			return hashCode;
 		}
 

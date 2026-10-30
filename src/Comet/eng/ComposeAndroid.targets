@@ -1,0 +1,8 @@
+<Project>
+  <!-- Source references do not import NuGet buildTransitive assets. -->
+  <PropertyGroup Condition="'$(TargetFramework)' != '' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <_CometComposeBuildSupportDirectory>$(MSBuildThisFileDirectory)..\src\vendor\Microsoft.AndroidX.Compose\buildTransitive\</_CometComposeBuildSupportDirectory>
+  </PropertyGroup>
+  <Import Project="..\src\Comet\PackAssets\Comet.Android.targets"
+          Condition="'$(_CometComposeBuildSupportDirectory)' != ''" />
+</Project>

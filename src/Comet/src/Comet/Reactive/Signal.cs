@@ -6,7 +6,7 @@ using Comet;
 
 namespace Comet.Reactive;
 
-public sealed class Signal<T> : IReactiveSource, INotifyPropertyRead, IDisposable
+public sealed class Signal<T> : IReactiveSource, INotifyPropertyRead, IUntypedValue, IDisposable
 {
 	static readonly PropertyChangedEventArgs ValueChangedArgs = new("Value");
 
@@ -38,6 +38,7 @@ public sealed class Signal<T> : IReactiveSource, INotifyPropertyRead, IDisposabl
 				PropertyRead?.Invoke(this, ValueChangedArgs);
 			return _box.Value;
 		}
+
 		set
 		{
 			lock (_writeLock)
@@ -58,6 +59,8 @@ public sealed class Signal<T> : IReactiveSource, INotifyPropertyRead, IDisposabl
 			ReactiveScheduler.EnsureFlushScheduled();
 		}
 	}
+
+	object? IUntypedValue.UntypedValue => Value;
 
 	public T Peek() => _box.Value;
 

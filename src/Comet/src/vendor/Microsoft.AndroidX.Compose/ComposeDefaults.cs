@@ -142,6 +142,9 @@ using AndroidX.Compose;
 [assembly: ComposeDefaults<LazyDslKt>("LazyColumn", "LazyColumnDefault")]
 [assembly: ComposeDefaults<LazyDslKt>("LazyRow", "LazyRowDefault")]
 
+[assembly: ComposeDefaults("RememberSnapFlingBehaviorDefault",
+    "!lazyListState", "!snapPosition")]
+
 // androidx.compose.foundation.lazy.grid.LazyGridDslKt — same story for
 // LazyVerticalGrid / LazyHorizontalGrid, but with a required first
 // `columns` / `rows` IGridCells param. The facade always supplies that

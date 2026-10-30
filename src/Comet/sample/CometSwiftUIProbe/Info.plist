@@ -34,6 +34,14 @@
 	<string>LaunchScreen</string>
 	<key>MinimumOSVersion</key>
 	<string>17.0</string>
+	<key>NSCameraUsageDescription</key>
+	<string>BaristaNotes uses the camera to photograph coffee labels, profile portraits, and rooms for coffee planning.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>BaristaNotes uses selected photos for coffee labels, profile portraits, and room analysis.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>BaristaNotes uses speech recognition to let you log drinks hands-free.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>BaristaNotes needs microphone access while you hold the voice button.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fonts/Montserrat-Regular.ttf</string>
@@ -43,6 +51,10 @@
 		<string>Fonts/Karla-Bold.ttf</string>
 		<string>Fonts/MaterialIcons-Regular.ttf</string>
 		<string>Fonts/RobotoFlex-Regular.ttf</string>
+		<string>Fonts/Manrope-Regular.ttf</string>
+		<string>Fonts/Manrope-SemiBold.ttf</string>
+		<string>Fonts/MaterialSymbols.ttf</string>
+		<string>Fonts/coffee-icons.ttf</string>
 	</array>
 </dict>
 </plist>
