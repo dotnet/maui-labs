@@ -117,9 +117,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   maps to `Available`; downloadable/downloading map to `NotReady`; ambiguous
   unavailable/unknown states map to `Unknown` with the native reason. Advertise
   Text, Streaming, ImageInput, and input TokenUsage; add Reasoning only after
-  the runtime thinking-capability check. `DownloadModelAsync` exposes ML Kit's
-  native download `Flow`; callers enumerate progress and decide when to query
-  status again. Generation never starts or joins a download.
+  the runtime thinking-capability check. `PrepareModelAsync` explicitly awaits
+  ML Kit download/status `Flow` completion and is never called by generation.
+  `DownloadModelAsync` remains available when callers need native progress.
 
 ### Model identity
 

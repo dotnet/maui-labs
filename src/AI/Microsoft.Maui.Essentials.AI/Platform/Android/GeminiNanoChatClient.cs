@@ -44,6 +44,18 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 	}
 
 	/// <summary>
+	/// Downloads Gemini Nano model assets and waits for ML Kit's download Flow to complete.
+	/// Check <see cref="GetModelStatusAsync"/> before starting and again after completion.
+	/// </summary>
+	/// <param name="cancellationToken">Cancels this download Flow collection.</param>
+	public static async Task PrepareModelAsync(CancellationToken cancellationToken = default)
+	{
+		await foreach (var _ in DownloadModelAsync(cancellationToken).ConfigureAwait(false))
+		{
+		}
+	}
+
+	/// <summary>
 	/// Downloads Gemini Nano model assets and streams ML Kit's native download progress.
 	/// Check <see cref="GetModelStatusAsync"/> before starting and again after completion.
 	/// </summary>

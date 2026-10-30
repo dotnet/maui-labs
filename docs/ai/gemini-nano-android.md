@@ -80,6 +80,16 @@ Unavailable IDs, timestamps, and other usage counts remain null.
 
 ## Explicit download
 
+For an explicit download without progress reporting, await preparation and then
+query status again:
+
+```csharp
+await GeminiNanoChatClient.PrepareModelAsync(cancellationToken);
+var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
+```
+
+When the app needs native download progress, enumerate the progress stream:
+
 ```csharp
 var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
 if (status.Availability == ChatModelAvailability.NotReady)

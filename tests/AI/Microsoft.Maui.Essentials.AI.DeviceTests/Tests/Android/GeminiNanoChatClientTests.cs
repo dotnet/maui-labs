@@ -397,6 +397,8 @@ public class GeminiNanoChatClientInteropTests
 			{
 			}
 		});
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => GeminiNanoChatClient.PrepareModelAsync(cts.Token));
 	}
 
 	// Exercise the new Java-friendly status callback/cleanup on devices without requiring or downloading AICore models.

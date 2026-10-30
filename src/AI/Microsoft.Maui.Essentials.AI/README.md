@@ -64,16 +64,16 @@ user decision:
 var status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
 if (status.Availability == ChatModelAvailability.NotReady)
 {
-    await foreach (var update in GeminiNanoChatClient.DownloadModelAsync(cancellationToken))
-        Console.WriteLine($"{update.State}: {update.BytesDownloaded ?? update.BytesToDownload}");
+    await GeminiNanoChatClient.PrepareModelAsync(cancellationToken);
 }
 ```
 
 Gemini Nano supports text, in-memory images, streaming, and input-token usage.
 It rejects structured output and required tool invocation; Auto tool definitions
-are ignored and historical calls/results are replayed as text. Download
-enumeration reports ML Kit's native progress; query model status again afterward
-when the app wants to enable generation.
+are ignored and historical calls/results are replayed as text. `PrepareModelAsync`
+waits for the explicit download to finish. Use `DownloadModelAsync` when the app
+needs to display ML Kit's native progress, and query model status afterward
+before enabling generation.
 
 ## Quick start
 
