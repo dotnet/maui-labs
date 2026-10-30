@@ -73,6 +73,8 @@ jobs:
             packages: true
           - scenario: collection-view-grid
             maui-version: ''
+          - scenario: collection-view-async
+            maui-version: ''
           - scenario: bundle-resources
             maui-version: ''
             workloads: 'macos maui maui-tizen'
