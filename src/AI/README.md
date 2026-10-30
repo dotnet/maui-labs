@@ -59,6 +59,13 @@ dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.cs
 See the [Gemini Nano Android guide](../../docs/ai/gemini-nano-android.md) for
 the native bridge, model readiness, and validation details.
 
+The official pipeline's Android dependency step queries the SDK path resolved by
+`InstallAndroidDependencies` and exports it as `ANDROID_HOME` and
+`ANDROID_SDK_ROOT` for subsequent steps. This lets the standalone Kotlin bridge
+build use the same SDK as .NET, even when the agent does not predefine those
+environment variables. The step checks for the bridge's Android 36 platform
+before running Gradle.
+
 ### Windows
 
 ```powershell

@@ -262,7 +262,21 @@ extends:
               displayName: Select and verify Xcode 27
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
-            - script: .dotnet/dotnet build -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=true src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
+            - script: |
+                set -euo pipefail
+                android_sdk=$(.dotnet/dotnet build \
+                  -t:InstallAndroidDependencies \
+                  -f net10.0-android \
+                  -p:AcceptAndroidSDKLicenses=true \
+                  -getProperty:AndroidSdkDirectory \
+                  src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj)
+                if [ ! -f "$android_sdk/platforms/android-36/android.jar" ]; then
+                  echo "##vso[task.logissue type=error]Android SDK platform 36 was not installed at '$android_sdk'."
+                  exit 1
+                fi
+                echo "Resolved Android SDK: $android_sdk"
+                echo "##vso[task.setvariable variable=ANDROID_HOME]$android_sdk"
+                echo "##vso[task.setvariable variable=ANDROID_SDK_ROOT]$android_sdk"
               displayName: Install Android SDK dependencies
             - script: ./gradlew --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
               displayName: Build and Test EssentialsAI Kotlin Bridge
@@ -314,16 +328,24 @@ extends:
             - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
             - pwsh: |
+                $ErrorActionPreference = 'Stop'
                 $arguments = @(
                   'build'
                   '-t:InstallAndroidDependencies'
                   '-f'
                   'net10.0-android'
-                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
                   '-p:AcceptAndroidSDKLicenses=true'
+                  '-getProperty:AndroidSdkDirectory'
                   'src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj'
                 )
-                & eng/common/dotnet.ps1 @arguments
+                $androidSdk = & eng/common/dotnet.ps1 @arguments
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                if (!(Test-Path -LiteralPath "$androidSdk/platforms/android-36/android.jar" -PathType Leaf)) {
+                  throw "Android SDK platform 36 was not installed at '$androidSdk'."
+                }
+                Write-Host "Resolved Android SDK: $androidSdk"
+                Write-Host "##vso[task.setvariable variable=ANDROID_HOME]$androidSdk"
+                Write-Host "##vso[task.setvariable variable=ANDROID_SDK_ROOT]$androidSdk"
               displayName: Install Android SDK dependencies
             - script: gradlew.bat --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
               displayName: Build and Test EssentialsAI Kotlin Bridge
