@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ShinyBle.DevFlowPlugin\ShinyBle.DevFlowPlugin.csproj" />
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Abstractions\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\src\DevFlow\Microsoft.Maui.DevFlow.Client\Microsoft.Maui.DevFlow.Client.csproj" />
+  </ItemGroup>
+
+</Project>
