@@ -64,9 +64,37 @@ builder.AddMauiDevFlowAgent(options => options.AddExtension<OrdersDevFlowExtensi
 #endif
 ```
 
+### Registering from the library
+
+Most plugins need something installed before the app's container is built: a decorator around the
+service they watch, a middleware, or a recorder that has to catch events from startup. Give the library
+one registration method that installs that and registers the plugin in the app's services with
+`AddDevFlowExtension<T>()`. The agent creates every plugin registered this way when it starts, so the app
+does not touch the agent options:
+
+```csharp
+public static IServiceCollection AddOrdersDevFlow(this IServiceCollection services)
+{
+    services.AddSingleton<OrderRecorder>();    // catches events from startup
+    // ...wrap or hook whatever the plugin watches here...
+    services.AddDevFlowExtension<OrdersDevFlowExtension>();
+    return services;
+}
+```
+
+```csharp
+#if DEBUG
+builder.Services.AddOrdersDevFlow();
+builder.AddMauiDevFlowAgent();
+#endif
+```
+
+Registering the same plugin type twice, or both in services and in the agent options, creates it once.
+If the app does not run the agent, the registration is never used and no plugin is created.
+
 ## Lifecycle
 
-1. `AddExtension<T>()` records the type. Nothing is created yet.
+1. `AddExtension<T>()` or `AddDevFlowExtension<T>()` records the type. Nothing is created yet.
 2. When the agent starts, after the app's services are built, it creates the plugin from the app's
    service provider (constructor injection works) and calls `Configure`. Routes and streams are mapped
    before the HTTP server listens.
@@ -74,7 +102,8 @@ builder.AddMauiDevFlowAgent(options => options.AddExtension<OrdersDevFlowExtensi
 4. `StopAsync` runs when the agent stops.
 
 A plain .NET agent (`Microsoft.Maui.DevFlow.Agent.Native`) has no container. Pass an instance with
-`options.AddExtension(new MyPlugin(...))`, or set `AgentOptions.Services`.
+`options.AddExtension(new MyPlugin(...))`, or set `AgentOptions.Services`, which also makes plugins
+registered with `AddDevFlowExtension` available.
 
 ### Failures stay inside the plugin
 
@@ -116,6 +145,7 @@ Write tool descriptions for an AI agent: say what the tool returns and when to u
 
 ## Packaging
 
+- Ship a registration method that calls `AddDevFlowExtension<T>()`, so apps add the plugin in one line.
 - Reference `Microsoft.Maui.DevFlow.Extensibility` only, never the agent packages. It is small, so the
   plugin can live in your library's main package or in a separate `*.DevFlow` package.
 - The agent is debug-only. Recommend that apps add the plugin inside `#if DEBUG`.

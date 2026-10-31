@@ -32,20 +32,30 @@ public partial class DevFlowAgentService
     internal IReadOnlyList<ExtensionLoadError> ExtensionLoadErrors => _extensionLoadErrors;
 
     /// <summary>
-    /// Creates and configures every plugin added with <see cref="AgentOptions.AddExtension{T}"/> and
-    /// maps its routes. Runs once, before the HTTP server starts listening.
+    /// Creates and configures every plugin added with <see cref="AgentOptions.AddExtension{T}"/> or
+    /// registered in the app's services with <c>AddDevFlowExtension</c>, and maps its routes. Runs
+    /// once, before the HTTP server starts listening.
     /// </summary>
     internal void ActivatePlugins()
     {
-        if (Interlocked.Exchange(ref _pluginsActivated, 1) == 1 || _options.ExtensionFactories.Count == 0)
+        if (Interlocked.Exchange(ref _pluginsActivated, 1) == 1)
             return;
 
         IServiceProvider? services;
         try { services = ExtensionServices; }
         catch { services = null; }
 
-        foreach (var registration in _options.ExtensionFactories)
+        var registrations = new List<ExtensionRegistration>(_options.ExtensionFactories);
+        registrations.AddRange(GetServiceRegistrations(services));
+        var created = new HashSet<Type>();
+
+        foreach (var registration in registrations)
         {
+            // An app may call a library's registration and also add the same plugin type to the
+            // options. Create it once.
+            if (registration.ServiceType is { } type && created.Contains(type))
+                continue;
+
             DevFlowExtension plugin;
             try
             {
@@ -56,6 +66,8 @@ public partial class DevFlowAgentService
                 ReportLoadError(registration.Name, ex);
                 continue;
             }
+
+            created.Add(plugin.GetType());
 
             AgentExtension extension;
             try
@@ -102,6 +114,30 @@ public partial class DevFlowAgentService
 
             _options.Extensions.Add(extension);
             _plugins.Add(extension);
+        }
+    }
+
+    // Plugins the app registered in its services. Resolving the registrations never runs plugin code;
+    // each plugin is created separately so one failing constructor is reported on its own.
+    private IEnumerable<ExtensionRegistration> GetServiceRegistrations(IServiceProvider? services)
+    {
+        if (services is null)
+            return [];
+
+        try
+        {
+            return services
+                .GetServices<DevFlowExtensionRegistration>()
+                .Select(r => new ExtensionRegistration(
+                    r.ExtensionType.FullName ?? r.ExtensionType.Name,
+                    sp => r.Factory(sp ?? services),
+                    r.ExtensionType))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            ReportLoadError("service-registered extensions", ex);
+            return [];
         }
     }
 

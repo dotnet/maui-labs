@@ -135,7 +135,6 @@ public class ShinyBleDevFlowExtensionTests
 
             var port = GetFreePort();
             var options = new AgentOptions { Port = port, Services = app._services, RequireMutationLease = requireLease };
-            options.AddExtension<ShinyBleDevFlowExtension>();
             app._agent = new DevFlowAgentService(options);
             app._agent.StartServerOnly(null);
             app.Client = new AgentClient("localhost", port);

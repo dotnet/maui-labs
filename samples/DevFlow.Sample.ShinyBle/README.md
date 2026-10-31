@@ -51,14 +51,15 @@ The app registers Shiny as usual, then two lines for the plugin:
 ```csharp
 builder.Services.AddBluetoothLE();
 #if DEBUG
-builder.Services.AddShinyBleDevFlowMonitor();                                // wraps IBleManager
-builder.AddMauiDevFlowAgent(o => o.AddExtension<ShinyBleDevFlowExtension>()); // adds the plugin
+builder.Services.AddShinyBleDevFlowMonitor();   // wraps IBleManager and registers the plugin
+builder.AddMauiDevFlowAgent();
 #endif
 ```
 
 `AddShinyBleDevFlowMonitor()` replaces the registered `IBleManager` with `MonitoredBleManager`, a
 decorator that hands back `MonitoredPeripheral` wrappers. Everything the app does through them is
-recorded by `BleActivityMonitor`, which the plugin serves.
+recorded by `BleActivityMonitor`, which the plugin serves. It also calls `AddDevFlowExtension<T>()`,
+so the agent creates the plugin from the app's services without any agent options.
 
 This sample can only use Shiny's public API, so it uses a decorator. A plugin shipped inside Shiny would
 use an internal diagnostics hook instead. That would also see activity from code that bypasses

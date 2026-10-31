@@ -15,7 +15,8 @@ can ship a plugin for itself without pulling DevFlow into its consumers' release
   `maui devflow extensions call`, and MCP clients see each one as its own tool (`ext_{prefix}_{tool}`).
 - **Event streams**: a bounded, thread-safe buffer the plugin publishes into. Clients follow it live
   (`maui devflow extensions watch`), poll it with a cursor, or read it as a tool.
-- **App services**: the agent creates plugins from the app's service provider.
+- **App services**: the agent creates plugins from the app's service provider, including plugins a
+  library registered there with `AddDevFlowExtension<T>()`.
 - **Contained failures**: a plugin that fails to start is reported as faulted instead of crashing the app.
 
 ## Platform support
@@ -55,6 +56,14 @@ The app adds the plugin to the agent in debug builds:
 #if DEBUG
 builder.AddMauiDevFlowAgent(options => options.AddExtension<OrdersDevFlowExtension>());
 #endif
+```
+
+Or the library registers it in the app's services, together with whatever the plugin needs installed
+before the container is built, and the agent picks it up:
+
+```csharp
+public static IServiceCollection AddOrdersDevFlow(this IServiceCollection services)
+    => services.AddDevFlowExtension<OrdersDevFlowExtension>();
 ```
 
 Then, with the app running:
