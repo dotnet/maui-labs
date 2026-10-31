@@ -10,11 +10,12 @@ namespace ShinyBle.DevFlowPlugin;
 /// adapter, the peripherals the app has used, and a live feed of scans, connections and GATT traffic.
 /// </summary>
 /// <remarks>
-/// Register both halves in a debug build:
+/// Register it in a debug build. <c>AddShinyBleDevFlowMonitor()</c> wraps Shiny's manager and registers
+/// this plugin, which the agent picks up from the app's services:
 /// <code>
 /// builder.Services.AddBluetoothLE();
 /// builder.Services.AddShinyBleDevFlowMonitor();
-/// builder.AddMauiDevFlowAgent(o => o.AddExtension&lt;ShinyBleDevFlowExtension&gt;());
+/// builder.AddMauiDevFlowAgent();
 /// </code>
 /// The plugin only observes. Its one write tool, <c>clear</c>, empties its own buffers.
 /// </remarks>
