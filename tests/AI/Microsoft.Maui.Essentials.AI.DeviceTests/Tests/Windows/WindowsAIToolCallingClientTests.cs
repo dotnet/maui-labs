@@ -194,8 +194,8 @@ public class WindowsAIToolCallingClientTests
 		Assert.False(argumentsSchema.TryGetProperty("required", out _));
 		Assert.Equal(new[] { "left", "operation", "right" },
 			argumentsSchema.GetProperty("properties").EnumerateObject().Select(property => property.Name));
-		Assert.Equal("integer", argumentsSchema.GetProperty("properties").GetProperty("left")
-			.GetProperty("type").GetString());
+		Assert.Equal(new[] { "integer", "null" }, argumentsSchema.GetProperty("properties")
+			.GetProperty("left").GetProperty("type").EnumerateArray().Select(value => value.GetString()));
 	}
 
 	[Fact]
@@ -217,8 +217,16 @@ public class WindowsAIToolCallingClientTests
 		var relaxed = Assert.IsType<ChatResponseFormatJson>(model.Options[1]!.ResponseFormat)
 			.Schema!.Value.GetProperty("properties").GetProperty("arguments");
 		Assert.False(relaxed.TryGetProperty("required", out _));
-		Assert.True(JsonElement.DeepEquals(originalNested,
-			relaxed.GetProperty("properties").GetProperty("request")));
+		var nested = relaxed.GetProperty("properties").GetProperty("request");
+		Assert.True(JsonElement.DeepEquals(originalNested.GetProperty("required"),
+			nested.GetProperty("required")));
+		Assert.Equal(new[] { "object", "null" },
+			nested.GetProperty("type").EnumerateArray().Select(value => value.GetString()));
+		Assert.Equal(new[] { "string", "null" }, nested.GetProperty("properties")
+			.GetProperty("city").GetProperty("type").EnumerateArray().Select(value => value.GetString()));
+		Assert.True(JsonElement.DeepEquals(
+			originalNested.GetProperty("properties").GetProperty("labels").GetProperty("items"),
+			nested.GetProperty("properties").GetProperty("labels").GetProperty("items")));
 	}
 
 	[Fact]
@@ -251,6 +259,175 @@ public class WindowsAIToolCallingClientTests
 		Assert.Contains("calculate.right", response.Text);
 		Assert.DoesNotContain(response.Messages.SelectMany(message => message.Contents),
 			content => content is FunctionCallContent);
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_StrictSchemaNullArgument_ClarifiesWithoutDispatch()
+	{
+		var model = new ScriptedChatClient(
+			Decision("tool_needed:lookup_order"),
+			Arguments("""{"orderId":null}""")) { UseStrictNativeSchema = true };
+		using var client = new WindowsAIToolCallingClient(model);
+
+		var response = await client.GetResponseAsync(
+			[new(ChatRole.User, "Check my order.")],
+			new ChatOptions { Tools = [PatternedOrder()] });
+
+		Assert.Contains("lookup_order.orderId", response.Text);
+		Assert.DoesNotContain(response.Messages.SelectMany(message => message.Contents),
+			content => content is FunctionCallContent);
+		var arguments = Assert.IsType<ChatResponseFormatJson>(model.Options[1]!.ResponseFormat)
+			.Schema!.Value.GetProperty("properties").GetProperty("arguments");
+		Assert.Equal("orderId", Assert.Single(arguments.GetProperty("required").EnumerateArray()).GetString());
+		Assert.Contains(arguments.GetProperty("properties").GetProperty("orderId")
+			.GetProperty("type").EnumerateArray(), value => value.GetString() == "null");
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_StrictSchemaNullNestedArgument_Clarifies()
+	{
+		var model = new ScriptedChatClient(Decision("tool_needed:summarize"),
+			Arguments("""{"request":{"city":"Paris","labels":null}}""", "Paris"))
+		{ UseStrictNativeSchema = true };
+		var tool = AIFunctionFactory.Create((NestedRequest request) => request.Labels.Length,
+			new AIFunctionFactoryOptions { Name = "summarize", ExcludeResultSchema = true });
+		using var client = new WindowsAIToolCallingClient(model);
+
+		var response = await client.GetResponseAsync(
+			[new(ChatRole.User, "Summarize labels for Paris.")], new ChatOptions { Tools = [tool] });
+
+		Assert.Contains("summarize.request.labels", response.Text);
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_StrictSchemaAllNullNestedArguments_Clarifies()
+	{
+		var model = new ScriptedChatClient(Decision("tool_needed:summarize"),
+			Arguments("""{"request":{"city":null,"labels":null}}"""))
+		{ UseStrictNativeSchema = true };
+		var tool = AIFunctionFactory.Create((NestedRequest request) => request.Labels.Length,
+			new AIFunctionFactoryOptions { Name = "summarize", ExcludeResultSchema = true });
+		using var client = new WindowsAIToolCallingClient(model);
+
+		var response = await client.GetResponseAsync(
+			[new(ChatRole.User, "Summarize my request.")], new ChatOptions { Tools = [tool] });
+
+		Assert.Contains("summarize.request.city", response.Text);
+		Assert.Contains("summarize.request.labels", response.Text);
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_StrictSchemaArrayObjectMissingValue_PreservesIndex()
+	{
+		var model = new ScriptedChatClient(Decision("tool_needed:summarize"),
+			Arguments("""{"requests":[{"city":"Paris","labels":null}]}""", "Paris"))
+		{ UseStrictNativeSchema = true };
+		var tool = AIFunctionFactory.Create((NestedRequest[] requests) => requests.Length,
+			new AIFunctionFactoryOptions { Name = "summarize", ExcludeResultSchema = true });
+		using var client = new WindowsAIToolCallingClient(model);
+
+		var response = await client.GetResponseAsync(
+			[new(ChatRole.User, "Summarize labels for Paris.")], new ChatOptions { Tools = [tool] });
+
+		Assert.Contains("summarize.requests[0].labels", response.Text);
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_NullArrayItem_IsNotSilentlyRemoved()
+	{
+		var model = new ScriptedChatClient(Decision("tool_needed:summarize"),
+			Arguments("""{"requests":[null]}""", "Paris"));
+		var tool = AIFunctionFactory.Create((NestedRequest[] requests) => requests.Length,
+			new AIFunctionFactoryOptions { Name = "summarize", ExcludeResultSchema = true });
+		using var client = new WindowsAIToolCallingClient(model);
+
+		var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			client.GetResponseAsync([new(ChatRole.User, "Summarize Paris.")],
+				new ChatOptions { Tools = [tool] }));
+
+		Assert.Contains("expected object", error.Message);
+	}
+
+	[Fact]
+	public void ExtractionSchema_DeclaredNullValue_IsNotAnAbsentArgument()
+	{
+		using var schema = JsonDocument.Parse("""
+			{"type":"object","properties":{"value":{"type":"null","enum":[null]}},"required":["value"]}
+			""");
+		using var arguments = JsonDocument.Parse("""{"value":null}""");
+
+		var extraction = WindowsAIToolSchema.CreateExtractionSchema(schema.RootElement);
+		var normalized = WindowsAIToolSchema.RemoveMissingValues(arguments.RootElement, schema.RootElement);
+
+		Assert.Equal("null", extraction["properties"]!["value"]!["type"]!.GetValue<string>());
+		Assert.Single(extraction["properties"]!["value"]!["enum"]!.AsArray());
+		Assert.Equal(JsonValueKind.Null, normalized.GetProperty("value").ValueKind);
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_StrictSchemaNullOptionalArgument_UsesDeclaredDefault()
+	{
+		var model = new ScriptedChatClient(Decision("tool_needed:optional_echo"),
+			Arguments("""{"value":null}""", "Use the default."), "default")
+		{ UseStrictNativeSchema = true };
+		var tool = AIFunctionFactory.Create((Func<string, string>)OptionalEcho, "optional_echo");
+		using var client = new WindowsAIToolCallingClient(model)
+			.AsBuilder().UseFunctionInvocation().Build();
+
+		var response = await client.GetResponseAsync(
+			[new(ChatRole.User, "Use the default.")], new ChatOptions { Tools = [tool] });
+
+		Assert.Equal("default", response.Text);
+		var call = Assert.Single(response.Messages.SelectMany(message => message.Contents)
+			.OfType<FunctionCallContent>());
+		Assert.Empty(call.Arguments!);
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_StrictSchemaNullEnumArgument_Clarifies()
+	{
+		var model = new ScriptedChatClient(Decision("tool_needed:calculate"),
+			Arguments("""{"left":2,"operation":null,"right":3}""", "2", "3"))
+		{ UseStrictNativeSchema = true };
+		using var client = new WindowsAIToolCallingClient(model);
+		var tool = Calculator((left, operation, right) => left + right);
+
+		var response = await client.GetResponseAsync(
+			[new(ChatRole.User, "Calculate using 2 and 3.")], new ChatOptions { Tools = [tool] });
+
+		Assert.Contains("calculate.operation", response.Text);
+	}
+
+	[Fact]
+	public async Task GetResponseAsync_StrictSchemaValidArguments_InvokesOrdinaryFunction()
+	{
+		var model = new ScriptedChatClient(Decision("tool_needed:calculate"),
+			Arguments("""{"left":2,"operation":"add","right":3}""", "2", "3"), "5")
+		{ UseStrictNativeSchema = true };
+		using var client = new WindowsAIToolCallingClient(model)
+			.AsBuilder().UseFunctionInvocation().Build();
+
+		var response = await client.GetResponseAsync(
+			[new(ChatRole.User, "Add 2 and 3.")],
+			new ChatOptions { Tools = [Calculator((left, operation, right) => left + right)] });
+
+		Assert.Equal("5", response.Text);
+	}
+
+	[Theory]
+	[InlineData("""{"evidence":["ORD-204"],"arguments":{"extra":null}}""", "unexpected")]
+	[InlineData("""{"evidence":["ORD-204"],"arguments":{"orderId":null,"orderId":"ORD-204"}}""", "duplicate")]
+	public async Task GetResponseAsync_NullNormalization_DoesNotHideMalformedArguments(
+		string extraction, string expected)
+	{
+		var model = new ScriptedChatClient(Decision("tool_needed:lookup_order"), extraction);
+		using var client = new WindowsAIToolCallingClient(model);
+
+		var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			client.GetResponseAsync([new(ChatRole.User, "Check ORD-204.")],
+				new ChatOptions { Tools = [PatternedOrder()] }));
+
+		Assert.Contains(expected, error.Message);
 	}
 
 	[Theory]
@@ -2394,6 +2571,11 @@ public class WindowsAIToolCallingClientTests
 
 	private sealed class ScriptedChatClient(params string[] replies) : IChatClient
 	{
+		private static readonly AIJsonSchemaTransformCache NativeSchemas = new(new()
+		{
+			DisallowAdditionalProperties = true,
+			RequireAllProperties = true
+		});
 		private readonly Queue<string> _replies = new(replies);
 		public List<IReadOnlyList<ChatMessage>> Requests { get; } = [];
 		public List<ChatOptions?> Options { get; } = [];
@@ -2401,6 +2583,7 @@ public class WindowsAIToolCallingClientTests
 		public Task? StreamContinuation { get; init; }
 		public Action<int>? OnRequest { get; init; }
 		public Task<ChatResponse>? DelayedResponse { get; init; }
+		public bool UseStrictNativeSchema { get; init; }
 
 		public Task<ChatResponse> GetResponseAsync(
 			IEnumerable<ChatMessage> messages,
@@ -2416,6 +2599,11 @@ public class WindowsAIToolCallingClientTests
 			if (!_replies.TryDequeue(out var reply))
 				throw new InvalidOperationException("The test model received an unexpected request.");
 
+			if (UseStrictNativeSchema && Options[^1]?.ResponseFormat is ChatResponseFormatJson { Schema: { } schema })
+			{
+				using var response = JsonDocument.Parse(reply);
+				AssertStrictShape(response.RootElement, schema);
+			}
 			return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
 		}
 
@@ -2452,9 +2640,37 @@ public class WindowsAIToolCallingClientTests
 		{
 			if (options?.Tools is { Count: > 0 } || options?.ToolMode is not null ||
 				options?.AllowMultipleToolCalls is not null)
-				throw new NotSupportedException("Native Phi Silica rejects tool and tool-only options.");
+				throw new NotSupportedException("The wrapper must not forward tool options to the native text client.");
 
-			Options.Add(options?.Clone());
+			var captured = options?.Clone();
+			if (UseStrictNativeSchema && options?.ResponseFormat is ChatResponseFormatJson format)
+				captured!.ResponseFormat = ChatResponseFormat.ForJsonSchema(
+					NativeSchemas.GetOrCreateTransformedSchema(format)!.Value);
+			Options.Add(captured);
+		}
+
+		private static void AssertStrictShape(JsonElement value, JsonElement schema)
+		{
+			if (value.ValueKind == JsonValueKind.Null)
+			{
+				var type = schema.GetProperty("type");
+				Assert.True(type.ValueKind == JsonValueKind.String ? type.GetString() == "null" :
+					type.EnumerateArray().Any(item => item.GetString() == "null"));
+				if (schema.TryGetProperty("enum", out var allowed))
+					Assert.Contains(allowed.EnumerateArray(), item => item.ValueKind == JsonValueKind.Null);
+			}
+			else if (value.ValueKind == JsonValueKind.Object)
+			{
+				foreach (var required in schema.GetProperty("required").EnumerateArray())
+					Assert.True(value.TryGetProperty(required.GetString()!, out _));
+				foreach (var property in value.EnumerateObject())
+					AssertStrictShape(property.Value, schema.GetProperty("properties").GetProperty(property.Name));
+			}
+			else if (value.ValueKind == JsonValueKind.Array)
+			{
+				foreach (var item in value.EnumerateArray())
+					AssertStrictShape(item, schema.GetProperty("items"));
+			}
 		}
 	}
 }

@@ -11,7 +11,7 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
 /// <summary>
 /// Packaged, on-device observations, not model-accuracy assertions. Run with:
-/// dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 -p:TargetFrameworks=net10.0-windows10.0.19041.0 -p:TestingMode=XHarness -p:EnableWindowsAIToolEvaluation=true -p:DeviceRunnersDataTimeout=600 --filter WindowsAIToolCallingEvaluationTests
+/// dotnet test tests\AI\Microsoft.Maui.Essentials.AI.DeviceTests\Microsoft.Maui.Essentials.AI.DeviceTests.csproj -f net10.0-windows10.0.19041.0 -p:EnableWindowsAIToolEvaluation=true --filter WindowsAIToolCallingEvaluationTests --logger trx
 /// </summary>
 public sealed class WindowsAIToolCallingEvaluationTests
 {

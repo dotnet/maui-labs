@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Microsoft.Maui.Essentials.AI;
@@ -10,6 +11,81 @@ namespace Microsoft.Maui.Essentials.AI;
 /// </summary>
 internal static class WindowsAIToolSchema
 {
+	// Windows requires every property in constrained output. Nullable extraction properties
+	// represent absence without forcing the model to invent an argument or overwrite a default.
+	internal static JsonObject CreateExtractionSchema(JsonElement schema)
+	{
+		var extraction = JsonNode.Parse(schema.GetRawText())!.AsObject();
+		MakePropertiesNullable(extraction);
+		extraction.Remove("required");
+		return extraction;
+	}
+
+	private static void MakePropertiesNullable(JsonObject schema)
+	{
+		if (schema["properties"] is JsonObject properties)
+		{
+			foreach (var property in properties)
+			{
+				var child = property.Value!.AsObject();
+				MakePropertiesNullable(child);
+				var type = child["type"]!.GetValue<string>();
+				if (type != "null")
+				{
+					child["type"] = new JsonArray(type, "null");
+					if (child["enum"] is JsonArray values && !values.Any(value => value is null))
+						values.Add(null);
+				}
+			}
+		}
+		if (schema["items"] is JsonObject items)
+			MakePropertiesNullable(items);
+	}
+
+	internal static JsonElement RemoveMissingValues(JsonElement value, JsonElement schema)
+	{
+		using var stream = new MemoryStream();
+		using (var writer = new Utf8JsonWriter(stream))
+			WritePresentValues(writer, value, schema);
+		using var document = JsonDocument.Parse(stream.ToArray());
+		return document.RootElement.Clone();
+	}
+
+	private static void WritePresentValues(Utf8JsonWriter writer, JsonElement value, JsonElement schema)
+	{
+		if (value.ValueKind == JsonValueKind.Object)
+		{
+			var hasProperties = schema.TryGetProperty("properties", out var properties);
+			writer.WriteStartObject();
+			var names = new HashSet<string>(StringComparer.Ordinal);
+			foreach (var property in value.EnumerateObject())
+			{
+				if (!names.Add(property.Name))
+					throw new InvalidOperationException($"Windows AI returned duplicate argument names: {property.Name}.");
+				if (hasProperties && properties.TryGetProperty(property.Name, out var child))
+				{
+					if (property.Value.ValueKind == JsonValueKind.Null &&
+						child.GetProperty("type").GetString() != "null")
+						continue;
+					writer.WritePropertyName(property.Name);
+					WritePresentValues(writer, property.Value, child);
+				}
+				else
+					property.WriteTo(writer);
+			}
+			writer.WriteEndObject();
+		}
+		else if (value.ValueKind == JsonValueKind.Array && schema.TryGetProperty("items", out var items))
+		{
+			writer.WriteStartArray();
+			foreach (var item in value.EnumerateArray())
+				WritePresentValues(writer, item, items);
+			writer.WriteEndArray();
+		}
+		else
+			value.WriteTo(writer);
+	}
+
 	/// <summary>Whether a parameter schema declares any properties to fill in.</summary>
 	internal static bool HasProperties(JsonElement schema) =>
 		schema.ValueKind == JsonValueKind.Object &&

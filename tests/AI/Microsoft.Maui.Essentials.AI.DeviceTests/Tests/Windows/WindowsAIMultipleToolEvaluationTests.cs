@@ -258,7 +258,7 @@ public sealed class WindowsAIMultipleToolEvaluationTests(ITestOutputHelper outpu
 			Date = date,
 			OS = Environment.OSVersion.Version.ToString(),
 			Model = "Windows AI active model/version is not exposed",
-			ModelLifecycle = "One WindowsAIChatClient shared sequentially; quarantine without disposal after an uncertain timeout",
+			ModelLifecycle = "One WindowsAIChatClient reused sequentially; owned native models are per-request; stop after an uncertain timeout",
 			Selection = "Model chooses tools; host only validates and invokes synthetic read-only results",
 			Pattern = @"lookup_order.orderId uses standard JsonSchema ^ORD-\d+$; no normalizer or resolver"
 		});
