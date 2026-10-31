@@ -35,6 +35,51 @@ The separate `ci-devflow.yml` workflow runs host, browser, JavaScript and AOT te
 
 ## Quick Start
 
+### File management and live SQLite
+
+The agent exposes root-scoped files, directories, moves, raw transfers, and live
+SQLite schema/query/grid/edit APIs. Protocol contracts and typed client methods
+live in `Microsoft.Maui.DevFlow.Client`; see its [README](Microsoft.Maui.DevFlow.Client/README.md)
+for examples, paging, limits, typed cell values and optimistic writes.
+
+SQLitePCLRaw's **core** is the only agent dependency: the app owns the provider,
+native library and any encryption. No capability check initializes a provider.
+`storage.sqlite.supported` is false with a reason when no usable provider exists,
+unless the host explicitly supplies initialization. The agent never replaces an
+already registered provider. SQLite 3.35+ is required.
+
+Configure through the existing `AgentOptions` callback at app startup:
+
+```csharp
+options.Sqlite.InitializeProvider = () => SQLitePCL.Batteries_V2.Init();
+options.Sqlite.Timeout = TimeSpan.FromSeconds(20);
+options.Sqlite.ConfigureConnection = connection =>
+{
+    // Runs before header validation; use connection.Handle for your provider's
+    // key/function/collation APIs. Do not close it or attach other databases.
+    connection.Execute("PRAGMA cache_size = 256");
+};
+```
+
+Initialization runs only when SQLitePCLRaw has no provider. Configuration runs on
+every new agent-owned connection, including read-only schema/grid connections and
+new databases; `IsReadOnly`, `IsNew`, and `Path` describe the operation. It must
+be thread-safe, fast and non-blocking. An encrypted database needs its key here;
+reusing a native provider alone does not inherit an app connection's settings.
+Configuration failures are reported, not swallowed.
+
+Each connection has a **20-second** default deadline (positive, at most 25 seconds)
+and responds to client disconnection/cancellation with `sqlite3_interrupt`.
+The HTTP client allows 30 seconds, leaving time to report SQL timeouts. Individual
+SQLite values are limited to 8 MiB; serialized responses to 1 MiB. The authorizer
+rejects `ATTACH` and `load_extension` before preparation. Host-registered functions
+remain trusted app code; do not expose functions that bypass your app's file policy.
+
+**Preview breaking changes:** SQLite row IDs are decimal strings, and newly
+introduced storage/SQLite DTOs moved from Agent.Abstractions to the portable Client
+assembly/Driver namespace. Existing base64 file calls stay supported, with the
+documented 16 MiB buffered download limit and streaming alternative.
+
 ### WebView failures
 
 WebView HTTP and CDP failures are reported as errors, not successful evaluation

@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/ci-testing.yml'
       - 'src/Testing/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -15,6 +16,7 @@ on:
     types: [opened, synchronize, reopened, edited]
     branches: [main]
     paths:
+      - '.github/workflows/ci-testing.yml'
       - 'src/Testing/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -29,11 +31,13 @@ jobs:
       contents: read
     env:
       Configuration: Release
+      # Keep the SDK, Apple workloads and selected Xcode aligned.
+      DOTNET_SDK_VERSION: '11.0.100-rc.3.26522.148'
+      DOTNET_WORKLOAD_VERSION: '11.0.100-rc.3.26524.4'
+      XCODE_VERSION: '27.0'
     strategy:
       matrix:
-        # The .NET 11 iOS/Mac Catalyst packs the template restores need Xcode 27, which
-        # macos-latest does not have yet. The runner's minor (27.1) is newer than the one
-        # the packs pin (27.0), so the smoke build skips that exact-version check.
+        # This image includes the pinned Xcode 27.0 selected below.
         os: [xcode-27, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
@@ -42,14 +46,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Select Xcode
+        if: runner.os == 'macOS'
+        run: |
+          developer_dir="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          xcodebuild -version
+
       - name: Setup .NET 11
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: 'preview'
+          dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --version ${{ env.DOTNET_WORKLOAD_VERSION }}
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj
@@ -79,7 +90,7 @@ jobs:
           dotnet restore (Join-Path $project 'MauiTestingSmoke.csproj') `
             --configfile ../../NuGet.config `
             "-p:RestoreAdditionalProjectSources=$localPackages"
-          dotnet build (Join-Path $project 'MauiTestingSmoke.csproj') --no-restore -p:ValidateXcodeVersion=false
+          dotnet build (Join-Path $project 'MauiTestingSmoke.csproj') --no-restore
 
       - name: Upload packages
         uses: actions/upload-artifact@v7

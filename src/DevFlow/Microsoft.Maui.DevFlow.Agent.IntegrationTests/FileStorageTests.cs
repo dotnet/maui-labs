@@ -16,15 +16,27 @@ public class FileStorageTests : IntegrationTestBase
         : base(app, output) { }
 
     [Fact]
-    public async Task ListStorageRoots_ReturnsAppDataRootOnly()
+    public async Task ListStorageRoots_ReturnsAppDataAndCacheRoots()
     {
         var roots = await Client.ListStorageRootsAsync();
 
-        var root = Assert.Single(roots.GetProperty("roots").EnumerateArray());
-        Assert.Equal("appData", root.GetProperty("id").GetString());
-        Assert.Equal("appData", root.GetProperty("kind").GetString());
-        Assert.True(root.GetProperty("isWritable").GetBoolean());
-        Assert.Contains("upload", root.GetProperty("supportedOperations").EnumerateArray().Select(value => value.GetString()));
+        var descriptors = roots.GetProperty("roots").EnumerateArray().ToArray();
+        Assert.Equal(["appData", "cache"], descriptors.Select(root => root.GetProperty("id").GetString()));
+        foreach (var root in descriptors)
+        {
+            var isAppData = root.GetProperty("id").GetString() == "appData";
+            Assert.Equal(isAppData ? "appData" : "cache", root.GetProperty("kind").GetString());
+            Assert.True(root.GetProperty("isWritable").GetBoolean());
+            Assert.False(root.GetProperty("isReadOnly").GetBoolean());
+            Assert.Equal(isAppData, root.GetProperty("isPersistent").GetBoolean());
+            Assert.Equal(isAppData, root.GetProperty("isBackedUp").GetBoolean());
+            Assert.Equal(!isAppData, root.GetProperty("mayBeClearedBySystem").GetBoolean());
+            Assert.False(root.GetProperty("isUserVisible").GetBoolean());
+            Assert.Equal(
+                ["create-directory", "delete", "delete-directory", "download", "list", "move", "upload"],
+                root.GetProperty("supportedOperations").EnumerateArray()
+                    .Select(value => value.GetString()).OrderBy(value => value, StringComparer.Ordinal));
+        }
         Assert.DoesNotContain("basePath", roots.ToString());
     }
 
@@ -55,35 +67,47 @@ public class FileStorageTests : IntegrationTestBase
         Assert.False(await Client.DeleteFileAsync(path));
     }
 
-    [Fact]
-    public async Task ExplicitAppDataRoot_RoundTripsFile()
+    [Theory]
+    [InlineData("appData")]
+    [InlineData("cache")]
+    public async Task ExplicitRoot_RoundTripsFile(string root)
     {
         var path = TestPath("explicit-root.txt");
-        var contentBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("hello from explicit appData root"));
+        var contentBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes($"hello from explicit {root} root"));
 
         try
         {
-            var upload = await Client.UploadFileAsync(path, contentBase64, "appData");
+            var upload = await Client.UploadFileAsync(path, contentBase64, root);
             Assert.True(upload.GetProperty("success").GetBoolean());
-            Assert.Equal("appData", upload.GetProperty("root").GetString());
+            Assert.Equal(root, upload.GetProperty("root").GetString());
+            Assert.Equal(path, upload.GetProperty("path").GetString());
 
-            var download = await Client.DownloadFileAsync(path, "appData");
-            Assert.Equal("appData", download.GetProperty("root").GetString());
+            var list = await Client.ListFilesAsync(TestPathPrefix, root);
+            Assert.Equal(root, list.GetProperty("root").GetString());
+            Assert.Contains(Path.GetFileName(path), list.ToString());
+
+            var download = await Client.DownloadFileAsync(path, root);
+            Assert.Equal(root, download.GetProperty("root").GetString());
+            Assert.Equal(path, download.GetProperty("path").GetString());
             Assert.Equal(contentBase64, download.GetProperty("contentBase64").GetString());
+
+            Assert.True(await Client.DeleteFileAsync(path, root));
+            Assert.False(await Client.DeleteFileAsync(path, root));
         }
         finally
         {
-            await Client.DeleteFileAsync(path, "appData");
+            await Client.DeleteFileAsync(path, root);
         }
     }
 
     [Fact]
     public async Task UnsupportedRoot_ReturnsClearError()
     {
-        var result = await Client.UploadFileAsync(TestPath("unsupported-root.txt"), "aGVsbG8=", "cache");
+        const string root = "integration-test-unsupported";
+        var result = await Client.UploadFileAsync(TestPath("unsupported-root.txt"), "aGVsbG8=", root);
 
         Assert.False(result.GetProperty("success").GetBoolean());
-        Assert.Contains("Storage root 'cache' is not available", result.GetProperty("error").GetString());
+        Assert.Contains($"Storage root '{root}' is not available", result.GetProperty("error").GetString());
     }
 
     [Theory]
