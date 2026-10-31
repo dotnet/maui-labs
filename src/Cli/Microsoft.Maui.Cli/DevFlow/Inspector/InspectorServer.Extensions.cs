@@ -326,11 +326,16 @@ public sealed partial class InspectorServer
 
         try
         {
-            // The browser only ever closes or pings this socket; any inbound data ends the relay.
+            // The browser only ever closes this socket (the relay never pings it), so any inbound
+            // frame or EOF ends the relay, as for /ws/events.
             _ = Task.Run(async () =>
             {
                 var monitor = new byte[256];
-                try { await clientStream.ReadAsync(monitor, linkedCt); }
+                try
+                {
+                    var read = await clientStream.ReadAsync(monitor, linkedCt);
+                    _ = read; // a frame (Close) or 0 at EOF; either way the browser is gone
+                }
                 catch { }
                 finally { try { browserClosedCts.Cancel(); } catch { } }
             }, linkedCt);
