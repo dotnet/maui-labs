@@ -301,6 +301,7 @@ maui-labs/
 │   │   ├── Microsoft.Maui.DevFlow.Client/              # Portable protocol client (AgentClient, DTOs) — netstandard2.0
 │   │   ├── Microsoft.Maui.DevFlow.Client.Tests/        # Client tests (net472 + modern .NET)
 │   │   ├── Microsoft.Maui.DevFlow.Driver/              # Platform drivers (process management, UI Automation)
+│   │   ├── Microsoft.Maui.DevFlow.Extensibility/       # Plugin contract (DevFlowExtension, tools, event streams) — no agent/MAUI dependency
 │   │   ├── Microsoft.Maui.DevFlow.Logging/             # JSONL file logger
 │   │   ├── Microsoft.Maui.DevFlow.Tests/               # xUnit tests
 │   │   ├── Microsoft.Maui.DevFlow.Agent.IntegrationTests/  # Integration tests
@@ -431,7 +432,10 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 78 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 78 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`).
+In addition, `Mcp/ExtensionToolCatalog.cs` publishes each tool of the connected app's extensions and
+plugins (`Microsoft.Maui.DevFlow.Extensibility`, see `docs/DevFlow/plugins.md`) as its own `ext_{prefix}_{tool}`
+tool and sends `notifications/tools/list_changed` when they change:
 
 | Tool | Purpose |
 |------|---------|

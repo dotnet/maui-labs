@@ -262,6 +262,27 @@
       "additionalProperties": {
         "$ref": "#/$defs/ExtensionDescriptor"
       }
+    },
+    "extensionErrors": {
+      "type": "array",
+      "description": "Plugins added with AgentOptions.AddExtension that could not be created. Present only when there are any.",
+      "items": {
+        "type": "object",
+        "required": [
+          "extension",
+          "error"
+        ],
+        "properties": {
+          "extension": {
+            "type": "string",
+            "description": "Plugin type name, or namespace when it was known."
+          },
+          "error": {
+            "type": "string",
+            "description": "Why the plugin could not be loaded."
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -288,9 +309,66 @@
             "$ref": "#/$defs/ExtensionTool"
           },
           "description": "Self-describing tools exposed by this extension. Each tool maps to an HTTP endpoint under /api/v1/ext/{namespace}/."
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExtensionStream"
+          },
+          "description": "Event streams the extension publishes. Omitted when there are none."
+        },
+        "toolPrefix": {
+          "type": "string",
+          "description": "Short prefix MCP clients use when publishing this extension's tools (ext_{toolPrefix}_{tool}). Omitted when the extension does not set one; clients default to the last namespace segment."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "faulted"
+          ],
+          "description": "Present for plugins (DevFlowExtension). A faulted plugin answers its routes with 503."
+        },
+        "error": {
+          "type": "string",
+          "description": "Why the plugin faulted. Present only when state is faulted."
         }
       },
       "description": "Extension descriptor with version, description, and self-describing tools."
+    },
+    "ExtensionStream": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "path",
+        "webSocketPath"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Stream name, unique within the extension."
+        },
+        "description": {
+          "type": "string",
+          "description": "What the stream carries."
+        },
+        "path": {
+          "type": "string",
+          "description": "Polling path: GET {path}?since={sequence}&limit={n} returns events after since. Also advertised as a read-only tool."
+        },
+        "webSocketPath": {
+          "type": "string",
+          "description": "Live path. Without ?since the feed starts with the next event; with it, buffered events after that sequence are replayed first."
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Event data fields a viewer should show as columns, in order."
+        }
+      }
     },
     "ExtensionTool": {
       "type": "object",

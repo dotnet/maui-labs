@@ -650,6 +650,58 @@ channels:
 # ---------------------------------------------------------------------------
 # Operations
 # ---------------------------------------------------------------------------
+  # ── Extension Streams ────────────────────────────────────────────────────
+  extensionStream:
+    address: /ws/v1/ext/{namespace}/streams/{stream}
+    description: |
+      Live events from a stream an extension (plugin) publishes. Streams are
+      advertised under `streams` in each extension descriptor of
+      `GET /api/v1/agent/capabilities`. Without `since` the feed starts with the
+      next event; with it, buffered events after that sequence are replayed
+      first. The same buffer can be polled at `GET /api/v1/ext/{namespace}/streams/{stream}`.
+      Client messages are ignored.
+    servers:
+      - $ref: '#/servers/agent'
+    parameters:
+      namespace:
+        description: Extension namespace in reverse-domain notation.
+      stream:
+        description: Stream name advertised in the extension descriptor.
+    bindings:
+      ws:
+        query:
+          type: object
+          description: Connection query-string parameters.
+          properties:
+            since:
+              type: integer
+              description: Replay buffered events after this sequence number first. 0 replays the whole buffer.
+    messages:
+      # ── server → client ──
+      extensionEvent:
+        name: extensionEvent
+        title: Extension Event
+        summary: One event, or a notice that events were dropped.
+        contentType: application/json
+        payload:
+          type: object
+          description: |
+            An event carries seq, ts and data. A frame may also carry dropped:
+            how many events were lost before it because the agent's buffer was
+            full. A frame with only dropped reports a gap with no event.
+          properties:
+            seq:
+              type: integer
+              description: Position in the stream, starting at 1.
+            ts:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+              description: When the event was published.
+            data:
+              description: Extension-defined event payload.
+            dropped:
+              type: integer
+              description: Events lost before this frame.
+
 operations:
 
   # ── Network ──────────────────────────────────────────────────────────────
@@ -706,6 +758,15 @@ operations:
       - $ref: '#/channels/sensors/messages/sensorSubscribed'
       - $ref: '#/channels/sensors/messages/sensorReading'
       - $ref: '#/channels/sensors/messages/sensorError'
+
+  # ── Extension Streams ────────────────────────────────────────────────────
+  sendExtensionStreamEvents:
+    action: send
+    channel:
+      $ref: '#/channels/extensionStream'
+    summary: Server streams extension events to the client.
+    messages:
+      - $ref: '#/channels/extensionStream/messages/extensionEvent'
 
   # ── Profiler ─────────────────────────────────────────────────────────────
   sendProfilerEvents:
