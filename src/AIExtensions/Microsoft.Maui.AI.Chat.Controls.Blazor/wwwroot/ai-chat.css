@@ -1,0 +1,8 @@
+:root { --mai-card-bg: #f4f6f8; --mai-card-border: #ccd2d9; --mai-error: #a4262c; }
+.maicard { background: var(--mai-card-bg); border: 1px solid var(--mai-card-border); border-radius: .5rem; margin: .35rem 0; padding: .6rem; }
+.maicard button { margin: .25rem; }
+.mai-error { color: var(--mai-error); }
+.mai-thinking { opacity: .75; }
+.mai-rich pre, .maicard pre { overflow: auto; white-space: pre-wrap; }
+.mai-rich img { max-width: 100%; height: auto; }
+.mai-media { display: block; max-width: 100%; border-radius: .4rem; }

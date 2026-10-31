@@ -1,0 +1,324 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
+using Microsoft.Extensions.AI;
+
+namespace Microsoft.Maui.AI.Chat.Tests.Engine;
+
+public class AgentContextApprovalTests
+{
+    private static (UIAgent agent, DelegatingStreamingChatClient client) CreateAgent()
+    {
+        var client = new DelegatingStreamingChatClient();
+        var agent = new UIAgent(client);
+        return (agent, client);
+    }
+
+    [Fact]
+    public async Task ApprovalBlock_SetsStatusToAwaitingInput()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitApprovalRequest("call-1", "DeleteFile"));
+        var context = new AgentContext(agent);
+
+        var statuses = new List<ConversationStatus>();
+        context.RegisterOnStatusChanged(s =>
+        {
+            statuses.Add(s);
+            // Auto-approve when awaiting to unblock SendMessageAsync
+            if (s == ConversationStatus.AwaitingInput)
+            {
+                var turn = context.Turns[^1];
+                var block = turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single();
+                block.Approve();
+            }
+        });
+
+        await context.SendMessageAsync("Delete the file");
+
+        Assert.Contains(ConversationStatus.AwaitingInput, statuses);
+    }
+
+    [Fact]
+    public async Task ApprovalBlock_EmittedAsToolApprovalBlock()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        client.SetHandler((msgs, opts, ct) =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return ResponseEmitters.EmitApprovalRequest("call-1", "DeleteFile");
+            }
+            return ResponseEmitters.EmitTextResponse("Done");
+        });
+        var context = new AgentContext(agent);
+
+        ToolApprovalBlock? capturedBlock = null;
+        context.RegisterOnStatusChanged(s =>
+        {
+            if (s == ConversationStatus.AwaitingInput)
+            {
+                var turn = context.Turns[^1];
+                capturedBlock = turn.ResponseBlocks.OfType<ToolApprovalBlock>().First();
+                capturedBlock.Approve();
+            }
+        });
+
+        await context.SendMessageAsync("Delete the file");
+
+        Assert.NotNull(capturedBlock);
+        Assert.Equal(ApprovalStatus.Approved, capturedBlock!.Status);
+        Assert.Equal("DeleteFile", capturedBlock.InnerBlock.ToolName);
+    }
+
+    [Fact]
+    public async Task Approve_ResumesStreamingThenIdle()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        client.SetHandler((msgs, opts, ct) =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return ResponseEmitters.EmitApprovalRequest("call-1", "DeleteFile");
+            }
+            return ResponseEmitters.EmitTextResponse("File deleted successfully.");
+        });
+        var context = new AgentContext(agent);
+
+        var statuses = new List<ConversationStatus>();
+        context.RegisterOnStatusChanged(s =>
+        {
+            statuses.Add(s);
+            if (s == ConversationStatus.AwaitingInput)
+            {
+                var turn = context.Turns[^1];
+                turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
+            }
+        });
+
+        await context.SendMessageAsync("Delete the file");
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+
+        // Verify the status transitions: Streaming → AwaitingInput → Streaming → Idle
+        Assert.Equal(new[]
+        {
+            ConversationStatus.Streaming,
+            ConversationStatus.AwaitingInput,
+            ConversationStatus.Streaming,
+            ConversationStatus.Idle,
+        }, statuses);
+    }
+
+    [Fact]
+    public async Task Reject_SetsStatusToIdle()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        client.SetHandler((msgs, opts, ct) =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return ResponseEmitters.EmitApprovalRequest("call-1", "DeleteFile");
+            }
+            return ResponseEmitters.EmitTextResponse("Operation cancelled.");
+        });
+        var context = new AgentContext(agent);
+
+        context.RegisterOnStatusChanged(s =>
+        {
+            if (s == ConversationStatus.AwaitingInput)
+            {
+                var turn = context.Turns[^1];
+                turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Reject("Not safe");
+            }
+        });
+
+        await context.SendMessageAsync("Delete the file");
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        var turn = Assert.Single(context.Turns);
+        var approvalBlock = turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single();
+        Assert.Equal(ApprovalStatus.Rejected, approvalBlock.Status);
+    }
+
+    [Fact]
+    public async Task Approve_ContinuationBlocksAddedToSameTurn()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        client.SetHandler((msgs, opts, ct) =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return ResponseEmitters.EmitApprovalRequest("call-1", "DeleteFile");
+            }
+            return ResponseEmitters.EmitTextResponse("Done!");
+        });
+        var context = new AgentContext(agent);
+
+        context.RegisterOnStatusChanged(s =>
+        {
+            if (s == ConversationStatus.AwaitingInput)
+            {
+                var turn = context.Turns[^1];
+                turn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
+            }
+        });
+
+        await context.SendMessageAsync("Delete the file");
+
+        // Same turn should have both the approval block and the continuation text
+        Assert.Single(context.Turns);
+        var turn = context.Turns[0];
+        var textBlock = turn.ResponseBlocks.OfType<TextContentBlock>().SingleOrDefault();
+        Assert.NotNull(textBlock);
+        Assert.Equal("Done!", textBlock!.RawText);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WhileAwaitingApproval_IsRejected()
+    {
+        var (agent, client) = CreateAgent();
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            callCount++;
+            return callCount == 1
+                ? ResponseEmitters.EmitApprovalRequest(
+                    "call-1",
+                    "DeleteFile",
+                    ct: cancellationToken)
+                : ResponseEmitters.EmitTextResponse(
+                    "Done",
+                    cancellationToken);
+        });
+        var context = new AgentContext(agent);
+        var awaiting = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+                awaiting.TrySetResult();
+        });
+
+        var firstSend = context.SendMessageAsync("Delete the file");
+        await awaiting.Task;
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.SendMessageAsync("Start another turn"));
+        Assert.Contains("already being processed", exception.Message);
+
+        context.Turns[^1]
+            .ResponseBlocks
+            .OfType<ToolApprovalBlock>()
+            .Single()
+            .Approve();
+        await firstSend;
+
+        Assert.Single(context.Turns);
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+    }
+
+    [Fact]
+    public async Task StatusTransitions_NoApproval_RemainsStreamingToIdle()
+    {
+        var (agent, client) = CreateAgent();
+        client.SetHandler((msgs, opts, ct) =>
+            ResponseEmitters.EmitTextResponse("Just text"));
+        var context = new AgentContext(agent);
+
+        var statuses = new List<ConversationStatus>();
+        context.RegisterOnStatusChanged(s => statuses.Add(s));
+
+        await context.SendMessageAsync("Hello");
+
+        Assert.Equal(new[] { ConversationStatus.Streaming, ConversationStatus.Idle }, statuses);
+    }
+
+    [Fact]
+    public async Task MixedApprovalAndBackendTool_ContinuationPreservesPerMessageRoles()
+    {
+        var backendTool = AIFunctionFactory.Create(
+            () => "sunny",
+            "GetWeather",
+            "Gets the weather");
+        var client = new DelegatingStreamingChatClient();
+        IReadOnlyList<ChatMessage>? continuation = null;
+        var callCount = 0;
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            _ = options;
+            callCount++;
+            if (callCount == 1)
+            {
+                return EmitMixedRequest(cancellationToken);
+            }
+
+            continuation = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse("Done");
+        });
+        var agent = new UIAgent(
+            client,
+            new ChatOptions { Tools = [backendTool] });
+        var context = new AgentContext(agent);
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+            {
+                context.Turns[^1]
+                    .ResponseBlocks
+                    .OfType<ToolApprovalBlock>()
+                    .Single()
+                    .Approve();
+            }
+        });
+
+        await context.SendMessageAsync("Run both");
+
+        Assert.NotNull(continuation);
+        var toolMessage = Assert.Single(
+            continuation,
+            message => message.Contents.Any(
+                content => content is FunctionResultContent));
+        Assert.Equal(ChatRole.Tool, toolMessage.Role);
+        var approvalMessage = Assert.Single(
+            continuation,
+            message => message.Contents.Any(
+                content => content is ToolApprovalResponseContent));
+        Assert.Equal(ChatRole.User, approvalMessage.Role);
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitMixedRequest(
+        [System.Runtime.CompilerServices.EnumeratorCancellation]
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var approvalCall = new FunctionCallContent(
+            "approval-call",
+            "DeleteFile");
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "mixed-response",
+            Contents =
+            [
+                new ToolApprovalRequestContent(
+                    "approval-request",
+                    approvalCall),
+                new FunctionCallContent(
+                    "backend-call",
+                    "GetWeather"),
+            ],
+        };
+        await Task.CompletedTask;
+    }
+}

@@ -6,7 +6,9 @@ using AIExtensions.Sample.Garden.ViewModels;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Chat.Controls;
 using Microsoft.Maui.DevFlow.Agent;
 
 namespace AIExtensions.Sample.Garden;
@@ -18,6 +20,7 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
+            .UseChatControls()
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -94,8 +97,9 @@ public static class MauiProgram
         var apiKey = aiSection["ApiKey"];
         var endpoint = aiSection["Endpoint"];
         var deploymentName = aiSection["DeploymentName"];
+        var imageDeploymentName = aiSection["ImageDeploymentName"];
 
-        if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(deploymentName))
+        if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(deploymentName) || string.IsNullOrEmpty(imageDeploymentName))
         {
             throw new InvalidOperationException(
                 """
@@ -104,6 +108,7 @@ public static class MauiProgram
                   dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
                   dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
                   dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
+                  dotnet user-secrets --id ai-attributes-secrets set "AI:ImageDeploymentName" "<your-image-deployment>"
                 """);
         }
 
@@ -112,7 +117,25 @@ public static class MauiProgram
             new ApiKeyCredential(apiKey));
         var chatClient = azureClient.GetChatClient(deploymentName);
 
-        builder.Services.AddSingleton<IChatClient>(chatClient.AsIChatClient());
+        // Image generation is always enabled: UseImageGeneration lets the chat model produce images
+        // inline; the image arrives as DataContent and renders as a MediaContentBlock. The ChatViewModel
+        // always adds the matching HostedImageGenerationTool.
+        var imageGenerator = azureClient.GetImageClient(imageDeploymentName).AsIImageGenerator();
+
+        // Build the full client here (with the root service provider) so source-generated tools bind
+        // their [FromServices] parameters. Image generation must be registered BEFORE function
+        // invocation so the hosted image tool is handled beneath the function-invocation loop.
+        builder.Services.AddSingleton<IChatClient>(sp =>
+        {
+            var lf = sp.GetRequiredService<ILoggerFactory>();
+            var clientBuilder = chatClient.AsIChatClient()
+                .AsBuilder()
+                .UseLogging(lf)
+                .UseImageGeneration(imageGenerator)
+                .UseFunctionInvocation(lf);
+
+            return clientBuilder.Build(sp);
+        });
 
         return builder;
     }

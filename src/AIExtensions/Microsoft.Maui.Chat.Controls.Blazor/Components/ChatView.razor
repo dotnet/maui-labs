@@ -1,0 +1,325 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The provider-neutral MAUI Blazor Hybrid chat shell.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+@implements IDisposable
+
+<div @attributes="AdditionalAttributes" class="@RootClass" data-theme="@ThemeAttribute">
+    <CascadingValue @key="_context" Value="_context" IsFixed="true">
+        <div class="mchat-chat-page__header">
+            @if (Header is not null)
+            {
+                @Header
+            }
+        </div>
+
+        <div class="mchat-chat-page__body">
+            <ChatMessagesView ChildContent="ChildContent"
+                              EmptyContent="EffectiveEmptyContent"
+                              AutoScrollToLatest="AutoScrollToLatest" />
+        </div>
+
+        <div class="mchat-chat-page__footer">
+            <div class="mchat-chat-page__composer-container">
+                @if (Footer is not null)
+                {
+                    @Footer
+                }
+
+                <Composer @ref="_composerRef"
+                          Context="_composer"
+                          AllowAttachments="AllowAttachments"
+                          AllowAudioCapture="AllowAudioCapture"
+                          AllowLiveSpeech="AllowLiveSpeech"
+                          Placeholder="@Placeholder"
+                          LeadingActions="InputLeadingActions"
+                          TrailingActions="InputTrailingActions"
+                          AttachmentTemplate="Attachment" />
+            </div>
+        </div>
+    </CascadingValue>
+</div>
+
+@code {
+    private ChatComposerContext _composer = default!;
+    private ChatComposerController? _composerParameter;
+    private ChatViewContext _context = default!;
+    private Composer? _composerRef;
+    private ChatConversation? _observed;
+    private bool _hasRendered;
+
+    /// <summary>Gets or sets the conversation this view renders and sends to.</summary>
+    [Parameter, EditorRequired]
+    public ChatConversation Conversation { get; set; } = default!;
+
+    /// <summary>Gets or sets the renderer-neutral composer state and operation controller.</summary>
+    [Parameter]
+    public ChatComposerController? ComposerController { get; set; }
+
+    /// <summary>Gets or sets content rendered above the message list.</summary>
+    [Parameter]
+    public RenderFragment? Header { get; set; }
+
+    /// <summary>Gets or sets content rendered below the message list and above the composer.</summary>
+    [Parameter]
+    public RenderFragment? Footer { get; set; }
+
+    /// <summary>Gets or sets content rendered inside the empty state.</summary>
+    [Parameter]
+    public RenderFragment? EmptyContent { get; set; }
+
+    /// <summary>Gets or sets the welcome message shown by the default empty-state panel.</summary>
+    [Parameter]
+    public string? WelcomeMessage { get; set; } = "Start the conversation";
+
+    /// <summary>Gets or sets the icon glyph shown by the default empty-state panel.</summary>
+    [Parameter]
+    public string? WelcomeIcon { get; set; } = "💬";
+
+    /// <summary>Gets or sets the composer placeholder.</summary>
+    [Parameter]
+    public string Placeholder { get; set; } = "Type a message";
+
+    /// <summary>Gets or sets rich suggestions rendered as chips while the conversation is empty.</summary>
+    [Parameter]
+    public IReadOnlyList<ChatSuggestion>? Suggestions { get; set; }
+
+    /// <summary>Gets or sets plain-string suggestions, a shorthand for <see cref="Suggestions"/>.</summary>
+    [Parameter]
+    public IReadOnlyList<string>? SuggestionPrompts { get; set; }
+
+    /// <summary>Gets or sets an optional per-suggestion template.</summary>
+    [Parameter]
+    public RenderFragment<ChatSuggestion>? SuggestionTemplate { get; set; }
+
+    /// <summary>Gets or sets the per-attachment chip template.</summary>
+    [Parameter]
+    public RenderFragment<ChatAttachment>? Attachment { get; set; }
+
+    /// <summary>Gets or sets child content that lives inside the chat cascade.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Gets or sets whether the attach button is available.</summary>
+    [Parameter]
+    public bool AllowAttachments { get; set; }
+
+    /// <summary>Gets or sets whether the audio-capture button is available.</summary>
+    [Parameter]
+    public bool AllowAudioCapture { get; set; }
+
+    /// <summary>Gets or sets whether the live-speech button is available.</summary>
+    [Parameter]
+    public bool AllowLiveSpeech { get; set; }
+
+    /// <summary>Gets or sets whether finalized live speech is submitted automatically.</summary>
+    [Parameter]
+    public bool AutoSubmitLiveSpeech { get; set; } = true;
+
+    /// <summary>Gets or sets whether the message list stays anchored to new content.</summary>
+    [Parameter]
+    public bool AutoScrollToLatest { get; set; } = true;
+
+    /// <summary>Gets or sets the maximum attachment size in bytes. Defaults to 10 MB.</summary>
+    [Parameter]
+    public long MaxAttachmentBytes { get; set; } = 10L * 1024 * 1024;
+
+    /// <summary>Gets or sets the maximum number of staged attachments. Defaults to 10.</summary>
+    [Parameter]
+    public int MaxAttachmentCount { get; set; } = 10;
+
+    /// <summary>Gets or sets the maximum total staged attachment size. Defaults to 50 MB.</summary>
+    [Parameter]
+    public long MaxTotalAttachmentBytes { get; set; } = 50L * 1024 * 1024;
+
+    /// <summary>Gets or sets an optional theme override.</summary>
+    [Parameter]
+    public ChatViewTheme? Theme { get; set; }
+
+    /// <summary>Gets or sets the fragment rendered before the composer textarea.</summary>
+    [Parameter]
+    public RenderFragment<IChatComposerContext>? InputLeadingActions { get; set; }
+
+    /// <summary>Gets or sets the fragment rendered after the composer textarea.</summary>
+    [Parameter]
+    public RenderFragment<IChatComposerContext>? InputTrailingActions { get; set; }
+
+    /// <summary>Gets or sets unmatched attributes applied to the root element.</summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    [Inject]
+    private IServiceProvider Services { get; set; } = default!;
+
+    /// <summary>Gets the compatibility context that delegates to the shared controller.</summary>
+    public IChatComposerContext ComposerContext => _composer;
+
+    private string RootClass
+    {
+        get
+        {
+            var custom = AdditionalAttributes is not null
+                && AdditionalAttributes.TryGetValue("class", out var raw)
+                && raw is string value
+                    ? " " + value
+                    : string.Empty;
+            return "mchat-root mchat-chat-page" + custom;
+        }
+    }
+
+    private string? ThemeAttribute => Theme switch
+    {
+        ChatViewTheme.Light => "light",
+        ChatViewTheme.Dark => "dark",
+        _ => null,
+    };
+
+    private RenderFragment? EffectiveEmptyContent => EmptyContent ?? BuildDefaultEmptyContent();
+
+    protected override void OnInitialized()
+    {
+        CreateComposer(ComposerController);
+        base.OnInitialized();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_composerParameter, ComposerController))
+            CreateComposer(ComposerController);
+
+        ConfigureComposerController();
+        if (!ReferenceEquals(_observed, Conversation))
+        {
+            _composer.AttachConversation(Conversation);
+            _context = new ChatViewContext(Conversation, _composer);
+            _observed = Conversation;
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _hasRendered = true;
+        base.OnAfterRender(firstRender);
+    }
+
+    /// <summary>Focuses the renderer-owned textarea, when it has been rendered.</summary>
+    public Task FocusAsync() => _composerRef is null ? Task.CompletedTask : _composerRef.FocusAsync();
+
+    /// <summary>Creates the current shared controller draft.</summary>
+    public ChatDraft CreateDraft() => _composer.CreateDraft();
+
+    /// <summary>Submits the current shared controller draft.</summary>
+    public Task SendAsync(CancellationToken cancellationToken = default) =>
+        InvokeControllerAsync(controller => controller.SubmitAsync(cancellationToken));
+
+    /// <summary>Cancels the current shared controller operation.</summary>
+    public Task StopAsync(CancellationToken cancellationToken = default) =>
+        InvokeControllerAsync(controller => controller.StopAsync(cancellationToken));
+
+    /// <summary>Stages files through the configured shared controller picker.</summary>
+    public Task PickAttachmentsAsync(CancellationToken cancellationToken = default) =>
+        InvokeControllerAsync(controller => controller.PickAttachmentsAsync(cancellationToken));
+
+    /// <summary>Toggles audio capture through the shared controller.</summary>
+    public Task ToggleAudioCaptureAsync() =>
+        InvokeControllerAsync(static controller => controller.ToggleAudioCaptureAsync());
+
+    /// <summary>Toggles live speech through the shared controller.</summary>
+    public Task ToggleLiveSpeechAsync() =>
+        InvokeControllerAsync(static controller => controller.ToggleLiveSpeechAsync());
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _composer.Changed -= OnComposerChanged;
+        _composer.Dispose();
+    }
+
+    private void CreateComposer(ChatComposerController? controller)
+    {
+        if (_composer is not null)
+        {
+            _composer.Changed -= OnComposerChanged;
+            _composer.Dispose();
+        }
+
+        _composer = new ChatComposerContext(controller);
+        _composerParameter = controller;
+        _composer.Changed += OnComposerChanged;
+        ConfigureComposerController();
+        _composer.AttachConversation(Conversation);
+        _context = new ChatViewContext(Conversation, _composer);
+        _observed = Conversation;
+    }
+
+    private void ConfigureComposerController()
+    {
+        var controller = _composer.Controller;
+        if (ComposerController is not null)
+            return;
+
+        controller.AllowAttachments = AllowAttachments;
+        controller.AllowAudioCapture = AllowAudioCapture;
+        controller.AllowLiveSpeech = AllowLiveSpeech;
+        controller.AttachmentPicker = Services.GetService(typeof(IChatAttachmentPicker)) as IChatAttachmentPicker;
+        controller.AudioRecorder = Services.GetService(typeof(IChatAudioRecorder)) as IChatAudioRecorder;
+        controller.AudioTranscriber = Services.GetService(typeof(IChatAudioTranscriber)) as IChatAudioTranscriber;
+        controller.SpeechRecognizer = Services.GetService(typeof(IChatSpeechRecognizer)) as IChatSpeechRecognizer;
+        controller.MaximumAttachmentBytes = MaxAttachmentBytes;
+        controller.MaximumAttachmentCount = MaxAttachmentCount;
+        controller.MaximumTotalAttachmentBytes = MaxTotalAttachmentBytes;
+        controller.LiveSpeechAutoSubmit = AutoSubmitLiveSpeech;
+        controller.ContinuousLiveSpeech = false;
+    }
+
+    private async Task InvokeControllerAsync(Func<ChatComposerController, Task> operation)
+    {
+        ConfigureComposerController();
+        await operation(_composer.Controller).ConfigureAwait(true);
+    }
+
+    private void OnComposerChanged()
+    {
+        if (_hasRendered)
+            _ = InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnSuggestionPicked(ChatSuggestion suggestion)
+    {
+        _composer.Text = suggestion.Prompt;
+        return _composer.SubmitAsync();
+    }
+
+    private RenderFragment BuildDefaultEmptyContent() => builder =>
+    {
+        builder.OpenComponent<WelcomePanel>(0);
+        builder.AddComponentParameter(1, nameof(WelcomePanel.Icon), WelcomeIcon);
+        builder.AddComponentParameter(2, nameof(WelcomePanel.Message), WelcomeMessage);
+        builder.AddComponentParameter(3, nameof(WelcomePanel.Suggestions), ResolveSuggestions());
+        if (SuggestionTemplate is not null)
+            builder.AddComponentParameter(4, nameof(WelcomePanel.SuggestionTemplate), SuggestionTemplate);
+        builder.AddComponentParameter(5, nameof(WelcomePanel.OnSuggestionPicked),
+            EventCallback.Factory.Create<ChatSuggestion>(this, OnSuggestionPicked));
+        builder.CloseComponent();
+    };
+
+    private IReadOnlyList<ChatSuggestion> ResolveSuggestions()
+    {
+        if ((Suggestions is null || Suggestions.Count == 0) &&
+            (SuggestionPrompts is null || SuggestionPrompts.Count == 0))
+        {
+            return Array.Empty<ChatSuggestion>();
+        }
+
+        var combined = new List<ChatSuggestion>((Suggestions?.Count ?? 0) + (SuggestionPrompts?.Count ?? 0));
+        if (Suggestions is not null)
+            combined.AddRange(Suggestions.Where(static suggestion => suggestion is not null));
+        if (SuggestionPrompts is not null)
+            combined.AddRange(SuggestionPrompts
+                .Where(static prompt => !string.IsNullOrWhiteSpace(prompt))
+                .Select(static prompt => new ChatSuggestion(prompt)));
+        return combined;
+    }
+}
