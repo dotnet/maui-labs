@@ -173,7 +173,9 @@ public sealed class AgentExtension : IDevFlowExtensionBuilder
         AddRoute(
             "GET",
             relativePath,
-            request => Task.FromResult(ReadStream(stream, request)),
+            request => Task.FromResult(Error is null
+                ? ReadStream(stream, request)
+                : HttpResponse.Error($"Extension '{Namespace}' is faulted: {Error}", 503, "extension-faulted")),
             StreamToolName(normalizedName),
             $"Read events from the '{normalizedName}' stream: {descriptor.Description} Pass the returned nextSequence as 'since' to continue where the last read stopped.",
             StreamParametersSchema,

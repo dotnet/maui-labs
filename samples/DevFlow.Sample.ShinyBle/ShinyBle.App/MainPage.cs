@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using Shiny;
 using Shiny.BluetoothLE;
 
@@ -18,6 +19,7 @@ public class MainPage : ContentPage
     readonly Button _disconnect = new() { AutomationId = "DisconnectButton", Text = "Disconnect", IsEnabled = false };
     IDisposable? _scanSub;
     IPeripheral? _connected;
+    CancellationTokenSource? _connection;
     readonly List<IDisposable> _notifySubs = [];
 
     public MainPage(IBleManager ble)
@@ -115,6 +117,12 @@ public class MainPage : ContentPage
     {
         StopScan();
         Disconnect();
+
+        // One token per connection attempt: Disconnect or picking another device cancels it, so a
+        // stale attempt cannot add subscriptions or report Connected after the user moved on.
+        var connection = new CancellationTokenSource();
+        var ct = connection.Token;
+        _connection = connection;
         _connected = peripheral;
         _disconnect.IsEnabled = true;
         _status.Text = $"Connecting to {peripheral.Name ?? peripheral.Uuid}...";
@@ -126,32 +134,38 @@ public class MainPage : ContentPage
                 .WhenStatusChanged()
                 .Where(s => s == ConnectionState.Connected)
                 .Take(1)
-                .Timeout(TimeSpan.FromSeconds(15));
+                .Timeout(TimeSpan.FromSeconds(15))
+                .ToTask(ct);
 
             var reads = 0;
-            foreach (var service in await peripheral.GetServices())
+            foreach (var service in await peripheral.GetServices().ToTask(ct))
             {
-                foreach (var characteristic in await peripheral.GetCharacteristics(service.Uuid))
+                foreach (var characteristic in await peripheral.GetCharacteristics(service.Uuid).ToTask(ct))
                 {
                     if (characteristic.Properties.HasFlag(CharacteristicProperties.Read))
                     {
                         try
                         {
-                            await peripheral.ReadCharacteristic(service.Uuid, characteristic.Uuid).Timeout(TimeSpan.FromSeconds(5));
+                            await peripheral.ReadCharacteristic(service.Uuid, characteristic.Uuid).Timeout(TimeSpan.FromSeconds(5)).ToTask(ct);
                             reads++;
                         }
-                        catch
+                        catch (Exception) when (!ct.IsCancellationRequested)
                         {
                             // recorded by the plugin as an error event; keep reading the rest
                         }
                     }
 
+                    ct.ThrowIfCancellationRequested();
                     if (characteristic.Properties.HasFlag(CharacteristicProperties.Notify) || characteristic.Properties.HasFlag(CharacteristicProperties.Indicate))
                         _notifySubs.Add(peripheral.NotifyCharacteristic(service.Uuid, characteristic.Uuid).Subscribe(_ => { }, _ => { }));
                 }
             }
 
             _status.Text = $"Connected to {peripheral.Name ?? peripheral.Uuid}: {reads} reads, {_notifySubs.Count} subscriptions";
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Disconnected or replaced by another device; that path already updated the UI.
         }
         catch (Exception ex)
         {
@@ -161,6 +175,10 @@ public class MainPage : ContentPage
 
     void Disconnect()
     {
+        _connection?.Cancel();
+        _connection?.Dispose();
+        _connection = null;
+
         foreach (var sub in _notifySubs)
             sub.Dispose();
         _notifySubs.Clear();

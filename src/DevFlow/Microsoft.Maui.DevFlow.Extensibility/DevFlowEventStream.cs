@@ -48,9 +48,13 @@ public class DevFlowEventStream
     /// <summary>Publishes an event. The payload is serialized with <see cref="DevFlowJson.Options"/>.</summary>
     public void Publish(object? data) => PublishElement(DevFlowJson.SerializeToElement(data));
 
-    /// <summary>Publishes an already serialized payload.</summary>
+    /// <summary>
+    /// Publishes an already serialized payload. The element is cloned, so the caller may dispose the
+    /// <see cref="JsonDocument"/> it came from.
+    /// </summary>
     public void PublishElement(JsonElement data)
     {
+        data = data.Clone();
         DevFlowEvent evt;
         Action<DevFlowEvent>[] snapshot;
         lock (gate)

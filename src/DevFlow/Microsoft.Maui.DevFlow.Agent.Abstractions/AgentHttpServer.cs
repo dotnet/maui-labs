@@ -24,6 +24,7 @@ public class AgentHttpServer : IDisposable
     private readonly Dictionary<string, RouteHandler> _putRoutes = new();
     private readonly Dictionary<string, RouteHandler> _deleteRoutes = new();
     private readonly Dictionary<string, Func<TcpClient, NetworkStream, HttpRequest, CancellationToken, Task>> _wsRoutes = new();
+    private readonly Dictionary<string, Func<HttpRequest, HttpResponse?>> _wsAdmission = new();
     private readonly SemaphoreSlim _mutationAdmissionGate = new(1, 1);
 
     public int Port => _port;
@@ -63,6 +64,19 @@ public class AgentHttpServer : IDisposable
 
     public void MapWebSocket(string path, Func<TcpClient, NetworkStream, HttpRequest, CancellationToken, Task> handler)
         => _wsRoutes[path.TrimEnd('/')] = handler;
+
+    /// <summary>
+    /// Maps a WebSocket route with an admission check that runs before the upgrade. When
+    /// <paramref name="admission"/> returns a response, it is sent instead of upgrading.
+    /// </summary>
+    public void MapWebSocket(
+        string path,
+        Func<TcpClient, NetworkStream, HttpRequest, CancellationToken, Task> handler,
+        Func<HttpRequest, HttpResponse?> admission)
+    {
+        MapWebSocket(path, handler);
+        _wsAdmission[path.TrimEnd('/')] = admission;
+    }
 
     public void Start()
     {
@@ -147,6 +161,13 @@ public class AgentHttpServer : IDisposable
                 if (!request.Headers.TryGetValue("Sec-WebSocket-Key", out var wsKey))
                 {
                     client.Dispose();
+                    return;
+                }
+
+                if (_wsAdmission.TryGetValue(request.Path, out var admission) && admission(request) is { } refusal)
+                {
+                    using (client)
+                        await WriteResponseAsync(stream, refusal, ct).ConfigureAwait(false);
                     return;
                 }
 
@@ -586,68 +607,86 @@ public class AgentHttpServer : IDisposable
     {
         try
         {
-            var header = new byte[2];
-            if (await ReadExactAsync(stream, header, ct) < 2) return null;
-
-            var fin = (header[0] & 0x80) != 0;
-            var opcode = header[0] & 0x0F;
-            var masked = (header[1] & 0x80) != 0;
-            var payloadLen = (long)(header[1] & 0x7F);
-
-            if (opcode == 0x08) return null; // close frame
-
-            if (payloadLen == 126)
+            // A loop rather than recursion: control frames (pings, and the pongs a client sends as
+            // keep-alives) can arrive indefinitely on a long-lived stream between text frames.
+            while (true)
             {
-                var extLen = new byte[2];
-                if (await ReadExactAsync(stream, extLen, ct) < 2) return null;
-                payloadLen = (extLen[0] << 8) | extLen[1];
+                var header = new byte[2];
+                if (await ReadExactAsync(stream, header, ct) < 2) return null;
+
+                var opcode = header[0] & 0x0F;
+                var masked = (header[1] & 0x80) != 0;
+                var payloadLen = (long)(header[1] & 0x7F);
+
+                if (opcode == 0x08) return null; // close frame
+
+                if (payloadLen == 126)
+                {
+                    var extLen = new byte[2];
+                    if (await ReadExactAsync(stream, extLen, ct) < 2) return null;
+                    payloadLen = (extLen[0] << 8) | extLen[1];
+                }
+                else if (payloadLen == 127)
+                {
+                    var extLen = new byte[8];
+                    if (await ReadExactAsync(stream, extLen, ct) < 8) return null;
+                    payloadLen = 0;
+                    for (int i = 0; i < 8; i++)
+                        payloadLen = (payloadLen << 8) | extLen[i];
+                }
+
+                byte[]? mask = null;
+                if (masked)
+                {
+                    mask = new byte[4];
+                    if (await ReadExactAsync(stream, mask, ct) < 4) return null;
+                }
+
+                if (payloadLen > 1_048_576) return null; // 1MB limit
+
+                var payload = new byte[payloadLen];
+                if (payloadLen > 0 && await ReadExactAsync(stream, payload, ct) < payloadLen) return null;
+
+                if (mask != null)
+                {
+                    for (int i = 0; i < payload.Length; i++)
+                        payload[i] ^= mask[i % 4];
+                }
+
+                // Text frame (opcode 1) or continuation
+                if (opcode == 0x01 || opcode == 0x00)
+                    return Encoding.UTF8.GetString(payload);
+
+                // Ping → send pong, then keep reading
+                if (opcode == 0x09)
+                {
+                    await WebSocketSendFrameAsync(stream, 0x8A, payload, ct);
+                    continue;
+                }
+
+                // Pong: the answer to our keep-alive ping, or a client's own keep-alive (RFC 6455 §5.5.3).
+                // Treating it as a close dropped every stream at its first ping.
+                if (opcode == 0x0A)
+                    continue;
+
+                return null;
             }
-            else if (payloadLen == 127)
-            {
-                var extLen = new byte[8];
-                if (await ReadExactAsync(stream, extLen, ct) < 8) return null;
-                payloadLen = 0;
-                for (int i = 0; i < 8; i++)
-                    payloadLen = (payloadLen << 8) | extLen[i];
-            }
-
-            byte[]? mask = null;
-            if (masked)
-            {
-                mask = new byte[4];
-                if (await ReadExactAsync(stream, mask, ct) < 4) return null;
-            }
-
-            if (payloadLen > 1_048_576) return null; // 1MB limit
-
-            var payload = new byte[payloadLen];
-            if (payloadLen > 0 && await ReadExactAsync(stream, payload, ct) < payloadLen) return null;
-
-            if (mask != null)
-            {
-                for (int i = 0; i < payload.Length; i++)
-                    payload[i] ^= mask[i % 4];
-            }
-
-            // Text frame (opcode 1) or continuation
-            if (opcode == 0x01 || opcode == 0x00)
-                return Encoding.UTF8.GetString(payload);
-
-            // Ping → send pong
-            if (opcode == 0x09)
-            {
-                await WebSocketSendFrameAsync(stream, 0x8A, payload, ct); // pong
-                return await WebSocketReadTextAsync(stream, ct); // continue reading
-            }
-
-            // Pong: the answer to our keep-alive ping, or a client's own keep-alive (RFC 6455 §5.5.3).
-            // Treating it as a close dropped every stream at its first ping.
-            if (opcode == 0x0A)
-                return await WebSocketReadTextAsync(stream, ct);
-
-            return null;
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Sends a close frame with a status code and reason (RFC 6455 §5.5.1), e.g. 1011 when the
+    /// producer behind the socket fails.
+    /// </summary>
+    public static async Task WebSocketSendCloseAsync(NetworkStream stream, ushort statusCode, string reason, CancellationToken ct)
+    {
+        var reasonBytes = Encoding.UTF8.GetBytes(reason);
+        var payload = new byte[2 + Math.Min(reasonBytes.Length, 123)];
+        payload[0] = (byte)(statusCode >> 8);
+        payload[1] = (byte)statusCode;
+        Array.Copy(reasonBytes, 0, payload, 2, payload.Length - 2);
+        await WebSocketSendFrameAsync(stream, 0x88, payload, ct); // 0x88 = FIN + close opcode
     }
 
     private static async Task WebSocketSendFrameAsync(NetworkStream stream, byte opcodeWithFin, byte[] payload, CancellationToken ct)

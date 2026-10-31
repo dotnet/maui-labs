@@ -16,7 +16,10 @@ package. That package has no dependency on the agent or on .NET MAUI.
 |---|---|---|---|---|
 | `MapTool(...)` | `/api/v1/ext/{namespace}/{path}` | `extensions call` | `ext_{prefix}_{tool}` | Tool form generated from the JSON schema |
 | `MapStream(...)` | `/ws/v1/ext/{namespace}/streams/{name}` (live) and `/api/v1/ext/{namespace}/streams/{name}` (polling) | `extensions watch`, `extensions events` | A read-only `…_events` tool | Live table with the stream's columns |
-| `MapGet/Post/Put/Delete(...)` | Plain routes, not advertised as tools | - | - | - |
+| `MapGet/Post/Put/Delete(...)` | `/api/v1/ext/{namespace}/{path}` | Advertised as a tool with a generated name, e.g. `get_status` for `GET /status` | Same, without a description or schema | Same |
+
+Every route is advertised as a tool, as for inline extensions. Prefer `MapTool`, which lets you give the
+tool a name, a description an AI agent can act on, and a parameter schema.
 
 Write routes (POST, PUT, DELETE) not marked read-only require the DevFlow mutation lease, like the
 agent's own mutations.
