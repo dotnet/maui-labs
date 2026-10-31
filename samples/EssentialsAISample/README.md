@@ -14,12 +14,12 @@ This sample demonstrates how to integrate Large Language Models (LLMs) into a .N
 - **Cross-Platform**: Runs on iOS, Android, Windows, and macOS
 
 On Windows 11 24H2+ the chat overlay and travel tips use on-device
-`WindowsAIChatClient` for text-only responses, and the on-device
-`WindowsAIImageGenerator` is registered separately. Native Windows chat cannot
-invoke the sample's landmark/weather/navigation tools or accept images; the
-chat overlay tells the model not to claim it performed those actions. The
-existing itinerary workflow, destination search, and embeddings **still require
-Azure OpenAI** (the configured chat and embedding deployments). No unsupported
+`WindowsAIChatClient` for text-only responses. Native Windows chat cannot
+invoke the sample's landmark/weather/navigation tools or accept images, and
+there is no Windows image generator; the chat overlay tells the model not to
+claim it performed those actions. The existing itinerary workflow, destination
+search, and embeddings **still require Azure OpenAI** (the configured chat and
+embedding deployments). No unsupported
 Windows content-indexing API or experimental tool-calling adapter is used.
 Windows builds run packaged with the `systemAIModels` capability; the Windows
 model also requires supported hardware. On earlier Windows versions the sample

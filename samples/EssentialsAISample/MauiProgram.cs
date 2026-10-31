@@ -176,7 +176,6 @@ public static class MauiProgram
 			return builder;
 
 		builder.Services.AddSingleton<IChatClient>(CreateWindowsAIChatClient);
-		builder.Services.AddSingleton<IImageGenerator, WindowsAIImageGenerator>();
 		return builder;
 	}
 
