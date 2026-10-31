@@ -659,8 +659,34 @@ public class AgentClient : IDisposable
         var httpMethod = new HttpMethod(method);
         using var response = await SendWithTransientRetriesAsync(httpMethod, () => SendExtensionToolRequestAsync(httpMethod, path, parameters));
         var body = await response.Content.ReadAsStringAsync();
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+            throw ExtensionToolError(response.StatusCode, body);
         return body;
+    }
+
+    // Plugins explain a refused call in the error envelope ("lat and lng are required", "turn simulation
+    // on first"). Keep that text: it is what tells a CLI user or an AI agent how to fix the call.
+    private static HttpRequestException ExtensionToolError(HttpStatusCode statusCode, string body)
+    {
+        var message = $"Extension tool failed with HTTP {(int)statusCode} ({statusCode}).";
+        try
+        {
+            var envelope = ProtocolJson.ParseElement(body);
+            if (envelope.ValueKind == JsonValueKind.Object
+                && envelope.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(error.GetString()))
+                message = $"{error.GetString()} (HTTP {(int)statusCode})";
+        }
+        catch (JsonException)
+        {
+        }
+
+#if NET5_0_OR_GREATER
+        return new HttpRequestException(message, null, statusCode);
+#else
+        return new HttpRequestException(message);
+#endif
     }
 
     private async Task<HttpResponseMessage> SendExtensionToolRequestAsync(HttpMethod method, string path, JsonElement? parameters)

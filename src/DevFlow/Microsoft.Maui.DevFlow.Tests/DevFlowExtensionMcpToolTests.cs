@@ -59,6 +59,26 @@ public class DevFlowExtensionMcpToolTests
     }
 
     [Fact]
+    public async Task PluginToolErrors_ReachTheMcpClient_WithThePluginsMessage()
+    {
+        var port = GetFreePort();
+        var services = new ServiceCollection().AddSingleton(new DevFlowExtensionPluginTests.Thermometer()).BuildServiceProvider();
+        var agentOptions = new AgentOptions { Port = port, Services = services, RequireMutationLease = false };
+        agentOptions.AddExtension<DevFlowExtensionPluginTests.ThermometerPlugin>();
+        using var agent = new DevFlowAgentService(agentOptions);
+        agent.StartServerOnly(null);
+
+        await using var mcp = await McpHarness.StartAsync(new McpAgentSession { DefaultAgentPort = port });
+        await mcp.Catalog.RefreshAsync(force: true);
+
+        // An AI agent can only correct a refused call if it sees why it was refused.
+        var result = await mcp.Client.CallToolAsync("ext_temp_set", new Dictionary<string, object?> { ["celsius"] = "hot" });
+        Assert.True(result.IsError);
+        var text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+        Assert.Contains("celsius must be a number", text);
+    }
+
+    [Fact]
     public async Task PluginTools_AreRemoved_WhenTheAgentGoesAway()
     {
         var port = GetFreePort();
