@@ -30,6 +30,12 @@ The skill must exist in the selected public catalog revision before these
 commands can discover it. Older published CLI versions may not expose the
 `ai` commands; verify `maui ai --help` and the skill listing first.
 
+For an explicitly supplied project-local skill absent from the host registry,
+check its frontmatter and relative references before external discovery. Reload/
+register through the host's supported mechanism; permitted direct source reading
+is not proof of registry activation. Preserve installed origin/revision metadata
+for feedback; don't infer provenance or install unrelated companions automatically.
+
 Alternatively, install the complete plugin in an agent that supports marketplaces:
 
 ```bash
@@ -63,7 +69,8 @@ Alternatively, install the complete plugin in an agent that supports marketplace
 | App features | [maui-networking-offline-data](dotnet-maui/skills/maui-networking-offline-data/) | Build typed HttpClient flows, emulator/device networking, retries, cancellation, SQLite/offline sync, and encryption decisions. |
 | App features | [maui-notifications-deep-links](dotnet-maui/skills/maui-notifications-deep-links/) | Add local and push notifications, FCM/APNs/Azure Notification Hubs, app links, universal links, URI schemes, and permission UX. |
 | Advanced and migration | [maui-ai-tool-bindings](dotnet-maui/skills/maui-ai-tool-bindings/) | Create source-generated Microsoft.Extensions.AI tool bindings with DI-bound parameters, approvals, and per-session scope. |
-| Advanced and migration | [maui-controls-deep-dive](dotnet-maui/skills/maui-controls-deep-dive/) | Tune CollectionView, SafeAreaEdges, GraphicsView, gestures, animations, and control-specific semantics. |
+| Advanced and migration | [maui-controls-deep-dive](dotnet-maui/skills/maui-controls-deep-dive/) | Tune stock CollectionView loading and item interactions, SwipeView/RefreshView/context actions, SafeAreaEdges, GraphicsView, gestures, and animations. |
+| Advanced and migration | [maui-bespoke-collections](dotnet-maui/skills/maui-bespoke-collections/) | Generate scenario-specific native collections with tailored layouts, bounded loading/reuse, drag/reorder, deletion, refresh, context actions, and honest platform validation. |
 | Advanced and migration | [maui-custom-handlers](dotnet-maui/skills/maui-custom-handlers/) | Customize handlers with mappers, platform partials, custom handler structure, and renderer-to-handler migration. |
 | Advanced and migration | [maui-essentials-ai](dotnet-maui/skills/maui-essentials-ai/) | Use Microsoft.Maui.Essentials.AI, Apple Intelligence chat, local embeddings, local tool invocation, and fallback UX. |
 | Advanced and migration | [maui-labs-platform-targeting](dotnet-maui/skills/maui-labs-platform-targeting/) | Target MAUI Labs GTK4, AppKit, and WPF platforms with project setup and conditional guidance. |
