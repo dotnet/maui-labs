@@ -1,0 +1,35 @@
+name: CI - Browser
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'platforms/Browser/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - 'platforms/Browser/**'
+      - 'eng/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      project-path: platforms/Browser/Browser.slnx
+      project-name: browser
+      os: '["ubuntu-latest", "windows-latest"]'
+      install-workloads: false
+      run-tests: true
+      pack: true

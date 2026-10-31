@@ -1,0 +1,1 @@
+Hello from the app package! This file was fetched relative to the app base URL.
