@@ -172,10 +172,12 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     {
         if (_disposed || !_options.Enabled) return;
         _dispatcher = dispatcher ?? _dispatcher;
+        ActivatePlugins();
         try
         {
             _server.Start();
             Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port}");
+            StartPlugins();
         }
         catch (Exception ex)
         {
@@ -428,6 +430,15 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
             }
 
             result["extensions"] = extensions;
+        }
+
+        if (ExtensionLoadErrors.Count > 0)
+        {
+            result["extensionErrors"] = ExtensionLoadErrors.Select(error => new Dictionary<string, object?>
+            {
+                ["extension"] = error.Extension,
+                ["error"] = error.Error
+            }).ToArray();
         }
 
         return Task.FromResult(HttpResponse.Json(result));

@@ -1808,6 +1808,48 @@ public partial class DevFlowCommands
         });
         extensionsCommand.Add(extCallCmd);
 
+        var extEventsNamespaceArg = new Argument<string>("namespace") { Description = "Extension namespace in reverse-domain notation" };
+        var extEventsStreamArg = new Argument<string>("stream") { Description = "Stream name within the extension" };
+        var extEventsSinceOption = new Option<long>("--since") { Description = "Return events after this sequence number (0 reads the whole buffer)", DefaultValueFactory = _ => 0 };
+        var extEventsLimitOption = new Option<int>("--limit") { Description = "Maximum events to return (1-1000)", DefaultValueFactory = _ => 100 };
+        var extEventsCmd = new Command("events", "Read buffered events from an extension stream")
+        {
+            extEventsNamespaceArg, extEventsStreamArg, extEventsSinceOption, extEventsLimitOption
+        };
+        extEventsCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var ns = ctx.GetValue(extEventsNamespaceArg)!;
+            var stream = ctx.GetValue(extEventsStreamArg)!;
+            var since = ctx.GetValue(extEventsSinceOption);
+            var limit = ctx.GetValue(extEventsLimitOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await ExtensionsEventsAsync(host, port, ns, stream, since, limit, output.ResolveJsonMode(json, noJson));
+        });
+        extensionsCommand.Add(extEventsCmd);
+
+        var extWatchNamespaceArg = new Argument<string>("namespace") { Description = "Extension namespace in reverse-domain notation" };
+        var extWatchStreamArg = new Argument<string>("stream") { Description = "Stream name within the extension" };
+        var extWatchSinceOption = new Option<long?>("--since") { Description = "Replay buffered events after this sequence number first (0 replays the whole buffer)" };
+        var extWatchCmd = new Command("watch", "Follow an extension stream live (Ctrl+C to stop)")
+        {
+            extWatchNamespaceArg, extWatchStreamArg, extWatchSinceOption
+        };
+        extWatchCmd.SetAction(async (ctx, ct) =>
+        {
+            var host = ctx.GetValue(agentHostOption)!;
+            var port = ctx.GetValue(agentPortOption);
+            var ns = ctx.GetValue(extWatchNamespaceArg)!;
+            var stream = ctx.GetValue(extWatchStreamArg)!;
+            var since = ctx.GetValue(extWatchSinceOption);
+            var json = ctx.GetValue(jsonOption);
+            var noJson = ctx.GetValue(noJsonOption);
+            await ExtensionsWatchAsync(host, port, ns, stream, since, output.ResolveJsonMode(json, noJson), ct);
+        });
+        extensionsCommand.Add(extWatchCmd);
+
         devflowCommand.Add(extensionsCommand);
 
         // ===== batch command (interactive stdin/stdout) =====
@@ -1892,10 +1934,15 @@ public partial class DevFlowCommands
                 return;
             }
 
-            Console.WriteLine($"{"Namespace",-35} {"Version",-10} {"Tools",-5} Description");
-            Console.WriteLine(new string('-', 90));
+            Console.WriteLine($"{"Namespace",-35} {"Version",-10} {"Tools",-5} {"Streams",-7} Description");
+            Console.WriteLine(new string('-', 98));
             foreach (var (ns, extension) in extensions.OrderBy(e => e.Key, StringComparer.Ordinal))
-                Console.WriteLine($"{ns,-35} {extension.Version,-10} {extension.Tools.Count,-5} {extension.Description}");
+            {
+                var description = extension.State == "faulted"
+                    ? $"FAULTED: {extension.Error}"
+                    : extension.Description;
+                Console.WriteLine($"{ns,-35} {extension.Version,-10} {extension.Tools.Count,-5} {extension.Streams.Count,-7} {description}");
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException)
         {
@@ -1924,11 +1971,24 @@ public partial class DevFlowCommands
 
             Console.WriteLine($"{ns} {extension.Version}");
             Console.WriteLine(extension.Description);
+            if (extension.State == "faulted")
+                Console.WriteLine($"FAULTED: {extension.Error}");
             Console.WriteLine();
             Console.WriteLine($"{"Tool",-24} {"Method",-7} Path");
             Console.WriteLine(new string('-', 80));
             foreach (var tool in extension.Tools.OrderBy(t => t.Name, StringComparer.Ordinal))
                 Console.WriteLine($"{tool.Name,-24} {tool.Method,-7} {tool.Path}");
+
+            if (extension.Streams.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"{"Stream",-24} Description");
+                Console.WriteLine(new string('-', 80));
+                foreach (var stream in extension.Streams.OrderBy(s => s.Name, StringComparer.Ordinal))
+                    Console.WriteLine($"{stream.Name,-24} {stream.Description}");
+                Console.WriteLine();
+                Console.WriteLine($"Follow a stream with: maui devflow extensions watch {ns} <stream>");
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException)
         {
@@ -1961,6 +2021,158 @@ public partial class DevFlowCommands
             Output.WriteError(ex.Message, json);
             _errorOccurred = true;
         }
+    }
+
+    private static async Task ExtensionsEventsAsync(string host, int port, string ns, string streamName, long since, int limit, bool json)
+    {
+        try
+        {
+            var (page, error) = await SendExtensionCommandAsync(host, port, async operations =>
+            {
+                var (stream, findError) = await operations.FindStreamAsync(ns, streamName);
+                if (stream is null)
+                    return ((ExtensionStreamPage?)null, findError);
+                return (await operations.ReadEventsAsync(ns, stream.Name, since, Math.Clamp(limit, 1, 1000)), (string?)null);
+            });
+            if (page is null)
+            {
+                Output.WriteError(error!, json, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
+
+            if (json)
+            {
+                Output.WriteResult(page, json);
+                return;
+            }
+
+            var columns = await TryGetStreamColumnsAsync(host, port, ns, streamName);
+            if (page.Dropped > 0)
+                Console.WriteLine($"  ({page.Dropped} older events were dropped from the agent's buffer)");
+            if (page.Events.Count == 0)
+                Console.WriteLine("No events.");
+            foreach (var evt in page.Events)
+                Console.WriteLine(FormatStreamEvent(evt, columns));
+            Console.WriteLine($"Next: --since {page.NextSequence}");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException)
+        {
+            Output.WriteError(ex.Message, json);
+            _errorOccurred = true;
+        }
+    }
+
+    private static async Task ExtensionsWatchAsync(string host, int port, string ns, string streamName, long? since, bool json, CancellationToken cancellationToken)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; cts.Cancel(); };
+        Console.CancelKeyPress += cancel;
+        try
+        {
+            using var client = await CreateAgentClientAsync(host, port);
+            var operations = new ExtensionOperations(client);
+            var (stream, error) = await operations.FindStreamAsync(ns, streamName);
+            if (stream is null)
+            {
+                Output.WriteError(error!, json, "InvocationError");
+                _errorOccurred = true;
+                return;
+            }
+
+            if (!json)
+            {
+                Console.WriteLine($"Watching {ns}/{stream.Name} at {client.BaseUrl} (Ctrl+C to stop)");
+                Console.WriteLine();
+            }
+
+            var count = 0;
+            await operations.WatchAsync(ns, stream.Name, since, evt =>
+            {
+                if (json)
+                {
+                    Console.WriteLine(JsonSerializer.Serialize(evt, DevFlowCliJsonContext.Default.ExtensionStreamEvent));
+                    return;
+                }
+
+                if (evt.Dropped > 0)
+                    Console.WriteLine($"  ({evt.Dropped} events dropped: the agent's buffer was full)");
+                if (evt.Sequence > 0)
+                {
+                    Console.WriteLine(FormatStreamEvent(evt, stream.Columns));
+                    count++;
+                }
+            }, cts.Token);
+
+            if (!json)
+                Console.WriteLine(cts.IsCancellationRequested ? $"\n{count} events." : $"\nThe agent closed the stream after {count} events.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or NotSupportedException or System.Net.WebSockets.WebSocketException)
+        {
+            Output.WriteError(ex.Message, json);
+            _errorOccurred = true;
+        }
+        finally
+        {
+            Console.CancelKeyPress -= cancel;
+        }
+    }
+
+    private static async Task<IReadOnlyList<string>> TryGetStreamColumnsAsync(string host, int port, string ns, string streamName)
+    {
+        try
+        {
+            var (stream, _) = await SendExtensionCommandAsync(host, port, operations => operations.FindStreamAsync(ns, streamName));
+            return stream?.Columns ?? [];
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// One line per event: sequence, local time, then the stream's columns as name=value, or the whole
+    /// payload as compact JSON when the stream declares no columns or the payload is not an object.
+    /// </summary>
+    internal static string FormatStreamEvent(ExtensionStreamEvent evt, IReadOnlyList<string> columns)
+    {
+        var time = DateTimeOffset.TryParse(evt.Timestamp, out var ts)
+            ? ts.ToLocalTime().ToString("HH:mm:ss.fff")
+            : "--:--:--.---";
+
+        string detail;
+        if (columns.Count > 0 && evt.Data.ValueKind == JsonValueKind.Object)
+        {
+            var parts = new List<string>(columns.Count);
+            foreach (var column in columns)
+            {
+                if (!TryGetPropertyIgnoreCase(evt.Data, column, out var value) || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                    continue;
+                parts.Add($"{column}={(value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText())}");
+            }
+            detail = string.Join("  ", parts);
+        }
+        else
+        {
+            detail = evt.Data.ValueKind == JsonValueKind.Undefined ? string.Empty : evt.Data.GetRawText();
+        }
+
+        return $"#{evt.Sequence,-6} {time}  {detail}";
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string name, out JsonElement value)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+        value = default;
+        return false;
     }
 
     private static string TryFormatJson(string value)

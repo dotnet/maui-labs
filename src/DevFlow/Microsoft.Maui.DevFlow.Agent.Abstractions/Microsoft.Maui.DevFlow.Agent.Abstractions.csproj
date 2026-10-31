@@ -13,10 +13,12 @@
   <ItemGroup>
     <PackageReference Include="Fizzler" />
     <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Logging\Microsoft.Maui.DevFlow.Logging.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Extensibility\Microsoft.Maui.DevFlow.Extensibility.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
                       ReferenceOutputAssembly="false"
                       OutputItemType="Analyzer" />
