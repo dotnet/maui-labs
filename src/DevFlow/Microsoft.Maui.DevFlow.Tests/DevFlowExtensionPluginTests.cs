@@ -169,7 +169,7 @@ public class DevFlowExtensionPluginTests
     public async Task FaultedPlugin_RefusesStreamPollingAndNewSubscriptions()
     {
         var port = GetFreePort();
-        var plugin = new FailingStartStreamPlugin(TimeSpan.Zero);
+        var plugin = new FailingStartStreamPlugin(Task.CompletedTask);
         var options = new AgentOptions { Port = port };
         options.AddExtension(plugin);
 
@@ -194,7 +194,9 @@ public class DevFlowExtensionPluginTests
     public async Task FaultedPlugin_ClosesSubscriptionsThatWereAlreadyOpen()
     {
         var port = GetFreePort();
-        var plugin = new FailingStartStreamPlugin(TimeSpan.FromMilliseconds(500));
+        // The test decides when the plugin faults: only once the subscription is open.
+        var fault = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var plugin = new FailingStartStreamPlugin(fault.Task);
         var options = new AgentOptions { Port = port };
         options.AddExtension(plugin);
 
@@ -204,6 +206,7 @@ public class DevFlowExtensionPluginTests
 
         using var ws = new System.Net.WebSockets.ClientWebSocket();
         await ws.ConnectAsync(new Uri(client.GetExtensionStreamWebSocketUrl("com.example.failstream", "events")), CancellationToken.None);
+        fault.SetResult();
 
         var buffer = new byte[1024];
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -627,7 +630,7 @@ public class DevFlowExtensionPluginTests
         }
     }
 
-    public sealed class FailingStartStreamPlugin(TimeSpan failAfter) : DevFlowExtension("com.example.failstream", "Stream whose start fails")
+    public sealed class FailingStartStreamPlugin(Task failWhen) : DevFlowExtension("com.example.failstream", "Stream whose start fails")
     {
         public DevFlowEventStream<Reading> Events { get; } = new(10);
 
@@ -637,7 +640,7 @@ public class DevFlowExtensionPluginTests
         protected internal override async Task StartAsync(IDevFlowExtensionContext context, CancellationToken cancellationToken)
         {
             Events.Publish(new Reading("before-fault", 1));
-            await Task.Delay(failAfter, cancellationToken);
+            await failWhen.WaitAsync(cancellationToken);
             throw new InvalidOperationException("radio lost");
         }
     }
