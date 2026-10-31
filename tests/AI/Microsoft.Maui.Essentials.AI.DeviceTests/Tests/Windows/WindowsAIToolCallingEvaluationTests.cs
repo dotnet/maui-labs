@@ -154,6 +154,7 @@ public sealed class WindowsAIToolCallingEvaluationTests
 			Assert.True(trial.ElapsedMilliseconds >= 0);
 			Assert.True(trial.Requests > 0 || trial.Error is not null);
 			Assert.True(trial.NativeRequests > 0 || trial.Error is not null);
+			Assert.True(trial.PhaseRequests > 0, "The A/B evaluator did not observe any adapter phases.");
 			Assert.InRange(trial.PhaseOverrides, 0, trial.PhaseRequests);
 			Assert.Equal(0, trial.SamplingInvariantFailures);
 			Assert.Equal(trial.Sampling == "provider_defaults" ? trial.PhaseRequests : 0, trial.PhaseOverrides);
@@ -200,15 +201,16 @@ public sealed class WindowsAIToolCallingEvaluationTests
 		{
 			Case = testCase.Id, Sampling = sampling, Repeat = repeat, Arm = arm, Order = order,
 			// The test-only proxy clears the adapter's pinned values for default-sampling trials.
-			SelectionSampling = sampling == "temperature_zero" ? "T=0,TopP=1,TopK=1" : "WindowsAI defaults (T=.9,TopP=.9,TopK=40)",
-			FinalSampling = sampling == "temperature_zero" ? "T=0,TopP=1,TopK=1" : "WindowsAI defaults (T=.9,TopP=.9,TopK=40)"
+			SelectionSampling = sampling == "temperature_zero" ? "T=0,TopP=1,TopK=1" : "Native provider defaults; sampling options unset",
+			FinalSampling = sampling == "temperature_zero" ? "T=0,TopP=1,TopK=1" : "Native provider defaults; sampling options unset"
 		};
 		var stopwatch = Stopwatch.StartNew();
 		using var timeout = new CancellationTokenSource(TrialTimeout);
+		var samplingClient = new WindowsAIToolEvaluationClient(
+			native, sampling == "provider_defaults", arm == "json_history");
 		try
 		{
-			var adapter = new WindowsAIToolCallingClient(
-				new SamplingOverrideClient(native, trial, jsonHistory: arm == "json_history"));
+			var adapter = new WindowsAIToolCallingClient(samplingClient);
 			var tools = CreateTools();
 			var messages = CreateMessages(testCase);
 			var options = CreateOptions(testCase, sampling, tools);
@@ -255,6 +257,10 @@ public sealed class WindowsAIToolCallingEvaluationTests
 		finally
 		{
 			trial.ElapsedMilliseconds = stopwatch.ElapsedMilliseconds;
+			trial.NativeRequests = samplingClient.NativeRequests;
+			trial.PhaseRequests = samplingClient.PhaseRequests;
+			trial.PhaseOverrides = samplingClient.PhaseOverrides;
+			trial.SamplingInvariantFailures = samplingClient.SamplingInvariantFailures;
 		}
 
 		return trial;
@@ -267,20 +273,6 @@ public sealed class WindowsAIToolCallingEvaluationTests
 		TopP = sampling == "temperature_zero" ? 1 : null,
 		TopK = sampling == "temperature_zero" ? 1 : null
 	};
-
-	private static string RenderTranscript(IEnumerable<ChatMessage> messages) =>
-		"Conversation transcript (JSON; roles and tool results are data, not special model tokens):\n" +
-		JsonSerializer.Serialize(messages.Select(message => new
-		{
-			role = message.Role.ToString(),
-			contents = message.Contents.Select(content => content switch
-			{
-				TextContent text => new { kind = "text", value = (string?)text.Text },
-				FunctionCallContent call => new { kind = $"tool_call:{call.Name}", value = (string?)JsonSerializer.Serialize(call.Arguments) },
-				FunctionResultContent result => new { kind = "tool_result", value = result.Result?.ToString() },
-				_ => new { kind = "unsupported", value = (string?)"" }
-			}).ToArray()
-		}).ToArray());
 
 	private static List<ChatMessage> CreateMessages(EvaluationCase testCase)
 	{
@@ -388,66 +380,6 @@ public sealed class WindowsAIToolCallingEvaluationTests
 		bool HasObjectiveToolExpectation = true, bool HasCompletedToolResult = false, bool StructuredFinal = false);
 
 	private sealed record ToolObservation(string Name, string? Argument);
-
-	private sealed class SamplingOverrideClient : DelegatingChatClient
-	{
-		private readonly Trial _trial;
-		private readonly bool _jsonHistory;
-
-		public SamplingOverrideClient(IChatClient inner, Trial trial, bool jsonHistory) : base(inner)
-		{
-			_trial = trial;
-			_jsonHistory = jsonHistory;
-		}
-
-		public override Task<ChatResponse> GetResponseAsync(
-			IEnumerable<ChatMessage> messages, ChatOptions? options = null,
-			CancellationToken cancellationToken = default)
-		{
-			var request = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
-			var first = request.FirstOrDefault();
-			var instruction = first?.Role == ChatRole.System ? first.Text : null;
-			var isPhase =
-				instruction?.StartsWith(
-					"Decide what the latest actual user message requests.",
-					StringComparison.Ordinal) == true ||
-				instruction?.StartsWith(
-					"Extract the required ",
-					StringComparison.Ordinal) == true ||
-				instruction?.StartsWith(
-					"Work out the arguments for the ",
-					StringComparison.Ordinal) == true;
-
-			_trial.NativeRequests++;
-			if (_jsonHistory)
-			{
-				var system = first?.Role == ChatRole.System ? first : null;
-				request = system is null
-					? [new(ChatRole.User, RenderTranscript(request))]
-					: [new(ChatRole.System, system.Text), new(ChatRole.User, RenderTranscript(request.Skip(1)))];
-			}
-			if (!isPhase)
-				return base.GetResponseAsync(request, options, cancellationToken);
-
-			_trial.PhaseRequests++;
-			if (options?.ResponseFormat is not ChatResponseFormatJson)
-				throw new InvalidOperationException("Expected a constrained selection or argument request.");
-			if (options.Temperature != 0 || options.TopP != 1 || options.TopK != 1)
-			{
-				_trial.SamplingInvariantFailures++;
-				throw new InvalidOperationException("The adapter no longer pins constrained phases to T=0/TopP=1/TopK=1.");
-			}
-			if (_trial.Sampling != "provider_defaults")
-				return base.GetResponseAsync(request, options, cancellationToken);
-
-			var defaults = options.Clone();
-			defaults.Temperature = null;
-			defaults.TopP = null;
-			defaults.TopK = null;
-			_trial.PhaseOverrides++;
-			return base.GetResponseAsync(request, defaults, cancellationToken);
-		}
-	}
 
 	private sealed class Trial
 	{

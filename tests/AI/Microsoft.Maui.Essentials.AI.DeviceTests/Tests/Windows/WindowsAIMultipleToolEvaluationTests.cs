@@ -451,7 +451,7 @@ public sealed class WindowsAIMultipleToolEvaluationTests(ITestOutputHelper outpu
 	private static bool PlannedTogether(Trial trial, params string[] names)
 	{
 		foreach (var phase in trial.Phases.Where(phase =>
-			phase.Kind == "batch_plan" && phase.RawDecision is not null))
+			phase.Kind == "batch_tool_plan" && phase.RawDecision is not null))
 		{
 			try
 			{
@@ -704,7 +704,8 @@ public sealed class WindowsAIMultipleToolEvaluationTests(ITestOutputHelper outpu
 			IEnumerable<ChatMessage> messages, ChatOptions? options = null,
 			CancellationToken cancellationToken = default)
 		{
-			var kind = PhaseKind(options?.ResponseFormat);
+			var kind = WindowsAIToolEvaluationClient.PlannerPhase(options?.ResponseFormat) ??
+				(options?.ResponseFormat is ChatResponseFormatJson ? "structured_final_answer" : "final_answer");
 			var phase = new Phase { Kind = kind };
 			trial.Phases.Add(phase);
 			try
@@ -734,22 +735,6 @@ public sealed class WindowsAIMultipleToolEvaluationTests(ITestOutputHelper outpu
 
 		public void Dispose() { }
 
-		private static string PhaseKind(ChatResponseFormat? format)
-		{
-			if (format is not ChatResponseFormatJson { Schema: { } schema })
-				return "final_answer";
-			if (!schema.TryGetProperty("properties", out var properties))
-				return "structured";
-			if (properties.TryGetProperty("tool_names", out _))
-				return "batch_plan";
-			if (properties.TryGetProperty("decision", out _))
-				return "production_selection";
-			if (properties.TryGetProperty("evidence", out _))
-				return "batch_argument";
-			if (properties.TryGetProperty("evidence_value", out _))
-				return "production_argument";
-			return "structured";
-		}
 	}
 }
 #endif

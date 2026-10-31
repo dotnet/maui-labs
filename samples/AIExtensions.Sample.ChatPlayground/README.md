@@ -34,6 +34,9 @@ evidence and argument schemas before emitting standard tool calls. The model
 can still choose the wrong function or infer a wrong schema-valid value.
 Use only harmless tools; this is not an authorization boundary. See
 [experimental tool calling](../../docs/ai/windows-ai-tool-calling.md).
+Windows phases have a 30-second total deadline. After Stop or a timeout, restart
+the app before using that Windows client again because native termination is
+uncertain. Ordinary completed request errors do not require a restart.
 
 ### Embeddings
 

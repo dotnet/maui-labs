@@ -30,7 +30,7 @@ public sealed class WindowsAIToolCallingEvidenceEvaluationTests(ITestOutputHelpe
 		new("ambiguous_order", "Could you help me with my order?", null, null, "missing_order_id")
 	];
 
-	private static readonly Case[] HeldOut =
+	private static readonly Case[] DevelopmentRegression =
 	[
 		new("pleasantry", "Good morning!", null, null, "morning"),
 		new("date", "Which calendar date is it locally right now?", "get_date", null, "date"),
@@ -58,7 +58,22 @@ public sealed class WindowsAIToolCallingEvidenceEvaluationTests(ITestOutputHelpe
 
 	[Fact]
 	[Trait(TestTraits.RequiresModel, TestTraits.True)]
-	public Task ProductionAdapter_HeldOutCases() => RunSetAsync("held_out", HeldOut);
+	public Task ProductionAdapter_DevelopmentRegressionCases() =>
+		RunSetAsync("development_regression", DevelopmentRegression);
+
+	[Theory]
+	[InlineData("role_text", "unnecessary_call", true)]
+	[InlineData("role_text", "wrong_call", false)]
+	[InlineData("order", "missed_call", false)]
+	public void DispatchGate_IncorrectCallAlwaysFails(string name, string status, bool unnecessary)
+	{
+		var observation = new Observation
+		{
+			Case = name, Status = status, UnnecessaryCall = unnecessary, CallCorrect = false
+		};
+
+		Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertDispatchCorrectness([observation]));
+	}
 
 	private async Task RunSetAsync(string setName, Case[] cases)
 	{
@@ -107,20 +122,23 @@ public sealed class WindowsAIToolCallingEvidenceEvaluationTests(ITestOutputHelpe
 			MissedOrWrongCalls = observations.Count(observation =>
 				observation.Status is "missed_call" or "wrong_call"),
 			Errors = observations.Count(observation =>
-				observation.Status is "error" or "timed_out" or "repeated_call"),
+				observation.Status is "error" or "timed_out" or "repeated_call" or "extra_call"),
 			NativeRequests = observations.Sum(observation => observation.Phases.Count),
 			ElapsedMilliseconds = observations.Sum(observation => observation.ElapsedMilliseconds)
 		});
 
-		if (setName == "core")
-			Assert.Empty(failures);
-		else
-		{
-			Assert.True(successes >= 18,
-				$"Expected at least 18/20 held-out successes; observed {successes}/{observations.Count}.");
-			Assert.All(failures, failure => Assert.Equal("role_text", failure.Case));
-		}
+		AssertDispatchCorrectness(observations);
+		Assert.Empty(failures);
 	}
+
+	private static void AssertDispatchCorrectness(IEnumerable<Observation> observations) =>
+		Assert.All(observations, observation =>
+		{
+			Assert.False(observation.UnnecessaryCall,
+				$"{observation.Case} emitted an unrequested function.");
+			Assert.True(observation.CallCorrect,
+				$"{observation.Case} returned {observation.Status} instead of the expected dispatch behavior.");
+		});
 
 	private async Task PreflightAsync(NativeModelLease lease)
 	{
@@ -196,8 +214,9 @@ public sealed class WindowsAIToolCallingEvidenceEvaluationTests(ITestOutputHelpe
 
 			var response = await client.GetResponseAsync(messages, options, timeout.Token)
 				.WaitAsync(timeout.Token);
-			var call = response.Messages.SelectMany(message => message.Contents)
-				.OfType<FunctionCallContent>().FirstOrDefault();
+			var calls = response.Messages.SelectMany(message => message.Contents)
+				.OfType<FunctionCallContent>().ToArray();
+			var call = calls.FirstOrDefault();
 			if (call is not null)
 			{
 				var key = call.Name switch
@@ -211,6 +230,24 @@ public sealed class WindowsAIToolCallingEvidenceEvaluationTests(ITestOutputHelpe
 						? value?.ToString()
 						: null;
 				observation.Call = new(call.Name, argument);
+				if (calls.Length > 1)
+				{
+					foreach (var extra in calls.Skip(1))
+					{
+						var extraKey = extra.Name switch
+						{
+							"lookup_order" => "orderId",
+							"get_weather" => "city",
+							_ => null
+						};
+						observation.ExtraCalls.Add(new(extra.Name,
+							extraKey is not null && extra.Arguments?.TryGetValue(extraKey, out var extraValue) == true
+								? extraValue?.ToString() : null));
+					}
+					observation.Status = "extra_call";
+					observation.UnnecessaryCall = true;
+					return observation;
+				}
 				if (test.Tool is null)
 				{
 					observation.Status = "unnecessary_call";
@@ -272,8 +309,8 @@ public sealed class WindowsAIToolCallingEvidenceEvaluationTests(ITestOutputHelpe
 		finally
 		{
 			observation.ElapsedMilliseconds = timer.ElapsedMilliseconds;
-			observation.UnnecessaryCall = test.Tool is null && observation.Call is not null;
-			observation.CallCorrect = observation.Status is not ("timed_out" or "error") &&
+			observation.UnnecessaryCall |= test.Tool is null && observation.Call is not null;
+			observation.CallCorrect = observation.Status is not ("timed_out" or "error" or "extra_call" or "repeated_call") &&
 				(test.Tool is null
 					? observation.Call is null
 					: observation.Call is { } call &&
@@ -367,6 +404,7 @@ public sealed class WindowsAIToolCallingEvidenceEvaluationTests(ITestOutputHelpe
 		public int Repeat { get; init; }
 		public string Status { get; set; } = "in_progress";
 		public Call? Call { get; set; }
+		public List<Call> ExtraCalls { get; } = [];
 		public bool CallCorrect { get; set; }
 		public bool UnnecessaryCall { get; set; }
 		public bool? FactCorrect { get; set; }

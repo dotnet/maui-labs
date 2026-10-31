@@ -34,6 +34,8 @@ one. The host removes those placeholders recursively, preserves array positions,
 and validates the remaining values against the original function schema.
 Missing required values clarify; omitted optional parameters retain their
 ordinary C# defaults. This is generic schema handling, not a per-tool normalizer.
+When the caller requests structured JSON, clarification uses the final-answer
+phase with that same schema rather than returning an unformatted text question.
 
 The host verifies evidence provenance and the supported schema subset before
 emitting standard `FunctionCallContent`. `UseFunctionInvocation()` executes the
@@ -42,6 +44,10 @@ not the raw function-call transcript. Final-answer streaming remains streaming;
 planning and extraction are buffered. Caller response formats are preserved for
 the final answer. All inner calls clear `Tools`, `ToolMode`, and
 `AllowMultipleToolCalls`; the native client does not register managed functions.
+The adapter validates original caller options and recognized message content
+before any selection or tool dispatch. Function calls belong in Assistant
+history and results in Tool history; misplaced content is rejected rather than
+reclassified as trusted tool data.
 
 ## Bounds and limitations
 
@@ -77,6 +83,10 @@ the final answer. All inner calls clear `Tools`, `ToolMode`, and
   In a long-lived playground client, cancellation therefore requires recreating
   the client (currently restarting the app). Ownership-aware recovery is not
   implemented for wrappers around arbitrary or caller-supplied native models.
+  An ordinary completed validation, readiness, or generation error propagates
+  without quarantining the wrapper. The 30-second bound is a total phase
+  deadline, including final answers and tool-less requests; it is not an
+  inactivity timer.
 
 Do not expose consequential, privacy-sensitive, or side-effecting functions
 without separate application authorization. This research adapter does not
@@ -121,8 +131,10 @@ results are encouraging, but these observations do not establish reliable
 multiple/dependent calls. The old 20/20 development-regression figure is not a
 measurement of the updated extraction grammar.
 
-The main client was reduced from 1,517 to about 1,180 lines. Schema validation
-now has one focused production helper; moving it does not itself reduce total
+In that cleanup iteration, the main client was reduced from 1,517 to 1,182 lines.
+Subsequent review fixes added request-validation and lifecycle handling, so that
+historical line count is not a description of the current file. Schema validation
+has one focused production helper; moving it does not itself reduce total
 complexity. The helper retains exact numeric bounds and all previous validation
 cases. No new classifier/critic, tokenizer-specific delimiters, per-function
 argument processing, or generic orchestration framework was added.
@@ -137,3 +149,35 @@ Real-model evaluators additionally require
 at a time with no other model probe active, archive TRX and runner events, and
 stop on the first timeout rather than repeatedly retrying. Historical XHarness
 commands are not the current runner contract.
+
+The broader development set is named
+`WindowsAIToolCallingEvidenceEvaluationTests.ProductionAdapter_DevelopmentRegressionCases`.
+It is not a held-out benchmark: every unexpected or wrong dispatch fails,
+including quoted-role cases. Answer-quality checks are scenario-specific
+regressions, not semantic quality scores. The sampling A/B evaluator identifies
+adapter phases by their structured-schema names, asserts a nonzero phase count,
+and verifies the requested sampling override; a structured final answer is not
+classified as a planner phase.
+
+### Review hardening (2026-10-31)
+
+Whole-PR reviews by Sonnet 5.5 and Gemini 4 Argon identified and verified fixes
+for completed streaming faults, structured clarification, pre-dispatch request
+validation, role-safe history, evidence-span handling, tool-mode value semantics,
+optional/default handling, and evaluator correctness. Subsequent passes by both
+reviewers reported no actionable findings.
+
+The final model-free validation passed:
+
+- 682/682 portable AI unit tests, including 388 wrapper/evaluator-proxy cases.
+- 391/391 packaged Windows cases: the same 388 cases plus three dispatch-gate
+  rejection tests. Fresh TCP begin/result/end records and matching TRX were checked.
+- 166/166 Chat Playground tests.
+- Windows library and Playground builds: zero warnings and errors.
+- Evaluated compile items exclude the three Windows-only scripted source files
+  from Android, iOS, and Mac Catalyst device-test builds while retaining the
+  portable test project's explicit links and the Windows compilation items.
+
+No live-model accuracy run was repeated for this contract-hardening pass. These
+results establish the scripted dispatch/lifecycle contracts, not general model
+intent accuracy or recovery from a native platform stall.

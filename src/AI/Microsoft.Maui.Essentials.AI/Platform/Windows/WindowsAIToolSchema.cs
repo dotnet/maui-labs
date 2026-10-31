@@ -67,6 +67,8 @@ internal static class WindowsAIToolSchema
 					if (property.Value.ValueKind == JsonValueKind.Null &&
 						child.GetProperty("type").GetString() != "null")
 						continue;
+					if (!IsRequired(schema, property.Name) && IsAbsentObjectShell(property.Value, child))
+						continue;
 					writer.WritePropertyName(property.Name);
 					WritePresentValues(writer, property.Value, child);
 				}
@@ -84,6 +86,30 @@ internal static class WindowsAIToolSchema
 		}
 		else
 			value.WriteTo(writer);
+	}
+
+	private static bool IsRequired(JsonElement schema, string name) =>
+		schema.TryGetProperty("required", out var required) &&
+			required.EnumerateArray().Any(property => property.GetString() == name);
+
+	private static bool IsAbsentObjectShell(JsonElement value, JsonElement schema)
+	{
+		if (value.ValueKind != JsonValueKind.Object || !value.EnumerateObject().Any() ||
+			!schema.TryGetProperty("properties", out var properties))
+			return false;
+		var names = new HashSet<string>(StringComparer.Ordinal);
+		foreach (var property in value.EnumerateObject())
+		{
+			// Unknown and duplicate keys must survive normalization so validation rejects them.
+			if (!names.Add(property.Name) || !properties.TryGetProperty(property.Name, out var child))
+				return false;
+			if (property.Value.ValueKind == JsonValueKind.Null &&
+				child.GetProperty("type").GetString() != "null")
+				continue;
+			if (!IsAbsentObjectShell(property.Value, child))
+				return false;
+		}
+		return true;
 	}
 
 	/// <summary>Whether a parameter schema declares any properties to fill in.</summary>

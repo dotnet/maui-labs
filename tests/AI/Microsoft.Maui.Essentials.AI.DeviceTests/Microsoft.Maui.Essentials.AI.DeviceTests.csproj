@@ -69,6 +69,12 @@
     <DefineConstants>$(DefineConstants);WINDOWS_AI_TOOL_EVALUATION</DefineConstants>
   </PropertyGroup>
 
+  <ItemGroup Condition="!$(TargetFramework.Contains('-windows'))">
+    <Compile Remove="Tests\Windows\WindowsAIToolCallingClientTests.cs" />
+    <Compile Remove="Tests\Windows\WindowsAIToolEvaluationClient.cs" />
+    <Compile Remove="Tests\Windows\WindowsAIToolEvaluationClientTests.cs" />
+  </ItemGroup>
+
   <!-- Windows AI WinRT APIs -->
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
     <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion_Experimental)" />
