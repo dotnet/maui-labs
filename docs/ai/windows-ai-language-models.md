@@ -17,6 +17,9 @@ tool, structured-output, streaming, and error behavior is defined in the
 
 The provider never silently switches to a cloud model.
 
+The separate [experimental tool-calling adapter](windows-ai-tool-calling.md)
+adds model-driven managed function calls without changing the native provider.
+
 ## Packaging
 
 Use the [Chat Playground manifest](../../samples/AIExtensions.Sample.ChatPlayground/Platforms/Windows/Package.appxmanifest)

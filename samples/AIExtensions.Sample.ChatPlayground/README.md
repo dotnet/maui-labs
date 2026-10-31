@@ -13,7 +13,7 @@ Chat, Embeddings, and Images have separate providers and capabilities.
 | Provider | Text | Image input | Tools | Structured JSON |
 |----------|------|-------------|-------|-----------------|
 | Apple Intelligence | iOS / Mac Catalyst 26+ on supported hardware | OS 27+ with a ready vision model | Supported | Supported |
-| Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Not supported | Not supported | Supported |
+| Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Not supported | Experimental adapter | Supported |
 | Gemini Nano | Android API 26+ on supported AICore hardware | In-memory images | Not supported | Not supported |
 | Azure OpenAI | Configured Responses API deployment | Supported by compatible deployments | Supported by compatible deployments | Supported by compatible deployments |
 | Replay | Recorded responses | No new image input | Recorded activity, no execution | Recorded responses |
@@ -27,6 +27,16 @@ recordings. Replay works offline; switch to a live provider to continue chatting
 Controls reflect provider capabilities. Uncheck tools or choose **None** to disable calls.
 Switching providers preserves your Structured JSON preference, but providers
 that opt out receive plain-text requests and their responses display as text.
+
+Windows Chat always layers the experimental `WindowsAIToolCallingClient` over
+the native text client. It selects functions with constrained JSON and validates
+evidence and argument schemas before emitting standard tool calls. The model
+can still choose the wrong function or infer a wrong schema-valid value.
+Use only harmless tools; this is not an authorization boundary. See
+[experimental tool calling](../../docs/ai/windows-ai-tool-calling.md).
+Windows phases have a 30-second total deadline. After Stop or a timeout, restart
+the app before using that Windows client again because native termination is
+uncertain. Ordinary completed request errors do not require a restart.
 
 ### Embeddings
 

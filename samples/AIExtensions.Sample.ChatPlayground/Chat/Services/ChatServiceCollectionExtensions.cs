@@ -51,16 +51,20 @@ internal static class ChatServiceCollectionExtensions
 
 #if WINDOWS
     [SupportedOSPlatform("windows10.0.26100.0")]
-    private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider) =>
-        new WindowsAIChatClient()
+    private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider)
+        => new WindowsAIChatClient()
             .AsBuilder()
             .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "windows-ai-chat",
                 "Windows AI",
-                "Windows AI checks model readiness on first use. Tool calling and image input are unavailable."))
+                "Windows AI checks model readiness on first use. Direct image input is unavailable. " +
+                "Experimental tool selection can choose the wrong function or arguments; use only harmless playground tools.",
+                SupportsToolCalling: true))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Use(inner => new WindowsAIToolCallingClient(inner))
             .Build();
 #endif
 
