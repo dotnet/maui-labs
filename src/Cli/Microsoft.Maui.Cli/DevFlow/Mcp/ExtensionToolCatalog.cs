@@ -93,6 +93,11 @@ public sealed partial class ExtensionToolCatalog
 	internal void Sync(Dictionary<string, ExtensionDescriptor>? extensions, string? hash, string? agentUrl)
 	{
 		var wanted = BuildTools(extensions ?? new Dictionary<string, ExtensionDescriptor>());
+
+		// Each add or remove raises the collection's Changed event, so the client gets one
+		// tools/list_changed per tool that changed. ModelContextProtocol 1.1.0 has no way to batch them;
+		// 2.0 adds McpServerPrimitiveCollection.DeferChangedEvents(), which this should use once the
+		// repo moves to it.
 		lock (_published)
 		{
 			foreach (var name in _published.Keys.Where(name => !wanted.ContainsKey(name)).ToArray())
