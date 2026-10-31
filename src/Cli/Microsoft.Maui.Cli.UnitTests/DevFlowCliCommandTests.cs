@@ -86,6 +86,25 @@ public class DevFlowCliCommandTests
         Assert.Contains("was not found", document.RootElement.GetProperty("error").GetString());
     }
 
+    [Fact]
+    public async Task ExtensionsCall_LeaseHeldByAnotherSession_WritesStructuredError()
+    {
+        var server = new MockAgentServer(supportMutationLease: true, mutationLeaseHeldByOther: true);
+        await server.StartAsync();
+        await using var _ = server;
+        var cli = new CliTestHarness(server.Port);
+
+        var result = await cli.InvokeAsync(
+            "devflow", "extensions", "call",
+            "com.example.diagnostics", "echo", """{"message":"hello"}""",
+            "--json");
+
+        Assert.Equal(1, result.ExitCode);
+        using var document = JsonDocument.Parse(result.StdErr);
+        Assert.Contains("Another DevFlow session is driving this app", document.RootElement.GetProperty("error").GetString());
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ext/com.example.diagnostics/echo");
+    }
+
     // ========== ui status / tree / query / element / hit-test ==========
 
     [Fact]

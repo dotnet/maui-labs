@@ -2016,7 +2016,8 @@ public partial class DevFlowCommands
 
             Console.WriteLine(TryFormatJson(result!));
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException)
+        // A write tool needs the mutation lease; another session holding it is a normal answer.
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or JsonException or NotSupportedException or MutationLeaseException)
         {
             Output.WriteError(ex.Message, json);
             _errorOccurred = true;
