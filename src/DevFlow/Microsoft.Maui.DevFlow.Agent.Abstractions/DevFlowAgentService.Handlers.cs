@@ -340,6 +340,7 @@ public partial class DevFlowAgentService
 
     public async Task StopAsync()
     {
+        await StopPluginsAsync();
         await StopProfilerAsync();
         await StopBackendAsync();
         await _server.StopAsync();
@@ -464,37 +465,45 @@ public partial class DevFlowAgentService
 
     protected void RegisterExtensionRoutes()
     {
-        var namespaces = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var extension in _options.Extensions)
+            RegisterExtensionRoutes(extension);
+    }
+
+    private void RegisterExtensionRoutes(AgentExtension extension)
+    {
+        if (!_extensionNamespaces.Add(extension.Namespace))
+            throw new InvalidOperationException($"Duplicate extension namespace registration: {extension.Namespace}");
+
+        foreach (var route in extension.Routes)
         {
-            if (!namespaces.Add(extension.Namespace))
-                throw new InvalidOperationException($"Duplicate extension namespace registration: {extension.Namespace}");
+            var key = $"{route.Method} {route.Path}";
+            if (!_extensionRouteKeys.Add(key))
+                throw new InvalidOperationException($"Duplicate extension route registration: {key}");
 
-            foreach (var route in extension.Routes)
+            switch (route.Method)
             {
-                var key = $"{route.Method} {route.Path}";
-                if (!seen.Add(key))
-                    throw new InvalidOperationException($"Duplicate extension route registration: {key}");
-
-                switch (route.Method)
-                {
-                    case "GET":
-                        _server.MapGet(route.Path, route.Handler);
-                        break;
-                    case "POST":
-                        _server.MapPost(route.Path, route.Handler, route.RequiresMutationLease);
-                        break;
-                    case "PUT":
-                        _server.MapPut(route.Path, route.Handler, route.RequiresMutationLease);
-                        break;
-                    case "DELETE":
-                        _server.MapDelete(route.Path, route.Handler, route.RequiresMutationLease);
-                        break;
-                    default:
-                        throw new InvalidOperationException($"Unsupported extension route method: {route.Method}");
-                }
+                case "GET":
+                    _server.MapGet(route.Path, route.Handler);
+                    break;
+                case "POST":
+                    _server.MapPost(route.Path, route.Handler, route.RequiresMutationLease);
+                    break;
+                case "PUT":
+                    _server.MapPut(route.Path, route.Handler, route.RequiresMutationLease);
+                    break;
+                case "DELETE":
+                    _server.MapDelete(route.Path, route.Handler, route.RequiresMutationLease);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unsupported extension route method: {route.Method}");
             }
+        }
+
+        foreach (var stream in extension.Streams)
+        {
+            var descriptor = stream;
+            _server.MapWebSocket(descriptor.WebSocketPath, (client, networkStream, request, ct)
+                => HandleExtensionStreamWebSocket(descriptor, client, networkStream, request, ct));
         }
     }
 
@@ -530,7 +539,7 @@ public partial class DevFlowAgentService
 
         foreach (var extension in _options.Extensions.OrderBy(e => e.Namespace, StringComparer.Ordinal))
         {
-            extensions[extension.Namespace] = new Dictionary<string, object?>
+            var metadata = new Dictionary<string, object?>
             {
                 ["version"] = extension.Version,
                 ["description"] = extension.Description,
@@ -551,6 +560,28 @@ public partial class DevFlowAgentService
                     }
                 }).ToArray()
             };
+
+            // Additive fields: older clients ignore them, and inline extensions without streams
+            // keep the descriptor (and its hash) they had before plugins existed.
+            if (extension.Streams.Count > 0)
+            {
+                metadata["streams"] = extension.Streams.Select(stream => new Dictionary<string, object?>
+                {
+                    ["name"] = stream.Name,
+                    ["description"] = stream.Description,
+                    ["path"] = stream.Path,
+                    ["webSocketPath"] = stream.WebSocketPath,
+                    ["columns"] = stream.Columns.ToArray()
+                }).ToArray();
+            }
+            if (!string.IsNullOrWhiteSpace(extension.ToolPrefix))
+                metadata["toolPrefix"] = extension.ToolPrefix;
+            if (extension.Plugin is not null || extension.Error is not null)
+                metadata["state"] = extension.State;
+            if (extension.Error is not null)
+                metadata["error"] = extension.Error;
+
+            extensions[extension.Namespace] = metadata;
         }
 
         return extensions;
@@ -1335,6 +1366,7 @@ public partial class DevFlowAgentService
         _disposed = true;
         NetworkStore.OnRequestCaptured -= HandleCapturedNetworkRequest;
         AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
+        _pluginCts?.Cancel();
         StopAutoUiHooks();
         DisposeBackendResources();
 

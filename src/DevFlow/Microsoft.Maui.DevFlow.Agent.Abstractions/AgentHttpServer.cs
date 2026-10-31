@@ -640,6 +640,11 @@ public class AgentHttpServer : IDisposable
                 return await WebSocketReadTextAsync(stream, ct); // continue reading
             }
 
+            // Pong: the answer to our keep-alive ping, or a client's own keep-alive (RFC 6455 §5.5.3).
+            // Treating it as a close dropped every stream at its first ping.
+            if (opcode == 0x0A)
+                return await WebSocketReadTextAsync(stream, ct);
+
             return null;
         }
         catch { return null; }

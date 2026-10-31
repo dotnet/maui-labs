@@ -1,3 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.DevFlow.Extensibility;
+
 namespace Microsoft.Maui.DevFlow.Agent.Core;
 
 /// <summary>
@@ -175,4 +179,46 @@ public class AgentOptions
         Extensions.Add(extension);
         return extension;
     }
+
+    /// <summary>
+    /// Plugins added with <see cref="AddExtension{T}"/>. The agent creates and configures them when it
+    /// starts, after the app's services exist.
+    /// </summary>
+    internal IList<ExtensionRegistration> ExtensionFactories { get; } = new List<ExtensionRegistration>();
+
+    /// <summary>
+    /// Service provider plugins are created from when the host does not supply one. MAUI hosts use the
+    /// app's provider automatically; set this for a plain .NET agent that has a container.
+    /// </summary>
+    public IServiceProvider? Services { get; set; }
+
+    /// <summary>
+    /// Adds a plugin. It is created when the agent starts, from the app's service provider when one is
+    /// available, so its constructor can take app services.
+    /// </summary>
+    public AgentOptions AddExtension<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>()
+        where T : DevFlowExtension
+        => AddExtension(typeof(T).FullName ?? typeof(T).Name, services => services is null
+            ? Activator.CreateInstance<T>()
+            : ActivatorUtilities.CreateInstance<T>(services));
+
+    /// <summary>Adds a plugin instance.</summary>
+    public AgentOptions AddExtension(DevFlowExtension extension)
+    {
+        ArgumentNullException.ThrowIfNull(extension);
+        return AddExtension(extension.GetType().FullName ?? extension.Namespace, _ => extension);
+    }
+
+    /// <summary>Adds a plugin created by <paramref name="factory"/> when the agent starts.</summary>
+    public AgentOptions AddExtension(Func<IServiceProvider?, DevFlowExtension> factory)
+        => AddExtension("extension factory", factory);
+
+    private AgentOptions AddExtension(string name, Func<IServiceProvider?, DevFlowExtension> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        ExtensionFactories.Add(new ExtensionRegistration(name, factory));
+        return this;
+    }
 }
+
+internal sealed record ExtensionRegistration(string Name, Func<IServiceProvider?, DevFlowExtension> Factory);
