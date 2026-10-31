@@ -20,6 +20,16 @@ The provider never silently switches to a cloud model.
 The separate [experimental tool-calling adapter](windows-ai-tool-calling.md)
 adds model-driven managed function calls without changing the native provider.
 
+The Chat Playground offers optional sample-only image descriptions with
+`AI:EnableWindowsImageDescriptions=true` (default off). A separate on-device
+`ImageDescriptionGenerator` captions attachments before sending text to this
+client; the model does not see pixels alongside the question. The original
+image remains in the recording. The legacy trip planner uses this client only
+for text-only chat and travel tips; its tool-dependent itinerary and semantic
+search still require configured Azure OpenAI and embeddings. There is no
+portable Windows embedding generator or available `AppContentIndex` WinRT
+namespace for that workflow.
+
 ## Packaging
 
 Use the [Chat Playground manifest](../../samples/AIExtensions.Sample.ChatPlayground/Platforms/Windows/Package.appxmanifest)
