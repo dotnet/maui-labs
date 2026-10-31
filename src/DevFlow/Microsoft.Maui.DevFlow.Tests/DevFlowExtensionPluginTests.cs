@@ -55,6 +55,26 @@ public class DevFlowExtensionPluginTests
     }
 
     [Fact]
+    public async Task Plugin_ErrorMessage_ReachesTheCaller()
+    {
+        var port = GetFreePort();
+        var options = new AgentOptions { Port = port, Services = ThermometerServices(), RequireMutationLease = false };
+        options.AddExtension<ThermometerPlugin>();
+
+        using var service = new DevFlowAgentService(options);
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(null);
+
+        var descriptor = (await client.GetExtensionsAsync())["com.example.thermo"];
+        var set = descriptor.Tools.Single(t => t.Name == "set");
+
+        // The plugin refuses the call and says why; the caller (CLI, MCP) needs that text, not just "400".
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => client.CallExtensionToolAsync(set.Method, set.Path, Json("""{"celsius":"hot"}""")));
+        Assert.Contains("celsius must be a number", ex.Message);
+        Assert.Equal(HttpStatusCode.BadRequest, ex.StatusCode);
+    }
+
+    [Fact]
     public async Task Plugin_WriteTools_RequireTheMutationLease()
     {
         var port = GetFreePort();
@@ -617,7 +637,9 @@ public class DevFlowExtensionPluginTests
 
             builder.MapTool("set", "Sets the temperature.", "POST", "/set", request =>
             {
-                thermometer.Celsius = double.Parse(request.GetParameter("celsius")!, System.Globalization.CultureInfo.InvariantCulture);
+                if (!double.TryParse(request.GetParameter("celsius"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var celsius))
+                    return Task.FromResult(DevFlowResponse.Error("celsius must be a number"));
+                thermometer.Celsius = celsius;
                 return Task.FromResult(DevFlowResponse.Ok());
             });
 
