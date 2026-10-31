@@ -41,15 +41,28 @@ Generate text vectors, index imported documents, and search their content.
 
 ### Image generation
 
-Generate or edit images using a configured Azure OpenAI deployment. Chat image
-input does not imply image-generation support.
+Generate or edit images using Windows AI or a configured Azure OpenAI deployment.
+Chat image input does not imply image-generation support.
+
+Open **Images**, select a generator in settings, enter a prompt, and generate.
+To edit, use **Choose image** or **Use sample image** from the attachment menu.
+The stop button requests cancellation; when it takes effect depends on the provider.
 
 | Provider | Image generation |
 |----------|------------------|
 | Apple on-device | Not supported |
-| Windows on-device | Coming soon |
+| Windows on-device | Experimental text-to-image and single-image edits |
 | Android on-device | Not supported |
 | Azure OpenAI | Supported by the configured image deployment |
+
+For the Windows provider, first use may download a large optional model. Select
+PNG or JPEG and the provider-default size; WebP, masks, and requested sizes are
+unsupported. Use at most one source image. Windows generation cannot be
+interrupted mid-call.
+
+Provider implementers should follow the
+[shared image contracts](../../docs/ai/image-generation-provider.md);
+Windows-specific setup and limits stay in its companion guide.
 
 ## Diagnostics
 
@@ -88,9 +101,11 @@ dotnet run --project samples\AIExtensions.Sample.ChatPlayground\AIExtensions.Sam
 ```
 
 Keep the Windows sample MSIX-packaged for on-device AI. It bundles an
-experimental Windows App SDK runtime while the library uses stable APIs.
+experimental Windows App SDK runtime matching the image-enabled library.
 See the [Windows AI language models guide](../../docs/ai/windows-ai-language-models.md)
-for hardware, capability, packaging, and access requirements.
+for hardware, capability, packaging, and access requirements, and the
+[Windows image generation guide](../../docs/ai/windows-ai-image-generation.md)
+for image dependencies and options.
 
 ### Android
 

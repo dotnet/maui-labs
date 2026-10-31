@@ -1,6 +1,6 @@
 # Microsoft.Maui.Essentials.AI
 
-On-device chat and text embeddings through
+On-device chat, text embeddings, and image generation through
 [`Microsoft.Extensions.AI`](https://learn.microsoft.com/dotnet/ai/ai-extensions),
 backed by Apple Intelligence, Apple NaturalLanguage, Windows AI, and Gemini Nano.
 Chat capabilities vary by platform; Apple supports native tool execution and
@@ -33,7 +33,7 @@ compatible Windows App SDK, and the applicable model-access configuration.
 
 | Package | Purpose |
 |---------|---------|
-| `Microsoft.Maui.Essentials.AI` | Apple, Windows, and Android on-device chat, plus Apple text embeddings |
+| `Microsoft.Maui.Essentials.AI` | Apple, Windows, and Android on-device chat, Apple text embeddings, and experimental Windows image generation |
 
 ```bash
 dotnet add package Microsoft.Maui.Essentials.AI --prerelease
@@ -206,6 +206,32 @@ to aggregate the stream and read `ChatResponse.Usage`. Usage is per request;
 accumulate it with `UsageDetails.Add` for conversation totals. Counts come
 from Foundation Models, not estimates, and usage is `null` on Apple OS 26.
 
+## Image generation
+
+Image generation is separate from chat image input and tool calling.
+
+| Platform | Native image generation |
+|----------|-------------------------|
+| Apple | Not supported |
+| Windows | Experimental text-to-image and single-image edits |
+| Android | Not supported |
+
+Use `WindowsAIImageGenerator` as an `IImageGenerator` in a packaged Windows app.
+It requires the experimental SDK listed in the
+[Windows image generation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-image-generation.md#requirements-and-dependencies).
+
+```csharp
+using var generator = new WindowsAIImageGenerator();
+var response = await generator.GenerateAsync(
+    new ImageGenerationRequest("A blue sailboat on a lake."));
+```
+
+Acknowledge `MEAI001` where using the experimental M.E.AI image API. Requests
+accept zero or one source image and return encoded bytes (PNG by default);
+masks and multiple source images are unsupported. First use may download a
+large optional model. Native inference is synchronous and cannot be interrupted
+mid-call. See [formats and options](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-image-generation.md#usage-and-options).
+
 ## Diagnostics
 
 Reference `Microsoft.Extensions.AI` to use its telemetry middleware:
@@ -265,8 +291,10 @@ The corresponding model asset must be installed.
 ## Guides and samples
 
 - [Chat provider implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) — shared behavior and provider policy.
+- [Image provider implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/image-generation-provider.md) — shared image contracts and provider differences.
 - [Apple Foundation Models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models.md) — Apple toolchain, images, availability, bridge mechanics, and validation.
 - [Windows AI language models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-language-models.md) — Windows packaging, readiness, dependencies, and validation.
+- [Windows image generation](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-image-generation.md) — experimental image dependencies, formats, and options.
 - [Gemini Nano Android](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md) — Android binding, AICore readiness, download, and validation.
 - [Chat Playground](https://github.com/dotnet/maui-labs/tree/main/samples/AIExtensions.Sample.ChatPlayground)
 - [Essentials AI sample](https://github.com/dotnet/maui-labs/tree/main/samples/EssentialsAISample)

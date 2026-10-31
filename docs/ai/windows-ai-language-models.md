@@ -37,19 +37,22 @@ packaged `dotnet run`.
 
 ## Dependencies
 
-The library references the stable AI package. Windows sample and device-test
-apps select the experimental umbrella SDK so their AI, Foundation, and
+The library's experimental image-generation surface requires the experimental
+AI package. Windows sample and device-test apps select the matching umbrella SDK
+so their AI, Foundation, and
 InteractiveExperiences components remain aligned:
 
 | Package | Library | Windows samples and device tests |
 | --- | --- | --- |
 | `Microsoft.WindowsAppSDK` | Not referenced | `2.5.4-experimental` |
-| `Microsoft.WindowsAppSDK.AI` | `2.4.4` | `2.5.4-experimental` (transitive) |
-| `Microsoft.WindowsAppSDK.Foundation` | `2.3.9` (transitive) | `2.3.13-experimental` (transitive) |
-| `Microsoft.WindowsAppSDK.InteractiveExperiences` | `2.1.3` (transitive) | `2.1.10-experimental` (transitive) |
+| `Microsoft.WindowsAppSDK.AI` | `2.5.4-experimental` | `2.5.4-experimental` (transitive) |
+| `Microsoft.WindowsAppSDK.Foundation` | `2.3.13-experimental` (transitive) | `2.3.13-experimental` (transitive) |
+| `Microsoft.WindowsAppSDK.InteractiveExperiences` | `2.1.10-experimental` (transitive) | `2.1.10-experimental` (transitive) |
 
 The explicit app SDK selection avoids conflicts with MAUI's implicit Windows
 App SDK graph. Experimental sample settings are not a production access grant.
+See [Windows image generation](windows-ai-image-generation.md) for that
+separate model, setup policy, and image-specific options.
 
 ## Registration
 

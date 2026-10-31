@@ -5,9 +5,11 @@ using DeviceRunners.UITesting;
 using DeviceRunners.VisualRunners;
 using Microsoft.Extensions.AI;
 
-#if ENABLE_OPENAI_CLIENT
+#if ENABLE_OPENAI_CLIENT || ENABLE_OPENAI_IMAGE_TESTS
 using System.ClientModel;
 using OpenAI;
+#endif
+#if ENABLE_OPENAI_CLIENT
 using OpenAI.Embeddings;
 #endif
 
@@ -34,7 +36,7 @@ public static class MauiProgram
 
 	private static void TryAddOpenAI(this MauiAppBuilder builder)
 	{
-#if ENABLE_OPENAI_CLIENT
+#if ENABLE_OPENAI_CLIENT || ENABLE_OPENAI_IMAGE_TESTS
 
 		var assembly = Assembly.GetExecutingAssembly();
 		var stream = assembly.GetManifestResourceStream("Microsoft.Maui.Essentials.AI.DeviceTests.secrets.json");
@@ -45,8 +47,10 @@ public static class MauiProgram
 
 		var apikey = aiSection["ApiKey"] ?? throw new InvalidOperationException("API Key not found in user secrets.");
 		var endpoint = new Uri(aiSection["Endpoint"] ?? throw new InvalidOperationException("Endpoint not found in user secrets."));
+#if ENABLE_OPENAI_CLIENT
 		var chatModel = aiSection["DeploymentName"] ?? throw new InvalidOperationException("Deployment Name not found in user secrets.");
 		var embeddingModel = aiSection["EmbeddingDeploymentName"] ?? throw new InvalidOperationException("Embedding Deployment Name not found in user secrets.");
+#endif
 
 		var client = new OpenAIClient(
 			credential: new ApiKeyCredential(apikey),
@@ -54,6 +58,7 @@ public static class MauiProgram
 			{
 				Endpoint = endpoint,
 			});
+#if ENABLE_OPENAI_CLIENT
 #pragma warning disable OPENAI001 // Responses API is experimental in the pinned SDK.
 		builder.Services.AddSingleton<IChatClient>(client.GetResponsesClient().AsIChatClient(chatModel));
 #pragma warning restore OPENAI001
@@ -66,6 +71,15 @@ public static class MauiProgram
 				Endpoint = endpoint,
 			});
 		builder.Services.AddSingleton(embeddings);
+#endif
+
+#if ENABLE_OPENAI_IMAGE_TESTS
+		var imageModel = aiSection["ImageDeploymentName"];
+		if (string.IsNullOrWhiteSpace(imageModel))
+			throw new InvalidOperationException("AI:ImageDeploymentName is required when OpenAI image tests are enabled.");
+
+		builder.Services.AddSingleton(client.GetImageClient(imageModel));
+#endif
 
 #endif
 	}

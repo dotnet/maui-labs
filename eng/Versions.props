@@ -111,6 +111,8 @@
     <DeviceRunnersVersion>0.1.0-preview.12</DeviceRunnersVersion>
     <!-- Stable library baseline; development apps override the umbrella SDK only. -->
     <MicrosoftWindowsAppSDKAIVersion>2.4.4</MicrosoftWindowsAppSDKAIVersion>
+    <!-- Image generation is available only in the experimental AI package. -->
+    <MicrosoftWindowsAppSDKAIVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKAIVersion_Experimental>
     <MicrosoftWindowsAppSDKVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKVersion_Experimental>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
