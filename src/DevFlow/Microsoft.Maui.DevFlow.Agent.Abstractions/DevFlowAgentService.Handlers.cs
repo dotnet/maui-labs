@@ -542,8 +542,10 @@ public partial class DevFlowAgentService
         foreach (var stream in extension.Streams)
         {
             var descriptor = stream;
-            _server.MapWebSocket(descriptor.WebSocketPath, (client, networkStream, request, ct)
-                => HandleExtensionStreamWebSocket(descriptor, client, networkStream, request, ct));
+            _server.MapWebSocket(
+                descriptor.WebSocketPath,
+                (client, networkStream, request, ct) => HandleExtensionStreamWebSocket(extension, descriptor, client, networkStream, request, ct),
+                _ => AdmitExtensionStream(extension));
         }
     }
 
@@ -1772,7 +1774,7 @@ public partial class DevFlowAgentService
         _disposed = true;
         NetworkStore.OnRequestCaptured -= HandleCapturedNetworkRequest;
         AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
-        _pluginCts?.Cancel();
+        StopPluginsForDispose();
         StopAutoUiHooks();
         DisposePointerSessions();
         DisposeBackendResources();

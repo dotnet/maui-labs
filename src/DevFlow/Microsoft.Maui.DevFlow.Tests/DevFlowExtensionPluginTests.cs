@@ -115,6 +115,152 @@ public class DevFlowExtensionPluginTests
     }
 
     [Fact]
+    public async Task Dispose_StopsPlugins_AsTheNativeAgentStopsThatWay()
+    {
+        var plugin = new LifecyclePlugin();
+        var options = new AgentOptions { Port = GetFreePort() };
+        options.AddExtension(plugin);
+
+        var service = new DevFlowAgentService(options);
+        service.StartServerOnly(null);
+        await plugin.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // DevFlowAgent.Stop() in Agent.Native disposes the service without calling StopAsync.
+        service.Dispose();
+
+        Assert.True(plugin.Stopped);
+        Assert.Equal(1, plugin.StopCount);
+    }
+
+    [Fact]
+    public async Task Stop_WaitsForAStartInProgress_BeforeStoppingThePlugin()
+    {
+        var plugin = new SlowStartPlugin(TimeSpan.FromMilliseconds(300));
+        var options = new AgentOptions { Port = GetFreePort() };
+        options.AddExtension(plugin);
+
+        using var service = new DevFlowAgentService(options);
+        service.StartServerOnly(null);
+        await plugin.Starting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await service.StopAsync();
+
+        Assert.Equal(["start-finished", "stop"], plugin.Log);
+    }
+
+    [Fact]
+    public async Task Stop_DoesNotHang_OnAPluginThatNeverStops()
+    {
+        var plugin = new HangingStopPlugin();
+        var options = new AgentOptions { Port = GetFreePort() };
+        options.AddExtension(plugin);
+
+        using var service = new DevFlowAgentService(options) { PluginStopTimeout = TimeSpan.FromMilliseconds(300) };
+        service.StartServerOnly(null);
+
+        var stop = service.StopAsync();
+        var finished = await Task.WhenAny(stop, Task.Delay(TimeSpan.FromSeconds(5)));
+
+        Assert.Same(stop, finished);
+        Assert.True(plugin.StopCalled);
+    }
+
+    [Fact]
+    public async Task FaultedPlugin_RefusesStreamPollingAndNewSubscriptions()
+    {
+        var port = GetFreePort();
+        var plugin = new FailingStartStreamPlugin(TimeSpan.Zero);
+        var options = new AgentOptions { Port = port };
+        options.AddExtension(plugin);
+
+        using var service = new DevFlowAgentService(options);
+        using var client = new AgentClient("localhost", port);
+        using var http = new HttpClient();
+        service.StartServerOnly(null);
+        await WaitUntilAsync(async () => (await client.GetExtensionsAsync())["com.example.failstream"].State == "faulted");
+
+        using var poll = await http.GetAsync($"http://localhost:{port}/api/v1/ext/com.example.failstream/streams/events");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, poll.StatusCode);
+        Assert.Contains("extension-faulted", await poll.Content.ReadAsStringAsync());
+
+        using var ws = new System.Net.WebSockets.ClientWebSocket();
+        ws.Options.CollectHttpResponseDetails = true;
+        await Assert.ThrowsAsync<System.Net.WebSockets.WebSocketException>(
+            () => ws.ConnectAsync(new Uri(client.GetExtensionStreamWebSocketUrl("com.example.failstream", "events")), CancellationToken.None));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ws.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task FaultedPlugin_ClosesSubscriptionsThatWereAlreadyOpen()
+    {
+        var port = GetFreePort();
+        var plugin = new FailingStartStreamPlugin(TimeSpan.FromMilliseconds(500));
+        var options = new AgentOptions { Port = port };
+        options.AddExtension(plugin);
+
+        using var service = new DevFlowAgentService(options);
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(null);
+
+        using var ws = new System.Net.WebSockets.ClientWebSocket();
+        await ws.ConnectAsync(new Uri(client.GetExtensionStreamWebSocketUrl("com.example.failstream", "events")), CancellationToken.None);
+
+        var buffer = new byte[1024];
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var result = await ws.ReceiveAsync(buffer, timeout.Token);
+
+        Assert.Equal(System.Net.WebSockets.WebSocketMessageType.Close, result.MessageType);
+        Assert.Equal(System.Net.WebSockets.WebSocketCloseStatus.InternalServerError, ws.CloseStatus);
+    }
+
+    [Fact]
+    public async Task Stream_DeliversConcurrentPublishesInOrder_WithoutGaps()
+    {
+        var port = GetFreePort();
+        var plugin = new StreamPlugin(capacity: 10_000);
+        var options = new AgentOptions { Port = port };
+        options.AddExtension(plugin);
+
+        using var service = new DevFlowAgentService(options);
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(null);
+
+        const int Publishers = 8;
+        const int PerPublisher = 250;
+        var received = new List<ExtensionStreamEvent>();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var watch = new ExtensionOperations(client).WatchAsync("com.example.stream", "events", since: 0, evt =>
+        {
+            lock (received)
+            {
+                received.Add(evt);
+                if (received.Count == Publishers * PerPublisher)
+                    cts.Cancel();
+            }
+        }, cts.Token);
+
+        await Task.WhenAll(Enumerable.Range(0, Publishers).Select(p => Task.Run(() =>
+        {
+            for (var i = 0; i < PerPublisher; i++)
+                plugin.Events.Publish(new Reading($"p{p}", i));
+        })));
+        await watch;
+
+        Assert.Equal(Enumerable.Range(1, Publishers * PerPublisher).Select(i => (long)i), received.Select(e => e.Sequence));
+        Assert.All(received, e => Assert.Equal(0, e.Dropped));
+    }
+
+    [Fact]
+    public void EventStream_PublishElement_CopiesThePayload()
+    {
+        var stream = new DevFlowEventStream(capacity: 10);
+        using (var doc = JsonDocument.Parse("""{"kind":"scan"}"""))
+            stream.PublishElement(doc.RootElement);
+
+        Assert.Equal("scan", stream.Read().Events.Single().Data.GetProperty("kind").GetString());
+    }
+
+    [Fact]
     public async Task Stream_IsReadableByPolling_AndReportsDroppedEvents()
     {
         var port = GetFreePort();
@@ -425,6 +571,7 @@ public class DevFlowExtensionPluginTests
     {
         public TaskCompletionSource<IDevFlowExtensionContext> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Stopped { get; private set; }
+        public int StopCount { get; private set; }
 
         protected internal override void Configure(IDevFlowExtensionBuilder builder)
             => builder.MapGet("/ping", _ => Task.FromResult(DevFlowResponse.Ok()));
@@ -438,7 +585,60 @@ public class DevFlowExtensionPluginTests
         protected internal override Task StopAsync(CancellationToken cancellationToken)
         {
             Stopped = true;
+            StopCount++;
             return Task.CompletedTask;
+        }
+    }
+
+    public sealed class SlowStartPlugin(TimeSpan startDelay) : DevFlowExtension("com.example.slowstart", "Slow start")
+    {
+        public TaskCompletionSource Starting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public List<string> Log { get; } = [];
+
+        protected internal override void Configure(IDevFlowExtensionBuilder builder)
+            => builder.MapGet("/ping", _ => Task.FromResult(DevFlowResponse.Ok()));
+
+        protected internal override async Task StartAsync(IDevFlowExtensionContext context, CancellationToken cancellationToken)
+        {
+            Starting.TrySetResult();
+            // Ignores cancellation on purpose, like a plugin awaiting a slow native call.
+            await Task.Delay(startDelay, CancellationToken.None);
+            lock (Log) Log.Add("start-finished");
+        }
+
+        protected internal override Task StopAsync(CancellationToken cancellationToken)
+        {
+            lock (Log) Log.Add("stop");
+            return Task.CompletedTask;
+        }
+    }
+
+    public sealed class HangingStopPlugin() : DevFlowExtension("com.example.hangingstop", "Never stops")
+    {
+        public bool StopCalled { get; private set; }
+
+        protected internal override void Configure(IDevFlowExtensionBuilder builder)
+            => builder.MapGet("/ping", _ => Task.FromResult(DevFlowResponse.Ok()));
+
+        protected internal override Task StopAsync(CancellationToken cancellationToken)
+        {
+            StopCalled = true;
+            return new TaskCompletionSource().Task; // never completes and ignores the token
+        }
+    }
+
+    public sealed class FailingStartStreamPlugin(TimeSpan failAfter) : DevFlowExtension("com.example.failstream", "Stream whose start fails")
+    {
+        public DevFlowEventStream<Reading> Events { get; } = new(10);
+
+        protected internal override void Configure(IDevFlowExtensionBuilder builder)
+            => builder.MapStream("events", "Readings.", Events);
+
+        protected internal override async Task StartAsync(IDevFlowExtensionContext context, CancellationToken cancellationToken)
+        {
+            Events.Publish(new Reading("before-fault", 1));
+            await Task.Delay(failAfter, cancellationToken);
+            throw new InvalidOperationException("radio lost");
         }
     }
 

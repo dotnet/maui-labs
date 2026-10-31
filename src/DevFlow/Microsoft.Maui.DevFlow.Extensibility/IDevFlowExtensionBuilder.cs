@@ -6,6 +6,10 @@ namespace Microsoft.Maui.DevFlow.Extensibility;
 /// Declares what a <see cref="DevFlowExtension"/> exposes. Paths are relative to the plugin's
 /// namespace: <c>/status</c> is served at <c>/api/v1/ext/{namespace}/status</c>.
 /// </summary>
+/// <remarks>
+/// Every route is advertised as a tool. <see cref="MapGet"/> and the other plain mappings get a generated
+/// name such as <c>get_status</c> and no description; use <see cref="MapTool"/> to name and describe it.
+/// </remarks>
 public interface IDevFlowExtensionBuilder
 {
     /// <summary>Maps a read-only GET route.</summary>

@@ -15,8 +15,12 @@ public partial class DevFlowAgentService
     private readonly HashSet<string> _extensionRouteKeys = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<AgentExtension> _plugins = new();
     private readonly List<ExtensionLoadError> _extensionLoadErrors = new();
+    private readonly Dictionary<AgentExtension, Task> _pluginStartTasks = new();
     private CancellationTokenSource? _pluginCts;
     private int _pluginsActivated;
+
+    /// <summary>How long stopping all plugins may take before the agent stops without them.</summary>
+    internal TimeSpan PluginStopTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Service provider plugins are created from. MAUI backends return the app's provider;
@@ -125,7 +129,9 @@ public partial class DevFlowAgentService
                 PlatformName,
                 AgentVersion);
 
-            _ = Task.Run(async () =>
+            // Tracked so stopping waits for a start in progress: an async start must not install
+            // subscriptions after StopAsync has already removed them.
+            _pluginStartTasks[extension] = Task.Run(async () =>
             {
                 try
                 {
@@ -139,11 +145,15 @@ public partial class DevFlowAgentService
                     extension.Error = ex.Message;
                     Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension.Namespace}' failed to start: {ex.Message}");
                 }
-            }, ct);
+            }, CancellationToken.None);
         }
     }
 
-    /// <summary>Runs every plugin's <see cref="DevFlowExtension.StopAsync"/>.</summary>
+    /// <summary>
+    /// Runs every plugin's <see cref="DevFlowExtension.StopAsync"/> once. Each plugin's start is
+    /// cancelled and awaited first, and the whole shutdown is bounded by <see cref="PluginStopTimeout"/>
+    /// so an unresponsive plugin cannot keep the agent from stopping.
+    /// </summary>
     internal async Task StopPluginsAsync()
     {
         var cts = Interlocked.Exchange(ref _pluginCts, null);
@@ -151,12 +161,24 @@ public partial class DevFlowAgentService
             return;
 
         cts.Cancel();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var deadline = DateTime.UtcNow + PluginStopTimeout;
+        using var stopToken = new CancellationTokenSource(PluginStopTimeout);
+
         foreach (var extension in _plugins.Where(e => e.Plugin is not null))
         {
+            if (_pluginStartTasks.Remove(extension, out var startTask)
+                && !await CompletesWithinAsync(startTask, deadline).ConfigureAwait(false))
+            {
+                Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension.Namespace}' did not finish starting; stopping it anyway.");
+            }
+
             try
             {
-                await extension.Plugin!.StopAsync(timeout.Token).ConfigureAwait(false);
+                var stopTask = extension.Plugin!.StopAsync(stopToken.Token);
+                if (!await CompletesWithinAsync(stopTask, deadline).ConfigureAwait(false))
+                    Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension.Namespace}' did not stop within {PluginStopTimeout.TotalSeconds:0}s.");
+                else
+                    await stopTask.ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -166,13 +188,43 @@ public partial class DevFlowAgentService
         cts.Dispose();
     }
 
+    /// <summary>
+    /// Runs <see cref="StopPluginsAsync"/> from <see cref="Dispose"/>, which native hosts call to stop
+    /// the agent. Off the calling thread, so a plugin that needs the UI thread cannot deadlock it.
+    /// </summary>
+    private void StopPluginsForDispose()
+    {
+        if (_pluginCts is null)
+            return;
+
+        try { Task.Run(StopPluginsAsync).Wait(PluginStopTimeout + TimeSpan.FromSeconds(1)); }
+        catch (AggregateException) { }
+    }
+
+    private static async Task<bool> CompletesWithinAsync(Task task, DateTime deadline)
+    {
+        var remaining = deadline - DateTime.UtcNow;
+        if (task.IsCompleted)
+            return true;
+        if (remaining <= TimeSpan.Zero)
+            return false;
+        return await Task.WhenAny(task, Task.Delay(remaining)).ConfigureAwait(false) == task;
+    }
+
     private void ReportLoadError(string extension, Exception ex)
     {
         _extensionLoadErrors.Add(new ExtensionLoadError(extension, ex.Message));
         Console.WriteLine($"[Microsoft.Maui.DevFlow] Extension '{extension}' could not be loaded: {ex.Message}");
     }
 
+    /// <summary>Refuses a stream subscription before the upgrade when its plugin is faulted.</summary>
+    private static HttpResponse? AdmitExtensionStream(AgentExtension extension)
+        => extension.Error is null
+            ? null
+            : HttpResponse.Error($"Extension '{extension.Namespace}' is faulted: {extension.Error}", 503, "extension-faulted");
+
     private async Task HandleExtensionStreamWebSocket(
+        AgentExtension extension,
         ExtensionStreamDescriptor descriptor,
         System.Net.Sockets.TcpClient client,
         System.Net.Sockets.NetworkStream stream,
@@ -180,20 +232,22 @@ public partial class DevFlowAgentService
         CancellationToken ct)
     {
         // Without ?since the client only wants what happens from now on.
-        var since = request.QueryParams.TryGetValue("since", out var sinceText) && long.TryParse(sinceText, out var parsed)
+        var lastSent = request.QueryParams.TryGetValue("since", out var sinceText) && long.TryParse(sinceText, out var parsed)
             ? parsed
             : descriptor.Stream.LastSequence;
 
-        long dropped = 0;
-        var queue = Channel.CreateBounded<DevFlowEvent>(
-            new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true },
-            _ => Interlocked.Increment(ref dropped));
-
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        // Subscribe before replaying so nothing published in between is lost; the sequence check drops repeats.
-        using var subscription = descriptor.Stream.Subscribe(evt => queue.Writer.TryWrite(evt));
 
-        var lastSent = since;
+        // Publishes only wake the sender, which then reads the buffer after lastSent. Reading from the
+        // buffer keeps delivery in sequence order even when publishers race, and reports real gaps
+        // through the page's dropped count.
+        var wake = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
+        {
+            FullMode = BoundedChannelFullMode.DropWrite,
+            SingleReader = true
+        });
+        using var subscription = descriptor.Stream.Subscribe(_ => wake.Writer.TryWrite(true));
+
         async Task SendAsync(DevFlowEvent? evt, long droppedCount)
         {
             var frame = new Dictionary<string, object?>();
@@ -208,7 +262,7 @@ public partial class DevFlowAgentService
             await AgentHttpServer.WebSocketSendTextAsync(stream, JsonSerializer.Serialize(frame, DevFlowJson.Options), cts.Token);
         }
 
-        try
+        async Task DrainAsync()
         {
             while (true)
             {
@@ -219,9 +273,12 @@ public partial class DevFlowAgentService
                     await SendAsync(page.Events[i], i == 0 ? page.Dropped : 0);
                 lastSent = page.NextSequence;
                 if (page.Events.Count < 500)
-                    break;
+                    return;
             }
+        }
 
+        try
+        {
             var readTask = Task.Run(async () =>
             {
                 while (!cts.Token.IsCancellationRequested)
@@ -234,27 +291,26 @@ public partial class DevFlowAgentService
             var lastPing = DateTime.UtcNow;
             while (!cts.Token.IsCancellationRequested)
             {
-                bool available;
+                if (extension.Error is not null)
+                {
+                    // The plugin faulted after this subscription started: end it rather than keep
+                    // serving a stream its descriptor now reports as faulted.
+                    await AgentHttpServer.WebSocketSendCloseAsync(stream, 1011, "extension faulted", cts.Token);
+                    break;
+                }
+
+                await DrainAsync();
+
                 try
                 {
                     using var wait = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
-                    wait.CancelAfter(TimeSpan.FromSeconds(15));
-                    available = await queue.Reader.WaitToReadAsync(wait.Token);
+                    wait.CancelAfter(TimeSpan.FromSeconds(1));
+                    await wake.Reader.WaitToReadAsync(wait.Token);
+                    wake.Reader.TryRead(out _);
                 }
                 catch (OperationCanceledException) when (!cts.Token.IsCancellationRequested)
                 {
-                    available = true;
-                }
-
-                if (!available)
-                    break;
-
-                while (queue.Reader.TryRead(out var evt))
-                {
-                    if (evt.Sequence <= lastSent)
-                        continue;
-                    await SendAsync(evt, Interlocked.Exchange(ref dropped, 0));
-                    lastSent = evt.Sequence;
+                    // Woken by the timer: check the fault state and keep-alive.
                 }
 
                 if ((DateTime.UtcNow - lastPing).TotalSeconds >= 15)
