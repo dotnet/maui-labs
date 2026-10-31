@@ -15,7 +15,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Inspector;
 /// Generates an interactive HTML page representing the native app's visual tree
 /// and proxies interaction commands to the DevFlow agent.
 /// </summary>
-public sealed class InspectorServer : IDisposable
+public sealed partial class InspectorServer : IDisposable
 {
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -530,6 +530,20 @@ public sealed class InspectorServer : IDisposable
                 return;
             }
 
+            // Extension stream subscriptions: same Origin check, plus the read token (in the query,
+            // since a browser WebSocket cannot send custom headers). Validated in the handler.
+            if (context.Request.IsWebSocketRequest && path.TrimEnd('/') == ExtensionStreamWebSocketPath)
+            {
+                if (!LocalOriginValidator.IsAllowed(context.Request.Headers["Origin"], brokerPort))
+                {
+                    context.Response.StatusCode = 403;
+                    context.Response.Close();
+                    return;
+                }
+                await HandleBrokerExtensionStreamProxy(context);
+                return;
+            }
+
             var method = context.Request.HttpMethod;
 
             // Mitigate CSRF on state-mutating endpoints: a browser can dispatch a "simple"
@@ -929,14 +943,21 @@ public sealed class InspectorServer : IDisposable
                 // page could POST to /api/tap, /api/scroll, etc. (CSRF) or open /ws/events
                 // (WebSocket hijack) when the inspector runs outside the broker.
                 var requestOrigin = request.Headers.TryGetValue("origin", out var o) ? o : null;
-                var isWebSocketUpgrade = request.Path == "/ws/events" &&
-                    request.Headers.TryGetValue("upgrade", out var upgradeHdr) &&
+                var isUpgrade = request.Headers.TryGetValue("upgrade", out var upgradeHdr) &&
                     upgradeHdr.Equals("websocket", StringComparison.OrdinalIgnoreCase);
+                var isWebSocketUpgrade = isUpgrade &&
+                    (request.Path == "/ws/events" || request.Path == ExtensionStreamWebSocketPath);
                 if ((request.Method == "POST" || isWebSocketUpgrade) &&
                     !LocalOriginValidator.IsAllowed(requestOrigin, _port))
                 {
                     await WriteResponseAsync(stream, 403, "text/plain",
                         Encoding.UTF8.GetBytes("Forbidden"), ct);
+                    return;
+                }
+
+                if (isWebSocketUpgrade && request.Path == ExtensionStreamWebSocketPath)
+                {
+                    await HandleExtensionStreamProxy(stream, request, ct);
                     return;
                 }
 
@@ -1030,6 +1051,7 @@ public sealed class InspectorServer : IDisposable
                     "/inspector-properties.js" => HandleEmbeddedFile("inspector-properties.js", "application/javascript"),
                     "/inspector-layout.js" => HandleEmbeddedFile("inspector-layout.js", "application/javascript"),
                     "/inspector-tree.js" => HandleEmbeddedFile("inspector-tree.js", "application/javascript"),
+                    "/inspector-extensions.js" => HandleEmbeddedFile("inspector-extensions.js", "application/javascript"),
                     "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
                 },
@@ -1076,6 +1098,9 @@ public sealed class InspectorServer : IDisposable
                     "/api/diagnostics/layout" => await HandleLayoutScanAsync(request.Body),
                     "/api/diagnostics/unsuppress" => HandleDiagnosticSuppression(request.Body, remove: true),
                     "/api/diagnostics/agent-payload" => HandleDiagnosticAgentPayload(request.Body),
+                    "/api/extensions" => await HandleExtensionsListAsync(),
+                    "/api/extensions/call" => await HandleExtensionCallAsync(request.Body, leaseId, holderKind, holderLabel),
+                    "/api/extensions/events" => await HandleExtensionEventsAsync(request.Body),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
                 },
                 _ => (405, "text/plain", Encoding.UTF8.GetBytes("Method Not Allowed"))
@@ -1669,7 +1694,17 @@ public sealed class InspectorServer : IDisposable
         {
             // Snapshot (not plain tree) so the frame carries the revision layout diagnostics are
             // paired against — findings computed over a different revision cannot be trusted.
-            var snapshot = await _client.GetTreeSnapshotAsync(includeNative: true);
+            ElementTreeSnapshot? snapshot;
+            try
+            {
+                snapshot = await _client.GetTreeSnapshotAsync(includeNative: true);
+            }
+            catch (NotSupportedByAgentException)
+            {
+                // A UI-less agent (StartServerOnly, e.g. one that only hosts plugins) has no tree.
+                // Treat it like an empty tree so the shell — and its Extensions tab — still loads.
+                return ([], string.Empty, null);
+            }
             var tree = snapshot?.Elements ?? [];
             if (tree.Count > 0)
                 return (tree, snapshot?.Revision ?? string.Empty, snapshot?.DiagnosticInputsRevision);
@@ -3200,7 +3235,8 @@ public sealed class InspectorServer : IDisposable
             or "/api/files/roots" or "/api/files/list"
             or "/api/flows/files/list" or "/api/flows/files/load"
             or "/api/alerts" or "/api/alerts/dismiss"
-            or "/api/cdp/webviews" or "/api/cdp/source" or "/api/cdp/eval" => true,
+            or "/api/cdp/webviews" or "/api/cdp/source" or "/api/cdp/eval"
+            or "/api/extensions" or "/api/extensions/call" or "/api/extensions/events" => true,
         _ => false,
     };
 
@@ -3822,6 +3858,7 @@ public sealed class InspectorServer : IDisposable
         {
             200 => "OK",
             400 => "Bad Request",
+            403 => "Forbidden",
             404 => "Not Found",
             405 => "Method Not Allowed",
             409 => "Conflict",

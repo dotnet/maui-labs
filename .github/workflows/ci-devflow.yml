@@ -91,14 +91,14 @@ jobs:
         run: |
           dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.DevFlow.Inspector.Tests.csproj `
             --configuration Release --no-build --no-restore `
-            --filter "FullyQualifiedName~InspectorLayoutWorkspaceTests" `
+            --filter "FullyQualifiedName~InspectorLayoutWorkspaceTests|FullyQualifiedName~InspectorExtensionsPanelTests" `
             --logger "console;verbosity=detailed" --logger "trx;LogFileName=layout-browser.trx" `
             --results-directory artifacts\TestResults\InspectorBrowser
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml]$trx = Get-Content artifacts\TestResults\InspectorBrowser\layout-browser.trx
           $results = @($trx.TestRun.Results.UnitTestResult)
-          if ($results.Count -ne 21 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
-            throw 'All 21 existing and regression browser tests must execute and pass; skips are not allowed.'
+          if ($results.Count -ne 22 -or @($results | Where-Object outcome -ne 'Passed').Count -ne 0) {
+            throw 'All 22 existing and regression browser tests (21 layout workspace + 1 extensions panel) must execute and pass; skips are not allowed.'
           }
 
       - name: Repeat Inspector synchronization regressions on Windows
