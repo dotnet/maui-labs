@@ -64,12 +64,41 @@
     <PackageReference Include="Xamarin.KotlinX.Coroutines.Reactive" />
     <!-- Keep separate archives on .NET 10: its Gradle 9 init-script bug blocks fused AARs (dotnet/android#10738).
          Explicit inclusion binds only the bridge and packages Google runtimes unbound; revisit fusion on .NET 11. -->
-    <AndroidGradleProject Include="../AndroidNative/EssentialsAI/build.gradle.kts" CreateAndroidLibrary="false" />
+    <AndroidGradleProject
+      Include="../AndroidNative/EssentialsAI/build.gradle.kts"
+      CreateAndroidLibrary="false"
+      Condition="'$(EssentialsAIAndroidNativeArtifactsPath)' == ''" />
     <TransformFile Include="Platform\Android\Transforms\Metadata.xml" />
   </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.Contains('-android')) and '$(EssentialsAIAndroidNativeArtifactsPath)' != ''">
+    <AndroidLibrary Include="$(EssentialsAIAndroidNativeArtifactsPath)/aar/EssentialsAI-release.aar" />
+    <AndroidLibrary Include="$(EssentialsAIAndroidNativeArtifactsPath)/mlkit-runtime/*.aar" Bind="false" />
+    <AndroidLibrary Include="$(EssentialsAIAndroidNativeArtifactsPath)/mlkit-runtime/*.jar" Bind="false" />
+  </ItemGroup>
+  <Target Name="ValidatePrebuiltGeminiNanoAndroidLibraries"
+          BeforeTargets="PrepareForBuild"
+          Condition="$(TargetFramework.Contains('-android')) and '$(EssentialsAIAndroidNativeArtifactsPath)' != ''">
+    <Error
+      Condition="!Exists('$(EssentialsAIAndroidNativeArtifactsPath)/aar/EssentialsAI-release.aar')"
+      Text="The prebuilt EssentialsAI Android bridge was not found at '$(EssentialsAIAndroidNativeArtifactsPath)/aar/EssentialsAI-release.aar'." />
+    <ItemGroup>
+      <_PrebuiltGeminiNanoCommon Include="$(EssentialsAIAndroidNativeArtifactsPath)/mlkit-runtime/genai-common-*.aar" />
+      <_PrebuiltGeminiNanoPrompt Include="$(EssentialsAIAndroidNativeArtifactsPath)/mlkit-runtime/genai-prompt-*.aar" />
+      <_PrebuiltGeminiNanoSchema Include="$(EssentialsAIAndroidNativeArtifactsPath)/mlkit-runtime/genai-schema-*.jar" />
+    </ItemGroup>
+    <Error
+      Condition="'@(_PrebuiltGeminiNanoCommon)' == ''"
+      Text="The prebuilt EssentialsAI Android genai-common runtime archive was not found in '$(EssentialsAIAndroidNativeArtifactsPath)/mlkit-runtime'." />
+    <Error
+      Condition="'@(_PrebuiltGeminiNanoPrompt)' == ''"
+      Text="The prebuilt EssentialsAI Android genai-prompt runtime archive was not found in '$(EssentialsAIAndroidNativeArtifactsPath)/mlkit-runtime'." />
+    <Error
+      Condition="'@(_PrebuiltGeminiNanoSchema)' == ''"
+      Text="The prebuilt EssentialsAI Android genai-schema runtime archive was not found in '$(EssentialsAIAndroidNativeArtifactsPath)/mlkit-runtime'." />
+  </Target>
   <Target Name="CollectGeminiNanoAndroidLibraries"
           AfterTargets="_BuildAndroidGradleProjects"
-          Condition="$(TargetFramework.Contains('-android'))">
+          Condition="$(TargetFramework.Contains('-android')) and '@(AndroidGradleProject)' != ''">
     <ItemGroup>
       <AndroidLibrary Include="%(AndroidGradleProject.OutputPath)outputs/aar/EssentialsAI-release.aar" />
       <AndroidLibrary Include="%(AndroidGradleProject.OutputPath)outputs/mlkit-runtime/*.aar" Bind="false" />

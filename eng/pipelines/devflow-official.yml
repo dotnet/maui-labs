@@ -291,6 +291,7 @@ extends:
                   --prepareMachine \
                   --ci \
                   --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf \
+                  /p:EssentialsAIAndroidNativeArtifactsPath=$(Build.SourcesDirectory)/src/AI/AndroidNative/EssentialsAI/build/outputs \
                   /p:ValidateXcodeVersion=false
               displayName: Build EssentialsAI (macOS)
               env:
@@ -303,6 +304,14 @@ extends:
                 Contents: |
                   */$(_BuildConfig)/*/*.resources.zip
                 TargetFolder: '$(Agent.TempDirectory)/native-binaries'
+            - task: CopyFiles@2
+              displayName: Copy Android Native Binaries
+              inputs:
+                SourceFolder: '$(Build.SourcesDirectory)/src/AI/AndroidNative/EssentialsAI/build/outputs'
+                Contents: |
+                  aar/EssentialsAI-release.aar
+                  mlkit-runtime/**
+                TargetFolder: '$(Agent.TempDirectory)/native-binaries/AndroidNative'
 
           - job: EssentialsAI
             displayName: EssentialsAI - Windows
@@ -358,13 +367,11 @@ extends:
                 Write-Host "##vso[task.setvariable variable=ANDROID_SDK_ROOT]$androidSdk"
                 Write-Host "##vso[task.setvariable variable=JAVA_HOME]$javaSdk"
               displayName: Install Android SDK dependencies
-            - script: gradlew.bat --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
-              displayName: Build and Test EssentialsAI Kotlin Bridge
-              workingDirectory: $(Build.SourcesDirectory)\src\AI\AndroidNative\EssentialsAI
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
                 -projects $(Build.SourcesDirectory)\src\AI\EssentialsAI.slnf
+                /p:EssentialsAIAndroidNativeArtifactsPath=$(Build.SourcesDirectory)\artifacts\bin\AndroidNative
                 $(_OfficialBuildArgs)
               displayName: Build and Test EssentialsAI
 
