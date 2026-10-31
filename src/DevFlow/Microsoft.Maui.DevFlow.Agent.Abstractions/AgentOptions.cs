@@ -182,7 +182,8 @@ public class AgentOptions
 
     /// <summary>
     /// Plugins added with <see cref="AddExtension{T}"/>. The agent creates and configures them when it
-    /// starts, after the app's services exist.
+    /// starts, after the app's services exist, followed by any registered in those services with
+    /// <c>AddDevFlowExtension</c>.
     /// </summary>
     internal IList<ExtensionRegistration> ExtensionFactories { get; } = new List<ExtensionRegistration>();
 
@@ -221,4 +222,8 @@ public class AgentOptions
     }
 }
 
-internal sealed record ExtensionRegistration(string Name, Func<IServiceProvider?, DevFlowExtension> Factory);
+/// <param name="ServiceType">
+/// For a plugin registered in the app's services, its type. It is skipped when a plugin of that type
+/// was already added to the options.
+/// </param>
+internal sealed record ExtensionRegistration(string Name, Func<IServiceProvider?, DevFlowExtension> Factory, Type? ServiceType = null);

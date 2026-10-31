@@ -423,6 +423,75 @@ public class DevFlowExtensionPluginTests
     }
 
     [Fact]
+    public async Task Plugin_RegisteredInAppServices_IsCreatedWithoutAddingItToTheOptions()
+    {
+        var port = GetFreePort();
+        var services = new ServiceCollection()
+            .AddSingleton(new Thermometer { Celsius = 100 })
+            .AddDevFlowExtension<ThermometerPlugin>()
+            .BuildServiceProvider();
+
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port, Services = services });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(null);
+
+        var (ns, descriptor) = Assert.Single(await client.GetExtensionsAsync());
+        Assert.Equal("com.example.thermo", ns);
+        Assert.Equal("ready", descriptor.State);
+
+        var read = descriptor.Tools.Single(t => t.Name == "read");
+        using var json = JsonDocument.Parse(await client.CallExtensionToolAsync(read.Method, read.Path, Json("""{"unit":"f"}""")));
+        Assert.Equal(212, json.RootElement.GetProperty("value").GetDouble(), 1);
+    }
+
+    [Fact]
+    public async Task Plugin_RegisteredInServicesAndAddedToTheOptions_IsCreatedOnce()
+    {
+        var port = GetFreePort();
+        var services = new ServiceCollection()
+            .AddSingleton(new Thermometer())
+            .AddDevFlowExtension<ThermometerPlugin>()
+            .AddDevFlowExtension<ThermometerPlugin>()
+            .BuildServiceProvider();
+        var options = new AgentOptions { Port = port, Services = services };
+        options.AddExtension<ThermometerPlugin>();
+
+        using var service = new DevFlowAgentService(options);
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(null);
+
+        Assert.Single(services.GetServices<DevFlowExtensionRegistration>());
+        Assert.Single(await client.GetExtensionsAsync());
+        Assert.Empty(service.ExtensionLoadErrors);
+    }
+
+    [Fact]
+    public async Task Plugin_RegisteredInServices_ThatFailsToConstruct_DoesNotStopTheOthers()
+    {
+        var port = GetFreePort();
+        var stream = new StreamPlugin(capacity: 10);
+        var services = new ServiceCollection()
+            .AddDevFlowExtension(typeof(ThermometerPlugin), _ => throw new InvalidOperationException("no thermometer"))
+            .AddDevFlowExtension(typeof(StreamPlugin), _ => stream)
+            .BuildServiceProvider();
+
+        using var service = new DevFlowAgentService(new AgentOptions { Port = port, Services = services });
+        using var client = new AgentClient("localhost", port);
+        service.StartServerOnly(null);
+
+        var (ns, _) = Assert.Single(await client.GetExtensionsAsync());
+        Assert.Equal("com.example.stream", ns);
+        var error = Assert.Single(await client.GetExtensionErrorsAsync());
+        Assert.Equal("no thermometer", error.Error);
+        Assert.Contains(nameof(ThermometerPlugin), error.Extension);
+    }
+
+    [Fact]
+    public void AddDevFlowExtension_RejectsATypeThatIsNotAPlugin()
+        => Assert.Throws<ArgumentException>(() => new ServiceCollection()
+            .AddDevFlowExtension(typeof(Thermometer), _ => new StreamPlugin(capacity: 1)));
+
+    [Fact]
     public void PluginNamespace_ThatCollidesWithAnInlineExtension_IsReportedNotThrown()
     {
         var options = new AgentOptions { Port = GetFreePort() };

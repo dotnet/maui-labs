@@ -6,8 +6,9 @@ namespace ShinyBle.DevFlowPlugin;
 public static class ShinyBleDevFlowServiceCollectionExtensions
 {
     /// <summary>
-    /// Wraps the registered <see cref="IBleManager"/> so the DevFlow plugin sees what the app does with it.
-    /// Call after <c>AddBluetoothLE()</c>, in debug builds only.
+    /// Wraps the registered <see cref="IBleManager"/> so the DevFlow plugin sees what the app does with it,
+    /// and registers the plugin with the DevFlow agent. Call after <c>AddBluetoothLE()</c>, in debug
+    /// builds only.
     /// </summary>
     public static IServiceCollection AddShinyBleDevFlowMonitor(this IServiceCollection services)
     {
@@ -19,6 +20,7 @@ public static class ShinyBleDevFlowServiceCollectionExtensions
         services.AddSingleton<IBleManager>(sp => new MonitoredBleManager(
             Resolve(registration, sp),
             sp.GetRequiredService<BleActivityMonitor>()));
+        services.AddDevFlowExtension<ShinyBleDevFlowExtension>();
         return services;
     }
 

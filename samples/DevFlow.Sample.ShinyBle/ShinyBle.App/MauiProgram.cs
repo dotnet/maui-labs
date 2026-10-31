@@ -19,9 +19,10 @@ public static class MauiProgram
         builder.Services.AddTransient<MainPage>();
 
 #if DEBUG
-        // The plugin: wrap Shiny's IBleManager so activity is recorded, then add the plugin to the agent.
+        // The plugin: wraps Shiny's IBleManager so activity is recorded, and registers the plugin,
+        // which the agent picks up from the app's services.
         builder.Services.AddShinyBleDevFlowMonitor();
-        builder.AddMauiDevFlowAgent(options => options.AddExtension<ShinyBleDevFlowExtension>());
+        builder.AddMauiDevFlowAgent();
 #endif
 
         return builder.Build();
