@@ -12,6 +12,10 @@ toolchain, packaging, and validation details in their companion guides:
 The implementation rows below describe reviewed targets. They do not claim
 hardware validation beyond the evidence documented by each platform guide.
 
+Image generation has a separate
+[provider implementation guide](image-generation-provider.md); chat image input
+does not imply image-generation or editing support.
+
 ## How to use this file
 
 Each reviewed topic has four parts:

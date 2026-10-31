@@ -291,6 +291,7 @@ The corresponding model asset must be installed.
 ## Guides and samples
 
 - [Chat provider implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/local-chat-provider.md) — shared behavior and provider policy.
+- [Image provider implementation guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/image-generation-provider.md) — shared image contracts and provider differences.
 - [Apple Foundation Models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/apple-foundation-models.md) — Apple toolchain, images, availability, bridge mechanics, and validation.
 - [Windows AI language models](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-language-models.md) — Windows packaging, readiness, dependencies, and validation.
 - [Windows image generation](https://github.com/dotnet/maui-labs/blob/main/docs/ai/windows-ai-image-generation.md) — experimental image dependencies, formats, and options.

@@ -105,6 +105,11 @@ especially its **Conformance testing** section. Follow that guide for generic
 test placement, capability hooks, model-free rejection paths, usage assertions,
 sampling controls, live provider validation, and provider-only test rationale.
 
+For image generation and editing, follow
+[`docs/ai/image-generation-provider.md`](../../docs/ai/image-generation-provider.md),
+especially **Conformance testing**. Keep raw provider contracts separate from
+source-linked sample behavior and bind generation/editing capabilities independently.
+
 ### What to Test
 
 - **Do test**: Public API methods, edge cases, error handling, serialization/deserialization

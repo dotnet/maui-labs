@@ -3,6 +3,10 @@
 `WindowsAIImageGenerator` implements `Microsoft.Extensions.AI.IImageGenerator`
 for experimental text-to-image generation and prompt-guided edits with one
 source image. It uses a separate optional model from Windows chat.
+Shared request, response, cancellation, ownership, and testing rules are in the
+[image provider implementation guide](image-generation-provider.md). This guide
+describes the Windows mapping and native requirements, not universal image
+capabilities.
 
 ## Requirements and dependencies
 
@@ -52,7 +56,22 @@ output. Source images must be encoded bytes in `DataContent`. Masks, multiple
 source images, requested sizes, and hosted URI output are rejected.
 Unsupported output formats fail before model setup.
 
-Inference runs on a worker thread. Native `Generate*` calls are synchronous;
-cancellation takes effect after a running call finishes, not mid-call.
+Native `Generate*` calls are synchronous and agile; `Task.Run` keeps even warm
+inference off the caller's UI thread. Source buffers remain alive until native
+completion, then cancellation is checked before encoding. Cancellation cannot
+interrupt a running call. Await requests before disposing the generator.
 The [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md)
 exposes the Windows image provider alongside Azure.
+
+## Implementation and validation
+
+`WindowsAIImageGenerator` maps requests and options, `WindowsAIImageBuffers`
+decodes/encodes pixels, and `WindowsAIImageModelFactory` performs image-only
+setup. Chat retains its own readiness and request lifecycle.
+
+The Windows generation and edit bindings inherit the shared image suites.
+`WindowsAIImageGeneratorValidationTests` covers native format, size, URI, and
+multiple-original restrictions without inference; the generation binding also
+checks queued UI cancellation during warm inference. Follow the shared guide's
+[conformance rules](image-generation-provider.md#conformance-testing) for the
+Azure baseline, source-linked sample tests, and complete device validation.

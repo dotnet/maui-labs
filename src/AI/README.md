@@ -12,6 +12,7 @@ on-device chat, embeddings, and experimental Windows image generation through
 |----------|---------|
 | [Package README](Microsoft.Maui.Essentials.AI/README.md) | Consumer installation, setup, examples, and capability tables |
 | [Chat provider implementation guide](../../docs/ai/local-chat-provider.md) | Shared provider rules and reviewed platform implementation targets |
+| [Image provider implementation guide](../../docs/ai/image-generation-provider.md) | Shared image contracts, OpenAI baseline, sample boundary, and Windows mapping |
 | [Apple Foundation Models](../../docs/ai/apple-foundation-models.md) | Apple toolchain, availability, images, native bridge, and validation |
 | [Windows AI language models](../../docs/ai/windows-ai-language-models.md) | Windows packaging, dependencies, model setup, and validation |
 | [Windows image generation](../../docs/ai/windows-ai-image-generation.md) | Experimental image dependencies, formats, and options |
@@ -179,6 +180,9 @@ dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Ess
 ```
 
 #### Image generation
+
+Follow the [shared image provider rules](../../docs/ai/image-generation-provider.md)
+and keep native details in the Windows image guide.
 
 Image suites test raw `IImageGenerator` contracts separately from the sample's
 request/response handling. Device tests source-link `ImageGenerationService` and

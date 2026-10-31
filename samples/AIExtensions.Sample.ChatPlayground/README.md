@@ -44,6 +44,10 @@ Generate text vectors, index imported documents, and search their content.
 Generate or edit images using Windows AI or a configured Azure OpenAI deployment.
 Chat image input does not imply image-generation support.
 
+Open **Images**, select a generator in settings, enter a prompt, and generate.
+To edit, use **Choose image** or **Use sample image** from the attachment menu.
+The stop button requests cancellation; when it takes effect depends on the provider.
+
 | Provider | Image generation |
 |----------|------------------|
 | Apple on-device | Not supported |
@@ -55,6 +59,10 @@ For the Windows provider, first use may download a large optional model. Select
 PNG or JPEG and the provider-default size; WebP, masks, and requested sizes are
 unsupported. Use at most one source image. Windows generation cannot be
 interrupted mid-call.
+
+Provider implementers should follow the
+[shared image contracts](../../docs/ai/image-generation-provider.md);
+Windows-specific setup and limits stay in its companion guide.
 
 ## Diagnostics
 
