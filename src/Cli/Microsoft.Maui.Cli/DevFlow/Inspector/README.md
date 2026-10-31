@@ -11,6 +11,7 @@ The broker serves the Inspector as embedded static assets from `Web/`.
 | `inspector-dialog.js` | Host-independent accessible confirmation dialog. |
 | `inspector-tree.js` | Visual-tree rendering, expansion state, selection, and keyboard navigation. |
 | `inspector-properties.js` | Property descriptors, typed editors, live updates, and XAML persistence controls. |
+| `inspector-extensions.js` | Extensions tab: plugin list, JSON-schema tool forms, and live stream tables. Pure helpers are exported for `src/DevFlow/js/test`. The server side lives in `InspectorServer.Extensions.cs`. |
 | `inspector-data-context.js` | Pure Data snapshot bounding and secret redaction. It must remain DOM-independent so its security contract can be tested directly. |
 
 Feature modules receive dependencies through factory options or function arguments. They must not import `devflow.js` or mutate unrelated global state. Keep cross-feature coordination in `devflow.js`; move cohesive rendering/state logic into a module when it can expose a narrow API.

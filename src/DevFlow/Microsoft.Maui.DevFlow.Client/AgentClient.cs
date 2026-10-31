@@ -623,6 +623,34 @@ public class AgentClient : IDisposable
         return capabilities?.Extensions ?? new Dictionary<string, ExtensionDescriptor>();
     }
 
+    /// <summary>Plugins the agent could not load, with the reason.</summary>
+    public async Task<List<ExtensionLoadErrorInfo>> GetExtensionErrorsAsync()
+    {
+        var capabilities = await GetAsync<AgentCapabilitiesResponse>($"{AgentApi}/capabilities");
+        return capabilities?.ExtensionErrors ?? new List<ExtensionLoadErrorInfo>();
+    }
+
+    /// <summary>
+    /// Reads events from an extension stream after <paramref name="since"/>. Pass the returned
+    /// <see cref="ExtensionStreamPage.NextSequence"/> as <paramref name="since"/> to continue.
+    /// </summary>
+    public async Task<ExtensionStreamPage> GetExtensionEventsAsync(string extensionNamespace, string stream, long since = 0, int limit = 100)
+    {
+        var path = $"/api/v1/ext/{Uri.EscapeDataString(extensionNamespace)}/streams/{Uri.EscapeDataString(stream)}?since={since}&limit={limit}";
+        return await GetAsync<ExtensionStreamPage>(path) ?? new ExtensionStreamPage { NextSequence = since };
+    }
+
+    /// <summary>
+    /// WebSocket URL for an extension stream. Without <paramref name="since"/> the feed starts with the
+    /// next event; with it, buffered events after that sequence are replayed first.
+    /// </summary>
+    public string GetExtensionStreamWebSocketUrl(string extensionNamespace, string stream, long? since = null)
+    {
+        var wsBase = _baseUrl.Replace("http://", "ws://").Replace("https://", "wss://");
+        var url = $"{wsBase}/ws/v1/ext/{Uri.EscapeDataString(extensionNamespace)}/streams/{Uri.EscapeDataString(stream)}";
+        return since.HasValue ? $"{url}?since={since.Value}" : url;
+    }
+
     public async Task<string> CallExtensionToolAsync(string method, string path, JsonElement? parameters = null)
     {
         if (string.IsNullOrWhiteSpace(path) || !path.StartsWith('/'))
@@ -658,7 +686,8 @@ public class AgentClient : IDisposable
         => value.ValueKind switch
         {
             JsonValueKind.String => value.GetString() ?? string.Empty,
-            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.ToString(),
+            // GetRawText gives "true"/"false"; JsonElement.ToString() gives "True"/"False".
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.GetRawText(),
             JsonValueKind.Null => string.Empty,
             _ => value.GetRawText()
         };
