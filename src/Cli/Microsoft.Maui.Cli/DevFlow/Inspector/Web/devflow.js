@@ -36,6 +36,7 @@ import {
   updateInspectorPresentationState,
 } from './inspector-presentation.js';
 import { createViewportController } from './inspector-viewport-controller.js';
+import { createExtensionsPanel } from './inspector-extensions.js';
 
 (function () {
   'use strict';
@@ -222,6 +223,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
   const CAPABILITY_REFRESH_MS = 60000;
   // Layout scans are explicit or opt-in live operations, independent of screenshot polling.
   let layoutPanel = null;
+  // Generic plugin UI (Data dock → Extensions); created with the dock below.
+  let extensionsPanel = null;
   const layoutEventTracker = createLayoutEventTracker();
   const diagnosticsWanted = () => false;
   const _origFetch = window.fetch.bind(window);
@@ -396,6 +399,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
     }
 
     if (presenceChanged) renderWriterPresence(presentation.presence);
+    if (previous && previous.connected !== presentation.connected)
+      extensionsPanel?.onConnectionChange(presentation.connected);
     if (flowChanged) updateFlowButtons();
     else updateCommandStates();
     if (previous && !previous.connected && presentation.connected)
@@ -2683,7 +2688,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
   }
 
   function visibleDockTabs() {
-    return dockTabButtons.filter(button => !button.hidden);
+    return dockTabButtons.filter(button => !button.hidden && !button.classList.contains('df-hidden'));
   }
 
   function syncCapabilitySurfaces(previousStates) {
@@ -4623,6 +4628,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
       const j = await apiPost('/api/cdp/webviews', {});
       if (dockLoadIsCurrent('webview', generation)) renderWebView(j);
     },
+    extensions: async (generation) => {
+      if (dockLoadIsCurrent('extensions', generation)) await extensionsPanel.activate(dockBodyEl);
+    },
   };
 
   function renderAlerts(result) {
@@ -4767,6 +4775,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
       await tabLoaders[name](generation);
       if (!dockLoadIsCurrent(name, generation)) return;
       setDockMeta(name === 'layout' ? 'explicit scan / opt-in live' :
+        name === 'extensions' ? 'live streams · tools run on demand' :
         (name === 'network' ? 'live · updated ' : 'captured ') + new Date().toLocaleTimeString());
     }
     catch (e) {
@@ -4851,6 +4860,31 @@ import { createViewportController } from './inspector-viewport-controller.js';
   setInterval(() => {
     if (networkPollIsActive()) loadNetworkList({ automatic: true, generation: dockViewGeneration });
   }, NETWORK_AUTO_REFRESH_MS);
+
+  // ── Extensions (DevFlow plugins) — generic tool forms and live stream tables ──
+  const extensionsTabBtn = document.getElementById('df-tab-extensions');
+  extensionsPanel = createExtensionsPanel({
+    document,
+    api: inspectorApi,
+    streamSocketUrl: (ns, stream, since) => {
+      const params = new URLSearchParams({ namespace: ns, stream, token: inspectorToken });
+      if (since > 0) params.set('since', String(since));
+      else params.set('since', '0');   // first connect replays what the agent still buffers
+      return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + basePath +
+        '/ws/extensions?' + params.toString();
+    },
+    canDrive: ensureCanDrive,
+    confirm: confirmModal,
+    status: setStatus,
+    onAvailabilityChange: (hasAny) => {
+      if (!extensionsTabBtn) return;
+      extensionsTabBtn.classList.toggle('df-hidden', !hasAny);
+      if (!hasAny && dockActiveTab === 'extensions') loadTab('logs');
+    },
+  });
+  extensionsPanel.onConnectionChange(presentation.connected);
+  // One descriptor read at startup decides whether the Extensions tab is offered at all.
+  extensionsPanel.refresh().catch(() => {});
 
   // ── Presence / single-writer coordination ──
   function renderWriterPresence(presenceState = presentation.presence) {
