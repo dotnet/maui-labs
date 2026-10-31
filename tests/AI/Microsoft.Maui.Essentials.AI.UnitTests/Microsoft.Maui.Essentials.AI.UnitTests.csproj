@@ -22,6 +22,7 @@
   <!-- The adapter has no WinRT dependencies; run its scripted tests on the host as well as on Windows devices. -->
   <ItemGroup>
     <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Platform\Windows\WindowsAIToolCallingClient.cs" Link="WindowsAIToolCallingClient.cs" />
+    <Compile Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Platform\Windows\WindowsAIToolSchema.cs" Link="WindowsAIToolSchema.cs" />
     <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\Windows\WindowsAIToolCallingClientTests.cs" Link="WindowsAIToolCallingClientTests.cs" />
   </ItemGroup>
 

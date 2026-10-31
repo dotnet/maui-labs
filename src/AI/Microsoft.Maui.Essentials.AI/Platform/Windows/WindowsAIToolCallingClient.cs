@@ -1,12 +1,9 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.Essentials.AI;
@@ -181,33 +178,22 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 		if (selection.Tools.Count == 0)
 			return null;
 
-		var signatures = GetCompletedCalls(conversation);
+		var signatures = previous.Where(call => !string.IsNullOrEmpty(call.Name))
+			.Select(call => Signature(call.Name, call.Arguments))
+			.ToHashSet(StringComparer.Ordinal);
 		var calls = new List<FunctionCallContent>();
-		var missing = new List<string>();
-		var deferredTools = new List<string>();
-		var deferredReasons = new List<string>();
-		var suppressedTools = new List<string>();
-		var suppressedReasons = new List<string>();
+		var deferred = new List<SkippedTool>();
+		var suppressed = new List<SkippedTool>();
 		var extractions = await ExtractArgumentsAsync(
 			conversation, selection.Tools, selection.Reason, options, cancellationToken);
 		ThrowIfToolPlanningUnavailable();
 		foreach (var tool in selection.Tools)
 		{
 			var extraction = extractions[tool.Name];
-			if (extraction.Failure is { } failure)
+			if (extraction.Failure is not null || extraction.Missing.Count > 0)
 			{
-				var names = extraction.Suppressed ? suppressedTools : deferredTools;
-				var reasons = extraction.Suppressed ? suppressedReasons : deferredReasons;
-				names.Add(tool.Name);
-				reasons.Add(failure);
-				continue;
-			}
-			missing.AddRange(extraction.Missing);
-			if (extraction.Missing.Count > 0)
-			{
-				deferredTools.Add(tool.Name);
-				deferredReasons.Add(
-					$"Missing required arguments: {string.Join(", ", extraction.Missing)}.");
+				var skipped = new SkippedTool(tool.Name, extraction);
+				(skipped.Suppressed ? suppressed : deferred).Add(skipped);
 				continue;
 			}
 			var call = new FunctionCallContent(
@@ -224,17 +210,17 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 			calls.Add(call);
 		}
 		cancellationToken.ThrowIfCancellationRequested();
-		if (calls.Count == 0 && deferredTools.Count + suppressedTools.Count > 0)
+		if (calls.Count == 0 && deferred.Count + suppressed.Count > 0)
 		{
-			if (deferredTools.Count == 0)
+			if (deferred.Count == 0)
 			{
 				if (options?.ToolMode == ChatToolMode.RequireAny)
-					throw new InvalidOperationException(string.Join(" ", suppressedReasons));
+					throw new InvalidOperationException(string.Join(" ", suppressed.Select(tool => tool.Reason)));
 				return null;
 			}
-			if (deferredReasons.All(reason => reason.StartsWith(
-				"Missing required arguments:", StringComparison.Ordinal)))
+			if (deferred.All(tool => tool.IsMissingArguments))
 			{
+				var missing = deferred.SelectMany(tool => tool.Extraction.Missing).ToArray();
 				if (options?.ToolMode == ChatToolMode.RequireAny)
 					throw new InvalidOperationException(
 						$"Required tool arguments are missing: {string.Join(", ", missing)}.");
@@ -242,25 +228,25 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 					$"What value should I use for the required {string.Join(", ", missing)} parameter?")];
 			}
 			throw new InvalidOperationException(
-				string.Join(" ", deferredReasons.Concat(suppressedReasons)));
+				string.Join(" ", deferred.Concat(suppressed).Select(tool => tool.Reason)));
 		}
-		if (deferredTools.Count > 0)
+		if (deferred.Count > 0)
 		{
 			foreach (var call in calls)
 			{
-				call.AdditionalProperties!["windows_ai.deferred_tools"] = deferredTools.ToArray();
-				call.AdditionalProperties["windows_ai.deferred_reasons"] = deferredReasons.ToArray();
+				call.AdditionalProperties!["windows_ai.deferred_tools"] = deferred.Select(tool => tool.Name).ToArray();
+				call.AdditionalProperties["windows_ai.deferred_reasons"] = deferred.Select(tool => tool.Reason).ToArray();
 			}
 		}
-		if (suppressedTools.Count > 0)
+		if (suppressed.Count > 0)
 		{
 			foreach (var call in calls)
 			{
-				call.AdditionalProperties!["windows_ai.suppressed_tools"] = suppressedTools.ToArray();
-				call.AdditionalProperties["windows_ai.suppressed_reasons"] = suppressedReasons.ToArray();
+				call.AdditionalProperties!["windows_ai.suppressed_tools"] = suppressed.Select(tool => tool.Name).ToArray();
+				call.AdditionalProperties["windows_ai.suppressed_reasons"] = suppressed.Select(tool => tool.Reason).ToArray();
 			}
 		}
-		if (selection.AnswerAfterResults && deferredTools.Count == 0)
+		if (selection.AnswerAfterResults && deferred.Count == 0)
 			RememberAnswerBatch(calls);
 		ThrowIfToolPlanningUnavailable();
 		return [.. calls];
@@ -331,7 +317,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 			throw new ArgumentException("Tool names must be nonempty, unique, and unambiguous decision names.", nameof(options));
 
 		foreach (var function in functions)
-			ValidateToolSchema(function.JsonSchema);
+			WindowsAIToolSchema.ValidateToolSchema(function.JsonSchema);
 
 		return functions;
 	}
@@ -353,8 +339,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 		ChatOptions? options,
 		CancellationToken cancellationToken)
 	{
-		var requiresFirstTool = options?.ToolMode == ChatToolMode.RequireAny &&
-			GetCompletedCalls(messages).Count == 0;
+		var requiresFirstTool = options?.ToolMode == ChatToolMode.RequireAny;
 
 		var candidates = tools;
 
@@ -371,20 +356,6 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 
 		foreach (var tool in candidates)
 			instructions.AppendLine(DescribeTool(tool));
-
-		// Naming the completed calls is what makes multi-tool requests work. Left to infer it from
-		// the transcript, the model reads any tool result as "done" and either stops early or
-		// repeats the call it just made. Told plainly what has run, it compares the request against
-		// that list and picks up whatever is still missing.
-		var completedNames = GetCompletedToolNames(messages);
-		if (completedNames.Count > 0)
-		{
-			instructions.AppendLine($"Already called: {string.Join(", ", completedNames)}.");
-			instructions.AppendLine("Do not repeat a call that has already been made.");
-			instructions.AppendLine(
-				"If the user asked for something that the completed calls do not cover, choose the tool that covers it.");
-			instructions.AppendLine($"Otherwise choose {AnswerWithoutTool}.");
-		}
 
 		IEnumerable<string> names = candidates.Select(t => ToolNeededPrefix + t.Name);
 		if (!requiresFirstTool)
@@ -467,42 +438,39 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 		return new(selected, reason, !moreNode.GetBoolean());
 	}
 
-	private static JsonElement BuildBatchSelectionSchema(AIFunction[] candidates, int remaining)
-	{
-		using var stream = new MemoryStream();
-		using (var writer = new Utf8JsonWriter(stream))
+	private static JsonElement BuildBatchSelectionSchema(AIFunction[] candidates, int remaining) =>
+		ToJsonElement(new JsonObject
 		{
-			writer.WriteStartObject();
-			writer.WriteString("type", "object");
-			writer.WriteBoolean("additionalProperties", false);
-			writer.WriteStartObject("properties");
-			writer.WriteStartObject("reason");
-			writer.WriteString("type", "string");
-			writer.WriteNumber("maxLength", MaxReasonLength);
-			writer.WriteEndObject();
-			writer.WriteStartObject("tool_names");
-			writer.WriteString("type", "array");
-			writer.WriteNumber("maxItems", remaining);
-			writer.WriteStartObject("items");
-			writer.WriteString("type", "string");
-			writer.WriteStartArray("enum");
-			foreach (var candidate in candidates)
-				writer.WriteStringValue(candidate.Name);
-			writer.WriteEndArray();
-			writer.WriteEndObject();
-			writer.WriteEndObject();
-			writer.WriteStartObject("more_tools_after_results");
-			writer.WriteString("type", "boolean");
-			writer.WriteEndObject();
-			writer.WriteEndObject();
-			writer.WriteStartArray("required");
-			writer.WriteStringValue("reason");
-			writer.WriteStringValue("tool_names");
-			writer.WriteStringValue("more_tools_after_results");
-			writer.WriteEndArray();
-			writer.WriteEndObject();
-		}
-		using var document = JsonDocument.Parse(stream.ToArray());
+			["type"] = "object",
+			["additionalProperties"] = false,
+			["properties"] = new JsonObject
+			{
+				["reason"] = new JsonObject
+				{
+					["type"] = "string",
+					["maxLength"] = MaxReasonLength
+				},
+				["tool_names"] = new JsonObject
+				{
+					["type"] = "array",
+					["maxItems"] = remaining,
+					["items"] = new JsonObject
+					{
+						["type"] = "string",
+						["enum"] = ToJsonArray(candidates.Select(candidate => candidate.Name))
+					}
+				},
+				["more_tools_after_results"] = new JsonObject { ["type"] = "boolean" }
+			},
+			["required"] = new JsonArray("reason", "tool_names", "more_tools_after_results")
+		});
+
+	private static JsonArray ToJsonArray(IEnumerable<string> values) =>
+		new(values.Select(value => (JsonNode?)JsonValue.Create(value)).ToArray());
+
+	private static JsonElement ToJsonElement(JsonObject schema)
+	{
+		using var document = JsonDocument.Parse(schema.ToJsonString());
 		return document.RootElement.Clone();
 	}
 
@@ -534,49 +502,6 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 			string.Join(" ", descriptions);
 	}
 
-	/// <summary>
-	/// Signatures of the tool calls already present in the conversation, used to detect repeats.
-	/// </summary>
-	private static HashSet<string> GetCompletedCalls(IReadOnlyList<ChatMessage> messages)
-	{
-		var completed = new HashSet<string>(StringComparer.Ordinal);
-
-		foreach (var message in CurrentTurn(messages))
-		{
-			foreach (var content in message.Contents)
-			{
-				if (content is FunctionCallContent call && !string.IsNullOrEmpty(call.Name))
-					completed.Add(Signature(call.Name, call.Arguments));
-			}
-		}
-
-		return completed;
-	}
-
-	/// <summary>
-	/// The distinct tool names already called in the conversation, in the order they first appear.
-	/// </summary>
-	private static List<string> GetCompletedToolNames(IReadOnlyList<ChatMessage> messages)
-	{
-		var names = new List<string>();
-		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-		foreach (var message in CurrentTurn(messages))
-		{
-			foreach (var content in message.Contents)
-			{
-				if (content is FunctionCallContent call &&
-					!string.IsNullOrEmpty(call.Name) &&
-					seen.Add(call.Name))
-				{
-					names.Add(call.Name);
-				}
-			}
-		}
-
-		return names;
-	}
-
 	private static IEnumerable<ChatMessage> CurrentTurn(IReadOnlyList<ChatMessage> messages)
 	{
 		for (var i = messages.Count - 1; i >= 0; i--)
@@ -602,42 +527,29 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 #pragma warning restore IL3050, IL2026
 	}
 
-	private static JsonElement BuildSelectionSchema(IEnumerable<string> toolNames)
-	{
-		using var stream = new MemoryStream();
-		using (var writer = new Utf8JsonWriter(stream))
+	private static JsonElement BuildSelectionSchema(IEnumerable<string> toolNames) =>
+		ToJsonElement(new JsonObject
 		{
-			writer.WriteStartObject();
-			writer.WriteString("type", "object");
-			writer.WriteBoolean("additionalProperties", false);
-			writer.WriteStartObject("properties");
-			writer.WriteStartObject("reason");
-			writer.WriteString("type", "string");
-			writer.WriteString("description", "Brief factual basis for the decision; do not invent missing information.");
-			writer.WriteNumber("minLength", 1);
-			writer.WriteNumber("maxLength", MaxReasonLength);
-			writer.WriteEndObject();
-			writer.WriteStartObject("decision");
-			writer.WriteString("type", "string");
-			writer.WriteString(
-				"description",
-				"Answer without a tool or identify the one tool whose information is needed.");
-			writer.WriteStartArray("enum");
-			foreach (var name in toolNames)
-				writer.WriteStringValue(name);
-			writer.WriteEndArray();
-			writer.WriteEndObject();
-			writer.WriteEndObject();
-			writer.WriteStartArray("required");
-			writer.WriteStringValue("reason");
-			writer.WriteStringValue("decision");
-			writer.WriteEndArray();
-			writer.WriteEndObject();
-		}
-
-		using var document = JsonDocument.Parse(stream.ToArray());
-		return document.RootElement.Clone();
-	}
+			["type"] = "object",
+			["additionalProperties"] = false,
+			["properties"] = new JsonObject
+			{
+				["reason"] = new JsonObject
+				{
+					["type"] = "string",
+					["description"] = "Brief factual basis for the decision; do not invent missing information.",
+					["minLength"] = 1,
+					["maxLength"] = MaxReasonLength
+				},
+				["decision"] = new JsonObject
+				{
+					["type"] = "string",
+					["description"] = "Answer without a tool or identify the one tool whose information is needed.",
+					["enum"] = ToJsonArray(toolNames)
+				}
+			},
+			["required"] = new JsonArray("reason", "decision")
+		});
 
 	private async Task<Dictionary<string, ArgumentExtraction>> ExtractArgumentsAsync(
 		IReadOnlyList<ChatMessage> messages,
@@ -668,12 +580,10 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 		var schema = tool.JsonSchema;
 		var relaxed = CreateRelaxedArgumentSchema(tool);
 		var extraction = CreateArgumentExtractionSchema(tool, relaxed);
-		using var extractionDocument = JsonDocument.Parse(extraction.ToJsonString());
-		var extractionSchema = extractionDocument.RootElement.Clone();
-		using var relaxedDocument = JsonDocument.Parse(relaxed.ToJsonString());
-		var relaxedSchema = relaxedDocument.RootElement.Clone();
+		var extractionSchema = ToJsonElement(extraction);
+		var relaxedSchema = ToJsonElement(relaxed);
 		var sources = EvidenceSources(messages);
-		var instructions = HasProperties(schema)
+		var instructions = WindowsAIToolSchema.HasProperties(schema)
 			? new StringBuilder(
 				$"Extract arguments only for {tool.Name}: {tool.Description}\n" +
 				$"Argument schema: {schema.GetRawText()}\n" +
@@ -734,7 +644,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 				{
 					["type"] = "array",
 					["description"] =
-						HasProperties(tool.JsonSchema)
+						WindowsAIToolSchema.HasProperties(tool.JsonSchema)
 							? $"Shortest exact quotes that directly support only {tool.Name}'s arguments; " +
 								"do not quote request clauses for other tools."
 							: $"Shortest exact quote showing the actual request needs {tool.Name}; " +
@@ -781,7 +691,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 			return new(new Dictionary<string, object?>(), evidence, [],
 				$"Windows AI arguments for {tool.Name} lack evidence.",
 				false);
-		if (evidence.Length == 0 && !HasProperties(schema))
+		if (evidence.Length == 0 && !WindowsAIToolSchema.HasProperties(schema))
 			return new(new Dictionary<string, object?>(), evidence, [],
 				$"Windows AI selected {tool.Name} without request evidence.",
 				true);
@@ -791,7 +701,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 			return new(new Dictionary<string, object?>(), evidence, [],
 				$"Windows AI returned duplicate argument names for {tool.Name}.",
 				false);
-		ValidateValue(argumentsNode, relaxedSchema,
+		WindowsAIToolSchema.ValidateValue(argumentsNode, relaxedSchema,
 			$"arguments.{tool.Name}", enforceRequired: false);
 		var missing = MissingRequired(argumentsNode, schema, tool.Name);
 		if (missing.Count > 0)
@@ -800,7 +710,7 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 			return new(new Dictionary<string, object?>(), evidence, [],
 				$"Windows AI arguments for {tool.Name} lack evidence.",
 				false);
-		ValidateValue(argumentsNode, schema, $"arguments.{tool.Name}");
+		WindowsAIToolSchema.ValidateValue(argumentsNode, schema, $"arguments.{tool.Name}");
 		return new(argumentProperties
 			.ToDictionary(property => property.Name, property => (object?)property.Value.Clone()),
 			evidence, [], null, false);
@@ -971,6 +881,13 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 		List<string> Missing,
 		string? Failure,
 		bool Suppressed);
+	private sealed record SkippedTool(string Name, ArgumentExtraction Extraction)
+	{
+		public bool Suppressed => Extraction.Failure is not null && Extraction.Suppressed;
+		public bool IsMissingArguments => Extraction.Failure is null;
+		public string Reason => Extraction.Failure ??
+			$"Missing required arguments: {string.Join(", ", Extraction.Missing)}.";
+	}
 	private sealed record EvidenceSource(string Label, string Text, bool IsToolResult);
 	private sealed record PendingBatch(HashSet<string> CallIds, long CreatedTimestamp)
 	{
@@ -1259,241 +1176,6 @@ public sealed class WindowsAIToolCallingClient : DelegatingChatClient
 				"Create a new client before making another request.",
 				failure);
 	}
-
-	/// <summary>Whether a parameter schema declares any properties to fill in.</summary>
-	private static bool HasProperties(JsonElement schema) =>
-		schema.ValueKind == JsonValueKind.Object &&
-		schema.TryGetProperty("properties", out var properties) &&
-		properties.ValueKind == JsonValueKind.Object &&
-		properties.EnumerateObject().Any();
-
-	private static void ValidateToolSchema(JsonElement schema)
-	{
-		if (schema.ValueKind != JsonValueKind.Object ||
-			!schema.TryGetProperty("type", out var type) || type.GetString() != "object")
-			throw new NotSupportedException("Tool arguments must have an object JSON schema.");
-
-		ValidateSupportedSchema(schema);
-	}
-
-	private static void ValidateSupportedSchema(JsonElement schema)
-	{
-		if (schema.ValueKind != JsonValueKind.Object)
-			throw new NotSupportedException("Tool argument schema must be an object.");
-
-		foreach (var keyword in schema.EnumerateObject())
-		{
-			if (keyword.Name is not ("type" or "properties" or "required" or "items" or
-				"additionalProperties" or "enum" or "description" or "title" or "$schema" or
-				"default" or "minimum" or "maximum" or "minLength" or "maxLength" or "pattern"))
-				throw new NotSupportedException($"Unsupported tool argument schema keyword: {keyword.Name}.");
-		}
-
-		if (!schema.TryGetProperty("type", out var type) ||
-			type.ValueKind != JsonValueKind.String ||
-			type.GetString() is not ("object" or "array" or "string" or "integer" or "number" or "boolean" or "null"))
-			throw new NotSupportedException("Tool argument schema must declare a supported type.");
-
-		if (schema.TryGetProperty("properties", out var properties))
-		{
-			if (type.GetString() != "object" || properties.ValueKind != JsonValueKind.Object)
-				throw new NotSupportedException("Tool properties require an object schema.");
-			foreach (var property in properties.EnumerateObject())
-				ValidateSupportedSchema(property.Value);
-		}
-
-		if (schema.TryGetProperty("required", out var required) &&
-			(type.GetString() != "object" || required.ValueKind != JsonValueKind.Array ||
-				required.EnumerateArray().Any(name => name.ValueKind != JsonValueKind.String ||
-					!schema.TryGetProperty("properties", out var declared) ||
-					!declared.TryGetProperty(name.GetString()!, out _))))
-			throw new NotSupportedException("Required tool arguments must name declared properties.");
-
-		if (schema.TryGetProperty("items", out var items))
-		{
-			if (type.GetString() != "array")
-				throw new NotSupportedException("Tool items require an array schema.");
-			ValidateSupportedSchema(items);
-		}
-		else if (type.GetString() == "array")
-			throw new NotSupportedException("Array tool arguments must declare an items schema.");
-
-		if (schema.TryGetProperty("additionalProperties", out var additional) &&
-			additional.ValueKind != JsonValueKind.False)
-			throw new NotSupportedException("Tool argument schemas must prohibit additional properties.");
-
-		if (schema.TryGetProperty("enum", out var allowed) && allowed.ValueKind != JsonValueKind.Array)
-			throw new NotSupportedException("Tool argument enum must be an array.");
-		foreach (var keyword in new[] { "minLength", "maxLength" })
-			if (schema.TryGetProperty(keyword, out var length) &&
-				(type.GetString() != "string" || length.ValueKind != JsonValueKind.Number ||
-					!length.TryGetInt32(out var count) || count < 0))
-				throw new NotSupportedException($"Invalid tool argument {keyword}.");
-		foreach (var keyword in new[] { "minimum", "maximum" })
-			if (schema.TryGetProperty(keyword, out var bound) &&
-				(type.GetString() is not ("integer" or "number") || bound.ValueKind != JsonValueKind.Number))
-				throw new NotSupportedException($"Invalid tool argument {keyword}.");
-		if (schema.TryGetProperty("pattern", out var pattern))
-		{
-			if (type.GetString() != "string" || pattern.ValueKind != JsonValueKind.String)
-				throw new NotSupportedException("Tool argument pattern requires a string schema.");
-			try
-			{
-				_ = new Regex(
-					pattern.GetString()!,
-					RegexOptions.ECMAScript | RegexOptions.CultureInvariant,
-					TimeSpan.FromSeconds(1));
-			}
-			catch (ArgumentException ex)
-			{
-				throw new NotSupportedException("Tool argument pattern is invalid.", ex);
-			}
-		}
-	}
-
-	private static void ValidateValue(
-		JsonElement value, JsonElement schema, string path, bool enforceRequired = true)
-	{
-		var type = schema.GetProperty("type").GetString();
-		var valid = type switch
-		{
-			"object" => value.ValueKind == JsonValueKind.Object,
-			"array" => value.ValueKind == JsonValueKind.Array,
-			"string" => value.ValueKind == JsonValueKind.String,
-			"integer" => value.ValueKind == JsonValueKind.Number &&
-				IsJsonInteger(value),
-			"number" => value.ValueKind == JsonValueKind.Number,
-			"boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
-			"null" => value.ValueKind == JsonValueKind.Null,
-			_ => false
-		};
-		if (!valid)
-			throw new InvalidOperationException($"Windows AI returned an invalid {path}: expected {type}.");
-
-		if (schema.TryGetProperty("enum", out var allowed) &&
-			!allowed.EnumerateArray().Any(choice => JsonElement.DeepEquals(choice, value)))
-			throw new InvalidOperationException($"Windows AI returned an invalid {path}: value is not in the allowed enum.");
-
-		if (type == "object")
-		{
-			var properties = schema.TryGetProperty("properties", out var declared) ? declared : default;
-			foreach (var property in value.EnumerateObject())
-			{
-				if (properties.ValueKind != JsonValueKind.Object ||
-					!properties.TryGetProperty(property.Name, out var propertySchema))
-					throw new InvalidOperationException($"Windows AI returned an unexpected tool argument: {path}.{property.Name}.");
-				ValidateValue(property.Value, propertySchema, $"{path}.{property.Name}", enforceRequired);
-			}
-
-			if (enforceRequired && schema.TryGetProperty("required", out var required))
-				foreach (var name in required.EnumerateArray())
-					if (!value.TryGetProperty(name.GetString()!, out _))
-						throw new InvalidOperationException($"Windows AI omitted required tool argument: {path}.{name.GetString()}.");
-		}
-		else if (type == "array")
-		{
-			foreach (var item in value.EnumerateArray())
-				ValidateValue(item, schema.GetProperty("items"), $"{path}[]", enforceRequired);
-		}
-		else if (type == "string")
-		{
-			var text = value.GetString()!;
-			var length = text.EnumerateRunes().Count();
-			if ((schema.TryGetProperty("minLength", out var minimum) && length < minimum.GetInt32()) ||
-				(schema.TryGetProperty("maxLength", out var maximum) && length > maximum.GetInt32()))
-				throw new InvalidOperationException($"Windows AI returned an invalid string length for {path}.");
-			if (schema.TryGetProperty("pattern", out var pattern))
-			{
-				try
-				{
-					if (!Regex.IsMatch(
-						text,
-						pattern.GetString()!,
-						RegexOptions.ECMAScript | RegexOptions.CultureInvariant,
-						TimeSpan.FromSeconds(1)))
-						throw new InvalidOperationException($"Windows AI returned an invalid pattern for {path}.");
-				}
-				catch (RegexMatchTimeoutException ex)
-				{
-					throw new InvalidOperationException($"Windows AI pattern validation timed out for {path}.", ex);
-				}
-			}
-		}
-		else if (type is "integer" or "number")
-		{
-			if ((schema.TryGetProperty("minimum", out var minimum) &&
-					CompareJsonNumbers(value, minimum) < 0) ||
-				(schema.TryGetProperty("maximum", out var maximum) &&
-					CompareJsonNumbers(value, maximum) > 0))
-				throw new InvalidOperationException($"Windows AI returned an out-of-range number for {path}.");
-		}
-	}
-
-	private static bool IsJsonInteger(JsonElement value)
-	{
-		var number = ParseJsonNumber(value);
-		return number.Digits == "0" || number.Exponent >= BigInteger.Zero;
-	}
-
-	private static int CompareJsonNumbers(JsonElement left, JsonElement right)
-	{
-		var leftNumber = ParseJsonNumber(left);
-		var rightNumber = ParseJsonNumber(right);
-		if (leftNumber.Digits == "0")
-			return rightNumber.Digits == "0" ? 0 : rightNumber.Negative ? 1 : -1;
-		if (rightNumber.Digits == "0")
-			return leftNumber.Negative ? -1 : 1;
-		if (leftNumber.Negative != rightNumber.Negative)
-			return leftNumber.Negative ? -1 : 1;
-
-		var leftOrder = leftNumber.Exponent + leftNumber.Digits.Length;
-		var rightOrder = rightNumber.Exponent + rightNumber.Digits.Length;
-		var comparison = leftOrder.CompareTo(rightOrder);
-		if (comparison == 0)
-		{
-			var width = Math.Max(leftNumber.Digits.Length, rightNumber.Digits.Length);
-			var leftCoefficient = BigInteger.Parse(leftNumber.Digits, CultureInfo.InvariantCulture) *
-				BigInteger.Pow(10, width - leftNumber.Digits.Length);
-			var rightCoefficient = BigInteger.Parse(rightNumber.Digits, CultureInfo.InvariantCulture) *
-				BigInteger.Pow(10, width - rightNumber.Digits.Length);
-			comparison = leftCoefficient.CompareTo(rightCoefficient);
-		}
-
-		return leftNumber.Negative ? -comparison : comparison;
-	}
-
-	private static JsonNumber ParseJsonNumber(JsonElement value)
-	{
-		var raw = value.GetRawText();
-		var negative = raw[0] == '-';
-		if (negative)
-			raw = raw[1..];
-
-		var exponentIndex = raw.IndexOfAny('e', 'E');
-		var exponent = exponentIndex >= 0
-			? BigInteger.Parse(raw[(exponentIndex + 1)..], CultureInfo.InvariantCulture)
-			: BigInteger.Zero;
-		var significand = exponentIndex >= 0 ? raw[..exponentIndex] : raw;
-		var decimalIndex = significand.IndexOf('.');
-		if (decimalIndex >= 0)
-		{
-			exponent -= significand.Length - decimalIndex - 1;
-			significand = significand.Remove(decimalIndex, 1);
-		}
-
-		var digits = significand.TrimStart('0');
-		if (digits.Length == 0)
-			return new(false, "0", BigInteger.Zero);
-		while (digits.Length > 1 && digits[^1] == '0')
-		{
-			digits = digits[..^1];
-			exponent++;
-		}
-		return new(negative, digits, exponent);
-	}
-
-	private readonly record struct JsonNumber(
-		bool Negative, string Digits, BigInteger Exponent);
 
 	private static (string Reason, string Decision) ReadDecision(string? json)
 	{
