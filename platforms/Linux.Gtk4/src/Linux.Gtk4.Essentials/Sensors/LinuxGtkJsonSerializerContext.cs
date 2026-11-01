@@ -6,8 +6,8 @@ using System.Text.Json.Serialization;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors
 {
-    [JsonSerializable(typeof(PlacemarkResponseInterop))]
-    [JsonSerializable(typeof(AddressInterop))]
+    [JsonSerializable(typeof(NominatimPlacemarkResponse))]
+    [JsonSerializable(typeof(NominatimAddress))]
     [JsonSerializable(typeof(IEnumerable<NominatimResponse>))]
     public partial class LinuxGtkJsonSerializerContext : JsonSerializerContext
     {
@@ -26,7 +26,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors
         public double LonValue => double.Parse(Lon, CultureInfo.InvariantCulture);
     }
 
-    public class AddressInterop
+    public class NominatimAddress
     {
         [JsonPropertyName("road")]
         public string? Road { get; set; }
@@ -68,10 +68,16 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors
         public string? Country { get; set; }
 
         [JsonPropertyName("country_code")]
-        public string? CcountryCode { get; set; }
+        public string? CountryCode { get; set; }
+
+        [JsonPropertyName("house_number")]
+        public string? HouseNumber { get; set; }
+
+        [JsonPropertyName("suburb")]
+        public string? Suburb { get; set; }
     }
 
-    public class PlacemarkResponseInterop
+    public class NominatimPlacemarkResponse
     {
         [JsonPropertyName("place_id")]
         public long PlaceId { get; set; }
@@ -113,7 +119,7 @@ namespace Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors
         public string? DisplayName { get; set; }
 
         [JsonPropertyName("address")]
-        public AddressInterop? Address { get; set; }
+        public NominatimAddress? Address { get; set; }
 
         [JsonPropertyName("boundingbox")]
         public List<string>? boundingbox { get; set; }
