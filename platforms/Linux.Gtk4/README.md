@@ -170,9 +170,9 @@ This applies to layout-position points as well as anchor points.
 
 | Status | Services |
 |--------|----------|
-| ✅ **Done** (20) | AppInfo, AppActions, Battery (UPower), Browser (`xdg-open`), Clipboard (`Gdk.Clipboard`), Connectivity (NetworkManager), DeviceDisplay, DeviceInfo, Email (`xdg-open mailto:`), FilePicker (`Gtk.FileDialog`), FileSystem (XDG dirs), Launcher, Map, MediaPicker, Preferences (JSON), Screenshot, SemanticScreenReader (AT-SPI), Share (XDG Portal), TextToSpeech (`espeak-ng`), VersionTracking |
-| ⚠️ **Partial** (2) | Geolocation (GeoClue — basic location only), WebAuthenticator (basic OAuth via system browser) |
-| ❌ **Stub** (13) | Accelerometer, Barometer, Compass, Contacts, Flashlight, Geocoding, Gyroscope, HapticFeedback, Magnetometer, OrientationSensor, PhoneDialer, SMS, Vibration — sensors and phone-specific APIs not applicable to desktop Linux |
+| ✅ **Done** (20) | Accelerometer, AppInfo, AppActions, Battery (UPower), Barometer,  Browser (`xdg-open`), Compass, Clipboard (`Gdk.Clipboard`), Connectivity (NetworkManager), DeviceDisplay, DeviceInfo, Email (`xdg-open mailto:`), FilePicker (`Gtk.FileDialog`), FileSystem (XDG dirs), Geocoding (Nominatim), Geolocation (GeoClue), Gyroscope, Launcher, Magnetometer, Map, MediaPicker, OrientationSensor, PhoneDialer, Preferences (JSON), Screenshot, SemanticScreenReader (AT-SPI), Share (XDG Portal), SMS,  TextToSpeech (`espeak-ng`), VersionTracking |
+| ⚠️ **Partial** (2) | WebAuthenticator (basic OAuth via system browser) |
+| ❌ **Stub** (13) | Contacts, Flashlight, HapticFeedback, Vibration — sensors APIs not applicable to desktop Linux |
 | ❌ **Unsupported** (1) | SecureStorage — all storage operations throw `PlatformNotSupportedException` |
 
 **Behavior change:** Linux SecureStorage no longer uses libsecret or encrypted files.
