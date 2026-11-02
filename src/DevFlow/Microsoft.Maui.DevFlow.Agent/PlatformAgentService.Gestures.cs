@@ -9,6 +9,8 @@ using UIKit;
 #endif
 #if MACOS
 using AppKit;
+using CoreGraphics;
+using Foundation;
 #endif
 
 namespace Microsoft.Maui.DevFlow.Agent;
@@ -31,7 +33,8 @@ namespace Microsoft.Maui.DevFlow.Agent;
 /// which own no recognizer to drive. That last tier needs private UIKit ivars, hence the opt-in.</item>
 /// <item>Windows — ScrollViewer zoom/offset. Input injection needs the restricted
 /// <c>inputInjectionBrokered</c> capability and is not usable from a normal app package.</item>
-/// <item>macOS AppKit — NSScrollView magnification and content offset.</item>
+/// <item>macOS AppKit — NSScrollView magnification and content offset, or mouse events
+/// dispatched through the window to a hit-tested native view for point taps and drags.</item>
 /// </list>
 /// Every method returns a short description of what serviced the gesture, or null when unhandled.
 /// </summary>
@@ -72,7 +75,17 @@ public partial class PlatformAgentService
 #elif WINDOWS
         return await Task.FromResult(WindowsPan(element, deltaX, deltaY));
 #elif MACOS
-        return await Task.FromResult(MacPan(element, deltaX, deltaY));
+        if (element.Handler?.PlatformView is NSView view
+            && view is not NSScrollView
+            && view.GetType().GetMethod(nameof(NSView.MouseDragged), [typeof(NSEvent)])?.DeclaringType is { } owner
+            && owner != typeof(NSView))
+        {
+            var from = new Point(element.Width / 2, element.Height / 2);
+            var result = await MacPointDragAsync(element, from, element,
+                new Point(from.X + deltaX, from.Y + deltaY), 0, durationMs, steps);
+            return result.Handled ? result.Message : null;
+        }
+        return MacPan(element, deltaX, deltaY);
 #else
         return await base.TryNativePan(element, deltaX, deltaY, durationMs, steps);
 #endif
@@ -122,6 +135,8 @@ public partial class PlatformAgentService
         return await AndroidPointTapAsync(element, point);
 #elif IOS || MACCATALYST
         return await ApplePointTapAsync(element, point, RawTouchPolicy);
+#elif MACOS
+        return await MacPointTapAsync(element, point);
 #else
         return await base.TryNativePointTapAsync(element, point);
 #endif
@@ -134,6 +149,8 @@ public partial class PlatformAgentService
         return await AndroidPointDragAsync(element, from, endElement, to, holdMs, durationMs, steps);
 #elif IOS || MACCATALYST
         return await ApplePointDragAsync(element, from, endElement, to, holdMs, durationMs, steps, RawTouchPolicy);
+#elif MACOS
+        return await MacPointDragAsync(element, from, endElement, to, holdMs, durationMs, steps);
 #else
         return await base.TryNativePointDragAsync(element, from, endElement, to, holdMs, durationMs, steps);
 #endif
@@ -1545,6 +1562,108 @@ public partial class PlatformAgentService
 #endif
 
 #if MACOS
+    private static PointTouchResult? MacDragTarget(
+        VisualElement element, Point from, VisualElement endElement, Point to,
+        out NSView? view, out NSWindow? window, out CGPoint start, out CGPoint end)
+    {
+        view = element.Handler?.PlatformView as NSView;
+        window = view?.Window;
+        start = default;
+        end = default;
+        if (window?.ContentView is not { } content)
+            return PointTouchResult.Failed($"{element.GetType().Name} is not in a window");
+        if (endElement.Handler?.PlatformView is not NSView endView || endView.Window != window)
+            return PointTouchResult.Failed($"The drop target {endElement.GetType().Name} is not in the same window");
+
+        static CGPoint ToWindow(NSView native, Point point) =>
+            native.ConvertPointToView(new CGPoint(
+                native.Bounds.X + point.X,
+                native.IsFlipped ? native.Bounds.Y + point.Y : native.Bounds.Y + native.Bounds.Height - point.Y), null);
+
+        start = ToWindow(view!, from);
+        end = ToWindow(endView, to);
+        if (!content.Bounds.Contains(content.ConvertPointFromView(end, null)))
+            return PointTouchResult.Failed(
+                $"End point ({to.X:0.#}, {to.Y:0.#}) is outside the window");
+        var hit = content.HitTest(content.ConvertPointFromView(start, null));
+        if (hit == null || !(hit == view || hit.IsDescendantOf(view!)))
+            return PointTouchResult.Failed(
+                $"Start point ({from.X:0.#}, {from.Y:0.#}) on {element.GetType().Name} is hidden or covered by {hit?.GetType().Name ?? "nothing"}");
+        if (hit is NSControl or NSScrollView)
+            return PointTouchResult.Failed(
+                $"Start point ({from.X:0.#}, {from.Y:0.#}) lands on {hit.GetType().Name}, which tracks its own mouse events");
+        if (!ReferenceEquals(endElement, element))
+        {
+            var endHit = content.HitTest(content.ConvertPointFromView(end, null));
+            if (endHit == null || !(endHit == endView || endHit.IsDescendantOf(endView)))
+                return PointTouchResult.Failed(
+                    $"End point ({to.X:0.#}, {to.Y:0.#}) on {endElement.GetType().Name} is hidden or covered by {endHit?.GetType().Name ?? "nothing"}");
+        }
+        return null;
+    }
+
+    private static void MacSendMouseEvent(NSWindow window, NSEventType type, CGPoint point, int number, float pressure)
+    {
+        using var mouseEvent = NSEvent.MouseEvent(
+            type, point, 0, NSProcessInfo.ProcessInfo.SystemUptime,
+            window.WindowNumber, window.GraphicsContext, number, 1, pressure);
+        if (mouseEvent == null)
+            throw new InvalidOperationException($"Could not create {type} event");
+        window.SendEvent(mouseEvent);
+    }
+
+    private static async Task<PointTouchResult> MacPointTapAsync(VisualElement element, Point point)
+    {
+        if (MacDragTarget(element, point, element, point, out var view, out var window,
+                out var at, out _) is { } error)
+            return error;
+
+        MacSendMouseEvent(window!, NSEventType.LeftMouseDown, at, 1, 1);
+        try
+        {
+            await Task.Delay(50);
+        }
+        finally
+        {
+            MacSendMouseEvent(window!, NSEventType.LeftMouseUp, at, 2, 0);
+        }
+        return PointTouchResult.Delivered($"AppKit mouse tap on {view!.GetType().Name}");
+    }
+
+    private static async Task<PointTouchResult> MacPointDragAsync(
+        VisualElement element, Point from, VisualElement endElement, Point to,
+        int holdMs, int durationMs, int steps)
+    {
+        if (MacDragTarget(element, from, endElement, to, out var view, out var window,
+                out var start, out var end) is { } error)
+            return error;
+
+        MacSendMouseEvent(window!, NSEventType.LeftMouseDown, start, 1, 1);
+        try
+        {
+            if (holdMs > 0)
+                await Task.Delay(holdMs);
+            var count = Math.Max(1, steps);
+            var interval = (durationMs > 0 ? durationMs : 200) / count;
+            for (var i = 1; i <= count; i++)
+            {
+                if (interval > 0)
+                    await Task.Delay(interval);
+                var fraction = (double)i / count;
+                var at = new CGPoint(
+                    start.X + (end.X - start.X) * fraction,
+                    start.Y + (end.Y - start.Y) * fraction);
+                MacSendMouseEvent(window!, NSEventType.LeftMouseDragged, at, i + 1, 1);
+            }
+        }
+        finally
+        {
+            MacSendMouseEvent(window!, NSEventType.LeftMouseUp, end, steps + 2, 0);
+        }
+        return PointTouchResult.Delivered(
+            $"AppKit mouse drag from ({from.X:0.#}, {from.Y:0.#}) to ({to.X:0.#}, {to.Y:0.#}) on {view!.GetType().Name}");
+    }
+
     private static string? MacPinch(VisualElement element, double scale)
     {
         var scrollView = FindMacScrollView(element);
