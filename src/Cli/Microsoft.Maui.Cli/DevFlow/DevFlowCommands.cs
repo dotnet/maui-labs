@@ -487,8 +487,8 @@ public partial class DevFlowCommands
 
         // MAUI tap
         var tapIdArg = new Argument<string?>("elementId") { Description = "Element ID to tap (optional if --automationId, --type, or --text is used)", DefaultValueFactory = _ => null };
-        var tapXOption = new Option<double?>("--x") { Description = "Tap at this X inside the element (device-independent units from its left edge); use with --y to tap content drawn on a canvas" };
-        var tapYOption = new Option<double?>("--y") { Description = "Tap at this Y inside the element (device-independent units from its top edge); use with --x" };
+        var tapXOption = WithInvariantParsing(new Option<double?>("--x") { Description = "Tap at this X inside the element (device-independent units from its left edge); use with --y to tap content drawn on a canvas" });
+        var tapYOption = WithInvariantParsing(new Option<double?>("--y") { Description = "Tap at this Y inside the element (device-independent units from its top edge); use with --x" });
         var mauiTapCmd = new Command("tap", "Tap element, or a point inside it with --x/--y") { tapIdArg, resolveAutoIdOption, resolveTypeOption, resolveTextOption, resolveIndexOption, tapXOption, tapYOption, andScreenshotOption, andTreeOption, andTreeDepthOption };
         mauiTapCmd.SetAction(async (ctx, ct) =>
         {
@@ -733,8 +733,8 @@ public partial class DevFlowCommands
 
         // MAUI scroll
         var scrollElementIdOption = new Option<string?>("--element") { Description = "Element ID to scroll into view or to scroll within" };
-        var scrollDeltaXOption = new Option<double>("--dx") { Description = "Horizontal scroll delta (pixels)", DefaultValueFactory = _ => 0 };
-        var scrollDeltaYOption = new Option<double>("--dy") { Description = "Vertical scroll delta (pixels, negative = down)", DefaultValueFactory = _ => 0 };
+        var scrollDeltaXOption = WithInvariantParsing(new Option<double>("--dx") { Description = "Horizontal scroll delta (pixels)", DefaultValueFactory = _ => 0 });
+        var scrollDeltaYOption = WithInvariantParsing(new Option<double>("--dy") { Description = "Vertical scroll delta (pixels, negative = down)", DefaultValueFactory = _ => 0 });
         var scrollAnimatedOption = new Option<bool>("--animated") { Description = "Animate the scroll", DefaultValueFactory = _ => true };
         var scrollItemIndexOption = new Option<int?>("--item-index") { Description = "Item index to scroll to (for CollectionView/ListView)" };
         var scrollGroupIndexOption = new Option<int?>("--group-index") { Description = "Group index for grouped CollectionView" };
@@ -765,19 +765,19 @@ public partial class DevFlowCommands
         };
         var gestureElementOption = new Option<string?>("--element") { Description = "Target element ID (required for tap; other gestures default to the current page)" };
         var gestureDirectionOption = new Option<string?>("--direction") { Description = "Direction for swipe/pan: up, down, left, right" };
-        var gestureDistanceOption = new Option<double?>("--distance") { Description = "Swipe/pan distance in device-independent pixels (default: 120)" };
-        var gestureScaleOption = new Option<double?>("--scale") { Description = "Pinch factor: 2.0 zooms in 2x, 0.5 zooms out (default: 1.5)" };
-        var gestureRotationOption = new Option<double?>("--rotation") { Description = "Rotation in degrees, positive = clockwise (default: 90)" };
-        var gestureDxOption = new Option<double?>("--dx") { Description = "Explicit horizontal pan distance; overrides --direction" };
-        var gestureDyOption = new Option<double?>("--dy") { Description = "Explicit vertical pan distance; overrides --direction" };
-        var gestureOriginXOption = new Option<double?>("--origin-x") { Description = "Focal point X, element-relative 0..1 (default: 0.5)" };
-        var gestureOriginYOption = new Option<double?>("--origin-y") { Description = "Focal point Y, element-relative 0..1 (default: 0.5)" };
+        var gestureDistanceOption = WithInvariantParsing(new Option<double?>("--distance") { Description = "Swipe/pan distance in device-independent pixels (default: 120)" });
+        var gestureScaleOption = WithInvariantParsing(new Option<double?>("--scale") { Description = "Pinch factor: 2.0 zooms in 2x, 0.5 zooms out (default: 1.5)" });
+        var gestureRotationOption = WithInvariantParsing(new Option<double?>("--rotation") { Description = "Rotation in degrees, positive = clockwise (default: 90)" });
+        var gestureDxOption = WithInvariantParsing(new Option<double?>("--dx") { Description = "Explicit horizontal pan distance; overrides --direction" });
+        var gestureDyOption = WithInvariantParsing(new Option<double?>("--dy") { Description = "Explicit vertical pan distance; overrides --direction" });
+        var gestureOriginXOption = WithInvariantParsing(new Option<double?>("--origin-x") { Description = "Focal point X, element-relative 0..1 (default: 0.5)" });
+        var gestureOriginYOption = WithInvariantParsing(new Option<double?>("--origin-y") { Description = "Focal point Y, element-relative 0..1 (default: 0.5)" });
         var gestureDurationOption = new Option<int?>("--duration") { Description = "Gesture duration in milliseconds (default: 200)" };
         var gestureStepsOption = new Option<int?>("--steps") { Description = "Interpolation steps between start and end (default: 10)" };
-        var gestureXOption = new Option<double?>("--x") { Description = "drag: press at this X on the element (device-independent units from its left edge); with --y, makes the drag a real touch from that point" };
-        var gestureYOption = new Option<double?>("--y") { Description = "drag: press at this Y on the element (device-independent units from its top edge); use with --x" };
-        var gestureToXOption = new Option<double?>("--to-x") { Description = "drag: release at this X, on --to-element if given, otherwise on the element (may lie past its edge)" };
-        var gestureToYOption = new Option<double?>("--to-y") { Description = "drag: release at this Y, on --to-element if given, otherwise on the element; use with --to-x" };
+        var gestureXOption = WithInvariantParsing(new Option<double?>("--x") { Description = "drag: press at this X on the element (device-independent units from its left edge); with --y, makes the drag a real touch from that point" });
+        var gestureYOption = WithInvariantParsing(new Option<double?>("--y") { Description = "drag: press at this Y on the element (device-independent units from its top edge); use with --x" });
+        var gestureToXOption = WithInvariantParsing(new Option<double?>("--to-x") { Description = "drag: release at this X, on --to-element if given, otherwise on the element (may lie past its edge)" });
+        var gestureToYOption = WithInvariantParsing(new Option<double?>("--to-y") { Description = "drag: release at this Y, on --to-element if given, otherwise on the element; use with --to-x" });
         var gestureToElementOption = new Option<string?>("--to-element") { Description = "drag: element ID to drop onto; released at its centre unless --to-x/--to-y are given" };
         var gestureHoldOption = new Option<int?>("--hold") { Description = "drag: hold the press this many milliseconds before moving (long-press-to-drag)" };
         var mauiGestureCmd = new Command("gesture", "Perform a gesture: pinch, rotate, pan, drag, swipe, doubletap, longpress, tap")
@@ -3076,6 +3076,34 @@ public partial class DevFlowCommands
 
         result.AddError($"Invalid {name} coordinate '{token}'. Provide a number using '.' as the decimal separator (e.g. 1240.5).");
         return default;
+    }
+
+    /// <summary>
+    /// Parses a numeric option using invariant culture so dot-decimal input (e.g. "--scale 2.0")
+    /// is accepted regardless of the host's current culture. The built-in System.CommandLine
+    /// converter uses the current culture and rejects "2.0" on locales that use ',' as the
+    /// decimal separator.
+    /// </summary>
+    private static Option<double> WithInvariantParsing(Option<double> option)
+    {
+        option.CustomParser = result => ParseInvariantNumber(result, option.Name) ?? default;
+        return option;
+    }
+
+    private static Option<double?> WithInvariantParsing(Option<double?> option)
+    {
+        option.CustomParser = result => ParseInvariantNumber(result, option.Name);
+        return option;
+    }
+
+    private static double? ParseInvariantNumber(ArgumentResult result, string name)
+    {
+        var token = result.Tokens.Count > 0 ? result.Tokens[0].Value : null;
+        if (token != null && double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            return value;
+
+        result.AddError($"Invalid value '{token}' for option '{name}'. Provide a number using '.' as the decimal separator (e.g. 1.5).");
+        return null;
     }
 
     private static async Task MauiHitTestAsync(string host, int port, bool json, double x, double y, int? window)
