@@ -34,7 +34,7 @@ namespace Microsoft.Maui.DevFlow.Agent;
 /// <item>Windows — ScrollViewer zoom/offset. Input injection needs the restricted
 /// <c>inputInjectionBrokered</c> capability and is not usable from a normal app package.</item>
 /// <item>macOS AppKit — NSScrollView magnification and content offset, or mouse events
-/// dispatched through the window to a hit-tested native view for point taps and drags.</item>
+/// posted to the app for point taps and drags on hit-tested native views.</item>
 /// </list>
 /// Every method returns a short description of what serviced the gesture, or null when unhandled.
 /// </summary>
@@ -75,17 +75,7 @@ public partial class PlatformAgentService
 #elif WINDOWS
         return await Task.FromResult(WindowsPan(element, deltaX, deltaY));
 #elif MACOS
-        if (element.Handler?.PlatformView is NSView view
-            && view is not NSScrollView
-            && view.GetType().GetMethod(nameof(NSView.MouseDragged), [typeof(NSEvent)])?.DeclaringType is { } owner
-            && owner != typeof(NSView))
-        {
-            var from = new Point(element.Width / 2, element.Height / 2);
-            var result = await MacPointDragAsync(element, from, element,
-                new Point(from.X + deltaX, from.Y + deltaY), 0, durationMs, steps);
-            return result.Handled ? result.Message : null;
-        }
-        return MacPan(element, deltaX, deltaY);
+        return await Task.FromResult(MacPan(element, deltaX, deltaY));
 #else
         return await base.TryNativePan(element, deltaX, deltaY, durationMs, steps);
 #endif
@@ -1602,14 +1592,45 @@ public partial class PlatformAgentService
         return null;
     }
 
-    private static void MacSendMouseEvent(NSWindow window, NSEventType type, CGPoint point, int number, float pressure)
+    private static void MacPostMouseEvent(NSWindow window, NSEventType type, CGPoint point, int number, float pressure)
     {
+        if (type == NSEventType.LeftMouseDown)
+        {
+            window.MakeKeyAndOrderFront(null);
+            NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
+        }
         using var mouseEvent = NSEvent.MouseEvent(
             type, point, 0, NSProcessInfo.ProcessInfo.SystemUptime,
             window.WindowNumber, window.GraphicsContext, number, 1, pressure);
         if (mouseEvent == null)
             throw new InvalidOperationException($"Could not create {type} event");
-        window.SendEvent(mouseEvent);
+        // NSWindow.SendEvent can silently drop synthetic mouse events; the app event queue delivers them.
+        NSApplication.SharedApplication.PostEvent(mouseEvent, false);
+    }
+
+    private static async Task<bool> MacPostMouseUpAsync(NSWindow window, CGPoint point, int number)
+    {
+        var dispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var monitor = NSEvent.AddLocalMonitorForEventsMatchingMask(NSEventMask.LeftMouseUp, mouseEvent =>
+        {
+            if (mouseEvent.WindowNumber == window.WindowNumber && mouseEvent.EventNumber == number)
+                dispatched.TrySetResult();
+            return mouseEvent;
+        });
+        try
+        {
+            MacPostMouseEvent(window, NSEventType.LeftMouseUp, point, number, 0);
+            await dispatched.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+        finally
+        {
+            NSEvent.RemoveMonitor(monitor);
+        }
     }
 
     private static async Task<PointTouchResult> MacPointTapAsync(VisualElement element, Point point)
@@ -1618,15 +1639,18 @@ public partial class PlatformAgentService
                 out var at, out _) is { } error)
             return error;
 
-        MacSendMouseEvent(window!, NSEventType.LeftMouseDown, at, 1, 1);
+        MacPostMouseEvent(window!, NSEventType.LeftMouseDown, at, 1, 1);
+        bool processed;
         try
         {
             await Task.Delay(50);
         }
         finally
         {
-            MacSendMouseEvent(window!, NSEventType.LeftMouseUp, at, 2, 0);
+            processed = await MacPostMouseUpAsync(window!, at, 2);
         }
+        if (!processed)
+            return PointTouchResult.Failed("AppKit mouse tap was not processed by the event loop");
         return PointTouchResult.Delivered($"AppKit mouse tap on {view!.GetType().Name}");
     }
 
@@ -1638,12 +1662,13 @@ public partial class PlatformAgentService
                 out var start, out var end) is { } error)
             return error;
 
-        MacSendMouseEvent(window!, NSEventType.LeftMouseDown, start, 1, 1);
+        MacPostMouseEvent(window!, NSEventType.LeftMouseDown, start, 1, 1);
+        var count = Math.Max(1, steps);
+        bool processed;
         try
         {
             if (holdMs > 0)
                 await Task.Delay(holdMs);
-            var count = Math.Max(1, steps);
             var interval = (durationMs > 0 ? durationMs : 200) / count;
             for (var i = 1; i <= count; i++)
             {
@@ -1653,13 +1678,15 @@ public partial class PlatformAgentService
                 var at = new CGPoint(
                     start.X + (end.X - start.X) * fraction,
                     start.Y + (end.Y - start.Y) * fraction);
-                MacSendMouseEvent(window!, NSEventType.LeftMouseDragged, at, i + 1, 1);
+                MacPostMouseEvent(window!, NSEventType.LeftMouseDragged, at, i + 1, 1);
             }
         }
         finally
         {
-            MacSendMouseEvent(window!, NSEventType.LeftMouseUp, end, steps + 2, 0);
+            processed = await MacPostMouseUpAsync(window!, end, count + 2);
         }
+        if (!processed)
+            return PointTouchResult.Failed("AppKit mouse drag was not processed by the event loop");
         return PointTouchResult.Delivered(
             $"AppKit mouse drag from ({from.X:0.#}, {from.Y:0.#}) to ({to.X:0.#}, {to.Y:0.#}) on {view!.GetType().Name}");
     }

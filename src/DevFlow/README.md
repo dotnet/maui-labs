@@ -368,7 +368,7 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 - **Visual Tree Inspection** — query the full MAUI visual tree via HTTP API or CLI
 - **Layout Diagnostics** — detect clipping, lost overflow, text truncation, overlap, and interaction occlusion with platform-specific evidence and confidence
 - **Element Interaction** — tap, fill, scroll, navigate, focus, resize, and mutate properties
-- **AppKit canvas input** — a point tap or drag sends native left-mouse events to the hit-tested view; a pan on a view that handles mouse drags uses the same path. Scroll-view pan continues to move the viewport. This is mouse input, not synthetic finger touches; the target view must handle mouse events.
+- **AppKit canvas input** — a point tap or drag sends native left-mouse events to the hit-tested view. Use a point-based drag for drawing; an ordinary pan on a scroll view continues to move its viewport. This is mouse input, not synthetic finger touches; the target view must handle mouse events.
 - **Application Menus** — inspect and invoke the app menu bar: the cross-platform MAUI `MenuBarItems` tree plus the native macOS AppKit `NSMenu` and active Mac Catalyst responder-chain key commands. Disabled items and disabled ancestors are respected; unhandled native actions report failure.
 - **Screenshots** — capture PNG screenshots from any platform (full window or per-element); AppKit window capture includes native chrome and attached sheets without activating the app
 - **Screen Recording** — start/stop video recording of app sessions

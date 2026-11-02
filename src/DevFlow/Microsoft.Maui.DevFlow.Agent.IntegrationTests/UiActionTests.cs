@@ -467,7 +467,7 @@ public class UiActionTests : IntegrationTestBase
 
     [Fact]
     [Trait(TestFramework.Trait, TestFramework.Maui)]
-    public async Task MacOS_MouseInput_DeliversNativeMouseSequences()
+    public async Task MacOS_PointInput_DeliversNativeMouseSequences()
     {
         if (Platform != "macos")
             return;
@@ -486,24 +486,13 @@ public class UiActionTests : IntegrationTestBase
             && text.Contains("down=1 dragged=4 up=1 dx=80 dy=40", StringComparison.Ordinal));
 
         target = await FindElementAsync("MacMouseTarget");
-        result = await Client.PanAsync(target.Id, deltaX: -40, deltaY: 20, steps: 4,
-            captureEpoch: target.CaptureEpoch, registryGeneration: target.RegistryGeneration);
-        Assert.True(result.Success, result.Error);
-        Assert.Equal("native", result.HandledBy);
-        Assert.Contains("AppKit mouse drag", result.Detail);
-
-        await WaitForAsync(async () =>
-            (await FindElementAsync("MacMouseStatus")).Text is { } text
-            && text.Contains("down=2 dragged=8 up=2 dx=-40 dy=20", StringComparison.Ordinal));
-
-        target = await FindElementAsync("MacMouseTarget");
         var tap = await Client.TapResultAsync(target.Id, 35, 45,
             target.CaptureEpoch, target.RegistryGeneration);
         Assert.True(tap.Success, tap.Error);
 
         await WaitForAsync(async () =>
             (await FindElementAsync("MacMouseStatus")).Text is { } text
-            && text.Contains("down=3 dragged=8 up=3 dx=0 dy=0", StringComparison.Ordinal));
+            && text.Contains("down=2 dragged=4 up=2 dx=0 dy=0", StringComparison.Ordinal));
 
         target = await FindElementAsync("MacMouseTarget");
         var offscreen = await Client.DragAsync(target.Id, x: 40, y: 40,
@@ -511,7 +500,7 @@ public class UiActionTests : IntegrationTestBase
             captureEpoch: target.CaptureEpoch, registryGeneration: target.RegistryGeneration);
         Assert.False(offscreen.Success);
         Assert.Contains("outside the window", offscreen.Error);
-        Assert.Contains("down=3 dragged=8 up=3", (await FindElementAsync("MacMouseStatus")).Text);
+        Assert.Contains("down=2 dragged=4 up=2", (await FindElementAsync("MacMouseStatus")).Text);
     }
 
     private async Task<ElementInfo> FindRawTouchTargetAsync()
