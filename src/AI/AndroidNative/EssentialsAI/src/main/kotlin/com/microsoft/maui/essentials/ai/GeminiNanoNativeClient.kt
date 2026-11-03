@@ -47,8 +47,8 @@ internal fun modelConfiguration(modelId: String?): GenerationConfig {
 }
 
 fun checkStatus(
-    callback: NativeCheckStatusCallback,
     modelId: String?,
+    callback: NativeCheckStatusCallback,
 ): NativeCancellation {
     val terminated = AtomicBoolean()
     fun fail(cause: Throwable) {
@@ -80,8 +80,8 @@ fun checkStatus(
 }
 
 fun downloadModel(
-    callback: NativeDownloadCallback,
     modelId: String?,
+    callback: NativeDownloadCallback,
 ): NativeCancellation {
     val terminated = AtomicBoolean()
     fun fail(cause: Throwable) {
