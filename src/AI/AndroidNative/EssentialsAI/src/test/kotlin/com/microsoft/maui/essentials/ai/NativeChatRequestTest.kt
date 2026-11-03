@@ -113,7 +113,7 @@ class NativeChatRequestTest {
         val result = request(
             message("system", "Be concise."),
             message("user", "hello"),
-            options = NativeChatOptions(null, null, null, null, true),
+            options = NativeChatOptions(null, null, null, null, true, null),
         ).toNative()
 
         assertTrue(result.dynamicTools.isNullOrEmpty())

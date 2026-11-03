@@ -136,7 +136,7 @@ progress. Status checks never start a download.
 
 DOWNLOADABLE maps to `NotReady`, DOWNLOADING to `Downloading`, and UNAVAILABLE to
 `Unavailable`. Unrecognized status codes map to `Unknown`. Reasoning is advertised
-only when `isThinkingModeAvailable` succeeds.
+only when `Feature.THINKING_MODE` is present in `getAvailableFeatures()`.
 
 ## Android minimum and model availability
 
