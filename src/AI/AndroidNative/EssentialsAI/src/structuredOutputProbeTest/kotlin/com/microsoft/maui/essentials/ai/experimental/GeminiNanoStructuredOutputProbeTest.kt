@@ -50,7 +50,7 @@ class GeminiNanoStructuredOutputProbeTest {
             { calls.add("readiness"); FeatureStatus.AVAILABLE },
         )
 
-        assertEquals(listOf("capability", "readiness"), calls)
+        assertEquals(listOf("readiness", "capability"), calls)
         assertEquals(SentimentProbe::class, request.outputClass)
         assertTrue(request.includeSchemaInPrompt)
         val base = request.generateContentRequest
@@ -62,20 +62,20 @@ class GeminiNanoStructuredOutputProbeTest {
     }
 
     @Test
-    fun unavailableStructuredOutputFailsBeforeReadinessOrRequestCreation() = runBlocking {
+    fun unavailableStructuredOutputFailsBeforeRequestCreation() = runBlocking {
         val error = runCatching {
-            prepareStructuredOutputProbe("input", { false }, { error("Must not query readiness.") })
+            prepareStructuredOutputProbe("input", { false }, { FeatureStatus.AVAILABLE })
         }.exceptionOrNull()
 
         assertTrue(error is IllegalStateException)
-        assertEquals("Gemini Nano native structured output is unavailable on this device.", error!!.message)
+        assertEquals("The selected Gemini Nano model does not support native structured output.", error!!.message)
     }
 
     @Test
     fun everyNonReadyStatusFailsWithoutDownloadOrInference() = runBlocking {
         for (status in listOf(FeatureStatus.UNAVAILABLE, FeatureStatus.DOWNLOADABLE, FeatureStatus.DOWNLOADING)) {
             val error = runCatching {
-                prepareStructuredOutputProbe("input", { true }, { status })
+                prepareStructuredOutputProbe("input", { error("Must not query unavailable model features.") }, { status })
             }.exceptionOrNull()
             assertTrue(error is IllegalStateException)
             assertEquals(

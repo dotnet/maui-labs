@@ -34,6 +34,7 @@ android {
         consumerProguardFiles("consumer-rules.pro")
         if (enableGeminiStructuredOutputProbe) {
             consumerProguardFiles("src/structuredOutputProbe/consumer-rules.pro")
+            testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
     }
 
@@ -41,6 +42,8 @@ android {
         sourceSets {
             getByName("main").java.srcDir("src/structuredOutputProbe/kotlin")
             getByName("test").java.srcDir("src/structuredOutputProbeTest/kotlin")
+            getByName("androidTest").java.srcDir("src/structuredOutputProbeAndroidTest/kotlin")
+            getByName("androidTest").manifest.srcFile("src/structuredOutputProbeAndroidTest/AndroidManifest.xml")
         }
     }
 
@@ -80,6 +83,10 @@ dependencies {
     if (enableGeminiStructuredOutputProbe) {
         compileOnly("com.google.mlkit:genai-schema:1.0.0-alpha2")
         add("ksp", "com.google.mlkit:genai-schema-compiler:1.0.0-alpha2")
+        androidTestImplementation("androidx.test.ext:junit:1.3.0")
+        androidTestImplementation("androidx.test:runner:1.7.0")
+        androidTestImplementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
+        androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     }
 }
 
