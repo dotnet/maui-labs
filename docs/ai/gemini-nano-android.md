@@ -185,8 +185,8 @@ so extra newlines omitted by ML Kit's final response are not displayed.
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
 Unavailable IDs, timestamps, and other usage counts remain null.
-A candidate without text is rejected explicitly; the text-only adapter does not
-silently convert a native function-call-only candidate to an empty answer.
+A candidate without text or function calls is rejected explicitly. Native
+function-call-only responses contain typed calls without invented answer text.
 
 ## Model selection
 
