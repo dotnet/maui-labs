@@ -12,6 +12,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
     private ChatClientDescriptor? _descriptor;
     private string? _modelId;
     private CancellationTokenSource? _operation;
+    // Providers may finish after cancellation; only the current selection may update the UI.
     private long _generation;
     private bool _isInteractionBusy;
     private readonly ILogger<ModelReadinessViewModel> _logger;
@@ -32,6 +33,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
     public string? ErrorMessage { get; private set; }
     public ModelPreparationProgress? Progress { get; private set; }
     public double? BytesPerSecond { get; private set; }
+
     public IAsyncRelayCommand RefreshCommand { get; }
     public IAsyncRelayCommand PrepareCommand { get; }
     public IRelayCommand CancelCommand { get; }
@@ -47,22 +49,28 @@ public sealed class ModelReadinessViewModel : ObservableObject
     }
 
     private bool HasStatus => _descriptor?.GetModelStatusAsync is not null;
+
     public bool IsBusy => _operation is not null;
     public bool IsSendBlocked => HasStatus && (IsPreparing || Status?.Availability != ChatModelAvailability.Available);
     public bool IsVisible => HasStatus && (IsSendBlocked || ErrorMessage is not null);
+
     public bool IsSystemPreparing => Status?.Availability == ChatModelAvailability.Downloading;
     public bool ShowPreparationAction => !IsPreparing && _descriptor?.PrepareModelAsync is not null &&
         Status?.Availability == ChatModelAvailability.NotReady;
     public bool CanPrepare => ShowPreparationAction && !IsBusy && !IsInteractionBusy;
+
     public bool ShouldPoll => HasStatus && !IsBusy && !IsInteractionBusy && ErrorMessage is null &&
         (Status is null || Status.Availability is ChatModelAvailability.NotReady or ChatModelAvailability.Downloading);
+
     public bool HasDeterminateProgress => IsPreparing && Progress is { BytesDownloaded: >= 0, TotalBytes: > 0 };
     public bool IsIndeterminateProgress => ErrorMessage is null &&
         (IsPreparing || IsSystemPreparing) && !HasDeterminateProgress;
     public double DeterminateProgressOpacity => HasDeterminateProgress ? 1 : 0;
     public double IndeterminateProgressOpacity => IsIndeterminateProgress ? 1 : 0;
+
     public double ProgressFraction => Progress is { BytesDownloaded: >= 0 and var downloaded, TotalBytes: > 0 and var total }
         ? Math.Clamp((double)downloaded / total, 0, 1) : 0;
+
     public string PreparationActionLabel => _descriptor?.PreparationActionLabel ?? "Prepare";
     public string ActionLabel => IsPreparing ? "Cancel" : ShowPreparationAction ? PreparationActionLabel : "Check again";
     public IRelayCommand ActionCommand => IsPreparing ? CancelCommand : ShowPreparationAction ? PrepareCommand : RefreshCommand;
@@ -73,6 +81,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
         {
             if (ErrorMessage is not null)
                 return ErrorMessage;
+
             var name = _descriptor?.DisplayName ?? "Model";
             if (IsChecking)
                 return $"Checking {name} availability...";
@@ -82,6 +91,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
                 return $"{name} model preparation is in progress.";
             if (ShowPreparationAction)
                 return $"{name} needs model preparation before chatting.";
+
             return Status?.Availability switch
             {
                 ChatModelAvailability.Available => string.Empty,
@@ -101,9 +111,11 @@ public sealed class ModelReadinessViewModel : ObservableObject
         {
             if (!IsPreparing || ErrorMessage is not null || Progress?.BytesDownloaded is not >= 0)
                 return string.Empty;
+
             var counts = Progress.TotalBytes is > 0 and var total
                 ? $"{Progress.BytesDownloaded / 1048576d:F1} / {total / 1048576d:F1} MiB"
                 : $"{Progress.BytesDownloaded / 1048576d:F1} MiB downloaded";
+
             return BytesPerSecond is { } rate ? $"{counts} ({rate / 1048576d:F1} MiB/s)" : counts;
         }
     }
@@ -120,6 +132,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
         Progress = null;
         BytesPerSecond = null;
         NotifyStateChanged();
+
         if (RefreshCommand.CanExecute(null))
             RefreshCommand.Execute(null);
     }
@@ -131,6 +144,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
         _operation = null;
         if (IsPreparing)
             ErrorMessage = "Preparation cancelled. A shared system download may continue.";
+
         IsChecking = false;
         IsPreparing = false;
         Progress = null;
@@ -155,12 +169,15 @@ public sealed class ModelReadinessViewModel : ObservableObject
         var generation = ++_generation;
         using var operation = new CancellationTokenSource();
         _operation = operation;
+
+        // Poll quietly once a snapshot exists so the banner does not flash between checks.
         IsChecking = !prepare && Status is null;
         IsPreparing = prepare;
         ErrorMessage = null;
         Progress = null;
         BytesPerSecond = null;
         NotifyStateChanged();
+
         bool IsCurrent() => generation == _generation && !operation.IsCancellationRequested;
 
         try
@@ -168,7 +185,10 @@ public sealed class ModelReadinessViewModel : ObservableObject
             var status = await getStatus(modelId, operation.Token);
             if (!IsCurrent())
                 return;
+
             UpdateStatus(status);
+
+            // Recheck before explicit preparation: another app may already have started or finished it.
             if (prepare && status.Availability == ChatModelAvailability.NotReady &&
                 descriptor.PrepareModelAsync is { } prepareModel)
             {
@@ -176,44 +196,51 @@ public sealed class ModelReadinessViewModel : ObservableObject
                 IsPreparing = true;
                 NotifyStateChanged();
                 _logger.LogInformation("Preparing {Model} ({ModelId}).", descriptor.DisplayName, modelId);
+
                 long? firstBytes = null;
                 var transfer = new Stopwatch();
                 var progress = new Progress<ModelPreparationProgress>(update =>
                 {
-                    if (IsCurrent() && IsPreparing)
+                    if (!IsCurrent() || !IsPreparing)
+                        return;
+
+                    if (update.BytesDownloaded is >= 0 and var downloaded)
                     {
-                        if (update.BytesDownloaded is >= 0 and var downloaded)
+                        // Average only bytes observed by this operation; restart if the counter resets.
+                        if (firstBytes is null || downloaded < firstBytes.Value ||
+                            Progress?.BytesDownloaded is { } previous && downloaded < previous)
                         {
-                            if (firstBytes is null || downloaded < firstBytes.Value ||
-                                Progress?.BytesDownloaded is { } previous && downloaded < previous)
-                            {
-                                firstBytes = downloaded;
-                                transfer.Restart();
-                                BytesPerSecond = null;
-                            }
-                            else
-                            {
-                                var seconds = transfer.Elapsed.TotalSeconds;
-                                BytesPerSecond = seconds > 0 ? (downloaded - firstBytes.Value) / seconds : null;
-                            }
+                            firstBytes = downloaded;
+                            transfer.Restart();
+                            BytesPerSecond = null;
                         }
                         else
                         {
-                            BytesPerSecond = null;
+                            var seconds = transfer.Elapsed.TotalSeconds;
+                            BytesPerSecond = seconds > 0 ? (downloaded - firstBytes.Value) / seconds : null;
                         }
-                        Progress = update;
-                        _logger.LogDebug("{Model} preparation progress: {DownloadedBytes} / {TotalBytes} bytes.",
-                            descriptor.DisplayName, update.BytesDownloaded, update.TotalBytes);
-                        NotifyStateChanged();
                     }
+                    else
+                    {
+                        BytesPerSecond = null;
+                    }
+
+                    Progress = update;
+                    _logger.LogDebug("{Model} preparation progress: {DownloadedBytes} / {TotalBytes} bytes.",
+                        descriptor.DisplayName, update.BytesDownloaded, update.TotalBytes);
+                    NotifyStateChanged();
                 });
+
                 await prepareModel(modelId, progress, operation.Token);
                 if (!IsCurrent())
                     return;
+
+                // Native download completion does not guarantee that the model is ready for inference.
                 _logger.LogInformation("{Model} preparation call completed.", descriptor.DisplayName);
                 status = await getStatus(modelId, operation.Token);
                 if (!IsCurrent())
                     return;
+
                 UpdateStatus(status);
             }
         }
@@ -255,6 +282,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
             _logger.LogDebug("{Model} ({ModelId}) model status: {Availability}",
                 _descriptor?.DisplayName, _modelId, status.Availability);
         }
+
         Status = status;
     }
 

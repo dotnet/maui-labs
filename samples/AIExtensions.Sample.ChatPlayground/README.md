@@ -56,7 +56,8 @@ input does not imply image-generation support.
 Each tab's **Logs** button toggles a local diagnostics sidebar; capture continues
 while hidden. It starts collapsed. In narrow windows, tap outside to dismiss it.
 
-Logs and completed spans are grouped by trace, including MEAI/Apple tool events.
+App and provider logs and completed spans are grouped by trace, including MEAI
+request logs and Apple tool events.
 Apple callbacks retain the request's trace/span. Chat and embeddings emit spans;
 the pinned MEAI version provides image logging only. Model/usage data come from
 the provider. Payload logging and sensitive telemetry are disabled, but exceptions

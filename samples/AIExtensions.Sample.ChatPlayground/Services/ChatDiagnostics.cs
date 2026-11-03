@@ -13,11 +13,11 @@ public sealed record ChatDiagnosticEntry(
     string Details,
     string? TraceId = null);
 
-/// <summary>A bounded local receiver for existing AI logs and completed playground activities.</summary>
+/// <summary>A bounded local receiver for app and AI logs and completed playground activities.</summary>
 public sealed class ChatDiagnostics : ILoggerProvider
 {
     public const string SourceName = "AIExtensions.Sample.ChatPlayground";
-    public const string AppleToolLogCategory = "Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient";
+    public const string ProviderLogCategory = "Microsoft.Maui.Essentials.AI";
     public const int Capacity = 500;
     private const int TextLimit = 8192;
     private readonly object _gate = new();
@@ -115,8 +115,10 @@ public sealed class ChatDiagnostics : ILoggerProvider
             lock (owner._gate)
                 return !owner._disposed && level >= LogLevel.Debug && level < LogLevel.None
                     && (category.StartsWith("Microsoft.Extensions.AI.", StringComparison.Ordinal)
-                        || category == AppleToolLogCategory
-                        || category == typeof(ModelReadinessViewModel).FullName);
+                        || category == ProviderLogCategory
+                        || category.StartsWith(ProviderLogCategory + ".", StringComparison.Ordinal)
+                        || category == SourceName
+                        || category.StartsWith(SourceName + ".", StringComparison.Ordinal));
         }
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state,

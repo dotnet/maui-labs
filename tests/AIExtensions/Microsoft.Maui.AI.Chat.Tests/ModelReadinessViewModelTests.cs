@@ -30,7 +30,7 @@ public sealed class ModelReadinessViewModelTests
         using var diagnostics = new ChatDiagnostics();
         using var factory = LoggerFactory.Create(builder => builder
             .AddProvider(diagnostics)
-            .AddFilter<ChatDiagnostics>(typeof(ModelReadinessViewModel).FullName, LogLevel.Debug));
+            .AddFilter<ChatDiagnostics>(ChatDiagnostics.SourceName, LogLevel.Debug));
         var viewModel = new ModelReadinessViewModel(factory.CreateLogger<ModelReadinessViewModel>());
         var status = new ChatModelStatus(ChatModelAvailability.Downloading, null);
         await SelectAsync(viewModel, new("android", "Gemini Nano", "Native",
