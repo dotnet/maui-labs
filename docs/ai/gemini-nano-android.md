@@ -142,12 +142,6 @@ Prompt/Common/Schema runtime archives. Shared Kotlin, coroutine, AndroidX, and
 Google dependencies come from NuGet to avoid packaging duplicate Java classes.
 Bindings for the bridge remain internal.
 
-The bridge pins GenAI Prompt/Common `1.0.0-beta5`, Schema `1.0.0-alpha2`,
-Kotlin `2.4.0`, and coroutines `1.11.0`. This SDK update does not enable native
-tool calling, structured output, model selection, or server-held sessions.
-The existing typed SDK builders remain KClass-based; no schema compiler or KSP
-plugin is needed by this bridge.
-
 Java 17+ and the Android SDK are required when building from source. Kotlin and
 Java emit Java 17 bytecode without requiring an exact Java 17 toolchain.
 
