@@ -16,6 +16,7 @@ public sealed class GeminiNanoModelProfileTests(ITestOutputHelper output)
 	{
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 		using var client = new GeminiNanoChatClient();
+		string? defaultModel = null;
 		foreach (var modelId in new string?[] { "gemini-nano", "gemini-nano-preview-fast", "gemini-nano-full", null })
 		{
 			var status = await GeminiNanoChatClient.GetModelStatusAsync(modelId, timeout.Token);
@@ -24,7 +25,6 @@ public sealed class GeminiNanoModelProfileTests(ITestOutputHelper output)
 				output.WriteLine($"PROFILE_SWITCH {modelId ?? "(default)"}: {status.Availability}; {status.UnavailableReason}");
 				continue;
 			}
-			var expectedModel = await GeminiNanoChatClient.GetBaseModelNameAsync(modelId, timeout.Token);
 			var response = await client.GetResponseAsync(
 				[new ChatMessage(ChatRole.User, "Reply with OK.")],
 				new ChatOptions { ModelId = modelId, Temperature = 0, MaxOutputTokens = 16 },
@@ -35,7 +35,11 @@ public sealed class GeminiNanoModelProfileTests(ITestOutputHelper output)
 				ActualModelId = response.ModelId,
 				response.Text,
 			}));
-			Assert.Equal(expectedModel, response.ModelId);
+			Assert.False(string.IsNullOrWhiteSpace(response.ModelId));
+			if (modelId == "gemini-nano")
+				defaultModel = response.ModelId;
+			else if (modelId is null or "gemini-nano-full" && defaultModel is not null)
+				Assert.Equal(defaultModel, response.ModelId);
 		}
 		Assert.Equal("gemini-nano", client.GetService<ChatClientMetadata>()?.DefaultModelId);
 	}
@@ -62,26 +66,11 @@ public sealed class GeminiNanoModelProfileTests(ITestOutputHelper output)
 				RequestedModelId = modelId,
 				Error = exception.Message,
 			}));
-			var nameError = await Assert.ThrowsAsync<InvalidOperationException>(
-				() => GeminiNanoChatClient.GetBaseModelNameAsync(modelId, timeout.Token));
-			Assert.Equal(606, nameError.Data["MLKitErrorCode"]);
 			return;
-		}
-		string? modelName = null;
-		string? modelNameError = null;
-		try
-		{
-			modelName = await GeminiNanoChatClient.GetBaseModelNameAsync(modelId, timeout.Token);
-		}
-		catch (InvalidOperationException exception)
-		{
-			modelNameError = exception.Message;
 		}
 		output.WriteLine("PROFILE_STATUS " + JsonSerializer.Serialize(new
 		{
 			RequestedModelId = modelId,
-			BaseModelName = modelName,
-			ModelNameError = modelNameError,
 			Availability = status.Availability.ToString(),
 			status.UnavailableReason,
 			Capabilities = status.Capabilities?.Select(capability => capability.ToString()).ToArray(),
@@ -104,7 +93,6 @@ public sealed class GeminiNanoModelProfileTests(ITestOutputHelper output)
 			ElapsedMilliseconds = elapsed.ElapsedMilliseconds,
 		}));
 		Assert.False(string.IsNullOrWhiteSpace(response.ModelId));
-		Assert.Equal(modelName, response.ModelId);
 	}
 }
 #endif

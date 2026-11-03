@@ -345,7 +345,6 @@ public class GeminiNanoChatClientInteropTests
 		await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetStreamingResponseAsync(
 			[new(ChatRole.User, "Hello")], new ChatOptions { ModelId = modelId }).ToChatResponseAsync());
 		await Assert.ThrowsAsync<InvalidOperationException>(() => GeminiNanoChatClient.GetModelStatusAsync(modelId));
-		await Assert.ThrowsAsync<InvalidOperationException>(() => GeminiNanoChatClient.GetBaseModelNameAsync(modelId));
 		await Assert.ThrowsAsync<InvalidOperationException>(() => GeminiNanoChatClient.PrepareModelAsync(modelId));
 		await Assert.ThrowsAsync<InvalidOperationException>(async () =>
 		{
@@ -438,8 +437,6 @@ public class GeminiNanoChatClientInteropTests
 			() => GeminiNanoChatClient.PrepareModelAsync(cts.Token));
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(
 			() => GeminiNanoChatClient.GetModelStatusAsync("gemini-nano-preview-full", cts.Token));
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(
-			() => GeminiNanoChatClient.GetBaseModelNameAsync("gemini-nano-preview-full", cts.Token));
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(
 			() => GeminiNanoChatClient.PrepareModelAsync("gemini-nano-preview-full", cts.Token));
 	}

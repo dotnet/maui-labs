@@ -51,20 +51,6 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		return CreateModelStatus(status.Status, status.ThinkingAvailable);
 	}
 
-	/// <summary>Reads ML Kit's resolved base-model name without generating a response or downloading assets.</summary>
-	/// <param name="modelId">A Gemini Nano model ID from the profiles supported by this client. Null uses gemini-nano.</param>
-	/// <param name="cancellationToken">Cancels the native model-name request.</param>
-	public static async Task<string> GetBaseModelNameAsync(string? modelId = null, CancellationToken cancellationToken = default)
-	{
-		cancellationToken.ThrowIfCancellationRequested();
-		using var callback = new CheckStatusCallback(cancellationToken);
-		using var cancellation = AndroidNative.GeminiNanoNative.CheckStatus(callback, modelId);
-		using var registration = cancellationToken.Register(() => cancellation.Cancel());
-		var status = await callback.Response.ConfigureAwait(false);
-		return !string.IsNullOrWhiteSpace(status.ModelName) ? status.ModelName
-			: throw new InvalidOperationException("ML Kit returned no base-model name for the requested profile.");
-	}
-
 	/// <summary>
 	/// Downloads Gemini Nano model assets and waits for ML Kit's download Flow to complete.
 	/// Check <see cref="GetModelStatusAsync(CancellationToken)"/> before starting and again after completion.
