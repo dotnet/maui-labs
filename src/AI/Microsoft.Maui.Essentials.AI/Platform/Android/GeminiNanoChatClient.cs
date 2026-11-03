@@ -45,8 +45,7 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		using var callback = new CheckStatusCallback(cancellationToken);
-		using var cancellation = AndroidNative.GeminiNanoNative.CheckStatus(
-			callback, modelId, includeModelName: false);
+		using var cancellation = AndroidNative.GeminiNanoNative.CheckStatus(callback, modelId);
 		using var registration = cancellationToken.Register(() => cancellation.Cancel());
 		var status = await callback.Response.ConfigureAwait(false);
 		return CreateModelStatus(status.Status, status.ThinkingAvailable);
@@ -59,8 +58,7 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		using var callback = new CheckStatusCallback(cancellationToken);
-		using var cancellation = AndroidNative.GeminiNanoNative.CheckStatus(
-			callback, modelId, includeModelName: true);
+		using var cancellation = AndroidNative.GeminiNanoNative.CheckStatus(callback, modelId);
 		using var registration = cancellationToken.Register(() => cancellation.Cancel());
 		var status = await callback.Response.ConfigureAwait(false);
 		return !string.IsNullOrWhiteSpace(status.ModelName) ? status.ModelName

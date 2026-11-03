@@ -50,7 +50,23 @@ public sealed class GeminiNanoModelProfileTests(ITestOutputHelper output)
 	public async Task CheckAndRunProfile_ReportsActualNativeModel(string modelId)
 	{
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-		var status = await GeminiNanoChatClient.GetModelStatusAsync(modelId, timeout.Token);
+		ChatModelStatus status;
+		try
+		{
+			status = await GeminiNanoChatClient.GetModelStatusAsync(modelId, timeout.Token);
+		}
+		catch (InvalidOperationException exception) when (exception.Data["MLKitErrorCode"] is 606)
+		{
+			output.WriteLine("PROFILE_UNAVAILABLE " + JsonSerializer.Serialize(new
+			{
+				RequestedModelId = modelId,
+				Error = exception.Message,
+			}));
+			var nameError = await Assert.ThrowsAsync<InvalidOperationException>(
+				() => GeminiNanoChatClient.GetBaseModelNameAsync(modelId, timeout.Token));
+			Assert.Equal(606, nameError.Data["MLKitErrorCode"]);
+			return;
+		}
 		string? modelName = null;
 		string? modelNameError = null;
 		try

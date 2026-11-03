@@ -49,7 +49,6 @@ internal fun modelConfiguration(modelId: String?): GenerationConfig {
 fun checkStatus(
     callback: NativeCheckStatusCallback,
     modelId: String?,
-    includeModelName: Boolean,
 ): NativeCancellation {
     val terminated = AtomicBoolean()
     fun fail(cause: Throwable) {
@@ -65,7 +64,7 @@ fun checkStatus(
                     featureStatus,
                     featureStatus == FeatureStatus.AVAILABLE &&
                         Feature.THINKING_MODE in model.getAvailableFeatures(),
-                    if (includeModelName) model.getBaseModelName() else null,
+                    model.getBaseModelName(),
                 )
             } finally {
                 model.close()

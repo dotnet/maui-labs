@@ -120,6 +120,9 @@ if (status.Availability == ChatModelAvailability.Available)
 requested profile, and multiple profiles may report the same base-model name.
 `GetBaseModelNameAsync(modelId, cancellationToken)` queries that name without
 inference or downloading; native availability errors are returned to the caller.
+Status queries also read the base-model name. If ML Kit cannot resolve the
+requested profile, the status query propagates that error rather than returning
+a snapshot without a model name.
 Preview availability depends on the device and AICore enrollment. The client
 does not switch profiles or download assets automatically.
 Pass the same profile to `PrepareModelAsync(modelId, cancellationToken)` or
