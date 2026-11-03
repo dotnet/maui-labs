@@ -1,0 +1,353 @@
+{
+  "format": "maui-ai-chat-recording",
+  "schemaVersion": 1,
+  "metadata": {
+    "meaiVersion": "10.7.0.0",
+    "pipelineBoundary": "legacy-ordinal",
+    "sanitizerProfile": "legacy-import-v1"
+  },
+  "interactions": [
+    {
+      "sequence": 0,
+      "name": "legacy-0",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
+        {
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "messageId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:08.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "messageId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:08.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "messageId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:08.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "!"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "messageId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:08.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "messageId": "chatcmpl-DP9gKSl59H5uAXksKRvNWmSGzLSE2",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:08.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 12,
+                  "OutputTokenCount": 140,
+                  "TotalTokenCount": 152,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 128,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        }
+      ],
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
+    },
+    {
+      "sequence": 1,
+      "name": "legacy-1",
+      "request": {
+        "legacy": true
+      },
+      "updates": [
+        {
+          "sequence": 0,
+          "value": {
+            "authorName": null,
+            "role": null,
+            "responseId": "",
+            "messageId": "",
+            "conversationId": null,
+            "createdAt": "1970-01-01T00:00:00.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 1,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "messageId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:12.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 2,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "messageId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:12.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Good"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 3,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "messageId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:12.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "bye"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 4,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "messageId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:12.0000000+00:00",
+            "finishReason": null,
+            "modelId": "",
+            "contents": [
+              {
+                "type": "text",
+                "text": "!"
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 5,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "messageId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:12.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        },
+        {
+          "sequence": 6,
+          "value": {
+            "authorName": null,
+            "role": "assistant",
+            "responseId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "messageId": "chatcmpl-DP9gOJsuvLblKULPhnLXcUtGJrCQ0",
+            "conversationId": null,
+            "createdAt": "2026-03-30T16:23:12.0000000+00:00",
+            "finishReason": "stop",
+            "modelId": "",
+            "contents": [
+              {
+                "type": "usage",
+                "details": {
+                  "InputTokenCount": 31,
+                  "OutputTokenCount": 77,
+                  "TotalTokenCount": 108,
+                  "CachedInputTokenCount": 0,
+                  "ReasoningTokenCount": 64,
+                  "inputAudioTokenCount": null,
+                  "inputTextTokenCount": null,
+                  "outputAudioTokenCount": null,
+                  "outputTextTokenCount": null,
+                  "AdditionalCounts": {
+                    "InputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AudioTokenCount": 0,
+                    "OutputTokenDetails.AcceptedPredictionTokenCount": 0,
+                    "OutputTokenDetails.RejectedPredictionTokenCount": 0
+                  }
+                }
+              }
+            ],
+            "additional": null,
+            "raw": null,
+            "continuationToken": null
+          },
+          "delayMs": null
+        }
+      ],
+      "outcome": "completed",
+      "errorType": null,
+      "errorMessage": null,
+      "legacy": true
+    }
+  ],
+  "manifest": {
+    "redacted": 0,
+    "rejected": 0,
+    "legacyImport": true
+  }
+}

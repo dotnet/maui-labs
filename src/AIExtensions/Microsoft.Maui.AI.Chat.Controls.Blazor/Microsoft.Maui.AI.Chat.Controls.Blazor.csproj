@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IsShipping>true</IsShipping>
+    <PackageId>Microsoft.Maui.AI.Chat.Controls.Blazor</PackageId>
+    <Description>Blazor Hybrid presentation components for Microsoft.Maui.AI.Chat.</Description>
+    <PackRepoRootReadme>false</PackRepoRootReadme>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateJSModuleManifest>false</GenerateJSModuleManifest>
+    <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
+    <StaticWebAssetBasePath>_content/Microsoft.Maui.AI.Chat.Controls.Blazor</StaticWebAssetBasePath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Blazor.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.Maui.AI.Chat.Presentation\Microsoft.Maui.AI.Chat.Presentation.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.Chat.Controls\Microsoft.Maui.Chat.Controls.csproj" />
+    <ProjectReference Include="..\Microsoft.Maui.Chat.Controls.Blazor\Microsoft.Maui.Chat.Controls.Blazor.csproj" />
+  </ItemGroup>
+</Project>

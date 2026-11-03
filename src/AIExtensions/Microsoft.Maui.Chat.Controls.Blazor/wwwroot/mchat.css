@@ -1,0 +1,663 @@
+/* Licensed to the .NET Foundation under one or more agreements.
+   The .NET Foundation licenses this file to you under the MIT license.
+
+   Adapted from https://github.com/dotnet/aspnetcore/blob/31b20463068f8d9ad900393bf96c9a182c397216/src/Components/AI/src/wwwroot/ai-chat.css
+   under the MIT license. The design tokens, buttons, message-list layout, bubble sizing,
+   typing dots, error banner, and chat-page shell rules follow the upstream layout closely.
+   The class prefix has been renamed from sc-ai- to mchat- to align with the
+   Microsoft.Maui.Chat.Controls MauiChat.* XAML resource keys, and neutral tokens have been
+   added for participant chrome (avatar, name, timestamp, delivery glyph) that the neutral
+   MAUI chat surface exposes but the upstream AI-only shell does not. See
+   Components/UPSTREAM-NOTES.md for the full mapping. */
+
+/* ==========================================================================
+   Microsoft.Maui.Chat.Controls.Blazor — Design Tokens & Default Styles
+   ========================================================================== */
+
+/* ---------- Root scope ---------- */
+.mchat-root {
+    /* ---- Typography ---- */
+    --mchat-font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mchat-font-size: 0.9375rem;
+    --mchat-font-size-sm: 0.8125rem;
+    --mchat-font-size-lg: 1.125rem;
+    --mchat-line-height: 1.5;
+    --mchat-font-weight-normal: 400;
+    --mchat-font-weight-medium: 500;
+    --mchat-font-weight-bold: 600;
+
+    /* ---- Colors — Surface & Background ---- */
+    --mchat-color-bg: #ffffff;
+    --mchat-color-surface: #ffffff;
+    --mchat-color-surface-hover: #f8f9fa;
+    --mchat-color-text: #212529;
+    --mchat-color-text-secondary: #6c757d;
+    --mchat-color-text-on-accent: #ffffff;
+    --mchat-color-accent: #0d6efd;
+    --mchat-color-accent-hover: #0b5ed7;
+    --mchat-color-border: #dee2e6;
+    --mchat-color-success: #198754;
+    --mchat-color-error: #dc3545;
+    --mchat-color-error-bg: #f8d7da;
+    --mchat-color-warning: #ffc107;
+
+    /* ---- Colors — Message Bubbles ---- */
+    --mchat-color-bubble-outgoing: #0d6efd;
+    --mchat-color-bubble-outgoing-text: #ffffff;
+    --mchat-color-bubble-incoming: #e9ecef;
+    --mchat-color-bubble-incoming-text: #212529;
+
+    /* ---- Layout & Spacing ---- */
+    --mchat-spacing-xs: 0.25rem;
+    --mchat-spacing-sm: 0.5rem;
+    --mchat-spacing-md: 1rem;
+    --mchat-spacing-lg: 1.5rem;
+    --mchat-max-width: 48rem;
+    --mchat-border-radius-sm: 0.375rem;
+    --mchat-border-radius-lg: 1.25rem;
+    --mchat-input-height: 3rem;
+    --mchat-avatar-size: 2rem;
+
+    /* ---- Transitions ---- */
+    --mchat-transition-fast: 120ms ease;
+
+    /* ---- Focus & States ---- */
+    --mchat-focus-ring: 0 0 0 2px var(--mchat-color-accent);
+    --mchat-disabled-opacity: 0.5;
+
+    font-family: var(--mchat-font-family);
+    font-size: var(--mchat-font-size);
+    line-height: var(--mchat-line-height);
+    color: var(--mchat-color-text);
+    box-sizing: border-box;
+}
+
+.mchat-root *,
+.mchat-root *::before,
+.mchat-root *::after {
+    box-sizing: inherit;
+}
+
+/* ---------- Automatic dark mode ---------- */
+@media (prefers-color-scheme: dark) {
+    .mchat-root:not([data-theme="light"]) {
+        --mchat-color-bg: #1c1b1f;
+        --mchat-color-surface: #2b2930;
+        --mchat-color-surface-hover: #3a3841;
+        --mchat-color-text: #e6e1e5;
+        --mchat-color-text-secondary: #cac4d0;
+        --mchat-color-border: #49454f;
+        --mchat-color-bubble-outgoing: #6750a4;
+        --mchat-color-bubble-outgoing-text: #ffffff;
+        --mchat-color-bubble-incoming: #3a3841;
+        --mchat-color-bubble-incoming-text: #e6e1e5;
+        --mchat-color-error-bg: #4a1c22;
+    }
+}
+
+.mchat-root[data-theme="dark"] {
+    --mchat-color-bg: #1c1b1f;
+    --mchat-color-surface: #2b2930;
+    --mchat-color-surface-hover: #3a3841;
+    --mchat-color-text: #e6e1e5;
+    --mchat-color-text-secondary: #cac4d0;
+    --mchat-color-border: #49454f;
+    --mchat-color-bubble-outgoing: #6750a4;
+    --mchat-color-bubble-outgoing-text: #ffffff;
+    --mchat-color-bubble-incoming: #3a3841;
+    --mchat-color-bubble-incoming-text: #e6e1e5;
+    --mchat-color-error-bg: #4a1c22;
+}
+
+/* ---------- Buttons ---------- */
+.mchat-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--mchat-spacing-xs);
+    padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
+    border: 1px solid transparent;
+    border-radius: var(--mchat-border-radius-sm);
+    font-family: inherit;
+    font-size: var(--mchat-font-size-sm);
+    font-weight: var(--mchat-font-weight-medium);
+    cursor: pointer;
+    transition: background var(--mchat-transition-fast),
+                color var(--mchat-transition-fast),
+                border-color var(--mchat-transition-fast),
+                opacity var(--mchat-transition-fast);
+    line-height: 1;
+}
+
+.mchat-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--mchat-focus-ring);
+}
+
+.mchat-btn:disabled {
+    opacity: var(--mchat-disabled-opacity);
+    cursor: not-allowed;
+}
+
+.mchat-btn--primary {
+    background: var(--mchat-color-accent);
+    color: var(--mchat-color-text-on-accent);
+}
+
+.mchat-btn--primary:hover:not(:disabled) {
+    background: var(--mchat-color-accent-hover);
+}
+
+.mchat-btn--secondary {
+    background: var(--mchat-color-surface);
+    color: var(--mchat-color-text);
+    border-color: var(--mchat-color-border);
+}
+
+.mchat-btn--secondary:hover:not(:disabled) {
+    background: var(--mchat-color-surface-hover);
+}
+
+/* ---------- Message List ---------- */
+.mchat-message-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mchat-spacing-sm);
+    max-width: var(--mchat-max-width);
+    margin: 0 auto;
+    padding: var(--mchat-spacing-lg) var(--mchat-spacing-md);
+    width: 100%;
+}
+
+.mchat-message-list__footer {
+    min-height: var(--mchat-spacing-lg);
+}
+
+/* ---------- One projected row ---------- */
+.mchat-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mchat-spacing-xs);
+}
+
+.mchat-row--outgoing {
+    align-items: flex-end;
+}
+
+.mchat-row--incoming {
+    align-items: flex-start;
+}
+
+.mchat-row--group-continuation {
+    /* Squeeze consecutive rows together so a run reads like one grouped message. */
+    margin-top: calc(var(--mchat-spacing-xs) * -1);
+}
+
+/* ---------- Participant chrome ---------- */
+.mchat-row__header {
+    display: flex;
+    align-items: center;
+    gap: var(--mchat-spacing-sm);
+    font-size: var(--mchat-font-size-sm);
+    color: var(--mchat-color-text-secondary);
+}
+
+.mchat-row--outgoing .mchat-row__header {
+    flex-direction: row-reverse;
+}
+
+.mchat-avatar {
+    width: var(--mchat-avatar-size);
+    height: var(--mchat-avatar-size);
+    border-radius: 50%;
+    background: var(--mchat-color-surface-hover);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: var(--mchat-font-weight-bold);
+    font-size: var(--mchat-font-size-sm);
+    color: var(--mchat-color-text-secondary);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.mchat-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mchat-participant-name {
+    font-weight: var(--mchat-font-weight-medium);
+    color: var(--mchat-color-text);
+}
+
+.mchat-row__footer {
+    display: flex;
+    align-items: center;
+    gap: var(--mchat-spacing-xs);
+    font-size: var(--mchat-font-size-sm);
+    color: var(--mchat-color-text-secondary);
+}
+
+.mchat-row--outgoing .mchat-row__footer {
+    flex-direction: row-reverse;
+}
+
+.mchat-status {
+    font-size: var(--mchat-font-size-sm);
+    color: var(--mchat-color-text-secondary);
+}
+
+.mchat-status--failed {
+    color: var(--mchat-color-error);
+}
+
+.mchat-status--sending {
+    color: var(--mchat-color-warning);
+}
+
+/* ---------- Bubble ---------- */
+.mchat-bubble {
+    max-width: 85%;
+    padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
+    border-radius: var(--mchat-border-radius-lg);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.mchat-row--outgoing .mchat-bubble {
+    background: var(--mchat-color-bubble-outgoing);
+    color: var(--mchat-color-bubble-outgoing-text);
+    border-bottom-right-radius: var(--mchat-border-radius-sm);
+}
+
+.mchat-row--incoming .mchat-bubble {
+    background: var(--mchat-color-bubble-incoming);
+    color: var(--mchat-color-bubble-incoming-text);
+    border-bottom-left-radius: var(--mchat-border-radius-sm);
+}
+
+.mchat-bubble--bare {
+    background: transparent;
+    padding: 0;
+}
+
+/* ---------- Media ---------- */
+.mchat-media {
+    max-width: 20rem;
+    border-radius: var(--mchat-border-radius-sm);
+    overflow: hidden;
+    background: var(--mchat-color-surface-hover);
+}
+
+.mchat-media img {
+    width: 100%;
+    display: block;
+}
+
+.mchat-file-card {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mchat-spacing-sm);
+    padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
+    background: var(--mchat-color-surface);
+    border: 1px solid var(--mchat-color-border);
+    border-radius: var(--mchat-border-radius-sm);
+    color: var(--mchat-color-text);
+    max-width: 20rem;
+}
+
+.mchat-file-card__icon {
+    font-size: 1.5rem;
+}
+
+.mchat-file-card__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.mchat-file-card__name {
+    font-weight: var(--mchat-font-weight-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mchat-file-card__size {
+    font-size: var(--mchat-font-size-sm);
+    color: var(--mchat-color-text-secondary);
+}
+
+.mchat-audio {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mchat-spacing-sm);
+    padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
+    background: var(--mchat-color-surface);
+    border: 1px solid var(--mchat-color-border);
+    border-radius: var(--mchat-border-radius-sm);
+}
+
+.mchat-audio__toggle {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border-radius: 50%;
+    border: none;
+    background: var(--mchat-color-accent);
+    color: var(--mchat-color-text-on-accent);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+}
+
+.mchat-audio__label {
+    font-size: var(--mchat-font-size-sm);
+    color: var(--mchat-color-text);
+}
+
+/* ---------- Streaming cursor ---------- */
+.mchat-bubble--streaming::after {
+    content: "";
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: currentColor;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    animation: mchat-blink 1s step-end infinite;
+}
+
+@keyframes mchat-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* ---------- Typing Indicator ---------- */
+.mchat-typing {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
+    color: var(--mchat-color-text-secondary);
+    font-size: var(--mchat-font-size-sm);
+}
+
+.mchat-typing__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--mchat-color-text-secondary);
+    animation: mchat-bounce 1.4s ease-in-out infinite;
+}
+
+.mchat-typing__dot:nth-child(2) { animation-delay: 0.2s; }
+.mchat-typing__dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes mchat-bounce {
+    0%, 80%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-6px); }
+}
+
+/* ---------- Error Banner ---------- */
+.mchat-error {
+    display: flex;
+    align-items: center;
+    gap: var(--mchat-spacing-sm);
+    padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
+    background: var(--mchat-color-error-bg);
+    color: var(--mchat-color-error);
+    border-radius: var(--mchat-border-radius-sm);
+    font-size: var(--mchat-font-size-sm);
+    margin: var(--mchat-spacing-sm) 0;
+}
+
+.mchat-error__message {
+    flex: 1;
+}
+
+/* ---------- Welcome / Empty state ---------- */
+.mchat-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--mchat-spacing-lg);
+    gap: var(--mchat-spacing-md);
+    color: var(--mchat-color-text-secondary);
+}
+
+.mchat-welcome__icon {
+    font-size: 3rem;
+}
+
+.mchat-welcome__message {
+    font-size: var(--mchat-font-size-lg);
+    color: var(--mchat-color-text);
+}
+
+.mchat-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--mchat-spacing-sm);
+    justify-content: center;
+    padding: 0 var(--mchat-spacing-md);
+}
+
+.mchat-suggestion {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mchat-spacing-xs);
+    padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
+    background: var(--mchat-color-surface);
+    color: var(--mchat-color-text);
+    border: 1px solid var(--mchat-color-border);
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: var(--mchat-font-size-sm);
+}
+
+.mchat-suggestion:hover {
+    background: var(--mchat-color-surface-hover);
+}
+
+/* ---------- Composer ---------- */
+.mchat-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--mchat-spacing-sm);
+    padding: var(--mchat-spacing-sm);
+    background: var(--mchat-color-surface);
+    border: 1px solid var(--mchat-color-border);
+    border-radius: var(--mchat-border-radius-lg);
+    transition: border-color var(--mchat-transition-fast);
+}
+
+.mchat-composer:focus-within {
+    border-color: var(--mchat-color-accent);
+}
+
+.mchat-composer__body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.mchat-composer__textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: var(--mchat-line-height);
+    color: var(--mchat-color-text);
+    background: transparent;
+    min-height: var(--mchat-input-height);
+    max-height: 10rem;
+    padding: var(--mchat-spacing-sm);
+}
+
+.mchat-composer__textarea::placeholder {
+    color: var(--mchat-color-text-secondary);
+}
+
+.mchat-composer__textarea:disabled {
+    opacity: var(--mchat-disabled-opacity);
+}
+
+.mchat-composer__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mchat-spacing-xs);
+    flex-shrink: 0;
+}
+
+.mchat-icon-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--mchat-color-text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background var(--mchat-transition-fast),
+                color var(--mchat-transition-fast),
+                opacity var(--mchat-transition-fast);
+    font-size: 1.1rem;
+}
+
+.mchat-icon-btn:hover:not(:disabled) {
+    background: var(--mchat-color-surface-hover);
+}
+
+.mchat-icon-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--mchat-focus-ring);
+}
+
+.mchat-icon-btn:disabled {
+    opacity: var(--mchat-disabled-opacity);
+    cursor: not-allowed;
+}
+
+.mchat-icon-btn--primary {
+    background: var(--mchat-color-accent);
+    color: var(--mchat-color-text-on-accent);
+}
+
+.mchat-icon-btn--primary:hover:not(:disabled) {
+    background: var(--mchat-color-accent-hover);
+}
+
+.mchat-icon-btn--danger {
+    background: var(--mchat-color-error);
+    color: var(--mchat-color-text-on-accent);
+}
+
+.mchat-icon-btn--recording {
+    background: var(--mchat-color-error);
+    color: var(--mchat-color-text-on-accent);
+    animation: mchat-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mchat-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ---------- Attachments strip ---------- */
+.mchat-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--mchat-spacing-xs);
+    padding: 0 var(--mchat-spacing-sm) var(--mchat-spacing-xs);
+}
+
+.mchat-attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mchat-spacing-xs);
+    padding: 2px var(--mchat-spacing-sm);
+    background: var(--mchat-color-surface);
+    border: 1px solid var(--mchat-color-border);
+    border-radius: 999px;
+    font-size: var(--mchat-font-size-sm);
+    max-width: 12rem;
+}
+
+.mchat-attachment-chip__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mchat-attachment-chip__remove {
+    background: none;
+    border: none;
+    color: var(--mchat-color-text-secondary);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0;
+    line-height: 1;
+}
+
+.mchat-composer__status,
+.mchat-composer__error {
+    font-size: var(--mchat-font-size-sm);
+    padding: 2px var(--mchat-spacing-sm);
+}
+
+.mchat-composer__status {
+    color: var(--mchat-color-text-secondary);
+}
+
+.mchat-composer__error {
+    color: var(--mchat-color-error);
+}
+
+/* ---------- Chat Page Shell ---------- */
+.mchat-chat-page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    background: var(--mchat-color-bg);
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.mchat-chat-page__header {
+    flex-shrink: 0;
+}
+
+.mchat-chat-page__body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+}
+
+.mchat-chat-page__footer {
+    flex-shrink: 0;
+    border-top: 1px solid var(--mchat-color-border);
+    background: var(--mchat-color-surface);
+    padding: var(--mchat-spacing-sm) var(--mchat-spacing-md);
+}
+
+.mchat-chat-page__composer-container {
+    max-width: var(--mchat-max-width);
+    margin: 0 auto;
+}

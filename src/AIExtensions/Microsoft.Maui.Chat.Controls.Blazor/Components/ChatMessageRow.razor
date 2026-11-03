@@ -1,0 +1,94 @@
+@*
+    Licensed to the .NET Foundation under one or more agreements.
+    The .NET Foundation licenses this file to you under the MIT license.
+
+    One projected row inside ChatMessagesView. Wraps a resolved MessageContent fragment
+    inside the ChatBubble chrome unless the row's content presentation is Bare and no
+    consumer registered a chrome-owning template. Streaming state is deduced from the
+    conversation status plus row position.
+*@
+@namespace Microsoft.Maui.Chat.Controls.Blazor
+@using Microsoft.Maui.Chat.Controls
+@implements IDisposable
+
+<ChatBubble Row="Row" IsStreaming="IsStreaming">
+    @if (_registeredRenderer is not null)
+    {
+        @_registeredRenderer(Row.Content)
+    }
+    else
+    {
+        @DefaultRender()
+    }
+</ChatBubble>
+
+@code {
+    private MessageContent _content = default!;
+    private Func<MessageContent, RenderFragment>? _registeredRenderer;
+
+    /// <summary>Gets or sets the projected row this component renders.</summary>
+    [Parameter, EditorRequired]
+    public ChatMessageRowModel Row { get; set; } = default!;
+
+    /// <summary>Gets or sets whether this row is currently streaming.</summary>
+    [Parameter]
+    public bool IsStreaming { get; set; }
+
+    /// <summary>Gets or sets the ambient chat view context.</summary>
+    [CascadingParameter]
+    public ChatViewContext ViewContext { get; set; } = default!;
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_content, Row.Content))
+        {
+            if (_content is not null)
+            {
+                _content.ContentChanged -= OnContentChanged;
+            }
+
+            _content = Row.Content;
+            _content.ContentChanged += OnContentChanged;
+        }
+
+        _registeredRenderer = ViewContext.Resolve(Row.Content)?.Render;
+    }
+
+    private void OnContentChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
+
+    /// <summary>Renders the built-in fallback fragment for the row's content type.</summary>
+    private RenderFragment DefaultRender() => builder =>
+    {
+        switch (Row.Content)
+        {
+            case TextMessageContent text:
+                builder.OpenComponent<TextMessageContentView>(0);
+                builder.AddComponentParameter(1, nameof(TextMessageContentView.Content), text);
+                builder.AddComponentParameter(2, nameof(TextMessageContentView.IsStreaming), IsStreaming);
+                builder.CloseComponent();
+                break;
+
+            case MediaMessageContent media:
+                builder.OpenComponent<MediaMessageContentView>(0);
+                builder.AddComponentParameter(1, nameof(MediaMessageContentView.Content), media);
+                builder.CloseComponent();
+                break;
+
+            default:
+                // Unknown content types render as a zero-height row so an unrecognised block
+                // never breaks the screen. Consumers register a MessageContentRenderer to
+                // supply a body.
+                break;
+        }
+    };
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_content is not null)
+        {
+            _content.ContentChanged -= OnContentChanged;
+        }
+    }
+}
