@@ -73,8 +73,11 @@ models; closing the client cancels and joins outstanding work.
 Kit's streaming callback, serializes text/thought deltas, drains admitted
 progress before terminal completion releases the managed JNI callback, and
 reconciles the returned final text/thoughts. Equal final content emits nothing,
-an extension emits only its suffix, and divergence faults the stream. The C#
-adapter converts events to `ChatResponseUpdate` values.
+an extension emits only its suffix, and divergence faults the stream. Trailing
+whitespace is held until more content or completion because ML Kit can omit or
+change it in the final candidate; internal whitespace is preserved, and missing
+or divergent non-whitespace still faults. The C# adapter converts events to
+`ChatResponseUpdate` values.
 
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
