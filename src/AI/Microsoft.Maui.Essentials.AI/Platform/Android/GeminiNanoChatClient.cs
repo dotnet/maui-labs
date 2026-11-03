@@ -123,17 +123,8 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		];
 		if (thinkingAvailable)
 			capabilities.Add(ChatModelCapability.Reasoning);
-		return new(availability, availability == ChatModelAvailability.Available
-			? null : GetUnavailableReason(nativeStatus), capabilities);
+		return new(availability, capabilities);
 	}
-
-	private static string GetUnavailableReason(int nativeStatus) => nativeStatus switch
-	{
-		0 => "UNAVAILABLE (0): Gemini Nano is unsupported or AICore configuration is not ready.",
-		1 => "DOWNLOADABLE (1)",
-		2 => "DOWNLOADING (2)",
-		_ => $"Unknown ML Kit FeatureStatus ({nativeStatus})",
-	};
 
 	/// <inheritdoc />
 	public async Task<ChatResponse> GetResponseAsync(

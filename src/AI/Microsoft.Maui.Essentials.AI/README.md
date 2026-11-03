@@ -82,7 +82,7 @@ Check availability with the concrete client before offering chat:
 ```csharp
 var status = await AppleIntelligenceChatClient.GetModelStatusAsync();
 if (status.Availability != ChatModelAvailability.Available)
-    Console.WriteLine(status.UnavailableReason);
+    Console.WriteLine(status.Availability);
 ```
 
 Register and explicitly prepare Windows AI in a supported packaged app:

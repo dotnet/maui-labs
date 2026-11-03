@@ -51,7 +51,7 @@ public enum ChatModelAvailability
 	/// </remarks>
 	Unknown,
 
-	/// <summary>The provider reports that the model is unavailable. See the status reason for details.</summary>
+	/// <summary>The provider reports that the model is unavailable.</summary>
 	/// <remarks>
 	/// <para>Apple: not mapped; known unavailable reasons use the more specific states above.</para>
 	/// <para>Android: <c>UNAVAILABLE (0)</c>.</para>

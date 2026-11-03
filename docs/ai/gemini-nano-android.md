@@ -135,9 +135,8 @@ Download completion does not guarantee readiness or recovery of earlier byte
 progress. Status checks never start a download.
 
 DOWNLOADABLE maps to `NotReady`, DOWNLOADING to `Downloading`, and UNAVAILABLE to
-`Unavailable`. Unrecognized status codes map to `Unknown`. The native reason is
-preserved in `UnavailableReason`. Reasoning
-is advertised only when `isThinkingModeAvailable` succeeds.
+`Unavailable`. Unrecognized status codes map to `Unknown`. Reasoning is advertised
+only when `isThinkingModeAvailable` succeeds.
 
 ## Android minimum and model availability
 

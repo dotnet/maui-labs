@@ -22,7 +22,7 @@ public sealed class GeminiNanoModelProfileTests(ITestOutputHelper output)
 			var status = await GeminiNanoChatClient.GetModelStatusAsync(modelId, timeout.Token);
 			if (status.Availability != ChatModelAvailability.Available)
 			{
-				output.WriteLine($"PROFILE_SWITCH {modelId ?? "(default)"}: {status.Availability}; {status.UnavailableReason}");
+				output.WriteLine($"PROFILE_SWITCH {modelId ?? "(default)"}: {status.Availability}");
 				continue;
 			}
 			var response = await client.GetResponseAsync(
@@ -72,7 +72,6 @@ public sealed class GeminiNanoModelProfileTests(ITestOutputHelper output)
 		{
 			RequestedModelId = modelId,
 			Availability = status.Availability.ToString(),
-			status.UnavailableReason,
 			Capabilities = status.Capabilities?.Select(capability => capability.ToString()).ToArray(),
 		}));
 		if (status.Availability != ChatModelAvailability.Available)

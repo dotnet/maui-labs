@@ -114,7 +114,7 @@ The banner disables Send until the selected on-device model is ready. Android
 offers **Download**, Windows offers **Prepare**, and system-managed or ongoing
 preparation offers **Check again**. Downloads show byte progress and transfer rate
 when available. **Cancel** stops this app's request, but a shared system download
-may continue. Native status details appear in **Logs**.
+may continue. Status changes and operation errors appear in **Logs**.
 
 ## Configure Azure OpenAI
 

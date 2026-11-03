@@ -86,7 +86,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
             {
                 ChatModelAvailability.Available => string.Empty,
                 ChatModelAvailability.NotReady => $"{name} is not ready. The system manages model preparation.",
-                ChatModelAvailability.Unavailable => $"{name} is unavailable. Check Logs for details.",
+                ChatModelAvailability.Unavailable => $"{name} is unavailable on this device or its system configuration is not ready.",
                 ChatModelAvailability.Disabled => $"{name} is disabled. Enable it in system settings.",
                 ChatModelAvailability.NotSupported => $"{name} is not supported on this device.",
                 ChatModelAvailability.RequirementsNotMet => $"{name} needs additional system setup or an OS update.",
@@ -250,11 +250,10 @@ public sealed class ModelReadinessViewModel : ObservableObject
     private void UpdateStatus(ChatModelStatus status)
     {
         var previous = Status;
-        if (previous is null || previous.Availability != status.Availability ||
-            previous.UnavailableReason != status.UnavailableReason)
+        if (previous is null || previous.Availability != status.Availability)
         {
-            _logger.LogDebug("{Model} ({ModelId}) model status: {Availability}; native reason: {UnavailableReason}",
-                _descriptor?.DisplayName, _modelId, status.Availability, status.UnavailableReason);
+            _logger.LogDebug("{Model} ({ModelId}) model status: {Availability}",
+                _descriptor?.DisplayName, _modelId, status.Availability);
         }
         Status = status;
     }
