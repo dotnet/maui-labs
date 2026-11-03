@@ -75,9 +75,6 @@ waits for the explicit download to finish. Use `DownloadModelAsync` when the app
 needs to display ML Kit's native progress, and query model status afterward
 before enabling generation.
 
-For Android model IDs and per-request selection, see
-[model selection](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#model-selection).
-
 ## Quick start
 
 Check availability with the concrete client before offering chat:
