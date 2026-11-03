@@ -533,6 +533,65 @@ public class DevFlowCliCommandTests
         }
     }
 
+    [Fact]
+    public async Task UiScroll_UnderCommaDecimalCulture_AcceptsDotDecimalDelta()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "scroll", "--dy", "-100.5", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/scroll");
+            Assert.Contains("-100.5", req.Body);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [Fact]
+    public async Task UiGesture_UnderCommaDecimalCulture_AcceptsDotDecimalOptions()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+        try
+        {
+            var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pinch", "--element", "el-1",
+                "--scale", "2.5", "--origin-x", "0.25", "--origin-y", "0.75", "--json");
+
+            Assert.Equal(0, result.ExitCode);
+            var req = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+            Assert.Contains("2.5", req.Body);
+            Assert.Contains("0.25", req.Body);
+            Assert.Contains("0.75", req.Body);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [Fact]
+    public async Task UiGesture_InvalidNumber_FailsWithoutCallingAgent()
+    {
+        var (server, cli) = await CreateFixturesAsync();
+        await using var _ = server;
+
+        var result = await cli.InvokeAsync("devflow", "ui", "gesture", "pinch", "--element", "el-1", "--scale", "big", "--json");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/ui/actions/gesture");
+    }
+
     // ========== logs ==========
 
     [Fact]
