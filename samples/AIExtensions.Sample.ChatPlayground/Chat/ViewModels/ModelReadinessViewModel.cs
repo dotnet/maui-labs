@@ -50,13 +50,12 @@ public sealed class ModelReadinessViewModel : ObservableObject
     public bool IsBusy => _operation is not null;
     public bool IsSendBlocked => HasStatus && (IsPreparing || Status?.Availability != ChatModelAvailability.Available);
     public bool IsVisible => HasStatus && (IsSendBlocked || ErrorMessage is not null);
-    public bool IsSystemPreparing => Status is { Availability: ChatModelAvailability.NotReady } status &&
-        _descriptor?.IsPreparationInProgress?.Invoke(status) == true;
+    public bool IsSystemPreparing => Status?.Availability == ChatModelAvailability.Downloading;
     public bool ShowPreparationAction => !IsPreparing && _descriptor?.PrepareModelAsync is not null &&
-        Status?.Availability == ChatModelAvailability.NotReady && !IsSystemPreparing;
+        Status?.Availability == ChatModelAvailability.NotReady;
     public bool CanPrepare => ShowPreparationAction && !IsBusy && !IsInteractionBusy;
     public bool ShouldPoll => HasStatus && !IsBusy && !IsInteractionBusy && ErrorMessage is null &&
-        (Status is null || Status.Availability == ChatModelAvailability.NotReady);
+        (Status is null || Status.Availability is ChatModelAvailability.NotReady or ChatModelAvailability.Downloading);
     public bool HasDeterminateProgress => IsPreparing && Progress is { BytesDownloaded: >= 0, TotalBytes: > 0 };
     public bool IsIndeterminateProgress => ErrorMessage is null &&
         (IsPreparing || IsSystemPreparing) && !HasDeterminateProgress;
@@ -87,6 +86,7 @@ public sealed class ModelReadinessViewModel : ObservableObject
             {
                 ChatModelAvailability.Available => string.Empty,
                 ChatModelAvailability.NotReady => $"{name} is not ready. The system manages model preparation.",
+                ChatModelAvailability.Unavailable => $"{name} is unavailable. Check Logs for details.",
                 ChatModelAvailability.Disabled => $"{name} is disabled. Enable it in system settings.",
                 ChatModelAvailability.NotSupported => $"{name} is not supported on this device.",
                 ChatModelAvailability.RequirementsNotMet => $"{name} needs additional system setup or an OS update.",

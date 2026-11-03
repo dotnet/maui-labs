@@ -112,6 +112,7 @@ public sealed class ModelReadinessViewModelTests
     [InlineData(ChatModelAvailability.Disabled)]
     [InlineData(ChatModelAvailability.RequirementsNotMet)]
     [InlineData(ChatModelAvailability.Unknown)]
+    [InlineData(ChatModelAvailability.Unavailable)]
     public async Task Unavailable_ExplainsNativeReasonWithoutOfferingDownload(ChatModelAvailability availability)
     {
         var viewModel = new ModelReadinessViewModel(NullLogger<ModelReadinessViewModel>.Instance);
@@ -234,6 +235,8 @@ public sealed class ModelReadinessViewModelTests
     [InlineData(ChatModelAvailability.NotSupported)]
     [InlineData(ChatModelAvailability.RequirementsNotMet)]
     [InlineData(ChatModelAvailability.Unknown)]
+    [InlineData(ChatModelAvailability.Unavailable)]
+    [InlineData(ChatModelAvailability.Downloading)]
     public async Task Prepare_RechecksAndDoesNotStartDownloadIfNativeStateChanged(ChatModelAvailability updated)
     {
         var status = NotReady;
@@ -265,16 +268,15 @@ public sealed class ModelReadinessViewModelTests
     }
 
     [Theory]
-    [InlineData("DOWNLOADABLE (1)", false)]
-    [InlineData("DOWNLOADING (2)", true)]
-    public async Task StatusChecks_DoNotStartOrReattachPreparation(string nativeReason, bool downloading)
+    [InlineData(ChatModelAvailability.NotReady, false)]
+    [InlineData(ChatModelAvailability.Downloading, true)]
+    public async Task StatusChecks_DoNotStartOrReattachPreparation(ChatModelAvailability availability, bool downloading)
     {
         var subscriptions = 0;
         var viewModel = new ModelReadinessViewModel(NullLogger<ModelReadinessViewModel>.Instance);
         await SelectAsync(viewModel, new("android", "Gemini Nano", "Native",
-            GetModelStatusAsync: (_, _) => Task.FromResult(new ChatModelStatus(ChatModelAvailability.NotReady, nativeReason, null)),
-            PrepareModelAsync: (_, _, _) => { subscriptions++; return Task.CompletedTask; },
-            IsPreparationInProgress: status => status.UnavailableReason == "DOWNLOADING (2)"));
+            GetModelStatusAsync: (_, _) => Task.FromResult(new ChatModelStatus(availability, "native details", null)),
+            PrepareModelAsync: (_, _, _) => { subscriptions++; return Task.CompletedTask; }));
 
         Assert.Equal(0, subscriptions);
         Assert.True(viewModel.IsSendBlocked);
@@ -299,12 +301,11 @@ public sealed class ModelReadinessViewModelTests
     [Fact]
     public async Task ExistingPreparation_PollsUntilAvailable_WithoutOfferingAnotherDownload()
     {
-        var status = NotReady;
+        var status = new ChatModelStatus(ChatModelAvailability.Downloading, "native details", null);
         var viewModel = new ModelReadinessViewModel(NullLogger<ModelReadinessViewModel>.Instance);
         await SelectAsync(viewModel, new("android", "Gemini Nano", "Native",
             GetModelStatusAsync: (_, _) => Task.FromResult(status),
-            PrepareModelAsync: (_, _, _) => throw new InvalidOperationException("Must not start preparation"),
-            IsPreparationInProgress: _ => true));
+            PrepareModelAsync: (_, _, _) => throw new InvalidOperationException("Must not start preparation")));
 
         Assert.Contains("in progress", viewModel.Message);
         Assert.Equal("Check again", viewModel.ActionLabel);

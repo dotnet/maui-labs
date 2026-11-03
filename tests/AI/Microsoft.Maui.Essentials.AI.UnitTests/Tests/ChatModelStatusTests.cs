@@ -15,6 +15,8 @@ public class ChatModelStatusTests
 				ChatModelAvailability.Disabled,
 				ChatModelAvailability.RequirementsNotMet,
 				ChatModelAvailability.Unknown,
+				ChatModelAvailability.Unavailable,
+				ChatModelAvailability.Downloading,
 			],
 			Enum.GetValues<ChatModelAvailability>());
 	}
@@ -26,6 +28,8 @@ public class ChatModelStatusTests
 	[InlineData(ChatModelAvailability.Disabled, "Disabled")]
 	[InlineData(ChatModelAvailability.RequirementsNotMet, "RequirementsNotMet")]
 	[InlineData(ChatModelAvailability.Unknown, "Unknown")]
+	[InlineData(ChatModelAvailability.Unavailable, "Unavailable")]
+	[InlineData(ChatModelAvailability.Downloading, "Downloading")]
 	public void Availability_ToStringReturnsStableName(ChatModelAvailability availability, string name) =>
 		Assert.Equal(name, availability.ToString());
 

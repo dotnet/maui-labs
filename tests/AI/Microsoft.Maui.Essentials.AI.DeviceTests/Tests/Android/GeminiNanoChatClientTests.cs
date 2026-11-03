@@ -392,8 +392,8 @@ public class GeminiNanoChatClientInteropTests
 	[Theory]
 	[InlineData(3, ChatModelAvailability.Available)]
 	[InlineData(1, ChatModelAvailability.NotReady)]
-	[InlineData(2, ChatModelAvailability.NotReady)]
-	[InlineData(0, ChatModelAvailability.Unknown)]
+	[InlineData(2, ChatModelAvailability.Downloading)]
+	[InlineData(0, ChatModelAvailability.Unavailable)]
 	[InlineData(99, ChatModelAvailability.Unknown)]
 	public void CreateModelStatus_MapsAvailabilityAndOnlyAdvertisesEffectiveCapabilities(int native, ChatModelAvailability expected)
 	{

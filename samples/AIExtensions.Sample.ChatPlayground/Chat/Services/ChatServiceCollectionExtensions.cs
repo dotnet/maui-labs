@@ -107,8 +107,6 @@ internal static class ChatServiceCollectionExtensions
                 GetModelStatusAsync: GeminiNanoChatClient.GetModelStatusAsync,
                 PrepareModelAsync: DownloadGeminiModelAsync,
                 PreparationActionLabel: "Download",
-                // The shared availability maps both DOWNLOADABLE and DOWNLOADING to NotReady.
-                IsPreparationInProgress: status => status.UnavailableReason == "DOWNLOADING (2)",
                 Models:
                 [
                     new("gemini-nano", "Default (stable/full)"),

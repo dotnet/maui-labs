@@ -134,9 +134,9 @@ Always check `GetModelStatusAsync` after preparation before enabling generation.
 Download completion does not guarantee readiness or recovery of earlier byte
 progress. Status checks never start a download.
 
-DOWNLOADABLE and DOWNLOADING both map to `NotReady`. UNAVAILABLE maps to `Unknown`
-because ML Kit uses it for both unsupported hardware and missing AICore
-configuration. The native reason is preserved in `UnavailableReason`. Reasoning
+DOWNLOADABLE maps to `NotReady`, DOWNLOADING to `Downloading`, and UNAVAILABLE to
+`Unavailable`. Unrecognized status codes map to `Unknown`. The native reason is
+preserved in `UnavailableReason`. Reasoning
 is advertised only when `isThinkingModeAvailable` succeeds.
 
 ## Android minimum and model availability

@@ -16,7 +16,6 @@ public sealed record ChatClientDescriptor(
     Func<string?, CancellationToken, Task<ChatModelStatus>>? GetModelStatusAsync = null,
     Func<string?, IProgress<ModelPreparationProgress>, CancellationToken, Task>? PrepareModelAsync = null,
     string PreparationActionLabel = "Prepare",
-    Func<ChatModelStatus, bool>? IsPreparationInProgress = null,
     IReadOnlyList<ChatModelOption>? Models = null);
 
 public sealed record ChatModelOption(string Id, string DisplayName)

@@ -91,7 +91,7 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - Return a shared status shape containing availability, an optional provider-native reason, and effective MEAI-facing capabilities.
 - `ChatModelStatus` is a sealed immutable class with reference identity; compare its properties explicitly when comparing snapshots.
 - `ChatModelAvailability` contains `Available`, `NotReady`, `NotSupported`,
-  `Disabled`, `RequirementsNotMet`, and `Unknown`.
+  `Disabled`, `RequirementsNotMet`, `Unknown`, `Unavailable`, and `Downloading`.
 - `ChatModelCapability` describes effective MEAI-facing text, streaming, image
   input, tool calling, structured output, token usage, and reasoning support.
 - `UnavailableReason` is always `null` for `Available`; a supplied reason is
@@ -114,8 +114,9 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   is the only setup/download path; generation rechecks readiness and never
   prepares implicitly.
 - **Android:** query ML Kit status on every status/generation path. Available
-  maps to `Available`; downloadable/downloading map to `NotReady`; ambiguous
-  unavailable/unknown states map to `Unknown` with the native reason. Advertise
+  maps to `Available`; downloadable maps to `NotReady`; downloading maps to
+  `Downloading`; unavailable maps to `Unavailable`; unrecognized values map to
+  `Unknown`. Preserve the native reason. Advertise
   Text, Streaming, ImageInput, and input TokenUsage; add Reasoning only after
   the runtime thinking-capability check. `PrepareModelAsync` explicitly awaits
   ML Kit download/status `Flow` completion and is never called by generation.

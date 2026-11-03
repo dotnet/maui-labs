@@ -108,11 +108,12 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 	internal static ChatModelStatus CreateModelStatus(int nativeStatus, bool thinkingAvailable)
 	{
 		// ML Kit beta4 FeatureStatus: UNAVAILABLE=0, DOWNLOADABLE=1, DOWNLOADING=2, AVAILABLE=3.
-		// UNAVAILABLE conflates unsupported devices and missing AICore configuration.
 		var availability = nativeStatus switch
 		{
 			3 => ChatModelAvailability.Available,
-			1 or 2 => ChatModelAvailability.NotReady,
+			1 => ChatModelAvailability.NotReady,
+			2 => ChatModelAvailability.Downloading,
+			0 => ChatModelAvailability.Unavailable,
 			_ => ChatModelAvailability.Unknown,
 		};
 		List<ChatModelCapability> capabilities =
