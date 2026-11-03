@@ -18,7 +18,8 @@ Kotlin constructs the Google request:
 
 - Nonblank system-message text is concatenated within each message and joined
   with two LF characters between messages, options first, then passed as native
-  `SystemInstruction`, after checking `isSystemPromptAvailable()`.
+  `SystemInstruction`, after checking `Feature.SYSTEM_PROMPT` in
+  `getAvailableFeatures()`.
 - A single user prompt is passed through unchanged. With assistant/tool history,
   messages receive ordinary `User:`/`Assistant:`/`Tool:` text labels and
   are included in order. Text and image parts remain interleaved; images are not
@@ -27,7 +28,8 @@ Kotlin constructs the Google request:
   C# checks known ranges and Seed's 32-bit representability; Google's builder
   also validates native numeric constraints.
 - `Reasoning.Output = ReasoningOutput.Full` enables thinking after checking
-  `isThinkingModeAvailable()`. Effort levels and summaries have no native mapping.
+  `Feature.THINKING_MODE` in `getAvailableFeatures()`. Effort levels and summaries
+  have no native mapping.
 
 There is no client-held conversation state. Callers supply the conversation on
 each request. Custom content and unknown roles (including `developer`) are
@@ -77,6 +79,8 @@ adapter converts events to `ChatResponseUpdate` values.
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
 Unavailable IDs, timestamps, and other usage counts remain null.
+A candidate without text is rejected explicitly; the text-only adapter does not
+silently convert a native function-call-only candidate to an empty answer.
 
 ## Explicit download
 
@@ -111,7 +115,7 @@ download only when appropriate, and query status again when deciding whether to
 enable generation. Status is never cached. DOWNLOADABLE/DOWNLOADING map to
 NotReady. ML Kit's UNAVAILABLE means either unsupported hardware **or** missing
 AICore configuration; without more evidence it maps to Unknown, preserving that
-native reason. Only a successful runtime `isThinkingModeAvailable` check
+native reason. Only a successful runtime `Feature.THINKING_MODE` availability check
 advertises Reasoning. Generation rejects non-AVAILABLE states without ever
 starting a download.
 
@@ -134,6 +138,12 @@ and runs its JVM tests. The SDK collects the bridge AAR and the pinned
 Prompt/Common/Schema runtime archives. Shared Kotlin, coroutine, AndroidX, and
 Google dependencies come from NuGet to avoid packaging duplicate Java classes.
 Bindings for the bridge remain internal.
+
+The bridge pins GenAI Prompt/Common `1.0.0-beta5`, Schema `1.0.0-alpha2`,
+Kotlin `2.4.0`, and coroutines `1.11.0`. This SDK update does not enable native
+tool calling, structured output, model selection, or server-held sessions.
+The existing typed SDK builders remain KClass-based; no schema compiler or KSP
+plugin is needed by this bridge.
 
 Java 17+ and the Android SDK are required when building from source. Kotlin and
 Java emit Java 17 bytecode without requiring an exact Java 17 toolchain.
