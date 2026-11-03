@@ -14,26 +14,22 @@
                   AutomationId="PlaygroundMainPanel">
                 <Border x:Name="HeaderPanel" Style="{StaticResource PlaygroundPanel}" Padding="16">
                     <Grid ColumnDefinitions="Auto,*,Auto"
-                          RowDefinitions="Auto,Auto" ColumnSpacing="10">
+                          RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="6">
                         <ImageButton x:Name="OpenSettingsButton" Source="settings.png"
                                      IsVisible="False" Clicked="OpenSettingsClicked"
-                                     Style="{StaticResource AttachmentButton}"
+                                     Style="{StaticResource AttachmentButton}" VerticalOptions="Start"
                                      SemanticProperties.Description="Open settings"
                                      AutomationId="OpenSettingsButton" />
-                        <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
-                            <HorizontalStackLayout Spacing="6">
-                                <Label Text="{Binding HeaderTitle, Source={x:Reference PlaygroundLayout}}"
-                                       FontSize="20" FontAttributes="Bold" VerticalOptions="Center"
-                                       MaxLines="1" LineBreakMode="TailTruncation"
-                                       AutomationId="PageTitleLabel" />
-                                <local:InfoTip Text="{Binding HeaderInfo, Source={x:Reference PlaygroundLayout}}" />
-                            </HorizontalStackLayout>
-                            <Label Text="{Binding HeaderStatus, Source={x:Reference PlaygroundLayout}}"
-                                   Style="{StaticResource MutedLabel}" FontSize="12" MaxLines="2"
-                                   LineBreakMode="TailTruncation"
-                                   AutomationId="{Binding StatusAutomationId, Source={x:Reference PlaygroundLayout}}" />
-                        </VerticalStackLayout>
-                        <HorizontalStackLayout x:Name="HeaderActionsPresenter" Grid.Column="2" Spacing="8">
+                        <Grid Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="6"
+                              VerticalOptions="Start" HorizontalOptions="Start">
+                            <Label Text="{Binding HeaderTitle, Source={x:Reference PlaygroundLayout}}"
+                                   FontSize="20" FontAttributes="Bold" VerticalOptions="Center"
+                                   MaxLines="1" LineBreakMode="TailTruncation"
+                                   AutomationId="PageTitleLabel" />
+                            <local:InfoTip Grid.Column="1" Text="{Binding HeaderInfo, Source={x:Reference PlaygroundLayout}}" />
+                        </Grid>
+                        <HorizontalStackLayout Grid.Column="2" Spacing="8"
+                                               VerticalOptions="Start" HorizontalOptions="End">
                             <ContentView Content="{Binding HeaderActions, Source={x:Reference PlaygroundLayout}}" />
                             <VerticalStackLayout x:Name="DiagnosticsToggle" Spacing="2" IsVisible="False">
                                 <ImageButton Source="logs.png" Style="{StaticResource ChatActionButton}"
@@ -44,6 +40,11 @@
                                 <Label Text="Logs" Style="{StaticResource ChatActionLabel}" />
                             </VerticalStackLayout>
                         </HorizontalStackLayout>
+                        <Label Grid.Row="1" Grid.ColumnSpan="3"
+                               Text="{Binding HeaderStatus, Source={x:Reference PlaygroundLayout}}"
+                               Style="{StaticResource MutedLabel}" FontSize="12" MaxLines="2"
+                               LineBreakMode="TailTruncation"
+                               AutomationId="{Binding StatusAutomationId, Source={x:Reference PlaygroundLayout}}" />
                     </Grid>
                 </Border>
                 <ContentView Grid.Row="1"

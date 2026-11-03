@@ -115,7 +115,8 @@ public sealed class ChatDiagnostics : ILoggerProvider
             lock (owner._gate)
                 return !owner._disposed && level >= LogLevel.Debug && level < LogLevel.None
                     && (category.StartsWith("Microsoft.Extensions.AI.", StringComparison.Ordinal)
-                        || category == AppleToolLogCategory);
+                        || category == AppleToolLogCategory
+                        || category == typeof(ModelReadinessViewModel).FullName);
         }
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state,

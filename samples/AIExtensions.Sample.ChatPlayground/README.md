@@ -96,15 +96,43 @@ for hardware, capability, packaging, and access requirements.
 
 The Android app requires API 26+ and supported AICore hardware/configuration for
 Gemini Nano. It supports text/image chat, not tools or structured JSON.
-The first request never downloads assets: explicitly enumerate
-`GeminiNanoChatClient.DownloadModelAsync` after a download decision and query
-status again before chatting. There is no download UI or automatic cloud fallback.
+Use **Download** in the readiness banner to prepare the model. Chat requests never
+download assets or fall back to a cloud provider.
 See the [Android guide](../../docs/ai/gemini-nano-android.md).
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
   -f net10.0-android --device <device-id>
 ```
+
+### Model readiness
+
+The Gemini Nano sidebar includes model radio buttons. The selection becomes
+`ChatOptions.ModelId` on the next send without replacing the client or clearing
+the conversation. Readiness checks and downloads use the same selected ID.
+
+The banner above the composer shows the selected on-device model's status until
+it is available. You can edit the draft while waiting, but cannot send it.
+
+Android offers **Download** and Windows offers **Prepare** when the model is not
+ready. Apple manages model setup through the OS, so its banner offers
+**Check again** instead. Native status codes and reasons appear in **Logs**.
+If AICore reports that a download is already running, Android also shows
+**Check again** with an in-progress message instead of offering another download.
+
+Preparation starts only when you press the button; it does not send the draft.
+The banner shows preparation on the first line and byte progress plus the average
+transfer rate underneath, in MiB and MiB/s. It uses a spinner when byte counts are
+unavailable. **Cancel** cancels this app's preparation request, but a shared system
+download may continue. Errors remain visible and can be retried.
+
+`ChatClientDescriptor` supplies optional status and preparation callbacks, plus a
+provider-specific check for preparation already in progress.
+The page checks status when it appears or the client changes, and polls
+`NotReady` clients every five seconds while idle. Checking status never starts a
+download. Leaving the tab stops polling and cancels any pending check or
+preparation call. Azure and Replay have no native status callbacks and do not
+show this banner.
 
 ## Configure Azure OpenAI
 

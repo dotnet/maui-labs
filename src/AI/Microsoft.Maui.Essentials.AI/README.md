@@ -75,6 +75,15 @@ waits for the explicit download to finish. Use `DownloadModelAsync` when the app
 needs to display ML Kit's native progress, and query model status afterward
 before enabling generation.
 
+On Android, `ChatOptions.ModelId` defaults to `gemini-nano` (stable/full).
+Per-request overrides are `gemini-nano-fast`, `gemini-nano-full`,
+`gemini-nano-preview-fast`, and `gemini-nano-preview-full`. An override does not
+change the client's default. Use that same ID with the status and download
+overloads. `response.ModelId` reports the actual base-model name, not the requested
+alias. Unknown IDs are rejected. `GetBaseModelNameAsync(modelId)` queries the name
+without inference.
+See [model selection](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#model-selection).
+
 ## Quick start
 
 Check availability with the concrete client before offering chat:

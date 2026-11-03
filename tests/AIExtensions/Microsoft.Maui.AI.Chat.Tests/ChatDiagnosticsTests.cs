@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Essentials.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
@@ -137,6 +138,26 @@ public sealed class ChatDiagnosticsTests
         Assert.DoesNotContain(entries, entry => (entry.Message + entry.Details).Contains("private tool"));
         receiver.Dispose();
         Assert.False(logger.IsEnabled(LogLevel.Debug));
+    }
+
+    [Fact]
+    public void Receiver_CapturesTypedReadinessLogsWithoutIncludingOtherAppCategories()
+    {
+        using var receiver = new ChatDiagnostics();
+        using var factory = LoggerFactory.Create(builder => builder
+            .SetMinimumLevel(LogLevel.Warning)
+            .AddProvider(receiver)
+            .AddFilter<ChatDiagnostics>(typeof(ModelReadinessViewModel).FullName, LogLevel.Debug));
+        var logger = factory.CreateLogger<ModelReadinessViewModel>();
+
+        logger.LogDebug("Model status: {Availability}", ChatModelAvailability.NotReady);
+        logger.LogTrace("not captured");
+        factory.CreateLogger<ChatSessionService>().LogError("unrelated");
+
+        var entry = Assert.Single(receiver.Snapshot().Entries);
+        Assert.Contains(nameof(ModelReadinessViewModel), entry.Heading);
+        Assert.Equal("Model status: NotReady", entry.Message);
+        Assert.True(logger.IsEnabled(LogLevel.Debug));
     }
 
     [Fact]

@@ -69,21 +69,61 @@ and Tool accepts function results.
 ML Kit model directly for each request. Independent requests own independent
 models; closing the client cancels and joins outstanding work.
 
-`NativeChatStream` is the horizontal concurrency boundary: it implements ML
-Kit's streaming callback, serializes text/thought deltas, drains admitted
-progress before terminal completion releases the managed JNI callback, and
-reconciles the returned final text/thoughts. Equal final content emits nothing,
-an extension emits only its suffix, and divergence faults the stream. Trailing
-whitespace is held until more content or completion because ML Kit can omit or
-change it in the final candidate; internal whitespace is preserved, and missing
-or divergent non-whitespace still faults. The C# adapter converts events to
-`ChatResponseUpdate` values.
+`NativeChatStream` delivers ML Kit's text and reasoning updates in order and
+waits for queued updates before completing the managed callback. The C# adapter
+converts these updates to `ChatResponseUpdate` values.
+
+Trailing whitespace is buffered separately for text and reasoning. It is emitted
+with the next non-whitespace text, or at completion if the final response includes
+it. This avoids displaying extra newlines that ML Kit omits from its final
+response. Any suffix present only in the final response is emitted before
+completion. Apart from trailing whitespace, the final response must agree with
+the text already received from ML Kit.
 
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
 Unavailable IDs, timestamps, and other usage counts remain null.
 A candidate without text is rejected explicitly; the text-only adapter does not
 silently convert a native function-call-only candidate to an empty answer.
+
+## Model selection
+
+`ChatOptions.ModelId` selects a profile for one request without changing the
+client registered in DI:
+
+| Model ID | Release stage | Preference |
+|---|---|---|
+| `gemini-nano` or null | Stable | Full (default) |
+| `gemini-nano-full` | Stable | Full |
+| `gemini-nano-fast` | Stable | Fast |
+| `gemini-nano-preview-full` | Preview | Full |
+| `gemini-nano-preview-fast` | Preview | Fast |
+
+These are selection aliases, not pinned model generations. Other IDs are rejected.
+
+Use the same ID for status checks, downloads, and requests:
+
+```csharp
+const string modelId = "gemini-nano-preview-full";
+var status = await GeminiNanoChatClient.GetModelStatusAsync(modelId, cancellationToken);
+if (status.Availability == ChatModelAvailability.Available)
+{
+    var response = await client.GetResponseAsync(
+        [new ChatMessage(ChatRole.User, "Hello")],
+        new ChatOptions { ModelId = modelId },
+        cancellationToken);
+    Console.WriteLine(response.ModelId);
+}
+```
+
+`response.ModelId` comes from ML Kit's `getBaseModelName()`. It can differ from the
+requested profile, and multiple profiles may report the same base-model name.
+`GetBaseModelNameAsync(modelId, cancellationToken)` queries that name without
+inference or downloading; native availability errors are returned to the caller.
+Preview availability depends on the device and AICore enrollment. The client
+does not switch profiles or download assets automatically.
+Pass the same profile to `PrepareModelAsync(modelId, cancellationToken)` or
+`DownloadModelAsync(modelId, cancellationToken)` when preparation is needed.
 
 ## Explicit download
 
@@ -103,24 +143,29 @@ if (status.Availability == ChatModelAvailability.NotReady)
 {
     await foreach (var update in GeminiNanoChatClient.DownloadModelAsync(cancellationToken))
         Console.WriteLine($"{update.State}: {update.BytesDownloaded ?? update.BytesToDownload}");
+
+    status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
 }
 ```
 
-`DownloadModelAsync` directly collects ML Kit's cold download Flow, which starts
-the download and reports `DownloadStarted`, `DownloadProgress`, and
-`DownloadCompleted`. `DownloadFailed` becomes the native managed exception.
-Stopping enumeration cancels this call's Flow collection; it does not promise to
-cancel an AICore download shared with other apps.
+`DownloadModelAsync` requests a download through ML Kit and forwards its start,
+progress, and completion notifications as `GeminiNanoDownloadUpdate` values.
+Download failures throw exceptions. Stopping enumeration cancels this
+subscription, but may not stop an AICore download shared with other apps.
 
-The client does not poll readiness or join a download already reported as
-DOWNLOADING. Callers own that policy: inspect `GetModelStatusAsync`, enumerate a
-download only when appropriate, and query status again when deciding whether to
-enable generation. Status is never cached. DOWNLOADABLE/DOWNLOADING map to
-NotReady. ML Kit's UNAVAILABLE means either unsupported hardware **or** missing
-AICore configuration; without more evidence it maps to Unknown, preserving that
-native reason. Only a successful runtime `Feature.THINKING_MODE` availability check
-advertises Reasoning. Generation rejects non-AVAILABLE states without ever
-starting a download.
+Starting another subscription does not guarantee recovery of earlier byte
+progress. ML Kit may report completion without byte counts while status still
+says DOWNLOADING. Always check `GetModelStatusAsync` after preparation before
+enabling generation. The client does not cache status, and status checks never
+start a download.
+
+DOWNLOADABLE and DOWNLOADING both map to `NotReady`. UNAVAILABLE maps to `Unknown`
+because ML Kit uses it for both unsupported hardware and missing AICore
+configuration. The native reason is preserved in `UnavailableReason`. Reasoning
+is advertised only when `isThinkingModeAvailable` succeeds.
+
+See the [Chat Playground sample](../../samples/AIExtensions.Sample.ChatPlayground/README.md#model-readiness)
+for a readiness banner with an explicit Download button.
 
 ## Android minimum and model availability
 
@@ -162,6 +207,8 @@ cd src/AI/AndroidNative/EssentialsAI
 ## Validation boundaries
 
 `NativeChatRequestTest` checks the Google request shape and capability errors.
+`GeminiNanoModelProfileTests` logs the status and resolved name of each profile,
+then runs the same prompt on profiles that are ready. It never downloads models.
 `NativeChatStreamTest` exercises callback ordering, text/thought reconciliation,
 drain-before-terminal, cancellation, and late-event suppression without
 abstracting the ML Kit model.

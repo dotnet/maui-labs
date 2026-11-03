@@ -149,7 +149,11 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
   the provider surface rather than installed weights.
 - **Android:** report provider `google` and default model ID `gemini-nano` in
   metadata; use the native executed model name in responses and updates when
-  ML Kit supplies it.
+  ML Kit supplies it. `ChatOptions.ModelId` selects `gemini-nano-fast`,
+  `gemini-nano-full`, `gemini-nano-preview-fast`, or `gemini-nano-preview-full`.
+  These are per-request release-stage/performance profiles, not pinned model
+  generations. Null and `gemini-nano` retain the stable/full default. Reject
+  unknown IDs rather than silently using another model.
 
 ### Conversation state and context
 

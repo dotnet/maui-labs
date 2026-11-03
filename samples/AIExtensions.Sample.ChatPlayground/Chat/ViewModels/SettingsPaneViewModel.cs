@@ -24,6 +24,9 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
 
     /// <summary>Gets or sets the selected client implementation.</summary>
     [ObservableProperty] private IChatClient? selectedClient;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RequestModelId))]
+    private string? selectedModelId;
     [ObservableProperty] private bool isBusy;
 
     [ObservableProperty] private bool useStreaming = true;
@@ -64,6 +67,9 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         ? client.GetRequiredService<ChatClientDescriptor>()
         : null;
     public bool CanEditOptions => !IsBusy && SelectedDescriptor is { IsReplay: false };
+    public IReadOnlyList<ChatModelOption> Models => SelectedDescriptor?.Models ?? [];
+    public bool HasModels => Models.Count > 0;
+    public string? RequestModelId => HasModels ? SelectedModelId : null;
 
     public bool IsMultipleToolCallsDefault
     {
@@ -98,6 +104,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
 
         var options = new ChatOptions
         {
+            ModelId = RequestModelId,
             Instructions = string.IsNullOrWhiteSpace(Instructions) ? null : Instructions.Trim(),
             Temperature = OptionalFloat(EnableTemperature, Temperature, "Temperature"),
             TopP = OptionalFloat(EnableTopP, TopP, "Top P"),
@@ -165,9 +172,13 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
 
     partial void OnSelectedClientChanged(IChatClient? value)
     {
+        SelectedModelId = Models.FirstOrDefault()?.Id;
         ClientStatus = SelectedDescriptor?.Description ?? "No chat client selected.";
         OnPropertyChanged(nameof(SelectedDescriptor));
         OnPropertyChanged(nameof(CanEditOptions));
+        OnPropertyChanged(nameof(Models));
+        OnPropertyChanged(nameof(HasModels));
+        OnPropertyChanged(nameof(RequestModelId));
     }
 
     partial void OnIsBusyChanged(bool value)
