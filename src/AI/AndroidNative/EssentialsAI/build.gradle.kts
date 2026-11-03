@@ -44,6 +44,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testImplementation("org.json:json:20250517")
 }
 
 // Shared Kotlin, AndroidX and Google dependencies are supplied by NuGet.

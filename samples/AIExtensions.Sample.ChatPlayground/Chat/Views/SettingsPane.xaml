@@ -97,7 +97,7 @@
                 </Grid>
                 <Editor Text="{Binding Instructions}" AutoSize="TextChanges"
                         MinimumHeightRequest="70" AutomationId="InstructionsEditor" />
-                <VerticalStackLayout IsVisible="{Binding SelectedDescriptor.SupportsToolCalling}" Spacing="12">
+                <VerticalStackLayout IsVisible="{Binding SupportsToolCalling}" Spacing="12">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                         <Label Text="Tools" FontSize="12" FontAttributes="Bold" VerticalOptions="Center" />
                         <local:InfoTip Grid.Column="1"
@@ -149,6 +149,7 @@
                         <RadioButton Content="None" Value="{x:Static ai:ChatToolMode.None}"
                                      AutomationId="ToolModeNoneRadio" />
                         <RadioButton Content="Require any" Value="{x:Static ai:ChatToolMode.RequireAny}"
+                                     IsVisible="{Binding SelectedDescriptor.SupportsRequiredToolMode}"
                                      AutomationId="ToolModeRequireAnyRadio" />
                     </HorizontalStackLayout>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">

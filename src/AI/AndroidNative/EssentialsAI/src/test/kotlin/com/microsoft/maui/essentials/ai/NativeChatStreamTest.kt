@@ -14,6 +14,24 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class NativeChatStreamTest {
+    @Test
+    fun toolStreamsSuppressRawControlTokensAndUseOnlyFinalDisplayText() = runBlocking {
+        val callback = Callback()
+        val stream = NativeChatStream(this, callback, "native-model", deferToolText = true)
+        stream.onNewText("<ctrl42>call:lookup{key:<ctrl46>orchard<ctrl46>}<ctrl43>")
+        yield()
+        assertTrue(callback.events.isEmpty())
+        stream.finish(response(""))
+        assertTrue(callback.events.isEmpty())
+
+        val answer = NativeChatStream(this, callback, "native-model", deferToolText = true)
+        answer.onNewText("secret")
+        yield()
+        assertTrue(callback.events.isEmpty())
+        answer.finish(response("secret"))
+        assertEquals(listOf(Triple(false, "secret", "native-model")), callback.events)
+    }
+
     private class Callback : NativeChatCallback {
         val events = mutableListOf<Triple<Boolean, String, String>>()
 

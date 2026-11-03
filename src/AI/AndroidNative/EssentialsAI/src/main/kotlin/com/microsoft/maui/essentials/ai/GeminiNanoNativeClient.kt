@@ -60,12 +60,14 @@ fun checkStatus(
             try {
                 ensureActive()
                 val featureStatus = model.checkStatus()
+                val features = if (featureStatus == FeatureStatus.AVAILABLE) model.getAvailableFeatures() else emptyList()
                 NativeModelStatus(
                     featureStatus,
-                    featureStatus == FeatureStatus.AVAILABLE &&
-                        Feature.THINKING_MODE in model.getAvailableFeatures(),
+                    Feature.THINKING_MODE in features,
                     model.getBaseModelName(),
-                )
+                ).apply {
+                    toolCallingAvailable = Feature.FUNCTION_CALLING in features
+                }
             } finally {
                 model.close()
             }.also { ensureActive() }
@@ -171,10 +173,16 @@ class GeminiNanoNativeClient {
                         "Gemini Nano is not ready (ML Kit FeatureStatus $featureStatus). Download the model explicitly before retrying."
                     }
                     val nativeRequest = request.toNative()
-                    val features = if (nativeRequest.systemInstruction != null || nativeRequest.enableThinking) {
+                    val features = if (nativeRequest.systemInstruction != null ||
+                        nativeRequest.enableThinking || request.options.toolsJson != null) {
                         model.getAvailableFeatures()
                     } else {
                         emptyList()
+                    }
+                    if (request.options.toolsJson != null) {
+                        check(Feature.FUNCTION_CALLING in features) {
+                            "The selected Gemini Nano model does not support native function calling."
+                        }
                     }
                     if (nativeRequest.systemInstruction != null) {
                         check(Feature.SYSTEM_PROMPT in features) {
@@ -189,7 +197,8 @@ class GeminiNanoNativeClient {
                     val modelName = model.getBaseModelName()
                     val tokenCount = model.countTokens(nativeRequest).totalTokens
                     val generated = if (streaming) {
-                        val nativeStream = NativeChatStream(this, callback, modelName)
+                        val nativeStream = NativeChatStream(this, callback, modelName,
+                            deferToolText = request.options.toolsJson != null)
                         stream = nativeStream
                         model.generateContent(nativeRequest, nativeStream)
                     } else {
@@ -235,18 +244,23 @@ class GeminiNanoNativeClient {
             "Gemini Nano returned no response candidate."
         }
         return NativeChatResponse(
-            checkNotNull(candidate.text) { "Gemini Nano returned a response candidate without text." },
+            if (candidate.functionCalls.isNotEmpty()) candidate.text.orEmpty()
+            else checkNotNull(candidate.text) { "Gemini Nano returned a response candidate without text." },
             thoughtProcess.map { it.text }.toTypedArray(),
             candidate.finishReason ?: FINISH_UNSPECIFIED,
             modelName,
             inputTokens,
-        )
+        ).apply {
+            functionCalls = candidate.functionCalls.map { it.toNativeCall() }.toTypedArray()
+        }
     }
 }
 
 internal fun NativeChatRequest.toNative(): GenerateContentRequest {
     val instructions = mutableListOf<String>()
     val contents = mutableListOf<Content>()
+    val useNativeTools = options.toolsJson != null
+    val callNames = mutableMapOf<String, String>()
     val hasAssistantHistory = messages.any {
         it.role.equals("assistant", ignoreCase = true) || it.role.equals("tool", ignoreCase = true)
     }
@@ -264,7 +278,9 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
             }
             "user", "assistant", "tool" -> {
                 val builder = Content.builder()
-                if (hasAssistantHistory) {
+                if (useNativeTools) {
+                    builder.setRole(if (role == "assistant") Content.Role.MODEL else Content.Role.USER)
+                } else if (hasAssistantHistory) {
                     builder.addPart(TextPart(when (role) {
                         "user" -> "User:\n"
                         "assistant" -> "Assistant:\n"
@@ -278,10 +294,20 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
                         CONTENT_IMAGE -> builder.addPart(
                             ImagePart(requireNotNull(part.image) { "Image part has no data." })
                         )
+                        CONTENT_FUNCTION_CALL -> {
+                            val part = functionCallPart(requireNotNull(part.text))
+                            val id = requireNotNull(part.functionCall.id)
+                            require(callNames.put(id, part.functionCall.name) == null) {
+                                "Duplicate function call ID '$id' in history."
+                            }
+                            builder.addPart(part)
+                        }
+                        CONTENT_FUNCTION_RESULT -> builder.addPart(
+                            functionResultPart(requireNotNull(part.text), callNames))
                         else -> error("Unsupported native content kind '${part.kind}'.")
                     }
                 }
-                if (hasAssistantHistory) builder.addPart(TextPart("\n\n"))
+                if (!useNativeTools && hasAssistantHistory) builder.addPart(TextPart("\n\n"))
                 contents.add(builder.build())
             }
             else -> Unit
@@ -303,5 +329,6 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
     builder.seed = options.seed
     builder.maxOutputTokens = options.maxOutputTokens
     builder.enableThinking = options.enableThinking
+    options.toolsJson?.let { builder.setTools(nativeTools(it)) }
     return builder.build()
 }

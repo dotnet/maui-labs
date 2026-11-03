@@ -13,6 +13,7 @@ internal class NativeChatStream(
     scope: CoroutineScope,
     private val target: NativeChatCallback,
     private val modelName: String,
+    private val deferToolText: Boolean = false,
 ) : StreamingCallback {
     private data class Event(val thought: Boolean, val text: String)
 
@@ -36,7 +37,9 @@ internal class NativeChatStream(
 
     @Synchronized
     override fun onNewText(additionalText: String) {
-        append(text, additionalText)
+        // Beta5 emits raw <ctrl42>call:... tokens through onNewText as well as typed calls.
+        // The final candidate separates those tokens from displayable text.
+        if (!deferToolText) append(text, additionalText)
     }
 
     @Synchronized

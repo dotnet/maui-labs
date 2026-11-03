@@ -29,7 +29,11 @@ public partial class ChatViewModel : ObservableObject
         Chat = chat;
         Diagnostics = diagnostics;
         Readiness = readiness;
-        Readiness.PropertyChanged += (_, _) => UpdateChatCanSend();
+        Readiness.PropertyChanged += (_, _) =>
+        {
+            Settings.ModelStatus = Readiness.Status;
+            UpdateChatCanSend();
+        };
         _replayClient = settings.Clients.Single(option => option.Descriptor.IsReplay).Client;
         Chat.SendCommand = new AsyncRelayCommand(SendAsync, () => Chat.CanSend);
         Chat.CancelCommand = new RelayCommand(Cancel, () => Chat.IsBusy);
@@ -427,7 +431,7 @@ public partial class ChatViewModel : ObservableObject
     private List<AITool> CreateEnabledTools()
     {
         var tools = new List<AITool>();
-        if (SelectedDescriptor?.SupportsToolCalling != true)
+        if (!Settings.SupportsToolCalling)
             return tools;
         if (Settings.UseDateTimeTool)
             tools.Add(_tools.CurrentLocalDateTime);
@@ -467,7 +471,7 @@ public partial class ChatViewModel : ObservableObject
             return false;
         }
 
-        return !descriptor.SupportsToolCalling ||
+        return !Settings.SupportsToolCalling ||
             Settings.ToolMode != ChatToolMode.RequireAny ||
             Settings.UseDateTimeTool ||
             Settings.UseCalculatorTool ||
