@@ -79,23 +79,39 @@
       <button id="df-more" class="df-tool-btn df-more-btn df-hidden" title="More inspector actions" aria-haspopup="menu" aria-expanded="false" aria-controls="df-toolbar-overflow"><svg class="df-ic"><use href="#i-more"/></svg><span class="df-btn-label">More</span></button>
       <div id="df-toolbar-overflow" class="df-toolbar-overflow df-hidden" role="menu" aria-label="More inspector actions"></div>
       <span class="df-spacer"></span>
-      <span id="df-presence" class="df-presence" role="status" aria-live="polite" aria-atomic="true" title="Who can drive this app right now"></span>
+      <span id="df-presence" class="df-presence" title="Who can drive this app right now"></span>
       <button id="df-take-control" class="df-tool-btn df-hidden" title="Another session is driving this app, click to take control"><svg class="df-ic"><use href="#i-key"/></svg><span class="df-btn-label">Take control</span></button>
     </div>
     <div id="df-status" class="df-status" role="status" aria-live="polite"></div>
+    <div id="df-health-live" class="df-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <div id="df-body">
       <button id="df-pane-scrim" class="df-pane-scrim df-hidden" aria-hidden="true" tabindex="-1"></button>
       <aside id="df-tree-pane" class="df-pane" aria-label="Visual tree">
         <div class="df-pane-header"><h2 class="df-pane-title">Visual tree</h2><span id="df-tree-count" class="df-pane-count"></span></div>
         <div id="df-tree" role="tree" aria-label="Element tree"></div>
       </aside>
-      <section id="df-view-pane" class="df-pane df-pane-grow" role="main" aria-label="Live app preview">
-        <div class="df-pane-header"><h2 class="df-pane-title">Screenshot</h2><span id="df-preview-pending" class="df-pane-count df-hidden">Updating…</span></div>
+      <section id="df-view-pane" class="df-pane df-pane-grow" role="main" aria-label="Live app preview" tabindex="-1">
+        <div class="df-pane-header">
+          <h2 class="df-pane-title">Screenshot</h2>
+          <span id="df-preview-health" class="df-preview-health" data-tone="success">
+            <span id="df-preview-health-label">Live</span>
+            <span id="df-preview-badges" class="df-preview-badges"></span>
+          </span>
+          <span id="df-preview-pending" class="df-pane-count df-hidden">Updating…</span>
+        </div>
+        <div id="df-health-banner" class="df-health-banner df-hidden" role="note" aria-labelledby="df-health-banner-heading" aria-describedby="df-health-banner-detail">
+          <svg class="df-health-icon"><use href="#i-refresh"/></svg>
+          <div class="df-health-copy">
+            <strong id="df-health-banner-heading">Preview delayed</strong>
+            <span id="df-health-banner-detail">Showing the last captured frame.</span>
+          </div>
+          <button id="df-retry-capture" class="df-tool-btn" type="button"><svg class="df-ic"><use href="#i-refresh"/></svg><span>Retry capture</span></button>
+        </div>
         <div id="df-disconnected-overlay" class="df-connection-overlay df-hidden" aria-hidden="true">
           <div class="df-connection-card">
             <svg class="df-connection-icon"><use href="#i-refresh"/></svg>
-            <h2>App disconnected</h2>
-            <p>Showing the last captured frame while DevFlow reconnects.</p>
+            <h2 id="df-connection-heading">App disconnected</h2>
+            <p id="df-connection-detail">Showing the last captured frame while DevFlow reconnects.</p>
             <button id="df-retry-connection" class="df-tool-btn" type="button"><svg class="df-ic"><use href="#i-refresh"/></svg><span>Retry now</span></button>
           </div>
         </div>

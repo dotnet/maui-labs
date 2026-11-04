@@ -391,7 +391,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
             await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
             await Expect(Page.Locator("#df-disconnected-overlay"))
-                .ToHaveAttributeAsync("aria-busy", "true");
+                .Not.ToHaveAttributeAsync("aria-busy", "true");
+            await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Live");
 
             var explicitRefreshStarted = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously);
@@ -403,6 +404,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Page.Locator("#df-retry-connection").DispatchEventAsync("click");
             await explicitRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Equal(requestsBeforeTap + 2, Volatile.Read(ref stateRequests));
+            await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Retrying");
             await Expect(hint).ToBeVisibleAsync();
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
 
@@ -758,6 +760,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         _pendingRequests.Clear();
         await Expect(Page.Locator("#screenshot")).ToHaveCountAsync(0);
         await Expect(Page.Locator("#df-retry-connection")).ToBeVisibleAsync();
+        await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Capture unavailable");
+        await Expect(Page.Locator("#df-connection-detail")).ToContainTextAsync("latest capture failed");
 
         Volatile.Write(ref _returnInvalidScreenshot, 0);
         await Page.Locator("#df-retry-connection").ClickAsync();
@@ -770,6 +774,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 
         await Expect(Page.Locator("#df-disconnected-overlay")).ToHaveClassAsync(
             "df-connection-overlay df-hidden");
+        await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Live");
         // The forced retry aborts the failed fetch; Playwright may not emit a terminal request
         // callback for that aborted fetch even though the replacement refresh completed.
         _pendingRequests.Clear();
@@ -780,7 +785,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     public async Task Tap_FrameMetadataCommitsAtomicallyWithDecodedScreenshot()
     {
         string? committedFrameId = null;
-        await Page.RouteAsync("**/api/state", async route =>
+        await Page.RouteAsync("**/api/state*", async route =>
         {
             var response = await route.FetchAsync();
             var responseBody = await response.TextAsync();
@@ -965,7 +970,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 {
                     Status = 503,
                     ContentType = "application/json",
-                    Body = """{"ok":false,"retryable":true}"""
+                    Body = """{"ok":false,"reason":"capture-failed","retryable":true}"""
                 });
                 return;
             }
@@ -976,7 +981,9 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         try
         {
             await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
-            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-health-banner")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
+            await Expect(Page.Locator("#df-health-banner-detail")).ToContainTextAsync("latest capture failed");
             await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync(new() { Timeout = 1000 });
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
             await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -1039,7 +1046,9 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         try
         {
             await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
-            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-health-banner")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
+            await Expect(Page.Locator("#df-health-banner-detail")).ToContainTextAsync("could not be decoded");
             await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
             await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -1080,10 +1089,11 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Page.Locator("#screenshot").DispatchEventAsync("error");
             await Page.Clock.RunForAsync(50);
             await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-decode-started", "true");
-            await Expect(Page.Locator("#df-disconnected-overlay")).ToHaveAttributeAsync("aria-busy", "true");
+            await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Preview delayed");
             await Page.Clock.RunForAsync(10_100);
-            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeVisibleAsync();
-            await Expect(Page.Locator("#df-disconnected-overlay")).Not.ToHaveAttributeAsync("aria-busy", "true");
+            await Expect(Page.Locator("#df-health-banner")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
+            await Expect(Page.Locator("#df-health-banner")).Not.ToHaveAttributeAsync("aria-busy", "true");
             await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
             Assert.Empty(_pageErrors);
@@ -1156,6 +1166,17 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     {
         await Page.Clock.InstallAsync();
         await Page.Clock.PauseAtAsync(DateTime.UtcNow.AddSeconds(1));
+        await Page.EvaluateAsync("""
+            () => {
+              const originalSetTimeout = window.setTimeout;
+              window.setTimeout = (handler, delay, ...args) => {
+                if (delay === 300) {
+                  document.body.dataset.fixtureDelayedRetryScheduled = 'true';
+                }
+                return originalSetTimeout(handler, delay, ...args);
+              };
+            }
+            """);
         var firstStateCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var retryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var requests = 0;
@@ -1186,6 +1207,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
         await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
         await Expect(Page.Locator("#df-disconnected-overlay")).Not.ToHaveAttributeAsync("aria-busy", "true");
+        await Expect(Page.Locator("body"))
+            .ToHaveAttributeAsync("data-fixture-delayed-retry-scheduled", "true");
 
         Volatile.Write(ref _text, "Tapped");
         await Page.Clock.RunForAsync(299);
@@ -1246,6 +1269,63 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Contains("fresh=1", request, StringComparison.Ordinal);
         await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
         Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Resize_FailedFreshResolutionKeepsCommittedFrameUntilRetry()
+    {
+        var targetScaleRequests = 0;
+        var firstFailure = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var retryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var initialSource = await Page.Locator("#screenshot").GetAttributeAsync("src");
+        await Page.RouteAsync("**/api/state*", async route =>
+        {
+            if (!route.Request.Url.Contains("targetScale=", StringComparison.Ordinal))
+            {
+                await route.ContinueAsync();
+                return;
+            }
+
+            Assert.Contains("fresh=1", route.Request.Url, StringComparison.Ordinal);
+            if (Interlocked.Increment(ref targetScaleRequests) == 1)
+            {
+                await route.FulfillAsync(new()
+                {
+                    Status = 503,
+                    ContentType = "application/json",
+                    Body = """{"ok":false,"reason":"capture-failed","retryable":true}"""
+                });
+                firstFailure.TrySetResult();
+                return;
+            }
+
+            retryStarted.TrySetResult();
+            await route.ContinueAsync();
+        });
+
+        try
+        {
+            await TriggerResolutionDowngradeAsync();
+            await firstFailure.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Preview delayed");
+            await Expect(Page.Locator("#df-health-banner")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
+            await Expect(Page.Locator("#df-health-banner-detail")).ToContainTextAsync("latest capture failed");
+            await Expect(Page.Locator("#screenshot")).ToHaveAttributeAsync("src", initialSource!);
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+
+            await Page.Locator("#df-retry-capture").ClickAsync();
+            await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(Page.Locator("#df-health-banner")).ToBeHiddenAsync();
+            await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Live");
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+            Assert.Equal(2, Volatile.Read(ref targetScaleRequests));
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            await Page.UnrouteAsync("**/api/state*");
+        }
     }
 
     [InspectorBrowserFixtureFact]
@@ -1443,6 +1523,13 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Page.Keyboard.PressAsync("Escape");
         await Expect(Page.Locator("#df-props-pane")).ToBeHiddenAsync();
         await WaitForScreenshotFitAsync(propertiesOpen: false);
+
+        await Page.SetViewportSizeAsync(320, 780);
+        await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-host-layout", "narrow");
+        await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Live");
+        Assert.True(await Page.Locator("#df-view-pane .df-pane-header").EvaluateAsync<bool>(
+            "header => header.scrollWidth <= header.clientWidth + 1"),
+            "Preview health badges overflowed the compact pane header.");
         Assert.Empty(_pageErrors);
     }
 
