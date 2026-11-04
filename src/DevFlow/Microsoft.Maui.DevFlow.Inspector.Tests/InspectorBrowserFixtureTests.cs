@@ -1574,6 +1574,371 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         }
         """);
 
+    [InspectorBrowserFixtureFact]
+    public async Task ViewportZoom_KeepsTheCursorAnchoredInAppCoordinates()
+    {
+        await Page.Locator("#df-props-close").ClickAsync();
+        await Page.RouteAsync("**/api/tap", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = """{"ok":true}"""
+        }));
+        var target = Page.Locator(".devflow-element[data-id='fixture-button']");
+        var box = await target.BoundingBoxAsync();
+        Assert.NotNull(box);
+        var clientX = box.X + box.Width / 2;
+        var clientY = box.Y + box.Height / 2;
+
+        var before = await Page.RunAndWaitForRequestAsync(
+            () => Page.Mouse.ClickAsync(clientX, clientY),
+            request => request.Url.EndsWith("/api/tap", StringComparison.Ordinal));
+        using var beforeBody = JsonDocument.Parse(before.PostData!);
+        var beforeX = beforeBody.RootElement.GetProperty("x").GetDouble();
+        var beforeY = beforeBody.RootElement.GetProperty("y").GetDouble();
+
+        await Page.Mouse.MoveAsync(clientX, clientY);
+        await Page.Keyboard.DownAsync("Control");
+        try
+        {
+            await Page.Mouse.WheelAsync(0, -300);
+        }
+        finally
+        {
+            await Page.Keyboard.UpAsync("Control");
+        }
+        await Expect(Page.Locator("#df-zoom-indicator"))
+            .Not.ToHaveTextAsync("100%", new() { Timeout = 2_000 });
+
+        var after = await Page.RunAndWaitForRequestAsync(
+            () => Page.Mouse.ClickAsync(clientX, clientY),
+            request => request.Url.EndsWith("/api/tap", StringComparison.Ordinal));
+        using var afterBody = JsonDocument.Parse(after.PostData!);
+        Assert.InRange(Math.Abs(afterBody.RootElement.GetProperty("x").GetDouble() - beforeX), 0, 0.5);
+        Assert.InRange(Math.Abs(afterBody.RootElement.GetProperty("y").GetDouble() - beforeY), 0, 0.5);
+
+        var anchoredTransform = await Page.Locator("#app-viewport")
+            .EvaluateAsync<string>("element => element.style.transform");
+        await Page.RunAndWaitForResponseAsync(
+            () => Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => response.Url.Contains("/api/state", StringComparison.Ordinal));
+        await Expect(Page.Locator("#app-viewport")).ToHaveAttributeAsync(
+            "style",
+            new System.Text.RegularExpressions.Regex(
+                System.Text.RegularExpressions.Regex.Escape(anchoredTransform)));
+
+        var scrollBodies = new ConcurrentQueue<string>();
+        await Page.RouteAsync("**/api/scroll", route =>
+        {
+            scrollBodies.Enqueue(route.Request.PostData!);
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        });
+        await Page.Mouse.MoveAsync(clientX, clientY);
+        await Page.Mouse.WheelAsync(0, 60);
+        await Page.Keyboard.DownAsync("Control");
+        try
+        {
+            await Page.Mouse.WheelAsync(0, -120);
+        }
+        finally
+        {
+            await Page.Keyboard.UpAsync("Control");
+        }
+        await Page.Mouse.MoveAsync(clientX + 40, clientY);
+        await Page.Mouse.WheelAsync(0, 80);
+        await Page.WaitForTimeoutAsync(180);
+        Assert.Equal(2, scrollBodies.Count);
+        var scrolls = scrollBodies.Select(body => JsonDocument.Parse(body)).ToArray();
+        try
+        {
+            Assert.Equal(60, scrolls[0].RootElement.GetProperty("deltaY").GetDouble());
+            Assert.Equal(80, scrolls[1].RootElement.GetProperty("deltaY").GetDouble());
+            Assert.NotEqual(
+                scrolls[0].RootElement.GetProperty("x").GetDouble(),
+                scrolls[1].RootElement.GetProperty("x").GetDouble());
+        }
+        finally
+        {
+            foreach (var scroll in scrolls) scroll.Dispose();
+        }
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task ViewportPan_NeverBecomesAnAppGesture_AndOrdinaryInputStillDrives()
+    {
+        await Page.Locator("#df-props-close").ClickAsync();
+        var appRequests = new ConcurrentQueue<string>();
+        foreach (var endpoint in new[] { "tap", "scroll", "gesture", "fill" })
+        {
+            await Page.RouteAsync($"**/api/{endpoint}", route =>
+            {
+                appRequests.Enqueue(endpoint);
+                return route.FulfillAsync(new()
+                {
+                    Status = 200,
+                    ContentType = "application/json",
+                    Body = """{"ok":true}"""
+                });
+            });
+        }
+
+        await Page.Locator("#df-zoom-preset").SelectOptionAsync("2");
+        await Page.Locator("#df-zoom-in").ClickAsync();
+        await Page.Locator("#df-zoom-in").ClickAsync();
+        await Expect(Page.Locator("#df-zoom-indicator")).ToHaveTextAsync("400%");
+        var viewport = Page.Locator("#app-viewport");
+        var box = await viewport.BoundingBoxAsync();
+        Assert.NotNull(box);
+        var startX = box.X + box.Width / 2;
+        var startY = box.Y + box.Height / 2;
+        var before = await viewport.EvaluateAsync<string>("element => element.style.transform");
+
+        await Page.Mouse.MoveAsync(startX, startY);
+        await Page.Locator("#df-viewport-wrap").FocusAsync();
+        await Page.Keyboard.DownAsync("Space");
+        try
+        {
+            await Page.Mouse.DownAsync();
+            await Page.Mouse.MoveAsync(startX + 70, startY + 45, new() { Steps = 4 });
+            await Page.Mouse.UpAsync();
+        }
+        finally
+        {
+            await Page.Keyboard.UpAsync("Space");
+        }
+        var afterSpacePan = await viewport.EvaluateAsync<string>("element => element.style.transform");
+        Assert.NotEqual(before, afterSpacePan);
+        Assert.Empty(appRequests);
+
+        box = await viewport.BoundingBoxAsync();
+        Assert.NotNull(box);
+        startX = box.X + box.Width / 2;
+        startY = box.Y + box.Height / 2;
+        await Page.Mouse.MoveAsync(startX, startY);
+        await Page.Locator("#df-viewport-wrap").FocusAsync();
+        await Page.Keyboard.DownAsync("Space");
+        try
+        {
+            await Page.Mouse.DownAsync();
+            await Page.Mouse.MoveAsync(startX + 30, startY + 20, new() { Steps = 3 });
+            await Page.Keyboard.PressAsync("Escape");
+            await Page.WaitForTimeoutAsync(40);
+            await Page.Mouse.UpAsync();
+        }
+        finally
+        {
+            await Page.Keyboard.UpAsync("Space");
+        }
+        Assert.Empty(appRequests);
+
+        await Page.Mouse.MoveAsync(startX, startY);
+        await Page.Mouse.DownAsync(new() { Button = MouseButton.Middle });
+        await Page.Mouse.MoveAsync(startX - 55, startY - 30, new() { Steps = 4 });
+        await Page.Mouse.UpAsync(new() { Button = MouseButton.Middle });
+        var afterMiddlePan = await viewport.EvaluateAsync<string>("element => element.style.transform");
+        Assert.NotEqual(afterSpacePan, afterMiddlePan);
+        Assert.Empty(appRequests);
+
+        await viewport.EvaluateAsync("""
+            element => {
+              const originalCapture = element.setPointerCapture;
+              element.setPointerCapture = () => {};
+              try {
+                const pointer = (type, pointerId, isPrimary, x) =>
+                  element.dispatchEvent(new PointerEvent(type, {
+                    bubbles: true,
+                    pointerId,
+                    pointerType: 'touch',
+                    isPrimary,
+                    button: 0,
+                    clientX: x,
+                    clientY: 200,
+                  }));
+                pointer('pointerdown', 41, true, 80);
+                pointer('pointerdown', 42, false, 320);
+                pointer('pointermove', 42, false, 322);
+                pointer('pointerup', 42, false, 322);
+                pointer('pointerup', 41, true, 80);
+              } finally {
+                element.setPointerCapture = originalCapture;
+              }
+            }
+            """);
+        await Page.WaitForTimeoutAsync(50);
+        Assert.DoesNotContain("gesture", appRequests);
+
+        await Page.Mouse.MoveAsync(startX, startY);
+        await Page.Mouse.WheelAsync(0, 120);
+        await Page.WaitForTimeoutAsync(150);
+        Assert.Contains("scroll", appRequests);
+        while (appRequests.TryDequeue(out _)) { }
+
+        await Page.Mouse.DownAsync();
+        await Page.Mouse.MoveAsync(startX + 40, startY, new() { Steps = 3 });
+        await Page.Mouse.UpAsync();
+        await Page.WaitForTimeoutAsync(50);
+        Assert.Contains("gesture", appRequests);
+        while (appRequests.TryDequeue(out _)) { }
+
+        await Page.Locator("#df-reset-view").ClickAsync();
+        await Expect(Page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "true");
+        await Expect(Page.Locator("#df-zoom-preset")).ToHaveValueAsync("fit");
+
+        await viewport.EvaluateAsync("""
+            element => {
+              const entry = document.createElement('div');
+              entry.className = 'devflow-element';
+              entry.dataset.id = 'viewport-entry';
+              entry.dataset.type = 'Entry';
+              entry.dataset.text = 'draft';
+              entry.dataset.isvisible = 'true';
+              entry.dataset.isenabled = 'true';
+              entry.dataset.capabilities = 'set-value';
+              entry.style.cssText = 'position:absolute;left:100px;top:140px;width:120px;height:32px;';
+              element.appendChild(entry);
+            }
+            """);
+        await Page.Locator("[data-id='viewport-entry']").ClickAsync();
+        var inlineEditor = Page.Locator("#app-viewport > input, #app-viewport > textarea").First;
+        await Expect(inlineEditor).ToBeVisibleAsync();
+        await inlineEditor.FillAsync("unsaved viewport draft");
+        while (appRequests.TryDequeue(out _)) { }
+        var editorTransform = await viewport.EvaluateAsync<string>("element => element.style.transform");
+        box = await viewport.BoundingBoxAsync();
+        Assert.NotNull(box);
+        startX = box.X + box.Width / 2;
+        startY = box.Y + box.Height / 2;
+        await Page.Mouse.MoveAsync(startX, startY);
+        await Page.Mouse.DownAsync(new() { Button = MouseButton.Middle });
+        await Page.Mouse.MoveAsync(startX + 40, startY + 20, new() { Steps = 3 });
+        await Page.Mouse.UpAsync(new() { Button = MouseButton.Middle });
+        await Expect(inlineEditor).ToBeVisibleAsync();
+        Assert.Equal(editorTransform, await viewport.EvaluateAsync<string>("element => element.style.transform"));
+        Assert.DoesNotContain("fill", appRequests);
+        await inlineEditor.PressAsync("Escape");
+
+        await Page.Locator("#df-zoom-preset").SelectOptionAsync("0.5");
+        var stage = await Page.Locator("#df-stage").BoundingBoxAsync();
+        box = await viewport.BoundingBoxAsync();
+        Assert.NotNull(stage);
+        Assert.NotNull(box);
+        var gutterX = stage.X + 10;
+        var gutterY = stage.Y + stage.Height / 2;
+        var gutterTransform = await viewport.EvaluateAsync<string>("element => element.style.transform");
+        await Page.Mouse.MoveAsync(gutterX, gutterY);
+        await Page.Mouse.DownAsync(new() { Button = MouseButton.Middle });
+        await Page.Mouse.MoveAsync(gutterX + 30, gutterY, new() { Steps = 3 });
+        await Page.Mouse.UpAsync(new() { Button = MouseButton.Middle });
+        Assert.NotEqual(gutterTransform, await viewport.EvaluateAsync<string>("element => element.style.transform"));
+        Assert.Empty(appRequests);
+        await Page.Keyboard.DownAsync("Control");
+        try
+        {
+            await Page.Mouse.WheelAsync(0, -120);
+        }
+        finally
+        {
+            await Page.Keyboard.UpAsync("Control");
+        }
+        await Expect(Page.Locator("#df-zoom-indicator")).Not.ToHaveTextAsync("50%");
+        Assert.Empty(appRequests);
+        await Page.Locator("#df-reset-view").ClickAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task ViewportControls_ExposeKeyboardAndAccessibleStateInNarrowHosts()
+    {
+        await Page.Locator("#df-props-close").ClickAsync();
+        await Page.SetViewportSizeAsync(260, 700);
+        await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-host-layout", "narrow");
+
+        var header = await Page.Locator("#df-view-pane > .df-pane-header").BoundingBoxAsync();
+        var controls = await Page.Locator("#df-viewport-controls").BoundingBoxAsync();
+        Assert.NotNull(header);
+        Assert.NotNull(controls);
+        Assert.True(controls.X >= header.X - 0.5 && controls.X + controls.Width <= header.X + header.Width + 0.5,
+            $"Viewport controls escaped the narrow header: controls={controls.X}..{controls.X + controls.Width}, header={header.X}..{header.X + header.Width}");
+        await Expect(Page.Locator("#df-zoom-indicator")).ToHaveAttributeAsync("aria-hidden", "true");
+        await Expect(Page.Locator("#df-viewport-wrap")).ToHaveAttributeAsync("tabindex", "0");
+
+        var wrap = Page.Locator("#df-viewport-wrap");
+        await Page.Locator("#df-reset-view").FocusAsync();
+        await Page.Keyboard.PressAsync("Tab");
+        Assert.Equal("df-viewport-wrap", await Page.EvaluateAsync<string>("document.activeElement?.id"));
+        var focusRing = await wrap.EvaluateAsync<string>("""
+            element => {
+              const style = getComputedStyle(element, '::before');
+              return `${style.borderTopWidth}|${style.zIndex}`;
+            }
+            """);
+        Assert.Equal("2px|4999", focusRing);
+        await wrap.PressAsync("1");
+        await Expect(Page.Locator("#df-zoom-indicator")).ToHaveTextAsync("100%");
+        await Expect(Page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "false");
+        await wrap.PressAsync("=");
+        await Expect(Page.Locator("#df-zoom-indicator")).ToHaveTextAsync("125%");
+        var beforeModifiedKeys = await Page.Locator("#df-zoom-indicator").TextContentAsync();
+        var modifiedPrevented = await wrap.EvaluateAsync<bool>("""
+            element => [
+              new KeyboardEvent('keydown', { key: '=', ctrlKey: true, bubbles: true, cancelable: true }),
+              new KeyboardEvent('keydown', { key: '0', ctrlKey: true, bubbles: true, cancelable: true }),
+              new KeyboardEvent('keydown', { key: '1', metaKey: true, bubbles: true, cancelable: true }),
+            ].some(event => {
+              element.dispatchEvent(event);
+              return event.defaultPrevented;
+            })
+            """);
+        Assert.False(modifiedPrevented);
+        await Expect(Page.Locator("#df-zoom-indicator")).ToHaveTextAsync(beforeModifiedKeys!);
+
+        var viewport = Page.Locator("#app-viewport");
+        await viewport.EvaluateAsync("""
+            element => {
+              const input = document.createElement('input');
+              input.id = 'viewport-shortcut-probe';
+              input.style.cssText = 'position:absolute;left:4px;top:4px;width:40px;height:20px;';
+              element.appendChild(input);
+            }
+            """);
+        var probe = Page.Locator("#viewport-shortcut-probe");
+        await probe.FocusAsync();
+        await probe.PressAsync("=");
+        await Expect(probe).ToHaveValueAsync("=");
+        await Expect(Page.Locator("#df-zoom-indicator")).ToHaveTextAsync("125%");
+
+        await wrap.FocusAsync();
+        for (var index = 0; index < 8; index++)
+            await wrap.PressAsync("-");
+        await Expect(Page.Locator("#df-zoom-indicator")).ToHaveTextAsync("25%");
+        var zoomOut = Page.Locator("#df-zoom-out");
+        await zoomOut.FocusAsync();
+        await Expect(zoomOut).ToHaveAttributeAsync("aria-disabled", "true");
+        await zoomOut.PressAsync("Enter");
+        Assert.Equal("df-zoom-out", await Page.EvaluateAsync<string>("document.activeElement?.id"));
+
+        var nativeScroll = await wrap.EvaluateAsync<int[]>("""
+            element => {
+              element.scrollLeft = 120;
+              element.scrollTop = 80;
+              return [element.scrollLeft, element.scrollTop];
+            }
+            """);
+        Assert.Equal(new[] { 0, 0 }, nativeScroll);
+
+        await wrap.FocusAsync();
+        await wrap.PressAsync("0");
+        await Expect(Page.Locator("#df-zoom-preset")).ToHaveValueAsync("fit");
+        await Expect(Page.Locator("#df-zoom-announcement")).ToContainTextAsync("Fit view");
+        Assert.Empty(_pageErrors);
+    }
+
     // Fit re-runs from a ResizeObserver and a requestAnimationFrame, so poll until it settles.
     private Task WaitForScreenshotFitAsync(bool propertiesOpen) => Page.WaitForFunctionAsync("""
         propertiesOpen => {

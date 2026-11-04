@@ -1088,6 +1088,8 @@ public sealed class InspectorServer : IDisposable
                     "/inspector-layout.js" => HandleEmbeddedFile("inspector-layout.js", "application/javascript"),
                     "/inspector-resolution.js" => HandleEmbeddedFile("inspector-resolution.js", "application/javascript"),
                     "/inspector-tree.js" => HandleEmbeddedFile("inspector-tree.js", "application/javascript"),
+                    "/inspector-viewport.js" => HandleEmbeddedFile("inspector-viewport.js", "application/javascript"),
+                    "/inspector-viewport-controller.js" => HandleEmbeddedFile("inspector-viewport-controller.js", "application/javascript"),
                     "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
                 },
