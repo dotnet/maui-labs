@@ -36,6 +36,7 @@ public sealed class FlowTools
             return Error("Flow failed validation: " + string.Join("; ", validation.Errors));
 
         using var agent = await session.GetAgentClientAsync(agentPort);
+        using var actionContext = agent.UseActionContext(source: "replay");
         var replayer = new FlowReplayer(agent);
         var report = await replayer.ReplayAsync(parsed.Flow!, read.Path);
         return Json(report);

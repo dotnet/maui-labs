@@ -152,7 +152,18 @@ public partial class DevFlowAgentService
         public required string PointerType { get; init; }
         public required object BackendState { get; init; }
         public required CancellationTokenSource Cancellation { get; init; }
+        public required Dictionary<string, object?> ActionCorrelation { get; init; }
+        public required double StartX { get; init; }
+        public required double StartY { get; init; }
+        public required DateTimeOffset StartedAtUtc { get; init; }
+        public long? CaptureEpoch { get; init; }
+        public long? RegistryGeneration { get; init; }
+        public int? WindowId { get; init; }
+        public string? DiagnosticInputsRevision { get; init; }
         public string? LeaseId { get; init; }
+        public double LastX { get; set; }
+        public double LastY { get; set; }
+        public long LastLifecycleUpdateTicks { get; set; }
         public int LastSequence { get; set; }
         public double LastElapsedMs { get; set; }
         public long StartedTicks { get; init; }
@@ -436,6 +447,21 @@ public partial class DevFlowAgentService
                 PointerType = pointerType,
                 BackendState = backend.State,
                 Cancellation = sessionCancellation,
+                ActionCorrelation = CreatePointerActionCorrelation(request, body.Correlation),
+                StartX = body.X,
+                StartY = body.Y,
+                LastX = body.X,
+                LastY = body.Y,
+                StartedAtUtc = DateTimeOffset.UtcNow,
+                CaptureEpoch = body.CaptureEpoch,
+                RegistryGeneration = body.RegistryGeneration,
+                WindowId = body.WindowId,
+                DiagnosticInputsRevision = ReadSafeToken(
+                    GetUiActionDiagnosticInputsRevision(
+                        body.CaptureEpoch,
+                        body.RegistryGeneration,
+                        body.WindowId),
+                    128),
                 LeaseId = GetRequestLeaseId(request),
                 LastSequence = 0,
                 LastElapsedMs = body.ElapsedMs,
@@ -468,6 +494,11 @@ public partial class DevFlowAgentService
                     "pointer-start-cancelled");
             }
             EnsurePointerSessionWatchdog();
+            PublishUiEvent(
+                "ui-action-started",
+                CreateUiActionEventData(
+                    CreatePointerActionDescriptor(state, "pointer"),
+                    state.ActionCorrelation));
 
             return PointerResponse(new PointerSessionReply
             {
@@ -590,7 +621,21 @@ public partial class DevFlowAgentService
 
             active.LastSequence = body.Sequence;
             if (body.Samples.Count > 0)
+            {
                 active.LastElapsedMs = body.Samples[^1].ElapsedMs;
+                active.LastX = body.Samples[^1].X;
+                active.LastY = body.Samples[^1].Y;
+                var nowTicks = Environment.TickCount64;
+                if (nowTicks - active.LastLifecycleUpdateTicks >= 33)
+                {
+                    active.LastLifecycleUpdateTicks = nowTicks;
+                    PublishUiEvent(
+                        "ui-action-updated",
+                        CreateUiActionEventData(
+                            CreatePointerActionDescriptor(active, ClassifyPointerAction(active)),
+                            active.ActionCorrelation));
+                }
+            }
             active.LastActivityTicks = Environment.TickCount64;
             var reply = new PointerSessionReply
             {
@@ -699,6 +744,9 @@ public partial class DevFlowAgentService
                 LastSequence = body.Sequence,
                 Detail = backend.Detail
             };
+            active.LastX = body.Sample.X;
+            active.LastY = body.Sample.Y;
+            active.LastElapsedMs = body.Sample.ElapsedMs;
             CompletePointerSession(active, reply, "end", fingerprint);
             return PointerResponse(reply);
         }
@@ -1004,6 +1052,21 @@ public partial class DevFlowAgentService
         string operationKind,
         string? fingerprint)
     {
+        var success = reply.Success && string.Equals(reply.State, "ended", StringComparison.Ordinal);
+        var outcome = success
+            ? "completed"
+            : string.IsNullOrWhiteSpace(reply.Error) ? "cancelled" : "failed";
+        PublishUiEvent(
+            "ui-action-completed",
+            CreateUiActionEventData(
+                CreatePointerActionDescriptor(active, ClassifyPointerAction(active)),
+                active.ActionCorrelation,
+                success,
+                outcome,
+                ReadSafeToken(reply.Reason, 80),
+                success ? 200 : null,
+                active.StartedAtUtc));
+
         lock (_pointerSessionStateGate)
         {
             if (ReferenceEquals(_activePointerSession, active))
@@ -1027,6 +1090,39 @@ public partial class DevFlowAgentService
 
         active.Cancellation.Cancel();
         DisposePointerSessionState(active);
+    }
+
+    private static UiActionDescriptor CreatePointerActionDescriptor(
+        PointerSessionState state,
+        string kind)
+        => new()
+        {
+            Kind = kind,
+            X = state.StartX,
+            Y = state.StartY,
+            ToX = state.LastX,
+            ToY = state.LastY,
+            DurationMs = state.LastElapsedMs >= 0
+                ? (int?)Math.Min(MaxPublishedActionDurationMs, Math.Round(state.LastElapsedMs))
+                : null,
+            CaptureEpoch = state.CaptureEpoch,
+            RegistryGeneration = state.RegistryGeneration,
+            WindowId = state.WindowId,
+            DiagnosticInputsRevision = state.DiagnosticInputsRevision
+        };
+
+    private static string ClassifyPointerAction(PointerSessionState state)
+    {
+        var distance = Math.Sqrt(
+            Math.Pow(state.LastX - state.StartX, 2)
+            + Math.Pow(state.LastY - state.StartY, 2));
+        if (distance <= 12)
+            return state.LastElapsedMs >= 500 ? "longpress" : "tap";
+
+        var speed = distance / Math.Max(1, state.LastElapsedMs);
+        return state.LastElapsedMs <= 750 && speed >= 0.5
+            ? "swipe"
+            : "drag";
     }
 
     private void SignalPointerSessionCancellation(string? sessionId = null)

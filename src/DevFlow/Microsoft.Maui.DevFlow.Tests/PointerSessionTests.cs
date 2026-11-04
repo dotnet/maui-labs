@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Driver;
 
@@ -55,6 +58,125 @@ public class PointerSessionTests
             Assert.Equal(410, late.StatusCode);
             Assert.Equal("session-gone", late.Reason);
             Assert.Equal(["start", "move:2", "end"], service.Events);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_Lifecycle_CoalescesUpdatesAndCompletesOnce()
+    {
+        await WithServiceAsync(async (_, client) =>
+        {
+            using var socket = await ConnectUiEventsAsync(
+                client,
+                "ui-action-started",
+                "ui-action-updated",
+                "ui-action-completed");
+            var request = Start("lifecycle");
+            request.CaptureEpoch = 12;
+            request.RegistryGeneration = 34;
+            request.WindowId = 2;
+            request.Correlation = new ActionCorrelation
+            {
+                ActionId = "pointer-lifecycle",
+                Source = "inspector",
+                StreamId = "stream-1",
+                FrameId = "frame-1",
+                FrameRevision = 7,
+                CoordinateSpace = "windowLogical"
+            };
+
+            Assert.True((await client.StartPointerSessionAsync(request)).Success);
+            using var started = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-started",
+                "pointer-lifecycle");
+            var startedData = started.RootElement.GetProperty("data");
+            Assert.Equal("pointer", startedData.GetProperty("kind").GetString());
+            Assert.Equal(5, startedData.GetProperty("x").GetDouble());
+            Assert.Equal(6, startedData.GetProperty("y").GetDouble());
+            Assert.Equal(12, startedData.GetProperty("captureEpoch").GetInt64());
+            Assert.Equal(34, startedData.GetProperty("registryGeneration").GetInt64());
+            Assert.Equal(2, startedData.GetProperty("windowId").GetInt32());
+            var correlation = startedData.GetProperty("correlation");
+            Assert.Equal("inspector", correlation.GetProperty("source").GetString());
+            Assert.Equal("stream-1", correlation.GetProperty("streamId").GetString());
+            Assert.Equal("frame-1", correlation.GetProperty("frameId").GetString());
+            Assert.Equal(7, correlation.GetProperty("frameRevision").GetInt64());
+            Assert.Equal("windowLogical", correlation.GetProperty("coordinateSpace").GetString());
+
+            Assert.True((await client.MovePointerSessionAsync(
+                "lifecycle",
+                1,
+                [Sample(40, 50, 100), Sample(90, 110, 200)])).Success);
+            using var updated = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-updated",
+                "pointer-lifecycle");
+            var updatedData = updated.RootElement.GetProperty("data");
+            Assert.Equal("swipe", updatedData.GetProperty("kind").GetString());
+            Assert.Equal(90, updatedData.GetProperty("toX").GetDouble());
+            Assert.Equal(110, updatedData.GetProperty("toY").GetDouble());
+            Assert.Equal(200, updatedData.GetProperty("durationMs").GetInt32());
+
+            var endSample = Sample(205, 206, 300);
+            Assert.True((await client.EndPointerSessionAsync("lifecycle", 2, endSample)).Success);
+            Assert.True((await client.EndPointerSessionAsync("lifecycle", 2, endSample)).Success);
+            using var completed = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-completed",
+                "pointer-lifecycle");
+            var completedData = completed.RootElement.GetProperty("data");
+            Assert.Equal("swipe", completedData.GetProperty("kind").GetString());
+            Assert.True(completedData.GetProperty("success").GetBoolean());
+            Assert.Equal("completed", completedData.GetProperty("outcome").GetString());
+            Assert.Equal(205, completedData.GetProperty("toX").GetDouble());
+            Assert.Equal(206, completedData.GetProperty("toY").GetDouble());
+
+            await AssertNoUiEventAsync(socket);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_Cancel_PublishesCancelledTerminalLifecycle()
+    {
+        await WithServiceAsync(async (_, client) =>
+        {
+            using var socket = await ConnectUiEventsAsync(
+                client,
+                "ui-action-started",
+                "ui-action-completed");
+            var request = Start("cancel-lifecycle");
+            request.Correlation = new ActionCorrelation
+            {
+                ActionId = "pointer-cancel",
+                Source = "mcp",
+                CoordinateSpace = "windowLogical"
+            };
+
+            Assert.True((await client.StartPointerSessionAsync(request)).Success);
+            using var started = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-started",
+                "pointer-cancel");
+            Assert.Equal(
+                "pointer",
+                started.RootElement.GetProperty("data").GetProperty("kind").GetString());
+
+            Assert.True((await client.CancelPointerSessionAsync(
+                "cancel-lifecycle",
+                "pointercancel")).Success);
+            using var completed = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-completed",
+                "pointer-cancel");
+            var completedData = completed.RootElement.GetProperty("data");
+            Assert.False(completedData.GetProperty("success").GetBoolean());
+            Assert.Equal("cancelled", completedData.GetProperty("outcome").GetString());
+            Assert.Equal("pointercancel", completedData.GetProperty("reason").GetString());
+            Assert.Equal("mcp", completedData
+                .GetProperty("correlation")
+                .GetProperty("source")
+                .GetString());
         });
     }
 
@@ -452,6 +574,78 @@ public class PointerSessionTests
         {
             await service.StopAsync();
         }
+    }
+
+    private static async Task<ClientWebSocket> ConnectUiEventsAsync(
+        AgentClient client,
+        params string[] events)
+    {
+        var socket = new ClientWebSocket();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await socket.ConnectAsync(
+            new Uri(client.BaseUrl.Replace("http://", "ws://", StringComparison.Ordinal)
+                + "/ws/v1/ui/events"),
+            timeout.Token);
+        var subscription = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            type = "subscribe",
+            data = new { events }
+        }));
+        await socket.SendAsync(
+            subscription,
+            WebSocketMessageType.Text,
+            true,
+            timeout.Token);
+        return socket;
+    }
+
+    private static async Task<JsonDocument> ReceiveUiEventAsync(
+        ClientWebSocket socket,
+        string expectedType,
+        string expectedActionId)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            using var message = await ReceiveMessageAsync(socket, timeout.Token);
+            var document = JsonDocument.Parse(message.ToArray());
+            var root = document.RootElement;
+            var matches = root.TryGetProperty("type", out var type)
+                && type.GetString() == expectedType
+                && root.TryGetProperty("data", out var data)
+                && data.TryGetProperty("correlation", out var correlation)
+                && correlation.TryGetProperty("actionId", out var actionId)
+                && actionId.GetString() == expectedActionId;
+            if (matches)
+                return document;
+            document.Dispose();
+        }
+    }
+
+    private static async Task<MemoryStream> ReceiveMessageAsync(
+        ClientWebSocket socket,
+        CancellationToken cancellationToken)
+    {
+        var message = new MemoryStream();
+        var buffer = new byte[4096];
+        WebSocketReceiveResult result;
+        do
+        {
+            result = await socket.ReceiveAsync(buffer, cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close)
+                throw new InvalidOperationException("UI event stream closed before the expected event.");
+            message.Write(buffer, 0, result.Count);
+        }
+        while (!result.EndOfMessage);
+        return message;
+    }
+
+    private static async Task AssertNoUiEventAsync(ClientWebSocket socket)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        var buffer = new byte[256];
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await socket.ReceiveAsync(buffer, timeout.Token));
     }
 
     private static int FreePort()

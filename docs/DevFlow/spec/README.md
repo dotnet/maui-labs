@@ -81,6 +81,20 @@ Profiler DTOs retain PascalCase property names (`SessionId`, `Samples`, `TsUtc`,
 and so on) inside HTTP and WebSocket payloads; the surrounding dictionary
 envelopes and profiler capability keys use lower camel case.
 
+UI action lifecycle messages use `ui-action-started`, coalesced `ui-action-updated`
+messages for continuous pointer movement, and `ui-action-completed`.
+Their `data.correlation` object reserves `actionId`, `source`, `streamId`,
+`frameId`, `frameRevision`, and `coordinateSpace`; target geometry remains beside
+`correlation`. Inspector-proxied events use the canonical
+`frame.json#/$defs/ActionCorrelation`; direct agent clients without an Inspector
+frame use the compatible `actionId`/`source` subset. When available,
+`diagnosticInputsRevision` lets the Inspector match a direct client's distinct
+capture epoch to an unchanged cached frame without weakening explicit frame identity.
+Payloads are deliberately geometry-only: text, key values, property values, routes,
+raw action bodies, and exception details are excluded.
+Clients must degrade or skip an overlay when its referenced frame cannot be
+mapped, never reinterpret its coordinates against the current frame.
+
 ## Extension discovery
 
 Agents can expose app-specific diagnostics or automation under `/api/v1/ext/{namespace}/...`. Extension namespaces use reverse-domain notation such as `com.example.diagnostics`.

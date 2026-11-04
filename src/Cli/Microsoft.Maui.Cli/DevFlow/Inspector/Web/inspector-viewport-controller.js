@@ -154,6 +154,9 @@ export function createViewportController(options) {
     stage.style.height = `${bounds.viewportHeight}px`;
     viewport.style.transform =
       `translate(${rendered.translateX}px, ${rendered.translateY}px) scale(${rendered.scale})`;
+    viewport.style.setProperty('--df-preview-scale', String(rendered.scale));
+    viewport.style.setProperty('--df-preview-inverse-scale', String(1 / rendered.scale));
+    wrap.classList.toggle('df-fit-active', view.mode === 'fit');
     syncControls();
     onTransformChanged({
       bounds,
