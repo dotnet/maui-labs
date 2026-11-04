@@ -59,7 +59,25 @@ test('every rendered Inspector toolbar command is owned by the shared policy', (
   const rendered = [...toolbar.matchAll(/<button\b[^>]*\bid="([^"]+)"/g)]
     .map(match => match[1])
     .filter(id => id !== 'df-more');
-  assert.deepEqual(rendered, COMMAND_DEFINITIONS.map(command => command.id));
+  assert.deepEqual(
+    rendered,
+    COMMAND_DEFINITIONS
+      .filter(command => command.group !== 'viewport')
+      .map(command => command.id),
+  );
+});
+
+test('viewport header actions use the same screenshot capability policy', () => {
+  const viewportCommands = COMMAND_DEFINITIONS.filter(command => command.group === 'viewport');
+  assert.deepEqual(viewportCommands.map(command => command.id), [
+    'df-zoom-out',
+    'df-zoom-in',
+    'df-reset-view',
+  ]);
+  for (const command of viewportCommands) {
+    assert.match(inspectorHtml, new RegExp(`<button id="${command.id}"`));
+    assert.deepEqual(command.requiredCapabilities, [{ key: 'ui.screenshot' }]);
+  }
 });
 
 test('legacy metadata stays usable and explicit unsupported domains hide commands', () => {

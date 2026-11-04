@@ -281,10 +281,14 @@ public partial class InspectorPageTests : IAsyncLifetime
             ("inspector-dialog.js", "export function confirmModal"),
             ("inspector-data-context.js", "export function createDataSnapshot"),
             ("inspector-frame.js", "export function normalizeFrameDescriptor"),
+            ("inspector-command-policy.js", "export const COMMAND_DEFINITIONS"),
             ("inspector-presentation.js", "export function deriveInspectorPresentation"),
+            ("inspector-resolution.js", "export function selectScreenshotScaleBucket"),
             ("inspector-properties.js", "export function createPropertyGridController"),
             ("inspector-resolution.js", "export function selectScreenshotScaleBucket"),
             ("inspector-tree.js", "export function createElementTreeController"),
+            ("inspector-viewport.js", "export function fitViewportScale"),
+            ("inspector-viewport-controller.js", "export function createViewportController"),
         })
         {
             var response = await _page.APIRequest.GetAsync(ResolveUrl(file));

@@ -553,6 +553,66 @@ public partial class InspectorLayoutWorkspaceTests
         Assert.Equal(beforeHidden + 2, scans);
     }
 
+    [InspectorBrowserFact]
+    public async Task ViewportControls_PreserveCustomZoomAcrossCompactAndNarrowSharedHosts()
+    {
+        await PrepareLayoutWorkspaceAsync();
+        await _page.SetViewportSizeAsync(800, 700);
+        await _page.Clock.RunForAsync(100);
+        await Expect(_page.Locator("body")).ToHaveAttributeAsync("data-host-layout", "compact");
+
+        await _page.Locator("#df-zoom-preset").SelectOptionAsync("2");
+        await Expect(_page.Locator("#df-zoom-indicator")).ToHaveTextAsync("200%");
+        Assert.Contains("scale(2)", await _page.Locator("#app-viewport")
+            .EvaluateAsync<string>("element => element.style.transform"));
+
+        await _page.EvaluateAsync("""
+            () => {
+              document.getElementById('df-props-pane').classList.remove('df-hidden');
+              document.body.classList.add('df-props-open');
+              document.getElementById('df-preview-pending').classList.remove('df-hidden');
+            }
+            """);
+        await _page.Clock.RunForAsync(100);
+        var compactHeader = await _page.Locator("#df-view-pane > .df-pane-header").BoundingBoxAsync();
+        var compactControls = await _page.Locator("#df-viewport-controls").BoundingBoxAsync();
+        var pending = await _page.Locator("#df-preview-pending").BoundingBoxAsync();
+        var reset = await _page.Locator("#df-reset-view").BoundingBoxAsync();
+        Assert.NotNull(compactHeader);
+        Assert.NotNull(compactControls);
+        Assert.NotNull(pending);
+        Assert.NotNull(reset);
+        Assert.True(compactControls.X + compactControls.Width <= compactHeader.X + compactHeader.Width + 0.5,
+            $"Viewport controls escaped the compact header with Properties open: controls right={compactControls.X + compactControls.Width}, header right={compactHeader.X + compactHeader.Width}");
+        Assert.True(pending.Width <= 8.5, $"Expected a compact pending cue, got {pending.Width}px.");
+        await _page.Locator("#df-reset-view").ClickAsync(new() { Trial = true });
+        await Expect(_page.Locator("#df-zoom-indicator")).ToHaveTextAsync("200%");
+        await _page.EvaluateAsync("""
+            () => {
+              document.getElementById('df-props-pane').classList.add('df-hidden');
+              document.body.classList.remove('df-props-open');
+              document.getElementById('df-preview-pending').classList.add('df-hidden');
+            }
+            """);
+
+        await _page.SetViewportSizeAsync(420, 700);
+        await _page.Clock.RunForAsync(100);
+        await Expect(_page.Locator("body")).ToHaveAttributeAsync("data-host-layout", "narrow");
+        await Expect(_page.Locator("#df-zoom-preset")).ToHaveValueAsync("2");
+        await Expect(_page.Locator("#df-zoom-indicator")).ToHaveTextAsync("200%");
+
+        var header = await _page.Locator("#df-view-pane > .df-pane-header").BoundingBoxAsync();
+        var controls = await _page.Locator("#df-viewport-controls").BoundingBoxAsync();
+        Assert.NotNull(header);
+        Assert.NotNull(controls);
+        Assert.True(controls.X >= header.X - 0.5 && controls.X + controls.Width <= header.X + header.Width + 0.5,
+            $"Viewport controls escaped the shared host header: controls={controls.X}..{controls.X + controls.Width}, header={header.X}..{header.X + header.Width}");
+
+        await _page.Locator("#df-reset-view").ClickAsync();
+        await Expect(_page.Locator("#df-zoom-preset")).ToHaveValueAsync("fit");
+        await Expect(_page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "true");
+    }
+
     private static string LayoutWorkspacePolicyPath => Path.Combine(Directory.GetCurrentDirectory(), "layout-ui-fixture", ".mauidevflow");
 
     private static string LayoutWorkspaceResponse(bool suppressed = false, string message = "Child outside parent.") =>
