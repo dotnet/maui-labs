@@ -38,6 +38,16 @@ export interface ScreenshotOptions {
   selector?: string;
   maxWidth?: number;
   scale?: string;
+  targetScale?: number;
+  maxPixelWidth?: number;
+  maxPixelHeight?: number;
+  maxPixels?: number;
+}
+
+function minPositive(...values: Array<number | undefined>): number | undefined {
+  const positive = values.filter((value): value is number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0);
+  return positive.length > 0 ? Math.min(...positive) : undefined;
 }
 
 export interface OpenEventsHandlers {
@@ -352,8 +362,12 @@ export class DevFlowClient {
       window: opts.window,
       elementId: opts.elementId,
       selector: opts.selector,
-      maxWidth: opts.maxWidth,
+      maxWidth: minPositive(opts.maxWidth, opts.maxPixelWidth),
       scale: opts.scale,
+      targetScale: opts.targetScale,
+      maxPixelWidth: opts.maxPixelWidth,
+      maxPixelHeight: opts.maxPixelHeight,
+      maxPixels: opts.maxPixels,
     })}`;
     const resolved = await this.resolver.resolve();
     if (!resolved.ok) return { ok: false, error: resolved.error };

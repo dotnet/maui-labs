@@ -67,9 +67,30 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         capabilities["ui.actions"] = Capability(1, supported: true,
             ["tap", "fill", "clear", "focus", "scroll", "back", "key", "gesture", "properties"],
             reason: null);
-        capabilities["ui.screenshot"] = Capability(1, supported: true,
-            ["element", "fullscreen"],
-            reason: null);
+        capabilities["ui.screenshot"] = new Dictionary<string, object?>
+        {
+            ["version"] = 2,
+            ["supported"] = true,
+            ["features"] = new[]
+            {
+                "element",
+                "fullscreen",
+                "resolution-hints",
+                "resolution-metadata",
+                "post-capture-downsample",
+                "png"
+            },
+            ["resolution"] = new Dictionary<string, object?>
+            {
+                ["minScale"] = MinimumScreenshotTargetScale,
+                ["maxScale"] = MaximumScreenshotTargetScale,
+                ["maxDimension"] = MaximumScreenshotPixelDimension,
+                ["maxPixels"] = MaximumScreenshotPixels,
+                ["upscale"] = false,
+                ["format"] = "png"
+            },
+            ["reason"] = (string?)null
+        };
     }
 
     /// <inheritdoc />
@@ -441,6 +462,9 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     {
         if (!_bound) return HttpResponse.Error("Agent not bound to app");
 
+        if (!TryParseScreenshotResolutionHints(request, out var resolutionHints, out var resolutionError))
+            return resolutionError!;
+
         int? maxWidth = null;
         if (request.QueryParams.TryGetValue("maxWidth", out var maxWidthText)
             && int.TryParse(maxWidthText, out var parsed) && parsed > 0)
@@ -463,17 +487,22 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             var result = await DispatchAsync(async () =>
             {
                 byte[]? png;
+                double density;
                 if (hasElementId && !string.IsNullOrEmpty(elementId))
                 {
                     var view = ResolveView(elementId);
                     png = view == null ? null : NativeUi.CaptureView(view);
+                    density = view == null
+                        ? NativeUi.DisplayDensity
+                        : NativeUi.GetCaptureDensity(view);
                 }
                 else
                 {
+                    density = NativeUi.ScreenCaptureDensity;
                     png = await NativeUi.CaptureScreen();
                 }
 
-                return new ScreenshotCaptureResult(png, NativeUi.DisplayDensity);
+                return new ScreenshotCaptureResult(png, density);
             });
 
             if (result?.Png == null)
@@ -483,7 +512,13 @@ public class NativeDevFlowAgentService : DevFlowAgentService
                     : HttpResponse.Error("Screen capture returned no data");
             }
 
-            return HttpResponse.Png(ResizePngIfNeeded(result.Png, maxWidth, result.Density, autoScale));
+            return BuildScreenshotResponse(
+                ProcessScreenshotPng(
+                    result.Png,
+                    maxWidth,
+                    result.Density,
+                    autoScale,
+                    resolutionHints));
         }
         catch (Exception ex)
         {

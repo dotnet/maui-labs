@@ -557,8 +557,10 @@ paths:
       description: >
         Captures a screenshot of the entire screen or a specific element.
         Element IDs may identify MAUI visual elements or native elements
-        advertised by the visual tree. Successful responses are always PNG;
-        the runtime does not implement format selection.
+        advertised by the visual tree. Optional resolution hints are bounded,
+        downsample-only requests: agents never upscale beyond the native capture.
+        Successful responses are always PNG; the runtime does not implement
+        format selection.
       parameters:
         - name: elementId
           in: query
@@ -567,15 +569,50 @@ paths:
             type: string
         - name: maxWidth
           in: query
-          description: Maximum width in pixels. The image is scaled down if wider.
+          description: >
+            Legacy maximum width in pixels. The image is scaled down if wider.
+            New clients should also send maxPixelWidth so older agents can still
+            honor the width cap.
           schema:
             type: integer
             minimum: 1
+        - name: targetScale
+          in: query
+          description: >
+            Requested screenshot pixels per logical app unit. Values are bounded
+            to 0.1-4 and the result never exceeds the backend's native capture.
+          schema:
+            type: number
+            exclusiveMinimum: 0
+            maximum: 4
+        - name: maxPixelWidth
+          in: query
+          description: Maximum returned width in pixels.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 16384
+        - name: maxPixelHeight
+          in: query
+          description: Maximum returned height in pixels.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 16384
+        - name: maxPixels
+          in: query
+          description: Maximum returned pixel count.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 16777216
         - name: scale
           in: query
           description: >
             Scale mode. `native` returns at device pixel density; `auto`
-            returns a reasonable size for agent consumption.
+            returns a reasonable size for agent consumption. targetScale takes
+            precedence when both are supplied.
           schema:
             type: string
             enum: [native, auto]
@@ -601,6 +638,45 @@ paths:
               schema:
                 type: integer
                 minimum: 0
+            X-DevFlow-Screenshot-Pixel-Width:
+              description: Actual returned PNG width in pixels.
+              schema:
+                type: integer
+                minimum: 1
+            X-DevFlow-Screenshot-Pixel-Height:
+              description: Actual returned PNG height in pixels.
+              schema:
+                type: integer
+                minimum: 1
+            X-DevFlow-Screenshot-Logical-Width:
+              description: Captured logical width reported by the backend.
+              schema:
+                type: number
+                exclusiveMinimum: 0
+            X-DevFlow-Screenshot-Logical-Height:
+              description: Captured logical height reported by the backend.
+              schema:
+                type: number
+                exclusiveMinimum: 0
+            X-DevFlow-Screenshot-Capture-Scale:
+              description: Actual returned pixels per logical unit.
+              schema:
+                type: number
+                exclusiveMinimum: 0
+            X-DevFlow-Screenshot-Native-Scale:
+              description: Native capture pixels per logical unit before downsampling.
+              schema:
+                type: number
+                exclusiveMinimum: 0
+            X-DevFlow-Screenshot-Format:
+              description: Actual image format. Current agents return png.
+              schema:
+                type: string
+                enum: [png]
+            X-DevFlow-Screenshot-Clamped:
+              description: Whether the requested resolution was bounded.
+              schema:
+                type: boolean
           content:
             image/png:
               schema:

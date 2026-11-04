@@ -29,6 +29,29 @@ Do not commit a generated JSON copy of the OpenAPI document. If a consumer needs
 
 The DevFlow unit tests parse `openapi.yaml` with OpenAPI tooling and validate YAML/JSON syntax plus `$ref` targets across this directory.
 
+## Screenshot resolution negotiation
+
+`GET /api/v1/ui/screenshot` remains PNG-only and backward compatible. Agents that advertise
+`ui.screenshot/resolution-hints` accept a bounded `targetScale` plus pixel caps. The current
+implementation never upscales and applies negotiation after native capture, so it reduces PNG
+transfer, decode, and Inspector cache cost but does not promise lower platform capture CPU.
+Responses with `resolution-metadata` report the actual pixel and logical dimensions, native scale,
+capture scale, format, and whether the request was clamped.
+
+| Backend | Negotiated behavior |
+|---|---|
+| MAUI Android | Native-density capture followed by bounded downsampling. |
+| MAUI iOS / Mac Catalyst | Native `UIScreen.Scale` composite followed by bounded downsampling. |
+| MAUI macOS AppKit | Native ScreenCaptureKit/Quartz/view capture followed by bounded downsampling. |
+| MAUI Windows / WinUI | Native rasterized or composited capture followed by bounded downsampling. |
+| MAUI WPF | DPI-aware capture followed by bounded downsampling. |
+| MAUI GTK | Does not advertise resolution hints; optional hints are ignored because GTK snapshot scale cannot yet be reported reliably. |
+| Native Android / UIKit / AppKit | Native-density capture followed by bounded downsampling. |
+
+Older agents ignore the new query parameters. New clients also send the requested pixel width
+through legacy `maxWidth`, allowing older agents to honor the most useful bound without
+understanding the new capability.
+
 ## Existing WebView contract
 
 `GET /api/v1/webview/contexts` returns `{ "webviews": [...] }` for registered CDP

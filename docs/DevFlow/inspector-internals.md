@@ -91,7 +91,10 @@ canonical descriptor under `frame`; the existing flat fields remain compatibilit
 | `logicalWidth`, `logicalHeight` | Captured app-root size in device-independent units. |
 | `pixelWidth`, `pixelHeight` | PNG dimensions from its IHDR chunk. |
 | `rootOffsetX`, `rootOffsetY` | Captured root origin in window-logical coordinates. |
-| `captureScale` | Nominal PNG pixels per logical unit; exact conversion uses the per-axis dimension ratios. |
+| `captureScale` | Nominal PNG pixels per logical unit. Exact conversions use the per-axis dimension ratios. |
+| `nativeScale` | Backend native pixels per logical unit before negotiated downsampling, when known. |
+| `requestedCaptureScale` | Stable scale bucket requested for the frame; part of cache reuse, not a new identity. |
+| `resolutionClamped` | Whether backend/native limits or pixel budgets bounded the request. |
 | `createdAt` | UTC time when the complete tree and screenshot frame was created. |
 
 `frameId` remains the only cache lookup key. `frameRevision` provides ordering, and an internal
@@ -131,6 +134,13 @@ Inspector actions send `appLogical` coordinates plus optional correlation contai
 `source`, `streamId`, `frameId`, `frameRevision`, and `coordinateSpace`. Older callers may omit
 correlation and retain window-logical behavior. The Inspector proxy validates and converts
 correlated coordinates; direct `/api/v1` agent coordinate calls must already use `windowLogical`.
+
+Fit and 1:1 are transform values, not separate coordinate contracts. Future zoom/pan can supply
+its scale and translation to the same helpers without changing frame identity or action payloads.
+
+Resolution-only replacement frames remain coordinate-equivalent when the recursive element
+geometry, logical viewport, root offset, and window identity are unchanged; PNG pixel dimensions
+do not create a second coordinate contract.
 
 Elements the Agent reports as displayed can still lie wholly outside the frame (a closed Shell
 flyout is realized left of the window). The renderer marks those overlays `data-offscreen="true"`
