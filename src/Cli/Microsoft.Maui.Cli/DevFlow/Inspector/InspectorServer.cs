@@ -1086,6 +1086,7 @@ public sealed class InspectorServer : IDisposable
                     "/inspector-api.js" => HandleEmbeddedFile("inspector-api.js", "application/javascript"),
                     "/inspector-dialog.js" => HandleEmbeddedFile("inspector-dialog.js", "application/javascript"),
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
+                    "/inspector-presentation.js" => HandleEmbeddedFile("inspector-presentation.js", "application/javascript"),
                     "/inspector-properties.js" => HandleEmbeddedFile("inspector-properties.js", "application/javascript"),
                     "/inspector-layout.js" => HandleEmbeddedFile("inspector-layout.js", "application/javascript"),
                     "/inspector-resolution.js" => HandleEmbeddedFile("inspector-resolution.js", "application/javascript"),
@@ -1144,7 +1145,7 @@ public sealed class InspectorServer : IDisposable
         catch (Exception ex) when (IsAgentUnavailableException(ex))
         {
             return (503, "application/json", Encoding.UTF8.GetBytes(
-                "{\"ok\":false,\"error\":\"The DevFlow agent is unavailable.\"}"));
+                "{\"ok\":false,\"reason\":\"agent-unavailable\",\"error\":\"The DevFlow agent is unavailable.\"}"));
         }
         catch (Exception ex)
         {
@@ -1268,6 +1269,7 @@ public sealed class InspectorServer : IDisposable
                 JsonSerializer.SerializeToUtf8Bytes(new
                 {
                     ok = false,
+                    reason = "agent-unavailable",
                     error = "The DevFlow agent is unavailable.",
                     retryable = true
                 }));
@@ -1281,6 +1283,7 @@ public sealed class InspectorServer : IDisposable
                 JsonSerializer.SerializeToUtf8Bytes(new
                 {
                     ok = false,
+                    reason = "capture-failed",
                     error = "Unable to capture the current app state.",
                     retryable = true
                 }));
