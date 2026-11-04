@@ -35,6 +35,26 @@
                         <Setter Property="IsVisible" Value="False" />
                     </DataTrigger>
                 </VerticalStackLayout.Triggers>
+                <VerticalStackLayout Spacing="4" IsVisible="{Binding HasModels}"
+                                     AutomationId="ChatModelOptions">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <Label Text="MODEL" Style="{StaticResource SectionHeading}" VerticalOptions="Center" />
+                        <local:InfoTip Grid.Column="1"
+                                       Text="Select the model for the next send. Readiness checks and downloads use the same selection." />
+                    </Grid>
+                    <VerticalStackLayout Spacing="4"
+                                         RadioButtonGroup.GroupName="ChatModel"
+                                         RadioButtonGroup.SelectedValue="{Binding SelectedModelId, Mode=TwoWay}"
+                                         BindableLayout.ItemsSource="{Binding Models}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="local:ChatModelOption">
+                                <RadioButton HorizontalOptions="Fill"
+                                             Content="{Binding DisplayName}" Value="{Binding Id}"
+                                             AutomationId="{Binding AutomationId}" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
                 <BoxView HeightRequest="1"
                          Color="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}" />
                 <Label Text="RESPONSE" Style="{StaticResource SectionHeading}" />

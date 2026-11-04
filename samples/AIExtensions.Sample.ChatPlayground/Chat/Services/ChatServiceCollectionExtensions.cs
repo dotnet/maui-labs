@@ -25,6 +25,7 @@ internal static class ChatServiceCollectionExtensions
         services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatSessionService>());
         services.AddSingleton<SettingsPaneViewModel>();
         services.AddSingleton<ChatAreaViewModel>();
+        services.AddSingleton<ModelReadinessViewModel>();
         services.AddSingleton<ChatViewModel>();
         services.AddTransient<Page, ChatPage>();
 
@@ -58,7 +59,9 @@ internal static class ChatServiceCollectionExtensions
             .UseDescriptor(new ChatClientDescriptor(
                 "windows-ai-chat",
                 "Windows AI",
-                "Windows AI checks model readiness on first use. Tool calling and image input are unavailable."))
+                "Check model readiness above the composer and prepare the model when needed. Tool calling and image input are unavailable.",
+                GetModelStatusAsync: (_, cancellationToken) => WindowsAIChatClient.GetModelStatusAsync(cancellationToken),
+                PrepareModelAsync: (_, _, cancellationToken) => WindowsAIChatClient.EnsureReadyAsync(cancellationToken)))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
@@ -74,9 +77,10 @@ internal static class ChatServiceCollectionExtensions
             .UseDescriptor(new ChatClientDescriptor(
                 "apple-intelligence-chat",
                 "Apple Intelligence",
-                "Apple Intelligence is supported on this OS. The first request confirms that the local model is enabled and available.",
+                "Model readiness is checked above the composer. Apple manages model preparation in system settings.",
                 SupportsImageInput: OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27),
-                SupportsToolCalling: true))
+                SupportsToolCalling: true,
+                GetModelStatusAsync: (_, cancellationToken) => AppleIntelligenceChatClient.GetModelStatusAsync(cancellationToken)))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
@@ -93,16 +97,43 @@ internal static class ChatServiceCollectionExtensions
                 "gemini-nano-chat",
                 "Gemini Nano",
                 "Gemini Nano includes the supplied conversation in each text/image request. " +
-                    "No tools or structured JSON. System instructions require Nano V3+. Requests never download models; " +
-                    "start and monitor GeminiNanoChatClient.DownloadModelAsync explicitly before chatting.",
+                    "No tools or structured JSON. System instructions require Nano V3+. " +
+                    "Use Download above the composer to prepare the model; requests never download automatically.",
                 SupportsImageInput: true,
                 SupportsReasoningSummary: false,
                 SupportsImageGeneration: false,
                 SupportsToolCalling: false,
-                SupportsStructuredOutput: false))
+                SupportsStructuredOutput: false,
+                GetModelStatusAsync: GeminiNanoChatClient.GetModelStatusAsync,
+                PrepareModelAsync: DownloadGeminiModelAsync,
+                PreparationActionLabel: "Download",
+                Models:
+                [
+                    new("gemini-nano", "Default (stable/full)"),
+                    new("gemini-nano-fast", "Stable fast"),
+                    new("gemini-nano-full", "Stable full"),
+                    new("gemini-nano-preview-fast", "Preview fast"),
+                    new("gemini-nano-preview-full", "Preview full"),
+                ]))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
+
+    [SupportedOSPlatform("android26.0")]
+    private static async Task DownloadGeminiModelAsync(
+        string? modelId, IProgress<ModelPreparationProgress> progress, CancellationToken cancellationToken)
+    {
+        long? totalBytes = null;
+        long? downloadedBytes = null;
+        await foreach (var update in GeminiNanoChatClient.DownloadModelAsync(modelId, cancellationToken))
+        {
+            if (update.BytesToDownload is { } total)
+                totalBytes = total;
+            if (update.BytesDownloaded is { } downloaded)
+                downloadedBytes = downloaded;
+            progress.Report(new ModelPreparationProgress(downloadedBytes, totalBytes));
+        }
+    }
 #endif
 
     private static IChatClient CreateAzureChatClient(IServiceProvider serviceProvider, AISettings settings)

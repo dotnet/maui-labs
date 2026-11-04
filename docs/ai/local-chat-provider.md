@@ -88,17 +88,15 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 **Essentials.AI rule**
 
 - Expose provider-specific helpers for native availability and capabilities when the platform supplies them.
-- Return a shared status shape containing availability, an optional provider-native reason, and effective MEAI-facing capabilities.
+- Return a shared status shape containing availability and effective MEAI-facing capabilities.
 - `ChatModelStatus` is a sealed immutable class with reference identity; compare its properties explicitly when comparing snapshots.
 - `ChatModelAvailability` contains `Available`, `NotReady`, `NotSupported`,
-  `Disabled`, `RequirementsNotMet`, and `Unknown`.
+  `Disabled`, `RequirementsNotMet`, `Unknown`, `Unavailable`, and `Downloading`.
 - `ChatModelCapability` describes effective MEAI-facing text, streaming, image
   input, tool calling, structured output, token usage, and reasoning support.
-- `UnavailableReason` is always `null` for `Available`; a supplied reason is
-  provider-native and nonblank.
 - `Capabilities` is defensively copied and read-only. `null` means unknown or
   not advertised; an empty collection means known none.
-- Map native states to the most appropriate shared availability value without losing the provider reason.
+- Map native states to the most appropriate shared availability value.
 - Treat reported capabilities as immutable, best-effort guidance; generation remains authoritative.
 - Refresh status rather than caching it.
 - Generation must recheck availability and fail clearly when the model is not ready; it must never initiate model setup or download.
@@ -109,13 +107,14 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 **Essentials.AI implementation**
 
 - **Apple:** expose current status and effective capabilities, with no preparation API because model assets are OS-managed.
-- **Windows:** map `AIFeatureReadyState` to the shared status, preserve native
-  reasons, and advertise Text, Streaming, and StructuredOutput. `EnsureReadyAsync`
+- **Windows:** map `AIFeatureReadyState` to the shared status
+  and advertise Text, Streaming, and StructuredOutput. `EnsureReadyAsync`
   is the only setup/download path; generation rechecks readiness and never
   prepares implicitly.
 - **Android:** query ML Kit status on every status/generation path. Available
-  maps to `Available`; downloadable/downloading map to `NotReady`; ambiguous
-  unavailable/unknown states map to `Unknown` with the native reason. Advertise
+  maps to `Available`; downloadable maps to `NotReady`; downloading maps to
+  `Downloading`; unavailable maps to `Unavailable`; unrecognized values map to
+  `Unknown`. Advertise
   Text, Streaming, ImageInput, and input TokenUsage; add Reasoning only after
   the runtime thinking-capability check. `PrepareModelAsync` explicitly awaits
   ML Kit download/status `Flow` completion and is never called by generation.

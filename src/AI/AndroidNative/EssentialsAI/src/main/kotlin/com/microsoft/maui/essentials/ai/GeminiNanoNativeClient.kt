@@ -10,6 +10,10 @@ import com.google.mlkit.genai.prompt.Feature
 import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.GenerateContentResponse
 import com.google.mlkit.genai.prompt.Generation
+import com.google.mlkit.genai.prompt.GenerationConfig
+import com.google.mlkit.genai.prompt.ModelConfig
+import com.google.mlkit.genai.prompt.ModelPreference
+import com.google.mlkit.genai.prompt.ModelReleaseStage
 import com.google.mlkit.genai.prompt.ImagePart
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
@@ -23,14 +27,36 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicBoolean
 
-fun checkStatus(callback: NativeCheckStatusCallback): NativeCancellation {
+internal fun modelConfiguration(modelId: String?): GenerationConfig {
+    val (stage, modelPreference) = when (modelId) {
+        null, "gemini-nano", "gemini-nano-full" -> ModelReleaseStage.STABLE to ModelPreference.FULL
+        "gemini-nano-fast" -> ModelReleaseStage.STABLE to ModelPreference.FAST
+        "gemini-nano-preview-full" -> ModelReleaseStage.PREVIEW to ModelPreference.FULL
+        "gemini-nano-preview-fast" -> ModelReleaseStage.PREVIEW to ModelPreference.FAST
+        else -> throw IllegalArgumentException(
+            "Unsupported Gemini Nano model ID '$modelId'. Use gemini-nano, gemini-nano-fast, " +
+                "gemini-nano-full, gemini-nano-preview-fast, or gemini-nano-preview-full."
+        )
+    }
+    return GenerationConfig.Builder().apply {
+        modelConfig = ModelConfig.Builder().apply {
+            releaseStage = stage
+            preference = modelPreference
+        }.build()
+    }.build()
+}
+
+fun checkStatus(
+    modelId: String?,
+    callback: NativeCheckStatusCallback,
+): NativeCancellation {
     val terminated = AtomicBoolean()
     fun fail(cause: Throwable) {
         if (terminated.compareAndSet(false, true)) callback.onError(toNativeError(cause))
     }
     val job = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
         val status = try {
-            val model = Generation.getClient()
+            val model = Generation.getClient(modelConfiguration(modelId))
             try {
                 ensureActive()
                 val featureStatus = model.checkStatus()
@@ -38,6 +64,7 @@ fun checkStatus(callback: NativeCheckStatusCallback): NativeCancellation {
                     featureStatus,
                     featureStatus == FeatureStatus.AVAILABLE &&
                         Feature.THINKING_MODE in model.getAvailableFeatures(),
+                    model.getBaseModelName(),
                 )
             } finally {
                 model.close()
@@ -52,7 +79,10 @@ fun checkStatus(callback: NativeCheckStatusCallback): NativeCancellation {
     return NativeCancellation(job)
 }
 
-fun downloadModel(callback: NativeDownloadCallback): NativeCancellation {
+fun downloadModel(
+    modelId: String?,
+    callback: NativeDownloadCallback,
+): NativeCancellation {
     val terminated = AtomicBoolean()
     fun fail(cause: Throwable) {
         if (terminated.compareAndSet(false, true)) callback.onError(toNativeError(cause))
@@ -60,7 +90,7 @@ fun downloadModel(callback: NativeDownloadCallback): NativeCancellation {
     val job = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
         var completed = false
         try {
-            val model = Generation.getClient()
+            val model = Generation.getClient(modelConfiguration(modelId))
             try {
                 ensureActive()
                 model.download().collect { update ->
@@ -133,7 +163,7 @@ class GeminiNanoNativeClient {
         val job = operationScope.launch {
             var stream: NativeChatStream? = null
             val response = try {
-                val model = Generation.getClient()
+                val model = Generation.getClient(modelConfiguration(request.options.modelId))
                 val generatedResponse = try {
                     ensureActive()
                     val featureStatus = model.checkStatus()

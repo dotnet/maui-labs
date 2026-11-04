@@ -320,46 +320,39 @@ public class AppleIntelligenceChatClientConformanceTests
 		Assert.Equal(text ?? "", Assert.IsType<TextContentNative>(Assert.Single(native[^1].Contents)).Text);
 	}
 
-	public static TheoryData<string, ChatModelAvailability, string?> ModelAvailabilityCases => new()
+	public static TheoryData<string, ChatModelAvailability> ModelAvailabilityCases => new()
 	{
 		{
 			AppleIntelligenceModelAvailabilityNative.Available,
-			ChatModelAvailability.Available,
-			null
+			ChatModelAvailability.Available
 		},
 		{
 			AppleIntelligenceModelAvailabilityNative.DeviceNotEligible,
-			ChatModelAvailability.NotSupported,
-			AppleIntelligenceModelAvailabilityNative.DeviceNotEligible
+			ChatModelAvailability.NotSupported
 		},
 		{
 			AppleIntelligenceModelAvailabilityNative.AppleIntelligenceNotEnabled,
-			ChatModelAvailability.Disabled,
-			AppleIntelligenceModelAvailabilityNative.AppleIntelligenceNotEnabled
+			ChatModelAvailability.Disabled
 		},
 		{
 			AppleIntelligenceModelAvailabilityNative.ModelNotReady,
-			ChatModelAvailability.NotReady,
-			AppleIntelligenceModelAvailabilityNative.ModelNotReady
+			ChatModelAvailability.NotReady
 		},
 		{
 			"futureNativeReason",
-			ChatModelAvailability.Unknown,
-			"futureNativeReason"
+			ChatModelAvailability.Unknown
 		},
 	};
 
-	// Apple's native unavailable reasons are preserved independently of its effective MEAI capabilities.
+	// Apple's native availability maps independently of its effective MEAI capabilities.
 	[Theory]
 	[MemberData(nameof(ModelAvailabilityCases))]
-	public void ModelStatus_MapsAndPreservesNativeReason(
+	public void ModelStatus_MapsNativeAvailability(
 		string providerCode,
-		ChatModelAvailability expectedAvailability,
-		string? expectedReason)
+		ChatModelAvailability expectedAvailability)
 	{
 		var status = AppleIntelligenceChatClient.CreateModelStatus(providerCode, null);
 		Assert.Equal(expectedAvailability, status.Availability);
-		Assert.Equal(expectedReason, status.UnavailableReason);
 		Assert.NotNull(status.Capabilities);
 		Assert.Contains(ChatModelCapability.Text, status.Capabilities);
 		Assert.Contains(ChatModelCapability.Streaming, status.Capabilities);
@@ -424,7 +417,6 @@ public class AppleIntelligenceChatClientConformanceTests
 				? (AppleIntelligenceModelCapabilitiesNative?)capabilities.UInt64Value
 				: null);
 		Assert.Equal(expected.Availability, second.Availability);
-		Assert.Equal(expected.UnavailableReason, second.UnavailableReason);
 		Assert.Equal(expected.Capabilities, second.Capabilities);
 	}
 

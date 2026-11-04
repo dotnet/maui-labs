@@ -17,6 +17,8 @@ namespace Microsoft.Maui.Essentials.AI;
 /// included in the prompt by the Kotlin bridge, with in-memory images and native
 /// system instructions. Tool registration and structured output are not supported.
 /// Model download is explicit and observable; generation never downloads or falls back to a cloud provider.
+/// ChatOptions.ModelId accepts gemini-nano, gemini-nano-fast, gemini-nano-full,
+/// gemini-nano-preview-fast, or gemini-nano-preview-full. The default is stable/full.
 /// </remarks>
 [SupportedOSPlatform("android26.0")]
 public sealed partial class GeminiNanoChatClient : IChatClient
@@ -33,11 +35,17 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 	/// <summary>Reads current ML Kit availability and effective capabilities without downloading model assets.</summary>
 	/// <param name="cancellationToken">Cancels the native status request.</param>
 	/// <returns>A fresh advisory snapshot; generation rechecks readiness.</returns>
-	public static async Task<ChatModelStatus> GetModelStatusAsync(CancellationToken cancellationToken = default)
+	public static Task<ChatModelStatus> GetModelStatusAsync(CancellationToken cancellationToken = default) =>
+		GetModelStatusAsync(DefaultModelId, cancellationToken);
+
+	/// <summary>Checks a model profile without downloading its assets.</summary>
+	/// <param name="modelId">A Gemini Nano model ID from the profiles supported by this client. Null uses gemini-nano.</param>
+	/// <param name="cancellationToken">Cancels the native status request.</param>
+	public static async Task<ChatModelStatus> GetModelStatusAsync(string? modelId, CancellationToken cancellationToken = default)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		using var callback = new CheckStatusCallback(cancellationToken);
-		using var cancellation = AndroidNative.GeminiNanoNative.CheckStatus(callback);
+		using var cancellation = AndroidNative.GeminiNanoNative.CheckStatus(modelId, callback);
 		using var registration = cancellationToken.Register(() => cancellation.Cancel());
 		var status = await callback.Response.ConfigureAwait(false);
 		return CreateModelStatus(status.Status, status.ThinkingAvailable);
@@ -45,22 +53,35 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 
 	/// <summary>
 	/// Downloads Gemini Nano model assets and waits for ML Kit's download Flow to complete.
-	/// Check <see cref="GetModelStatusAsync"/> before starting and again after completion.
+	/// Check <see cref="GetModelStatusAsync(CancellationToken)"/> before starting and again after completion.
 	/// </summary>
 	/// <param name="cancellationToken">Cancels this download Flow collection.</param>
-	public static async Task PrepareModelAsync(CancellationToken cancellationToken = default)
+	public static Task PrepareModelAsync(CancellationToken cancellationToken = default) =>
+		PrepareModelAsync(DefaultModelId, cancellationToken);
+
+	/// <summary>Downloads the selected model profile and waits for ML Kit's download Flow to complete.</summary>
+	/// <param name="modelId">A Gemini Nano model ID from the profiles supported by this client. Null uses gemini-nano.</param>
+	/// <param name="cancellationToken">Cancels this download Flow collection.</param>
+	public static async Task PrepareModelAsync(string? modelId, CancellationToken cancellationToken = default)
 	{
-		await foreach (var _ in DownloadModelAsync(cancellationToken).ConfigureAwait(false))
+		await foreach (var _ in DownloadModelAsync(modelId, cancellationToken).ConfigureAwait(false))
 		{
 		}
 	}
 
 	/// <summary>
 	/// Downloads Gemini Nano model assets and streams ML Kit's native download progress.
-	/// Check <see cref="GetModelStatusAsync"/> before starting and again after completion.
+	/// Check <see cref="GetModelStatusAsync(CancellationToken)"/> before starting and again after completion.
 	/// </summary>
 	/// <param name="cancellationToken">Cancels this download Flow collection.</param>
+	public static IAsyncEnumerable<GeminiNanoDownloadUpdate> DownloadModelAsync(CancellationToken cancellationToken = default) =>
+		DownloadModelAsync(DefaultModelId, cancellationToken);
+
+	/// <summary>Downloads the selected model profile and streams ML Kit's native progress.</summary>
+	/// <param name="modelId">A Gemini Nano model ID from the profiles supported by this client. Null uses gemini-nano.</param>
+	/// <param name="cancellationToken">Cancels this download Flow collection.</param>
 	public static async IAsyncEnumerable<GeminiNanoDownloadUpdate> DownloadModelAsync(
+		string? modelId,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
@@ -70,7 +91,7 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 			SingleWriter = true,
 		});
 		using var callback = new DownloadCallback(channel.Writer, cancellationToken);
-		using var cancellation = AndroidNative.GeminiNanoNative.DownloadModel(callback);
+		using var cancellation = AndroidNative.GeminiNanoNative.DownloadModel(modelId, callback);
 		try
 		{
 			using var registration = cancellationToken.Register(() => cancellation.Cancel());
@@ -87,11 +108,12 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 	internal static ChatModelStatus CreateModelStatus(int nativeStatus, bool thinkingAvailable)
 	{
 		// ML Kit beta4 FeatureStatus: UNAVAILABLE=0, DOWNLOADABLE=1, DOWNLOADING=2, AVAILABLE=3.
-		// UNAVAILABLE conflates unsupported devices and missing AICore configuration.
 		var availability = nativeStatus switch
 		{
 			3 => ChatModelAvailability.Available,
-			1 or 2 => ChatModelAvailability.NotReady,
+			1 => ChatModelAvailability.NotReady,
+			2 => ChatModelAvailability.Downloading,
+			0 => ChatModelAvailability.Unavailable,
 			_ => ChatModelAvailability.Unknown,
 		};
 		List<ChatModelCapability> capabilities =
@@ -101,17 +123,8 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 		];
 		if (thinkingAvailable)
 			capabilities.Add(ChatModelCapability.Reasoning);
-		return new(availability, availability == ChatModelAvailability.Available
-			? null : GetUnavailableReason(nativeStatus), capabilities);
+		return new(availability, capabilities);
 	}
-
-	private static string GetUnavailableReason(int nativeStatus) => nativeStatus switch
-	{
-		0 => "UNAVAILABLE (0): Gemini Nano is unsupported or AICore configuration is not ready.",
-		1 => "DOWNLOADABLE (1)",
-		2 => "DOWNLOADING (2)",
-		_ => $"Unknown ML Kit FeatureStatus ({nativeStatus})",
-	};
 
 	/// <inheritdoc />
 	public async Task<ChatResponse> GetResponseAsync(
@@ -246,7 +259,8 @@ public sealed partial class GeminiNanoChatClient : IChatClient
 			options?.TopK is { } topK ? Java.Lang.Integer.ValueOf(topK) : null,
 			options?.Seed is { } seed ? Java.Lang.Integer.ValueOf(checked((int)seed)) : null,
 			options?.MaxOutputTokens is { } maxOutputTokens ? Java.Lang.Integer.ValueOf(maxOutputTokens) : null,
-			enableThinking: options?.Reasoning?.Output == ReasoningOutput.Full);
+			enableThinking: options?.Reasoning?.Output == ReasoningOutput.Full,
+			modelId: options?.ModelId);
 
 	private static AndroidNative.NativeChatMessage ToNative(ChatMessage message)
 	{

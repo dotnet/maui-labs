@@ -56,7 +56,8 @@ input does not imply image-generation support.
 Each tab's **Logs** button toggles a local diagnostics sidebar; capture continues
 while hidden. It starts collapsed. In narrow windows, tap outside to dismiss it.
 
-Logs and completed spans are grouped by trace, including MEAI/Apple tool events.
+App and provider logs and completed spans are grouped by trace, including MEAI
+request logs and Apple tool events.
 Apple callbacks retain the request's trace/span. Chat and embeddings emit spans;
 the pinned MEAI version provides image logging only. Model/usage data come from
 the provider. Payload logging and sensitive telemetry are disabled, but exceptions
@@ -96,15 +97,25 @@ for hardware, capability, packaging, and access requirements.
 
 The Android app requires API 26+ and supported AICore hardware/configuration for
 Gemini Nano. It supports text/image chat, not tools or structured JSON.
-The first request never downloads assets: explicitly enumerate
-`GeminiNanoChatClient.DownloadModelAsync` after a download decision and query
-status again before chatting. There is no download UI or automatic cloud fallback.
+Use **Download** in the readiness banner to prepare the model. Chat requests never
+download assets or fall back to a cloud provider.
 See the [Android guide](../../docs/ai/gemini-nano-android.md).
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
   -f net10.0-android --device <device-id>
 ```
+
+### Model readiness
+
+Choose a Gemini Nano model in the sidebar for the next send. The selection also
+applies to readiness checks and downloads; it does not clear the conversation.
+
+The banner disables Send until the selected on-device model is ready. Android
+offers **Download**, Windows offers **Prepare**, and system-managed or ongoing
+preparation offers **Check again**. Downloads show byte progress and transfer rate
+when available. **Cancel** stops this app's request, but a shared system download
+may continue. Status changes and operation errors appear in **Logs**.
 
 ## Configure Azure OpenAI
 

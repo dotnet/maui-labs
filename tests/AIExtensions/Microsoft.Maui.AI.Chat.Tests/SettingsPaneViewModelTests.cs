@@ -73,6 +73,43 @@ public sealed class SettingsPaneViewModelTests
     }
 
     [Fact]
+    public void ModelSelection_OverridesEachRequestWithoutReplacingTheClient()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("models", "Models", "Ready", Models:
+            [
+                new("gemini-nano", "Default"),
+                new("gemini-nano-preview-fast", "Preview fast"),
+            ]));
+        using var other = CreateClient("Other", isReplay: false);
+        var settings = new SettingsPaneViewModel([client, other]);
+
+        Assert.True(settings.HasModels);
+        Assert.Equal("gemini-nano", settings.SelectedModelId);
+        Assert.Equal("ChatModel-gemini-nano-preview-fast", settings.Models[1].AutomationId);
+        var originalOptions = settings.CreateChatOptions([]);
+        Assert.Equal("gemini-nano", originalOptions.ModelId);
+
+        settings.SelectedModelId = "gemini-nano-preview-fast";
+
+        Assert.Same(client, settings.SelectedClient);
+        Assert.Equal("gemini-nano-preview-fast", settings.CreateChatOptions([]).ModelId);
+        Assert.Equal("gemini-nano", originalOptions.ModelId);
+
+        settings.IsBusy = true;
+        Assert.False(settings.CanEditOptions);
+        settings.IsBusy = false;
+        settings.SelectedClient = other;
+
+        Assert.False(settings.HasModels);
+        Assert.Null(settings.RequestModelId);
+        Assert.Null(settings.CreateChatOptions([]).ModelId);
+
+        settings.SelectedClient = client;
+        Assert.Equal("gemini-nano", settings.SelectedModelId);
+    }
+
+    [Fact]
     public void CreateChatOptions_UsesBuiltInToolModesAndRejectsUnsupportedModes()
     {
         using var client = CreateClient("Live", isReplay: false);

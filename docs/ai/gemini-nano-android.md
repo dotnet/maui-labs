@@ -69,21 +69,38 @@ and Tool accepts function results.
 ML Kit model directly for each request. Independent requests own independent
 models; closing the client cancels and joins outstanding work.
 
-`NativeChatStream` is the horizontal concurrency boundary: it implements ML
-Kit's streaming callback, serializes text/thought deltas, drains admitted
-progress before terminal completion releases the managed JNI callback, and
-reconciles the returned final text/thoughts. Equal final content emits nothing,
-an extension emits only its suffix, and divergence faults the stream. Trailing
-whitespace is held until more content or completion because ML Kit can omit or
-change it in the final candidate; internal whitespace is preserved, and missing
-or divergent non-whitespace still faults. The C# adapter converts events to
-`ChatResponseUpdate` values.
+`NativeChatStream` delivers ML Kit's text and reasoning updates in order and
+waits for queued updates before completing the managed callback. The C# adapter
+converts these updates to `ChatResponseUpdate` values.
+
+Trailing whitespace is buffered until more content or the final response arrives,
+so extra newlines omitted by ML Kit's final response are not displayed.
 
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
 Unavailable IDs, timestamps, and other usage counts remain null.
 A candidate without text is rejected explicitly; the text-only adapter does not
 silently convert a native function-call-only candidate to an empty answer.
+
+## Model selection
+
+`ChatOptions.ModelId` selects a profile for one request without changing the
+client registered in DI:
+
+| Model ID | Release stage | Preference |
+|---|---|---|
+| `gemini-nano` or null | Stable | Full (default) |
+| `gemini-nano-full` | Stable | Full |
+| `gemini-nano-fast` | Stable | Fast |
+| `gemini-nano-preview-full` | Preview | Full |
+| `gemini-nano-preview-fast` | Preview | Fast |
+
+Use the same ID with `GetModelStatusAsync(modelId, cancellationToken)`,
+`PrepareModelAsync(modelId, cancellationToken)`, and
+`DownloadModelAsync(modelId, cancellationToken)`. Unknown IDs are rejected.
+Responses report the actual SDK model name, such as `nano-v4-fast`, rather than
+the selection alias. Preview support depends on the device and AICore enrollment.
+Status queries propagate errors if ML Kit cannot resolve the selected model.
 
 ## Explicit download
 
@@ -103,24 +120,23 @@ if (status.Availability == ChatModelAvailability.NotReady)
 {
     await foreach (var update in GeminiNanoChatClient.DownloadModelAsync(cancellationToken))
         Console.WriteLine($"{update.State}: {update.BytesDownloaded ?? update.BytesToDownload}");
+
+    status = await GeminiNanoChatClient.GetModelStatusAsync(cancellationToken);
 }
 ```
 
-`DownloadModelAsync` directly collects ML Kit's cold download Flow, which starts
-the download and reports `DownloadStarted`, `DownloadProgress`, and
-`DownloadCompleted`. `DownloadFailed` becomes the native managed exception.
-Stopping enumeration cancels this call's Flow collection; it does not promise to
-cancel an AICore download shared with other apps.
+`DownloadModelAsync` requests a download through ML Kit and forwards its start,
+progress, and completion notifications as `GeminiNanoDownloadUpdate` values.
+Download failures throw exceptions. Stopping enumeration cancels this
+subscription, but may not stop an AICore download shared with other apps.
 
-The client does not poll readiness or join a download already reported as
-DOWNLOADING. Callers own that policy: inspect `GetModelStatusAsync`, enumerate a
-download only when appropriate, and query status again when deciding whether to
-enable generation. Status is never cached. DOWNLOADABLE/DOWNLOADING map to
-NotReady. ML Kit's UNAVAILABLE means either unsupported hardware **or** missing
-AICore configuration; without more evidence it maps to Unknown, preserving that
-native reason. Only a successful runtime `Feature.THINKING_MODE` availability check
-advertises Reasoning. Generation rejects non-AVAILABLE states without ever
-starting a download.
+Always check `GetModelStatusAsync` after preparation before enabling generation.
+Download completion does not guarantee readiness or recovery of earlier byte
+progress. Status checks never start a download.
+
+DOWNLOADABLE maps to `NotReady`, DOWNLOADING to `Downloading`, and UNAVAILABLE to
+`Unavailable`. Unrecognized status codes map to `Unknown`. Reasoning is advertised
+only when `Feature.THINKING_MODE` is present in `getAvailableFeatures()`.
 
 ## Android minimum and model availability
 

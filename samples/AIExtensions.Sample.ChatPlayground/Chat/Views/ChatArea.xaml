@@ -13,12 +13,16 @@
                             AutomationId="ChatMessages">
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="local:ChatMessageViewModel">
-                        <Grid Padding="6,6">
+                        <!-- Keep recycled rows full-width; only the bubble should size to its content. -->
+                        <Grid Padding="6,6"
+                              WidthRequest="{Binding Width, Source={x:Reference MessagesView}, x:DataType=CollectionView}"
+                              AutomationId="ChatMessageRow">
                                 <local:MessageBubble Padding="12"
                                                      MaximumWidthRequest="640"
                                                      Stroke="{AppThemeBinding Light={StaticResource BorderColor}, Dark={StaticResource BorderColorDark}}"
                                                      StrokeShape="RoundRectangle 12"
                                                      HorizontalOptions="Start"
+                                                     AutomationId="ChatMessageBubble"
                                                      BackgroundColor="{AppThemeBinding Light={StaticResource AssistantBubble}, Dark={StaticResource AssistantBubbleDark}}">
                                     <Border.Triggers>
                                         <DataTrigger TargetType="Border" Binding="{Binding IsUser}" Value="True">
@@ -42,12 +46,14 @@
                                     </Border.Triggers>
                                     <VerticalStackLayout Spacing="6">
                                         <Label Text="{Binding Label}" FontAttributes="Bold" FontSize="11"
-                                               Style="{StaticResource MutedLabel}" />
+                                               Style="{StaticResource MutedLabel}"
+                                               AutomationId="ChatMessageRole" />
                                         <Label Text="{Binding ModelId, StringFormat='Model: {0}'}"
                                                IsVisible="{Binding HasModelId}"
                                                Style="{StaticResource MutedLabel}"
                                                AutomationId="MessageModelId" />
-                                        <Label Text="{Binding Text}" LineBreakMode="WordWrap" />
+                                        <Label Text="{Binding Text}" LineBreakMode="WordWrap"
+                                               AutomationId="ChatMessageText" />
                                         <Image Source="{Binding ImageSource}"
                                                IsVisible="{Binding HasImage}"
                                                WidthRequest="220"

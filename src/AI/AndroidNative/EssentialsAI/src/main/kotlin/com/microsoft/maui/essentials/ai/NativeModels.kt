@@ -23,6 +23,7 @@ class NativeChatOptions(
     val seed: Int?,
     val maxOutputTokens: Int?,
     val enableThinking: Boolean,
+    val modelId: String?,
 )
 
 class NativeChatRequest(
@@ -47,6 +48,7 @@ class NativeChatError(
 class NativeModelStatus(
     val status: Int,
     val thinkingAvailable: Boolean,
+    val modelName: String?,
 )
 
 interface NativeCheckStatusCallback {

@@ -96,7 +96,6 @@ public sealed partial class AppleIntelligenceChatClient : IChatClient
 
 		return new(
 			availability,
-			availability is ChatModelAvailability.Available ? null : nativeAvailability,
 			capabilities);
 	}
 

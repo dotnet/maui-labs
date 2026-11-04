@@ -57,7 +57,7 @@ if (OperatingSystem.IsIOSVersionAtLeast(26) ||
 ```csharp
 var status = await AppleIntelligenceChatClient.GetModelStatusAsync();
 if (status.Availability != ChatModelAvailability.Available)
-    Console.WriteLine(status.UnavailableReason);
+    Console.WriteLine(status.Availability);
 
 var supportsImages = status.Capabilities?.Contains(ChatModelCapability.ImageInput) == true;
 ```

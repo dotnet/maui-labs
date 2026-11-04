@@ -57,9 +57,42 @@
                 <local:ChatArea BindingContext="{Binding Chat}" />
             </local:PlaygroundPageLayout.MainContent>
             <local:PlaygroundPageLayout.InputContent>
-                <Grid>
-                    <local:ChatComposer BindingContext="{Binding Chat}" />
-                    <local:ReplayControls IsVisible="{Binding Chat.IsReplayClient}" />
+                <Grid RowDefinitions="Auto,Auto" RowSpacing="8">
+                    <Border BindingContext="{Binding Readiness}" x:DataType="local:ModelReadinessViewModel"
+                            IsVisible="{Binding IsVisible}" Padding="12,8" StrokeShape="RoundRectangle 12"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource ModelWarningBackground}, Dark={StaticResource ModelWarningBackgroundDark}}"
+                            Stroke="{AppThemeBinding Light={StaticResource ModelWarningText}, Dark={StaticResource ModelWarningTextDark}}"
+                            AutomationId="ModelReadinessBanner">
+                        <Grid ColumnDefinitions="*,112" RowDefinitions="Auto,2" ColumnSpacing="12" RowSpacing="4">
+                            <Grid ColumnDefinitions="20,*" ColumnSpacing="8">
+                                <ActivityIndicator IsRunning="{Binding IsIndeterminateProgress}"
+                                                   Opacity="{Binding IndeterminateProgressOpacity}"
+                                                   VerticalOptions="Center" WidthRequest="20" HeightRequest="20"
+                                                   AutomationId="ModelPreparationActivity" />
+                                <Label Grid.Column="1" FontSize="13" VerticalOptions="Center"
+                                       ToolTipProperties.Text="{Binding Message}"
+                                       TextColor="{AppThemeBinding Light={StaticResource ModelWarningText}, Dark={StaticResource ModelWarningTextDark}}"
+                                       AutomationId="ModelReadinessMessage">
+                                    <Label.FormattedText>
+                                        <FormattedString>
+                                            <Span Text="{Binding Message}" />
+                                            <Span Text="{Binding ProgressLine}" FontSize="12" />
+                                        </FormattedString>
+                                    </Label.FormattedText>
+                                </Label>
+                            </Grid>
+                            <Button Grid.Column="1" Text="{Binding ActionLabel}" Command="{Binding ActionCommand}"
+                                    VerticalOptions="Center" HeightRequest="44" FontSize="12"
+                                    AutomationId="ModelReadinessActionButton" />
+                            <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Progress="{Binding ProgressFraction}"
+                                         Opacity="{Binding DeterminateProgressOpacity}" VerticalOptions="Center"
+                                         AutomationId="ModelPreparationProgress" />
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="1">
+                        <local:ChatComposer BindingContext="{Binding Chat}" />
+                        <local:ReplayControls IsVisible="{Binding Chat.IsReplayClient}" />
+                    </Grid>
                 </Grid>
             </local:PlaygroundPageLayout.InputContent>
         </local:PlaygroundPageLayout>

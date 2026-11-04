@@ -297,14 +297,14 @@ public class GeminiNanoChatClientInteropTests
 		Assert.Equal(bytes, parts[1].GetImage());
 	}
 
-	// Only the four native builder options are marshalled. Optional unsupported MEAI settings are ignored.
+	// Sampling, thinking, and model selection are marshalled; unsupported optional controls remain ignored.
 	[Fact]
 	public void ToNative_MapsNativeOptionsAndIgnoresUnsupportedOptionalControls()
 	{
 		using var request = GeminiNanoChatClient.ToNative([new(ChatRole.User, "hello")], new()
 		{
 			Temperature = 0.5f, TopK = 12, Seed = int.MinValue, MaxOutputTokens = 128,
-			TopP = 0.7f, FrequencyPenalty = 0.1f, PresencePenalty = 0.1f, ModelId = "ignored",
+			TopP = 0.7f, FrequencyPenalty = 0.1f, PresencePenalty = 0.1f, ModelId = "gemini-nano-preview-fast",
 			StopSequences = ["stop"], AdditionalProperties = new() { ["custom"] = true },
 			RawRepresentationFactory = _ => throw new InvalidOperationException("Must not invoke unsupported factory."),
 			AllowBackgroundResponses = false, Reasoning = new() { Output = ReasoningOutput.Full },
@@ -314,6 +314,42 @@ public class GeminiNanoChatClientInteropTests
 		Assert.Equal(int.MinValue, request.Options.Seed!.IntValue());
 		Assert.Equal(128, request.Options.MaxOutputTokens!.IntValue());
 		Assert.True(request.Options.EnableThinking);
+		Assert.Equal("gemini-nano-preview-fast", request.Options.ModelId);
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("gemini-nano")]
+	[InlineData("gemini-nano-full")]
+	[InlineData("gemini-nano-fast")]
+	[InlineData("gemini-nano-preview-full")]
+	[InlineData("gemini-nano-preview-fast")]
+	public void ToNative_PreservesModelIdForNativeSelection(string? modelId)
+	{
+		using var request = GeminiNanoChatClient.ToNative([new(ChatRole.User, "Hello")],
+			new ChatOptions { ModelId = modelId });
+		Assert.Equal(modelId, request.Options.ModelId);
+	}
+
+	[Theory]
+	[InlineData("")]
+	[InlineData("nano-v3")]
+	[InlineData("nano-v4-fast")]
+	[InlineData("unknown")]
+	public async Task UnknownModelProfiles_RejectBeforeCallingAICore(string modelId)
+	{
+		using var client = new GeminiNanoChatClient();
+		var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetResponseAsync(
+			[new(ChatRole.User, "Hello")], new ChatOptions { ModelId = modelId }));
+		Assert.Contains("Unsupported Gemini Nano model ID", error.Message);
+		await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetStreamingResponseAsync(
+			[new(ChatRole.User, "Hello")], new ChatOptions { ModelId = modelId }).ToChatResponseAsync());
+		await Assert.ThrowsAsync<InvalidOperationException>(() => GeminiNanoChatClient.GetModelStatusAsync(modelId));
+		await Assert.ThrowsAsync<InvalidOperationException>(() => GeminiNanoChatClient.PrepareModelAsync(modelId));
+		await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+		{
+			await foreach (var _ in GeminiNanoChatClient.DownloadModelAsync(modelId)) { }
+		});
 	}
 
 	// Java seed is Int32. Verify the checked conversion cannot wrap the MEAI Int64 input.
@@ -356,8 +392,8 @@ public class GeminiNanoChatClientInteropTests
 	[Theory]
 	[InlineData(3, ChatModelAvailability.Available)]
 	[InlineData(1, ChatModelAvailability.NotReady)]
-	[InlineData(2, ChatModelAvailability.NotReady)]
-	[InlineData(0, ChatModelAvailability.Unknown)]
+	[InlineData(2, ChatModelAvailability.Downloading)]
+	[InlineData(0, ChatModelAvailability.Unavailable)]
 	[InlineData(99, ChatModelAvailability.Unknown)]
 	public void CreateModelStatus_MapsAvailabilityAndOnlyAdvertisesEffectiveCapabilities(int native, ChatModelAvailability expected)
 	{
@@ -365,14 +401,6 @@ public class GeminiNanoChatClientInteropTests
 		{
 			var status = GeminiNanoChatClient.CreateModelStatus(native, thinking);
 			Assert.Equal(expected, status.Availability);
-			Assert.Equal(native switch
-			{
-				0 => "UNAVAILABLE (0): Gemini Nano is unsupported or AICore configuration is not ready.",
-				1 => "DOWNLOADABLE (1)",
-				2 => "DOWNLOADING (2)",
-				3 => null,
-				_ => $"Unknown ML Kit FeatureStatus ({native})",
-			}, status.UnavailableReason);
 			Assert.Equal(thinking ? 5 : 4, status.Capabilities!.Count);
 			Assert.Contains(ChatModelCapability.Text, status.Capabilities);
 			Assert.Contains(ChatModelCapability.Streaming, status.Capabilities);
@@ -399,6 +427,10 @@ public class GeminiNanoChatClientInteropTests
 		});
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(
 			() => GeminiNanoChatClient.PrepareModelAsync(cts.Token));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => GeminiNanoChatClient.GetModelStatusAsync("gemini-nano-preview-full", cts.Token));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => GeminiNanoChatClient.PrepareModelAsync("gemini-nano-preview-full", cts.Token));
 	}
 
 	// Exercise the new Java-friendly status callback/cleanup on devices without requiring or downloading AICore models.
@@ -411,10 +443,7 @@ public class GeminiNanoChatClientInteropTests
 		Assert.NotSame(first, second);
 		foreach (var status in new[] { first, second })
 		{
-			if (status.Availability == ChatModelAvailability.Available)
-				Assert.Null(status.UnavailableReason);
-			else
-				Assert.False(string.IsNullOrWhiteSpace(status.UnavailableReason));
+			Assert.True(Enum.IsDefined(status.Availability));
 			Assert.Contains(ChatModelCapability.Text, status.Capabilities!);
 			Assert.Contains(ChatModelCapability.Streaming, status.Capabilities!);
 			Assert.Contains(ChatModelCapability.ImageInput, status.Capabilities!);
