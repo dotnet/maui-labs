@@ -1074,11 +1074,13 @@ public sealed class InspectorServer : IDisposable
                 {
                     "/" or "" => await HandleRootAsync(),
                     "/api/state" => await HandleStateAsync(request),
+                    "/api/capabilities" => await HandleCapabilitiesAsync(),
                     "/api/eventSupport" => await HandleEventSupportAsync(),
                     "/screenshot.png" => await HandleScreenshotAsync(request.Query.GetValueOrDefault("frame")),
                     "/devflow.js" => HandleEmbeddedFile("devflow.js", "application/javascript"),
                     "/inspector-frame.js" => HandleEmbeddedFile("inspector-frame.js", "application/javascript"),
                     "/inspector-api.js" => HandleEmbeddedFile("inspector-api.js", "application/javascript"),
+                    "/inspector-command-policy.js" => HandleEmbeddedFile("inspector-command-policy.js", "application/javascript"),
                     "/inspector-dialog.js" => HandleEmbeddedFile("inspector-dialog.js", "application/javascript"),
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
                     "/inspector-presentation.js" => HandleEmbeddedFile("inspector-presentation.js", "application/javascript"),
@@ -1334,6 +1336,29 @@ public sealed class InspectorServer : IDisposable
         resolutionClamped = frame.ResolutionClamped,
         createdAt = frame.CreatedUtc
     };
+
+    private async Task<(int, string, byte[])> HandleCapabilitiesAsync()
+    {
+        var document = await _client.GetCapabilitiesAsync();
+        if (document.ValueKind != JsonValueKind.Object
+            || !document.TryGetProperty("capabilities", out var capabilitiesValue)
+            || capabilitiesValue.ValueKind != JsonValueKind.Object)
+        {
+            return (503, "application/json", Encoding.UTF8.GetBytes(
+                "{\"ok\":false,\"error\":\"Agent capabilities are unavailable.\"}"));
+        }
+
+        JsonElement? agent = document.TryGetProperty("agent", out var agentValue)
+            ? agentValue.Clone()
+            : null;
+        var capabilities = capabilitiesValue.Clone();
+
+        return Ok(JsonSerializer.Serialize(new
+        {
+            agent,
+            capabilities
+        }, CamelCase));
+    }
 
     private async Task<(int, string, byte[])> HandleEventSupportAsync()
     {
