@@ -23,12 +23,14 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.De
   --results-directory artifacts\TestResults\InspectorBrowser
 ```
 
-All **21** fixtures must execute and pass: the original eleven Layout workspace checks,
+All **28** fixtures must execute and pass: the shared Layout, Preview health, synchronization,
+connection-recovery, and command-policy checks,
 cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticInputsRevision`
 invalidation/Live rescanning with unchanged geometry, two queued Live cancellation checks,
 three property/Network synchronization checks, and three connection recovery checks covering
 Retry feedback/reduced motion, hung state-request cancellation, and recovery with a live event
-socket (including after a webview visibility change).
+socket (including after a webview visibility change), plus three capability-policy checks covering
+legacy fallback, unsupported-command focus preservation, and distinct unavailable reasons.
 Disabling Live cancels queued automatic rescans while preserving an explicit refresh requested
 during an active scan; it does not abort the in-flight scan.
 
@@ -39,7 +41,7 @@ while detail stays open. Response gates hold each loading state until asserted; 
 clock drives the real polling intervals instead of wall-clock sleeps.
 
 `ci-devflow.yml` provisions Chromium in its dedicated `inspector-layout-browser` Windows job and
-sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 21 passed results and fails
+sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 28 passed results and fails
 if any filtered test is skipped; adding another fixture requires updating the explicit count.
 It also repeats all three synchronization cases five times, failing immediately on any failure
 or skip. The Windows live integration job enables these browser fixtures alongside the native

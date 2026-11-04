@@ -277,6 +277,7 @@ public partial class InspectorPageTests : IAsyncLifetime
         foreach (var (file, exportedSymbol) in new[]
         {
             ("inspector-api.js", "export function createInspectorApi"),
+            ("inspector-command-policy.js", "export function evaluateCommandStates"),
             ("inspector-dialog.js", "export function confirmModal"),
             ("inspector-data-context.js", "export function createDataSnapshot"),
             ("inspector-frame.js", "export function normalizeFrameDescriptor"),
@@ -1471,7 +1472,7 @@ public partial class InspectorPageTests : IAsyncLifetime
         await assertAction.EvaluateAsync("button => button.focus()");
         Assert.True(await assertAction.EvaluateAsync<bool>("button => button === document.activeElement"));
         await assertAction.DispatchEventAsync("click");
-        await Expect(_page.Locator("#df-status")).ToContainTextAsync("Enabled while recording");
+        await Expect(_page.Locator("#df-status")).ToContainTextAsync("Start recording before adding an assertion");
         await Expect(_page.Locator(".df-dock-tab-list")).ToHaveAttributeAsync("aria-label", "App data");
         await Expect(_page.Locator("#df-viewport-wrap")).ToHaveAttributeAsync("role", "region");
         await Expect(_page.Locator("#df-viewport-wrap")).ToHaveAttributeAsync("aria-label", "Live app viewport");

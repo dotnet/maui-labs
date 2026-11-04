@@ -75,6 +75,25 @@ Host bridges also supply their color palette, font metadata, contrast mode, and 
 preference. VS Code placement is configurable with
 `mauiDevflow.openLocation` (`auto`, `beside`, or `active`).
 
+## Capability-driven command policy
+
+The browser, VS Code, and Copilot Canvas hosts share one pure command policy from
+`inspector-command-policy.js`. It combines the agent capability document with the Inspector's
+normalized Preview/control access, selection, workflow, and Data state to derive each toolbar
+command's `visible`, `enabled`, `availability`, and disabled reason.
+
+- Explicitly unsupported commands are hidden. Missing capability metadata from legacy agents stays
+  unknown and preserves the existing usable toolbar.
+- Temporarily unavailable, read-only, and disconnected commands remain visible and focusable with
+  distinct `aria-disabled`, tooltip, and screen-reader reasons.
+- Starting a recording requires a current writable Preview; stopping or discarding an active
+  recording requires control but remains available while the Preview capture is delayed.
+- The same button element moves between the inline toolbar and **More**, so state never diverges.
+  Hidden commands do not consume overflow space, empty groups collapse, and focus moves to the next
+  visible command when a capability refresh removes the focused action.
+- Capability presentation is not enforcement. The Inspector server and agent mutation lease remain
+  authoritative for every operation.
+
 ## Coordinated frames and coordinates
 
 Each Inspector refresh creates one immutable frame containing the visual tree, exact screenshot

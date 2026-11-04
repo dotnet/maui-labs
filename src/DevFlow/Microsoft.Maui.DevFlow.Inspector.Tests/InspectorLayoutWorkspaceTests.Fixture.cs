@@ -66,6 +66,7 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
         output.WriteLine($"Loaded embedded scripts: {string.Join(", ", _scripts.Order())}");
         Assert.Contains("/devflow.js", _scripts);
         Assert.Contains("/inspector-frame.js", _scripts);
+        Assert.Contains("/inspector-command-policy.js", _scripts);
         Assert.Contains("/inspector-layout.js", _scripts);
         Assert.Contains("/inspector-presentation.js", _scripts);
         Assert.Contains("/inspector-resolution.js", _scripts);

@@ -125,8 +125,8 @@ body {
 .df-tool-btn.df-recording { background: var(--df-danger); color: #fff; border-color: var(--df-danger); }
 .df-mode-btn:disabled, .df-tool-btn:disabled { opacity: 0.4; cursor: default; }
 .df-mode-btn:disabled:hover, .df-tool-btn:disabled:hover { background: var(--df-surface-2); }
-.df-tool-btn[aria-disabled="true"] { opacity: 0.4; cursor: help; }
-.df-tool-btn[aria-disabled="true"]:hover { background: var(--df-surface-2); }
+.df-mode-btn[aria-disabled="true"], .df-tool-btn[aria-disabled="true"] { opacity: 0.4; cursor: help; }
+.df-mode-btn[aria-disabled="true"]:hover, .df-tool-btn[aria-disabled="true"]:hover { background: var(--df-surface-2); }
 .df-toolbar-secondary { display: inline-flex; flex: 0 0 auto; align-items: center; gap: var(--df-gap); }
 .df-toolbar-overflow {
   position: fixed;
@@ -161,6 +161,13 @@ body {
   box-shadow: none;
 }
 .df-toolbar-overflow .df-btn-label { display: inline !important; }
+
+@media (forced-colors: active) {
+  .df-mode-btn[aria-disabled="true"], .df-tool-btn[aria-disabled="true"] {
+    color: GrayText;
+    border-color: GrayText;
+  }
+}
 
 .df-status {
   display: block;
