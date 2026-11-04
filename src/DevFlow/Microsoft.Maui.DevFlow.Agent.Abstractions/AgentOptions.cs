@@ -154,6 +154,30 @@ public class AgentOptions
     public int MutationLeaseTimeoutMs { get; set; } = 10_000;
 
     /// <summary>
+    /// Maximum coalesced samples accepted by one pointer-session move request.
+    /// Default: 64.
+    /// </summary>
+    public int PointerSessionMaxSamplesPerMove { get; set; } = 64;
+
+    /// <summary>
+    /// Maximum UTF-8 request body size accepted by pointer-session endpoints.
+    /// Default: 16 KB.
+    /// </summary>
+    public int PointerSessionMaxRequestBytes { get; set; } = 16 * 1024;
+
+    /// <summary>
+    /// How long an active pointer session may remain idle before the backend receives a cancel.
+    /// Default: 5 seconds.
+    /// </summary>
+    public int PointerSessionIdleTimeoutMs { get; set; } = 5_000;
+
+    /// <summary>
+    /// Maximum lifetime of one pointer session before the backend receives a cancel.
+    /// Default: 60 seconds.
+    /// </summary>
+    public int PointerSessionMaxDurationMs { get; set; } = 60_000;
+
+    /// <summary>
     /// Custom routes registered under /api/v1/ext/{namespace}/...
     /// </summary>
     public IList<AgentExtension> Extensions { get; } = new List<AgentExtension>();

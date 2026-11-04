@@ -1150,6 +1150,142 @@ paths:
         "501":
           $ref: "#/components/responses/BackendNotSupported"
 
+  /api/v1/ui/actions/pointer-sessions:
+    post:
+      operationId: startPointerSession
+      tags: [ui-actions]
+      summary: Start a continuous pointer session
+      description: >
+        Delivers one native or synthetic pointer-down and keeps it active across bounded,
+        sequenced move requests. The caller must negotiate `ui.pointerStream`, send at most
+        one move request at a time, and end or cancel the session. A successful start commits
+        the press; clients must not replay the same interaction through the legacy gesture
+        endpoint after that point. v1 coordinates are `windowLogical`. The Inspector validates
+        its existing cached frame and converts `appLogical` coordinates before calling this route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/PointerSessionStartRequest"
+      responses:
+        "200":
+          description: Pointer down delivered and session active.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/PointerSessionResponse"
+        "400":
+          description: Invalid session id or request.
+        "409":
+          description: Another pointer session is active or capture metadata conflicts.
+        "413":
+          description: Request exceeds the advertised pointer payload limit.
+        "422":
+          description: Unsupported pointer type, field, coordinate space, or target.
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+
+  /api/v1/ui/actions/pointer-sessions/{id}/move:
+    post:
+      operationId: movePointerSession
+      tags: [ui-actions]
+      summary: Apply a coalesced pointer move batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/PointerSessionMoveRequest"
+      responses:
+        "200":
+          description: Move batch applied, or an identical sequence retry acknowledged.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/PointerSessionResponse"
+        "409":
+          description: Sequence conflict/gap or backend failure.
+        "410":
+          description: Session ended, was cancelled, timed out, or is unknown.
+        "413":
+          description: Too many samples or request exceeds the payload limit.
+        "422":
+          description: Invalid or regressing sample.
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/pointer-sessions/{id}/end:
+    post:
+      operationId: endPointerSession
+      tags: [ui-actions]
+      summary: Release a continuous pointer session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/PointerSessionEndRequest"
+      responses:
+        "200":
+          description: Pointer up delivered. Identical retries return the same terminal result.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/PointerSessionResponse"
+        "409":
+          description: Sequence conflict/gap or backend failure.
+        "410":
+          description: Session is already terminal or unknown.
+        "422":
+          description: Invalid final sample.
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ui/actions/pointer-sessions/{id}/cancel:
+    post:
+      operationId: cancelPointerSession
+      tags: [ui-actions]
+      summary: Cancel a continuous pointer session
+      description: >
+        Sends the backend's native cancel phase and is idempotent. Unknown sessions return a
+        successful `unknown` state so cleanup callers can always issue cancellation.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/actions.json#/$defs/PointerSessionCancelRequest"
+      responses:
+        "200":
+          description: Session cancelled, already terminal, or unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/actions.json#/$defs/PointerSessionResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/ui/actions/batch:
     post:
       operationId: batchActions

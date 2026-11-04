@@ -80,6 +80,9 @@ public sealed class InspectorServer : IDisposable
     private long? _captureEpoch;
     private Task<JsonElement?>? _capabilitiesTask;
     private readonly TimeSpan _frameReuseDuration;
+    private readonly object _pointerProxyGate = new();
+    private readonly Dictionary<string, PointerProxySession> _pointerProxySessions =
+        new(StringComparer.Ordinal);
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan DefaultFrameReuseDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan FrameCacheDuration = TimeSpan.FromSeconds(10);
@@ -917,6 +920,7 @@ public sealed class InspectorServer : IDisposable
 
     public async Task StopAsync()
     {
+        await CancelProxyPointerSessionsAsync("inspector-stopped");
         _cts?.Cancel();
         _listener?.Stop();
         if (_listenTask != null)
@@ -934,6 +938,7 @@ public sealed class InspectorServer : IDisposable
         // member.
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
+        try { CancelProxyPointerSessionsAsync("inspector-disposed").Wait(TimeSpan.FromSeconds(1)); } catch { }
         try { _lifetimeCts.Cancel(); } catch { }
         try { _cts?.Cancel(); } catch { }
         try { _listener?.Stop(); } catch { }
@@ -1098,6 +1103,10 @@ public sealed class InspectorServer : IDisposable
                     "/api/tap" => await HandleProxyTapAsync(request.Body),
                     "/api/scroll" => await HandleProxyScrollAsync(request.Body),
                     "/api/gesture" => await HandleProxyGestureAsync(request.Body),
+                    "/api/pointer/start" => await HandleProxyPointerStartAsync(request.Body),
+                    "/api/pointer/move" => await HandleProxyPointerMoveAsync(request.Body),
+                    "/api/pointer/end" => await HandleProxyPointerEndAsync(request.Body),
+                    "/api/pointer/cancel" => await HandleProxyPointerCancelAsync(request.Body),
                     "/api/back" => await HandleProxyBackAsync(),
                     "/api/fill" => await HandleProxyFillAsync(request.Body),
                     "/api/key" => await HandleProxyKeyAsync(request.Body),
@@ -1172,6 +1181,7 @@ public sealed class InspectorServer : IDisposable
                 ? ScreenshotResolutionKey.SupportedDefault
                 : ScreenshotResolutionKey.Legacy);
         var hasPublishedFrame = frame.FrameRevision > 0 && frame.Png.Length > 0;
+        var pointerStream = await GetPointerStreamCapabilityAsync();
         var html = HtmlRenderer.RenderWithViewport(
             frame.Tree,
             hasPublishedFrame,
@@ -1193,6 +1203,7 @@ public sealed class InspectorServer : IDisposable
                 ? BuildMeta("devflow-frame", JsonSerializer.Serialize(CreateFrameDescriptor(frame)))
                 : string.Empty)
             .Append(BuildMeta("devflow-screenshot-resolution", screenshotResolutionSupported ? "true" : "false"))
+            .Append(BuildMeta("devflow-pointer-stream", pointerStream?.Supported == true ? "true" : "false"))
             .ToString();
         var title = string.IsNullOrWhiteSpace(_appName)
             ? "MAUI DevFlow Inspector"
@@ -1292,6 +1303,7 @@ public sealed class InspectorServer : IDisposable
                 }));
         }
 
+        var pointerStream = await GetPointerStreamCapabilityAsync();
         var json = JsonSerializer.Serialize(new
         {
             frame = CreateFrameDescriptor(frame),
@@ -1310,7 +1322,10 @@ public sealed class InspectorServer : IDisposable
                 : null,
             captureEpoch = frame.CaptureEpoch,
             registryGeneration = frame.RegistryGeneration,
-            windowId = frame.WindowId
+            windowId = frame.WindowId,
+            pointerStream = pointerStream is null
+                ? null
+                : new { supported = pointerStream.Supported, reason = pointerStream.Reason }
         });
 
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
@@ -3027,6 +3042,369 @@ public sealed class InspectorServer : IDisposable
         return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"points array required\"}"));
     }
 
+    private async Task<(int, string, byte[])> HandleProxyPointerStartAsync(string? body)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerStartRequest? start, out var error))
+            return JsonResponse(400, new { ok = false, error });
+        if (start is null || string.IsNullOrWhiteSpace(start.SessionId))
+            return JsonResponse(400, new { ok = false, error = "sessionId is required" });
+
+        using var document = JsonDocument.Parse(body!);
+        var correlationError = ValidateActionCorrelation(
+            document.RootElement,
+            hasCoordinates: true,
+            out var frame,
+            out var coordinateSpace);
+        if (correlationError.HasValue)
+            return correlationError.Value;
+        if (frame is null || !string.Equals(coordinateSpace, "appLogical", StringComparison.Ordinal))
+        {
+            return ActionCorrelationError(
+                400,
+                "unsupported-coordinate-space",
+                "Inspector pointer sessions require appLogical coordinates.");
+        }
+
+        var capability = await GetPointerStreamCapabilityAsync();
+        if (capability is not { Supported: true })
+        {
+            return JsonResponse(200, new
+            {
+                ok = false,
+                fallback = true,
+                reason = capability?.Reason ?? "pointer stream capability is unavailable"
+            });
+        }
+
+        var windowPoint = ToWindowLogicalCoordinates(
+            start.X,
+            start.Y,
+            coordinateSpace,
+            frame);
+        var result = await _client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = start.SessionId,
+            PointerId = start.PointerId,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = windowPoint.x,
+            Y = windowPoint.y,
+            ElapsedMs = start.ElapsedMs,
+            WindowId = frame.WindowId,
+            CaptureEpoch = frame.CaptureEpoch,
+            RegistryGeneration = frame.RegistryGeneration,
+            Correlation = start.Correlation is null
+                ? null
+                : new ActionCorrelation
+                {
+                    ActionId = start.Correlation.ActionId,
+                    Source = start.Correlation.Source,
+                    StreamId = start.Correlation.StreamId,
+                    FrameId = start.Correlation.FrameId,
+                    FrameRevision = start.Correlation.FrameRevision,
+                    CoordinateSpace = "windowLogical"
+                }
+        });
+
+        var fallback = !result.TransportFailure
+            && (result.Unsupported || result.StatusCode is 400 or 422);
+        if (result.Success)
+        {
+            string[] staleSessionIds;
+            lock (_pointerProxyGate)
+            {
+                PrunePointerProxySessionsNoLock();
+                staleSessionIds = _pointerProxySessions.Keys
+                    .Where(id => !string.Equals(id, start.SessionId, StringComparison.Ordinal))
+                    .ToArray();
+                _pointerProxySessions.Clear();
+                _pointerProxySessions[start.SessionId] = new PointerProxySession(
+                    start.SessionId,
+                    frame.Id,
+                    frame.WindowId,
+                    frame.RootOffsetX,
+                    frame.RootOffsetY,
+                    frame.LogicalWidth,
+                    frame.LogicalHeight,
+                    DateTime.UtcNow.AddMilliseconds(
+                        Math.Clamp(result.MaxDurationMs > 0 ? result.MaxDurationMs : 60_000, 500, 300_000)
+                        + 5_000));
+            }
+            foreach (var staleSessionId in staleSessionIds)
+            {
+                try { await _client.CancelPointerSessionAsync(staleSessionId, "superseded"); }
+                catch { }
+            }
+        }
+
+        return JsonResponse(
+            result.Success ? 200 : result.StatusCode ?? 502,
+            new
+            {
+                ok = result.Success,
+                fallback,
+                result.SessionId,
+                result.State,
+                result.LastSequence,
+                result.IdleTimeoutMs,
+                result.MaxDurationMs,
+                result.MaxSamplesPerMove,
+                result.MaxRequestBytes,
+                result.Detail,
+                result.Reason,
+                result.Error,
+                result.TransportFailure
+            });
+    }
+
+    private async Task<(int, string, byte[])> HandleProxyPointerMoveAsync(string? body)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerMoveRequest? move, out var error))
+            return JsonResponse(400, new { ok = false, error });
+        if (move is null || string.IsNullOrWhiteSpace(move.SessionId))
+            return JsonResponse(400, new { ok = false, error = "sessionId is required" });
+        if (move.Samples is null || move.Samples.Count > 64)
+            return JsonResponse(413, new { ok = false, error = "A move may contain at most 64 samples." });
+        if (!TryGetPointerProxySession(move.SessionId, out var proxy))
+            return JsonResponse(410, new { ok = false, reason = "session-gone", error = "Pointer session not found." });
+        if (!IsPointerProxyFrameCompatible(proxy))
+            return await CancelSupersededPointerProxyAsync(move.SessionId);
+
+        var samples = move.Samples.Select(sample => new PointerSessionSample
+        {
+            X = sample.X + proxy.RootOffsetX,
+            Y = sample.Y + proxy.RootOffsetY,
+            ElapsedMs = sample.ElapsedMs
+        }).ToArray();
+        var result = await _client.MovePointerSessionAsync(move.SessionId, move.Sequence, samples);
+        if (!result.Success && !result.TransportFailure && result.State is "cancelled" or "gone")
+            RemovePointerProxySession(move.SessionId);
+        return PointerProxyResult(result);
+    }
+
+    private async Task<(int, string, byte[])> HandleProxyPointerEndAsync(string? body)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerEndRequest? end, out var error))
+            return JsonResponse(400, new { ok = false, error });
+        if (end?.Sample is null || string.IsNullOrWhiteSpace(end.SessionId))
+            return JsonResponse(400, new { ok = false, error = "sessionId and final sample are required" });
+        if (!TryGetPointerProxySession(end.SessionId, out var proxy))
+            return JsonResponse(410, new { ok = false, reason = "session-gone", error = "Pointer session not found." });
+        if (!IsPointerProxyFrameCompatible(proxy))
+            return await CancelSupersededPointerProxyAsync(end.SessionId);
+
+        var result = await _client.EndPointerSessionAsync(
+            end.SessionId,
+            end.Sequence,
+            new PointerSessionSample
+            {
+                X = end.Sample.X + proxy.RootOffsetX,
+                Y = end.Sample.Y + proxy.RootOffsetY,
+                ElapsedMs = end.Sample.ElapsedMs
+            });
+        if (result.Success || !result.TransportFailure)
+            RemovePointerProxySession(end.SessionId);
+        if (result.Success)
+            InvalidateScreenshotCache();
+        return PointerProxyResult(result);
+    }
+
+    private async Task<(int, string, byte[])> HandleProxyPointerCancelAsync(string? body)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerCancelRequest? cancel, out var error))
+            return JsonResponse(400, new { ok = false, error });
+        if (cancel is null || string.IsNullOrWhiteSpace(cancel.SessionId))
+            return JsonResponse(400, new { ok = false, error = "sessionId is required" });
+
+        var result = await _client.CancelPointerSessionAsync(cancel.SessionId, cancel.Reason);
+        RemovePointerProxySession(cancel.SessionId);
+        InvalidateScreenshotCache();
+        return PointerProxyResult(result);
+    }
+
+    private async Task<PointerStreamProxyCapability?> GetPointerStreamCapabilityAsync()
+    {
+        var capabilities = await GetAgentCapabilitiesAsync();
+        if (!capabilities.HasValue)
+            return null;
+        if (!capabilities.Value.TryGetProperty("ui.pointerStream", out var pointer)
+            || pointer.ValueKind != JsonValueKind.Object)
+        {
+            return new PointerStreamProxyCapability(
+                false,
+                "The connected agent predates pointer streaming.");
+        }
+
+        var supported = pointer.TryGetProperty("supported", out var supportedProperty)
+            && supportedProperty.ValueKind == JsonValueKind.True;
+        var reason = pointer.TryGetProperty("reason", out var reasonProperty)
+            && reasonProperty.ValueKind == JsonValueKind.String
+                ? reasonProperty.GetString()
+                : null;
+        return new PointerStreamProxyCapability(supported, reason);
+    }
+
+    private bool TryGetPointerProxySession(string sessionId, out PointerProxySession session)
+    {
+        lock (_pointerProxyGate)
+        {
+            PrunePointerProxySessionsNoLock();
+            return _pointerProxySessions.TryGetValue(sessionId, out session!);
+        }
+    }
+
+    private bool IsPointerProxyFrameCompatible(PointerProxySession session)
+    {
+        lock (_cacheLock)
+        {
+            var latest = _newestFrameId is { } newest
+                && _frames.TryGetValue(newest, out var cached)
+                    ? cached
+                    : _latestFrame;
+            if (latest is null)
+                return true;
+            if (string.Equals(session.FrameId, latest.Id, StringComparison.Ordinal))
+                return true;
+            return session.WindowId == latest.WindowId
+                && Math.Abs(session.RootOffsetX - latest.RootOffsetX) < 0.001
+                && Math.Abs(session.RootOffsetY - latest.RootOffsetY) < 0.001
+                && Math.Abs(session.LogicalWidth - latest.LogicalWidth) < 0.001
+                && Math.Abs(session.LogicalHeight - latest.LogicalHeight) < 0.001;
+        }
+    }
+
+    private void PrunePointerProxySessionsNoLock()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var id in _pointerProxySessions
+            .Where(pair => pair.Value.ExpiresUtc <= now)
+            .Select(static pair => pair.Key)
+            .ToArray())
+        {
+            _pointerProxySessions.Remove(id);
+        }
+    }
+
+    private async Task<(int, string, byte[])> CancelSupersededPointerProxyAsync(string sessionId)
+    {
+        try { await _client.CancelPointerSessionAsync(sessionId, "frame-superseded"); }
+        catch { }
+        RemovePointerProxySession(sessionId);
+        return ActionCorrelationError(
+            409,
+            "frame-superseded",
+            "The pointer session frame has been superseded.");
+    }
+
+    private void RemovePointerProxySession(string sessionId)
+    {
+        lock (_pointerProxyGate)
+            _pointerProxySessions.Remove(sessionId);
+    }
+
+    private async Task CancelProxyPointerSessionsAsync(string reason)
+    {
+        string[] sessionIds;
+        lock (_pointerProxyGate)
+        {
+            sessionIds = _pointerProxySessions.Keys.ToArray();
+            _pointerProxySessions.Clear();
+        }
+        foreach (var sessionId in sessionIds)
+        {
+            try { await _client.CancelPointerSessionAsync(sessionId, reason); }
+            catch { }
+        }
+    }
+
+    private static bool TryReadPointerBody<T>(string? body, out T? value, out string error)
+        where T : class
+    {
+        value = null;
+        error = "";
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            error = "Body required";
+            return false;
+        }
+        if (Encoding.UTF8.GetByteCount(body) > 16 * 1024)
+        {
+            error = "Pointer payload exceeds 16 KB.";
+            return false;
+        }
+        try
+        {
+            value = JsonSerializer.Deserialize<T>(body, CamelCase);
+            return value is not null;
+        }
+        catch (JsonException)
+        {
+            error = "Invalid pointer payload.";
+            return false;
+        }
+    }
+
+    private static (int, string, byte[]) PointerProxyResult(PointerSessionResult result)
+        => JsonResponse(
+            result.Success ? 200 : result.StatusCode ?? 502,
+            new
+            {
+                ok = result.Success,
+                result.SessionId,
+                result.State,
+                result.LastSequence,
+                result.IdleTimeoutMs,
+                result.MaxDurationMs,
+                result.MaxSamplesPerMove,
+                result.MaxRequestBytes,
+                result.Detail,
+                result.Reason,
+                result.Error,
+                result.TransportFailure
+            });
+
+    private sealed record PointerStreamProxyCapability(bool Supported, string? Reason);
+
+    private sealed record PointerProxySession(
+        string SessionId,
+        string FrameId,
+        int? WindowId,
+        double RootOffsetX,
+        double RootOffsetY,
+        double LogicalWidth,
+        double LogicalHeight,
+        DateTime ExpiresUtc);
+
+    private sealed class InspectorPointerStartRequest
+    {
+        public string? SessionId { get; set; }
+        public long PointerId { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double ElapsedMs { get; set; }
+        public ActionCorrelation? Correlation { get; set; }
+    }
+
+    private sealed class InspectorPointerMoveRequest
+    {
+        public string? SessionId { get; set; }
+        public int Sequence { get; set; }
+        public List<PointerSessionSample> Samples { get; set; } = [];
+    }
+
+    private sealed class InspectorPointerEndRequest
+    {
+        public string? SessionId { get; set; }
+        public int Sequence { get; set; }
+        public PointerSessionSample? Sample { get; set; }
+    }
+
+    private sealed class InspectorPointerCancelRequest
+    {
+        public string? SessionId { get; set; }
+        public string? Reason { get; set; }
+    }
+
     private sealed record InspectorFrame(
         string Id,
         DateTime CreatedUtc,
@@ -3884,6 +4262,7 @@ public sealed class InspectorServer : IDisposable
     internal static bool IsBlockedDuringReplay(string path) => path switch
     {
         "/api/tap" or "/api/scroll" or "/api/gesture" or "/api/back" or "/api/fill" or "/api/key"
+            or "/api/pointer/start" or "/api/pointer/move" or "/api/pointer/end" or "/api/pointer/cancel"
             or "/api/setProperty" or "/api/persistProperty" or "/api/navigate" or "/api/cdp/eval"
             or "/api/alerts/dismiss" or "/api/flows/record/start" or "/api/flows/record/step" => true,
         _ => false,
@@ -4232,6 +4611,7 @@ public sealed class InspectorServer : IDisposable
     internal static bool IsMutation(string path) => path switch
     {
         "/api/tap" or "/api/scroll" or "/api/gesture" or "/api/back" or "/api/fill" or "/api/key"
+            or "/api/pointer/start" or "/api/pointer/move" or "/api/pointer/end" or "/api/pointer/cancel"
             or "/api/setProperty" or "/api/persistProperty" or "/api/navigate" or "/api/cdp/eval"
             or "/api/alerts/dismiss"
             or "/api/flows/record/start" or "/api/flows/record/step" or "/api/flows/replay" => true,

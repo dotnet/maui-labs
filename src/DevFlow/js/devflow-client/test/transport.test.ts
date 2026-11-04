@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createTransport, READ_ONLY, INTERACT, FULL } from "../src/transport.js";
 import type { TransportClient } from "../src/transport.js";
 import { ok } from "../src/types.js";
-import type { DevFlowResult, ElementInfo } from "../src/types.js";
+import type { DevFlowResult, ElementInfo, PointerSessionResult } from "../src/types.js";
 
 function fakeClient(): { client: TransportClient; calls: string[] } {
   const calls: string[] = [];
@@ -28,6 +28,22 @@ function fakeClient(): { client: TransportClient; calls: string[] } {
     async gesture(): Promise<DevFlowResult<void>> {
       calls.push("gesture");
       return ok(undefined);
+    },
+    async pointerStart(): Promise<DevFlowResult<PointerSessionResult>> {
+      calls.push("pointerStart");
+      return ok({ success: true, sessionId: "s", state: "active", lastSequence: 0 });
+    },
+    async pointerMove(_id, sequence, samples): Promise<DevFlowResult<PointerSessionResult>> {
+      calls.push(`pointerMove:${sequence}:${samples.length}`);
+      return ok({ success: true, sessionId: "s", state: "active", lastSequence: sequence });
+    },
+    async pointerEnd(_id, sequence): Promise<DevFlowResult<PointerSessionResult>> {
+      calls.push(`pointerEnd:${sequence}`);
+      return ok({ success: true, sessionId: "s", state: "ended", lastSequence: sequence });
+    },
+    async pointerCancel(): Promise<DevFlowResult<PointerSessionResult>> {
+      calls.push("pointerCancel");
+      return ok({ success: true, sessionId: "s", state: "cancelled", lastSequence: 0 });
     },
     async back(): Promise<DevFlowResult<void>> {
       calls.push("back");
@@ -159,6 +175,45 @@ test("gesture enforces point count bounds", async () => {
   assert.equal(!many.ok && many.error.kind, "invalid-argument");
   const okReq = await t.request({ kind: "gesture", points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] });
   assert.equal(okReq.ok, true);
+});
+
+test("pointer lifecycle is permission-gated and sample-bounded", async () => {
+  const { client, calls } = fakeClient();
+  const readOnly = createTransport(client, { permissions: READ_ONLY });
+  const denied = await readOnly.request({
+    kind: "pointerStart",
+    value: { sessionId: "s", pointerId: 1, x: 1, y: 2 },
+  });
+  assert.equal(!denied.ok && denied.error.kind, "permission-denied");
+
+  const interact = createTransport(client, { permissions: INTERACT, maxPointerSamples: 2 });
+  assert.equal((await interact.request({
+    kind: "pointerStart",
+    value: { sessionId: "s", pointerId: 1, x: 1, y: 2 },
+  })).ok, true);
+  assert.equal((await interact.request({
+    kind: "pointerMove",
+    sessionId: "s",
+    sequence: 1,
+    samples: [{ x: 2, y: 3, elapsedMs: 4 }],
+  })).ok, true);
+  const tooMany = await interact.request({
+    kind: "pointerMove",
+    sessionId: "s",
+    sequence: 2,
+    samples: Array.from({ length: 3 }, () => ({ x: 2, y: 3, elapsedMs: 4 })),
+  });
+  assert.equal(!tooMany.ok && tooMany.error.kind, "invalid-argument");
+  assert.equal((await interact.request({
+    kind: "pointerEnd",
+    sessionId: "s",
+    sequence: 2,
+    sample: { x: 3, y: 4, elapsedMs: 8 },
+  })).ok, true);
+  assert.deepEqual(
+    calls.filter(call => call.startsWith("pointer")),
+    ["pointerStart", "pointerMove:1:1", "pointerEnd:2"],
+  );
 });
 
 test("key allow-list: single chars and named keys only", async () => {
