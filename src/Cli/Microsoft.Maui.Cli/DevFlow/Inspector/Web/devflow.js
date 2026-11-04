@@ -13,7 +13,6 @@ import {
   CoordinateSpace,
   appLogicalToWindowLogical,
   buildActionCorrelation,
-  clientToAppLogical,
   hasExplicitFrameIdentity,
   normalizeFrameDescriptor,
   shouldCommitFrame,
@@ -33,6 +32,7 @@ import {
   deriveInspectorPresentation,
   updateInspectorPresentationState,
 } from './inspector-presentation.js';
+import { createViewportController } from './inspector-viewport-controller.js';
 
 (function () {
   'use strict';
@@ -46,8 +46,6 @@ import {
     return image;
   })();
   const hasInitialScreenshot = !!screenshot.getAttribute('src');
-  // Fit-to-container scaling (responsive). #app-viewport holds the app at its fixed logical size;
-  // #df-stage is sized to the scaled box and #app-viewport carries the CSS scale transform.
   const stage = document.getElementById('df-stage');
   const vpWrap = document.getElementById('df-viewport-wrap');
   const disconnectedOverlay = document.getElementById('df-disconnected-overlay');
@@ -73,8 +71,7 @@ import {
   function setStatus(text) {
     return statusChannel.set(text);
   }
-  let fitMode = true;   // default: scale down to fit (never upscale past 1:1)
-  let scaleRaf = 0;
+  let viewportController = null;
   let rootOffsetX = parseFloat(viewport.dataset.rootOffsetX) || 0;
   let rootOffsetY = parseFloat(viewport.dataset.rootOffsetY) || 0;
 
@@ -395,6 +392,7 @@ import {
   let gesturePoints = [];
   let gestureFrame = null;
   let gestureViewportRect = null;
+  let gesturePointerId = null;
   let isGesturing = false;
   let isDragging = false;
   let refreshGeneration = 0;
@@ -429,11 +427,11 @@ import {
     frame = committedFrame,
     renderedViewport = viewport.getBoundingClientRect(),
   ) {
-    return clientToAppLogical(
+    return viewportController.toAppLogical(
       clientX,
       clientY,
-      renderedViewport,
-      frame);
+      frame,
+      renderedViewport);
   }
 
   function getElementCaptureMetadata(el) {
@@ -551,7 +549,7 @@ import {
     if (state.elements) onElementsUpdated();
     latestRootOffsetX = rootOffsetX;
     latestRootOffsetY = rootOffsetY;
-    applyScale();
+    viewportController?.applyLayout();
     return true;
   }
 
@@ -1025,7 +1023,7 @@ import {
       ? `Unable to update the app (${status}). Your text has been preserved.`
       : 'Unable to update the app. Your text has been preserved.';
     if (activeEditor === editor) {
-      setTimeout(() => editor.focus(), 0);
+      setTimeout(() => editor.focus({ preventScroll: true }), 0);
     }
   }
 
@@ -1154,7 +1152,7 @@ import {
     editorFrames.set(editor, committedFrame);
     activeEditor = editor;
     // Use a microtask so the click that opened us doesn't immediately blur it.
-    setTimeout(() => { editor.focus(); editor.select(); }, 0);
+    setTimeout(() => { editor.focus({ preventScroll: true }); editor.select(); }, 0);
   }
 
   function pulseActionTarget(el) {
@@ -1262,14 +1260,40 @@ import {
   let lastScrollPoint = null;
   let scrollFrame = null;
 
+  async function flushAppScroll() {
+    if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
+    scrollFlushTimer = null;
+    const frame = scrollFrame || committedFrame;
+    const point = lastScrollPoint;
+    const dx = scrollAccumX;
+    const dy = scrollAccumY;
+    scrollAccumX = 0;
+    scrollAccumY = 0;
+    scrollFrame = null;
+    lastScrollPoint = null;
+    if (!point || (!dx && !dy)) return;
+
+    try {
+      const resp = await fetch(`${basePath}/api/scroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(correlatedPayload(
+          { x: point.x, y: point.y, deltaX: dx, deltaY: dy },
+          CoordinateSpace.appLogical,
+          frame))
+      });
+      if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
+      scheduleRefresh(300);
+    } catch (err) {
+      console.error('Scroll failed:', err);
+    }
+  }
+
   viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (!ensureCanDrive()) return;
     if (scrollFrame && scrollFrame !== committedFrame) {
-      if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
-      scrollFlushTimer = null;
-      scrollAccumX = 0;
-      scrollAccumY = 0;
+      void flushAppScroll();
     }
     scrollFrame = committedFrame;
     scrollAccumX += e.deltaX;
@@ -1281,37 +1305,14 @@ import {
       viewport.getBoundingClientRect());
 
     if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
-    scrollFlushTimer = setTimeout(async () => {
-      const frame = scrollFrame || committedFrame;
-      const { x, y } = lastScrollPoint || { x: 0, y: 0 };
-      const dx = scrollAccumX, dy = scrollAccumY;
-      scrollAccumX = 0;
-      scrollAccumY = 0;
-      scrollFlushTimer = null;
-      scrollFrame = null;
-      lastScrollPoint = null;
-
-      try {
-        const resp = await fetch(`${basePath}/api/scroll`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(correlatedPayload(
-            { x, y, deltaX: dx, deltaY: dy },
-            CoordinateSpace.appLogical,
-            frame))
-        });
-        if (resp.status === 409 || resp.status === 410) scheduleRefresh(0);
-        if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
-        scheduleRefresh(300);
-      } catch (err) {
-        console.error('Scroll failed:', err);
-      }
-    }, 100);
+    scrollFlushTimer = setTimeout(() => { void flushAppScroll(); }, 100);
   }, { passive: false });
 
   // ── Pointer Drag → Gesture ──
   viewport.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.isPrimary || isGesturing) return;
     if (!ensureCanDrive()) return;
+    gesturePointerId = e.pointerId;
     gestureFrame = committedFrame;
     gestureViewportRect = viewport.getBoundingClientRect();
     const { x, y } = toAppCoords(
@@ -1326,7 +1327,7 @@ import {
   });
 
   viewport.addEventListener('pointermove', (e) => {
-    if (!isGesturing) return;
+    if (!isGesturing || e.pointerId !== gesturePointerId) return;
     const { x, y } = toAppCoords(
       e.clientX,
       e.clientY,
@@ -1339,7 +1340,7 @@ import {
   });
 
   viewport.addEventListener('pointerup', async (e) => {
-    if (!isGesturing) return;
+    if (!isGesturing || e.pointerId !== gesturePointerId) return;
     isGesturing = false;
 
     if (gesturePoints.length >= 2) {
@@ -1353,6 +1354,7 @@ import {
           gesturePoints = [];
           gestureFrame = null;
           gestureViewportRect = null;
+          gesturePointerId = null;
           setTimeout(() => { isDragging = false; }, 50);
           return;
         }
@@ -1379,8 +1381,20 @@ import {
     gesturePoints = [];
     gestureFrame = null;
     gestureViewportRect = null;
+    gesturePointerId = null;
     setTimeout(() => { isDragging = false; }, 50);
   });
+  function cancelAppGesture(event) {
+    if (!isGesturing || event.pointerId !== gesturePointerId) return;
+    isGesturing = false;
+    isDragging = false;
+    gesturePoints = [];
+    gestureFrame = null;
+    gestureViewportRect = null;
+    gesturePointerId = null;
+  }
+  viewport.addEventListener('pointercancel', cancelAppGesture);
+  viewport.addEventListener('lostpointercapture', cancelAppGesture);
 
   // ── Live updates: a WebSocket to the broker-proxied /ws/events makes the mirror react instantly
   // to app-side changes. The 3s poll below stays as a zero-regression fallback and only refreshes
@@ -1571,9 +1585,12 @@ import {
     takeControl: document.getElementById('df-take-control'),
   };
   const toolbarCommands = COMMAND_DEFINITIONS
+    .filter(command => command.group !== 'viewport')
     .map(command => document.getElementById(command.id))
     .filter(button => button instanceof HTMLButtonElement);
-  const toolbarCommandOrder = COMMAND_DEFINITIONS.map(command => command.id);
+  const toolbarCommandOrder = COMMAND_DEFINITIONS
+    .filter(command => command.group !== 'viewport')
+    .map(command => command.id);
   const toolbarActions = tb.secondary ? [...tb.secondary.querySelectorAll(':scope > button')] : [];
   const toolbarPriorities = new Map([
     ['df-goto-checkpoint', 10],
@@ -1900,6 +1917,10 @@ import {
       commandLayoutSignature = signature;
       scheduleToolbarLayout();
     }
+    const viewportControls = document.getElementById('df-viewport-controls');
+    if (viewportControls)
+      viewportControls.hidden = nextStates['df-toggle-fit']?.visible === false;
+    viewportController?.syncControls();
   }
 
   function updateCommandStates() {
@@ -4020,27 +4041,6 @@ import {
     tb.bounds.setAttribute('aria-pressed', String(on));
   });
 
-  // ── Fit-to-container scaling (responsive) ──────────────────────────────────
-  // In hosts smaller than the app's logical size (a Copilot canvas side panel, a short VS Code
-  // panel) scale #app-viewport down so the whole app stays visible; #df-stage is sized to the
-  // scaled box so centering + scrollbars behave. "Fit" (default) never upscales past 1:1 (keeps the
-  // screenshot crisp); toggling it off shows 1:1 actual pixels and lets #df-viewport-wrap scroll.
-  function applyScale() {
-    const dw = parseFloat(viewport.dataset.width) || viewport.offsetWidth || 1;
-    const dh = parseFloat(viewport.dataset.height) || viewport.offsetHeight || 1;
-    if (!stage || !vpWrap) return;
-    vpWrap.classList.toggle('df-fit-active', fitMode);
-    let s = 1;
-    if (fitMode) {
-      const availW = vpWrap.clientWidth, availH = vpWrap.clientHeight;
-      if (availW > 0 && availH > 0) s = Math.min(availW / dw, availH / dh, 1);
-      if (!(s > 0) || !isFinite(s)) s = 1;
-    }
-    viewport.style.transform = s === 1 ? 'none' : ('scale(' + s + ')');
-    stage.style.width = (dw * s) + 'px';
-    stage.style.height = (dh * s) + 'px';
-    scheduleScreenshotResolution(dw, dh, s);
-  }
   function boundedScreenshotScale(scale) {
     const maximum = Math.min(scale, learnedMaximumScreenshotScale);
     let bounded = SCREENSHOT_SCALE_BUCKETS[0];
@@ -4083,21 +4083,35 @@ import {
     }, delay);
   }
   function scheduleScale() {
-    if (scaleRaf) cancelAnimationFrame(scaleRaf);
-    scaleRaf = requestAnimationFrame(() => { scaleRaf = 0; applyScale(); });
+    viewportController?.scheduleLayout();
   }
+  // ── Inspector-only viewport navigation ──────────────────────────────────────
   const fitBtn = document.getElementById('df-toggle-fit');
-  if (fitBtn) {
-    fitBtn.addEventListener('click', () => {
-      fitMode = !fitMode;
-      fitBtn.classList.toggle('df-active', fitMode);
-      fitBtn.setAttribute('aria-pressed', String(fitMode));
-      const lbl = fitBtn.querySelector('.df-btn-label'); if (lbl) lbl.textContent = fitMode ? 'Fit' : '1:1';
-      applyScale();
-    });
-  }
-  if (window.ResizeObserver && vpWrap) { try { new ResizeObserver(scheduleScale).observe(vpWrap); } catch (_) {} }
-  window.addEventListener('resize', () => { updateHostLayout(); scheduleScale(); scheduleToolbarLayout(); });
+  viewportController = createViewportController({
+    document,
+    window,
+    viewport,
+    stage,
+    wrap: vpWrap,
+    fitButton: fitBtn,
+    zoomOutButton: document.getElementById('df-zoom-out'),
+    zoomInButton: document.getElementById('df-zoom-in'),
+    zoomPreset: document.getElementById('df-zoom-preset'),
+    zoomIndicator: document.getElementById('df-zoom-indicator'),
+    zoomAnnouncement: document.getElementById('df-zoom-announcement'),
+    resetButton: document.getElementById('df-reset-view'),
+    getFrame: () => committedFrame,
+    isEditing: () => !!activeEditor,
+    isCommandEnabled: id => commandStates[id]?.enabled !== false,
+    onTransformWillChange: () => { void flushAppScroll(); },
+    onTransformChanged: ({ bounds, transform }) =>
+      scheduleScreenshotResolution(bounds.contentWidth, bounds.contentHeight, transform.scale),
+  });
+  window.addEventListener('resize', () => {
+    updateHostLayout();
+    viewportController.scheduleLayout();
+    scheduleToolbarLayout();
+  });
 
   // ── Host theme sync (devflow:theme) ────────────────────────────────────────
   // A cross-origin iframe can't read the host's theme and prefers-color-scheme is unreliable across
@@ -4145,7 +4159,6 @@ import {
   updateHostLayout();
   scheduleToolbarLayout();
   elementTree.build();
-  applyScale();
 
 
   // Layout dock: the original list/detail/coverage UX over the current report contract.
@@ -4310,7 +4323,7 @@ import {
     if (!target) return;
     target.classList.add(className);
     if (scroll)
-      target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+      viewportController?.revealElement(target);
   }
 
   function applyDiagnosticsDelta(delta) {

@@ -70,6 +70,8 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
         Assert.Contains("/inspector-layout.js", _scripts);
         Assert.Contains("/inspector-presentation.js", _scripts);
         Assert.Contains("/inspector-resolution.js", _scripts);
+        Assert.Contains("/inspector-viewport.js", _scripts);
+        Assert.Contains("/inspector-viewport-controller.js", _scripts);
         Assert.Empty(_pageErrors);
     }
 
