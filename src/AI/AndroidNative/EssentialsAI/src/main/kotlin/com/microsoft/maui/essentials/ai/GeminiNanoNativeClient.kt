@@ -6,6 +6,7 @@ import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Content
+import com.google.mlkit.genai.prompt.Feature
 import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.GenerateContentResponse
 import com.google.mlkit.genai.prompt.Generation
@@ -35,7 +36,8 @@ fun checkStatus(callback: NativeCheckStatusCallback): NativeCancellation {
                 val featureStatus = model.checkStatus()
                 NativeModelStatus(
                     featureStatus,
-                    featureStatus == FeatureStatus.AVAILABLE && model.isThinkingModeAvailable(),
+                    featureStatus == FeatureStatus.AVAILABLE &&
+                        Feature.THINKING_MODE in model.getAvailableFeatures(),
                 )
             } finally {
                 model.close()
@@ -139,13 +141,18 @@ class GeminiNanoNativeClient {
                         "Gemini Nano is not ready (ML Kit FeatureStatus $featureStatus). Download the model explicitly before retrying."
                     }
                     val nativeRequest = request.toNative()
+                    val features = if (nativeRequest.systemInstruction != null || nativeRequest.enableThinking) {
+                        model.getAvailableFeatures()
+                    } else {
+                        emptyList()
+                    }
                     if (nativeRequest.systemInstruction != null) {
-                        check(model.isSystemPromptAvailable()) {
+                        check(Feature.SYSTEM_PROMPT in features) {
                             "The selected Gemini Nano model does not support native system instructions (requires Nano V3 or later)."
                         }
                     }
                     if (nativeRequest.enableThinking) {
-                        check(model.isThinkingModeAvailable()) {
+                        check(Feature.THINKING_MODE in features) {
                             "The selected Gemini Nano model does not support thinking mode (requires Nano V4 or later)."
                         }
                     }
@@ -198,7 +205,7 @@ class GeminiNanoNativeClient {
             "Gemini Nano returned no response candidate."
         }
         return NativeChatResponse(
-            candidate.text,
+            checkNotNull(candidate.text) { "Gemini Nano returned a response candidate without text." },
             thoughtProcess.map { it.text }.toTypedArray(),
             candidate.finishReason ?: FINISH_UNSPECIFIED,
             modelName,

@@ -84,6 +84,22 @@ class NativeChatRequestTest {
     }
 
     @Test
+    fun sdkUpdateKeepsRequestsStatelessAndWithoutNativeTools() {
+        val result = request(
+            message("system", "Be concise."),
+            message("user", "hello"),
+            options = NativeChatOptions(null, null, null, null, true),
+        ).toNative()
+
+        assertTrue(result.dynamicTools.isNullOrEmpty())
+        assertNull(result.sessionId)
+        assertNull(result.cachedContextName)
+        assertNull(result.promptPrefix)
+        assertEquals("Be concise.", result.systemInstruction!!.textString)
+        assertTrue(result.enableThinking)
+    }
+
+    @Test
     fun toolHistoryIsTextualAndUnknownRolesAreIgnored() {
         val result = request(message("user", "hello"),
             message("assistant", """{"type":"function_call","callId":"1","name":"sample","arguments":{}}"""),

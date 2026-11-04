@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -71,6 +72,94 @@ class NativeChatStreamTest {
             ),
             callback.events,
         )
+    }
+
+    @Test
+    fun trailingWhitespaceWaitsForMoreContentWithoutMixingTextAndThoughts() = runBlocking {
+        val callback = Callback()
+        val stream = NativeChatStream(this, callback, "native-model")
+        stream.onNewText(" \n")
+        stream.onNewThought("\t")
+        stream.onNewText("")
+        yield()
+        assertTrue(callback.events.isEmpty())
+
+        stream.onNewText("hello ")
+        stream.onNewThought("think\n")
+        yield()
+        assertEquals(
+            listOf(
+                Triple(false, " \nhello", "native-model"),
+                Triple(true, "\tthink", "native-model"),
+            ),
+            callback.events,
+        )
+
+        stream.onNewText("\n")
+        stream.onNewThought("\t")
+        yield()
+        assertEquals(2, callback.events.size)
+        stream.onNewText("world! \n")
+        stream.onNewThought("more\t")
+        stream.finish(response(" \nhello \nworld!", arrayOf("\tthink\n\tmore")))
+
+        assertEquals(
+            listOf(
+                Triple(false, " \nhello", "native-model"),
+                Triple(true, "\tthink", "native-model"),
+                Triple(false, " \nworld!", "native-model"),
+                Triple(true, "\n\tmore", "native-model"),
+            ),
+            callback.events,
+        )
+    }
+
+    @Test
+    fun finishUsesFinalWhitespaceWithoutEmittingDiscardedWhitespace() = runBlocking {
+        for ((streamed, final) in listOf(
+            "hello\n\n\n\n" to "hello",
+            "hello\n" to "hello ",
+            "hello\n" to "hello \n\n",
+            "hello\n" to "hello\n",
+            "hello  " to "hello  world  ",
+        )) {
+            val callback = Callback()
+            val stream = NativeChatStream(this, callback, "native-model")
+            stream.onNewText(streamed)
+            stream.onNewThought(streamed)
+
+            stream.finish(response(final, arrayOf(final)))
+
+            assertEquals(Triple(false, "hello", "native-model"), callback.events[0])
+            assertEquals(Triple(true, "hello", "native-model"), callback.events[1])
+            assertEquals(final, callback.events.filter { !it.first }.joinToString("") { it.second })
+            assertEquals(final, callback.events.filter { it.first }.joinToString("") { it.second })
+            assertEquals(if (final == "hello") 2 else 4, callback.events.size)
+        }
+    }
+
+    @Test
+    fun whitespaceOnlyStreamIsDiscardedWhenAbsentFromFinalResponse() = runBlocking {
+        val callback = Callback()
+        val stream = NativeChatStream(this, callback, "native-model")
+        stream.onNewText(" \t\n")
+        stream.onNewThought("\n\n")
+
+        stream.finish(response(""))
+
+        assertTrue(callback.events.isEmpty())
+    }
+
+    @Test
+    fun finalCandidateMissingNonWhitespaceStillFails() = runBlocking {
+        val callback = Callback()
+        val stream = NativeChatStream(this, callback, "native-model")
+        stream.onNewText("hello world")
+
+        assertTrue(runCatching {
+            stream.finish(response("hello"))
+        }.exceptionOrNull() is IllegalStateException)
+        stream.cancel()
     }
 
     @Test

@@ -18,7 +18,8 @@ Kotlin constructs the Google request:
 
 - Nonblank system-message text is concatenated within each message and joined
   with two LF characters between messages, options first, then passed as native
-  `SystemInstruction`, after checking `isSystemPromptAvailable()`.
+  `SystemInstruction`, after checking `Feature.SYSTEM_PROMPT` in
+  `getAvailableFeatures()`.
 - A single user prompt is passed through unchanged. With assistant/tool history,
   messages receive ordinary `User:`/`Assistant:`/`Tool:` text labels and
   are included in order. Text and image parts remain interleaved; images are not
@@ -27,7 +28,8 @@ Kotlin constructs the Google request:
   C# checks known ranges and Seed's 32-bit representability; Google's builder
   also validates native numeric constraints.
 - `Reasoning.Output = ReasoningOutput.Full` enables thinking after checking
-  `isThinkingModeAvailable()`. Effort levels and summaries have no native mapping.
+  `Feature.THINKING_MODE` in `getAvailableFeatures()`. Effort levels and summaries
+  have no native mapping.
 
 There is no client-held conversation state. Callers supply the conversation on
 each request. Custom content and unknown roles (including `developer`) are
@@ -71,12 +73,17 @@ models; closing the client cancels and joins outstanding work.
 Kit's streaming callback, serializes text/thought deltas, drains admitted
 progress before terminal completion releases the managed JNI callback, and
 reconciles the returned final text/thoughts. Equal final content emits nothing,
-an extension emits only its suffix, and divergence faults the stream. The C#
-adapter converts events to `ChatResponseUpdate` values.
+an extension emits only its suffix, and divergence faults the stream. Trailing
+whitespace is held until more content or completion because ML Kit can omit or
+change it in the final candidate; internal whitespace is preserved, and missing
+or divergent non-whitespace still faults. The C# adapter converts events to
+`ChatResponseUpdate` values.
 
 The final response reports the native finish reason, model name, and input
 tokens from `countTokens`. Output token counts are not estimated.
 Unavailable IDs, timestamps, and other usage counts remain null.
+A candidate without text is rejected explicitly; the text-only adapter does not
+silently convert a native function-call-only candidate to an empty answer.
 
 ## Explicit download
 
@@ -111,7 +118,7 @@ download only when appropriate, and query status again when deciding whether to
 enable generation. Status is never cached. DOWNLOADABLE/DOWNLOADING map to
 NotReady. ML Kit's UNAVAILABLE means either unsupported hardware **or** missing
 AICore configuration; without more evidence it maps to Unknown, preserving that
-native reason. Only a successful runtime `isThinkingModeAvailable` check
+native reason. Only a successful runtime `Feature.THINKING_MODE` availability check
 advertises Reasoning. Generation rejects non-AVAILABLE states without ever
 starting a download.
 
