@@ -116,6 +116,7 @@ public sealed class MockAgentServer : IAsyncDisposable
 
     public string? WebViewEvaluateResponse { get; set; }
     public string? AgentStatusResponse { get; set; }
+    public string? VisualTreeResponse { get; set; }
     public string? FileDownloadResponse { get; set; }
     public string BrokerHealthResponse { get; set; } = """{"agents":2}""";
     public string LayoutResponse { get; set; } = """{"summary":{"incomplete":1}}""";
@@ -333,9 +334,10 @@ public sealed class MockAgentServer : IAsyncDisposable
         app.MapGet("/api/v1/ui/tree", () => Results.Content(
             _returnEmptyTree
                 ? "[]"
-                : _includeDetachedNativeRoot
-                ? MockAgentResponses.VisualTreeWithDetachedNativeRoot
-                : MockAgentResponses.VisualTree,
+                : VisualTreeResponse
+                ?? (_includeDetachedNativeRoot
+                    ? MockAgentResponses.VisualTreeWithDetachedNativeRoot
+                    : MockAgentResponses.VisualTree),
             "application/json"));
         app.MapGet("/api/v1/ui/elements", (HttpContext context) =>
         {

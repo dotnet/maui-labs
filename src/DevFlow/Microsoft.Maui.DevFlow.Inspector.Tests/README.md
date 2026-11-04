@@ -96,8 +96,10 @@ failed state or image requests, and retaining the previous complete frame
 until its replacement screenshot loads. An unchanged immediate capture retries once so delayed
 UI mutations are not mistaken for the completed tap. Latest-wins coverage supersedes held state
 and image work, distinguishes scheduled sharing from explicit retries, and keeps feedback for the
-newest accepted tap. Playwright's clock verifies that post-acknowledgement capture starts within
-50 ms of browser time rather than waiting the former fixed 400 ms.
+newest accepted tap. Frame coverage also verifies screenshot, dimensions, offsets, overlays, and
+descriptor commit together after image decode. Playwright's clock verifies that
+post-acknowledgement capture starts within 50 ms of browser time rather than waiting the former
+fixed 400 ms.
 HTML and shipped scripts are not replaced.
 Teardown stops browser timers and prevents a late pagehide keepalive request, then
 drains HTTP traffic before disposing the
