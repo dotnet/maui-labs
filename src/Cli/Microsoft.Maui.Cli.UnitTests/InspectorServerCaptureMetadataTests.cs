@@ -1998,6 +1998,9 @@ public class InspectorServerCaptureMetadataTests
             using var failedState = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state");
             Assert.Equal(HttpStatusCode.ServiceUnavailable, failedState.StatusCode);
+            Assert.Contains(
+                "\"reason\":\"capture-failed\"",
+                await failedState.Content.ReadAsStringAsync());
 
             agent.ClearRecordedRequests();
             var requestJson = JsonSerializer.Serialize(new
@@ -2171,6 +2174,9 @@ public class InspectorServerCaptureMetadataTests
                 $"http://localhost:{inspectorPort}{path}");
 
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Contains(
+                "\"reason\":\"agent-unavailable\"",
+                await response.Content.ReadAsStringAsync());
             Assert.Equal(
                 3,
                 agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/tree"));
