@@ -16,7 +16,8 @@ In Interact mode, the Preview shows **Updating…** as soon as a tap is sent. Th
 a fresh frame immediately after the app acknowledges the tap, without a fixed settling delay.
 The hint stays until the new screenshot is decoded and its matching tree is displayed. A rejected
 tap clears its pending hint; a failed refresh keeps the previous frame and retries while the hint
-remains visible.
+remains visible. A newer forced refresh supersedes stalled state or image work, and only the latest
+complete frame may replace the Preview.
 
 ## Choose a host
 
