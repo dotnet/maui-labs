@@ -874,6 +874,11 @@ public sealed class InspectorServer : IDisposable
                     continue;
                 var payload = assembled.ToArray();
                 assembled.SetLength(0);
+                if (assembledMessageType
+                    == System.Net.WebSockets.WebSocketMessageType.Text)
+                {
+                    payload = ProcessUiEventPayload(payload);
+                }
                 await SendWebSocketMessageAsync(
                     destination,
                     sendGate,
@@ -1041,6 +1046,22 @@ public sealed class InspectorServer : IDisposable
                 ? hl
                 : "DevFlow Web Inspector";
             using var leaseScope = _client.UseMutationLease(leaseId, holderKind, holderLabel);
+            var inspectorAction = CreateInspectorActionContext(request);
+            using var actionScope = inspectorAction is null
+                ? null
+                : _client.UseActionContext(
+                    source: "inspector",
+                    actionId: inspectorAction.ActionId,
+                    streamId: inspectorAction.StreamId,
+                    frameId: inspectorAction.FrameId,
+                    frameRevision: inspectorAction.FrameRevision,
+                    coordinateSpace: inspectorAction.CoordinateSpace,
+                    x: inspectorAction.X,
+                    y: inspectorAction.Y,
+                    toX: inspectorAction.ToX,
+                    toY: inspectorAction.ToY,
+                    deltaX: inspectorAction.DeltaX,
+                    deltaY: inspectorAction.DeltaY);
 
             // While a replay is driving the app, reject concurrent user mutations + record steps so
             // the replay isn't interleaved (a replay may be triggered from any embedding host/tab).
@@ -1096,6 +1117,7 @@ public sealed class InspectorServer : IDisposable
                     "/inspector-api.js" => HandleEmbeddedFile("inspector-api.js", "application/javascript"),
                     "/inspector-command-policy.js" => HandleEmbeddedFile("inspector-command-policy.js", "application/javascript"),
                     "/inspector-dialog.js" => HandleEmbeddedFile("inspector-dialog.js", "application/javascript"),
+                    "/inspector-actions.js" => HandleEmbeddedFile("inspector-actions.js", "application/javascript"),
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
                     "/inspector-presentation.js" => HandleEmbeddedFile("inspector-presentation.js", "application/javascript"),
                     "/inspector-properties.js" => HandleEmbeddedFile("inspector-properties.js", "application/javascript"),
@@ -1187,6 +1209,137 @@ public sealed class InspectorServer : IDisposable
     private static bool IsAgentUnavailableException(Exception exception)
         => exception is HttpRequestException or SocketException or IOException or TaskCanceledException
             || (exception.InnerException is not null && IsAgentUnavailableException(exception.InnerException));
+
+    private InspectorActionContext? CreateInspectorActionContext(HttpRequestInfo request)
+    {
+        if (request.Method != "POST" || !IsMutation(request.Path))
+            return null;
+
+        string? actionId = null;
+        string? streamId = null;
+        string? frameId = null;
+        long? frameRevision = null;
+        string? coordinateSpace = null;
+        double? x = null;
+        double? y = null;
+        double? toX = null;
+        double? toY = null;
+        double? deltaX = null;
+        double? deltaY = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(request.Body))
+            {
+                using var document = JsonDocument.Parse(request.Body);
+                var body = document.RootElement;
+                if (body.ValueKind == JsonValueKind.Object)
+                {
+                    if (body.TryGetProperty("correlation", out var correlation)
+                        && correlation.ValueKind == JsonValueKind.Object)
+                    {
+                        actionId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "actionId"));
+                        streamId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "streamId"));
+                        var requestedFrameId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "frameId"));
+                        frameId = requestedFrameId;
+                        coordinateSpace = ReadOptionalString(
+                            correlation,
+                            "coordinateSpace") switch
+                        {
+                            "appLogical" => "appLogical",
+                            "windowLogical" => "windowLogical",
+                            "screenshotPixel" => "screenshotPixel",
+                            "inspectorCss" => "inspectorCss",
+                            "transformedViewport" => "transformedViewport",
+                            _ => null
+                        };
+                        if (correlation.TryGetProperty("frameRevision", out var revision)
+                            && revision.ValueKind == JsonValueKind.Number
+                            && revision.TryGetInt64(out var parsedRevision)
+                            && parsedRevision > 0)
+                        {
+                            frameRevision = parsedRevision;
+                        }
+                    }
+
+                    if (request.Path is "/api/tap" or "/api/scroll")
+                    {
+                        x = ReadBoundedInspectorCoordinate(body, "x");
+                        y = ReadBoundedInspectorCoordinate(body, "y");
+                    }
+
+                    if (request.Path == "/api/scroll")
+                    {
+                        deltaX = ReadBoundedInspectorCoordinate(body, "deltaX");
+                        deltaY = ReadBoundedInspectorCoordinate(body, "deltaY");
+                    }
+                    else if (request.Path == "/api/gesture"
+                        && body.TryGetProperty("points", out var points)
+                        && points.ValueKind == JsonValueKind.Array
+                        && points.GetArrayLength() >= 2)
+                    {
+                        var first = points[0];
+                        var last = points[points.GetArrayLength() - 1];
+                        x = ReadBoundedInspectorCoordinate(first, "x");
+                        y = ReadBoundedInspectorCoordinate(first, "y");
+                        toX = ReadBoundedInspectorCoordinate(last, "x");
+                        toY = ReadBoundedInspectorCoordinate(last, "y");
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        if (actionId is null)
+            return null;
+
+        return new InspectorActionContext(
+            actionId,
+            streamId,
+            frameId,
+            frameRevision,
+            coordinateSpace,
+            x,
+            y,
+            toX,
+            toY,
+            deltaX,
+            deltaY);
+    }
+
+    private static string? ReadSafeCorrelationToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var trimmed = value.Trim();
+        if (trimmed.Length > 128)
+            return null;
+        foreach (var character in trimmed)
+        {
+            if (!char.IsAsciiLetterOrDigit(character)
+                && character is not '-' and not '_' and not '.' and not ':')
+            {
+                return null;
+            }
+        }
+        return trimmed;
+    }
+
+    private static double? ReadBoundedInspectorCoordinate(
+        JsonElement element,
+        string propertyName)
+        => element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(propertyName, out var property)
+            && property.ValueKind == JsonValueKind.Number
+            && property.TryGetDouble(out var value)
+            && double.IsFinite(value)
+            && Math.Abs(value) <= 100_000
+                ? value
+                : null;
 
     private async Task<(int, string, byte[])> HandleRootAsync()
     {
@@ -3597,6 +3750,19 @@ public sealed class InspectorServer : IDisposable
         public static ScreenshotResolutionKey SupportedDefault { get; } = new(true, 1);
     }
 
+    private sealed record InspectorActionContext(
+        string? ActionId,
+        string? StreamId,
+        string? FrameId,
+        long? FrameRevision,
+        string? CoordinateSpace,
+        double? X,
+        double? Y,
+        double? ToX,
+        double? ToY,
+        double? DeltaX,
+        double? DeltaY);
+
     private async Task<(int, string, byte[])> HandleProxyBackAsync()
     {
         var success = await _client.BackAsync();
@@ -4393,6 +4559,7 @@ public sealed class InspectorServer : IDisposable
         {
             await CancelProxyPointerSessionsAsync("replay-started");
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            using var actionContext = _client.UseActionContext(source: "replay");
             var replayer = new Flows.FlowReplayer(_client);
             var report = await replayer.ReplayAsync(parsed.Flow, null, cts.Token);
             return (200, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(report, CamelCase)));
@@ -4912,7 +5079,7 @@ public sealed class InspectorServer : IDisposable
                     }
                     if (result.EndOfMessage)
                     {
-                        var payload = assembled.ToArray();
+                        var payload = ProcessUiEventPayload(assembled.ToArray());
                         assembled.SetLength(0);
                         await SendWebSocketFrameAsync(
                             clientStream,
@@ -4929,6 +5096,132 @@ public sealed class InspectorServer : IDisposable
         {
             try { browserClosedCts.Cancel(); } catch { }
         }
+    }
+
+    // State-changing events invalidate the current capture before the browser refreshes. Action
+    // events also gain the matching cached Inspector frame when the agent only knew its capture.
+    internal byte[] ProcessUiEventPayload(byte[] payload)
+    {
+        JsonNode? message;
+        try
+        {
+            message = JsonNode.Parse(payload);
+        }
+        catch (JsonException)
+        {
+            return payload;
+        }
+
+        if (message is not JsonObject root
+            || root["type"] is not JsonValue typeValue
+            || !typeValue.TryGetValue<string>(out var type))
+        {
+            return payload;
+        }
+
+        var eventData = root["data"] as JsonObject;
+        var completedSuccessfully = type == "ui-action-completed"
+            && eventData?["success"] is JsonValue successValue
+            && successValue.TryGetValue<bool>(out var success)
+            && success;
+        if (type is "navigation" or "treeChange" or "lifecycle"
+            || completedSuccessfully)
+        {
+            InvalidateScreenshotCache();
+        }
+
+        if (type is not ("ui-action-started" or "ui-action-updated" or "ui-action-completed")
+            || eventData is not JsonObject data)
+        {
+            return payload;
+        }
+
+        var correlation = data["correlation"] as JsonObject;
+        var existingFrameId = correlation?["frameId"] is JsonValue frameValue
+            && frameValue.TryGetValue<string>(out var parsedFrameId)
+            && !string.IsNullOrWhiteSpace(parsedFrameId)
+                ? parsedFrameId
+                : null;
+        var captureEpoch = TryGetInt64(data["captureEpoch"]);
+        var registryGeneration = TryGetInt64(data["registryGeneration"]);
+        var windowId = TryGetInt32(data["windowId"]);
+        var diagnosticInputsRevision = TryGetBoundedString(
+            data["diagnosticInputsRevision"],
+            128);
+
+        InspectorFrame? matchedFrame = null;
+        lock (_cacheLock)
+        {
+            PruneFramesLocked();
+            if (existingFrameId is not null)
+            {
+                _frames.TryGetValue(existingFrameId, out matchedFrame);
+            }
+            else if (diagnosticInputsRevision is not null)
+            {
+                matchedFrame = _frames.Values
+                    .Where(frame => string.Equals(
+                            frame.DiagnosticInputsRevision,
+                            diagnosticInputsRevision,
+                            StringComparison.Ordinal)
+                        && (registryGeneration is null
+                            || frame.RegistryGeneration == registryGeneration)
+                        && (windowId is null || frame.WindowId == windowId))
+                    .MaxBy(static frame => frame.CreatedUtc);
+            }
+            else if (captureEpoch is not null)
+            {
+                matchedFrame = _frames.Values
+                    .Where(frame => frame.CaptureEpoch == captureEpoch
+                        && (registryGeneration is null
+                            || frame.RegistryGeneration == registryGeneration)
+                        && (windowId is null || frame.WindowId == windowId))
+                    .MaxBy(static frame => frame.CreatedUtc);
+            }
+        }
+
+        if (matchedFrame is null)
+            return payload;
+
+        correlation ??= new JsonObject();
+        correlation["frameId"] = matchedFrame.Id;
+        if (existingFrameId is null)
+        {
+            correlation["streamId"] = _frameStreamId;
+            correlation["frameRevision"] = matchedFrame.FrameRevision;
+        }
+        else
+        {
+            correlation["streamId"] ??= _frameStreamId;
+            correlation["frameRevision"] ??= matchedFrame.FrameRevision;
+        }
+        data["correlation"] = correlation;
+        return Encoding.UTF8.GetBytes(root.ToJsonString());
+    }
+
+    private static long? TryGetInt64(JsonNode? node)
+        => node is JsonValue value && value.TryGetValue<long>(out var number)
+            ? number
+            : null;
+
+    private static int? TryGetInt32(JsonNode? node)
+        => node is JsonValue value && value.TryGetValue<int>(out var number)
+            ? number
+            : null;
+
+    private static string? TryGetBoundedString(JsonNode? node, int maxLength)
+    {
+        if (node is not JsonValue value
+            || !value.TryGetValue<string>(out var text)
+            || string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var trimmed = text.Trim();
+        if (trimmed.Length > maxLength || trimmed.Any(char.IsControl))
+            return null;
+        return trimmed;
     }
 
     internal static string ComputeWebSocketAcceptKey(string webSocketKey)

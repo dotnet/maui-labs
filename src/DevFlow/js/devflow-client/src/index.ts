@@ -613,8 +613,24 @@ function snippet(data: unknown): string | undefined {
 // ── Public re-exports ──────────────────────────────────────────────────────────
 export * from "./types.js";
 export { optionsFromEnv, parsePort } from "./env.js";
-export { openEventStream } from "./events.js";
-export type { DevFlowEvent, EventStreamHandle, EventStreamStatus, EventStreamOptions } from "./events.js";
+export {
+  isUiActionCompletedEvent,
+  isUiActionStartedEvent,
+  isUiActionUpdatedEvent,
+  openEventStream,
+} from "./events.js";
+export type {
+  DevFlowEvent,
+  EventStreamHandle,
+  EventStreamOptions,
+  EventStreamStatus,
+  UiActionCompletedEvent,
+  UiActionCorrelation,
+  UiActionEventData,
+  UiActionSource,
+  UiActionStartedEvent,
+  UiActionUpdatedEvent,
+} from "./events.js";
 export type { ScrollArgs, GestureArgs, AgentRequest } from "./agent.js";
 export { toRoots, buildQuery, requests } from "./agent.js";
 export type { ResolvedConnection } from "./resolve.js";

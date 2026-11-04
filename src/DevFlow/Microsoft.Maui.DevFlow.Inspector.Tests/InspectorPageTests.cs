@@ -276,6 +276,7 @@ public partial class InspectorPageTests : IAsyncLifetime
     {
         foreach (var (file, exportedSymbol) in new[]
         {
+            ("inspector-actions.js", "export function createActionOverlayController"),
             ("inspector-api.js", "export function createInspectorApi"),
             ("inspector-command-policy.js", "export function evaluateCommandStates"),
             ("inspector-dialog.js", "export function confirmModal"),
@@ -1473,6 +1474,10 @@ public partial class InspectorPageTests : IAsyncLifetime
         await Expect(_page.Locator("#df-tree-pane")).ToHaveAttributeAsync("aria-label", "Visual tree");
         await Expect(_page.Locator("#df-props-pane")).ToHaveAttributeAsync("aria-label", "Properties");
         await Expect(_page.Locator("#df-presence")).ToHaveAttributeAsync("role", "status");
+        await Expect(_page.Locator("#df-action-announcer")).ToHaveAttributeAsync("aria-live", "polite");
+        await Expect(_page.Locator("#df-action-announcer")).ToHaveAttributeAsync("aria-atomic", "true");
+        await Expect(_page.Locator("#df-action-overlay")).ToHaveAttributeAsync("aria-hidden", "true");
+        await Expect(_page.Locator("#df-action-chrome")).ToHaveAttributeAsync("aria-hidden", "true");
         await Expect(_page.Locator("#df-pane-scrim")).ToHaveAttributeAsync("tabindex", "-1");
         await Expect(_page.Locator(".df-modes")).ToHaveAttributeAsync("role", "radiogroup");
         await Expect(_page.Locator("#df-mode-interact")).ToHaveAttributeAsync("role", "radio");

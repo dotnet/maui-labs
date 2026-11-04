@@ -513,8 +513,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             ? HttpResponse.Json(new Dictionary<string, object?>
             {
                 ["revision"] = VisualTreeRevision.ComputeTree(tree),
-                ["diagnosticInputsRevision"] = FormattableString.Invariant(
-                    $"{capture.RegistryGeneration}:{capture.MutationGeneration}:{capture.ExternalMutationGeneration}"),
+                ["diagnosticInputsRevision"] = FormatDiagnosticInputsRevision(capture),
                 ["elements"] = tree
             })
             : HttpResponse.Json(tree);
@@ -1165,6 +1164,33 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 new Dictionary<string, CapturedElementIdentity>(StringComparer.Ordinal));
         }
     }
+
+    protected override string? GetUiActionDiagnosticInputsRevision(
+        long? captureEpoch,
+        long? registryGeneration,
+        int? windowId)
+    {
+        if (captureEpoch is not > 0)
+            return null;
+
+        lock (_captureStateGate)
+        {
+            if (!_captureLeases.TryGetValue(captureEpoch.Value, out var capture)
+                || registryGeneration is not null
+                    && capture.RegistryGeneration != registryGeneration
+                || windowId is not null
+                    && capture.WindowId != windowId)
+            {
+                return null;
+            }
+
+            return FormatDiagnosticInputsRevision(capture);
+        }
+    }
+
+    private static string FormatDiagnosticInputsRevision(UiCaptureContext capture)
+        => FormattableString.Invariant(
+            $"{capture.RegistryGeneration}:{capture.MutationGeneration}:{capture.ExternalMutationGeneration}");
 
     private bool CommitUiCapture(UiCaptureContext capture)
     {
@@ -3761,6 +3787,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         var body = request.BodyAs<BatchRequest>();
         if (body?.Actions == null || body.Actions.Count == 0)
             return HttpResponse.Error("actions are required");
+        if (body.Actions.Count > MaxUiBatchActions)
+            return HttpResponse.Error(
+                $"A batch can contain at most {MaxUiBatchActions} actions.",
+                statusCode: 400,
+                reason: "batch-too-large");
 
         var reservation = ReserveUiCapture(body);
         if (reservation.Error is not null)
@@ -3774,199 +3805,22 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 return identityError;
         }
 
-        var results = new List<object>(body.Actions.Count);
-        var allSucceeded = true;
-
         try
         {
-            foreach (var action in body.Actions)
-            {
-                var actionName = (action.Action ?? action.Type ?? string.Empty).Trim().ToLowerInvariant();
-                HttpResponse response;
-
-                var identityError = await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ElementId)
-                    ?? await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ToElementId);
-                if (identityError is not null)
+            return await ExecuteBatchActionsWithLifecycleAsync(
+                request,
+                body,
+                async action =>
                 {
-                    response = identityError;
-                }
-                else
-                {
+                    var identityError = await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ElementId)
+                        ?? await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ToElementId);
+                    if (identityError is not null)
+                        return identityError;
 
-                    switch (actionName)
-                    {
-                        case "tap":
-                            response = await HandleTap(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new TapRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    X = action.X,
-                                    Y = action.Y
-                                })
-                            });
-                            break;
-                        case "fill":
-                            response = await HandleFill(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new FillRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    Text = action.Text ?? string.Empty
-                                })
-                            });
-                            break;
-                        case "clear":
-                            response = await HandleClear(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new ActionRequest
-                                {
-                                    ElementId = action.ElementId
-                                })
-                            });
-                            break;
-                        case "focus":
-                            response = await HandleFocus(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new ActionRequest
-                                {
-                                    ElementId = action.ElementId
-                                })
-                            });
-                            break;
-                        case "navigate":
-                            response = await HandleNavigate(new HttpRequest
-                            {
-                                Method = "POST",
-                                Body = AgentJson.Serialize(new NavigateRequest { Route = action.Route ?? string.Empty })
-                            });
-                            break;
-                        case "resize":
-                            response = await HandleResize(new HttpRequest { Method = "POST", Body = AgentJson.Serialize(new ResizeRequest(action.Width, action.Height)) });
-                            break;
-                        case "scroll":
-                            response = await HandleScroll(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new ScrollRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    DeltaX = action.DeltaX ?? 0,
-                                    DeltaY = action.DeltaY ?? 0,
-                                    ItemIndex = action.ItemIndex,
-                                    GroupIndex = action.GroupIndex,
-                                    ScrollToPosition = action.ScrollToPosition,
-                                    Animated = action.Animated
-                                })
-                            });
-                            break;
-                        case "back":
-                            response = await HandleBack(new HttpRequest { Method = "POST" });
-                            break;
-                        case "key":
-                            response = await HandleKey(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new KeyActionRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    Key = action.Key,
-                                    Text = action.Text
-                                })
-                            });
-                            break;
-                        case "gesture":
-                            response = await HandleGesture(new HttpRequest
-                            {
-                                Method = "POST",
-                                MutationState = reservation.Capture,
-                                Body = AgentJson.Serialize(new GestureActionRequest
-                                {
-                                    ElementId = action.ElementId,
-                                    Type = action.Type ?? action.Action,
-                                    Direction = action.Direction,
-                                    Distance = action.Distance,
-                                    DurationMs = action.DurationMs,
-                                    Scale = action.Scale,
-                                    Rotation = action.Rotation,
-                                    DeltaX = action.DeltaX,
-                                    DeltaY = action.DeltaY,
-                                    OriginX = action.OriginX,
-                                    OriginY = action.OriginY,
-                                    X = action.X,
-                                    Y = action.Y,
-                                    ToX = action.ToX,
-                                    ToY = action.ToY,
-                                    ToElementId = action.ToElementId,
-                                    HoldMs = action.HoldMs,
-                                    Steps = action.Steps
-                                })
-                            });
-                            break;
-                        case "set-property":
-                        case "set_property":
-                            response = await HandleSetProperty(new HttpRequest
-                            {
-                                Method = "PUT",
-                                MutationState = reservation.Capture,
-                                RouteParams = new Dictionary<string, string>
-                                {
-                                    ["id"] = action.ElementId ?? string.Empty,
-                                    ["name"] = action.Property ?? string.Empty
-                                },
-                                Body = AgentJson.Serialize(new SetPropertyRequest
-                                {
-                                    Value = action.Value ?? string.Empty
-                                })
-                            });
-                            break;
-                        case "invoke-action":
-                        case "invoke_action":
-                            response = await HandleInvokeAction(new HttpRequest
-                            {
-                                Method = "POST",
-                                RouteParams = new Dictionary<string, string>
-                                {
-                                    ["name"] = action.Name ?? string.Empty
-                                },
-                                Body = AgentJson.Serialize(new InvokeActionRequest { Args = action.Args })
-                            });
-                            break;
-                        default:
-                            response = HttpResponse.Error($"Unsupported batch action '{actionName}'");
-                            break;
-                    }
-                }
-
-                var succeeded = response.StatusCode < 400;
-                allSucceeded &= succeeded;
-                results.Add(new Dictionary<string, object?>
-                {
-                    ["action"] = actionName,
-                    ["success"] = succeeded,
-                    ["statusCode"] = response.StatusCode,
-                    ["response"] = response.Body
+                    return await ExecuteBatchActionHandlerAsync(
+                        action,
+                        reservation.Capture);
                 });
-
-                if (!succeeded && !body.ContinueOnError)
-                    break;
-            }
-
-            return HttpResponse.Json(new Dictionary<string, object?>
-            {
-                ["success"] = allSucceeded,
-                ["results"] = results
-            });
         }
         finally
         {

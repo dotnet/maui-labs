@@ -103,7 +103,7 @@ channels:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
             entry:
-              oneOf:
+              anyOf:
                 - $ref: './schemas/network.json#/$defs/NetworkRequestDetail'
                 - type: 'null'
               description: Full details of the network request, or null if no entry matches.
@@ -402,7 +402,8 @@ channels:
     address: /ws/v1/ui/events
     description: |
       Real-time UI state change notifications including navigation, lifecycle
-      changes, visual tree mutations, system alerts, and unhandled exceptions.
+      changes, visual tree mutations, admitted action lifecycles, system alerts,
+      and unhandled exceptions.
       Clients subscribe to the event types they are interested in.
     servers:
       - $ref: '#/servers/agent'
@@ -588,6 +589,214 @@ channels:
                   $ref: './schemas/common.json#/$defs/Timestamp'
                   description: Timestamp when the error occurred.
 
+      uiActionStarted:
+        name: uiActionStarted
+        title: UI Action Started
+        summary: An admitted DevFlow UI action started.
+        contentType: application/json
+        payload:
+          type: object
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: ui-action-started
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+            data:
+              type: object
+              description: |
+                Geometry-only action metadata. Text, key values, property values,
+                routes, raw payloads, and exception details are never included.
+              required: [correlation, kind]
+              properties:
+                correlation:
+                  description: |
+                    Inspector-proxied events use the canonical frame ActionCorrelation.
+                    Direct agent clients that have no Inspector frame use the compatible
+                    actionId/source-only fallback.
+                  anyOf:
+                    - $ref: './schemas/frame.json#/$defs/ActionCorrelation'
+                    - type: object
+                      required: [actionId, source]
+                      properties:
+                        actionId:
+                          type: string
+                          maxLength: 128
+                        source:
+                          type: string
+                          enum: [inspector, cli, mcp, replay]
+                kind:
+                  type: string
+                  maxLength: 40
+                  examples: [pointer, tap, longpress, swipe, drag, fill, navigate]
+                elementId:
+                  type: string
+                  maxLength: 256
+                toElementId:
+                  type: string
+                  maxLength: 256
+                x:
+                  type: number
+                y:
+                  type: number
+                toX:
+                  type: number
+                toY:
+                  type: number
+                deltaX:
+                  type: number
+                deltaY:
+                  type: number
+                distance:
+                  type: number
+                originX:
+                  type: number
+                originY:
+                  type: number
+                direction:
+                  type: string
+                  enum: [up, down, left, right]
+                durationMs:
+                  type: integer
+                  minimum: 0
+                  maximum: 600000
+                holdMs:
+                  type: integer
+                  minimum: 0
+                  maximum: 600000
+                captureEpoch:
+                  type: integer
+                  minimum: 1
+                registryGeneration:
+                  type: integer
+                  minimum: 0
+                windowId:
+                  type: integer
+                  minimum: 0
+                diagnosticInputsRevision:
+                  type: string
+                  maxLength: 128
+                  description: Stable capture-input revision used to match identity-less actions to a compatible Inspector frame.
+
+      uiActionCompleted:
+        name: uiActionCompleted
+        title: UI Action Completed
+        summary: A DevFlow UI action completed, failed, or was cancelled.
+        contentType: application/json
+        payload:
+          type: object
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: ui-action-completed
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+            data:
+              type: object
+              description: |
+                Repeats the safe action geometry so clients can present a terminal
+                event even if the corresponding start event was missed.
+              required: [correlation, kind, success, outcome]
+              properties:
+                correlation:
+                  anyOf:
+                    - $ref: './schemas/frame.json#/$defs/ActionCorrelation'
+                    - type: object
+                      required: [actionId, source]
+                      properties:
+                        actionId:
+                          type: string
+                          maxLength: 128
+                        source:
+                          type: string
+                          enum: [inspector, cli, mcp, replay]
+                kind:
+                  type: string
+                  maxLength: 40
+                elementId:
+                  type: string
+                  maxLength: 256
+                toElementId:
+                  type: string
+                  maxLength: 256
+                x:
+                  type: number
+                y:
+                  type: number
+                toX:
+                  type: number
+                toY:
+                  type: number
+                deltaX:
+                  type: number
+                deltaY:
+                  type: number
+                distance:
+                  type: number
+                originX:
+                  type: number
+                originY:
+                  type: number
+                direction:
+                  type: string
+                  enum: [up, down, left, right]
+                durationMs:
+                  type: integer
+                  minimum: 0
+                  maximum: 600000
+                holdMs:
+                  type: integer
+                  minimum: 0
+                  maximum: 600000
+                captureEpoch:
+                  type: integer
+                  minimum: 1
+                registryGeneration:
+                  type: integer
+                  minimum: 0
+                windowId:
+                  type: integer
+                  minimum: 0
+                diagnosticInputsRevision:
+                  type: string
+                  maxLength: 128
+                  description: Stable capture-input revision used to match identity-less actions to a compatible Inspector frame.
+                success:
+                  type: boolean
+                outcome:
+                  type: string
+                  enum: [completed, failed, cancelled]
+                reason:
+                  type: string
+                  maxLength: 80
+                  description: Bounded machine-readable reason; never an exception message.
+                statusCode:
+                  type: integer
+                  minimum: 100
+                  maximum: 599
+                elapsedMs:
+                  type: integer
+                  minimum: 0
+
+      uiActionUpdated:
+        name: uiActionUpdated
+        title: UI Action Updated
+        summary: A coalesced pointer-session action moved.
+        contentType: application/json
+        payload:
+          type: object
+          required: [type, timestamp, data]
+          properties:
+            type:
+              type: string
+              const: ui-action-updated
+            timestamp:
+              $ref: './schemas/common.json#/$defs/Timestamp'
+            data:
+              $ref: '#/channels/uiEvents/messages/uiActionStarted/payload/properties/data'
+
       # ── client → server ──
       uiSubscribe:
         name: uiSubscribe
@@ -614,7 +823,7 @@ channels:
                   type: array
                   items:
                     type: string
-                    enum: [navigation, lifecycle, treeChange, alert, error, all]
+                    enum: [navigation, lifecycle, treeChange, alert, error, ui-action-started, ui-action-updated, ui-action-completed, all]
                   description: >
                     Event types to subscribe to. Use "all" to receive every
                     event type.
@@ -644,7 +853,7 @@ channels:
                   type: array
                   items:
                     type: string
-                    enum: [navigation, lifecycle, treeChange, alert, error, all]
+                    enum: [navigation, lifecycle, treeChange, alert, error, ui-action-started, ui-action-updated, ui-action-completed, all]
                   description: Event types to unsubscribe from.
 
 # ---------------------------------------------------------------------------
@@ -729,13 +938,16 @@ operations:
     summary: Server streams UI lifecycle events to the client.
     description: |
       Sends real-time notifications for navigation, lifecycle changes,
-      visual tree mutations, system alerts, and unhandled exceptions.
+      visual tree mutations, action lifecycles, system alerts, and unhandled exceptions.
     messages:
       - $ref: '#/channels/uiEvents/messages/uiNavigation'
       - $ref: '#/channels/uiEvents/messages/uiLifecycle'
       - $ref: '#/channels/uiEvents/messages/uiTreeChange'
       - $ref: '#/channels/uiEvents/messages/uiAlert'
       - $ref: '#/channels/uiEvents/messages/uiError'
+      - $ref: '#/channels/uiEvents/messages/uiActionStarted'
+      - $ref: '#/channels/uiEvents/messages/uiActionUpdated'
+      - $ref: '#/channels/uiEvents/messages/uiActionCompleted'
 
   receiveUICommands:
     action: receive

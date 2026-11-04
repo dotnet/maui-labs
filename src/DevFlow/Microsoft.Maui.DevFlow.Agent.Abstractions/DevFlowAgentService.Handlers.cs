@@ -52,6 +52,7 @@ public partial class DevFlowAgentService
     protected readonly List<UiEventSubscription> _uiEventSubscriptions = new();
 
     protected readonly object _uiEventSubscriptionGate = new();
+    private const int MaxQueuedUiEventsPerSubscription = 2048;
 
     protected sealed class UiEventSubscription
     {
@@ -380,17 +381,17 @@ public partial class DevFlowAgentService
             _server.MapPost("/api/v1/ui/diagnostics/layout", HandleLayoutDiagnostics, requiresMutationLease: false);
         }
         _server.MapGet("/api/v1/ui/elements/{id}/properties/{name}", HandleProperty);
-        _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", request => ExecuteUiMutationAsync(request, HandleSetProperty));
-        _server.MapPost("/api/v1/ui/actions/tap", request => ExecuteUiMutationAsync(request, HandleTap));
-        _server.MapPost("/api/v1/ui/actions/fill", request => ExecuteUiMutationAsync(request, HandleFill));
-        _server.MapPost("/api/v1/ui/actions/clear", request => ExecuteUiMutationAsync(request, HandleClear));
-        _server.MapPost("/api/v1/ui/actions/focus", request => ExecuteUiMutationAsync(request, HandleFocus));
-        _server.MapPost("/api/v1/ui/actions/navigate", request => ExecutePointerTerminatingMutationAsync(request, HandleNavigate));
-        _server.MapPost("/api/v1/ui/actions/resize", request => ExecuteUiMutationAsync(request, HandleResize));
-        _server.MapPost("/api/v1/ui/actions/scroll", request => ExecuteUiMutationAsync(request, HandleScroll));
-        _server.MapPost("/api/v1/ui/actions/back", request => ExecutePointerTerminatingMutationAsync(request, HandleBack));
-        _server.MapPost("/api/v1/ui/actions/key", request => ExecuteUiMutationAsync(request, HandleKey));
-        _server.MapPost("/api/v1/ui/actions/gesture", request => ExecuteUiMutationAsync(request, HandleGesture));
+        _server.MapPut("/api/v1/ui/elements/{id}/properties/{name}", request => ExecuteUiActionMutationAsync(request, "set-property", HandleSetProperty));
+        _server.MapPost("/api/v1/ui/actions/tap", request => ExecuteUiActionMutationAsync(request, "tap", HandleTap));
+        _server.MapPost("/api/v1/ui/actions/fill", request => ExecuteUiActionMutationAsync(request, "fill", HandleFill));
+        _server.MapPost("/api/v1/ui/actions/clear", request => ExecuteUiActionMutationAsync(request, "clear", HandleClear));
+        _server.MapPost("/api/v1/ui/actions/focus", request => ExecuteUiActionMutationAsync(request, "focus", HandleFocus));
+        _server.MapPost("/api/v1/ui/actions/navigate", request => ExecutePointerTerminatingActionMutationAsync(request, "navigate", HandleNavigate));
+        _server.MapPost("/api/v1/ui/actions/resize", request => ExecuteUiActionMutationAsync(request, "resize", HandleResize));
+        _server.MapPost("/api/v1/ui/actions/scroll", request => ExecuteUiActionMutationAsync(request, "scroll", HandleScroll));
+        _server.MapPost("/api/v1/ui/actions/back", request => ExecutePointerTerminatingActionMutationAsync(request, "back", HandleBack));
+        _server.MapPost("/api/v1/ui/actions/key", request => ExecuteUiActionMutationAsync(request, "key", HandleKey));
+        _server.MapPost("/api/v1/ui/actions/gesture", request => ExecuteUiActionMutationAsync(request, "gesture", HandleGesture));
         _server.MapPost("/api/v1/ui/actions/pointer-sessions", request => ExecuteUiMutationAsync(request, HandlePointerSessionStart));
         _server.MapPost("/api/v1/ui/actions/pointer-sessions/{id}/move", request => ExecuteUiMutationAsync(request, HandlePointerSessionMove));
         _server.MapPost("/api/v1/ui/actions/pointer-sessions/{id}/end", request => ExecuteUiMutationAsync(request, HandlePointerSessionEnd));
@@ -410,10 +411,10 @@ public partial class DevFlowAgentService
         _server.MapGet("/api/v1/webview/source", HandleCdpSource);
         _server.MapGet("/api/v1/webview/dom", HandleWebViewDom);
         _server.MapPost("/api/v1/webview/dom/query", HandleWebViewDomQuery, requiresMutationLease: false);
-        _server.MapPost("/api/v1/webview/navigate", request => ExecutePointerTerminatingMutationAsync(request, HandleWebViewNavigate));
-        _server.MapPost("/api/v1/webview/input/click", request => ExecuteUiMutationAsync(request, HandleWebViewInputClick));
-        _server.MapPost("/api/v1/webview/input/fill", request => ExecuteUiMutationAsync(request, HandleWebViewInputFill));
-        _server.MapPost("/api/v1/webview/input/text", request => ExecuteUiMutationAsync(request, HandleWebViewInputText));
+        _server.MapPost("/api/v1/webview/navigate", request => ExecutePointerTerminatingActionMutationAsync(request, "webview-navigate", HandleWebViewNavigate));
+        _server.MapPost("/api/v1/webview/input/click", request => ExecuteUiActionMutationAsync(request, "webview-click", HandleWebViewInputClick));
+        _server.MapPost("/api/v1/webview/input/fill", request => ExecuteUiActionMutationAsync(request, "webview-fill", HandleWebViewInputFill));
+        _server.MapPost("/api/v1/webview/input/text", request => ExecuteUiActionMutationAsync(request, "webview-text", HandleWebViewInputText));
         _server.MapGet("/api/v1/webview/console", HandleWebViewConsole);
         _server.MapGet("/api/v1/webview/screenshot", HandleWebViewScreenshot);
 
@@ -469,11 +470,16 @@ public partial class DevFlowAgentService
         _server.MapDelete("/api/v1/storage/files/{path}", HandleFileDelete);
 
         _server.MapGet("/api/v1/ui/menus", HandleMenusList);
-        _server.MapPost("/api/v1/ui/menus/invoke", request => ExecuteUiMutationAsync(request, HandleMenuInvoke));
+        _server.MapPost("/api/v1/ui/menus/invoke", request => ExecuteUiActionMutationAsync(request, "menu-invoke", HandleMenuInvoke));
 
         // Invoke / reflection
         _server.MapGet("/api/v1/invoke/actions", HandleListActions);
-        _server.MapPost("/api/v1/invoke/actions/{name}", HandleInvokeAction);
+        _server.MapPost(
+            "/api/v1/invoke/actions/{name}",
+            request => ExecuteUiActionLifecycleAsync(
+                request,
+                CreateUiActionDescriptor("invoke-action", request),
+                () => HandleInvokeAction(request)));
 
         RegisterExtensionRoutes();
     }
@@ -1443,7 +1449,13 @@ public partial class DevFlowAgentService
             foreach (var subscription in _uiEventSubscriptions)
             {
                 if (subscription.Events.Contains("all") || subscription.Events.Contains(type))
+                {
+                    while (subscription.Queue.Count >= MaxQueuedUiEventsPerSubscription
+                        && subscription.Queue.TryDequeue(out _))
+                    {
+                    }
                     subscription.Queue.Enqueue(payload);
+                }
             }
         }
     }

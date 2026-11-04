@@ -73,6 +73,77 @@ public class InspectorPropertyEndpointTests
     }
 
     [Fact]
+    public async Task UiActionEvents_UseCachedFrameDescriptorWhenAgentOnlyKnowsCapture()
+    {
+        await using var agent = new FakeAgent(
+            new ElementInfo
+            {
+                Id = "action-target",
+                Type = "Button",
+                IsVisible = true,
+                IsEnabled = true,
+                CaptureEpoch = 42,
+                RegistryGeneration = 7,
+                WindowId = 0,
+                Bounds = new BoundsInfo { X = 10, Y = 20, Width = 100, Height = 40 }
+            },
+            diagnosticInputsRevision: "7:3:0");
+        using var inspector = new InspectorServer(
+            FreePort(),
+            "127.0.0.1",
+            agent.Port);
+        inspector.Start();
+        try
+        {
+            using var http = new HttpClient();
+            var page = await http.GetStringAsync($"http://127.0.0.1:{inspector.Port}/");
+            var encodedFrame = Regex.Match(
+                page,
+                "<meta\\s+name=\"devflow-frame\"\\s+content=\"([^\"]+)\"")
+                .Groups[1]
+                .Value;
+            using var state = JsonDocument.Parse(WebUtility.HtmlDecode(encodedFrame));
+            var frame = state.RootElement;
+            var captureEpoch = frame.GetProperty("captureEpoch").GetInt64();
+            var registryGeneration = frame.GetProperty("registryGeneration").GetInt64();
+            var windowId = frame.GetProperty("windowId").GetInt32();
+            var diagnosticInputsRevision = frame
+                .GetProperty("diagnosticInputsRevision")
+                .GetString();
+            foreach (var eventType in new[] { "ui-action-started", "ui-action-updated" })
+            {
+                var payload = JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = eventType,
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    data = new
+                    {
+                        correlation = new { actionId = "action-1", source = "mcp" },
+                        kind = "tap",
+                        elementId = "action-target",
+                        captureEpoch = captureEpoch + 100,
+                        registryGeneration,
+                        windowId,
+                        diagnosticInputsRevision
+                    }
+                });
+
+                using var enriched = JsonDocument.Parse(inspector.ProcessUiEventPayload(payload));
+                var correlation = enriched.RootElement
+                    .GetProperty("data")
+                    .GetProperty("correlation");
+                Assert.False(string.IsNullOrWhiteSpace(correlation.GetProperty("frameId").GetString()));
+                Assert.False(string.IsNullOrWhiteSpace(correlation.GetProperty("streamId").GetString()));
+                Assert.True(correlation.GetProperty("frameRevision").GetInt64() > 0);
+            }
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task InspectorPage_TitleIncludesProductAndEncodedAppName()
     {
         await using var agent = new FakeAgent();
@@ -824,6 +895,7 @@ public class InspectorPropertyEndpointTests
         private readonly string? _hitTestResponse;
         private readonly string? _propertyDescriptorsResponse;
         private readonly Func<string, bool>? _tapResponse;
+        private readonly string? _diagnosticInputsRevision;
 
         public FakeAgent(
             ElementInfo? element = null,
@@ -833,7 +905,8 @@ public class InspectorPropertyEndpointTests
             Func<string, (int StatusCode, string Body)>? recordingResponse = null,
             string? hitTestResponse = null,
             string? propertyDescriptorsResponse = null,
-            Func<string, bool>? tapResponse = null)
+            Func<string, bool>? tapResponse = null,
+            string? diagnosticInputsRevision = null)
         {
             _element = element;
             _rejectProperty = rejectProperty;
@@ -842,6 +915,7 @@ public class InspectorPropertyEndpointTests
             _hitTestResponse = hitTestResponse;
             _propertyDescriptorsResponse = propertyDescriptorsResponse;
             _tapResponse = tapResponse;
+            _diagnosticInputsRevision = diagnosticInputsRevision;
             if (initialProperties is not null)
             {
                 foreach (var property in initialProperties)
@@ -883,6 +957,21 @@ public class InspectorPropertyEndpointTests
                         path.Equals($"/api/v1/ui/elements/{_element.Id}", StringComparison.Ordinal))
                     {
                         json = JsonSerializer.Serialize(_element);
+                        status = "200 OK";
+                    }
+
+                    if (method == "GET"
+                        && _element is not null
+                        && path.StartsWith("/api/v1/ui/tree", StringComparison.Ordinal))
+                    {
+                        json = _diagnosticInputsRevision is null
+                            ? JsonSerializer.Serialize(new[] { _element })
+                            : JsonSerializer.Serialize(new
+                            {
+                                revision = "fixture-tree",
+                                diagnosticInputsRevision = _diagnosticInputsRevision,
+                                elements = new[] { _element }
+                            });
                         status = "200 OK";
                     }
 
