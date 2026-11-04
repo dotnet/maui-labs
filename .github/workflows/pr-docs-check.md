@@ -43,6 +43,10 @@ permissions:
   pull-requests: read
   issues: read
 
+engine:
+  id: copilot
+  model: gpt-5.6-sol
+
 network:
   allowed:
     - defaults
