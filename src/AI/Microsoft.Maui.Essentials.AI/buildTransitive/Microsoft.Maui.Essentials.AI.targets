@@ -1,0 +1,29 @@
+<Project>
+  <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
+    <!-- ML Kit discovers the native response-schema providers through Java ServiceLoader. -->
+    <AndroidPackagingOptionsInclude Include="META-INF/services/com.google.mlkit.genai.schema.guided.GenerableProvider" />
+  </ItemGroup>
+  <PropertyGroup>
+    <_EssentialsAISchemaProvidersFile>$(MSBuildThisFileDirectory)com.google.mlkit.genai.schema.guided.GenerableProvider</_EssentialsAISchemaProvidersFile>
+    <_EssentialsAISchemaProvidersFile Condition="!Exists('$(_EssentialsAISchemaProvidersFile)')">$(MSBuildThisFileDirectory)../../AndroidNative/EssentialsAI/src/main/resources/META-INF/services/com.google.mlkit.genai.schema.guided.GenerableProvider</_EssentialsAISchemaProvidersFile>
+    <_EssentialsAIConsumerRules>$(MSBuildThisFileDirectory)consumer-rules.pro</_EssentialsAIConsumerRules>
+    <_EssentialsAIConsumerRules Condition="!Exists('$(_EssentialsAIConsumerRules)')">$(MSBuildThisFileDirectory)../../AndroidNative/EssentialsAI/consumer-rules.pro</_EssentialsAIConsumerRules>
+  </PropertyGroup>
+  <!-- Older BuildArchive versions remove unchanged JAR resource entries during
+       incremental packaging. A regular file is retained on that same path. -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
+    <ProguardConfiguration Include="$(_EssentialsAIConsumerRules)" />
+    <FilesToAddToArchive Include="$(_EssentialsAISchemaProvidersFile)">
+      <ArchivePath>META-INF/services/com.google.mlkit.genai.schema.guided.GenerableProvider</ArchivePath>
+      <ArchivePath Condition="'$(AndroidPackageFormat)' == 'aab'">root/META-INF/services/com.google.mlkit.genai.schema.guided.GenerableProvider</ArchivePath>
+    </FilesToAddToArchive>
+  </ItemGroup>
+  <Target Name="ValidateEssentialsAISchemaProviders"
+          BeforeTargets="PrepareForBuild"
+          Condition="$(TargetFramework.Contains('-android'))">
+    <Error Condition="!Exists('$(_EssentialsAISchemaProvidersFile)')"
+           Text="The Essentials.AI native schema-provider registration file is missing." />
+    <Error Condition="!Exists('$(_EssentialsAIConsumerRules)')"
+           Text="The Essentials.AI native consumer keep rules are missing." />
+  </Target>
+</Project>

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <metadata>
   <attr path="/api/package[@name='com.microsoft.maui.essentials.ai']/*" name="visibility">internal</attr>
+  <remove-node path="/api/package[@name='com.microsoft.maui.essentials.ai']/class[starts-with(@name, 'NativeResponseObject') or starts-with(@name, 'NativeResponseProvider') or starts-with(@name, 'NativeResponseSchema')]" />
 </metadata>

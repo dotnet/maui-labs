@@ -14,7 +14,7 @@ Chat, Embeddings, and Images have separate providers and capabilities.
 |----------|------|-------------|-------|-----------------|
 | Apple Intelligence | iOS / Mac Catalyst 26+ on supported hardware | OS 27+ with a ready vision model | Supported | Supported |
 | Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Not supported | Not supported | Supported |
-| Gemini Nano | Android API 26+ on supported AICore hardware | In-memory images | Native Auto on capable Nano V4 profiles | Not supported |
+| Gemini Nano | Android API 26+ on supported AICore hardware | In-memory images | Native Auto on capable Nano V4 profiles | Supported when the model advertises it; complete JSON at completion |
 | Azure OpenAI | Configured Responses API deployment | Supported by compatible deployments | Supported by compatible deployments | Supported by compatible deployments |
 | Replay | Recorded responses | No new image input | Recorded activity, no execution | Recorded responses |
 
@@ -100,7 +100,10 @@ Gemini Nano. It supports text/image chat and native tool calling when the select
 model advertises that capability. Select **Preview fast** for the verified Nano V4
 tool path; the default stable/full Nano V3 model has no native tool calling.
 Tool controls follow the selected model's status. Auto and None are available;
-Require any and structured JSON are unsupported. Tool-enabled text arrives at
+Require any is unsupported. **Structured JSON** uses the native schema API and
+temporarily disables incompatible tools without discarding their selections.
+With Streaming enabled, complete JSON arrives after inference rather than as
+token deltas. Tool-enabled text arrives at
 the end of each model turn so ML Kit's raw function tokens never appear in chat.
 Use **Download** in the readiness banner to prepare the model. Chat requests never
 download assets or fall back to a cloud provider.

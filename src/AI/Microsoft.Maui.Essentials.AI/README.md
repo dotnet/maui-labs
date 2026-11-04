@@ -5,7 +5,7 @@ On-device chat and text embeddings through
 backed by Apple Intelligence, Apple NaturalLanguage, Windows AI, and Gemini Nano.
 Chat capabilities vary by platform; Apple supports native tool execution and
 eligible image input, Windows supports structured JSON, and Android supports
-in-memory image input and native tool calling on supported Nano V4 models.
+in-memory image input, native structured responses, and tool calling on supported Nano V4 models.
 No cloud service is used.
 
 > **Experimental:** this package ships as a preview. APIs may change.
@@ -20,7 +20,7 @@ Requires .NET 10 and matching MAUI workloads.
 | Mac Catalyst 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 13.1+ |
 | macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 10.15+ |
 | Windows 11 24H2+ | Windows AI on supported Copilot+ hardware, including structured responses | Not supported | Not supported |
-| Android API 26+ | Gemini Nano on a supported AICore device; tools on capable Nano V4 profiles | In-memory images | Not supported |
+| Android API 26+ | Gemini Nano on supported AICore hardware; structured responses and tools depend on model capabilities | In-memory images | Not supported |
 
 Chat requires supported hardware with Apple Intelligence available and enabled.
 Image input, token usage metadata, and explicit native tool-calling modes require
@@ -70,7 +70,8 @@ if (status.Availability == ChatModelAvailability.NotReady)
 ```
 
 Gemini Nano supports text, in-memory images, streaming, and input-token usage.
-It rejects structured output and required tool invocation. Auto registers
+It supports explicit JSON schemas when the model advertises
+`ChatModelCapability.StructuredOutput`, but rejects schema-free JSON and required tool invocation. Auto registers
 `AIFunction` tools through ML Kit's native API when the selected model advertises
 `ChatModelCapability.ToolCalling`; use `.AsBuilder().UseFunctionInvocation().Build()`
 to execute returned calls. `gemini-nano-preview-fast` was validated with real
@@ -152,6 +153,12 @@ Native schema constraints apply. Structured responses may arrive as one final
 update when a provider emits no incremental progress. For trimmed/AOT apps,
 pass source-generated `JsonSerializerOptions`, as above, for every structured
 response type.
+
+Gemini Nano supports an explicit object-schema subset. Structured streaming
+delivers complete JSON at the end of inference, and cannot be combined with
+active tools or full thinking output. See the
+[Android structured-output guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-structured-output.md)
+for supported keywords and numeric limits.
 
 ### Apple tools
 
