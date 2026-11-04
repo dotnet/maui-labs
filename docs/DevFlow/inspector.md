@@ -19,6 +19,12 @@ tap clears its pending hint; a failed refresh keeps the previous frame and retri
 remains visible. A newer forced refresh supersedes stalled state or image work, and only the latest
 complete frame may replace the Preview.
 
+The Preview also negotiates screenshot resolution from its rendered size and the browser's device
+pixel ratio. Stable scale buckets avoid a new capture for every resize pixel: small fitted
+previews use smaller PNGs, while 1:1 previews on high-DPI displays can request native sharpness.
+The tree, screenshot, coordinate metadata, and negotiated resolution still commit as one immutable
+frame. Unsupported or older agents keep the legacy 1x behavior.
+
 ## Choose a host
 
 | Host | Open it | Best for | Availability |

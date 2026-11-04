@@ -38,6 +38,13 @@ function optionalString(value) {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function optionalBoolean(...values) {
+  for (const value of values) {
+    if (typeof value === 'boolean') return value;
+  }
+  return null;
+}
+
 function frameIdFromScreenshotUrl(url) {
   if (typeof url !== 'string' || url.length === 0) return null;
   try {
@@ -108,6 +115,19 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
     currentOrFallback('captureScale'),
     Math.abs(scaleX - scaleY) <= Math.max(scaleX, scaleY) * 0.005 ? scaleX : 1,
   ) || 1;
+  const nativeScale = positiveNumber(
+    raw.nativeScale,
+    stateObject.nativeScale,
+    canInheritFrameMetadata ? fallbackFrame.nativeScale : null,
+    canInheritFrameMetadata ? fallbackObject.nativeScale : null,
+  ) || null;
+  const requestedCaptureScale = positiveNumber(
+    raw.requestedCaptureScale,
+    stateObject.requestedCaptureScale,
+    canInheritFrameMetadata ? fallbackFrame.requestedCaptureScale : null,
+    canInheritFrameMetadata ? fallbackObject.requestedCaptureScale : null,
+    1,
+  ) || 1;
 
   return deepFreeze({
     streamId: optionalString(
@@ -143,6 +163,14 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
     rootOffsetX: finiteNumber(currentOrFallback('rootOffsetX')),
     rootOffsetY: finiteNumber(currentOrFallback('rootOffsetY')),
     captureScale,
+    nativeScale,
+    requestedCaptureScale,
+    resolutionClamped: optionalBoolean(
+      raw.resolutionClamped,
+      stateObject.resolutionClamped,
+      canInheritFrameMetadata ? fallbackFrame.resolutionClamped : null,
+      canInheritFrameMetadata ? fallbackObject.resolutionClamped : null,
+    ),
     createdAt: optionalString(
       pick('createdAt') ?? (sameFrame ? pickFallback('createdAt') : null),
     ),

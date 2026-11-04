@@ -38,6 +38,28 @@ public class InspectorServerCaptureMetadataTests
         ]
         """;
 
+    private const string RevisionlessOffsetVisualTree = """
+        [
+          {
+            "id": "window-root",
+            "type": "Window",
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": { "x": 0, "y": 0, "width": 100, "height": 100 },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": { "x": 10, "y": 20, "width": 100, "height": 100 },
+                "children": []
+              }
+            ]
+          }
+        ]
+        """;
+
     [Theory]
     [InlineData(
         "/api/tap",
@@ -617,6 +639,82 @@ public class InspectorServerCaptureMetadataTests
     }
 
     [Fact]
+    public async Task State_DifferentResolutionBucket_CreatesDistinctAtomicFrame()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var defaultResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            defaultResponse.EnsureSuccessStatusCode();
+            using var defaultState = JsonDocument.Parse(await defaultResponse.Content.ReadAsStringAsync());
+
+            using var highDpiResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2");
+            highDpiResponse.EnsureSuccessStatusCode();
+            using var highDpiState = JsonDocument.Parse(await highDpiResponse.Content.ReadAsStringAsync());
+
+            Assert.NotEqual(
+                defaultState.RootElement.GetProperty("frameId").GetString(),
+                highDpiState.RootElement.GetProperty("frameId").GetString());
+            Assert.Equal(
+                2,
+                highDpiState.RootElement
+                    .GetProperty("frame")
+                    .GetProperty("requestedCaptureScale")
+                    .GetDouble());
+            Assert.True(highDpiState.RootElement.GetProperty("screenshotResolutionSupported").GetBoolean());
+
+            var screenshotRequests = agent.RecordedRequests
+                .Where(request => request.Path == "/api/v1/ui/screenshot")
+                .ToArray();
+            Assert.Equal(2, screenshotRequests.Length);
+            Assert.DoesNotContain("targetScale", screenshotRequests[0].QueryString);
+            Assert.Contains("targetScale=2", screenshotRequests[1].QueryString);
+            Assert.Contains("maxPixels=8388608", screenshotRequests[1].QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_InvalidResolutionHint_IsRejectedBeforeCapture()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=NaN");
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.DoesNotContain(
+                agent.RecordedRequests,
+                request => request.Path == "/api/v1/ui/tree"
+                    || request.Path == "/api/v1/ui/screenshot");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task Screenshot_WithUnknownSnapshotId_ReturnsNotFoundWithoutRecapture()
     {
         await using var agent = new MockAgentServer();
@@ -1108,6 +1206,64 @@ public class InspectorServerCaptureMetadataTests
             Assert.NotEqual(
                 firstTap.RootElement.GetProperty("captureEpoch").GetInt64(),
                 secondTap.RootElement.GetProperty("captureEpoch").GetInt64());
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedHitTest_RevisionlessResolutionOnlyFrameReplacement_RemainsValid()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = RevisionlessOffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var firstResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            firstResponse.EnsureSuccessStatusCode();
+            using var firstState = JsonDocument.Parse(
+                await firstResponse.Content.ReadAsStringAsync());
+            var firstFrame = firstState.RootElement.GetProperty("frame");
+
+            using var secondResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2");
+            secondResponse.EnsureSuccessStatusCode();
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-resolution-only",
+                    source = "inspector",
+                    streamId = firstFrame.GetProperty("streamId").GetString(),
+                    frameId = firstFrame.GetProperty("frameId").GetString(),
+                    frameRevision = firstFrame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
+            response.EnsureSuccessStatusCode();
+            Assert.Contains(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
         }
         finally
         {

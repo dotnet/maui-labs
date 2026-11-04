@@ -79,6 +79,7 @@ using Microsoft.Maui.DevFlow.Driver;
 [assembly: TypeForwardedTo(typeof(ProfilerSpan))]
 [assembly: TypeForwardedTo(typeof(RecordingState))]
 [assembly: TypeForwardedTo(typeof(RecordingStateManager))]
+[assembly: TypeForwardedTo(typeof(ScreenshotResolutionOptions))]
 [assembly: TypeForwardedTo(typeof(ScreenshotResult))]
 [assembly: TypeForwardedTo(typeof(ThemeExtensions))]
 [assembly: TypeForwardedTo(typeof(ThemeResult))]
