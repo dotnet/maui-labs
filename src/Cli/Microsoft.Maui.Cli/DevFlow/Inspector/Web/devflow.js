@@ -7,6 +7,7 @@ import {
   CoordinateSpace,
   buildActionCorrelation,
   clientToAppLogical,
+  hasExplicitFrameIdentity,
   normalizeFrameDescriptor,
   shouldCommitFrame,
 } from './inspector-frame.js';
@@ -278,7 +279,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   }
 
   function commitFrame(state, frame, image) {
-    if (!shouldCommitFrame(committedFrame, frame)) return false;
+    if (hasExplicitFrameIdentity(state) && !shouldCommitFrame(committedFrame, frame)) return false;
 
     // All frame-owned DOM changes are synchronous. The browser cannot paint or dispatch another
     // event between them, so screenshot, geometry, offsets, overlays, and descriptor become visible

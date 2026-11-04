@@ -6,6 +6,7 @@ import {
   appLogicalToWindowLogical,
   buildActionCorrelation,
   clientToAppLogical,
+  hasExplicitFrameIdentity,
   inspectorCssToTransformedViewport,
   normalizeFrameDescriptor,
   screenshotPixelToAppLogical,
@@ -81,6 +82,18 @@ test("legacy states do not inherit ordering identity from a different frame", ()
   assert.equal(legacy.pixelWidth, 400);
   assert.equal(legacy.rootOffsetX, 0);
   assert.equal(shouldCommitFrame(frame, legacy), true);
+});
+
+test("only explicit frame identity enforces immutable commit ordering", () => {
+  assert.equal(hasExplicitFrameIdentity({
+    viewportWidth: 400,
+    viewportHeight: 300,
+    treeRevision: "legacy-refresh",
+    elements: "<div></div>",
+  }), false);
+  assert.equal(hasExplicitFrameIdentity({ frame: {} }), true);
+  assert.equal(hasExplicitFrameIdentity({ frameId: "frame-a" }), true);
+  assert.equal(hasExplicitFrameIdentity({ screenshotUrl: "screenshot.png?frame=frame-a" }), true);
 });
 
 test("coordinate conversions round-trip root offsets and capture scale", () => {

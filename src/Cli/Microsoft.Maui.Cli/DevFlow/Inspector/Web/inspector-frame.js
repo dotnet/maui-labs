@@ -47,6 +47,13 @@ function frameIdFromScreenshotUrl(url) {
   }
 }
 
+export function hasExplicitFrameIdentity(state) {
+  const stateObject = objectOrEmpty(state);
+  return (stateObject.frame && typeof stateObject.frame === 'object')
+    || optionalString(stateObject.frameId) !== null
+    || optionalString(stateObject.screenshotUrl) !== null;
+}
+
 function deepFreeze(value, seen = new WeakSet()) {
   if (!value || typeof value !== 'object' || seen.has(value)) return value;
   seen.add(value);
