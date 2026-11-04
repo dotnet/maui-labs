@@ -7,7 +7,7 @@
 // writes). Every result carries the target identity so the host can show what is controlled.
 
 import { err } from "./types.js";
-import type { AgentTarget, DevFlowError, DevFlowResult, ElementInfo } from "./types.js";
+import type { ActionCorrelation, AgentTarget, DevFlowError, DevFlowResult, ElementInfo } from "./types.js";
 import type { DevFlowEvent, EventStreamHandle } from "./events.js";
 import type { ScrollArgs, GestureArgs } from "./agent.js";
 
@@ -16,13 +16,13 @@ export type SeamOp =
   | { kind: "getState" }
   | { kind: "getTree"; depth?: number }
   | { kind: "getScreenshot"; elementId?: string }
-  | { kind: "tap"; x?: number; y?: number; elementId?: string }
-  | { kind: "scroll"; x: number; y: number; deltaX: number; deltaY: number }
-  | { kind: "gesture"; points: Array<{ x: number; y: number; t?: number }> }
-  | { kind: "back" }
-  | { kind: "fill"; elementId: string; text: string }
-  | { kind: "key"; elementId?: string; key: string; text?: string }
-  | { kind: "setProperty"; elementId: string; name: string; value: string };
+  | { kind: "tap"; x?: number; y?: number; elementId?: string; correlation?: ActionCorrelation }
+  | { kind: "scroll"; x: number; y: number; deltaX: number; deltaY: number; correlation?: ActionCorrelation }
+  | { kind: "gesture"; points: Array<{ x: number; y: number; t?: number }>; correlation?: ActionCorrelation }
+  | { kind: "back"; correlation?: ActionCorrelation }
+  | { kind: "fill"; elementId: string; text: string; correlation?: ActionCorrelation }
+  | { kind: "key"; elementId?: string; key: string; text?: string; correlation?: ActionCorrelation }
+  | { kind: "setProperty"; elementId: string; name: string; value: string; correlation?: ActionCorrelation };
 
 export interface SeamPermissions {
   /** Read the tree / current state. */
@@ -60,13 +60,13 @@ export interface TransportClient {
   readonly target: AgentTarget | null;
   getTree(depth?: number): Promise<DevFlowResult<ElementInfo[]>>;
   screenshot(opts?: { elementId?: string }): Promise<DevFlowResult<Buffer>>;
-  tap(target: { x?: number; y?: number; elementId?: string }): Promise<DevFlowResult<void>>;
+  tap(target: { x?: number; y?: number; elementId?: string; correlation?: ActionCorrelation }): Promise<DevFlowResult<void>>;
   scroll(args: ScrollArgs): Promise<DevFlowResult<void>>;
   gesture(args: GestureArgs): Promise<DevFlowResult<void>>;
-  back(): Promise<DevFlowResult<void>>;
-  fill(elementId: string, text: string): Promise<DevFlowResult<void>>;
-  key(key: string, elementId?: string, text?: string): Promise<DevFlowResult<void>>;
-  setProperty(elementId: string, name: string, value: string): Promise<DevFlowResult<void>>;
+  back(correlation?: ActionCorrelation): Promise<DevFlowResult<void>>;
+  fill(elementId: string, text: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>>;
+  key(key: string, elementId?: string, text?: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>>;
+  setProperty(elementId: string, name: string, value: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>>;
   openEvents(handlers: {
     onEvent: (e: DevFlowEvent) => void;
     onStatus?: (s: { connected: boolean }) => void;
@@ -83,6 +83,14 @@ const NAMED_KEYS = new Set([
   "up", "down", "left", "right", "home", "end", "pageup", "pagedown", "insert",
   "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
 ]);
+const ACTION_SOURCES = new Set(["inspector", "cli", "mcp", "replay"]);
+const COORDINATE_SPACES = new Set([
+  "appLogical",
+  "windowLogical",
+  "screenshotPixel",
+  "inspectorCss",
+  "transformedViewport",
+]);
 
 /** Create a validated, permission-gated Transport over a DevFlow client. */
 export function createTransport(client: TransportClient, opts: TransportOptions = {}): Transport {
@@ -98,8 +106,26 @@ export function createTransport(client: TransportClient, opts: TransportOptions 
 
   const finite = (n: unknown, limit: number): boolean =>
     typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= limit;
+  const validCorrelation = (value: unknown): value is ActionCorrelation => {
+    if (!value || typeof value !== "object") return false;
+    const correlation = value as Record<string, unknown>;
+    if (typeof correlation.actionId !== "string" || !correlation.actionId || correlation.actionId.length > 128) return false;
+    if (typeof correlation.frameId !== "string" || !correlation.frameId || correlation.frameId.length > 128) return false;
+    if (typeof correlation.source !== "string" || !ACTION_SOURCES.has(correlation.source)) return false;
+    if (typeof correlation.coordinateSpace !== "string" || !COORDINATE_SPACES.has(correlation.coordinateSpace)) return false;
+    if (correlation.streamId !== undefined &&
+        (typeof correlation.streamId !== "string" || !correlation.streamId || correlation.streamId.length > 128)) return false;
+    return correlation.frameRevision === undefined ||
+      (typeof correlation.frameRevision === "number" &&
+        Number.isSafeInteger(correlation.frameRevision) &&
+        correlation.frameRevision > 0);
+  };
 
   async function request(op: SeamOp): Promise<DevFlowResult<unknown>> {
+    const correlation = (op as { correlation?: unknown }).correlation;
+    if (correlation !== undefined && !validCorrelation(correlation)) {
+      return deny("invalid action correlation", "invalid-argument");
+    }
     switch (op.kind) {
       case "getState": {
         if (!perms.read) return deny("read permission required for getState");
@@ -121,14 +147,20 @@ export function createTransport(client: TransportClient, opts: TransportOptions 
         if (op.elementId === undefined) {
           if (!finite(op.x, maxCoord) || !finite(op.y, maxCoord)) return deny("tap requires elementId or finite x/y", "invalid-argument");
         }
-        return client.tap({ x: op.x, y: op.y, elementId: op.elementId });
+        return client.tap({ x: op.x, y: op.y, elementId: op.elementId, correlation: op.correlation });
       }
       case "scroll": {
         if (!perms.mutate) return deny("mutate permission required for scroll");
         if (!finite(op.x, maxCoord) || !finite(op.y, maxCoord) || !finite(op.deltaX, maxCoord) || !finite(op.deltaY, maxCoord)) {
           return deny("scroll requires finite x/y/deltaX/deltaY", "invalid-argument");
         }
-        return client.scroll({ x: op.x, y: op.y, deltaX: op.deltaX, deltaY: op.deltaY });
+        return client.scroll({
+          x: op.x,
+          y: op.y,
+          deltaX: op.deltaX,
+          deltaY: op.deltaY,
+          correlation: op.correlation,
+        });
       }
       case "gesture": {
         if (!perms.mutate) return deny("mutate permission required for gesture");
@@ -138,24 +170,24 @@ export function createTransport(client: TransportClient, opts: TransportOptions 
         for (const p of op.points) {
           if (!finite(p?.x, maxCoord) || !finite(p?.y, maxCoord)) return deny("gesture point out of range", "invalid-argument");
         }
-        return client.gesture({ points: op.points });
+        return client.gesture({ points: op.points, correlation: op.correlation });
       }
       case "back": {
         if (!perms.mutate) return deny("mutate permission required for back");
-        return client.back();
+        return client.back(op.correlation);
       }
       case "fill": {
         if (!perms.mutate) return deny("mutate permission required for fill");
         if (typeof op.elementId !== "string" || !op.elementId) return deny("fill requires elementId", "invalid-argument");
         if (typeof op.text !== "string" || op.text.length > maxText) return deny(`fill text must be a string <= ${maxText} chars`, "invalid-argument");
-        return client.fill(op.elementId, op.text);
+        return client.fill(op.elementId, op.text, op.correlation);
       }
       case "key": {
         if (!perms.mutate) return deny("mutate permission required for key");
         if (typeof op.key !== "string" || !op.key || op.key.length > 32) return deny("invalid key", "invalid-argument");
         if (op.key.length > 1 && !NAMED_KEYS.has(op.key.toLowerCase())) return deny(`key not allowed: ${op.key}`, "invalid-argument");
         if (op.text !== undefined && (typeof op.text !== "string" || op.text.length > maxText)) return deny("invalid key text", "invalid-argument");
-        return client.key(op.key, op.elementId, op.text);
+        return client.key(op.key, op.elementId, op.text, op.correlation);
       }
       case "setProperty": {
         if (!perms.setProperty) return deny("setProperty permission required (off by default)");
@@ -163,7 +195,7 @@ export function createTransport(client: TransportClient, opts: TransportOptions 
         if (typeof op.name !== "string" || !op.name) return deny("setProperty requires name", "invalid-argument");
         if (allowList && !allowList.has(op.name)) return deny(`property not allowed: ${op.name}`);
         if (typeof op.value !== "string" || op.value.length > maxText) return deny("setProperty value must be a string within the length cap", "invalid-argument");
-        return client.setProperty(op.elementId, op.name, op.value);
+        return client.setProperty(op.elementId, op.name, op.value, op.correlation);
       }
       default: {
         const _exhaustive: never = op;

@@ -13,6 +13,29 @@ export interface Bounds {
   height: number;
 }
 
+export type CoordinateSpace =
+  | "appLogical"
+  | "windowLogical"
+  | "screenshotPixel"
+  | "inspectorCss"
+  | "transformedViewport";
+
+export type ActionSource = "inspector" | "cli" | "mcp" | "replay";
+
+/**
+ * Correlates an action with the immutable Inspector frame that produced its target coordinates or
+ * element identity. The correlation object itself is optional for compatibility with older hosts;
+ * when supplied, its core identity fields are required.
+ */
+export interface ActionCorrelation {
+  actionId: string;
+  source: ActionSource;
+  frameId: string;
+  coordinateSpace: CoordinateSpace;
+  streamId?: string;
+  frameRevision?: number;
+}
+
 export interface ElementState {
   displayed: boolean;
   enabled: boolean;
