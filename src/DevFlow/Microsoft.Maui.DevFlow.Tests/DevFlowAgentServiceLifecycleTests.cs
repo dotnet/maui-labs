@@ -89,6 +89,15 @@ public class DevFlowAgentServiceLifecycleTests
         var capabilityMap = capabilities.GetProperty("capabilities");
         Assert.Contains("property-descriptors", capabilityMap.GetProperty("ui.actions").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
         Assert.Contains("subscribe", capabilityMap.GetProperty("ui.events").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
+        var screenshotCapabilities = capabilityMap.GetProperty("ui.screenshot");
+        Assert.Equal(3, screenshotCapabilities.GetProperty("version").GetInt32());
+        Assert.Contains(
+            "resolution-hints",
+            screenshotCapabilities.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
+        Assert.False(screenshotCapabilities.GetProperty("resolution").GetProperty("upscale").GetBoolean());
+        Assert.Equal(
+            16_777_216,
+            screenshotCapabilities.GetProperty("resolution").GetProperty("maxPixels").GetInt64());
         var jobsCapabilities = capabilityMap.GetProperty("device.jobs");
         Assert.False(jobsCapabilities.GetProperty("supported").GetBoolean());
         Assert.Empty(jobsCapabilities.GetProperty("features").EnumerateArray());
