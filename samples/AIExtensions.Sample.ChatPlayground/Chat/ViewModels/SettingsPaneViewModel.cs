@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
@@ -28,6 +29,9 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(RequestModelId))]
     private string? selectedModelId;
     [ObservableProperty] private bool isBusy;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SupportsToolCalling))]
+    private ChatModelStatus? modelStatus;
 
     [ObservableProperty] private bool useStreaming = true;
     [ObservableProperty] private bool useStructuredJson;
@@ -70,6 +74,8 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     public IReadOnlyList<ChatModelOption> Models => SelectedDescriptor?.Models ?? [];
     public bool HasModels => Models.Count > 0;
     public string? RequestModelId => HasModels ? SelectedModelId : null;
+    public bool SupportsToolCalling => SelectedDescriptor?.SupportsToolCalling == true &&
+        (ModelStatus?.Capabilities is not { } capabilities || capabilities.Contains(ChatModelCapability.ToolCalling));
 
     public bool IsMultipleToolCallsDefault
     {
@@ -92,7 +98,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     /// <summary>Creates request options using the current settings and supplied real tools.</summary>
     public ChatOptions CreateChatOptions(IList<AITool> tools)
     {
-        var supportsToolCalling = SelectedDescriptor?.SupportsToolCalling == true;
+        var supportsToolCalling = SupportsToolCalling;
         if (!supportsToolCalling && tools.Count > 0)
             throw new NotSupportedException("The selected chat client does not support tool calling.");
         if (supportsToolCalling && ToolMode != ChatToolMode.Auto &&
@@ -101,6 +107,8 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
             throw new ArgumentOutOfRangeException(nameof(ToolMode), "Select a supported tool mode.");
         if (supportsToolCalling && ToolMode == ChatToolMode.RequireAny && tools.Count == 0)
             throw new ArgumentException("Require any needs at least one enabled tool.");
+        if (supportsToolCalling && ToolMode is RequiredChatToolMode && SelectedDescriptor?.SupportsRequiredToolMode == false)
+            throw new NotSupportedException("The selected chat client does not support required tool mode. Select Auto.");
 
         var options = new ChatOptions
         {
@@ -172,6 +180,9 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
 
     partial void OnSelectedClientChanged(IChatClient? value)
     {
+        ModelStatus = null;
+        if (SelectedDescriptor?.SupportsRequiredToolMode == false && ToolMode is RequiredChatToolMode)
+            ToolMode = ChatToolMode.Auto;
         SelectedModelId = Models.FirstOrDefault()?.Id;
         ClientStatus = SelectedDescriptor?.Description ?? "No chat client selected.";
         OnPropertyChanged(nameof(SelectedDescriptor));
@@ -179,6 +190,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         OnPropertyChanged(nameof(Models));
         OnPropertyChanged(nameof(HasModels));
         OnPropertyChanged(nameof(RequestModelId));
+        OnPropertyChanged(nameof(SupportsToolCalling));
     }
 
     partial void OnIsBusyChanged(bool value)

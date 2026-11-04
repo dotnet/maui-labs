@@ -378,9 +378,13 @@ Never silently switch to a cloud provider or claim that an unsupported feature w
 - **Windows:** accept Auto and None by MEAI type and omit native registration;
   reject Required and named Required. Replay historical calls/results as
   labelled prompt text; the Windows App SDK model does not register managed tools.
-- **Android:** accept None and Auto by MEAI type and omit native registration;
-  reject Required and named Required. Replay each historical call/result as one
-  ordered JSON object; results carry no invented function name.
+- **Android:** None omits tools. Auto registers functions using ML Kit beta5's
+  native declarations when the selected model advertises FUNCTION_CALLING;
+  otherwise registration fails explicitly. Required and named Required reject.
+  Return native calls for standard MEAI middleware execution and replay
+  call/result history using native parts/roles on tool-enabled requests. Without
+  registration, retain the existing ordered textual JSON replay. See the
+  Android guide for schema/value restrictions and buffered tool-enabled streams.
 
 ### Structured output
 

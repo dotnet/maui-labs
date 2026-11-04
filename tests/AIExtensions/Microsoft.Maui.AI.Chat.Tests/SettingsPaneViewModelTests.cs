@@ -1,10 +1,32 @@
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.Essentials.AI;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
 public sealed class SettingsPaneViewModelTests
 {
+    [Fact]
+    public void ModelCapabilities_EnableToolsOnlyForTheCapableSelectionWithoutLosingToolChoices()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("nano", "Nano", "Ready", SupportsToolCalling: true,
+                SupportsRequiredToolMode: false));
+        var settings = new SettingsPaneViewModel([client]);
+        var tool = AIFunctionFactory.Create(() => "secret", "lookup");
+        settings.ModelStatus = new(ChatModelAvailability.Available, [ChatModelCapability.Text]);
+        Assert.False(settings.SupportsToolCalling);
+        Assert.Null(settings.CreateChatOptions([]).Tools);
+        Assert.Same(ChatToolMode.None, settings.CreateChatOptions([]).ToolMode);
+        Assert.True(settings.UseCalculatorTool);
+
+        settings.ModelStatus = new(ChatModelAvailability.Available, [ChatModelCapability.Text, ChatModelCapability.ToolCalling]);
+        Assert.True(settings.SupportsToolCalling);
+        Assert.Same(tool, Assert.Single(settings.CreateChatOptions([tool]).Tools!));
+        settings.ToolMode = ChatToolMode.RequireAny;
+        Assert.Throws<NotSupportedException>(() => settings.CreateChatOptions([tool]));
+    }
+
     [Fact]
     public void ChatDescriptor_ToolCallingIsOptIn()
     {

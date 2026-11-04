@@ -97,12 +97,13 @@ internal static class ChatServiceCollectionExtensions
                 "gemini-nano-chat",
                 "Gemini Nano",
                 "Gemini Nano includes the supplied conversation in each text/image request. " +
-                    "No tools or structured JSON. System instructions require Nano V3+. " +
+                    "Native tool calling requires a capable Nano V4 model, such as Preview fast. " +
+                    "Required tool mode and structured JSON are unavailable. System instructions require Nano V3+. " +
                     "Use Download above the composer to prepare the model; requests never download automatically.",
                 SupportsImageInput: true,
                 SupportsReasoningSummary: false,
                 SupportsImageGeneration: false,
-                SupportsToolCalling: false,
+                SupportsToolCalling: true,
                 SupportsStructuredOutput: false,
                 GetModelStatusAsync: GeminiNanoChatClient.GetModelStatusAsync,
                 PrepareModelAsync: DownloadGeminiModelAsync,
@@ -114,9 +115,11 @@ internal static class ChatServiceCollectionExtensions
                     new("gemini-nano-full", "Stable full"),
                     new("gemini-nano-preview-fast", "Preview fast"),
                     new("gemini-nano-preview-full", "Preview full"),
-                ]))
+                ],
+                SupportsRequiredToolMode: false))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 
     [SupportedOSPlatform("android26.0")]

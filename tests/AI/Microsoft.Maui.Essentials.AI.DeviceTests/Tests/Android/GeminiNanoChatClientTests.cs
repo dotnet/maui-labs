@@ -25,6 +25,22 @@ public class GeminiNanoChatClientInstantiationTests : ChatClientInstantiationTes
 public class GeminiNanoChatClientCancellationTests : ChatClientCancellationTestsBase<GeminiNanoChatClient>;
 
 [Collection(nameof(GeminiNanoCollection))]
+public class GeminiNanoNativeFunctionCallingTests : ChatClientFunctionCallingTestsBase<GeminiNanoChatClient>
+{
+	// Native tool support is profile-dependent; V3 cannot register tools.
+	protected override bool? SupportsRequiredToolMode => false;
+	protected override bool PreservesToolActivityContext => true;
+
+	protected override IChatClient EnableFunctionCalling(GeminiNanoChatClient client, Action<ChatOptions>? configureOptions = null) =>
+		client.AsBuilder().UseFunctionInvocation().ConfigureOptions(options =>
+		{
+			options.ModelId = "gemini-nano-preview-fast";
+			options.Temperature = 0;
+			configureOptions?.Invoke(options);
+		}).Build();
+}
+
+[Collection(nameof(GeminiNanoCollection))]
 public class GeminiNanoChatClientMessagesTests : ChatClientMessagesTestsBase<GeminiNanoChatClient>
 {
 	// ML Kit needs conversation content and cannot consume the other standard MEAI content kinds.
@@ -114,6 +130,70 @@ public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase
 public class GeminiNanoChatClientInteropTests
 {
 	private const string Png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC";
+
+	[Fact]
+	public void ToNative_RegisteredFunctionsCarrySchemasAndTypedHistoryWhileNoneOmitsRegistration()
+	{
+		var function = AIFunctionFactory.Create((string key) => key, "lookup", "Find a value.");
+		ChatMessage[] messages =
+		[
+			new(ChatRole.User, "Find orchard."),
+			new(ChatRole.Assistant, [new FunctionCallContent("call-1", "lookup", new Dictionary<string, object?> { ["key"] = "orchard" })]),
+			new(ChatRole.Tool, [new FunctionResultContent("call-1", "secret")]),
+		];
+		var options = new ChatOptions { Tools = [function], ModelId = "gemini-nano-preview-fast" };
+		using var request = GeminiNanoChatClient.ToNative(messages, options);
+		using var tools = JsonDocument.Parse(request.Options.ToolsJson!);
+		Assert.Equal("lookup", tools.RootElement[0].GetProperty("name").GetString());
+		Assert.True(JsonElement.DeepEquals(function.JsonSchema, tools.RootElement[0].GetProperty("parameters")));
+		Assert.Equal(2, request.GetMessages()[1].GetParts()[0].Kind);
+		Assert.Equal(3, request.GetMessages()[2].GetParts()[0].Kind);
+		options.ToolMode = new NoneChatToolMode();
+		using var none = GeminiNanoChatClient.ToNative(messages, options);
+		Assert.Null(none.Options.ToolsJson);
+		Assert.Equal(0, none.GetMessages()[1].GetParts()[0].Kind);
+		Assert.Same(function, Assert.Single(options.Tools));
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void NativeResponses_MapTypedFunctionCallsAndFinishReasonWithoutLeakingProtocolText(bool streaming)
+	{
+		var function = AIFunctionFactory.Create((string key) => key, "lookup");
+		var options = new ChatOptions { Tools = [function] };
+		using var native = new AndroidNative.NativeChatResponse("", [], 0, "nano-v4-fast", 12);
+		native.SetFunctionCalls([new AndroidNative.NativeFunctionCall("id", "lookup", """{"key":"orchard"}""")]);
+		var contents = streaming
+			? GeminiNanoChatClient.CreateFinalUpdate(native, options).Contents
+			: GeminiNanoChatClient.FromNative(native, options).Messages.Single().Contents;
+		var call = Assert.Single(contents.OfType<FunctionCallContent>());
+		Assert.Equal("id", call.CallId);
+		Assert.Equal("lookup", call.Name);
+		Assert.Equal("orchard", Assert.IsType<JsonElement>(call.Arguments!["key"]).GetString());
+		Assert.Empty(contents.OfType<TextContent>());
+		Assert.Equal(ChatFinishReason.ToolCalls, GeminiNanoChatClient.FromNative(native, options).FinishReason);
+		Assert.Equal(ChatFinishReason.ToolCalls, GeminiNanoChatClient.CreateFinalUpdate(native, options).FinishReason);
+
+		Assert.Throws<InvalidOperationException>(() => GeminiNanoChatClient.FromNative(native, null));
+		native.SetFunctionCalls([
+			new AndroidNative.NativeFunctionCall("id", "lookup", "{}"),
+			new AndroidNative.NativeFunctionCall("id", "lookup", "{}"),
+		]);
+		Assert.Throws<InvalidOperationException>(() => GeminiNanoChatClient.CreateFinalUpdate(native, options));
+		options.AllowMultipleToolCalls = false;
+		Assert.Throws<InvalidOperationException>(() => GeminiNanoChatClient.FromNative(native, options));
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void CreateModelStatus_ReportsNativeToolCapabilityWithoutInferringItFromThinking(bool toolCalling)
+	{
+		var status = GeminiNanoChatClient.CreateModelStatus(3, thinkingAvailable: false, toolCalling);
+		Assert.Equal(toolCalling, status.Capabilities!.Contains(ChatModelCapability.ToolCalling));
+		Assert.DoesNotContain(ChatModelCapability.Reasoning, status.Capabilities!);
+	}
 
 	// Verify JNI DTO ordering/copying and ML Kit's separate system slot without requiring AICore.
 	[Fact]

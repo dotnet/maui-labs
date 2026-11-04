@@ -5,7 +5,8 @@ On-device chat and text embeddings through
 backed by Apple Intelligence, Apple NaturalLanguage, Windows AI, and Gemini Nano.
 Chat capabilities vary by platform; Apple supports native tool execution and
 eligible image input, Windows supports structured JSON, and Android supports
-in-memory image input. No cloud service is used.
+in-memory image input and native tool calling on supported Nano V4 models.
+No cloud service is used.
 
 > **Experimental:** this package ships as a preview. APIs may change.
 
@@ -19,7 +20,7 @@ Requires .NET 10 and matching MAUI workloads.
 | Mac Catalyst 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 13.1+ |
 | macOS 26+ | Apple Intelligence, including tools and structured responses | OS 27+ with a ready vision model | NaturalLanguage, OS 10.15+ |
 | Windows 11 24H2+ | Windows AI on supported Copilot+ hardware, including structured responses | Not supported | Not supported |
-| Android API 26+ | Gemini Nano on a supported AICore device | In-memory images | Not supported |
+| Android API 26+ | Gemini Nano on a supported AICore device; tools on capable Nano V4 profiles | In-memory images | Not supported |
 
 Chat requires supported hardware with Apple Intelligence available and enabled.
 Image input, token usage metadata, and explicit native tool-calling modes require
@@ -69,8 +70,15 @@ if (status.Availability == ChatModelAvailability.NotReady)
 ```
 
 Gemini Nano supports text, in-memory images, streaming, and input-token usage.
-It rejects structured output and required tool invocation; Auto tool definitions
-are ignored and historical calls/results are replayed as text. `PrepareModelAsync`
+It rejects structured output and required tool invocation. Auto registers
+`AIFunction` tools through ML Kit's native API when the selected model advertises
+`ChatModelCapability.ToolCalling`; use `.AsBuilder().UseFunctionInvocation().Build()`
+to execute returned calls. `gemini-nano-preview-fast` was validated with real
+local tool execution; the default Nano V3 model does not support native tools.
+Tool-enabled streams buffer text until each model turn completes to suppress
+native control tokens. See the [Android tool-calling guide](https://github.com/dotnet/maui-labs/blob/main/docs/ai/gemini-nano-android.md#native-tool-calling)
+for setup, model selection, schema restrictions, and validation boundaries.
+`PrepareModelAsync`
 waits for the explicit download to finish. Use `DownloadModelAsync` when the app
 needs to display ML Kit's native progress, and query model status afterward
 before enabling generation.
