@@ -25,6 +25,31 @@ previews use smaller PNGs, while 1:1 previews on high-DPI displays can request n
 The tree, screenshot, coordinate metadata, and negotiated resolution still commit as one immutable
 frame. Unsupported or older agents keep the legacy 1x behavior.
 
+### Action visualization
+
+The Preview also visualizes admitted DevFlow actions from MCP, the CLI, workflow replay, and other
+Inspector sessions. Taps and long presses show an automation cursor and press marker; swipes,
+pans, point drags, and Inspector wheel gestures show their path. The source is labelled when it
+helps distinguish another driver. A dedicated polite live region announces remote actions and
+bounded failure/cancellation states without reusing the Inspector's general status line. Rapid
+updates are coalesced, target text is bounded, and continuous pointer actions are announced only
+after their final tap, swipe, long-press, or drag classification is known.
+
+The marker remains visible briefly while the screenshot and tree refresh, and reduced-motion
+clients receive a static marker and path instead of animation. A local Inspector action is rendered
+optimistically and correlated by `actionId`, so its websocket echo is suppressed in the originating
+tab while other Inspector tabs still see it.
+
+Action events reference the frame they used when that identity is available. During compatibility
+with agents that expose only capture metadata, the Inspector matches `captureEpoch`,
+`registryGeneration`, and `windowId` against its existing frame cache. Current MAUI agents also
+publish the capture's stable `diagnosticInputsRevision`, allowing an MCP or CLI capture with a
+different epoch to match an unchanged Inspector frame. An event that cannot be mapped to the
+current Preview is shown as a frame-unavailable badge and announcement; it is never repositioned
+against a newer frame. The versioned frame descriptor and coordinate conversions are owned by the
+shared `inspector-frame.js` contract; action visualization does not maintain a second frame ring or
+transform model.
+
 ## Choose a host
 
 | Host | Open it | Best for | Availability |

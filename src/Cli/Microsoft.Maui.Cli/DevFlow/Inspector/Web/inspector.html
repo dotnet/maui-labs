@@ -86,6 +86,7 @@
     </div>
     <div id="df-status" class="df-status" role="status" aria-live="polite"></div>
     <div id="df-health-live" class="df-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="df-action-announcer" class="df-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <div id="df-body">
       <button id="df-pane-scrim" class="df-pane-scrim df-hidden" aria-hidden="true" tabindex="-1"></button>
       <aside id="df-tree-pane" class="df-pane" aria-label="Visual tree">
@@ -138,10 +139,12 @@
             <div id="df-stage">
               <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" data-root-offset-x="{{ROOT_OFFSET_X}}" data-root-offset-y="{{ROOT_OFFSET_Y}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
                 {{SCREENSHOT}}
+                <div id="df-action-overlay" aria-hidden="true"></div>
                 <div id="diagnostic-overlays" aria-hidden="true"></div>
                 {{ELEMENTS}}
               </div>
             </div>
+            <div id="df-action-chrome" aria-hidden="true"></div>
           </div>
         </div>
       </section>

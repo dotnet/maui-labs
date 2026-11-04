@@ -67,6 +67,7 @@ public partial class InspectorLayoutWorkspaceTests(ITestOutputHelper output) : I
         if (_agent is not null) await _agent.DisposeAsync();
         output.WriteLine($"Loaded embedded scripts: {string.Join(", ", _scripts.Order())}");
         Assert.Contains("/devflow.js", _scripts);
+        Assert.Contains("/inspector-actions.js", _scripts);
         Assert.Contains("/inspector-frame.js", _scripts);
         Assert.Contains("/inspector-command-policy.js", _scripts);
         Assert.Contains("/inspector-layout.js", _scripts);

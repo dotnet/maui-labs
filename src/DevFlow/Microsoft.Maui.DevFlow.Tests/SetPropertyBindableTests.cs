@@ -3,8 +3,10 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Maui;
+using Microsoft.Maui.Cli.DevFlow.Flows;
 using Microsoft.Maui.Cli.DevFlow.Inspector;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.DevFlow.Agent.Core;
@@ -265,6 +267,240 @@ public class SetPropertyBindableTests
     }
 
     [Fact]
+    public async Task UiEventsWebSocket_PublishesCorrelatedActionLifecycle()
+    {
+        var button = new Button
+        {
+            AutomationId = "action-event-button",
+            Text = "Run"
+        };
+
+        using var harness = await SetPropertyTestHarness.CreateAsync(button);
+        harness.Client.MutationLeaseHolderKind = "mcp";
+        var target = Assert.Single(await harness.Client.QueryAsync(automationId: button.AutomationId));
+        using var socket = await ConnectUiEventsAsync(
+            harness.Port,
+            "ui-action-started",
+            "ui-action-completed");
+
+        using (harness.Client.UseActionContext(
+            actionId: "action-test",
+            frameId: "frame-test",
+            coordinateSpace: "appLogical",
+            x: 123,
+            y: 45))
+        {
+            var result = await harness.Client.TapResultAsync(
+                target.Id,
+                target.CaptureEpoch,
+                target.RegistryGeneration);
+            Assert.True(result.Success);
+        }
+
+        using var started = await ReceiveUiEventAsync(
+            socket,
+            "ui-action-started",
+            "action-test");
+        var startData = started.RootElement.GetProperty("data");
+        Assert.Equal("tap", startData.GetProperty("kind").GetString());
+        Assert.Equal(target.Id, startData.GetProperty("elementId").GetString());
+        Assert.Equal(123, startData.GetProperty("x").GetDouble());
+        Assert.Equal(45, startData.GetProperty("y").GetDouble());
+        Assert.Equal(target.CaptureEpoch, startData.GetProperty("captureEpoch").GetInt64());
+        Assert.False(string.IsNullOrWhiteSpace(
+            startData.GetProperty("diagnosticInputsRevision").GetString()));
+        var correlation = startData.GetProperty("correlation");
+        Assert.Equal("mcp", correlation.GetProperty("source").GetString());
+        Assert.Equal("frame-test", correlation.GetProperty("frameId").GetString());
+        Assert.Equal("appLogical", correlation.GetProperty("coordinateSpace").GetString());
+
+        using var completed = await ReceiveUiEventAsync(
+            socket,
+            "ui-action-completed",
+            "action-test");
+        var completedData = completed.RootElement.GetProperty("data");
+        Assert.True(completedData.GetProperty("success").GetBoolean());
+        Assert.Equal("completed", completedData.GetProperty("outcome").GetString());
+    }
+
+    [Fact]
+    public async Task UiEventsWebSocket_DoesNotPublishSensitiveActionPayloads()
+    {
+        using var harness = await SetPropertyTestHarness.CreateAsync(new Entry
+        {
+            AutomationId = "secret-entry"
+        });
+        harness.Client.MutationLeaseHolderKind = "mcp";
+        using var socket = await ConnectUiEventsAsync(
+            harness.Port,
+            "ui-action-started",
+            "ui-action-completed");
+
+        const string secret = "do-not-publish-this-value";
+        using (harness.Client.UseActionContext(actionId: "secret-action"))
+        {
+            var result = await harness.Client.FillResultAsync(
+                "missing-element",
+                secret,
+                captureEpoch: null,
+                registryGeneration: null);
+            Assert.False(result.Success);
+        }
+
+        using var started = await ReceiveUiEventAsync(
+            socket,
+            "ui-action-started",
+            "secret-action");
+        using var completed = await ReceiveUiEventAsync(
+            socket,
+            "ui-action-completed",
+            "secret-action");
+        var lifecycleJson = started.RootElement.GetRawText()
+            + completed.RootElement.GetRawText();
+        Assert.DoesNotContain(secret, lifecycleJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"text\"", lifecycleJson, StringComparison.Ordinal);
+        Assert.False(completed.RootElement
+            .GetProperty("data")
+            .GetProperty("success")
+            .GetBoolean());
+    }
+
+    [Fact]
+    public async Task UiEventsWebSocket_BatchPublishesOneLifecyclePerLogicalAction()
+    {
+        var button = new Button
+        {
+            AutomationId = "batch-action-button",
+            Text = "Run"
+        };
+
+        using var harness = await SetPropertyTestHarness.CreateAsync(button);
+        harness.Client.MutationLeaseHolderKind = "mcp";
+        var target = Assert.Single(await harness.Client.QueryAsync(automationId: button.AutomationId));
+        using var socket = await ConnectUiEventsAsync(
+            harness.Port,
+            "ui-action-started",
+            "ui-action-completed");
+
+        using (harness.Client.UseActionContext(actionId: "batch-container"))
+        {
+            var response = await harness.Client.BatchAsync(
+                [
+                    new JsonObject
+                    {
+                        ["action"] = "tap",
+                        ["elementId"] = target.Id
+                    },
+                    new JsonObject
+                    {
+                        ["action"] = "tap",
+                        ["elementId"] = target.Id
+                    }
+                ],
+                continueOnError: false,
+                captureEpoch: target.CaptureEpoch,
+                registryGeneration: target.RegistryGeneration);
+            Assert.True(response.GetProperty("success").GetBoolean());
+        }
+
+        var startedIds = new HashSet<string>(StringComparer.Ordinal);
+        var completedIds = new HashSet<string>(StringComparer.Ordinal);
+        while (startedIds.Count < 2 || completedIds.Count < 2)
+        {
+            using var message = await ReceiveUiEventAsync(socket);
+            var type = message.RootElement.GetProperty("type").GetString();
+            var id = message.RootElement
+                .GetProperty("data")
+                .GetProperty("correlation")
+                .GetProperty("actionId")
+                .GetString()!;
+            if (type == "ui-action-started")
+                startedIds.Add(id);
+            else if (type == "ui-action-completed")
+                completedIds.Add(id);
+        }
+
+        Assert.Equal(2, startedIds.Count);
+        Assert.True(startedIds.SetEquals(completedIds));
+        Assert.DoesNotContain("batch-container", startedIds);
+    }
+
+    [Fact]
+    public async Task UiEventsWebSocket_ReplayPublishesDistinctReplayLifecycles()
+    {
+        var button = new Button
+        {
+            AutomationId = "replay-button",
+            Text = "Run"
+        };
+        var entry = new Entry
+        {
+            AutomationId = "replay-entry"
+        };
+        using var harness = await SetPropertyTestHarness.CreateAsync(button, entry);
+        using var socket = await ConnectUiEventsAsync(
+            harness.Port,
+            "ui-action-started",
+            "ui-action-completed");
+        var flow = new MauiFlow
+        {
+            Name = "lifecycle",
+            Steps =
+            {
+                new FlowStep
+                {
+                    Seq = 1,
+                    Action = FlowActions.Tap,
+                    Args = new FlowStepArgs
+                    {
+                        Selector = new FlowSelector { AutomationId = button.AutomationId }
+                    }
+                },
+                new FlowStep
+                {
+                    Seq = 2,
+                    Action = FlowActions.Fill,
+                    Args = new FlowStepArgs
+                    {
+                        Selector = new FlowSelector { AutomationId = entry.AutomationId },
+                        Text = "value"
+                    }
+                }
+            }
+        };
+
+        using (harness.Client.UseActionContext(source: "replay"))
+        {
+            var report = await new FlowReplayer(
+                harness.Client,
+                pollTries: 1,
+                pollGapMs: 0).ReplayAsync(flow);
+            Assert.True(report.Ok, JsonSerializer.Serialize(report));
+        }
+
+        var startedIds = new HashSet<string>(StringComparer.Ordinal);
+        var completedIds = new HashSet<string>(StringComparer.Ordinal);
+        while (startedIds.Count < 2 || completedIds.Count < 2)
+        {
+            using var message = await ReceiveUiEventAsync(socket);
+            var data = message.RootElement.GetProperty("data");
+            Assert.Equal(
+                "replay",
+                data.GetProperty("correlation").GetProperty("source").GetString());
+            Assert.True(data.TryGetProperty("captureEpoch", out var captureEpoch));
+            Assert.True(captureEpoch.GetInt64() > 0);
+            var id = data.GetProperty("correlation").GetProperty("actionId").GetString()!;
+            if (message.RootElement.GetProperty("type").GetString() == "ui-action-started")
+                startedIds.Add(id);
+            else
+                completedIds.Add(id);
+        }
+
+        Assert.Equal(2, startedIds.Count);
+        Assert.True(startedIds.SetEquals(completedIds));
+    }
+
+    [Fact]
     public async Task SetPropertyAsync_UpdatesInheritedBindableProperty_ThroughAgentEndpoint()
     {
         var button = new Button
@@ -439,6 +675,56 @@ public class SetPropertyBindableTests
         while (!result.EndOfMessage);
 
         return message;
+    }
+
+    private static async Task<ClientWebSocket> ConnectUiEventsAsync(
+        int port,
+        params string[] events)
+    {
+        var socket = new ClientWebSocket();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await socket.ConnectAsync(
+            new Uri($"ws://localhost:{port}/ws/v1/ui/events"),
+            timeout.Token);
+        var subscription = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            type = "subscribe",
+            data = new { events }
+        }));
+        await socket.SendAsync(
+            subscription,
+            WebSocketMessageType.Text,
+            true,
+            timeout.Token);
+        return socket;
+    }
+
+    private static async Task<JsonDocument> ReceiveUiEventAsync(
+        ClientWebSocket socket,
+        string? expectedType = null,
+        string? expectedActionId = null)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            using var message = await ReceiveMessageAsync(socket, timeout.Token);
+            var document = JsonDocument.Parse(message.ToArray());
+            var root = document.RootElement;
+            var messageType = root.TryGetProperty("type", out var type)
+                ? type.GetString()
+                : null;
+            var typeMatches = expectedType is null
+                ? messageType is "ui-action-started" or "ui-action-completed"
+                : messageType == expectedType;
+            var actionMatches = expectedActionId is null
+                || root.TryGetProperty("data", out var data)
+                && data.TryGetProperty("correlation", out var correlation)
+                && correlation.TryGetProperty("actionId", out var actionId)
+                && actionId.GetString() == expectedActionId;
+            if (typeMatches && actionMatches)
+                return document;
+            document.Dispose();
+        }
     }
 
     private sealed class ImmediateDispatcher : IDispatcher
