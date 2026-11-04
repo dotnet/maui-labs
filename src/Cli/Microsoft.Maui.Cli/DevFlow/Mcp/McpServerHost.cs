@@ -23,6 +23,8 @@ public static class McpServerHost
 		builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
 		builder.Services.AddSingleton<McpAgentSession>();
+		builder.Services.AddSingleton<ExtensionToolCatalog>();
+		builder.Services.AddHostedService<ExtensionToolCatalogStartup>();
 
 		builder.Services
 			.AddMcpServer(options =>
@@ -50,6 +52,12 @@ public static class McpServerHost
 						? " Call maui_control_status to inspect the current holder, then call maui_take_control with force=true only after the user approves interrupting that session."
 						: " Check the broker and agent connection, then retry the mutation.";
 					throw new McpException(ex.Message + guidance);
+				}
+				finally
+				{
+					// Tool calls are when an app appears, restarts or changes agents: pick up its plugin tools.
+					if (context.Services?.GetService(typeof(ExtensionToolCatalog)) is ExtensionToolCatalog catalog)
+						_ = Task.Run(() => catalog.RefreshAsync(), CancellationToken.None);
 				}
 			}))
 			.WithTools<ScreenshotTool>()

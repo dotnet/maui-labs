@@ -123,3 +123,14 @@ test failure, not a skip.
 `MAUI_INSPECTOR_LIVE_TESTS`. They require a provisioned broker and connected app.
 These browser fixtures **do not prove native gesture injection, platform rendering,
 device source-map generation, or native menu invocation**.
+
+## Extensions panel
+
+`InspectorExtensionsPanelTests` (`InspectorBrowserFact`) drives the Data dock's Extensions tab in
+headless Chromium against the real InspectorServer and a real UI-less `DevFlowAgentService` hosting
+a test plugin: listing and load errors, a schema-generated tool form, and a live stream table
+(dropped-events note, filter, pause/resume) over the `/ws/extensions` proxy.
+
+```powershell
+dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests --filter "FullyQualifiedName~InspectorExtensionsPanelTests"
+```

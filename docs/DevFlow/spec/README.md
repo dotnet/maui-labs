@@ -73,4 +73,16 @@ Extensions are discovered through `GET /api/v1/agent/capabilities`. The response
 - `description`: human-readable summary
 - `tools[]`: self-describing tool descriptors with `name`, `description`, `method`, `path`, optional JSON Schema `parameters`, optional JSON Schema `returns`, and optional behavior `annotations`
 
-`GET /api/v1/agent/status` includes an `extensions` marker with `count` and `hash`. Clients can cache extension descriptors by hash and avoid fetching full capabilities when the marker has not changed.
+- `streams[]` (optional): event streams with `name`, `description`, `path` (polling), `webSocketPath` (live) and `columns`
+- `toolPrefix` (optional): the short prefix MCP clients use when publishing the extension's tools as `ext_{toolPrefix}_{tool}`
+- `state` and `error` (plugins only): `ready`, or `faulted` with the reason; a faulted plugin answers its routes with 503
+
+Plugins that could not be created at all are listed in a top-level `extensionErrors` array.
+
+`GET /api/v1/agent/status` includes an `extensions` marker with `count` and `hash`. Clients can cache extension descriptors by hash and avoid fetching full capabilities when the marker has not changed. The hash covers streams and plugin state, so a plugin that faults after start changes it.
+
+### Extension streams
+
+A stream is a bounded buffer of events. Poll it with `GET {path}?since={sequence}&limit={n}`, which returns `{ events: [{ seq, ts, data }], nextSequence, dropped }`, or follow it live over `{webSocketPath}`, where each text frame is `{ seq, ts, data }` and may carry `dropped`. Each stream is also advertised as a read-only tool (`{name}_events`, or `{name}` when the name already ends in "events") so tool-only clients can read it.
+
+Plugins are written against `Microsoft.Maui.DevFlow.Extensibility`; see [the plugin guide](../plugins.md).

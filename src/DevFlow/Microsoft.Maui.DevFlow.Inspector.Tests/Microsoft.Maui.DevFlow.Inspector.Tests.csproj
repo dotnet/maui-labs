@@ -19,6 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Cli\Microsoft.Maui.Cli\Microsoft.Maui.Cli.csproj" />
     <ProjectReference Include="..\Microsoft.Maui.DevFlow.Driver\Microsoft.Maui.DevFlow.Driver.csproj" />
+    <!-- A real UI-less agent hosting a plugin backs the Extensions panel browser fixture. -->
+    <ProjectReference Include="..\Microsoft.Maui.DevFlow.Agent.Abstractions\Microsoft.Maui.DevFlow.Agent.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

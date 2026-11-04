@@ -2877,6 +2877,70 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   # ─────────────────────────────── Extensions ───────────────────────────
+  /api/v1/ext/{namespace}/streams/{stream}:
+    get:
+      operationId: readExtensionStream
+      tags: [extensions]
+      summary: Read buffered events from an extension stream
+      description: >
+        Returns events after `since`, oldest first. Pass the returned
+        `nextSequence` as `since` to continue. A `since` newer than the stream
+        (the app restarted) reads from the start. The agent keeps a bounded
+        buffer per stream; `dropped` counts events after `since` that already
+        left it. The same events are available live over
+        `/ws/v1/ext/{namespace}/streams/{stream}`.
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          description: Extension namespace in reverse-domain notation.
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9]*\\.[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
+        - name: stream
+          in: path
+          required: true
+          description: Stream name advertised in the extension descriptor.
+          schema:
+            type: string
+        - name: since
+          in: query
+          required: false
+          description: Return events after this sequence number. 0 reads the whole buffer.
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: Maximum events to return (1-1000).
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: A page of events.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, nextSequence, dropped]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      required: [seq, ts, data]
+                      properties:
+                        seq: { type: integer, format: int64 }
+                        ts: { type: string, format: date-time }
+                        data: { description: Extension-defined event payload. }
+                  nextSequence: { type: integer, format: int64 }
+                  dropped: { type: integer, format: int64 }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/ext/{namespace}/{path}:
     get:
       operationId: callExtensionGet

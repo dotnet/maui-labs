@@ -6,6 +6,7 @@ import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from
 import { createPropertyGridController } from './inspector-properties.js';
 import { createElementTreeController } from './inspector-tree.js';
 import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layoutRootElementId } from './inspector-layout.js';
+import { createExtensionsPanel } from './inspector-extensions.js';
 
 (function () {
   'use strict';
@@ -53,6 +54,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let connected = true;   // a live app is reachable (derived from /api/state); gates the drive-actions
   // Layout scans are explicit or opt-in live operations, independent of screenshot polling.
   let layoutPanel = null;
+  // Generic plugin UI (Data dock → Extensions); created with the dock below.
+  let extensionsPanel = null;
   const layoutEventTracker = createLayoutEventTracker();
   const diagnosticsWanted = () => false;
   const _origFetch = window.fetch.bind(window);
@@ -334,6 +337,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       disconnectReturnFocus = null;
     }
     renderWriterPresence();
+    extensionsPanel?.onConnectionChange(value);
     const status = document.getElementById('df-status');
     if (!value) setStatus(disconnectedStatus);
     else if (status && status.textContent === disconnectedStatus) setStatus('');
@@ -2938,6 +2942,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       const j = await apiPost('/api/cdp/webviews', {});
       if (dockLoadIsCurrent('webview', generation)) renderWebView(j);
     },
+    extensions: async (generation) => {
+      if (dockLoadIsCurrent('extensions', generation)) await extensionsPanel.activate(dockBodyEl);
+    },
   };
 
   function renderAlerts(result) {
@@ -3075,6 +3082,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       await tabLoaders[name](generation);
       if (!dockLoadIsCurrent(name, generation)) return;
       setDockMeta(name === 'layout' ? 'explicit scan / opt-in live' :
+        name === 'extensions' ? 'live streams · tools run on demand' :
         (name === 'network' ? 'live · updated ' : 'captured ') + new Date().toLocaleTimeString());
     }
     catch (e) {
@@ -3139,10 +3147,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     else loadTab(dockActiveTab);
   });
   if (attachDataBtn) attachDataBtn.addEventListener('click', attachDockDataToCopilot);
-  const dockTabButtons = [...dockTabsEl.querySelectorAll('.df-dock-tab')];
-  for (const b of dockTabButtons) {
+  const allDockTabButtons = [...dockTabsEl.querySelectorAll('.df-dock-tab')];
+  for (const b of allDockTabButtons) {
     b.addEventListener('click', () => loadTab(b.getAttribute('data-tab')));
     b.addEventListener('keydown', (e) => {
+      // The Extensions tab stays hidden until the app hosts a plugin; skip hidden tabs.
+      const dockTabButtons = allDockTabButtons.filter((t) => !t.classList.contains('df-hidden'));
       const index = dockTabButtons.indexOf(b);
       let target = null;
       if (e.key === 'ArrowRight') target = dockTabButtons[(index + 1) % dockTabButtons.length];
@@ -3158,6 +3168,30 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   setInterval(() => {
     if (networkPollIsActive()) loadNetworkList({ automatic: true, generation: dockViewGeneration });
   }, NETWORK_AUTO_REFRESH_MS);
+
+  // ── Extensions (DevFlow plugins) — generic tool forms and live stream tables ──
+  const extensionsTabBtn = document.getElementById('df-tab-extensions');
+  extensionsPanel = createExtensionsPanel({
+    document,
+    api: inspectorApi,
+    streamSocketUrl: (ns, stream, since) => {
+      const params = new URLSearchParams({ namespace: ns, stream, token: inspectorToken });
+      if (since > 0) params.set('since', String(since));
+      else params.set('since', '0');   // first connect replays what the agent still buffers
+      return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + basePath +
+        '/ws/extensions?' + params.toString();
+    },
+    canDrive: ensureCanDrive,
+    confirm: confirmModal,
+    status: setStatus,
+    onAvailabilityChange: (hasAny) => {
+      if (!extensionsTabBtn) return;
+      extensionsTabBtn.classList.toggle('df-hidden', !hasAny);
+      if (!hasAny && dockActiveTab === 'extensions') loadTab('logs');
+    },
+  });
+  // One descriptor read at startup decides whether the Extensions tab is offered at all.
+  extensionsPanel.refresh().catch(() => {});
 
   // ── Presence / single-writer coordination ──
   function renderWriterPresence() {

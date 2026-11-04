@@ -17,6 +17,21 @@ public class AgentClientCompatibilityTests
     }
 
     [Fact]
+    public void DriverFacade_ForwardsEveryPublicClientType()
+    {
+        // Driver re-exports the portable Client surface; a new public DTO without a forward breaks
+        // consumers that compiled against Driver.
+        var forwarded = typeof(AndroidAppDriver).Assembly.GetForwardedTypes().ToHashSet();
+        var missing = typeof(AgentClient).Assembly.GetExportedTypes()
+            .Where(t => !t.IsNested && !forwarded.Contains(t))
+            .Select(t => t.FullName)
+            .Order()
+            .ToArray();
+
+        Assert.Empty(missing);
+    }
+
+    [Fact]
     public void CaptureAwareOverloads_PreserveOriginalPublicSignatures()
     {
         var type = typeof(AgentClient);

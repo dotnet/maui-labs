@@ -239,6 +239,37 @@ platform before making changes.
 See the [Canvas host README](../../.github/extensions/maui-devflow-canvas/README.md) for
 capabilities, safety boundaries, and contributor tests.
 
+## Extensions panel
+
+Apps that host DevFlow plugins (`DevFlowExtension`, added with `AgentOptions.AddExtension`) get an
+**Extensions** tab in the Data dock. The tab stays hidden when the app hosts no plugins. It needs no
+plugin-specific Inspector code: everything is generated from the descriptors the agent advertises in
+`/api/v1/agent/capabilities`.
+
+- **Extensions list** — each plugin with its version, `ready`/`faulted` state, description, and MCP
+  tool prefix. A faulted plugin shows its error; plugins that could not be created at all are listed
+  under **Load errors**.
+- **Tools** — each tool gets a form generated from its JSON-schema parameters: text, number, whole
+  number, checkbox, and enum fields; nested objects/arrays and schemas that are not a flat object use
+  a raw JSON box. **Run** shows the HTTP status, duration, and the formatted response, including the
+  agent's error envelope when the tool fails. Tools that are not GET and not marked read-only drive
+  the app, so they need the mutation lease (take control first if another session is driving).
+  Tools marked destructive ask for confirmation.
+- **Streams** — each stream gets a live table with the stream's declared columns (or the event as
+  compact JSON), the sequence number, and local time. Pause holds new events until Resume; Clear
+  empties the table; the filter matches any cell. A note appears when the agent dropped events
+  because the Inspector fell behind. The table replays what the agent still buffers on first
+  connect, reconnects automatically (resuming after the last event it saw), and marks a restart
+  when the app is relaunched. If the WebSocket keeps failing, it falls back to polling for a while.
+
+The Inspector reaches plugins only through its own token-gated routes: `/api/extensions` (list),
+`/api/extensions/call` (run a tool by namespace and name), `/api/extensions/events` (poll), and the
+`/ws/extensions` WebSocket. The agent route is always resolved from the plugin's descriptor, never
+taken from the browser.
+
+The UI shows a stream's newest 1,000 events. Events published by a relaunched app before the table
+reconnects may be missed if that app has already published more events than the table had seen.
+
 ## Troubleshooting
 
 | Symptom | What to do |
