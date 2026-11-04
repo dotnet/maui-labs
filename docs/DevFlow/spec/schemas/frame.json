@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "frame.json",
+  "title": "Inspector Frame and Coordinate Models",
+  "description": "Immutable frame identity, dimensions, coordinate spaces, and optional action correlation shared by Inspector hosts.",
+  "$defs": {
+    "CoordinateSpace": {
+      "type": "string",
+      "enum": [
+        "appLogical",
+        "windowLogical",
+        "screenshotPixel",
+        "inspectorCss",
+        "transformedViewport"
+      ],
+      "description": "appLogical is relative to the captured app root in device-independent units. windowLogical is window-absolute in the same units and equals appLogical plus the frame root offset. screenshotPixel addresses PNG pixels. inspectorCss addresses the untransformed Inspector viewport. transformedViewport addresses the rendered viewport after host scale and translation."
+    },
+    "FrameDescriptor": {
+      "type": "object",
+      "description": "A complete immutable Inspector frame. frameId is the sole cache identity; frameRevision orders committed frames only within one streamId.",
+      "required": [
+        "streamId",
+        "frameId",
+        "frameRevision",
+        "treeRevision",
+        "logicalWidth",
+        "logicalHeight",
+        "pixelWidth",
+        "pixelHeight",
+        "rootOffsetX",
+        "rootOffsetY",
+        "captureScale",
+        "createdAt"
+      ],
+      "properties": {
+        "streamId": {
+          "type": "string",
+          "description": "Opaque identity for one Inspector server lifetime. Revision ordering never crosses streams."
+        },
+        "frameId": {
+          "type": "string",
+          "description": "Opaque identity used by the frame-specific screenshot URL and cache."
+        },
+        "frameRevision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Strictly increasing revision assigned only when a complete frame commits within streamId."
+        },
+        "captureEpoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Agent capture epoch, when supported."
+        },
+        "registryGeneration": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Native element registry generation paired with captureEpoch, when supported."
+        },
+        "windowId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Agent window identifier, when reported."
+        },
+        "treeRevision": {
+          "type": "string",
+          "description": "Opaque geometry and rendered-state revision for the semantic tree."
+        },
+        "diagnosticInputsRevision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional opaque revision for observed diagnostic sizing inputs."
+        },
+        "logicalWidth": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Captured app-root width in device-independent logical units."
+        },
+        "logicalHeight": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Captured app-root height in device-independent logical units."
+        },
+        "pixelWidth": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "PNG width in physical image pixels."
+        },
+        "pixelHeight": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "PNG height in physical image pixels."
+        },
+        "rootOffsetX": {
+          "type": "number",
+          "description": "Window-logical X origin of the captured app root."
+        },
+        "rootOffsetY": {
+          "type": "number",
+          "description": "Window-logical Y origin of the captured app root."
+        },
+        "captureScale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Nominal PNG pixels per logical unit. Exact conversions use pixelWidth/logicalWidth and pixelHeight/logicalHeight per axis."
+        },
+        "createdAt": {
+          "$ref": "common.json#/$defs/Timestamp",
+          "description": "UTC time when the complete tree and screenshot frame was created."
+        }
+      }
+    },
+    "ActionCorrelation": {
+      "type": "object",
+      "description": "Optional action identity and the immutable Inspector frame that produced its element or coordinates. Target-specific x/y, points, and elementId remain on the containing action payload. The Inspector proxy validates cached frame references; direct agent endpoints accept correlation as advisory metadata and require coordinate-form operations to use windowLogical space.",
+      "required": [
+        "actionId",
+        "source",
+        "frameId",
+        "coordinateSpace"
+      ],
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "description": "Caller-generated opaque action identity."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "inspector",
+            "cli",
+            "mcp",
+            "replay"
+          ],
+          "description": "Host that produced the action."
+        },
+        "streamId": {
+          "type": "string",
+          "description": "Inspector frame stream, when the action originated from a rendered frame."
+        },
+        "frameId": {
+          "type": "string",
+          "description": "Target Inspector frame. Older cached frames remain valid until they expire."
+        },
+        "frameRevision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Target frame revision within streamId, when known."
+        },
+        "coordinateSpace": {
+          "$ref": "#/$defs/CoordinateSpace",
+          "description": "Space used by coordinates on the containing action payload. Direct agent coordinate operations use windowLogical; Inspector hosts may submit another space to the Inspector proxy for conversion."
+        }
+      }
+    }
+  }
+}

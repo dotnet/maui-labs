@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -721,6 +722,117 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         finally
         {
             gate.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_FrameMetadataCommitsAtomicallyWithDecodedScreenshot()
+    {
+        string? committedFrameId = null;
+        await Page.RouteAsync("**/api/state", async route =>
+        {
+            var response = await route.FetchAsync();
+            var responseBody = await response.TextAsync();
+            var state = JsonNode.Parse(responseBody)!.AsObject();
+            var elements = state["elements"]?.GetValue<string>() ?? string.Empty;
+            if (!elements.Contains("data-text=\"Tapped\"", StringComparison.Ordinal) ||
+                committedFrameId is not null)
+            {
+                await route.FulfillAsync(new()
+                {
+                    Status = response.Status,
+                    ContentType = response.Headers.GetValueOrDefault("content-type"),
+                    Body = responseBody
+                });
+                return;
+            }
+
+            var frame = state["frame"]!.AsObject();
+            committedFrameId = frame["frameId"]!.GetValue<string>();
+            frame["logicalWidth"] = 200;
+            frame["logicalHeight"] = 150;
+            frame["rootOffsetX"] = 11;
+            frame["rootOffsetY"] = 13;
+            frame["captureScale"] = 2;
+            state["viewportWidth"] = 200;
+            state["viewportHeight"] = 150;
+            state["rootOffsetX"] = 11;
+            state["rootOffsetY"] = 13;
+            state["elements"] = elements.Replace(
+                "data-text=\"Tapped\"",
+                "data-text=\"Frame B\"",
+                StringComparison.Ordinal);
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = state.ToJsonString()
+            });
+        });
+        await Page.EvaluateAsync("""
+            () => {
+              window.fixtureOriginalImageDecode = HTMLImageElement.prototype.decode;
+              window.fixtureDecodeStarted = false;
+              window.fixtureReleaseDecode = null;
+              HTMLImageElement.prototype.decode = function () {
+                if (!this.id && !window.fixtureDecodeStarted) {
+                  window.fixtureDecodeStarted = true;
+                  document.body.dataset.fixtureDecodeStarted = 'true';
+                  return new Promise(resolve => {
+                    window.fixtureReleaseDecode = () => {
+                      resolve();
+                      return new Promise(done => setTimeout(() => {
+                        document.body.dataset.fixtureDecodeReleased = 'true';
+                        done();
+                      }, 0));
+                    };
+                  });
+                }
+                return window.fixtureOriginalImageDecode.call(this);
+              };
+            }
+            """);
+        try
+        {
+            await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-decode-started", "true");
+
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Frame B", new() { Timeout = 10_000 });
+            await Expect(Page.Locator("#app-viewport")).ToHaveAttributeAsync("data-width", "200");
+            await Expect(Page.Locator("#app-viewport")).ToHaveAttributeAsync("data-height", "150");
+            await Expect(Page.Locator("#app-viewport")).ToHaveAttributeAsync("data-root-offset-x", "11");
+            await Expect(Page.Locator("#app-viewport")).ToHaveAttributeAsync("data-root-offset-y", "13");
+            Assert.Equal(
+                200,
+                await Page.Locator("#screenshot")
+                    .EvaluateAsync<double>("element => parseFloat(getComputedStyle(element).width)"));
+            Assert.Equal(
+                150,
+                await Page.Locator("#screenshot")
+                    .EvaluateAsync<double>("element => parseFloat(getComputedStyle(element).height)"));
+            Assert.NotNull(committedFrameId);
+            await Expect(Page.Locator("#screenshot"))
+                .ToHaveAttributeAsync("src", new System.Text.RegularExpressions.Regex($"frame={committedFrameId}$"));
+
+            await Page.EvaluateAsync("() => window.fixtureReleaseDecode?.()");
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-decode-released", "true");
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Frame B");
+            await Expect(Page.Locator("#app-viewport")).ToHaveAttributeAsync("data-width", "200");
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            await Page.EvaluateAsync("""
+                () => {
+                  window.fixtureReleaseDecode?.();
+                  if (window.fixtureOriginalImageDecode) {
+                    HTMLImageElement.prototype.decode = window.fixtureOriginalImageDecode;
+                  }
+                }
+                """);
         }
     }
 

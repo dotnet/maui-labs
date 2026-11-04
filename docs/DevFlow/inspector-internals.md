@@ -77,26 +77,54 @@ preference. VS Code placement is configurable with
 
 ## Coordinated frames and coordinates
 
-Each inspector refresh creates an immutable frame containing:
+Each Inspector refresh creates one immutable frame containing the visual tree, exact screenshot
+bytes, rendered overlay HTML, dimensions, offsets, and capture metadata. `/api/state` exposes the
+canonical descriptor under `frame`; the existing flat fields remain compatibility aliases.
 
-- the visual tree used for the overlay;
-- the exact screenshot bytes;
-- screenshot dimensions;
-- the screenshotted root page and its window offset;
-- rendered element HTML.
+| Field | Meaning |
+|---|---|
+| `streamId` | Opaque identity for one `InspectorServer` lifetime. Revision ordering never crosses streams. |
+| `frameId` | Opaque GUID and the sole frame-cache identity used by `screenshot.png?frame=...`. |
+| `frameRevision` | Strictly increasing revision assigned only when a complete frame commits within `streamId`. |
+| `captureEpoch`, `registryGeneration`, `windowId` | Optional agent capture identity used for stale element rejection. |
+| `treeRevision`, `diagnosticInputsRevision` | Opaque tree and optional layout-input revisions. |
+| `logicalWidth`, `logicalHeight` | Captured app-root size in device-independent units. |
+| `pixelWidth`, `pixelHeight` | PNG dimensions from its IHDR chunk. |
+| `rootOffsetX`, `rootOffsetY` | Captured root origin in window-logical coordinates. |
+| `captureScale` | Nominal PNG pixels per logical unit; exact conversion uses the per-axis dimension ratios. |
+| `createdAt` | UTC time when the complete tree and screenshot frame was created. |
 
-The screenshot URL includes the frame ID. Expired frame screenshots return `404`, causing the
-client to refresh state instead of pairing a new screenshot with stale bounds. When a modal or
-sheet is screenshotted, only that page subtree is rendered, preventing underlying window chrome
-from producing negative offsets.
+`frameId` remains the only cache lookup key. `frameRevision` provides ordering, and
+`_cacheGeneration` remains an internal invalidation guard. The initial HTML carries the same
+descriptor as `/api/state`, so actions before the first poll still reference the displayed frame.
+Identity-less compatibility payloads may refresh in place; explicit frames commit only when their
+stream/revision ordering permits it.
 
 Browser refreshes use a monotonically increasing generation. A forced refresh aborts older state
 fetch or image-decode work; late completions are ignored, and cancellation never clears the last
 committed frame or pending tap feedback. Forced state requests also bypass the server's short
 frame-reuse window so post-action evidence cannot reuse a frame captured before the action.
 
-Browser coordinates are converted from the fit-scaled viewport back to screenshot coordinates,
-then translated to window coordinates with the frame's root offset before hit testing.
+The browser decodes a candidate screenshot before synchronously committing screenshot source,
+logical viewport size, offsets, element HTML, and descriptor. Expired screenshot lookups return
+`404`. Correlated actions referencing unknown frames return `410 frame-expired`; stream/revision or
+changed-geometry mismatches return `409 frame-mismatch` or `409 frame-superseded`. `actionId` is a
+tracing identifier, not replay protection.
+
+Coordinate conversions are centralized in `Web/inspector-frame.js`:
+
+```text
+windowLogical = appLogical + (rootOffsetX, rootOffsetY)
+appLogical = windowLogical - (rootOffsetX, rootOffsetY)
+screenshotPixel.x = appLogical.x * pixelWidth / logicalWidth
+screenshotPixel.y = appLogical.y * pixelHeight / logicalHeight
+inspectorCss = (transformedViewport - origin - translation) / scale
+```
+
+Inspector actions send `appLogical` coordinates plus optional correlation containing `actionId`,
+`source`, `streamId`, `frameId`, `frameRevision`, and `coordinateSpace`. Older callers may omit
+correlation and retain window-logical behavior. The Inspector proxy validates and converts
+correlated coordinates; direct `/api/v1` agent coordinate calls must already use `windowLogical`.
 
 Elements the Agent reports as displayed can still lie wholly outside the frame (a closed Shell
 flyout is realized left of the window). The renderer marks those overlays `data-offscreen="true"`

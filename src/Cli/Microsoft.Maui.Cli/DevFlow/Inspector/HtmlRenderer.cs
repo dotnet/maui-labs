@@ -40,7 +40,7 @@ public static class HtmlRenderer
 
         // Build screenshot tag
         var screenshotHtml = hasScreenshot
-            ? $"<img id=\"screenshot\" src=\"{Escape(screenshotUrl ?? "screenshot.png")}\" alt=\"App screenshot\">"
+            ? $"<img id=\"screenshot\" src=\"{Escape(screenshotUrl ?? "screenshot.png")}\" alt=\"App screenshot\" style=\"width:100%;height:100%;\">"
             : "";
 
         // Replace scalar placeholders first (all produce known-safe, non-user
