@@ -94,7 +94,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let gesturePoints = [];
   let isGesturing = false;
   let isDragging = false;
-  let refreshPromise = null;
+  let refreshGeneration = 0;
+  let activeRefresh = null;
   const STATE_FETCH_TIMEOUT_MS = 10000;
 
   // Inspector selection and tree state. Declared early so the event
@@ -229,27 +230,60 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Refresh state via AJAX (no full page reload — avoids flash)
   async function refreshState(force = false) {
-    if (refreshPromise) {
-      if (!force) return refreshPromise;
-      await refreshPromise;
-      // Another forced caller may already have started the fresh refresh; share it.
-      if (refreshPromise) return refreshPromise;
+    const tap = latestTap;
+    if (activeRefresh) {
+      if (!force) return activeRefresh.promise;
+      if (tap !== null && activeRefresh.tap === tap) return activeRefresh.promise;
+      activeRefresh.cancelReason = 'superseded';
+      activeRefresh.controller.abort();
     }
 
-    const currentRefresh = (async () => {
-      const tap = latestTap;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), STATE_FETCH_TIMEOUT_MS);
+    const refresh = {
+      generation: ++refreshGeneration,
+      tap,
+      controller: new AbortController(),
+      cancelReason: null,
+      promise: null,
+    };
+    const isSuperseded = () =>
+      activeRefresh !== refresh || refresh.generation !== refreshGeneration;
+    const followReplacement = () =>
+      activeRefresh && activeRefresh !== refresh ? activeRefresh.promise : null;
+    const ensureCurrent = () => {
+      if (isSuperseded()) return false;
+      if (refresh.controller.signal.aborted) {
+        throw refresh.controller.signal.reason
+          || new DOMException('State refresh aborted.', 'AbortError');
+      }
+      return true;
+    };
+    activeRefresh = refresh;
+    refresh.promise = (async () => {
+      const timeout = setTimeout(() => {
+        if (isSuperseded()) return;
+        refresh.cancelReason = 'timeout';
+        refresh.controller.abort();
+      }, STATE_FETCH_TIMEOUT_MS);
       disconnectedOverlay?.setAttribute('aria-busy', 'true');
       try {
-        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: controller.signal });
+        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: refresh.controller.signal });
+        if (!ensureCurrent()) return followReplacement();
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();
+        if (!ensureCurrent()) return followReplacement();
 
         // Keep the previous frame intact until its replacement image is ready.
+        let image = null;
         if (screenshot && state.screenshotUrl) {
-          const image = await loadDecodedImage(state.screenshotUrl, controller.signal);
+          image = await loadDecodedImage(state.screenshotUrl, refresh.controller.signal);
+          if (!ensureCurrent()) return followReplacement();
           if (!navigator.onLine) return null;
+        }
+        if (!ensureCurrent()) return followReplacement();
+
+        // Commit the complete frame synchronously so tree, screenshot, geometry, and metadata
+        // cannot be mixed with a superseded refresh.
+        if (screenshot && image) {
           screenshot.src = image.src;
         }
         markConnected(true);
@@ -285,6 +319,11 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           const renderedStateSignature = JSON.stringify(renderedState);
           if (renderedStateSignature !== tap.previewStateSignature || tap.unchangedCaptures > 0) {
             latestTap = null;
+            if (refreshTimer && refreshTimerDelay === 3000) {
+              clearTimeout(refreshTimer);
+              refreshTimer = null;
+              refreshTimerDelay = null;
+            }
             renderPreviewPending();
           } else {
             tap.unchangedCaptures++;
@@ -293,19 +332,23 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         }
         return state;
       } catch (err) {
+        if (refresh.cancelReason === 'superseded' || isSuperseded()) {
+          return followReplacement();
+        }
         markConnected(false);
         console.error('State refresh failed:', err);
         return null;
       } finally {
         clearTimeout(timeout);
-        disconnectedOverlay?.removeAttribute('aria-busy');
       }
     })();
-    refreshPromise = currentRefresh;
     try {
-      return await currentRefresh;
+      return await refresh.promise;
     } finally {
-      if (refreshPromise === currentRefresh) refreshPromise = null;
+      if (activeRefresh === refresh) {
+        activeRefresh = null;
+        disconnectedOverlay?.removeAttribute('aria-busy');
+      }
     }
   }
 
@@ -463,18 +506,24 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Debounced refresh — coalesce rapid calls
   let refreshTimer = null;
+  let refreshTimerDelay = null;
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
     previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
   }
   function scheduleRefresh(delayMs = 300) {
-    if (refreshTimer) clearTimeout(refreshTimer);
+    if (refreshTimer) {
+      if (refreshTimerDelay === 0 && delayMs > 0) return;
+      clearTimeout(refreshTimer);
+    }
+    refreshTimerDelay = delayMs;
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
+      refreshTimerDelay = null;
       // A refresh already in flight may predate the tap, so wait for it and capture again.
       const state = await refreshState(latestTap !== null);
-      if (!state && latestTap !== null) scheduleRefresh(3000);
+      if (!state && latestTap !== null && !activeRefresh) scheduleRefresh(3000);
     }, delayMs);
   }
   if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(3000));
