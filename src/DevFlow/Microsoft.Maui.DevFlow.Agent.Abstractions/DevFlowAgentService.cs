@@ -156,6 +156,13 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     protected virtual Task StopBackendAsync() => Task.CompletedTask;
 
     /// <summary>
+    /// Starts or reattaches backend-owned runtime hooks.
+    /// </summary>
+    protected virtual void StartBackendResources()
+    {
+    }
+
+    /// <summary>
     /// Notifies the active backend that a successful UI operation completed.
     /// </summary>
     protected virtual void OnUiOperationSucceeded()
@@ -173,6 +180,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
         _dispatcher = dispatcher ?? _dispatcher;
         try
         {
+            StartBackendResources();
             _server.Start();
             Console.WriteLine($"[Microsoft.Maui.DevFlow.Agent] HTTP server started on port {_options.Port}");
         }
