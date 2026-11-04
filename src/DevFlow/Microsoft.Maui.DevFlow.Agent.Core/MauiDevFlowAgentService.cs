@@ -1685,6 +1685,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         HttpRequest request,
         Func<HttpRequest, Task<HttpResponse>> handler)
     {
+        if (RejectMutationDuringPointerSession(request) is { } rejected)
+            return rejected;
+
         if (!await _uiMutationGate.WaitAsync(TimeSpan.FromSeconds(5)))
         {
             return HttpResponse.Error(

@@ -22,6 +22,19 @@ public class AgentClientCompatibilityTests
     }
 
     [Fact]
+    public void DriverFacade_ForwardsPointerSessionProtocolTypes()
+    {
+        var driver = typeof(AndroidAppDriver).Assembly;
+        var forwarded = driver.GetForwardedTypes();
+
+        Assert.Contains(typeof(PointerSessionStartRequest), forwarded);
+        Assert.Contains(typeof(PointerSessionSample), forwarded);
+        Assert.Contains(typeof(PointerSessionResult), forwarded);
+        Assert.Contains(typeof(ActionCorrelation), forwarded);
+        Assert.Equal("Microsoft.Maui.DevFlow.Client", typeof(PointerSessionResult).Assembly.GetName().Name);
+    }
+
+    [Fact]
     public void CaptureAwareOverloads_PreserveOriginalPublicSignatures()
     {
         var type = typeof(AgentClient);

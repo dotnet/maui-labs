@@ -347,6 +347,7 @@ public partial class DevFlowAgentService
     public async Task StopAsync()
     {
         await StopProfilerAsync();
+        await StopPointerSessionsAsync();
         await StopBackendAsync();
         await _server.StopAsync();
     }
@@ -384,12 +385,21 @@ public partial class DevFlowAgentService
         _server.MapPost("/api/v1/ui/actions/fill", request => ExecuteUiMutationAsync(request, HandleFill));
         _server.MapPost("/api/v1/ui/actions/clear", request => ExecuteUiMutationAsync(request, HandleClear));
         _server.MapPost("/api/v1/ui/actions/focus", request => ExecuteUiMutationAsync(request, HandleFocus));
-        _server.MapPost("/api/v1/ui/actions/navigate", request => ExecuteUiMutationAsync(request, HandleNavigate));
+        _server.MapPost("/api/v1/ui/actions/navigate", request => ExecutePointerTerminatingMutationAsync(request, HandleNavigate));
         _server.MapPost("/api/v1/ui/actions/resize", request => ExecuteUiMutationAsync(request, HandleResize));
         _server.MapPost("/api/v1/ui/actions/scroll", request => ExecuteUiMutationAsync(request, HandleScroll));
-        _server.MapPost("/api/v1/ui/actions/back", request => ExecuteUiMutationAsync(request, HandleBack));
+        _server.MapPost("/api/v1/ui/actions/back", request => ExecutePointerTerminatingMutationAsync(request, HandleBack));
         _server.MapPost("/api/v1/ui/actions/key", request => ExecuteUiMutationAsync(request, HandleKey));
         _server.MapPost("/api/v1/ui/actions/gesture", request => ExecuteUiMutationAsync(request, HandleGesture));
+        _server.MapPost("/api/v1/ui/actions/pointer-sessions", request => ExecuteUiMutationAsync(request, HandlePointerSessionStart));
+        _server.MapPost("/api/v1/ui/actions/pointer-sessions/{id}/move", request => ExecuteUiMutationAsync(request, HandlePointerSessionMove));
+        _server.MapPost("/api/v1/ui/actions/pointer-sessions/{id}/end", request => ExecuteUiMutationAsync(request, HandlePointerSessionEnd));
+        _server.MapPost(
+            "/api/v1/ui/actions/pointer-sessions/{id}/cancel",
+            HandlePointerSessionCancel,
+            requiresMutationLease: true,
+            mutationLeaseExemption: null,
+            serializeMutation: false);
         _server.MapPost("/api/v1/ui/actions/batch", request => ExecuteUiMutationAsync(request, HandleBatch));
 
         _server.MapGet("/api/v1/logs", HandleLogs);
@@ -400,7 +410,7 @@ public partial class DevFlowAgentService
         _server.MapGet("/api/v1/webview/source", HandleCdpSource);
         _server.MapGet("/api/v1/webview/dom", HandleWebViewDom);
         _server.MapPost("/api/v1/webview/dom/query", HandleWebViewDomQuery, requiresMutationLease: false);
-        _server.MapPost("/api/v1/webview/navigate", request => ExecuteUiMutationAsync(request, HandleWebViewNavigate));
+        _server.MapPost("/api/v1/webview/navigate", request => ExecutePointerTerminatingMutationAsync(request, HandleWebViewNavigate));
         _server.MapPost("/api/v1/webview/input/click", request => ExecuteUiMutationAsync(request, HandleWebViewInputClick));
         _server.MapPost("/api/v1/webview/input/fill", request => ExecuteUiMutationAsync(request, HandleWebViewInputFill));
         _server.MapPost("/api/v1/webview/input/text", request => ExecuteUiMutationAsync(request, HandleWebViewInputText));
@@ -1702,6 +1712,7 @@ public partial class DevFlowAgentService
         NetworkStore.OnRequestCaptured -= HandleCapturedNetworkRequest;
         AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
         StopAutoUiHooks();
+        DisposePointerSessions();
         DisposeBackendResources();
 
         var cts = _profilerLoopCts;

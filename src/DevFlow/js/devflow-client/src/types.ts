@@ -144,6 +144,28 @@ export interface ThemeResult {
   [key: string]: unknown;
 }
 
+export interface PointerSessionSample {
+  x: number;
+  y: number;
+  elapsedMs: number;
+  pressure?: number;
+  buttons?: number;
+}
+
+export interface PointerSessionResult {
+  success: boolean;
+  sessionId: string;
+  state: string;
+  lastSequence: number;
+  idleTimeoutMs?: number;
+  maxDurationMs?: number;
+  maxSamplesPerMove?: number;
+  maxRequestBytes?: number;
+  detail?: string | null;
+  reason?: string | null;
+  error?: string | null;
+}
+
 export type DevFlowErrorKind =
   | "broker-not-found"
   | "broker-unreachable"

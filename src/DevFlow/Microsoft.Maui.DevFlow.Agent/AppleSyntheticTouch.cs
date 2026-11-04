@@ -167,6 +167,8 @@ internal sealed class AppleSyntheticTouch : IDisposable
 
     internal bool End() => TrySetPhase(UITouchPhase.Ended);
 
+    internal bool Cancel() => TrySetPhase(UITouchPhase.Cancelled);
+
     private bool TrySetPhase(UITouchPhase phase)
     {
         var handle = (IntPtr)Touch.Handle;
@@ -295,6 +297,191 @@ internal sealed class SyntheticTouchEvent : UIEvent
 /// </summary>
 internal static class AppleTouchInjector
 {
+    internal sealed class PointerSession : IDisposable
+    {
+        private readonly UIView _target;
+        private readonly AppleSyntheticTouch _touch;
+        private readonly NSSet _touches;
+        private readonly SyntheticTouchEvent _touchEvent;
+        private readonly List<UIGestureRecognizer>? _receiving;
+        private readonly HashSet<UIGestureRecognizer> _losers = [];
+        private readonly bool _rawTouch;
+        private readonly CGPoint _start;
+        private bool _terminal;
+
+        private PointerSession(
+            UIView target,
+            AppleSyntheticTouch touch,
+            NSSet touches,
+            SyntheticTouchEvent touchEvent,
+            List<UIGestureRecognizer>? receiving,
+            bool rawTouch,
+            CGPoint start)
+        {
+            _target = target;
+            _touch = touch;
+            _touches = touches;
+            _touchEvent = touchEvent;
+            _receiving = receiving;
+            _rawTouch = rawTouch;
+            _start = start;
+        }
+
+        internal static PointerSession? Start(
+            UIView target,
+            IReadOnlyList<UIGestureRecognizer> recognizers,
+            bool rawTouch,
+            CGPoint start)
+        {
+            if (target.Window is not { } window)
+                return null;
+
+            var touch = AppleSyntheticTouch.Create(window, target, start);
+            if (touch is null)
+                return null;
+
+            var touches = new NSSet(touch.Touch);
+            var touchEvent = new SyntheticTouchEvent(touches);
+            try
+            {
+                List<UIGestureRecognizer>? receiving = null;
+                if (rawTouch)
+                {
+                    target.TouchesBegan(touches, touchEvent);
+                }
+                else
+                {
+                    receiving = recognizers.Where(r => DelegateAccepts(r, touch.Touch)).ToList();
+                    if (receiving.Count == 0)
+                    {
+                        touchEvent.Dispose();
+                        touches.Dispose();
+                        touch.Dispose();
+                        return null;
+                    }
+
+                    foreach (var recognizer in receiving)
+                        recognizer.TouchesBegan(touches, touchEvent);
+                }
+
+                return new PointerSession(
+                    target,
+                    touch,
+                    touches,
+                    touchEvent,
+                    receiving,
+                    rawTouch,
+                    start);
+            }
+            catch
+            {
+                touchEvent.Dispose();
+                touches.Dispose();
+                touch.Dispose();
+                throw;
+            }
+        }
+
+        internal bool MoveTo(CGPoint point)
+        {
+            if (_terminal || !_touch.MoveTo(point))
+                return false;
+
+            if (_rawTouch)
+            {
+                _target.TouchesMoved(_touches, _touchEvent);
+                return true;
+            }
+
+            foreach (var recognizer in _receiving!)
+            {
+                if (IsLive(recognizer, _losers))
+                    recognizer.TouchesMoved(_touches, _touchEvent);
+            }
+            Arbitrate(_receiving!, _losers, Distance(_start, point), _touches, _touchEvent);
+            return true;
+        }
+
+        internal bool End()
+        {
+            if (_terminal || !_touch.End())
+                return false;
+            _terminal = true;
+
+            if (_rawTouch)
+            {
+                _target.TouchesEnded(_touches, _touchEvent);
+                return true;
+            }
+
+            foreach (var recognizer in _receiving!)
+            {
+                if (IsLive(recognizer, _losers))
+                    recognizer.TouchesEnded(_touches, _touchEvent);
+            }
+            foreach (var recognizer in _receiving!)
+            {
+                if (!_losers.Contains(recognizer)
+                    && recognizer.State is UIGestureRecognizerState.Began or UIGestureRecognizerState.Changed)
+                {
+                    TrySetState(recognizer, UIGestureRecognizerState.Ended);
+                }
+            }
+            return true;
+        }
+
+        internal bool Cancel()
+        {
+            if (_terminal)
+                return true;
+            _terminal = true;
+            _touch.Cancel();
+
+            if (_rawTouch)
+            {
+                _target.TouchesCancelled(_touches, _touchEvent);
+                return true;
+            }
+
+            foreach (var recognizer in _receiving!)
+            {
+                if (IsLive(recognizer, _losers))
+                {
+                    recognizer.TouchesCancelled(_touches, _touchEvent);
+                    TrySetState(recognizer, UIGestureRecognizerState.Cancelled);
+                }
+            }
+            return true;
+        }
+
+        public void Dispose()
+        {
+            if (!_terminal)
+                Cancel();
+            _touchEvent.Dispose();
+            _touches.Dispose();
+            _touch.Dispose();
+        }
+    }
+
+    internal static PointerSession? StartPointerSession(
+        UIView target,
+        IReadOnlyList<UIGestureRecognizer> recognizers,
+        bool rawTouch,
+        CGPoint start)
+    {
+        try
+        {
+            return PointerSession.Start(target, recognizers, rawTouch, start);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Synthetic pointer start failed: {ex.GetBaseException().Message}");
+            return null;
+        }
+    }
+
     /// <summary>
     /// Delivers the sequence to <paramref name="target"/>, which the caller has already
     /// resolved and accepted. Nothing is delivered unless every finger's starting point

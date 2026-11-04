@@ -495,6 +495,246 @@
         }
       }
     },
+    "PointerSample": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "elapsedMs"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "y": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "elapsedMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Monotonic milliseconds since the pointer session started."
+        },
+        "pressure": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "buttons": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "PointerSessionStartRequest": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "pointerId",
+        "pointerType",
+        "coordinateSpace",
+        "x",
+        "y",
+        "elapsedMs"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "pointerId": {
+          "type": "integer"
+        },
+        "pointerType": {
+          "type": "string",
+          "enum": [
+            "touch"
+          ]
+        },
+        "coordinateSpace": {
+          "type": "string",
+          "const": "windowLogical",
+          "description": "Window-local device-independent units. Inspector appLogical coordinates are validated against the cached frame and converted by InspectorServer before this request."
+        },
+        "x": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "y": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "elapsedMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pressure": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "buttons": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "windowId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "captureEpoch": {
+          "$ref": "#/$defs/CaptureEpoch"
+        },
+        "registryGeneration": {
+          "$ref": "#/$defs/RegistryGeneration"
+        },
+        "correlation": {
+          "$ref": "#/$defs/ActionCorrelation"
+        }
+      }
+    },
+    "PointerSessionMoveRequest": {
+      "type": "object",
+      "required": [
+        "sequence",
+        "samples"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "samples": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/PointerSample"
+          },
+          "description": "A bounded coalesced batch. An empty array is a heartbeat."
+        }
+      }
+    },
+    "PointerSessionEndRequest": {
+      "type": "object",
+      "required": [
+        "sequence",
+        "sample"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sample": {
+          "$ref": "#/$defs/PointerSample"
+        }
+      }
+    },
+    "PointerSessionCancelRequest": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        }
+      }
+    },
+    "PointerSessionResponse": {
+      "type": "object",
+      "required": [
+        "success",
+        "sessionId",
+        "state",
+        "lastSequence",
+        "idleTimeoutMs",
+        "maxDurationMs",
+        "maxSamplesPerMove",
+        "maxRequestBytes"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "active",
+            "ended",
+            "cancelled",
+            "unknown",
+            "gone",
+            "rejected"
+          ]
+        },
+        "lastSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idleTimeoutMs": {
+          "type": "integer",
+          "minimum": 500
+        },
+        "maxDurationMs": {
+          "type": "integer",
+          "minimum": 500
+        },
+        "maxSamplesPerMove": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "maxRequestBytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65536
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
     "GestureResponse": {
       "type": "object",
       "description": "Result of a gesture, naming the tier that serviced it.",

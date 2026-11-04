@@ -3,7 +3,14 @@
 // ONE place. Keeping these pure (no dependency on resolve.ts) keeps the module graph
 // one-way and makes parsing/query-building unit-testable.
 
-import type { ActionCorrelation, AgentStatus, ElementInfo, ThemeResult } from "./types.js";
+import type {
+  ActionCorrelation,
+  AgentStatus,
+  ElementInfo,
+  PointerSessionResult,
+  PointerSessionSample,
+  ThemeResult,
+} from "./types.js";
 
 const API = "/api/v1";
 const UI = `${API}/ui`;
@@ -134,6 +141,20 @@ export interface GestureArgs {
   distance?: number;
   durationMs?: number;
   points?: Array<{ x: number; y: number; t?: number }>;
+  correlation?: ActionCorrelation;
+}
+
+export interface PointerSessionStartArgs {
+  sessionId: string;
+  pointerId: number;
+  x: number;
+  y: number;
+  elapsedMs?: number;
+  pointerType?: string;
+  coordinateSpace?: string;
+  windowId?: number;
+  captureEpoch?: number;
+  registryGeneration?: number;
   correlation?: ActionCorrelation;
 }
 
@@ -283,6 +304,47 @@ export const requests = {
     return action("gesture", `${UI}/actions/gesture`, body);
   },
 
+  pointerStart(args: PointerSessionStartArgs): AgentRequest<PointerSessionResult> {
+    return pointerAction("pointerStart", `${UI}/actions/pointer-sessions`, {
+      ...args,
+      elapsedMs: args.elapsedMs ?? 0,
+      pointerType: args.pointerType ?? "touch",
+      coordinateSpace: args.coordinateSpace ?? "windowLogical",
+    });
+  },
+
+  pointerMove(
+    sessionId: string,
+    sequence: number,
+    samples: PointerSessionSample[],
+  ): AgentRequest<PointerSessionResult> {
+    return pointerAction(
+      "pointerMove",
+      `${UI}/actions/pointer-sessions/${encodeURIComponent(sessionId)}/move`,
+      { sequence, samples },
+    );
+  },
+
+  pointerEnd(
+    sessionId: string,
+    sequence: number,
+    sample: PointerSessionSample,
+  ): AgentRequest<PointerSessionResult> {
+    return pointerAction(
+      "pointerEnd",
+      `${UI}/actions/pointer-sessions/${encodeURIComponent(sessionId)}/end`,
+      { sequence, sample },
+    );
+  },
+
+  pointerCancel(sessionId: string, reason?: string): AgentRequest<PointerSessionResult> {
+    return pointerAction(
+      "pointerCancel",
+      `${UI}/actions/pointer-sessions/${encodeURIComponent(sessionId)}/cancel`,
+      { reason },
+    );
+  },
+
   themeGet(): AgentRequest<ThemeResult | null> {
     return {
       method: "GET",
@@ -306,4 +368,22 @@ export const requests = {
 
 function action(operation: string, path: string, body: unknown): AgentRequest<void> {
   return { method: "POST", path, body, idempotent: false, operation, appError: actionAppError, parse: noop };
+}
+
+function pointerAction(
+  operation: string,
+  path: string,
+  body: unknown,
+): AgentRequest<PointerSessionResult> {
+  return {
+    method: "POST",
+    path,
+    body,
+    // Still a mutation for lease acquisition/header propagation. The agent handles explicit
+    // identical retries by session id and sequence; the generic transport must not replay it.
+    idempotent: false,
+    operation,
+    appError: actionAppError,
+    parse: data => data as PointerSessionResult,
+  };
 }
