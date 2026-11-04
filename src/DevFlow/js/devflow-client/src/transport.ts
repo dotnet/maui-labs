@@ -7,9 +7,17 @@
 // writes). Every result carries the target identity so the host can show what is controlled.
 
 import { err } from "./types.js";
-import type { ActionCorrelation, AgentTarget, DevFlowError, DevFlowResult, ElementInfo } from "./types.js";
+import type {
+  ActionCorrelation,
+  AgentTarget,
+  DevFlowError,
+  DevFlowResult,
+  ElementInfo,
+  PointerSessionResult,
+  PointerSessionSample,
+} from "./types.js";
 import type { DevFlowEvent, EventStreamHandle } from "./events.js";
-import type { ScrollArgs, GestureArgs } from "./agent.js";
+import type { ScrollArgs, GestureArgs, PointerSessionStartArgs } from "./agent.js";
 
 /** The complete set of operations a webview may request through a host proxy. */
 export type SeamOp =
@@ -19,6 +27,10 @@ export type SeamOp =
   | { kind: "tap"; x?: number; y?: number; elementId?: string; correlation?: ActionCorrelation }
   | { kind: "scroll"; x: number; y: number; deltaX: number; deltaY: number; correlation?: ActionCorrelation }
   | { kind: "gesture"; points: Array<{ x: number; y: number; t?: number }>; correlation?: ActionCorrelation }
+  | { kind: "pointerStart"; value: PointerSessionStartArgs }
+  | { kind: "pointerMove"; sessionId: string; sequence: number; samples: PointerSessionSample[] }
+  | { kind: "pointerEnd"; sessionId: string; sequence: number; sample: PointerSessionSample }
+  | { kind: "pointerCancel"; sessionId: string; reason?: string }
   | { kind: "back"; correlation?: ActionCorrelation }
   | { kind: "fill"; elementId: string; text: string; correlation?: ActionCorrelation }
   | { kind: "key"; elementId?: string; key: string; text?: string; correlation?: ActionCorrelation }
@@ -53,6 +65,8 @@ export interface TransportOptions {
   maxTextLength?: number;
   /** Max gesture point count. Default 512. */
   maxGesturePoints?: number;
+  /** Max coalesced samples in one pointer move. Default 64. */
+  maxPointerSamples?: number;
 }
 
 /** Structural subset of DevFlowClient the transport needs (so this module has no cycle). */
@@ -63,6 +77,10 @@ export interface TransportClient {
   tap(target: { x?: number; y?: number; elementId?: string; correlation?: ActionCorrelation }): Promise<DevFlowResult<void>>;
   scroll(args: ScrollArgs): Promise<DevFlowResult<void>>;
   gesture(args: GestureArgs): Promise<DevFlowResult<void>>;
+  pointerStart(args: PointerSessionStartArgs): Promise<DevFlowResult<PointerSessionResult>>;
+  pointerMove(sessionId: string, sequence: number, samples: PointerSessionSample[]): Promise<DevFlowResult<PointerSessionResult>>;
+  pointerEnd(sessionId: string, sequence: number, sample: PointerSessionSample): Promise<DevFlowResult<PointerSessionResult>>;
+  pointerCancel(sessionId: string, reason?: string): Promise<DevFlowResult<PointerSessionResult>>;
   back(correlation?: ActionCorrelation): Promise<DevFlowResult<void>>;
   fill(elementId: string, text: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>>;
   key(key: string, elementId?: string, text?: string, correlation?: ActionCorrelation): Promise<DevFlowResult<void>>;
@@ -98,6 +116,7 @@ export function createTransport(client: TransportClient, opts: TransportOptions 
   const maxCoord = opts.maxCoordinate ?? 100000;
   const maxText = opts.maxTextLength ?? 100000;
   const maxPoints = opts.maxGesturePoints ?? 512;
+  const maxPointerSamples = opts.maxPointerSamples ?? 64;
   const allowList = opts.propertyAllowList ? new Set(opts.propertyAllowList) : null;
   const handles = new Set<EventStreamHandle>();
 
@@ -120,6 +139,23 @@ export function createTransport(client: TransportClient, opts: TransportOptions 
         Number.isSafeInteger(correlation.frameRevision) &&
         correlation.frameRevision > 0);
   };
+
+  function validPointerSessionOperation(sessionId: unknown, sequence: unknown): boolean {
+    return typeof sessionId === "string" && sessionId.length > 0 && sessionId.length <= 96
+      && Number.isSafeInteger(sequence) && (sequence as number) > 0;
+  }
+
+  function validPointerSample(sample: PointerSessionSample | undefined): boolean {
+    return !!sample
+      && finite(sample.x, maxCoord)
+      && finite(sample.y, maxCoord)
+      && finite(sample.elapsedMs, 300000)
+      && sample.elapsedMs >= 0
+      && (sample.pressure === undefined
+        || (finite(sample.pressure, 1) && sample.pressure >= 0))
+      && (sample.buttons === undefined
+        || (Number.isSafeInteger(sample.buttons) && sample.buttons >= 0));
+  }
 
   async function request(op: SeamOp): Promise<DevFlowResult<unknown>> {
     const correlation = (op as { correlation?: unknown }).correlation;
@@ -171,6 +207,54 @@ export function createTransport(client: TransportClient, opts: TransportOptions 
           if (!finite(p?.x, maxCoord) || !finite(p?.y, maxCoord)) return deny("gesture point out of range", "invalid-argument");
         }
         return client.gesture({ points: op.points, correlation: op.correlation });
+      }
+      case "pointerStart": {
+        if (!perms.mutate) return deny("mutate permission required for pointerStart");
+        const value = op.value;
+        if (!value || typeof value.sessionId !== "string" || !value.sessionId || value.sessionId.length > 96) {
+          return deny("pointerStart requires a bounded sessionId", "invalid-argument");
+        }
+        if (!Number.isSafeInteger(value.pointerId)
+            || !finite(value.x, maxCoord)
+            || !finite(value.y, maxCoord)
+            || (value.elapsedMs !== undefined && !finite(value.elapsedMs, 300000))) {
+          return deny("pointerStart requires finite pointerId/x/y/elapsedMs", "invalid-argument");
+        }
+        if ((value.coordinateSpace ?? "windowLogical") !== "windowLogical") {
+          return deny("pointerStart supports only windowLogical coordinates", "invalid-argument");
+        }
+        if (value.correlation !== undefined
+            && (!validCorrelation(value.correlation)
+              || value.correlation.coordinateSpace !== "windowLogical")) {
+          return deny("pointerStart correlation must describe windowLogical coordinates", "invalid-argument");
+        }
+        return client.pointerStart(value);
+      }
+      case "pointerMove": {
+        if (!perms.mutate) return deny("mutate permission required for pointerMove");
+        if (!validPointerSessionOperation(op.sessionId, op.sequence)) {
+          return deny("pointerMove requires sessionId and a positive sequence", "invalid-argument");
+        }
+        if (!Array.isArray(op.samples) || op.samples.length > maxPointerSamples
+            || op.samples.some(sample => !validPointerSample(sample))) {
+          return deny(`pointerMove accepts at most ${maxPointerSamples} finite samples`, "invalid-argument");
+        }
+        return client.pointerMove(op.sessionId, op.sequence, op.samples);
+      }
+      case "pointerEnd": {
+        if (!perms.mutate) return deny("mutate permission required for pointerEnd");
+        if (!validPointerSessionOperation(op.sessionId, op.sequence) || !validPointerSample(op.sample)) {
+          return deny("pointerEnd requires sessionId, sequence and a finite final sample", "invalid-argument");
+        }
+        return client.pointerEnd(op.sessionId, op.sequence, op.sample);
+      }
+      case "pointerCancel": {
+        if (!perms.mutate) return deny("mutate permission required for pointerCancel");
+        if (typeof op.sessionId !== "string" || !op.sessionId || op.sessionId.length > 96
+            || (op.reason !== undefined && (typeof op.reason !== "string" || op.reason.length > 64))) {
+          return deny("pointerCancel requires a bounded sessionId/reason", "invalid-argument");
+        }
+        return client.pointerCancel(op.sessionId, op.reason);
       }
       case "back": {
         if (!perms.mutate) return deny("mutate permission required for back");

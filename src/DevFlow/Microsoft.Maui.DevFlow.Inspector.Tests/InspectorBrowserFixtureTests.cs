@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
@@ -26,12 +27,21 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private IBrowser? _browser;
     private IPage? _page;
     private readonly ConcurrentQueue<(string Name, string Value)> _writes = new();
+    private readonly ConcurrentQueue<string> _pointerEvents = new();
+    private readonly ConcurrentQueue<(string? FrameId, long? FrameRevision, string? CoordinateSpace)> _pointerStarts = new();
+    private readonly ConcurrentQueue<int> _pointerMoveBytes = new();
     private readonly ConcurrentQueue<string> _pageErrors = new();
     private readonly ConcurrentDictionary<IRequest, byte> _pendingRequests = new();
     private string _text = "Original text";
     private int _flyoutX = ClosedFlyoutX;
     private int _treeRequests;
     private volatile bool _rejectWrites;
+    private volatile bool _pointerStreamEnabled;
+    private volatile TaskCompletionSource? _pointerMoveGate;
+    private volatile TaskCompletionSource? _pointerMoveStarted;
+    private int _pointerMovesInFlight;
+    private int _maxPointerMovesInFlight;
+    private int _pointerMaxRequestBytes = 16 * 1024;
     private readonly TaskCompletionSource _screenshotHeld = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private volatile TaskCompletionSource? _screenshotGate;
     private int _disposed;
@@ -58,10 +68,9 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 app = new { name = "Loopback fixture" },
                 running = true,
             }));
-            _agent.MapGet("/api/v1/agent/capabilities", () => Results.Json(new
+            _agent.MapGet("/api/v1/agent/capabilities", () =>
             {
-                agent = new { framework = "maui" },
-                capabilities = new Dictionary<string, object>
+                var capabilities = new Dictionary<string, object>
                 {
                     ["ui.screenshot"] = new
                     {
@@ -73,8 +82,23 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                             "resolution-hints"
                         }
                     }
-                },
-            }));
+                };
+                if (_pointerStreamEnabled)
+                {
+                    capabilities["ui.pointerStream"] = new
+                    {
+                        version = 1,
+                        supported = true,
+                        maxSamplesPerMove = 64,
+                        idleTimeoutMs = 5000
+                    };
+                }
+                return Results.Json(new
+                {
+                    agent = new { framework = "maui" },
+                    capabilities
+                });
+            });
             _agent.MapPost("/api/v1/agent/recording", () => Results.Json(new { ok = true, recording = false, steps = 0 }));
             _agent.MapGet("/api/v1/ui/tree", () =>
             {
@@ -108,6 +132,69 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             {
                 Volatile.Write(ref _text, "Tapped");
                 return Results.Json(new { success = true });
+            });
+            _agent.MapPost("/api/v1/ui/actions/gesture", () =>
+            {
+                _pointerEvents.Enqueue("gesture");
+                return Results.Json(new { success = true, type = "swipe", handledBy = "native" });
+            });
+            _agent.MapPost("/api/v1/ui/actions/pointer-sessions", async (HttpContext context) =>
+            {
+                using var body = await JsonDocument.ParseAsync(context.Request.Body);
+                var root = body.RootElement;
+                var sessionId = root.GetProperty("sessionId").GetString();
+                var correlation = root.GetProperty("correlation");
+                _pointerStarts.Enqueue((
+                    correlation.GetProperty("frameId").GetString(),
+                    correlation.TryGetProperty("frameRevision", out var revision) ? revision.GetInt64() : null,
+                    correlation.GetProperty("coordinateSpace").GetString()));
+                _pointerEvents.Enqueue($"start:{sessionId}");
+                return Results.Json(new
+                {
+                    success = true,
+                    sessionId,
+                    state = "active",
+                    lastSequence = 0,
+                    idleTimeoutMs = 5000,
+                    maxDurationMs = 60000,
+                    maxSamplesPerMove = 64,
+                    maxRequestBytes = Volatile.Read(ref _pointerMaxRequestBytes)
+                });
+            });
+            _agent.MapPost("/api/v1/ui/actions/pointer-sessions/{id}/move", async (HttpContext context, string id) =>
+            {
+                using var body = await JsonDocument.ParseAsync(context.Request.Body);
+                var sequence = body.RootElement.GetProperty("sequence").GetInt32();
+                var sampleCount = body.RootElement.GetProperty("samples").GetArrayLength();
+                _pointerMoveBytes.Enqueue(Encoding.UTF8.GetByteCount(body.RootElement.GetRawText()));
+                var inFlight = Interlocked.Increment(ref _pointerMovesInFlight);
+                UpdateMax(ref _maxPointerMovesInFlight, inFlight);
+                _pointerEvents.Enqueue($"move:{sequence}:{sampleCount}");
+                _pointerMoveStarted?.TrySetResult();
+                try
+                {
+                    if (_pointerMoveGate is { } gate)
+                        await gate.Task.WaitAsync(context.RequestAborted);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _pointerMovesInFlight);
+                }
+                return Results.Json(new { success = true, sessionId = id, state = "active", lastSequence = sequence });
+            });
+            _agent.MapPost("/api/v1/ui/actions/pointer-sessions/{id}/end", async (HttpContext context, string id) =>
+            {
+                using var body = await JsonDocument.ParseAsync(context.Request.Body);
+                var sequence = body.RootElement.GetProperty("sequence").GetInt32();
+                _pointerEvents.Enqueue($"end:{sequence}");
+                return Results.Json(new { success = true, sessionId = id, state = "ended", lastSequence = sequence });
+            });
+            _agent.MapPost("/api/v1/ui/actions/pointer-sessions/{id}/cancel", async (HttpContext context, string id) =>
+            {
+                using var body = await JsonDocument.ParseAsync(context.Request.Body);
+                var reason = body.RootElement.TryGetProperty("reason", out var value) ? value.GetString() : null;
+                _pointerEvents.Enqueue($"cancel:{reason}");
+                return Results.Json(new { success = true, sessionId = id, state = "cancelled", lastSequence = 0 });
             });
             _agent.MapGet("/api/v1/ui/screenshot", () => Results.File(
                 Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAABdElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+Bn+3AAHo8fTrAAAAAElFTkSuQmCC"),
@@ -301,6 +388,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
             Assert.Empty(_pageErrors);
         }
+
         finally
         {
             gate.TrySetResult();
@@ -577,6 +665,168 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 }
                 """);
         }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerStream_CoalescesMovesSingleFlight_AndDrainsBeforeEnd()
+    {
+        await ReloadWithPointerStreamAsync();
+        Volatile.Write(ref _pointerMaxRequestBytes, 1024);
+        var moveGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var moveStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pointerMoveGate = moveGate;
+        _pointerMoveStarted = moveStarted;
+        var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+        Assert.NotNull(box);
+
+        await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+        await Page.Mouse.DownAsync();
+        await WaitForPointerEventAsync("start:");
+        var start = Assert.Single(_pointerStarts);
+        Assert.False(string.IsNullOrWhiteSpace(start.FrameId));
+        Assert.True(start.FrameRevision > 0);
+        Assert.Equal("windowLogical", start.CoordinateSpace);
+        await Page.WaitForTimeoutAsync(250);
+        await Page.RunAndWaitForResponseAsync(
+            () => Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => response.Url.EndsWith("/api/state", StringComparison.Ordinal));
+        Assert.DoesNotContain(_pointerEvents, value => value.StartsWith("cancel:", StringComparison.Ordinal));
+        for (var i = 1; i <= 80; i++)
+            await Page.Mouse.MoveAsync(box.X + 5 + i, box.Y + 5 + (i % 7));
+        await moveStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await Page.Mouse.UpAsync();
+        await Page.WaitForTimeoutAsync(250);
+        Assert.DoesNotContain(_pointerEvents, value => value.StartsWith("end:", StringComparison.Ordinal));
+        Assert.Equal(1, Volatile.Read(ref _maxPointerMovesInFlight));
+
+        moveGate.TrySetResult();
+        await WaitForPointerEventAsync("end:");
+        await WaitForPointerIdleAsync();
+        var events = _pointerEvents.ToArray();
+        Assert.StartsWith("start:", events[0], StringComparison.Ordinal);
+        Assert.StartsWith("end:", events[^1], StringComparison.Ordinal);
+        Assert.All(
+            events.Where(value => value.StartsWith("move:", StringComparison.Ordinal)),
+            value => Assert.InRange(int.Parse(value.Split(':')[2]), 0, 64));
+        Assert.All(_pointerMoveBytes, bytes => Assert.InRange(bytes, 1, 1024));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerCancel_SendsCancelWithoutEnd()
+    {
+        await ReloadWithPointerStreamAsync();
+        var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+        Assert.NotNull(box);
+        await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+        await Page.Mouse.DownAsync();
+        await WaitForPointerEventAsync("start:");
+
+        await Page.EvaluateAsync(
+            "() => document.getElementById('app-viewport').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1, isPrimary: true }))");
+
+        await WaitForPointerEventAsync("cancel:pointercancel");
+        await WaitForPointerIdleAsync();
+        await Page.Mouse.UpAsync();
+        Assert.DoesNotContain(_pointerEvents, value => value.StartsWith("end:", StringComparison.Ordinal));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerPageHide_SendsKeepaliveCancel()
+    {
+        await ReloadWithPointerStreamAsync();
+        await Page.RouteAsync("**/api/pointer/cancel", async route =>
+        {
+            using var body = JsonDocument.Parse(route.Request.PostData ?? "{}");
+            _pointerEvents.Enqueue($"cancel:{body.RootElement.GetProperty("reason").GetString()}");
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        }, new() { Times = 1 });
+        await Page.RouteAsync("**/api/control", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = """{"ok":true}"""
+        }), new() { Times = 1 });
+        var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+        Assert.NotNull(box);
+        await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+        await Page.Mouse.DownAsync();
+        await WaitForPointerEventAsync("start:");
+
+        await Page.EvaluateAsync("() => window.dispatchEvent(new PageTransitionEvent('pagehide'))");
+
+        await WaitForPointerEventAsync("cancel:pagehide");
+        await WaitForPointerIdleAsync();
+        await Page.Mouse.UpAsync();
+        Assert.DoesNotContain(_pointerEvents, value => value.StartsWith("end:", StringComparison.Ordinal));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerStart_TransportFailure_IsCancelledWithoutFallbackReplay()
+    {
+        await ReloadWithPointerStreamAsync();
+        await Page.RouteAsync("**/api/pointer/start", route => route.FulfillAsync(new()
+        {
+            Status = 502,
+            ContentType = "application/json",
+            Body = """{"ok":false,"transportFailure":true,"error":"response lost"}"""
+        }), new() { Times = 1 });
+        await Page.RouteAsync("**/api/pointer/cancel", async route =>
+        {
+            using var body = JsonDocument.Parse(route.Request.PostData ?? "{}");
+            _pointerEvents.Enqueue($"cancel:{body.RootElement.GetProperty("reason").GetString()}");
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        }, new() { Times = 1 });
+
+        var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+        Assert.NotNull(box);
+        await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+        await Page.Mouse.DownAsync();
+        await WaitForPointerEventAsync("cancel:start-transport-failure");
+        await Page.Mouse.UpAsync();
+
+        Assert.DoesNotContain(_pointerEvents, value => value == "gesture");
+        Assert.DoesNotContain(_pointerEvents, value => value.StartsWith("end:", StringComparison.Ordinal));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerStream_UnsupportedAgent_FallsBackToLegacyGesture()
+    {
+        await Page.RouteAsync("**/api/gesture", async route =>
+        {
+            _pointerEvents.Enqueue("gesture");
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        }, new() { Times = 1 });
+        var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+        Assert.NotNull(box);
+        await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+        await Page.Mouse.DownAsync();
+        await Page.Mouse.MoveAsync(box.X + 80, box.Y + 15, new() { Steps = 8 });
+        await Page.Mouse.UpAsync();
+
+        await WaitForPointerEventAsync("gesture");
+        await WaitForPointerIdleAsync();
+        Assert.DoesNotContain(_pointerEvents, value => value.StartsWith("start:", StringComparison.Ordinal));
+        Assert.Empty(_pageErrors);
     }
 
     [InspectorBrowserFixtureFact]
@@ -1624,6 +1874,53 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         sourceFile = "FixturePage.xaml", sourceLine = 2,
         children = new[] { Button(), FlyoutRow() },
     };
+
+    private async Task WaitForPointerEventAsync(string prefix)
+    {
+        await Expect(Page.Locator("body")).ToBeVisibleAsync();
+        var timeout = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (DateTime.UtcNow < timeout)
+        {
+            if (_pointerEvents.Any(value => value.StartsWith(prefix, StringComparison.Ordinal)))
+                return;
+            await Task.Delay(25);
+        }
+        throw new TimeoutException($"Pointer event '{prefix}' was not observed. Events: {string.Join(", ", _pointerEvents)}");
+    }
+
+    private Task WaitForPointerIdleAsync()
+        => Page.WaitForFunctionAsync(
+            "() => !document.getElementById('app-viewport')?.dataset.pointerSession",
+            null,
+            new() { Timeout = 10_000 });
+
+    private async Task ReloadWithPointerStreamAsync()
+    {
+        _pointerStreamEnabled = true;
+        await Page.ReloadAsync(new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await Page.WaitForFunctionAsync("""
+            () => {
+              const image = document.querySelector('#screenshot');
+              return image?.complete && image.naturalWidth === 400 && image.naturalHeight === 300;
+            }
+            """);
+        await Expect(Page.Locator("meta[name='devflow-pointer-stream']"))
+            .ToHaveAttributeAsync("content", "true");
+        await Expect(Page.Locator("#df-presence")).ToHaveClassAsync(
+            new System.Text.RegularExpressions.Regex(@"\bdf-writer\b"));
+    }
+
+    private static void UpdateMax(ref int target, int value)
+    {
+        var current = Volatile.Read(ref target);
+        while (value > current)
+        {
+            var observed = Interlocked.CompareExchange(ref target, value, current);
+            if (observed == current)
+                return;
+            current = observed;
+        }
+    }
 
     // Nested under the Label because the Inspector scopes each frame to the window's last child.
     private static object Button() => new

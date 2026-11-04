@@ -123,6 +123,10 @@ public static class AgentServiceExtensions
                 {
                     EnsureAgentStarted();
                 });
+                android.OnStop(activity =>
+                {
+                    _ = service.CancelPointerSessionForHostAsync("app-backgrounded");
+                });
             });
 #elif IOS || MACCATALYST
             lifecycle.AddiOS(ios =>
@@ -132,6 +136,10 @@ public static class AgentServiceExtensions
                     var mainDispatcher = Dispatching.Dispatcher.GetForCurrentThread();
                     EnsureAgentStarted(mainDispatcher);
                     return true;
+                });
+                ios.DidEnterBackground(app =>
+                {
+                    _ = service.CancelPointerSessionForHostAsync("app-backgrounded");
                 });
             });
 #elif WINDOWS

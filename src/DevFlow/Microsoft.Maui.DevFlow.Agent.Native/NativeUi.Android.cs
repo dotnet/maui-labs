@@ -229,6 +229,183 @@ internal static partial class NativeUi
         }
     }
 
+    private sealed class NativeAndroidPointerSession
+    {
+        public required View Root { get; init; }
+        public required float Density { get; init; }
+        public required long DownTime { get; init; }
+        public long LastEventTime { get; set; }
+        public float LastX { get; set; }
+        public float LastY { get; set; }
+    }
+
+    private static bool TryStartAndroidPointerSession(
+            double x,
+            double y,
+            out object? state,
+            out string? detail,
+            out string? error)
+    {
+        state = null;
+        detail = null;
+        error = null;
+        var root = CurrentActivity?.Window?.DecorView?.RootView;
+        if (root is null || root.Width <= 1 || root.Height <= 1)
+        {
+            error = "The Android window is not laid out.";
+            return false;
+        }
+
+        var density = root.Resources?.DisplayMetrics?.Density ?? 1f;
+        var px = (float)(x * density);
+        var py = (float)(y * density);
+        if (px < 0 || py < 0 || px >= root.Width || py >= root.Height)
+        {
+            error = $"Pointer start ({x:0.#}, {y:0.#}) is outside the Android window.";
+            return false;
+        }
+
+        var downTime = SystemClock.UptimeMillis();
+        using var down = MotionEvent.Obtain(
+            downTime,
+            downTime,
+            MotionEventActions.Down,
+            px,
+            py,
+            0);
+        if (!root.DispatchTouchEvent(down))
+        {
+            error = $"Nothing at ({x:0.#}, {y:0.#}) accepted the Android touch.";
+            return false;
+        }
+
+        state = new NativeAndroidPointerSession
+        {
+            Root = root,
+            Density = density,
+            DownTime = downTime,
+            LastEventTime = downTime,
+            LastX = px,
+            LastY = py
+        };
+        detail = $"MotionEvent pointer down at ({x:0.#}, {y:0.#})";
+        return true;
+    }
+
+    private static bool TryMoveAndroidPointerSession(
+            object state,
+            double x,
+            double y,
+            double elapsedMs,
+            out string? error)
+    {
+        error = null;
+        if (state is not NativeAndroidPointerSession session)
+        {
+            error = "Invalid Android pointer session state.";
+            return false;
+        }
+
+        var eventTime = NativeAndroidPointerEventTime(session, elapsedMs);
+        var px = (float)(x * session.Density);
+        var py = (float)(y * session.Density);
+        using var move = MotionEvent.Obtain(
+            session.DownTime,
+            eventTime,
+            MotionEventActions.Move,
+            px,
+            py,
+            0);
+        if (!session.Root.DispatchTouchEvent(move))
+        {
+            error = "The Android view stopped handling the pointer stream.";
+            return false;
+        }
+
+        session.LastEventTime = eventTime;
+        session.LastX = px;
+        session.LastY = py;
+        return true;
+    }
+
+    private static bool TryEndAndroidPointerSession(
+            object state,
+            double x,
+            double y,
+            double elapsedMs,
+            out string? detail,
+            out string? error)
+    {
+        detail = null;
+        error = null;
+        if (state is not NativeAndroidPointerSession session)
+        {
+            error = "Invalid Android pointer session state.";
+            return false;
+        }
+
+        var eventTime = NativeAndroidPointerEventTime(session, elapsedMs);
+        var px = (float)(x * session.Density);
+        var py = (float)(y * session.Density);
+        if (px != session.LastX || py != session.LastY)
+        {
+            using var move = MotionEvent.Obtain(
+                session.DownTime,
+                eventTime,
+                MotionEventActions.Move,
+                px,
+                py,
+                0);
+            session.Root.DispatchTouchEvent(move);
+            eventTime = Math.Max(eventTime + 1, SystemClock.UptimeMillis());
+        }
+
+        using var up = MotionEvent.Obtain(
+            session.DownTime,
+            eventTime,
+            MotionEventActions.Up,
+            px,
+            py,
+            0);
+        session.Root.DispatchTouchEvent(up);
+        detail = $"MotionEvent pointer up at ({x:0.#}, {y:0.#})";
+        return true;
+    }
+
+    private static bool TryCancelAndroidPointerSession(
+            object state,
+            string reason,
+            out string? detail,
+            out string? error)
+    {
+        detail = null;
+        error = null;
+        if (state is not NativeAndroidPointerSession session)
+        {
+            error = "Invalid Android pointer session state.";
+            return false;
+        }
+
+        var eventTime = Math.Max(session.LastEventTime + 1, SystemClock.UptimeMillis());
+        using var cancel = MotionEvent.Obtain(
+            session.DownTime,
+            eventTime,
+            MotionEventActions.Cancel,
+            session.LastX,
+            session.LastY,
+            0);
+        session.Root.DispatchTouchEvent(cancel);
+        detail = $"MotionEvent pointer cancel ({reason}).";
+        return true;
+    }
+
+    private static long NativeAndroidPointerEventTime(
+        NativeAndroidPointerSession session,
+        double elapsedMs)
+        => Math.Max(
+            session.LastEventTime + 1,
+            session.DownTime + (long)Math.Round(elapsedMs));
+
     public static bool TrySetText(object viewObject, string text)
     {
         if (viewObject is EditText edit)

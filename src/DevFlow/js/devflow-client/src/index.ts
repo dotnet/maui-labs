@@ -7,7 +7,7 @@
 import { discoverBroker } from "./broker.js";
 import { randomBytes } from "node:crypto";
 import { agentErrorMessage, buildQuery, requests } from "./agent.js";
-import type { AgentRequest, GestureArgs, ScrollArgs } from "./agent.js";
+import type { AgentRequest, GestureArgs, PointerSessionStartArgs, ScrollArgs } from "./agent.js";
 import { httpJson, httpRaw, isConnError } from "./http.js";
 import type { JsonResponse } from "./http.js";
 import { openEventStream } from "./events.js";
@@ -29,6 +29,8 @@ import type {
   ElementInfo,
   MutationLeaseStatus,
   MutationRecordingStatus,
+  PointerSessionResult,
+  PointerSessionSample,
   ThemeResult,
 } from "./types.js";
 
@@ -263,6 +265,26 @@ export class DevFlowClient {
       if (coordinateError) return coordinateError;
     }
     return this.run(requests.gesture(args));
+  }
+  pointerStart(args: PointerSessionStartArgs): Promise<DevFlowResult<PointerSessionResult>> {
+    return this.run(requests.pointerStart(args));
+  }
+  pointerMove(
+    sessionId: string,
+    sequence: number,
+    samples: PointerSessionSample[],
+  ): Promise<DevFlowResult<PointerSessionResult>> {
+    return this.run(requests.pointerMove(sessionId, sequence, samples));
+  }
+  pointerEnd(
+    sessionId: string,
+    sequence: number,
+    sample: PointerSessionSample,
+  ): Promise<DevFlowResult<PointerSessionResult>> {
+    return this.run(requests.pointerEnd(sessionId, sequence, sample));
+  }
+  pointerCancel(sessionId: string, reason?: string): Promise<DevFlowResult<PointerSessionResult>> {
+    return this.run(requests.pointerCancel(sessionId, reason));
   }
   back(correlation?: ActionCorrelation): Promise<DevFlowResult<void>> {
     return this.run(requests.back(correlation));
@@ -615,7 +637,7 @@ export * from "./types.js";
 export { optionsFromEnv, parsePort } from "./env.js";
 export { openEventStream } from "./events.js";
 export type { DevFlowEvent, EventStreamHandle, EventStreamStatus, EventStreamOptions } from "./events.js";
-export type { ScrollArgs, GestureArgs, AgentRequest } from "./agent.js";
+export type { ScrollArgs, GestureArgs, PointerSessionStartArgs, AgentRequest } from "./agent.js";
 export { toRoots, buildQuery, requests } from "./agent.js";
 export type { ResolvedConnection } from "./resolve.js";
 export {
