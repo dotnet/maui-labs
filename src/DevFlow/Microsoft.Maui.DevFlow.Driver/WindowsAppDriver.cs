@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 #if WINDOWS_BUILD
 using Interop.UIAutomationClient;
 using Microsoft.Maui.DevFlow.Driver.Windows;
-using SkiaSharp;
 #endif
 
 namespace Microsoft.Maui.DevFlow.Driver;
@@ -642,7 +641,14 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
                 ? CaptureScreenRectangle(rect)
                 : null;
         }
-        catch { return null; }
+        catch (Exception ex) when (ex is ExternalException or System.ComponentModel.Win32Exception
+            or IOException or UnauthorizedAccessException or InvalidOperationException
+            or ArgumentException or OverflowException or DllNotFoundException or EntryPointNotFoundException
+            or InvalidCastException or NotSupportedException)
+        {
+            Console.Error.WriteLine($"Warning: Windows host screenshot failed: {ex.Message}");
+            return null;
+        }
     }
 
     private bool TryResolveTargetRectangle(out CaptureRect rect)
@@ -732,11 +738,7 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
             if (scanLines == 0)
                 return null;
 
-            using var skBitmap = new SKBitmap(rect.Width, rect.Height, SKColorType.Bgra8888, SKAlphaType.Opaque);
-            Marshal.Copy(bytes, 0, skBitmap.GetPixels(), bytes.Length);
-            using var image = SKImage.FromBitmap(skBitmap);
-            using var png = image.Encode(SKEncodedImageFormat.Png, 100);
-            return png.ToArray();
+            return WindowsPngEncoder.Encode(bytes, rect.Width, rect.Height);
         }
         finally
         {

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,7 +19,7 @@ public sealed partial class FoldableDevice
     public string DeviceId { get; }
 
     public FoldableDevice(string platform, string deviceId, bool allowExperimentalIos = false, string? adbPath = null)
-        : this(platform, deviceId, allowExperimentalIos, adbPath, RunProcessAsync)
+        : this(platform, deviceId, allowExperimentalIos, adbPath, HostProcess.RunAsync)
     {
         if (Platform == "ios" && !OperatingSystem.IsMacOS())
             throw new NotSupportedException("iOS Simulator fold controls require macOS.");
@@ -226,44 +225,5 @@ public sealed partial class FoldableDevice
         var source = CancellationTokenSource.CreateLinkedTokenSource(token);
         source.CancelAfter(TimeSpan.FromSeconds(seconds));
         return source;
-    }
-
-    internal static async Task<string> RunProcessAsync(string executable, string[] arguments, CancellationToken token)
-    {
-        token.ThrowIfCancellationRequested();
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo(executable)
-            {
-                UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
-                CreateNoWindow = true,
-            },
-        };
-        foreach (var argument in arguments)
-            process.StartInfo.ArgumentList.Add(argument);
-        process.Start();
-        var output = process.StandardOutput.ReadToEndAsync(token);
-        var error = process.StandardError.ReadToEndAsync(token);
-        try
-        {
-            await process.WaitForExitAsync(token).ConfigureAwait(false);
-            var stdout = await output.ConfigureAwait(false);
-            var stderr = await error.ConfigureAwait(false);
-            if (process.ExitCode != 0 || (stdout + "\n" + stderr).Split('\n')
-                .Any(line => line.TrimStart().StartsWith("KO:", StringComparison.Ordinal)))
-                throw new InvalidOperationException($"{executable} {string.Join(" ", arguments)} failed ({process.ExitCode}): {stderr.Trim()} {stdout.Trim()}");
-            return stdout;
-        }
-        catch (OperationCanceledException)
-        {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException ex) { Trace.WriteLine($"Fold process exited during cancellation: {ex.Message}"); }
-            try { await process.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
-            catch (TimeoutException ex) { Trace.WriteLine($"Fold process did not exit after cancellation: {ex.Message}"); }
-            // Observe both readers even when cancellation interrupted WaitForExitAsync.
-            try { await Task.WhenAll(output, error).ConfigureAwait(false); }
-            catch (OperationCanceledException) { }
-            throw;
-        }
     }
 }

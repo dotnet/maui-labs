@@ -254,7 +254,7 @@ public class FoldableDeviceTests
         var arguments = OperatingSystem.IsWindows() ? new[] { "/c", "echo KO: unsupported" }
             : ["-c", "printf 'KO: unsupported\\n'"];
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            FoldableDevice.RunProcessAsync(OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+            HostProcess.RunAsync(OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
                 arguments, CancellationToken.None));
         Assert.Contains("KO: unsupported", exception.Message);
     }
@@ -267,7 +267,7 @@ public class FoldableDeviceTests
         var arguments = OperatingSystem.IsWindows() ? new[] { "/c", "ping -n 30 127.0.0.1 > nul" }
             : ["-c", "sleep 30"];
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            FoldableDevice.RunProcessAsync(OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+            HostProcess.RunAsync(OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
                 arguments, cancel.Token));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10));
     }
