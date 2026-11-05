@@ -25,6 +25,13 @@ maui-labs/
 - [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for the pinned version)
 - MAUI workloads: `dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-rc2.json`
 
+Use the exact pinned SDK with this rollback file; manifests are SDK-feature-band
+specific. Do not install a .NET 10 workload set into the .NET 11 SDK. The RC2
+manifests retain .NET 10 Apple packs for Xcode 26.0 alongside .NET 11 Apple
+packs for Xcode 27.0. Select the matching Xcode when building app heads.
+Existing .NET 10 target frameworks and central MAUI package versions remain
+unchanged; AI's `UseXcode27Preview=true` adds .NET 11 OS 27 targets.
+
 ### Building
 
 ```bash
