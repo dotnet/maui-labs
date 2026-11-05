@@ -35,6 +35,11 @@ on:
         type: string
         default: 'maui macos maccatalyst'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
+      workload-rollback-file:
+        required: false
+        type: string
+        default: ''
+        description: 'Optional workload rollback file; when empty, workload-version is used.'
       workload-version:
         required: false
         type: string
@@ -77,8 +82,12 @@ jobs:
         if: inputs.native-deps != ''
         run: ${{ inputs.native-deps }}
 
+      - name: Install workloads from rollback file
+        if: inputs.install-workloads && inputs.workload-rollback-file != ''
+        run: dotnet workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
+
       - name: Install workloads
-        if: inputs.install-workloads
+        if: inputs.install-workloads && inputs.workload-rollback-file == ''
         run: dotnet workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
       - name: Build and run device tests

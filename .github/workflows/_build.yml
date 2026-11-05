@@ -42,12 +42,17 @@ on:
         required: false
         type: boolean
         default: true
-        description: 'Install MAUI workloads and Android SDK (not needed for net10.0-only projects)'
+        description: 'Install MAUI workloads and Android SDK (not needed for framework-only projects)'
       workloads:
         required: false
         type: string
         default: 'maui ios maccatalyst macos maui-tizen'
         description: 'Space-separated list of workloads to install (only used when install-workloads is true)'
+      workload-rollback-file:
+        required: false
+        type: string
+        default: ''
+        description: 'Optional workload rollback file; when empty, workload-version is used.'
       workload-version:
         required: false
         type: string
@@ -128,13 +133,22 @@ jobs:
 
       # Use Arcade's dotnet wrapper for workload-related setup so SDK resolution
       # matches the later cibuild invocation.
+      - name: Install workloads from rollback file (Windows)
+        if: inputs.install-workloads && runner.os == 'Windows' && inputs.workload-rollback-file != ''
+        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
+        shell: cmd
+
       - name: Install workloads (Windows)
-        if: inputs.install-workloads && runner.os == 'Windows'
+        if: inputs.install-workloads && runner.os == 'Windows' && inputs.workload-rollback-file == ''
         run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
         shell: cmd
 
+      - name: Install workloads from rollback file (Unix)
+        if: inputs.install-workloads && runner.os != 'Windows' && inputs.workload-rollback-file != ''
+        run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
+
       - name: Install workloads (Unix)
-        if: inputs.install-workloads && runner.os != 'Windows'
+        if: inputs.install-workloads && runner.os != 'Windows' && inputs.workload-rollback-file == ''
         run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
       - name: Install Android SDK dependencies (Windows)
