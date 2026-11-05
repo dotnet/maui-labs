@@ -32,6 +32,9 @@ packs for Xcode 27.0. Select the matching Xcode when building app heads.
 Resolve Xcode aliases with `pwd -P` before setting `DEVELOPER_DIR` and
 `MD_APPLE_SDK_ROOT`: the Apple pack's explicit SDK paths must use the physical
 Xcode application directory, not a runner alias such as `Xcode_26.0.app`.
+For iOS asset compilation, install the SDK-matching simulator runtime with
+`xcodebuild -downloadPlatform iOS -buildVersion 26.0`, even when the test device
+uses a later runtime such as 26.2.
 Existing .NET 10 target frameworks and central MAUI package versions remain
 unchanged; AI's `UseXcode27Preview=true` adds .NET 11 OS 27 targets.
 

@@ -281,7 +281,7 @@ jobs:
       DEVFLOW_TEST_IOS_ISOLATED: 'true'
       # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
       TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
-      # Preserve the 26.2 simulator runtime on macOS 15.
+      # Keep the test device on 26.2; actool also needs the SDK-matching 26.0 runtime.
       DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '26.2' }}
     steps:
       - uses: actions/checkout@v6
@@ -334,6 +334,17 @@ jobs:
           brew trust --formula facebook/fb/idb-companion
           brew install facebook/fb/idb-companion
           command -v idb_companion
+
+      - name: Install SDK-matching iOS simulator runtime
+        run: |
+          xcodebuild -downloadPlatform iOS -buildVersion 26.0
+          xcrun simctl list runtimes --json | python3 -c '
+          import json, sys
+          runtimes = json.load(sys.stdin)["runtimes"]
+          assert any(runtime["version"] == "26.0" and runtime["isAvailable"]
+                     and runtime["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+                     for runtime in runtimes), "The iOS 26.0 runtime required by Xcode 26.0 actool is unavailable"
+          '
 
       - name: List available iOS simulators
         run: xcrun simctl list devices available
