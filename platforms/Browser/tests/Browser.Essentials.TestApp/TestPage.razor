@@ -1,0 +1,31 @@
+@using System.Text.Json
+@inject EssentialsTestSuite Suite
+
+<h1>Browser Essentials test suite</h1>
+
+@if (resultsJson is null)
+{
+    <p id="test-status">Running…</p>
+}
+else
+{
+    <p id="test-status">@passed / @total passed</p>
+    <pre id="test-results" data-done="true" data-passed="@passed" data-total="@total">@resultsJson</pre>
+}
+
+@code {
+    string? resultsJson;
+    int passed;
+    int total;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        var results = await Suite.RunAsync();
+        passed = results.Count(r => r.Passed);
+        total = results.Count;
+        resultsJson = JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true });
+        StateHasChanged();
+    }
+}
