@@ -11,7 +11,7 @@ Host Blazor components in a native macOS WKWebView using the BlazorWebView contr
 <PackageReference Include="Microsoft.Maui.Platforms.MacOS.BlazorWebView" Version="0.2.0-beta.6" />
 ```
 
-### 2. Register the Handler
+### 2. Register the standard MAUI BlazorWebView services
 
 ```csharp
 // MauiProgram.cs
@@ -21,8 +21,9 @@ public static MauiApp CreateMauiApp()
 {
     var builder = MauiApp.CreateBuilder();
     builder
-        .UseMauiAppMacOS<MacOSApp>()
-        .AddMacOSBlazorWebView();  // Register BlazorWebView handler
+        .UseMauiAppMacOS<MacOSApp>();
+
+    builder.Services.AddMacOSBlazorWebView();
 
     return builder.Build();
 }
@@ -51,7 +52,7 @@ var blazorView = new MacOSBlazorWebView
     HostPage = "wwwroot/index.html",
 };
 
-blazorView.RootComponents.Add(new RootComponent
+blazorView.RootComponents.Add(new BlazorRootComponent
 {
     Selector = "#app",
     ComponentType = typeof(MyBlazorApp.Main),
@@ -66,6 +67,9 @@ Content = blazorView;
 - **Asset loading**: The `MacOSMauiAssetFileProvider` loads files from the app bundle
 - **JavaScript interop**: Full Blazor JS interop support via the WebView bridge
 - **Threading**: `MacOSBlazorDispatcher` ensures UI updates run on the main AppKit thread
+- **Standard MAUI contract**: On .NET 11 the handler is selected through
+  `AddMauiBlazorWebView().UsePlatformHandler<BlazorWebViewHandler>()`; the
+  `MacOSBlazorWebView` subtype keeps the public AppKit-specific inset APIs.
 
 ## Conditional Compilation
 

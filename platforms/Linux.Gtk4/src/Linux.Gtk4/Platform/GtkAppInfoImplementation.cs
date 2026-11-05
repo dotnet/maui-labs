@@ -41,9 +41,7 @@ class GtkAppInfoImplementation : IAppInfo
 		}
 	}
 
-	/// <summary>
-	/// Sets this implementation as the static default so AppInfo.RequestedTheme works.
-	/// </summary>
+#if NET10_0
 	public static void Register()
 	{
 		var instance = new GtkAppInfoImplementation();
@@ -57,4 +55,5 @@ class GtkAppInfoImplementation : IAppInfo
 		}
 		field.SetValue(null, instance);
 	}
+#endif
 }

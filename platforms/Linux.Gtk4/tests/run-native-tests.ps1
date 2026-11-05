@@ -16,6 +16,10 @@ if (-not $IsLinux) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $project = (Resolve-Path -LiteralPath (Join-Path $repoRoot $TestProject)).Path
+$dotnetVersion = (& dotnet --version).Trim()
+if ($LASTEXITCODE -ne 0 -or $dotnetVersion -notmatch '^11\.') {
+    throw "Linux GTK4 CI requires the .NET 11 SDK; found '$dotnetVersion'."
+}
 $resultsName = if ($MauiVersion) { "$TestClass-maui-$MauiVersion" } else { $TestClass }
 $results = [IO.Path]::GetFullPath($ResultsDirectory, $repoRoot)
 $trxPath = Join-Path $results "$resultsName.trx"
@@ -33,12 +37,16 @@ $filter = "FullyQualifiedName~$TestNamespace.$TestClass."
 # passing it as one argument (observed in CI as "-p:MauiVersion=..." exploded into a
 # per-character argument list that MSBuild then rejected as an unknown switch).
 [string[]] $mauiArgs = @()
+$testFramework = 'net11.0'
 if ($MauiVersion) {
     $mauiArgs = @("-p:MauiVersion=$MauiVersion")
+    if ($MauiVersion.StartsWith('10.')) {
+        $testFramework = 'net10.0'
+    }
 }
 
 & dbus-run-session -- xvfb-run --auto-servernum dotnet test $project `
-    --configuration Release --filter $filter @mauiArgs `
+    --configuration Release --framework $testFramework --filter $filter @mauiArgs `
     --logger 'console;verbosity=detailed' `
     --logger "trx;LogFileName=$resultsName.trx" `
     --results-directory $results --blame-hang-timeout 3m '-m:1' '-nr:false'

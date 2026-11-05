@@ -1,7 +1,9 @@
+using System.Buffers.Binary;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Hosting;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Media;
 using Microsoft.Maui.Storage;
 
 namespace Essentials.Tests;
@@ -50,6 +52,62 @@ public class NativeFacadeTests(Xunit.Abstractions.ITestOutputHelper output)
             if (error is not null)
                 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
         });
+    }
+
+    [NativeGtkFact]
+    public void PresentedGtkWindow_ScreenshotReturnsReusablePngResult()
+    {
+        using var gtkApp = Gtk.Application.New(null, Gio.ApplicationFlags.NonUnique);
+        Exception? error = null;
+        var executed = false;
+        gtkApp.OnActivate += (_, _) =>
+        {
+            var window = Gtk.ApplicationWindow.New(gtkApp);
+            window.SetDefaultSize(320, 180);
+            window.SetChild(Gtk.Label.New("GTK screenshot"));
+            window.Present();
+
+            _ = CaptureFromWorkerAsync();
+
+            async Task CaptureFromWorkerAsync()
+            {
+                executed = true;
+                try
+                {
+                    var result = await Task.Run(
+                        async () => await new LinuxScreenshot().CaptureAsync());
+                    Assert.True(result.Width > 0);
+                    Assert.True(result.Height > 0);
+
+                    using var first = await result.OpenReadAsync();
+                    using var second = await result.OpenReadAsync();
+                    var png = new byte[first.Length];
+                    await first.ReadExactlyAsync(png);
+                    Assert.True(png.Length > 24);
+                    Assert.Equal(first.Length, second.Length);
+                    Assert.Equal(result.Width, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16, 4)));
+                    Assert.Equal(result.Height, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20, 4)));
+                }
+                catch (Exception ex)
+                {
+                    error = ex;
+                }
+                finally
+                {
+                    GLib.Functions.IdleAdd(0, () =>
+                    {
+                        window.Close();
+                        gtkApp.Quit();
+                        return false;
+                    });
+                }
+            }
+        };
+
+        Assert.Equal(0, gtkApp.Run([]));
+        Assert.True(executed);
+        if (error is not null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
     }
 }
 

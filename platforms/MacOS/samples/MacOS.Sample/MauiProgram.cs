@@ -21,8 +21,9 @@ public static class MauiProgram
             .CreateBuilder()
             .UseMauiAppMacOS<MacOSApp>()
             .UseCupertinoMauiIcons()
-            .AddMacOSEssentials()
-            .AddMacOSBlazorWebView();
+            .AddMacOSEssentials();
+
+        builder.Services.AddMacOSBlazorWebView();
 
         // Use native NSOutlineView source list sidebar for FlyoutPage
         builder.ConfigureMauiHandlers(handlers =>
@@ -34,8 +35,6 @@ public static class MauiProgram
         {
             fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
         });
-
-        builder.Services.AddMauiBlazorWebView();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

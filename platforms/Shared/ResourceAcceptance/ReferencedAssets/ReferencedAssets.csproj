@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>__TARGET_FRAMEWORK__</TargetFramework>
+    <UseMaui>true</UseMaui>
+    <EnableDefaultMauiResourceItems>false</EnableDefaultMauiResourceItems>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    __PLATFORM_PROPERTIES__
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="__MAUI_VERSION__" />
+    <PackageReference Include="__BACKEND_PACKAGE__" Version="__BACKEND_VERSION__" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <MauiAsset Include="Resources/Raw/Nested/payload.bin" LogicalName="Shared/Nested/payload.bin" />
+    <MauiAsset Include="Resources/Raw/Unicode/café.txt" LogicalName="Shared/Unicode/café.txt" />
+    <MauiAsset Include="Resources/Raw/zero.bin" LogicalName="Shared/zero.bin" />
+  </ItemGroup>
+</Project>

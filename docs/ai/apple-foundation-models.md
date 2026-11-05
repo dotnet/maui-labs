@@ -28,12 +28,15 @@ reference packs. Build from the repository root:
 
 ```bash
 dotnet build src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
-Use `net10.0-ios27.0` or `net10.0-macos27.0` for those platforms.
+Use `net11.0-ios27.0` or `net11.0-macos27.0` for those platforms.
+The .NET 11 RC2 Apple manifests expose OS 27 reference packs only for .NET 11;
+the normal .NET 10 Apple targets remain available for Xcode 26 compatibility.
 `UseXcode27Preview` selects reference-pack targets; it does not install or
-select Xcode. The official pipeline also builds unsuffixed Apple target
+select Xcode. Install workloads with
+`--from-rollback-file eng/workloads/dotnet11-rc2.json`. The official pipeline also builds unsuffixed Apple target
 frameworks against Xcode 27 with its validated compatibility settings.
 
 ## Registration
@@ -166,7 +169,7 @@ Run managed Mac Catalyst device tests:
 
 ```bash
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj \
-  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true
+  -f net11.0-maccatalyst27.0 -p:UseXcode27Preview=true
 ```
 
 Model-dependent tests use `RequiresModel=true`. Runtime availability checks use

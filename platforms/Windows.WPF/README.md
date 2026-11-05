@@ -5,7 +5,14 @@
 
 Custom .NET MAUI backend targeting WPF (Windows Presentation Foundation) — an alternative to the official WinUI backend.
 
-This backend uses the platform-agnostic MAUI NuGet packages (`net10.0` fallback assemblies) and provides custom handler implementations that bridge MAUI's layout/rendering system to WPF controls. **All core MAUI controls, pages, layouts, gestures, and navigation patterns are implemented.**
+The core shipping library multi-targets `net10.0-windows` and
+`net11.0-windows`. The Essentials library uses the Windows 10 version 1809
+TFMs so it can compile against the Windows location and Jump List
+contracts.
+.NET 11 is the default for templates and uses MAUI's public backend extension
+points; the .NET 10 target retains isolated compatibility bridges for existing
+applications. The handlers bridge MAUI's layout/rendering system to WPF controls.
+**All core MAUI controls, pages, layouts, gestures, and navigation patterns are implemented.**
 
 > **Inspiration:** This project follows the patterns established by [mauiplatforms](https://github.com/Redth/mauiplatforms) (macOS/tvOS backends) and [Maui.Gtk](https://github.com/AathifMahir/Maui.Gtk).
 
@@ -290,7 +297,7 @@ manifests are read from the directory where the build wrote them.
 ## Samples
 
 Blazor Hybrid hosts need a Windows SDK-versioned target framework, such as
-`net10.0-windows10.0.17763.0`, so WebView2 can load the `Microsoft.Windows.SDK.NET`
+`net11.0-windows10.0.17763.0`, so WebView2 can load the `Microsoft.Windows.SDK.NET`
 projection assembly. Copy `wwwroot` content to both build and publish output; without
 `wwwroot/index.html`, the WebView can start but cannot load the Blazor host page.
 The `Windows.WPF.Sample` project includes both settings.
@@ -421,8 +428,14 @@ When `Build()` returns, every registered Essentials facade (`FileSystem.Current`
 `Preferences.Default`, `DeviceInfo.Current`, and the other supported APIs) uses the
 same instance as dependency injection, including application overrides registered
 before or after `UseWPFEssentials()`. Static calls are supported after `Build()`,
-not while configuring the builder. Unsupported desktop capabilities keep their
-existing stub behavior.
+not while configuring the builder. Desktop capabilities are registered only when
+they have a real Windows implementation. Location uses Windows Runtime APIs and
+requires Windows 10 version 1809 or later. Media file selection is
+implemented with `OpenFileDialog`, but camera capture is explicitly unsupported:
+the legacy `Windows.Media.Capture.CameraCaptureUI` API is UWP-only, while the
+supported desktop replacement requires a future Windows App SDK integration.
+App actions additionally require an MSIX package identity. Physical sensors and
+phone APIs remain explicit limitations.
 
 Version tracking records a launch only when `VersionTracking.Track()` or a
 tracking property is used, not merely when building the app.
@@ -443,7 +456,7 @@ they remove only their own directories, never the user storage roots.
 | API | Status | Notes |
 |---|---|---|
 | AppInfo | ✅ | Assembly-based name, version, package; RequestedTheme |
-| DeviceInfo | ✅ | OS version, DeviceIdiom.Desktop |
+| DeviceInfo | ✅ | OS version, DeviceIdiom.Desktop, `DevicePlatform.Create("WPF")` |
 | Connectivity | ✅ | NetworkInterface.GetIsNetworkAvailable() |
 | DeviceDisplay | ✅ | SystemParameters with DPI |
 | FileSystem | ✅ | Environment.SpecialFolder paths |
@@ -454,21 +467,24 @@ they remove only their own directories, never the user storage roots.
 | Launcher | ✅ | Process.Start |
 | Email | ✅ | mailto: protocol |
 | Map | ✅ | Bing Maps URL |
-| Screenshot | ✅ | RenderTargetBitmap capture |
+| Screenshot | ✅ | Window/view RenderTargetBitmap capture; PNG/JPEG; independent streams |
 | VersionTracking | ✅ | Preferences-backed |
-| TextToSpeech | ✅ | System.Speech.Synthesis via PowerShell |
-| Battery | ✅ | Returns Full/AC for desktop |
+| TextToSpeech | ✅ | Windows SAPI voices, locales, rate/volume/voice options, cancellation |
+| Battery | ✅ | `GetSystemPowerStatus`, AC/battery source, saver state, change polling |
+| MediaPicker | ⚠️ | Native image/video selection through `OpenFileDialog`; camera capture is explicitly unsupported until the Windows App SDK desktop API is integrated |
+| SemanticScreenReader | ✅ | WPF UI Automation live-region announcements |
+| AppActions | ⚠️ | Windows Jump List actions for MSIX-packaged apps; unpackaged apps report unsupported, and activation opens the process with `--maui-app-action <id>` |
+| Geolocation | ⚠️ | Native Windows `Geolocator` one-shot and foreground listening; permission and status behavior requires packaged/unpackaged Windows validation |
 | Share | ⚠️ | Stub — no native share dialog on Windows desktop |
-| FilePicker | ⚠️ | Stub — needs WPF OpenFileDialog implementation |
+| FilePicker | ✅ | Native WPF OpenFileDialog |
 | Sensors | ⚠️ | Stubs (Accelerometer, Gyroscope, Compass, Barometer — N/A for desktop) |
-| Geolocation | ⚠️ | Stub (limited desktop relevance) |
 | Haptics / Vibration | ⚠️ | Stubs (N/A for desktop) |
 
 ## Project Structure
 
 ```
 src/
-  Microsoft.Maui.Platforms.Windows.WPF/              # WPF backend library (net10.0-windows)
+  Microsoft.Maui.Platforms.Windows.WPF/              # WPF backend library (net10 + net11)
   Microsoft.Maui.Platforms.Windows.WPF.Essentials/   # WPF Essentials library
 samples/
   ControlGallery/                  # WPF Control Gallery (used by UI tests)
@@ -533,10 +549,9 @@ example picker. DevFlow can find realized contact labels by text or their name
 as an automation id. Tapping **Alice Johnson** or **Bob Smith** updates the status
 to `Tapped: <name>`, providing an observable check beyond a successful tap response.
 
-The `ci-wpf.yml` compatibility matrix runs `AlertManagerSubscriptionTests` in the
-existing `HandlerTests` project against MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110
-through the shared build workflow's targeted test mode. These are registration
-contract tests, not native dialog interaction tests.
+The libraries and focused tests multi-target .NET 10 and .NET 11. The .NET 10
+lane keeps the historical `AlertManagerSubscriptionTests` coverage for the
+compatibility `DispatchProxy`; .NET 11 verifies the public keyed dialog delegates.
 
 The project includes **213 UI tests** covering all implemented controls, plus a **WinUI comparison framework** that captures side-by-side screenshots of the WPF and WinUI ControlGallery apps for visual parity validation.
 
@@ -552,11 +567,18 @@ Comparison screenshots are saved to `tests/UITests/Comparisons/`.
 
 ## Key Technical Notes
 
-- MAUI NuGet packages resolve to the `net10.0` (platform-agnostic) assembly. `ToPlatform()` returns `object` — `WPFViewHandler<TVirtualView, TPlatformView>` provides the typed bridge.
+- .NET 11 uses public keyed dialog delegates, public gesture dispatch, and
+  `IGesturePlatformManagerFactory`. Reflection remains compiled only for `NET10_0`.
 - The platform-agnostic `ViewHandler` has no-op `PlatformArrange` and returns `Size.Zero`. `WPFViewHandler` overrides these to bridge MAUI layout to WPF `Measure`/`Arrange`.
 - WPF `System.Windows.Controls` and MAUI `Microsoft.Maui.Controls` share many type names — every handler file uses `using` aliases to disambiguate (e.g., `WButton = System.Windows.Controls.Button`).
 - The `MauiWPFApplication` base class in `App.xaml` bootstraps the MAUI runtime within a WPF `Application`.
-- Dialogs use `DispatchProxy` + reflection to intercept `AlertManager` requests (the API is internal in MAUI). Both the nested subscription interface in MAUI 10.0.41–10.0.60 and the top-level interface in 10.0.70+ are supported. An unrecognized contract fails during registration rather than leaving dialog tasks pending. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+- Dialogs use MAUI 11's documented keyed delegate contract. The .NET 10 target
+  retains the older `DispatchProxy` bridge solely for binary compatibility.
+- `buildTransitive` targets opt WPF into Resizetizer and consume
+  `MauiProcessedImage`, `MauiProcessedFont`, and `MauiProcessedAsset`. Runtime SVG
+  loading is rejected; reference the processed bitmap name instead.
+- Register Blazor with
+  `AddMauiBlazorWebView().UsePlatformHandler<Microsoft.AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>()`.
 
 ## Known Limitations
 

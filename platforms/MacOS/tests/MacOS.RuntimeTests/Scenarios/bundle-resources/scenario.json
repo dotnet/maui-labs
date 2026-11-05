@@ -1,7 +1,7 @@
 {
   "name": "bundle-resources",
   "expectedCases": 4,
-  "expectedAssertions": 26,
+  "expectedAssertions": 29,
   "driver": "driver.py",
   "evidence": ["bundle-files.json", "assertions.txt"],
   "fixedEvidence": ["resources.json", "image.png", "font.png"],

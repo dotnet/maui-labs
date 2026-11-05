@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0-windows;net11.0-windows</TargetFrameworks>
+    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+    <MauiVersion Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-'))">$(Maui10Version)</MauiVersion>
+    <MauiVersion Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net11.0-'))">$(Maui11Version)</MauiVersion>
     <UseWPF>true</UseWPF>
     <UseMaui>true</UseMaui>
     <RootNamespace>Microsoft.Maui.Platforms.Windows.WPF</RootNamespace>
@@ -18,7 +21,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" ExcludeAssets="build;buildTransitive" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="$(MauiVersion)" />
   </ItemGroup>
 
@@ -26,6 +29,8 @@
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <None Include="build\Microsoft.Maui.Platforms.Windows.WPF.targets" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\Microsoft.Maui.Platforms.Windows.WPF.props" Pack="true" PackagePath="buildTransitive\net11.0-windows7.0\" />
+    <None Include="buildTransitive\Microsoft.Maui.Platforms.Windows.WPF.targets" Pack="true" PackagePath="buildTransitive\" />
     <None Include="build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets" Pack="true" PackagePath="build\Fonts\" />
   </ItemGroup>
 

@@ -294,7 +294,8 @@ jobs:
       pack: false
       os: '["macos-latest"]'
       # App heads enforce the Apple SDK's Xcode requirement, which libraries do not, so this job
-      # has to pin Xcode even though the library job above gets away without it. Keep in step with
-      # the version the pinned .NET for iOS/macOS asks for — see https://aka.ms/xcode-requirement.
+      # has to pin Xcode even though the library job above gets away without it. This remains a
+      # .NET 10/Xcode 26 compatibility lane; the newer pack validation is skipped explicitly.
       xcode-version: '26.3'
+      skip-xcode-version-validation: true
       android-project: samples/DevFlow.Sample.Native/Android/DevFlow.Sample.Native.Android.csproj

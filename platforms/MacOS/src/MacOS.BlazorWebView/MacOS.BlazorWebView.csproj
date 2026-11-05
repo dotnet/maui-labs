@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFrameworks>net10.0-macos;net11.0-macos</TargetFrameworks>
     <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
     <RootNamespace>Microsoft.Maui.Platforms.MacOS</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.MacOS.BlazorWebView</AssemblyName>
@@ -15,8 +15,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" />
+    <PackageReference Include="Microsoft.Maui.Controls">
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSMaui10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSMaui11Version)</VersionOverride>
+    </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui"
+                      ExcludeAssets="build;buildTransitive">
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSMaui10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSMaui11Version)</VersionOverride>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

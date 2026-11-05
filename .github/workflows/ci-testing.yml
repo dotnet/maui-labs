@@ -49,7 +49,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --from-rollback-file ${{ github.workspace }}/eng/workloads/dotnet11-rc2.json
 
       - name: Build runtime
         run: dotnet build Microsoft.Maui.Testing/Microsoft.Maui.Testing.csproj

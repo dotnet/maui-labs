@@ -23,6 +23,12 @@
     <MicrosoftAspNetCoreComponentsWebViewVersion>10.0.3</MicrosoftAspNetCoreComponentsWebViewVersion>
     <MicrosoftMauiControlsMapsVersion>$(MicrosoftMauiControlsVersion)</MicrosoftMauiControlsMapsVersion>
     <MicrosoftAspNetCoreComponentsWebViewMauiVersion>$(MicrosoftMauiControlsVersion)</MicrosoftAspNetCoreComponentsWebViewMauiVersion>
+    <!-- Community desktop backends consume the .NET 11 public extensibility
+         contracts while the rest of the multi-product repository retains its
+         established MAUI 10 compatibility baseline. -->
+    <CommunityPlatformMauiVersion>11.0.0-rc.2.26505.5</CommunityPlatformMauiVersion>
+    <CommunityPlatformAspNetCoreComponentsWebViewVersion>11.0.0-rc.2.26504.105</CommunityPlatformAspNetCoreComponentsWebViewVersion>
+    <CommunityPlatformDotNetSdkVersion>11.0.100-rc.2.26504.105</CommunityPlatformDotNetSdkVersion>
   </PropertyGroup>
   <PropertyGroup Label="AndroidX">
     <!-- WorkManager: used by DevFlow.Sample to exercise background job inspection/triggering.
@@ -114,6 +120,7 @@
     <MicrosoftWindowsAppSDKVersion_Experimental>2.5.4-experimental</MicrosoftWindowsAppSDKVersion_Experimental>
     <!-- Windows: enables dotnet run for packaged MSIX apps -->
     <MicrosoftWindowsSDKBuildToolsWinAppVersion>0.3.0</MicrosoftWindowsSDKBuildToolsWinAppVersion>
+    <MicrosoftWindowsSdkNetRefVersion>10.0.26100.87</MicrosoftWindowsSdkNetRefVersion>
   </PropertyGroup>
   <PropertyGroup Label="Testing">
     <MicrosoftNETTestSdkVersion>18.3.0</MicrosoftNETTestSdkVersion>

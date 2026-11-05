@@ -316,26 +316,12 @@ internal sealed class GtkFontManager : IFontManager, IGtkFontManager
 		if (!File.Exists(fontPath) || !_registeredFontFiles.TryAdd(fontPath, 0))
 			return false;
 
-		// Install to user font directory so fontconfig/Pango picks it up
-		// reliably (FcConfigAppFontAddFile may not propagate to GTK4's
-		// Pango context which caches fontconfig state at startup).
-		try
-		{
-			var userFontDir = Path.Combine(
-				Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-				"fonts");
-			Directory.CreateDirectory(userFontDir);
-			var destPath = Path.Combine(userFontDir, Path.GetFileName(fontPath));
-			if (!File.Exists(destPath))
-				File.Copy(fontPath, destPath, overwrite: false);
-		}
-		catch (Exception ex)
-		{
-			_logger.LogDebug(ex, "Could not install font to user directory; falling back to FcConfigAppFontAddFile.");
-		}
-
 		if (!FontConfigNative.TryAddAppFont(fontPath))
+		{
+			_registeredFontFiles.TryRemove(fontPath, out _);
 			_logger.LogWarning("Unable to register app font '{FontPath}' with fontconfig.", fontPath);
+			return false;
+		}
 
 		return true;
 	}

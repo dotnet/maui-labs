@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Reflection;
 using System.Windows.Automation;
 using Microsoft.Maui.Controls.Internals;
 using Microsoft.Maui.Platforms.Windows.WPF;
@@ -27,16 +26,12 @@ public class AlertManagerTests
 		var arguments = new AlertArguments(title, message, accept, cancel);
 		var expectedButtons = accept == null ? new[] { cancel } : new[] { accept, cancel };
 
-		// Exercise the production request handler, independently of MAUI's internal
-		// subscription interface (whose version compatibility is tested separately).
-		var handler = typeof(WPFAlertManagerSubscription).GetMethod(
-			"OnAlertRequested", BindingFlags.Static | BindingFlags.NonPublic)!;
 		Exception? requestFailure = null;
 		var request = Task.Run(() =>
 		{
 			try
 			{
-				WpfApplicationHost.Run(_ => handler.Invoke(null, new object?[] { null, arguments }));
+				WpfApplicationHost.Run(_ => RequestAlert(arguments));
 			}
 			catch (Exception ex)
 			{
@@ -108,13 +103,34 @@ public class AlertManagerTests
 	public async Task OnAlertRequested_OnNonStaThread_FaultsTaskInsteadOfLeavingItPending()
 	{
 		var arguments = new AlertArguments("Thread error", "Message", null, "OK");
-		var handler = typeof(WPFAlertManagerSubscription).GetMethod(
-			"OnAlertRequested", BindingFlags.Static | BindingFlags.NonPublic)!;
-
-		await Task.Run(() => handler.Invoke(null, new object?[] { null, arguments }));
+#if NET10_0
+		await Task.Run(() => RequestAlert(arguments));
 
 		Assert.True(arguments.Result.Task.IsFaulted);
 		await Assert.ThrowsAsync<InvalidOperationException>(() => arguments.Result.Task);
+#else
+		await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			Task.Run(() => RequestAlert(arguments)));
+#endif
+	}
+
+	static void RequestAlert(AlertArguments arguments)
+	{
+#if NET10_0
+		var subscriptionType = typeof(Microsoft.Maui.Controls.Window).Assembly
+			.GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
+			?? throw new InvalidOperationException("MAUI 10 dialog subscription contract was not found.");
+		var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+		WPFAlertManagerSubscription.Register(services);
+		using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions
+			.BuildServiceProvider(services);
+		var subscription = provider.GetService(subscriptionType)
+			?? throw new InvalidOperationException("The WPF dialog subscription was not registered.");
+		subscriptionType.GetMethod("OnAlertRequested")!.Invoke(subscription, [null, arguments]);
+#else
+		var result = WPFDialogService.ShowAlertAsync(null, arguments).GetAwaiter().GetResult();
+		arguments.SetResult(result);
+#endif
 	}
 
 	static AutomationElement[] GetDialogButtons(AutomationElement dialog)

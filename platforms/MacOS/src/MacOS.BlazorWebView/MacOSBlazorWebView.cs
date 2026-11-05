@@ -1,19 +1,28 @@
 using Microsoft.Maui.Controls;
+#if NET11_0_OR_GREATER
+using Microsoft.AspNetCore.Components.WebView.Maui;
+#endif
 
 namespace Microsoft.Maui.Platforms.MacOS.Controls;
 
 /// <summary>
-/// A custom BlazorWebView control for macOS (AppKit) that hosts Blazor components
-/// in a WKWebView. This avoids the MAUI BlazorWebView control which internally
-/// casts to its own handler type and fails on AppKit.
+/// A BlazorWebView control for macOS (AppKit) that hosts Blazor components in a
+/// WKWebView and adds AppKit-specific content inset behavior.
 /// </summary>
-public class MacOSBlazorWebView : View
+public class MacOSBlazorWebView :
+#if NET11_0_OR_GREATER
+    BlazorWebView
+#else
+    View
+#endif
 {
+#if !NET11_0_OR_GREATER
     public static readonly BindableProperty HostPageProperty =
         BindableProperty.Create(nameof(HostPage), typeof(string), typeof(MacOSBlazorWebView));
 
     public static readonly BindableProperty StartPathProperty =
         BindableProperty.Create(nameof(StartPath), typeof(string), typeof(MacOSBlazorWebView), "/");
+#endif
 
     /// <summary>
     /// Content insets for the WebView's scrollable content. The web content scrolls
@@ -37,6 +46,7 @@ public class MacOSBlazorWebView : View
     public static readonly BindableProperty HideScrollPocketOverlayProperty =
         BindableProperty.Create(nameof(HideScrollPocketOverlay), typeof(bool), typeof(MacOSBlazorWebView), false);
 
+#if !NET11_0_OR_GREATER
     public string? HostPage
     {
         get => (string?)GetValue(HostPageProperty);
@@ -48,6 +58,7 @@ public class MacOSBlazorWebView : View
         get => (string)GetValue(StartPathProperty);
         set => SetValue(StartPathProperty, value);
     }
+#endif
 
     /// <summary>
     /// Gets or sets the content insets (top, left, bottom, right) for the WebView.
@@ -71,12 +82,20 @@ public class MacOSBlazorWebView : View
         set => SetValue(HideScrollPocketOverlayProperty, value);
     }
 
+#if !NET11_0_OR_GREATER
     public List<BlazorRootComponent> RootComponents { get; } = new();
+#endif
 }
 
+#if NET11_0_OR_GREATER
+public class BlazorRootComponent : RootComponent
+{
+}
+#else
 public class BlazorRootComponent
 {
     public string? Selector { get; set; }
     public Type? ComponentType { get; set; }
     public IDictionary<string, object?>? Parameters { get; set; }
 }
+#endif

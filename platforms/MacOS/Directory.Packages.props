@@ -1,0 +1,9 @@
+<Project>
+  <Import Project="../../Directory.Packages.props" />
+
+  <PropertyGroup>
+    <!-- The AppKit product restores MAUI 10 and MAUI 11 side by side.
+         Shared transitive pins cannot represent both dependency graphs. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+</Project>

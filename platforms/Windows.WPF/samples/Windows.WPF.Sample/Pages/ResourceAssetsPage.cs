@@ -102,23 +102,16 @@ public class ResourceAssetsPage : ContentPage
 	void UpdateStatus()
 	{
 		var baseDirectory = AppContext.BaseDirectory;
-		var imagePath = Path.Combine(baseDirectory, "dotnet_bot.png");
-		var fontPath = Path.Combine(baseDirectory, "OpenSans-Regular.ttf");
-		var appIconDirectory = Path.Combine(baseDirectory, "hicolor", "scalable", "apps");
-		var appIconThemeIndexPath = Path.Combine(baseDirectory, "hicolor", "index.theme");
-		var appIconFilePath = Directory.Exists(appIconDirectory)
-			? Directory.EnumerateFiles(appIconDirectory)
-				.Select(path => new FileInfo(path))
-				.OrderByDescending(static info => info.LastWriteTimeUtc)
-				.Select(static info => info.FullName)
-				.FirstOrDefault()
+		var imagePath = Path.Combine(baseDirectory, "Resources", "Images", "dotnet_bot.png");
+		var fontPath = Path.Combine(baseDirectory, "Resources", "Fonts", "OpenSans-Regular.ttf");
+		var resourcesDirectory = Path.Combine(baseDirectory, "Resources");
+		var appIconFilePath = Directory.Exists(resourcesDirectory)
+			? Directory.EnumerateFiles(resourcesDirectory, "appicon_modern.*").FirstOrDefault()
 			: null;
-		var appIconName = string.IsNullOrWhiteSpace(appIconFilePath)
-			? "<none>"
-			: Path.GetFileNameWithoutExtension(appIconFilePath);
+		var appIconName = appIconFilePath == null ? "<none>" : Path.GetFileName(appIconFilePath);
 
 		_imageStatus.Text = $"dotnet_bot.png exists: {File.Exists(imagePath)}";
 		_fontStatus.Text = $"OpenSans-Regular.ttf exists: {File.Exists(fontPath)}. Compare alias/font-file labels plus Entry/Editor previews above.";
-		_appIconStatus.Text = $"App icon ({appIconName}) exists: {(!string.IsNullOrWhiteSpace(appIconFilePath) && File.Exists(appIconFilePath))}, hicolor index.theme exists: {File.Exists(appIconThemeIndexPath)}";
+		_appIconStatus.Text = $"WPF app icon source ({appIconName}) exists in Resources: {(!string.IsNullOrWhiteSpace(appIconFilePath) && File.Exists(appIconFilePath))}";
 	}
 }

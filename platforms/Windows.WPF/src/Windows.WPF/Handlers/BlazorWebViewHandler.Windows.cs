@@ -9,7 +9,7 @@ using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
-using WebView2Control = Microsoft.Web.WebView2.Wpf.WebView2CompositionControl;
+using WebView2Control = Microsoft.Web.WebView2.Wpf.IWebView2;
 
 namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 {
@@ -17,6 +17,9 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 	/// A <see cref="ViewHandler"/> for <see cref="BlazorWebView"/>.
 	/// </summary>
 	public partial class BlazorWebViewHandler : WPFViewHandler<BlazorWebView, Wpf.BlazorWebView>
+#if !NET10_0
+		, IBlazorWebViewHandler
+#endif
 	{
 		// Track the inner WebView2 reference so we can unsubscribe on disconnect even if
 		// PlatformView.WebView has already been torn down.
@@ -40,14 +43,14 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 			if (double.IsInfinity(h)) h = 600;
 
 			// PlatformView.WebView is lazily created after Loaded fires; guard against NRE during initial measure.
-			PlatformView?.WebView?.Measure(new System.Windows.Size(w, h));
+			PlatformView?.Measure(new System.Windows.Size(w, h));
 			return new Size(w, h);
 		}
 
 		public override void PlatformArrange(Rect rect)
 		{
 			base.PlatformArrange(rect);
-			PlatformView?.WebView?.Arrange(new global::System.Windows.Rect(rect.X, rect.Y, rect.Width, rect.Height));
+			PlatformView?.Arrange(new global::System.Windows.Rect(rect.X, rect.Y, rect.Width, rect.Height));
 		}
 
 		protected override void ConnectHandler(Wpf.BlazorWebView platformView)
@@ -111,12 +114,20 @@ namespace Microsoft.AspNetCore.Components.WebView.Maui.WPF
 			// extension point for future host-side initialization hooks.
 		}
 
-		internal IFileProvider CreateFileProvider(string contentRootDir)
+		public IFileProvider CreateFileProvider(string contentRootDir)
 		{
 			// On WinUI we override HandleWebResourceRequest in WinUIWebViewManager so that loading static assets is done entirely there in an async manner.
 			// This allows the code to be async because in WinUI all the file storage APIs are async-only, but IFileProvider is sync-only and we need to control
 			// the precedence of which files are loaded from where.
 			return new NullFileProvider();
 		}
+
+#if !NET10_0
+		public Task<bool> TryDispatchAsync(Action<IServiceProvider> workItem)
+		{
+			ArgumentNullException.ThrowIfNull(workItem);
+			return PlatformView.TryDispatchAsync(workItem);
+		}
+#endif
 	}
 }

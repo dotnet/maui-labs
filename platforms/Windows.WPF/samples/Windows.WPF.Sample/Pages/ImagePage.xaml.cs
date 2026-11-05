@@ -14,7 +14,7 @@ public partial class ImagePage : ContentPage
 		base.OnAppearing();
 		AnimatedGifImage.IsAnimationPlaying = AnimationSwitch.IsToggled;
 
-		var imagePath = Path.Combine(AppContext.BaseDirectory, "dotnet_bot.png");
+		var imagePath = Path.Combine(AppContext.BaseDirectory, "Resources", "Images", "dotnet_bot.png");
 		if (!File.Exists(imagePath))
 		{
 			StreamSourceImage.IsVisible = false;
@@ -37,7 +37,7 @@ public partial class ImagePage : ContentPage
 
 	void UseUriSource_Clicked(object? sender, EventArgs e)
 	{
-		var imagePath = Path.Combine(AppContext.BaseDirectory, "animated_heart.gif");
+		var imagePath = Path.Combine(AppContext.BaseDirectory, "Resources", "Images", "animated_heart.gif");
 		if (!File.Exists(imagePath))
 		{
 			return;

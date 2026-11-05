@@ -43,6 +43,7 @@ def run(runner):
         runner.command(
             [REPO / "eng/common/dotnet.sh", "msbuild", runner.project,
              "-t:AssertBundleResourceItems", "-m:1", "-nr:false",
+             f"-p:TargetFramework={runner.framework}",
              *(f"-p:{key}={value}" for key, value in arguments.items())],
             runner.stage_directory(stage) / "assertions.log",
         )

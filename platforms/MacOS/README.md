@@ -70,9 +70,11 @@ assertions as `appkit-runtime-shell-sections-default`. See the
 
 ## Prerequisites
 
-- .NET 10 SDK
+- .NET SDK `11.0.100-rc.2.26504.105`
+- SDK-bundled `macos` workload (`27.0.12212-net11-rc.2`)
 - macOS 14 (Sonoma) or later
-- Xcode command line tools (for `sips` / `iconutil` — used by the icon build target)
+- Xcode 27 for .NET 11 build and runtime validation
+- Xcode command line tools (`sips` / `iconutil` are used by the icon build target)
 
 ## Quick start
 
@@ -95,7 +97,7 @@ dotnet run
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-macos</TargetFramework>
+    <TargetFramework>net11.0-macos</TargetFramework>
     <OutputType>Exe</OutputType>
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
@@ -103,6 +105,7 @@ dotnet run
 
     <ApplicationTitle>My macOS App</ApplicationTitle>
     <ApplicationId>com.example.myapp</ApplicationId>
+    <ApplicationManifest>Info.plist</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
@@ -119,6 +122,15 @@ dotnet run
   </ItemGroup>
 </Project>
 ```
+
+Photo capture uses the native ImageKit picture taker. Apps that call
+`MediaPicker.CapturePhotoAsync` or `CaptureVideoAsync` must include an
+`NSCameraUsageDescription` entry in `Info.plist`; the template includes a
+default explanation that applications should customize. Video capture uses an
+AVFoundation camera session and movie-file output, with native Stop and Cancel
+actions. It records camera-only `.mov` files, so it does not request microphone
+permission. Cancelled, failed, empty, or timed-out recordings delete their
+partial cache files. Camera permission denial is reported explicitly.
 
 #### 2. `Main.cs`
 
@@ -222,8 +234,9 @@ See [the shared host contract](tests/MacOS.RuntimeTests/README.md) to add a scen
 version matrix entry or scoped fixture assets without another application/project.
 Portable `MacOS.Tests` remains independent of native AppKit execution.
 
-The same host also registers `dialog-registration` (consumed MAUI interface,
-AppKit proxy and singleton contract) and `dialogs` (real Page action sheet, prompt
+The same host also registers `dialog-registration` (the public typed MAUI 11
+contract, the isolated MAUI 10 compatibility proxy, and singleton semantics) and
+`dialogs` (real Page action sheet, prompt
 and alert completion with native-sheet screenshots). The existing AppKit workflow
 tests registration on MAUI 10.0.41, 10.0.60, 10.0.70 and 10.0.110; native dialogs
 run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run.
@@ -231,7 +244,8 @@ run at 10.0.70 with an exact missing-subscription baseline and bounded fixed run
 ## Unit tests
 
 The platform-neutral tests exercise the backend's managed lifecycle code using real MAUI
-windows and handlers. They target `net10.0` and do not require AppKit, Xcode, or MAUI workloads:
+windows and handlers. They target `net10.0` and `net11.0` and do not require AppKit,
+Xcode, or MAUI workloads:
 
 ```bash
 dotnet test platforms/MacOS/tests/MacOS.Tests/MacOS.Tests.csproj
@@ -242,8 +256,9 @@ Native window notifications and rendering still require testing in a running mac
 
 ### Bundled resources
 
-The package's build targets translate `MauiImage`, `MauiFont`, and `MauiAsset` into
-Apple SDK `BundleResource` items, including files linked from outside the head project.
+On .NET 11, the package consumes Resizetizer's `MauiProcessedImage`,
+`MauiProcessedFont`, and `MauiProcessedAsset` outputs as Apple SDK
+`BundleResource` items, including files linked from outside the head project.
 Images are bundled as `Contents/Resources/Images/<filename>` and fonts as
 `Contents/Resources/Fonts/<filename>`. Raw assets use `LogicalName` relative to
 `Contents/Resources` (or the filename when no logical name is supplied), matching
@@ -253,8 +268,9 @@ unrelated `BundleResource` items are unchanged.
 For apps that intentionally manage all these paths using custom `BundleResource` items,
 set `EnableMacOSMauiResourceMapping` to `false` to retain that mapping instead.
 
-This bundles image sources as-is; it does not add Resizetizer resizing or SVG conversion.
-Image names and font names must be unique within their respective bundle directories.
+Images are processed by Resizetizer, including resizing and SVG conversion. The
+MAUI 10 compatibility target retains the prior raw-item mapping and is isolated
+from the .NET 11 path. Image names and font names must be unique within their respective bundle directories.
 Use `LogicalName` to preserve nested raw-asset paths.
 
 The `bundle-resources` scenario runs inside the shared `MacOS.RuntimeTests` host,

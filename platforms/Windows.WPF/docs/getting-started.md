@@ -4,7 +4,7 @@ This guide walks you through creating your first .NET MAUI app running on Window
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) or later
 - MAUI workload: `dotnet workload install maui`
 
 ## Quick Start
@@ -35,21 +35,33 @@ cause a package downgrade.
 
 ## Using the NuGet Package Directly
 
-Use a `net10.0-windows` project with `UseMaui` and `UseWPF` enabled. For a
+Use a `net11.0-windows` project with `UseMaui` and `UseWPF` enabled. For a
 code-only entry point, also set `EnableDefaultApplicationDefinition` and
 `EnableDefaultPageItems` to `false`, as the template does.
 
 Reference `Microsoft.Maui.Controls` explicitly at the version required by the
-backend (currently `10.0.41`), and reference both
+backend (currently `11.0.0-rc.2.26505.5`), and reference both
 `Microsoft.Maui.Platforms.Windows.WPF` and
 `Microsoft.Maui.Platforms.Windows.WPF.Essentials` at the same full release
 version. For example, these references select the preview.12 release:
 
 ```xml
-<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.41" />
+<PackageReference Include="Microsoft.Maui.Controls" Version="11.0.0-rc.2.26505.5" />
 <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF" Version="0.1.0-preview.12.26421.1" />
 <PackageReference Include="Microsoft.Maui.Platforms.Windows.WPF.Essentials" Version="0.1.0-preview.12.26421.1" />
 ```
+
+For Blazor Hybrid, register the WPF handler through the standard MAUI 11
+extension point after `AddMauiBlazorWebView()`:
+
+```csharp
+builder.Services
+    .AddMauiBlazorWebView()
+    .UsePlatformHandler<Microsoft.AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>();
+```
+
+The packages also contain a `net10.0-windows` compatibility target. It exists
+for established applications; new projects and the template default to .NET 11.
 
 Do not shorten a release version to `0.1.0-preview`: NuGet treats that as a
 minimum version and selects the oldest matching package, not the latest preview.

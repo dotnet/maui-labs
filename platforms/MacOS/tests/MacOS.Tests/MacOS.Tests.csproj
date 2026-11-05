@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <RootNamespace>Microsoft.Maui.Platforms.MacOS.Tests</RootNamespace>
     <AssemblyName>Microsoft.Maui.Platforms.MacOS.Tests</AssemblyName>
     <IsPackable>false</IsPackable>
@@ -9,7 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.Maui.Controls">
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0'">$(MacOSMaui10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0'">$(MacOSMaui11Version)</VersionOverride>
+    </PackageReference>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="xunit" />
   </ItemGroup>
@@ -21,6 +24,8 @@
              Link="Platform/ShellTabBarCoordinator.cs" />
     <Compile Include="../../src/MacOS/Platform/WindowCloseCoordinator.cs"
              Link="Platform/WindowCloseCoordinator.cs" />
+    <Compile Include="../../src/MacOS.Essentials/MediaCaptureCoordinator.cs"
+             Link="Essentials/MediaCaptureCoordinator.cs" />
   </ItemGroup>
 
   <ItemGroup>

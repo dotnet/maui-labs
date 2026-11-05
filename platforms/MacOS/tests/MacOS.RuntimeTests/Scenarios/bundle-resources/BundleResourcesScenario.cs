@@ -5,6 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Media;
+using Microsoft.Maui.Platforms.MacOS.Essentials;
+using Microsoft.Maui.Platforms.MacOS.Platform;
 using Microsoft.Maui.Storage;
 
 namespace MacOS.RuntimeTests.Scenarios.BundleResources;
@@ -28,7 +31,7 @@ sealed class BundleResourcesScenario : MauiRuntimeScenario
     public static void Register() => ScenarioRegistry.Register(new(
         "bundle-resources", ExpectedCases: 4,
         CreateDelegate: context => new BundleResourcesScenario().CreateDelegate(context),
-        ExpectedAssertions: 26));
+        ExpectedAssertions: 29));
 
     public override void Configure(MauiAppBuilder builder) =>
         builder.ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "BundleProbeFont"));
@@ -72,12 +75,38 @@ sealed class BundleResourcesScenario : MauiRuntimeScenario
         var label = _label.Handler?.PlatformView as NSTextField;
         context.Assert(label != null, "The MAUI label must have an AppKit view.");
         using var fontKey = new NSString("NSFont");
-        var font = label!.AttributedStringValue.GetAttributes(0, out _)[fontKey] as NSFont;
+        var attributes = label!.AttributedStringValue.GetAttributes(0, out _);
+        var font = attributes?.ObjectForKey(fontKey) as NSFont;
         context.Assert(font?.FontName == "OpenSans-Regular", $"Expected OpenSans-Regular, got {font?.FontName}.");
+
+        var services = window.Handler?.MauiContext?.Services
+            ?? throw new InvalidOperationException("The runtime window has no MAUI services.");
+        var registrar = services.GetRequiredService<IFontRegistrar>();
+        var macOSRegistrar = registrar as MacOSFontRegistrar
+            ?? throw new InvalidOperationException("The AppKit font registrar was not registered.");
+        macOSRegistrar.Register(
+            "Embedded/OpenSans-Regular.ttf",
+            "EmbeddedBundleProbeFont",
+            typeof(BundleResourcesScenario).Assembly);
+        context.Assert(macOSRegistrar.GetFont("EmbeddedBundleProbeFont") == "OpenSans-Regular",
+            "Assembly-aware registration must load the real embedded font resource.");
+
+        var screenshot = services.GetRequiredService<IScreenshot>();
+#if NET11_0_OR_GREATER
+        context.Assert(screenshot is IViewScreenshot,
+            "The AppKit screenshot service must expose the typed view-capture contract.");
+        var viewCapture = await ((IViewScreenshot)screenshot).CaptureViewAsync(imageView);
+#else
+        context.Assert(screenshot is ScreenshotImplementation,
+            "The AppKit screenshot service must resolve to the native implementation.");
+        var viewCapture = await ((ScreenshotImplementation)screenshot).CaptureAsync(imageView);
+#endif
+        context.Assert(viewCapture?.Width > 0 && viewCapture.Height > 0,
+            "The existing NSView capture must produce a non-empty screenshot.");
         context.Capture(label, "font.png");
         context.Pass("native font");
 
-        var fileSystem = window.Handler!.MauiContext!.Services.GetRequiredService<IFileSystem>();
+        var fileSystem = services.GetRequiredService<IFileSystem>();
         foreach (var (name, content) in Assets)
         {
             context.Assert(await fileSystem.AppPackageFileExistsAsync(name), $"IFileSystem must find {name}.");

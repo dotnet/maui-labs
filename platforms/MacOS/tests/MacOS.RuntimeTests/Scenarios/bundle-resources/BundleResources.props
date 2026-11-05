@@ -8,9 +8,14 @@
     <MacOSResourceTargets>$(MSBuildThisFileDirectory)..\..\..\..\src\MacOS\buildTransitive\Microsoft.Maui.Platforms.MacOS.targets</MacOSResourceTargets>
   </PropertyGroup>
   <ItemGroup Condition="'$(RuntimeTestScenario)' == 'bundle-resources'">
-    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.Maui.Controls">
+      <VersionOverride Condition="'$(TargetFramework)' == 'net10.0-macos'">$(MacOSMaui10Version)</VersionOverride>
+      <VersionOverride Condition="'$(TargetFramework)' == 'net11.0-macos'">$(MacOSMaui11Version)</VersionOverride>
+    </PackageReference>
     <MauiImage Include="..\..\samples\MacOS.Sample\Resources\AppIcon\appicon.png" Link="Resources\Images\appicon.png" />
     <MauiFont Include="..\..\samples\MacOS.Sample\Resources\Fonts\OpenSans-Regular.ttf" Link="Resources\Fonts\OpenSans-Regular.ttf" />
+    <EmbeddedResource Include="..\..\samples\MacOS.Sample\Resources\Fonts\OpenSans-Regular.ttf"
+                      LogicalName="MacOS.RuntimeTests.Embedded.OpenSans-Regular.ttf" />
     <MauiAsset Include="..\Fixtures\BundleResources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" Link="Resources\Raw\%(RecursiveDir)%(Filename)%(Extension)" />
     <MauiAsset Include="..\Fixtures\BundleResources\renamed.txt" LogicalName="Custom\renamed.txt" />
     <MauiAsset Include="..\Fixtures\BundleResources\default.txt" />

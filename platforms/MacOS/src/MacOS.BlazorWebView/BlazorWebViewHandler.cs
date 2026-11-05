@@ -4,6 +4,7 @@ using CoreGraphics;
 using Foundation;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.WebView;
+using Microsoft.AspNetCore.Components.WebView.Maui;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Maui.Dispatching;
@@ -13,16 +14,36 @@ using WebKit;
 
 namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 
-public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView, WKWebView>
+public partial class BlazorWebViewHandler : MacOSViewHandler<
+#if NET11_0_OR_GREATER
+    IBlazorWebView,
+#else
+    MacOSBlazorWebView,
+#endif
+    WKWebView>
+#if NET11_0_OR_GREATER
+    , IBlazorWebViewHandler
+#endif
 {
     public event Action<WKWebView>? PlatformViewDisconnected;
 
+#if NET11_0_OR_GREATER
+    public static readonly IPropertyMapper<IBlazorWebView, BlazorWebViewHandler> Mapper =
+        new PropertyMapper<IBlazorWebView, BlazorWebViewHandler>(ViewMapper)
+        {
+            [nameof(IBlazorWebView.HostPage)] = MapHostPage,
+            [nameof(IBlazorWebView.RootComponents)] = MapRootComponents,
+            [nameof(MacOSBlazorWebView.ContentInsets)] = MapContentInsets,
+            [nameof(MacOSBlazorWebView.HideScrollPocketOverlay)] = MapHideScrollPocketOverlay,
+        };
+#else
     public static readonly IPropertyMapper<MacOSBlazorWebView, BlazorWebViewHandler> Mapper =
         new PropertyMapper<MacOSBlazorWebView, BlazorWebViewHandler>(ViewMapper)
         {
             [nameof(MacOSBlazorWebView.ContentInsets)] = MapContentInsets,
             [nameof(MacOSBlazorWebView.HideScrollPocketOverlay)] = MapHideScrollPocketOverlay,
         };
+#endif
 
     internal static string AppOrigin { get; } = "app://0.0.0.1/";
     internal static Uri AppOriginUri { get; } = new(AppOrigin);
@@ -57,6 +78,10 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
     MacOSWebViewManager? _webviewManager;
     ContentInsetsWindowObserver? _contentInsetsWindowObserver;
     TitlebarWindowObserver? _titlebarWindowObserver;
+#if NET11_0_OR_GREATER
+    RootComponentsCollection? _rootComponents;
+    readonly HashSet<RootComponent> _registeredRootComponents = [];
+#endif
 
     string? HostPage => VirtualView?.HostPage;
     new IServiceProvider? Services => MauiContext?.Services;
@@ -65,8 +90,77 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
     {
     }
 
+#if NET11_0_OR_GREATER
+    public static void MapHostPage(BlazorWebViewHandler handler, IBlazorWebView view)
+        => handler.StartWebViewCoreIfPossible();
+
+    public static void MapRootComponents(BlazorWebViewHandler handler, IBlazorWebView view)
+    {
+        handler.RootComponents = view.RootComponents;
+        handler.StartWebViewCoreIfPossible();
+    }
+
+    RootComponentsCollection? RootComponents
+    {
+        get => _rootComponents;
+        set
+        {
+            if (_rootComponents != null)
+                _rootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
+
+            _rootComponents = value;
+
+            if (_rootComponents != null)
+                _rootComponents.CollectionChanged += OnRootComponentsCollectionChanged;
+
+            SynchronizeRootComponents();
+        }
+    }
+
+    void OnRootComponentsCollectionChanged(
+        object? sender,
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs eventArgs)
+        => SynchronizeRootComponents();
+
+    void SynchronizeRootComponents()
+    {
+        var manager = _webviewManager;
+        if (manager == null)
+            return;
+
+        _ = manager.Dispatcher.InvokeAsync(async () =>
+        {
+            var desiredComponents = _rootComponents?.ToHashSet() ?? [];
+
+            foreach (var item in _registeredRootComponents.Except(desiredComponents).ToArray())
+            {
+                await item.RemoveFromWebViewManagerAsync(manager);
+                _registeredRootComponents.Remove(item);
+            }
+
+            foreach (var item in desiredComponents.Except(_registeredRootComponents).ToArray())
+            {
+                await item.AddToWebViewManagerAsync(manager);
+                _registeredRootComponents.Add(item);
+            }
+        });
+    }
+
+    public IFileProvider CreateFileProvider(string contentRootDir)
+        => new MacOSMauiAssetFileProvider(contentRootDir);
+
+    public Task<bool> TryDispatchAsync(Action<IServiceProvider> workItem)
+    {
+        ArgumentNullException.ThrowIfNull(workItem);
+        return _webviewManager?.TryDispatchAsyncInternal(workItem) ?? Task.FromResult(false);
+    }
+#endif
+
     protected override WKWebView CreatePlatformView()
     {
+#if NET11_0_OR_GREATER
+        VirtualView?.BlazorWebViewInitializing(new BlazorWebViewInitializingEventArgs());
+#endif
         var config = new WKWebViewConfiguration();
 
         config.UserContentController.AddScriptMessageHandler(
@@ -82,6 +176,9 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         // Allow transparent backgrounds — the page CSS controls what's visible
         webview.SetValueForKey(NSObject.FromObject(false)!, new NSString("drawsBackground"));
 
+#if NET11_0_OR_GREATER
+        VirtualView?.BlazorWebViewInitialized(new BlazorWebViewInitializedEventArgs(webview));
+#endif
         return webview;
     }
 
@@ -118,7 +215,17 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         // WKUserContentController and the WebViewScriptMessageHandler.
         platformView.Configuration.UserContentController.RemoveScriptMessageHandler("webwindowinterop");
 
+#if NET11_0_OR_GREATER
+        if (_rootComponents != null)
+        {
+            _rootComponents.CollectionChanged -= OnRootComponentsCollectionChanged;
+            _rootComponents = null;
+        }
+#endif
         var webviewManager = System.Threading.Interlocked.Exchange(ref _webviewManager, null);
+#if NET11_0_OR_GREATER
+        _registeredRootComponents.Clear();
+#endif
         if (webviewManager != null)
         {
             try
@@ -149,24 +256,45 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         var contentRootDir = Path.GetDirectoryName(hostPage) ?? string.Empty;
         var hostPageRelativePath = Path.GetRelativePath(contentRootDir, hostPage);
 
+#if NET11_0_OR_GREATER
+        var fileProvider = CreateFileProvider(contentRootDir);
+#else
         var fileProvider = new MacOSMauiAssetFileProvider(contentRootDir);
+#endif
 
         var dispatcher = services.GetService<IDispatcher>()
             ?? new Microsoft.Maui.Platforms.MacOS.Platform.MacOSDispatcher();
 
+#if NET11_0_OR_GREATER
+        var jsComponents = VirtualView.JSComponents;
+#else
         var jsComponents = new Microsoft.AspNetCore.Components.Web.JSComponentConfigurationStore();
+#endif
 
         var webviewManager = new MacOSWebViewManager(
             PlatformView,
             services,
+#if NET11_0_OR_GREATER
+            new MauiDispatcher(dispatcher),
+#else
             new MacOSBlazorDispatcher(dispatcher),
+#endif
             fileProvider,
             jsComponents,
             contentRootDir,
             hostPageRelativePath);
 
-        foreach (var rootComponent in VirtualView.RootComponents)
+#if NET11_0_OR_GREATER
+        var rootComponents = RootComponents ?? VirtualView.RootComponents;
+#else
+        var rootComponents = VirtualView.RootComponents;
+#endif
+        foreach (var rootComponent in rootComponents)
         {
+#if NET11_0_OR_GREATER
+            _ = rootComponent.AddToWebViewManagerAsync(webviewManager);
+            _registeredRootComponents.Add(rootComponent);
+#else
             if (rootComponent.ComponentType != null && rootComponent.Selector != null)
             {
                 var parameters = rootComponent.Parameters != null
@@ -174,6 +302,7 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
                     : ParameterView.Empty;
                 _ = webviewManager.AddRootComponentAsync(rootComponent.ComponentType, rootComponent.Selector, parameters);
             }
+#endif
         }
 
         System.Threading.Volatile.Write(ref _webviewManager, webviewManager);
@@ -187,12 +316,18 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
         return new Size(width, height);
     }
 
-    public static void MapContentInsets(BlazorWebViewHandler handler, MacOSBlazorWebView view)
+    public static void MapContentInsets(
+        BlazorWebViewHandler handler,
+#if NET11_0_OR_GREATER
+        IBlazorWebView view)
+#else
+        MacOSBlazorWebView view)
+#endif
     {
-        if (handler.PlatformView == null)
+        if (handler.PlatformView == null || view is not MacOSBlazorWebView macOSView)
             return;
 
-        var insets = view.ContentInsets;
+        var insets = macOSView.ContentInsets;
         var wkWebView = handler.PlatformView;
 
         // If insets are all zero, auto-calculate from toolbar height when the window is available
@@ -208,7 +343,7 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
 
         // Setting content insets can cause WKWebView to recreate its scroll pocket
         // subviews, undoing any prior hiding. Re-apply if HideScrollPocketOverlay is on.
-        if (view.HideScrollPocketOverlay)
+        if (macOSView.HideScrollPocketOverlay)
         {
             CoreFoundation.DispatchQueue.MainQueue.DispatchAsync(() =>
                 ApplyScrollPocketVisibility(wkWebView, true));
@@ -305,13 +440,19 @@ public partial class BlazorWebViewHandler : MacOSViewHandler<MacOSBlazorWebView,
     [System.Runtime.InteropServices.DllImport(ObjCRuntime.Constants.ObjectiveCLibrary, EntryPoint = "objc_msgSend")]
     static extern void _objc_msgSend_NSEdgeInsets(IntPtr receiver, IntPtr selector, NSEdgeInsets arg1);
 
-    public static void MapHideScrollPocketOverlay(BlazorWebViewHandler handler, MacOSBlazorWebView view)
+    public static void MapHideScrollPocketOverlay(
+        BlazorWebViewHandler handler,
+#if NET11_0_OR_GREATER
+        IBlazorWebView view)
+#else
+        MacOSBlazorWebView view)
+#endif
     {
-        if (handler.PlatformView == null)
+        if (handler.PlatformView == null || view is not MacOSBlazorWebView macOSView)
             return;
 
         var wkWebView = handler.PlatformView;
-        var hide = view.HideScrollPocketOverlay;
+        var hide = macOSView.HideScrollPocketOverlay;
 
         // The scroll pocket views may not exist yet if the WKWebView hasn't been laid out.
         // Defer until the next layout pass to ensure the subview hierarchy is populated.

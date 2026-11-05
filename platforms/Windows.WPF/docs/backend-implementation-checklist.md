@@ -187,11 +187,12 @@
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| [x] **DisplayAlert** | ✅ | `MessageBox.Show()` via `WPFAlertManagerSubscription` `DispatchProxy` |
+| [x] **DisplayAlert** | ✅ | Typed keyed delegate via `WPFDialogService` on .NET 11 |
 | [x] **DisplayActionSheet** | ✅ | Custom WPF `Window` with button list |
 | [x] **DisplayPromptAsync** | ✅ | Custom WPF `Window` with `TextBox` + OK/Cancel |
 
-> **⚠️ Known Extensibility Gap:** `AlertManager` and `IAlertManagerSubscription` are internal. We use `DispatchProxy` + reflection to intercept dialog requests. See [dotnet/maui#34104](https://github.com/dotnet/maui/issues/34104).
+> .NET 11 uses MAUI's public keyed dialog delegates. The `DispatchProxy` bridge is
+> compiled only for the .NET 10 compatibility target.
 
 ---
 
@@ -199,14 +200,14 @@
 
 | Gesture | Status | Notes |
 |---------|--------|-------|
-| [x] **TapGestureRecognizer** | ✅ | `GestureManager` — `MouseLeftButtonUp` with reflection for `SendTapped` |
-| [x] **PointerGestureRecognizer** | ✅ | `GestureManager` — `MouseEnter`/`Leave`/`Move` with reflection for `SendPointerEntered`/`Exited`/`Moved` |
-| [x] **PanGestureRecognizer** | ✅ | `GestureManager` — mouse capture + delta tracking, PanStarted/Running/Completed |
-| [x] **SwipeGestureRecognizer** | ✅ | `GestureManager` — threshold-based direction detection |
-| [x] **PinchGestureRecognizer** | ✅ | Ctrl+MouseWheel zoom via `GestureManager` |
-| [x] **DragGestureRecognizer** | ✅ | `GestureManager` — WPF `DragDrop.DoDragDrop` |
-| [x] **DropGestureRecognizer** | ✅ | `GestureManager` — `AllowDrop` + `DragOver`/`Drop` events |
-| [x] **LongPressGestureRecognizer** | ✅ | `GestureManager` — `DispatcherTimer` 500ms hold detection |
+| [x] **TapGestureRecognizer** | ✅ | Public `SendTapped` through the WPF gesture platform manager |
+| [x] **PointerGestureRecognizer** | ✅ | Public pointer dispatch through `IGesturePlatformManagerFactory` |
+| [x] **PanGestureRecognizer** | ✅ | Public pan controller dispatch with mouse capture and delta tracking |
+| [x] **SwipeGestureRecognizer** | ✅ | Public swipe controller dispatch with threshold-based detection |
+| [x] **PinchGestureRecognizer** | ✅ | Public pinch dispatch mapped to Ctrl+MouseWheel |
+| [x] **DragGestureRecognizer** | ✅ | Public drag dispatch with WPF `DragDrop.DoDragDrop` |
+| [x] **DropGestureRecognizer** | ✅ | Public drop dispatch with `AllowDrop` + `DragOver`/`Drop` events |
+| [x] **LongPressGestureRecognizer** | ✅ | Public long-press dispatch with per-recognizer duration and movement |
 
 > **MAUI Source Reference:**
 > - Gesture platform managers: [`src/Controls/src/Core/Platform/GestureManager/`](https://github.com/dotnet/maui/tree/main/src/Controls/src/Core/Platform/GestureManager)
@@ -357,31 +358,32 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 | Service | Interface | Status | Notes |
 |---------|-----------|--------|-------|
 | [x] **App Info** | `IAppInfo` | ✅ | Assembly-based name, version, package; `RequestedTheme` returns `Unspecified` |
-| [x] **Battery** | `IBattery` | ✅ | `WPFBattery` — returns Full/AC for desktop |
+| [ ] **Battery** | `IBattery` | ❌ | Not registered; WPF cannot report a reliable battery contract |
 | [x] **Browser** | `IBrowser` | ✅ | `Process.Start()` with UseShellExecute |
 | [x] **Clipboard** | `IClipboard` | ✅ | WPF `System.Windows.Clipboard` |
 | [x] **Connectivity** | `IConnectivity` | ✅ | `NetworkInterface.GetIsNetworkAvailable()` |
 | [x] **Device Display** | `IDeviceDisplay` | ✅ | `SystemParameters.PrimaryScreenWidth/Height` with DPI |
-| [x] **Device Info** | `IDeviceInfo` | ✅ | `Environment.OSVersion`, `DeviceIdiom.Desktop` |
+| [x] **Device Info** | `IDeviceInfo` | ✅ | `Environment.OSVersion`, Desktop, platform identity `WPF` |
 | [x] **Email** | `IEmail` | ✅ | `WPFEmail` opens `mailto:` URI via `Process.Start` |
-| [x] **File Picker** | `IFilePicker` | ⚠️ | Stub registered — needs WPF `OpenFileDialog` implementation |
+| [x] **File Picker** | `IFilePicker` | ✅ | Native WPF `OpenFileDialog` |
 | [x] **File System** | `IFileSystem` | ✅ | `Environment.SpecialFolder` paths |
 | [x] **Geolocation** | `IGeolocation` | ✅ | Stub (desktop — limited relevance) |
 | [x] **Haptic Feedback** | `IHapticFeedback` | ✅ | Stub (N/A for desktop) |
 | [x] **Launcher** | `ILauncher` | ✅ | `Process.Start()` with UseShellExecute |
 | [x] **Map** | `IMap` | ✅ | `WPFMap` opens Bing Maps URL via `Process.Start` |
-| [x] **Media Picker** | `IMediaPicker` | ✅ | Stub (camera N/A for desktop) |
+| [ ] **Media Picker** | `IMediaPicker` | ❌ | Not registered; no fake empty result |
 | [x] **Preferences** | `IPreferences` | ✅ | `IsolatedStorageSettings` or registry-based |
-| [x] **Screenshot** | `IScreenshot` | ✅ | `WPFScreenshot` uses `RenderTargetBitmap` to capture window |
+| [x] **Screenshot** | `IScreenshot`, `IViewScreenshot` | ✅ | Window/view capture, physical dimensions, PNG/JPEG |
 | [x] **Secure Storage** | `ISecureStorage` | ✅ | `ProtectedData` (DPAPI) |
 | [x] **Semantic Screen Reader** | `ISemanticScreenReader` | ✅ | Stub — WPF uses UIA natively |
 | [x] **Share** | `IShare` | ⚠️ | Stub — no native share dialog on Windows desktop |
-| [x] **Text-to-Speech** | `ITextToSpeech` | ✅ | `WPFTextToSpeech` uses PowerShell `System.Speech.Synthesis` |
+| [ ] **Text-to-Speech** | `ITextToSpeech` | ❌ | Not registered; no reflective/silent fallback |
 | [x] **Version Tracking** | `IVersionTracking` | ✅ | Cross-platform — uses `IPreferences` + `IAppInfo` |
 | [x] **Vibration** | `IVibration` | ✅ | Stub (N/A for desktop) |
 | [x] **Sensors** | Various | ✅ | Stubs for all sensors (Accelerometer, Barometer, Compass, Gyroscope, etc.) — N/A for desktop |
 
-> **⚠️ Known Extensibility Gap:** Essentials use internal `SetDefault()` methods. Custom backends must use reflection. See [dotnet/maui#34100](https://github.com/dotnet/maui/issues/34100).
+> MAUI 11 bridges static Essentials facades to DI. The private `SetCurrent`
+> compatibility bridge is compiled only for .NET 10.
 
 ---
 
@@ -531,12 +533,14 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 | Item Type | Status | Notes |
 |-----------|--------|-------|
 | [x] **MauiIcon** | ✅ | MSBuild target copies icon to `Resources/` in output directory |
-| [x] **MauiImage** | ✅ | MSBuild target copies images to `Resources/Images/` |
-| [x] **MauiFont** | ✅ | MSBuild target copies fonts to `Resources/Fonts/` |
-| [x] **MauiAsset** | ✅ | MSBuild target preserves logical paths relative to the app root in build and publish output |
+| [x] **MauiImage** | ✅ | Consumes `MauiProcessedImage` into `Resources/Images/` |
+| [x] **MauiFont** | ✅ | Consumes `MauiProcessedFont` into `Resources/Fonts/` |
+| [x] **MauiAsset** | ✅ | Consumes `MauiProcessedAsset` and preserves logical paths |
 | [x] **MauiSplashScreen** | ✅ | MSBuild target copies splash image to `Resources/` |
 
-> **WPF Implementation Note:** Use `AfterTargets="ResizetizeImages"` to hook processed images. See [dotnet/maui#34222](https://github.com/dotnet/maui/issues/34222).
+> The idempotent `buildTransitive` props/targets set `ResizetizerPlatformType`,
+> declare the WPF platform folder, run the public processing targets, and consume
+> the resulting `MauiProcessed*` items.
 
 ---
 
@@ -544,13 +548,7 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 
 ### Gap 1: Essentials Static `Default` Properties ([#34100](https://github.com/dotnet/maui/issues/34100))
 
-**Status:** ⚠️ Using reflection workaround in `EssentialsExtensions.cs`
-
-```csharp
-var setDefault = typeof(Preferences).GetMethod("SetDefault",
-    BindingFlags.Static | BindingFlags.NonPublic);
-setDefault?.Invoke(null, new object[] { new WPFPreferences() });
-```
+**Status:** ✅ Public DI bridge on .NET 11; compatibility reflection is `NET10_0` only.
 
 ### Gap 2: `MainThread.BeginInvokeOnMainThread` ([#34101](https://github.com/dotnet/maui/issues/34101))
 
@@ -558,15 +556,15 @@ setDefault?.Invoke(null, new object[] { new WPFPreferences() });
 
 ### Gap 3: Resizetizer Extensibility ([#34102](https://github.com/dotnet/maui/issues/34102), [#34222](https://github.com/dotnet/maui/issues/34222))
 
-**Status:** ❌ Not yet addressed — no custom build targets.
+**Status:** ✅ Public processed-item hooks in the package's `buildTransitive` target.
 
 ### Gap 4: BlazorWebView Registration ([#34103](https://github.com/dotnet/maui/issues/34103))
 
-**Status:** ✅ Worked around — we use `AspNetCore.Components.WebView.Wpf` directly with a custom `BlazorWebViewHandler`.
+**Status:** ✅ Standard `AddMauiBlazorWebView().UsePlatformHandler<THandler>()`.
 
 ### Gap 5: Alert/Dialog System ([#34104](https://github.com/dotnet/maui/issues/34104))
 
-**Status:** ✅ Implemented via `WPFAlertManagerSubscription` using `DispatchProxy` + reflection.
+**Status:** ✅ Public typed keyed delegates on .NET 11; `DispatchProxy` only on .NET 10.
 
 ---
 
@@ -575,7 +573,7 @@ setDefault?.Invoke(null, new object[] { new WPFPreferences() });
 ```
 D:\repos\rmarinho\maui.wpf\
 ├── BACKEND_IMPLEMENTATION_CHECKLIST.md
-├── Directory.Build.props          # Centralized: BaseTargetFramework=net10.0, MauiVersion=10.0.31
+├── Directory.Build.props          # MAUI 10 compatibility + MAUI 11 default versions
 ├── Maui.WPF.sln
 ├── README.md
 ├── build.slnf                     # Solution filter for CI (libraries only)
@@ -643,7 +641,7 @@ D:\repos\rmarinho\maui.wpf\
 33. Remaining essentials ❌
 34. ~~App Theme / Dark Mode~~ ✅
 35. ~~Lifecycle events~~ ✅
-36. Build targets / Resizetizer integration ❌
+36. ~~Build targets / Resizetizer integration~~ ✅
 
 ---
 
@@ -675,9 +673,9 @@ D:\repos\rmarinho\maui.wpf\
 | **Lifecycle Events** | 8 of 8 | 8 | 100% |
 | **Image Source Types** | 3 of 4 | 4 | 75% |
 | **App Theme** | 4 of 4 | 4 | 100% |
-| **Build/Resizetizer** | 0 of 5 | 5 | 0% |
+| **Build/Resizetizer** | 5 of 5 | 5 | 100% |
 | | | | |
-| **TOTAL** | **160 of 222** | **222** | **72%** |
+| **TOTAL** | **162 of 222** | **222** | **73%** |
 
 ---
 
@@ -708,5 +706,4 @@ D:\repos\rmarinho\maui.wpf\
 
 *Last updated: 2026-02-26*
 *Branch: `more-controls`*
-*Target Framework: `net10.0` | MAUI Version: `10.0.31`*
-
+*Target Frameworks: `net10.0-windows` + `net11.0-windows` | Default MAUI: `11.0.0-rc.2.26505.5`*
