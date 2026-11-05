@@ -23,7 +23,7 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 ### Technology Stack
 
-- **.NET 10** (SDK version pinned in `global.json`, `rollForward: latestMinor`)
+- **.NET 11** (SDK version pinned in `global.json`)
 - **C#** with `LangVersion: latest`, file-scoped namespaces
 - **Microsoft.DotNet.Arcade.Sdk** for build infrastructure
 - **Central Package Management** — all versions in `Directory.Packages.props`
@@ -35,8 +35,8 @@ This repository hosts experimental .NET MAUI packages. It is a **multi-product m
 
 ### Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (see `global.json` for exact version)
-- MAUI workload: `dotnet workload install maui`
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for the pinned version)
+- MAUI workloads: `dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-rc2.json`
 
 ### Build Commands
 
@@ -142,11 +142,10 @@ Full guidance: `.github/instructions/dependencies.instructions.md`.
 
 Comet is being refactored off MAUI handlers onto a retained **node backend**
 (Jetpack Compose on Android, SwiftUI on iOS). This path uses **.NET 11 preview**,
-pinned by `src/Comet/global.json` — NOT the repo-root .NET 10.
+pinned by `src/Comet/global.json`, separately from the repository-root SDK.
 
-- **Run Comet builds from inside `src/Comet`.** Bare `dotnet` at the repo root
-  resolves the .NET 10 SDK (root `global.json`) and fails net11 targets with
-  NETSDK1045.
+- **Run Comet builds from inside `src/Comet`.** This resolves the SDK version
+  pinned for Comet rather than the repository-root SDK.
 - **Host tests link Comet via a HintPath**, so rebuild it first:
   `dotnet build src/Comet/src/Comet/Comet.csproj -f net11.0-maccatalyst`
   before `dotnet test tests/Comet.Tests` — otherwise tests run a stale DLL.

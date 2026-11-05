@@ -1,0 +1,51 @@
+name: CI - .NET 11 community platform contracts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'eng/Versions.props'
+      - 'eng/pipelines/devflow-official.yml'
+      - 'eng/workloads/dotnet11-rc2.json'
+      - 'global.json'
+      - 'NuGet.config'
+      - 'platforms/Shared/Net11ContractProbe/**'
+      - 'src/Testing/global.json'
+      - 'src/AI/Microsoft.Maui.Essentials.AI/*.csproj'
+      - 'samples/AIExtensions.Sample.ChatPlayground/*.csproj'
+      - 'tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/*.csproj'
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'eng/Versions.props'
+      - 'eng/pipelines/devflow-official.yml'
+      - 'eng/workloads/dotnet11-rc2.json'
+      - 'global.json'
+      - 'NuGet.config'
+      - 'platforms/Shared/Net11ContractProbe/**'
+      - 'src/Testing/global.json'
+      - 'src/AI/Microsoft.Maui.Essentials.AI/*.csproj'
+      - 'samples/AIExtensions.Sample.ChatPlayground/*.csproj'
+      - 'tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/*.csproj'
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify SDK and workload configuration contracts
+        run: node --test .github/workflows/tests/net11-workloads.test.cjs
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Verify public .NET 11 community platform contracts
+        run: dotnet run --project platforms/Shared/Net11ContractProbe/Net11ContractProbe.csproj --configuration Release
