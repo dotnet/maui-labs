@@ -51,13 +51,8 @@ on:
       workload-rollback-file:
         required: false
         type: string
-        default: ''
-        description: 'Optional workload rollback file; when empty, workload-version is used.'
-      workload-version:
-        required: false
-        type: string
-        default: '10.0.203'
-        description: 'Workload version to install (pinned for reproducibility)'
+        default: 'eng/workloads/dotnet11-rc2.json'
+        description: 'Pinned workload rollback file matching the exact repository SDK.'
       os:
         required: false
         type: string
@@ -134,22 +129,13 @@ jobs:
       # Use Arcade's dotnet wrapper for workload-related setup so SDK resolution
       # matches the later cibuild invocation.
       - name: Install workloads from rollback file (Windows)
-        if: inputs.install-workloads && runner.os == 'Windows' && inputs.workload-rollback-file != ''
+        if: inputs.install-workloads && runner.os == 'Windows'
         run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
         shell: cmd
 
-      - name: Install workloads (Windows)
-        if: inputs.install-workloads && runner.os == 'Windows' && inputs.workload-rollback-file == ''
-        run: eng\common\dotnet.cmd workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
-        shell: cmd
-
       - name: Install workloads from rollback file (Unix)
-        if: inputs.install-workloads && runner.os != 'Windows' && inputs.workload-rollback-file != ''
+        if: inputs.install-workloads && runner.os != 'Windows'
         run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --from-rollback-file ${{ inputs.workload-rollback-file }}
-
-      - name: Install workloads (Unix)
-        if: inputs.install-workloads && runner.os != 'Windows' && inputs.workload-rollback-file == ''
-        run: ./eng/common/dotnet.sh workload install ${{ inputs.workloads }} --version ${{ inputs.workload-version }}
 
       - name: Install Android SDK dependencies (Windows)
         if: inputs.install-workloads && runner.os == 'Windows' && inputs.android-project != ''

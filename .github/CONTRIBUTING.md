@@ -23,7 +23,7 @@ maui-labs/
 ### Prerequisites
 
 - [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) (see `global.json` for the pinned version)
-- MAUI workload: `dotnet workload install maui`
+- MAUI workloads: `dotnet workload install maui macos --from-rollback-file eng/workloads/dotnet11-rc2.json`
 
 ### Building
 

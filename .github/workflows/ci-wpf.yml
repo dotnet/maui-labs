@@ -60,6 +60,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.403
       - name: Verify native layout regression before and after
         shell: pwsh
         run: |
@@ -168,6 +171,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.403
       - name: Verify native WPF section navigation before and after
         shell: pwsh
         run: |
@@ -238,6 +244,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: fixed/global.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.403
       - name: Verify native enabled-state baseline and fix with identical tests
         shell: pwsh
         run: >
@@ -342,7 +351,7 @@ jobs:
           $sdkVersion = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
           $sdkDirectory = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion"
           $dotnet = Join-Path $env:DOTNET_ROOT 'dotnet.exe'
-          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --version 10.0.203
+          & $dotnet (Join-Path $sdkDirectory 'dotnet.dll') workload install maui maui-tizen --from-rollback-file eng/workloads/dotnet11-rc2.json
           if ($LASTEXITCODE -ne 0) { throw 'Workload installation failed.' }
       - name: Restore and build the normal source consumer
         id: source-font-build

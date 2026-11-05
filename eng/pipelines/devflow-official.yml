@@ -113,7 +113,7 @@ extends:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
             # DevFlow packages are built on Windows, including Apple library TFMs.
-            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui maui-android ios maccatalyst macos maui-tizen --from-rollback-file eng\workloads\dotnet11-rc2.json
               displayName: Install MAUI and Apple workloads
             - pwsh: |
                 $arguments = @(
@@ -260,7 +260,7 @@ extends:
                 printf '%s\n' "$version" | grep -Eq '^Xcode 27([.[:space:]]|$)'
                 echo "##vso[task.setvariable variable=DEVELOPER_DIR]$DEVELOPER_DIR"
               displayName: Select and verify Xcode 27
-            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.401
+            - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --from-rollback-file eng/workloads/dotnet11-rc2.json
               displayName: Install MAUI workloads
             - script: |
                 set -euo pipefail
@@ -292,6 +292,7 @@ extends:
                   --ci \
                   --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf \
                   /p:EssentialsAIAndroidNativeArtifactsPath=$(Build.SourcesDirectory)/src/AI/AndroidNative/EssentialsAI/build/outputs \
+                  /p:UseXcode27Preview=true \
                   /p:ValidateXcodeVersion=false
               displayName: Build EssentialsAI (macOS)
               env:
@@ -334,7 +335,7 @@ extends:
                 path: '$(Build.SourcesDirectory)/artifacts/bin'
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 10.0.401
+            - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --from-rollback-file eng\workloads\dotnet11-rc2.json
               displayName: Install MAUI workloads
             - pwsh: |
                 $ErrorActionPreference = 'Stop'
@@ -372,6 +373,7 @@ extends:
                 -prepareMachine
                 -projects $(Build.SourcesDirectory)\src\AI\EssentialsAI.slnf
                 /p:EssentialsAIAndroidNativeArtifactsPath=$(Build.SourcesDirectory)\artifacts\bin\AndroidNative
+                /p:UseXcode27Preview=true
                 $(_OfficialBuildArgs)
               displayName: Build and Test EssentialsAI
 
@@ -430,7 +432,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui --from-rollback-file eng\workloads\dotnet11-rc2.json
               displayName: Install MAUI workload
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -457,7 +459,7 @@ extends:
             steps:
             - script: eng\common\dotnet.cmd --info
               displayName: Provision .NET SDK via Arcade
-            - script: eng\common\dotnet.cmd workload install maui macos --version 10.0.203
+            - script: eng\common\dotnet.cmd workload install maui macos --from-rollback-file eng\workloads\dotnet11-rc2.json
               displayName: Install MAUI and macOS workloads
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
@@ -482,12 +484,12 @@ extends:
             - task: UseDotNet@2
               displayName: Install .NET 11 RC 2 SDK
               inputs:
-                version: 11.0.x
+                version: 11.0.100-rc.2.26504.105
                 includePreviewVersions: true
-                # Arcade installs the root .NET 10 SDK here; keep .NET 11 and its workloads in the same host.
+                # Keep the exact SDK and its RC2 workload manifests in the same host.
                 installationPath: $(Build.SourcesDirectory)\.dotnet
             - powershell: |
-                dotnet workload install maui
+                dotnet workload install maui --from-rollback-file "$(Build.SourcesDirectory)\eng\workloads\dotnet11-rc2.json"
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               displayName: Install MAUI workload
               workingDirectory: $(Build.SourcesDirectory)\src\Testing
