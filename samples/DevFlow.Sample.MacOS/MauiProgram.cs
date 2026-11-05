@@ -22,6 +22,10 @@ public static partial class MauiProgram
 			.ConfigureFonts(fonts =>
 			{
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+			})
+			.ConfigureMauiHandlers(handlers =>
+			{
+				handlers.AddHandler<MacMouseProbeView, MacMouseProbeHandler>();
 			});
 
 		// Blazor WebView
