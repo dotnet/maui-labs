@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json;
 using System.Xml.Linq;
 using Xamarin.Android.Tools;
+using System.Text.RegularExpressions;
 
 namespace Microsoft.Maui.DevFlow.Driver;
 
@@ -167,9 +169,80 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     /// </summary>
     public async Task<AlertInfo?> DetectAlertAsync()
     {
-        var xml = await DumpUiHierarchyAsync().ConfigureAwait(false);
-        if (xml is null) return null;
-        return ParseAlertFromHierarchy(xml);
+        AlertInfo? unstableAlert = null;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var before = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
+            var xml = await DumpUiHierarchyAsync().ConfigureAwait(false);
+            if (xml is null) return null;
+            var alert = ParseAlertFromHierarchy(xml);
+            if (alert is null) return null;
+            var after = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
+            var beforeId = AndroidDialogWindowSafety.GetInstanceId(before, alert.SourceProcessName);
+            var afterId = AndroidDialogWindowSafety.GetInstanceId(after, alert.SourceProcessName);
+            if (beforeId != null && beforeId == afterId)
+                return alert with { InstanceId = afterId };
+
+            unstableAlert = alert;
+            if (attempt < 2)
+                await Task.Delay(100).ConfigureAwait(false);
+        }
+
+        return unstableAlert;
+    }
+
+    public async Task<bool> IsDialogAttributedToTargetAsync(
+        AlertInfo dialog, string expectedPackageId, string expectedAppName)
+    {
+        var ownerPackage = dialog.SourceProcessName;
+        if (string.IsNullOrWhiteSpace(ownerPackage) || string.IsNullOrWhiteSpace(dialog.InstanceId))
+            return false;
+        if (!Regex.IsMatch(ownerPackage, @"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*$", RegexOptions.CultureInvariant))
+            return false;
+        if (dialog.IsSystemDialog)
+        {
+            if (ownerPackage is not ("com.google.android.permissioncontroller" or "com.android.permissioncontroller")
+                || !PermissionPromptNamesTarget(dialog.Title, expectedAppName))
+            {
+                return false;
+            }
+        }
+        else if (ownerPackage != expectedPackageId)
+        {
+            return false;
+        }
+
+        var packageInfo = await RunAdbWithOutputAsync("shell", "cmd", "package", "list", "packages", "-U", ownerPackage);
+        var ownerUid = AndroidDialogWindowSafety.GetPackageUid(packageInfo, ownerPackage);
+        if (!ownerUid.HasValue)
+            return false;
+        var windows = await RunAdbWithOutputAsync("shell", "dumpsys", "window", "-a");
+        return AndroidDialogWindowSafety.IsUnobscuredDialog(windows, dialog, ownerPackage, ownerUid.Value);
+    }
+
+    public async Task<bool> IsTargetAppForegroundAsync(string packageId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        var windowState = await RunAdbWithOutputAsync("shell", "dumpsys", "window");
+        if (string.IsNullOrWhiteSpace(windowState))
+            return false;
+
+        return IsFocusedPackage(windowState, packageId);
+    }
+
+    internal static bool IsFocusedPackage(string windowState, string packageId)
+    {
+        var focusedAppLine = windowState
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(line => line.Contains("mFocusedApp", StringComparison.Ordinal));
+        if (focusedAppLine is null)
+            return false;
+        var component = Regex.Match(
+            focusedAppLine,
+            @"(?<package>[A-Za-z0-9._]+)/[A-Za-z0-9._$]+",
+            RegexOptions.CultureInvariant);
+        return component.Success
+            && component.Groups["package"].Value.Equals(packageId, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -183,6 +256,55 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
 
         var btn = FindButtonToTap(alert, buttonLabel);
         await TapAsync(btn).ConfigureAwait(false);
+    }
+
+    public async Task<AlertActionResult> PressAlertButtonSafelyAsync(
+        AlertInfo reviewedDialog,
+        string buttonLabel,
+        string expectedPackageId,
+        string expectedAppName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(buttonLabel);
+        cancellationToken.ThrowIfCancellationRequested();
+        var currentDialog = await DetectAlertAsync();
+        if (currentDialog == null || !NativeDialogIdentity.CreateFingerprint(Platform, Serial ?? string.Empty, currentDialog)
+            .Equals(NativeDialogIdentity.CreateFingerprint(Platform, Serial ?? string.Empty, reviewedDialog), StringComparison.Ordinal))
+        {
+            return new AlertActionResult(false, true, "The reviewed Android dialog changed or disappeared. Detect it again before acting.", currentDialog);
+        }
+
+        var matches = currentDialog.Buttons
+            .Where(button => button.Label.Equals(buttonLabel, StringComparison.Ordinal))
+            .ToArray();
+        if (matches.Length != 1)
+        {
+            return new AlertActionResult(
+                false,
+                true,
+                matches.Length == 0
+                    ? $"Button '{buttonLabel}' was not found by exact label."
+                    : $"More than one button has the exact label '{buttonLabel}'.",
+                reviewedDialog);
+        }
+
+        var attributedToTarget = await IsDialogAttributedToTargetAsync(currentDialog, expectedPackageId, expectedAppName);
+        if (!attributedToTarget)
+        {
+            return new AlertActionResult(
+                false,
+                true,
+                "The Android dialog window owner or unobscured button could not be verified. Respond manually or detect the prompt again.",
+                reviewedDialog);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await TapAsync(matches[0]);
+        return new AlertActionResult(
+            true,
+            false,
+            $"Pressed '{buttonLabel}' using Android device input without moving the host pointer.",
+            reviewedDialog);
     }
 
     /// <summary>
@@ -260,7 +382,10 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
                 var label = btn.Attribute("text")?.Value;
                 if (string.IsNullOrEmpty(label)) continue;
                 if (TryParseBounds(btn.Attribute("bounds")?.Value, out var r))
-                    buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h));
+                    buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h)
+                    {
+                        Identifier = btn.Attribute("resource-id")?.Value
+                    });
             }
         }
 
@@ -274,11 +399,18 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
                 var label = item.Attribute("text")?.Value;
                 if (string.IsNullOrEmpty(label)) continue;
                 if (TryParseBounds(item.Attribute("bounds")?.Value, out var r))
-                    buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h));
+                    buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h)
+                    {
+                        Identifier = item.Attribute("resource-id")?.Value
+                    });
             }
         }
 
-        return new AlertInfo(title, buttons);
+        return new AlertInfo(title, buttons)
+        {
+            Text = CollectVisibleText(parentPanel),
+            SourceProcessName = GetHierarchyPackage(parentPanel)
+        };
     }
 
     /// <summary>
@@ -289,7 +421,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     {
         // Permission dialogs come from com.google.android.permissioncontroller
         var permNodes = root.DescendantsAndSelf("node")
-            .Where(n => n.Attribute("package")?.Value == "com.google.android.permissioncontroller")
+            .Where(n => n.Attribute("package")?.Value is "com.google.android.permissioncontroller" or "com.android.permissioncontroller")
             .ToList();
 
         if (permNodes.Count == 0) return null;
@@ -313,12 +445,57 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             var label = btn.Attribute("text")?.Value ?? btn.Attribute("content-desc")?.Value ?? "";
             if (string.IsNullOrEmpty(label)) continue;
             if (TryParseBounds(btn.Attribute("bounds")?.Value, out var r))
-                buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h));
+                buttons.Add(new AlertButton(label, r.x, r.y, r.w, r.h)
+                {
+                    Identifier = btn.Attribute("resource-id")?.Value
+                });
         }
 
         if (buttons.Count == 0) return null;
-        return new AlertInfo(title ?? "Permission Request", buttons);
+        return new AlertInfo(title ?? "Permission Request", buttons)
+        {
+            Text = CollectVisibleText(permNodes),
+            IsSystemDialog = true,
+            SourceProcessName = GetHierarchyPackage(permNodes.First())
+        };
     }
+
+    private static string? GetHierarchyPackage(XElement root)
+    {
+        var packages = root.DescendantsAndSelf("node")
+            .Select(node => node.Attribute("package")?.Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return packages.Length == 1 ? packages[0] : null;
+    }
+
+    internal static bool PermissionPromptNamesTarget(string? promptText, string targetName)
+    {
+        if (string.IsNullOrWhiteSpace(promptText) || string.IsNullOrWhiteSpace(targetName))
+            return false;
+
+        var match = Regex.Match(
+            promptText,
+            @"^Allow\s+(?<app>.+?)\s+to\b",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        return match.Success
+            && match.Groups["app"].Value.Equals(targetName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<string> CollectVisibleText(XElement root)
+        => CollectVisibleText(root.DescendantsAndSelf("node"));
+
+    private static IReadOnlyList<string> CollectVisibleText(IEnumerable<XElement> nodes)
+        => nodes
+            .SelectMany(node => new[]
+            {
+                node.Attribute("text")?.Value,
+                node.Attribute("content-desc")?.Value
+            })
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(text => text!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     private static XElement? FindByResourceId(XElement root, string shortId)
     {
@@ -486,6 +663,176 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     }
 
     // ──────────────────────────────────────────────
+    // ──────────────────────────────────────────────
+    // Background jobs (WorkManager via JobScheduler)
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// The JobScheduler namespace WorkManager schedules into. Job lookups and the run command
+    /// both need it — without <c>-n</c> the job simply is not found.
+    /// </summary>
+    public const string WorkManagerNamespace = "androidx.work.systemjobscheduler";
+
+    /// <summary>
+    /// Lists the app's scheduled JobScheduler jobs by parsing <c>dumpsys jobscheduler</c>.
+    ///
+    /// <para>
+    /// This is the host-side counterpart to the in-app WorkManager query. It sees what the
+    /// system actually has scheduled rather than what the app's WorkManager database believes,
+    /// and it needs no cooperation from the app — but it reports JobScheduler's view, so the
+    /// identifier is a numeric job id rather than a WorkSpec UUID.
+    /// </para>
+    /// </summary>
+    public virtual async Task<IReadOnlyList<AndroidScheduledJob>> ListScheduledJobsAsync(string packageName, CancellationToken cancellationToken = default)
+    {
+        var dump = await RunJobAdbAsync(["shell", "dumpsys", "jobscheduler"], cancellationToken);
+        return ParseScheduledJobs(dump, packageName);
+    }
+
+    /// <summary>
+    /// Reads jobs through a temporary forward on the selected adb device, pinning its serial
+    /// for subsequent scheduler commands. Callers must compare the agent instance identity.
+    /// </summary>
+    public virtual async Task<JsonElement> ReadJobsOnDeviceAsync(int agentPort, CancellationToken cancellationToken = default)
+    {
+        if (agentPort is < 1 or > 65535)
+            throw new ArgumentOutOfRangeException(nameof(agentPort));
+        Serial = await ResolveSerialAsync().WaitAsync(cancellationToken);
+        var localPortText = await RunJobAdbAsync(
+            ["forward", "tcp:0", $"tcp:{agentPort}"], cancellationToken);
+        if (!int.TryParse(localPortText.Trim(), out var localPort) || localPort is < 1 or > 65535)
+            throw new InvalidOperationException($"adb did not return an allocated forward port: {localPortText}");
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var response = await http.GetAsync(
+                $"http://127.0.0.1:{localPort}/api/v1/device/jobs", cancellationToken);
+            response.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            return document.RootElement.Clone();
+        }
+        finally
+        {
+            await RunJobAdbAsync(["forward", "--remove", $"tcp:{localPort}"], CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Parses <c>dumpsys jobscheduler</c> output. Entries look like:
+    /// <code>
+    /// JOB androidx.work.systemjobscheduler:u0a233/1: 258ed68 #SampleSyncWorker#@androidx.work.systemjobscheduler@com.pkg/androidx.work.impl.background.systemjob.SystemJobService
+    /// JOB #1000/808: cb8ff9f android/com.android.server.MountServiceIdler
+    /// </code>
+    /// The namespaced form carries the WorkManager worker name in <c>#…#</c>.
+    /// </summary>
+    internal static IReadOnlyList<AndroidScheduledJob> ParseScheduledJobs(string dumpsysOutput, string packageName)
+    {
+        var jobs = new List<AndroidScheduledJob>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        // Two shapes occur, and both must parse:
+        //   JOB <namespace>:<uid>/<jobId>: <hash> #<worker>#@<namespace>@<package>/<service>
+        //   JOB #<uid>/<jobId>: <hash> <package>/<service>          (no namespace)
+        var pattern = new System.Text.RegularExpressions.Regex(
+            @"JOB\s+(?:(?<ns>[A-Za-z0-9_.\-]+):)?#?u?(?<uid>[0-9a-z]+)/(?<jobId>-?\d+):\s+\S+\s+(?<detail>.*)",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        foreach (var rawLine in dumpsysOutput.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (!line.StartsWith("JOB ", StringComparison.Ordinal)) continue;
+            var match = pattern.Match(line);
+            if (!match.Success) continue;
+
+            var detail = match.Groups["detail"].Value;
+            var jobId = match.Groups["jobId"].Value;
+
+            // A namespace appears as a "<ns>:" prefix, and again as "@<ns>@" inside the detail.
+            // The plain "JOB #<uid>/<id>" form has neither.
+            string? ns = match.Groups["ns"].Success && match.Groups["ns"].Value.Length > 0
+                ? match.Groups["ns"].Value
+                : null;
+            if (ns == null)
+            {
+                var atMatch = System.Text.RegularExpressions.Regex.Match(detail, @"@(?<ns>[^@]+)@");
+                if (atMatch.Success) ns = atMatch.Groups["ns"].Value;
+            }
+
+            var workerMatch = System.Text.RegularExpressions.Regex.Match(detail, @"#(?<worker>[^#]+)#");
+            var worker = workerMatch.Success ? workerMatch.Groups["worker"].Value : null;
+
+            var serviceMatch = System.Text.RegularExpressions.Regex.Match(
+                detail, @"(?:^|@|\s)" + System.Text.RegularExpressions.Regex.Escape(packageName) + @"/(?<service>\S+)");
+            if (!serviceMatch.Success) continue;
+            var service = serviceMatch.Success ? serviceMatch.Groups["service"].Value : null;
+
+            var key = $"{ns}|{jobId}";
+            if (!seen.Add(key)) continue;
+
+            jobs.Add(new AndroidScheduledJob
+            {
+                JobId = jobId,
+                Namespace = ns,
+                Worker = worker,
+                Service = service,
+                IsWorkManager = ns == WorkManagerNamespace
+                    || service?.Contains("androidx.work", StringComparison.Ordinal) == true
+            });
+        }
+
+        return jobs;
+    }
+
+    /// <summary>
+    /// Returns JobScheduler's view of a job: pending / active / ready / waiting, etc.
+    /// </summary>
+    public async Task<string> GetJobStateAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace)
+    {
+        var output = await RunAdbWithOutputAsync(BuildJobSchedulerArguments("get-job-state", packageName, jobId, jobNamespace));
+        return output.Trim();
+    }
+
+    /// <summary>
+    /// Forces a scheduled job to run now.
+    /// </summary>
+    /// <param name="force">
+    /// Ignore unmet constraints. Required for anything with a delay or a network/charging
+    /// requirement, which is most real work; without it JobScheduler declines.
+    /// </param>
+    public virtual async Task<string> RunScheduledJobAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace, bool force = true, CancellationToken cancellationToken = default)
+    {
+        var output = await RunJobAdbAsync(BuildJobSchedulerArguments("run", packageName, jobId, jobNamespace, force), cancellationToken);
+        return output.Trim();
+    }
+
+    /// <summary>
+    /// Stops a running job, delivering the given stop reason so <c>onStopped</c> paths are testable.
+    /// </summary>
+    public async Task<string> StopScheduledJobAsync(string packageName, string jobId, string? jobNamespace = WorkManagerNamespace)
+    {
+        var output = await RunAdbWithOutputAsync(BuildJobSchedulerArguments("stop", packageName, jobId, jobNamespace));
+        return output.Trim();
+    }
+
+    internal static string[] BuildJobSchedulerArguments(
+        string action, string packageName, string jobId, string? jobNamespace, bool force = false)
+    {
+        var arguments = new List<string> { "shell", "cmd", "jobscheduler", action };
+        if (force) arguments.Add("-f");
+        if (!string.IsNullOrWhiteSpace(jobNamespace))
+            arguments.AddRange(["-n", jobNamespace]);
+        arguments.AddRange([packageName, jobId]);
+        return arguments.ToArray();
+    }
+
+    private async Task<string> RunJobAdbAsync(string[] arguments, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        return await RunAdbForSerialAsync(Serial, arguments, timeout.Token);
+    }
+
+    // ──────────────────────────────────────────────
     // adb helpers
     // ──────────────────────────────────────────────
 
@@ -525,10 +872,10 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
     private async Task RunAdbAsync(params string[] arguments)
         => _ = await RunAdbWithOutputAsync(arguments).ConfigureAwait(false);
 
-    private Task<string> RunAdbWithOutputAsync(params string[] arguments)
+    internal virtual Task<string> RunAdbWithOutputAsync(params string[] arguments)
         => RunAdbForSerialAsync(Serial, arguments);
 
-    private async Task<string> RunAdbForSerialAsync(string? serial, string[] arguments)
+    private async Task<string> RunAdbForSerialAsync(string? serial, string[] arguments, CancellationToken cancellationToken = default)
     {
         var adbArguments = BuildAdbArguments(serial, arguments);
         var processStartInfo = CreateAdbProcessStartInfo(AdbPath, adbArguments);
@@ -539,7 +886,7 @@ public class AndroidAppDriver : AppDriverBase, IAlertDriver
             processStartInfo,
             output,
             error,
-            CancellationToken.None).ConfigureAwait(false);
+            cancellationToken).ConfigureAwait(false);
 
         if (exitCode != 0)
             throw new InvalidOperationException($"adb {string.Join(" ", arguments)} failed: {error}");

@@ -206,7 +206,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
             false);
 
         window.Center();
-        window.ReleasedWhenClosed = false;
+        window.ReleaseWhenClosed(false);
 
         // Cascade additional windows so they don't stack on top of each other
         if (_windowCascadeOffset > 0)

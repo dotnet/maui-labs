@@ -23,10 +23,12 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.De
   --results-directory artifacts\TestResults\InspectorBrowser
 ```
 
-All **19** fixtures must execute and pass: the original eleven Layout workspace checks,
+All **21** fixtures must execute and pass: the original eleven Layout workspace checks,
 cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticInputsRevision`
 invalidation/Live rescanning with unchanged geometry, two queued Live cancellation checks,
-three property/Network synchronization checks, and the disconnected overlay's "Retry now" check.
+three property/Network synchronization checks, and three connection recovery checks covering
+Retry feedback/reduced motion, hung state-request cancellation, and recovery with a live event
+socket (including after a webview visibility change).
 Disabling Live cancels queued automatic rescans while preserving an explicit refresh requested
 during an active scan; it does not abort the in-flight scan.
 
@@ -37,7 +39,7 @@ while detail stays open. Response gates hold each loading state until asserted; 
 clock drives the real polling intervals instead of wall-clock sleeps.
 
 `ci-devflow.yml` provisions Chromium in its dedicated `inspector-layout-browser` Windows job and
-sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 19 passed results and fails
+sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 21 passed results and fails
 if any filtered test is skipped; adding another fixture requires updating the explicit count.
 It also repeats all three synchronization cases five times, failing immediately on any failure
 or skip. The Windows live integration job enables these browser fixtures alongside the native
@@ -88,13 +90,19 @@ is required.
 Coverage includes runtime property writes and rejection, source-button
 clean/pending/dirty states, selection preservation after real state refresh,
 property filtering, numeric validation, color-editor alpha handling, and off-screen overlays (dimmed in the tree,
-not drawn or highlighted on the Preview). Only the agent's controlled responses
-are mocked; browser requests are not intercepted and HTML is not injected.
+not drawn or highlighted on the Preview). Tap regressions cover immediate pending feedback,
+rejection (including a later rejected tap during an accepted tap's capture), automatic retry after
+failed state or image requests, and retaining the previous complete frame
+until its replacement screenshot loads. An unchanged immediate capture retries once so delayed
+UI mutations are not mistaken for the completed tap. A stalled replacement image shares the
+state request's deadline so refresh cleanup and retries cannot remain blocked. Playwright's clock verifies that the post-acknowledgement
+capture starts within 50 ms of browser time, rather than waiting the former fixed 400 ms.
+HTML and shipped scripts are not replaced.
 Teardown stops browser timers and prevents a late pagehide keepalive request, then
 drains HTTP traffic before disposing the
 Inspector and awaiting the agent server's shutdown.
-The only intercepted browser request is one held `/api/state` response, which keeps
-a refresh in flight while a tap lands.
+Controlled browser response gates hold a pre-tap `/api/state` response, a tap acknowledgement,
+failed/retried state requests, or the replacement screenshot to assert each pending state.
 
 From the repository root (PowerShell):
 

@@ -17,6 +17,15 @@ internal static class SyntheticTouchGeometry
 
     internal readonly record struct Drag(double StartX, double StartY, double DeltaX, double DeltaY);
 
+    internal readonly record struct Tap(double X, double Y);
+
+    /// <summary>
+    /// A drag from a point on the element to an end point. <see cref="ToX"/>/<see cref="ToY"/> are
+    /// relative to the drop target when there is one and to the element otherwise; both are null
+    /// when the drag ends at the centre of the drop target.
+    /// </summary>
+    internal readonly record struct PointDrag(double FromX, double FromY, double? ToX, double? ToY);
+
     /// <summary>
     /// Two fingers on a horizontal line through the origin. The origin is moved inwards when a
     /// full-radius pinch there would put a finger off the view. Null when the view is too small
@@ -74,6 +83,60 @@ internal static class SyntheticTouchGeometry
         var dx = deltaX * factor;
         var dy = deltaY * factor;
         return new Drag(width / 2 - dx / 2, height / 2 - dy / 2, dx, dy);
+    }
+
+    /// <summary>
+    /// A tap exactly where it was asked for. Unlike the gestures, a tap is not nudged inwards —
+    /// content on a canvas is hit-tested from this point, so moving it would tap something else.
+    /// Null when the point is not on the view: the near edges count as on it, the far edges not.
+    /// </summary>
+    internal static Tap? ForTap(double width, double height, double x, double y)
+    {
+        if (!(width > 0) || !(height > 0) || !double.IsFinite(x) || !double.IsFinite(y))
+            return null;
+
+        return x >= 0 && y >= 0 && x < width && y < height ? new Tap(x, y) : null;
+    }
+
+    /// <summary>
+    /// Works out where a drag from a point ends: at <paramref name="toX"/>/<paramref name="toY"/>, at
+    /// the drop target (its centre unless a point on it is given), or a vector away from the start.
+    /// Returns the reason when the request is incomplete or names more than one end. The start
+    /// point is not nudged or checked against the element here; the caller does that against the
+    /// element's live bounds, and the end may lie off the element — dragging past a slider's end or
+    /// onto another view is what a drag is for.
+    /// </summary>
+    internal static string? TryPlanPointDrag(
+        double? x, double? y, double? toX, double? toY, bool hasDropTarget,
+        double? deltaX, double? deltaY, out PointDrag plan)
+    {
+        plan = default;
+        if (x is not { } fromX || y is not { } fromY)
+            return "A drag from a point needs both x and y";
+        if (toX.HasValue != toY.HasValue)
+            return "toX and toY must be given together";
+        if (!double.IsFinite(fromX) || !double.IsFinite(fromY)
+            || toX is { } tx && !double.IsFinite(tx) || toY is { } ty && !double.IsFinite(ty)
+            || deltaX is { } dx0 && !double.IsFinite(dx0) || deltaY is { } dy0 && !double.IsFinite(dy0))
+            return "Drag coordinates must be finite numbers";
+
+        var hasDelta = deltaX.HasValue || deltaY.HasValue;
+        if (hasDelta && (toX.HasValue || hasDropTarget))
+            return "Give the end of a drag once: as toX/toY, a drop target, or a deltaX/deltaY vector";
+
+        if (hasDropTarget || toX.HasValue)
+        {
+            plan = new PointDrag(fromX, fromY, toX, toY);
+            return null;
+        }
+
+        var dx = deltaX ?? 0;
+        var dy = deltaY ?? 0;
+        if (dx == 0 && dy == 0)
+            return "A drag from a point needs an end: toX/toY, a drop target, or a non-zero deltaX/deltaY";
+
+        plan = new PointDrag(fromX, fromY, fromX + dx, fromY + dy);
+        return null;
     }
 
     private static bool HasRoom(double width, double height)

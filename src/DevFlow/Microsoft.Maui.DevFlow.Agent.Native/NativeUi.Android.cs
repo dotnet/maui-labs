@@ -21,6 +21,8 @@ internal static partial class NativeUi
     public static string DeviceTypeName =>
         Build.Fingerprint?.Contains("generic", StringComparison.OrdinalIgnoreCase) == true ? "virtual" : "physical";
 
+    public static string? DeviceIdentifier => null;
+
     private static Activity? _currentActivity;
 
     /// <summary>
@@ -537,10 +539,10 @@ internal static partial class NativeUi
         return stream.ToArray();
     }
 
-    public static byte[]? CaptureScreen()
+    public static Task<byte[]?> CaptureScreen()
     {
         var decor = CurrentActivity?.Window?.DecorView;
-        return decor == null ? null : CaptureView(decor);
+        return Task.FromResult(decor == null ? null : CaptureView(decor));
     }
 
     public static IReadOnlyDictionary<string, string?> GetProperties(object viewObject)

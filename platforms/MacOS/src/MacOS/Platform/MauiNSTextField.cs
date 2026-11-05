@@ -84,17 +84,20 @@ internal class MauiNSTextFieldCell : NSTextFieldCell
         return InsetRect(base.TitleRectForBounds(theRect));
     }
 
-    public override void DrawInteriorWithFrame(CGRect cellFrame, NSView inView)
+    public override void DrawInteriorWithFrame(CGRect cellFrame, NSView? inView)
     {
+        if (inView == null)
+            return;
+
         base.DrawInteriorWithFrame(InsetRect(cellFrame), inView);
     }
 
-    public override void EditWithFrame(CGRect aRect, NSView inView, NSText editor, NSObject delegateObject, NSEvent theEvent)
+    public override void EditWithFrame(CGRect aRect, NSView? inView, NSText? editor, NSObject? delegateObject, NSEvent theEvent)
     {
         base.EditWithFrame(InsetRect(aRect), inView, editor, delegateObject, theEvent);
     }
 
-    public override void SelectWithFrame(CGRect aRect, NSView inView, NSText editor, NSObject delegateObject, nint selStart, nint selLength)
+    public override void SelectWithFrame(CGRect aRect, NSView? inView, NSText? editor, NSObject? delegateObject, nint selStart, nint selLength)
     {
         base.SelectWithFrame(InsetRect(aRect), inView, editor, delegateObject, selStart, selLength);
     }

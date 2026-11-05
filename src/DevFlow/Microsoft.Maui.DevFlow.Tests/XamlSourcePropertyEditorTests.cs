@@ -192,6 +192,31 @@ public sealed class XamlSourcePropertyEditorTests : IDisposable
         Assert.Equal(xaml, await File.ReadAllTextAsync(sourcePath));
     }
 
+    [Theory]
+    [InlineData("FontSize", "32")]
+    [InlineData("Opacity", "0.5")]
+    public async Task PersistAsync_StyleOrDefaultProperty_RequiresDirectAttributeWithoutWriting(string property, string value)
+    {
+        var (sourcePath, xaml) = await CreateProjectAsync("""
+            <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+                <ContentPage.Resources>
+                    <Style x:Key="Heading" TargetType="Label">
+                        <Setter Property="FontSize" Value="28" />
+                    </Style>
+                </ContentPage.Resources>
+                <Label Text="Original" Style="{StaticResource Heading}" />
+            </ContentPage>
+            """);
+        var element = CreateElement(sourcePath, xaml, "<Label");
+
+        var result = await CreateEditor(sourcePath).PersistAsync(element, property, value);
+
+        Assert.Equal(XamlSourceEditStatus.Unsupported, result.Status);
+        Assert.Contains("not declared as a direct XAML attribute", result.Error);
+        Assert.Equal(xaml, await File.ReadAllTextAsync(sourcePath));
+    }
+
     [Fact]
     public async Task PersistAsync_ValueBeginningWithBrace_IsEscapedAsLiteral()
     {

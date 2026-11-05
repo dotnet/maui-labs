@@ -136,7 +136,7 @@ internal class MacOSModalManager
 			NSWindowStyle.Titled | NSWindowStyle.Closable | NSWindowStyle.Resizable,
 			NSBackingStore.Buffered,
 			deferCreation: false);
-		sheetWindow.ReleasedWhenClosed = false;
+		sheetWindow.ReleaseWhenClosed(false);
 
 		// Apply min size constraints to the sheet window
 		var minWidth = MacOSPage.GetModalSheetMinWidth(page);
@@ -269,7 +269,7 @@ internal class MacOSModalManager
 			NSWindowStyle.Titled | NSWindowStyle.Resizable,
 			NSBackingStore.Buffered,
 			deferCreation: false);
-		modalWindow.ReleasedWhenClosed = false;
+		modalWindow.ReleaseWhenClosed(false);
 
 		var minWidth = MacOSPage.GetModalSheetMinWidth(page);
 		var minHeight = MacOSPage.GetModalSheetMinHeight(page);

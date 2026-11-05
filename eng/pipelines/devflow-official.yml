@@ -267,6 +267,27 @@ extends:
             - script: .dotnet/dotnet workload install maui ios maccatalyst macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
             - script: |
+                set -euo pipefail
+                android_sdk=$(.dotnet/dotnet build \
+                  -t:InstallAndroidDependencies \
+                  -f net10.0-android \
+                  -p:AcceptAndroidSDKLicenses=true \
+                  -getProperty:AndroidSdkDirectory \
+                  src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj)
+                if [ ! -f "$android_sdk/platforms/android-36/android.jar" ]; then
+                  echo "##vso[task.logissue type=error]Android SDK platform 36 was not installed at '$android_sdk'."
+                  exit 1
+                fi
+                echo "Resolved Android SDK: $android_sdk"
+                echo "##vso[task.setvariable variable=ANDROID_HOME]$android_sdk"
+                echo "##vso[task.setvariable variable=ANDROID_SDK_ROOT]$android_sdk"
+              displayName: Install Android SDK dependencies
+            - script: ./gradlew --no-daemon testReleaseUnitTest assembleRelease exportMlKitRuntime
+              displayName: Build and Test EssentialsAI Kotlin Bridge
+              workingDirectory: $(Build.SourcesDirectory)/src/AI/AndroidNative/EssentialsAI
+              env:
+                ANDROID_HOME: $(ANDROID_HOME)
+            - script: |
                 ./eng/common/build.sh \
                   --configuration $(_BuildConfig) \
                   --restore \
@@ -274,6 +295,7 @@ extends:
                   --prepareMachine \
                   --ci \
                   --projects $(Build.SourcesDirectory)/src/AI/EssentialsAI.slnf \
+                  /p:EssentialsAIAndroidNativeArtifactsPath=$(Build.SourcesDirectory)/src/AI/AndroidNative/EssentialsAI/build/outputs \
                   /p:ValidateXcodeVersion=false
               displayName: Build EssentialsAI (macOS)
               env:
@@ -286,6 +308,14 @@ extends:
                 Contents: |
                   */$(_BuildConfig)/*/*.resources.zip
                 TargetFolder: '$(Agent.TempDirectory)/native-binaries'
+            - task: CopyFiles@2
+              displayName: Copy Android Native Binaries
+              inputs:
+                SourceFolder: '$(Build.SourcesDirectory)/src/AI/AndroidNative/EssentialsAI/build/outputs'
+                Contents: |
+                  aar/EssentialsAI-release.aar
+                  mlkit-runtime/**
+                TargetFolder: '$(Agent.TempDirectory)/native-binaries/AndroidNative'
 
           - job: EssentialsAI
             displayName: EssentialsAI - Windows
@@ -311,21 +341,41 @@ extends:
             - script: eng\common\dotnet.cmd workload install maui maui-android macos maui-tizen --version 10.0.401
               displayName: Install MAUI workloads
             - pwsh: |
+                $ErrorActionPreference = 'Stop'
                 $arguments = @(
                   'build'
                   '-t:InstallAndroidDependencies'
                   '-f'
                   'net10.0-android'
-                  "-p:AndroidSdkDirectory=$env:ANDROID_HOME"
                   '-p:AcceptAndroidSDKLicenses=true'
+                  '-getProperty:AndroidSdkDirectory,JavaSdkDirectory'
                   'src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj'
                 )
-                & eng/common/dotnet.ps1 @arguments
+                $toolchainJson = & eng/common/dotnet.ps1 @arguments
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                $toolchain = ($toolchainJson -join "`n" | ConvertFrom-Json).Properties
+                $androidSdk = $toolchain.AndroidSdkDirectory
+                $javaSdk = $toolchain.JavaSdkDirectory
+                if (!(Test-Path -LiteralPath "$androidSdk/platforms/android-36/android.jar" -PathType Leaf)) {
+                  throw "Android SDK platform 36 was not installed at '$androidSdk'."
+                }
+                if ([string]::IsNullOrWhiteSpace($javaSdk) -or
+                    !(Test-Path -LiteralPath "$javaSdk/bin/java.exe" -PathType Leaf)) {
+                  throw "The resolved Java SDK does not contain bin/java.exe: '$javaSdk'."
+                }
+                & "$javaSdk/bin/java.exe" -version
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                Write-Host "Resolved Android SDK: $androidSdk"
+                Write-Host "Resolved Java SDK: $javaSdk"
+                Write-Host "##vso[task.setvariable variable=ANDROID_HOME]$androidSdk"
+                Write-Host "##vso[task.setvariable variable=ANDROID_SDK_ROOT]$androidSdk"
+                Write-Host "##vso[task.setvariable variable=JAVA_HOME]$javaSdk"
               displayName: Install Android SDK dependencies
             - script: eng\common\cibuild.cmd
                 -configuration $(_BuildConfig)
                 -prepareMachine
                 -projects $(Build.SourcesDirectory)\src\AI\EssentialsAI.slnf
+                /p:EssentialsAIAndroidNativeArtifactsPath=$(Build.SourcesDirectory)\artifacts\bin\AndroidNative
                 $(_OfficialBuildArgs)
               displayName: Build and Test EssentialsAI
 

@@ -41,6 +41,7 @@ public sealed class MockAgentServer : IAsyncDisposable
     private string? _mockMutationLeaseId;
     private string? _mockMutationHolderKind;
     private string? _mockMutationLabel;
+    private readonly HashSet<string> _mockMutationTransactions = [];
     private int _capabilitiesRequestCount;
     private int _hitTestCount;
     private int _tapCount;
@@ -48,6 +49,9 @@ public sealed class MockAgentServer : IAsyncDisposable
     private int _screenshotCount;
     private int _keyCount;
     private WebApplication? _app;
+    public Func<string>? JobsListResponse { get; set; }
+    public Func<string>? JobRunResponse { get; set; }
+    public Func<string, bool>? RejectMutationLeaseAction { get; set; }
 
     public MockAgentServer(
         bool supportsCaptureEpoch = true,
@@ -242,19 +246,24 @@ public sealed class MockAgentServer : IAsyncDisposable
                 var requestedLabel = body.RootElement.TryGetProperty("label", out var label)
                     ? label.GetString()
                     : null;
+                var transactionId = body.RootElement.TryGetProperty("transactionId", out var transaction)
+                    ? transaction.GetString() : null;
+                if (RejectMutationLeaseAction?.Invoke(action ?? "") == true)
+                    return Results.Json(new { ok = false, allowed = false, youHold = false, error = "Lease renewal rejected." });
                 bool allowed;
                 bool youHold;
                 bool heldByOther;
                 string? currentLeaseId;
                 string? currentHolderKind;
                 string? currentLabel;
+                string? currentTransactionId;
                 lock (_mutationLeaseLock)
                 {
                     if (action == "claim")
                     {
                         var available = _mockMutationLeaseId is null ||
                             string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal);
-                        if (available || (force && !_mutationLeaseTransactionBlocked))
+                        if (available || (force && !_mutationLeaseTransactionBlocked && _mockMutationTransactions.Count == 0))
                         {
                             _mockMutationLeaseId = requestedLeaseId;
                             _mockMutationHolderKind = requestedHolderKind;
@@ -262,11 +271,19 @@ public sealed class MockAgentServer : IAsyncDisposable
                         }
                     }
                     else if (action == "release" &&
-                             string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal))
+                             string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal) &&
+                             _mockMutationTransactions.Count == 0)
                     {
                         _mockMutationLeaseId = null;
                         _mockMutationHolderKind = null;
                         _mockMutationLabel = null;
+                    }
+                    else if (action is "begin" or "end" &&
+                        !string.IsNullOrWhiteSpace(transactionId) &&
+                        string.Equals(_mockMutationLeaseId, requestedLeaseId, StringComparison.Ordinal))
+                    {
+                        if (action == "begin") _mockMutationTransactions.Add(transactionId);
+                        else _mockMutationTransactions.Remove(transactionId);
                     }
 
                     currentLeaseId = _mockMutationLeaseId;
@@ -276,6 +293,8 @@ public sealed class MockAgentServer : IAsyncDisposable
                         string.Equals(currentLeaseId, requestedLeaseId, StringComparison.Ordinal);
                     heldByOther = currentLeaseId is not null && !youHold;
                     allowed = youHold;
+                    currentTransactionId = youHold && transactionId is not null && _mockMutationTransactions.Contains(transactionId)
+                        ? transactionId : null;
                 }
                 return Results.Json(new
                 {
@@ -284,6 +303,7 @@ public sealed class MockAgentServer : IAsyncDisposable
                     youHold,
                     heldByOther,
                     leaseId = youHold ? currentLeaseId : null,
+                    transactionId = currentTransactionId,
                     holderKind = currentHolderKind,
                     label = currentLabel,
                     expiresInMs = currentLeaseId is null ? 0 : 10000,
@@ -539,8 +559,12 @@ public sealed class MockAgentServer : IAsyncDisposable
             Results.Content(MockAgentResponses.GestureSuccess, "application/json"));
     }
 
-    private static void RegisterDeviceEndpoints(WebApplication app)
+    private void RegisterDeviceEndpoints(WebApplication app)
     {
+        app.MapGet("/api/v1/device/jobs", () => Results.Content(
+            JobsListResponse?.Invoke() ?? """{"platform":"Test","supported":false,"jobs":[]}""", "application/json"));
+        app.MapPost("/api/v1/device/jobs/{identifier}/run", () => Results.Content(
+            JobRunResponse?.Invoke() ?? """{"success":false,"error":"Jobs run is unsupported."}""", "application/json"));
         app.MapGet("/api/v1/device/info", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/app", () => Results.Content(MockAgentResponses.DeviceInfo, "application/json"));
         app.MapGet("/api/v1/device/app/theme", () => Results.Content(MockAgentResponses.ThemeInfo, "application/json"));

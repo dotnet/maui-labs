@@ -63,6 +63,10 @@
         "idiom"
       ],
       "properties": {
+        "id": {
+          "type": ["string", "null"],
+          "description": "Platform device identifier when safely available, such as the simulator UDID on iOS Simulator. Null when unavailable; it must not be used to infer a host device."
+        },
         "model": {
           "type": "string",
           "description": "Device model name (e.g. 'iPhone 15 Pro', 'Pixel 8')."

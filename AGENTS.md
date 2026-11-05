@@ -433,7 +433,7 @@ Each product requires source setup **and** CI/CD configuration across two system
 
 ## DevFlow MCP Tools
 
-DevFlow exposes 73 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
+DevFlow exposes 78 MCP tools for AI agent integration (in `src/Cli/Microsoft.Maui.Cli/DevFlow/Mcp/Tools/`):
 
 | Tool | Purpose |
 |------|---------|
@@ -461,8 +461,10 @@ DevFlow exposes 73 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_files_upload` | Upload a file to an advertised app storage root |
 | `maui_fill` | Fill text into Entry/Editor |
 | `maui_focus` | Set focus to an element |
+| `maui_fold_capabilities` | Discover fold/hinge support on Android emulator or iOS simulator (no app agent required) |
 | `maui_geolocation` | GPS coordinates |
-| `maui_gesture` | Pinch/zoom, rotate, pan, swipe, double-tap, long-press |
+| `maui_gesture` | Pinch/zoom, rotate, pan, real-touch drag from a point (sliders, reorder, drop targets), swipe, double-tap, long-press |
+| `maui_get_fold_state` | Read hinge angles in degrees and observed fold mode (no app agent required) |
 | `maui_get_property` | Read any element property |
 | `maui_get_theme` | Get the current app-scoped light/dark theme |
 | `maui_hittest` | Find elements at screen coordinates |
@@ -477,6 +479,8 @@ DevFlow exposes 73 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_menu_invoke` | Invoke an application menu item (MAUI or native macOS/Catalyst menu) |
 | `maui_menu_list` | Inspect the application menu bar (MAUI MenuBarItems + native menu) |
 | `maui_navigate` | Shell navigation to a route |
+| `maui_native_dialog_detect` | Detect app or system permission dialogs without changing host focus |
+| `maui_native_dialog_respond` | Invoke an exact confirmed dialog button with safe platform automation |
 | `maui_network` | List captured HTTP requests |
 | `maui_network_clear` | Clear captured request buffer |
 | `maui_network_detail` | Full request/response details |
@@ -502,6 +506,7 @@ DevFlow exposes 73 MCP tools for AI agent integration (in `src/Cli/Microsoft.Mau
 | `maui_sensors_list` | List available device sensors |
 | `maui_sensors_start` | Start a sensor |
 | `maui_sensors_stop` | Stop a sensor |
+| `maui_set_fold_state` | Set and verify emulator/simulator hinge mode or angle (no app agent required) |
 | `maui_set_property` | Live-edit element properties |
 | `maui_set_theme` | Set the app or emulator/simulator to light, dark, or system theme |
 | `maui_status` | Agent connection status, platform, app name |

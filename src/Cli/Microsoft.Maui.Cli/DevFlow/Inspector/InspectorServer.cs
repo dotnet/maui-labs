@@ -1772,26 +1772,6 @@ public sealed class InspectorServer : IDisposable
             root.WindowId);
     }
 
-    /// <summary>Reads width/height from PNG IHDR chunk (bytes 16-23) after validating PNG signature.</summary>
-    private static (int width, int height) GetPngDimensions(byte[] png)
-    {
-        // PNG magic: 137 80 78 71 13 10 26 10
-        ReadOnlySpan<byte> pngSig = [137, 80, 78, 71, 13, 10, 26, 10];
-        if (png.Length < 24 || !png.AsSpan(0, 8).SequenceEqual(pngSig))
-            return (0, 0);
-        int w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
-        int h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
-        // Reject negative dimensions (PNG IHDR width/height are 4-byte big-endian
-        // unsigned, so a negative int here means bit 31 was set — invalid per spec)
-        // and absurdly large positive dimensions. The inspector feeds these values
-        // into CSS sizing, so an attacker-controlled or corrupt PNG could otherwise
-        // produce a multi-million-pixel viewport. 32768 is well above any real
-        // device resolution and matches common platform texture-size limits.
-        const int MaxDimension = 32768;
-        if (w <= 0 || h <= 0 || w > MaxDimension || h > MaxDimension) return (0, 0);
-        return (w, h);
-    }
-
     private async Task<(int, string, byte[])> HandleScreenshotAsync(string? frameId)
     {
         byte[]? png = null;
@@ -1850,7 +1830,7 @@ public sealed class InspectorServer : IDisposable
                     registryGeneration,
                     fullscreen) ?? Array.Empty<byte>();
                 var hasScreenshot = screenshot.Length > 0;
-                var (width, height) = hasScreenshot ? GetPngDimensions(screenshot) : (0, 0);
+                var (width, height) = hasScreenshot ? ScreenshotImage.GetPngDimensions(screenshot) : (0, 0);
                 if (width <= 0 || height <= 0)
                 {
                     width = 800;

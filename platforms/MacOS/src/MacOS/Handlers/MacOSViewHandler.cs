@@ -316,7 +316,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
             platformView.AccessibilityIdentifier = view.AutomationId;
     }
 
-    public static void MapSemantics(IViewHandler handler, IView view)
+    public static new void MapSemantics(IViewHandler handler, IView view)
     {
         if (handler.PlatformView is not NSView platformView)
             return;
@@ -421,7 +421,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         MapTransform(handler, view);
     }
 
-    public static void MapInputTransparent(IViewHandler handler, IView view)
+    public static new void MapInputTransparent(IViewHandler handler, IView view)
     {
         // When InputTransparent is true, the view should not receive any hit-testing events.
         // On macOS, we can achieve this by overriding HitTest in a custom NSView subclass,
@@ -432,7 +432,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         // We rely on the container view's HitTest override to skip InputTransparent children.
     }
 
-    public static void MapToolTip(IViewHandler handler, IView view)
+    public static new void MapToolTip(IViewHandler handler, IView view)
     {
         if (handler.PlatformView is NSView platformView && view is Microsoft.Maui.Controls.View mauiView)
         {
@@ -451,7 +451,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
     }
 
-    public static void MapContextFlyout(IViewHandler handler, IView view)
+    public static new void MapContextFlyout(IViewHandler handler, IView view)
     {
         if (handler.PlatformView is not NSView platformView || view is not Microsoft.Maui.Controls.View mauiView)
             return;
@@ -484,7 +484,7 @@ public abstract class MacOSViewHandler<TVirtualView, TPlatformView> : ViewHandle
         }
     }
 
-    static void MapFocus(IViewHandler handler, IView view, object? args)
+    static new void MapFocus(IViewHandler handler, IView view, object? args)
     {
         if (args is not FocusRequest request)
             return;

@@ -40,7 +40,8 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         SystemItemKind.Print => NSToolbar.NSToolbarPrintItemIdentifier,
         SystemItemKind.ShowColors => NSToolbar.NSToolbarShowColorsItemIdentifier,
         SystemItemKind.ShowFonts => NSToolbar.NSToolbarShowFontsItemIdentifier,
-        SystemItemKind.WritingTools => NSToolbar.NSToolbarWritingToolsItemIdentifier,
+        SystemItemKind.WritingTools when OperatingSystem.IsMacOSVersionAtLeast(15, 2)
+            => NSToolbar.NSToolbarWritingToolsItemIdentifier,
         SystemItemKind.InspectorTrackingSeparator => NSToolbar.NSToolbarInspectorTrackingSeparatorItemIdentifier,
         _ => NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
     };
@@ -885,7 +886,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
                 source = _shareItem;
             }
 
-            if (source != null)
+            if (source != null && OperatingSystem.IsMacOSVersionAtLeast(15))
                 nsItem.Hidden = !MacOSToolbarItem.GetIsVisible(source);
 
             if (source is ToolbarItem toolbarItem)
@@ -1079,7 +1080,7 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
                 Editable = false,
                 Bordered = false,
                 DrawsBackground = false,
-                Font = NSFont.BoldSystemFontOfSize(13),
+                Font = NSFont.BoldSystemFontOfSize(13)!,
                 TextColor = NSColor.Label,
                 Alignment = NSTextAlignment.Center,
             };
@@ -1181,12 +1182,13 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             nsItem.VisibilityPriority = (nint)(long)visPriority;
 
         // Item visibility (maps to NSToolbarItem.IsHidden, macOS 15+)
-        if (!MacOSToolbarItem.GetIsVisible(mauiItem))
+        if (!MacOSToolbarItem.GetIsVisible(mauiItem)
+            && OperatingSystem.IsMacOSVersionAtLeast(15))
             nsItem.Hidden = true;
 
         // Background tint color
         var tintColor = MacOSToolbarItem.GetBackgroundTintColor(mauiItem);
-        if (tintColor != null)
+        if (tintColor != null && OperatingSystem.IsMacOSVersionAtLeast(26))
             nsItem.BackgroundTintColor = AppKit.NSColor.FromRgba(
                 (nfloat)tintColor.Red, (nfloat)tintColor.Green,
                 (nfloat)tintColor.Blue, (nfloat)tintColor.Alpha);
@@ -1244,9 +1246,11 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             NSToolbar.NSToolbarPrintItemIdentifier,
             NSToolbar.NSToolbarShowColorsItemIdentifier,
             NSToolbar.NSToolbarShowFontsItemIdentifier,
-            NSToolbar.NSToolbarWritingToolsItemIdentifier,
             NSToolbar.NSToolbarInspectorTrackingSeparatorItemIdentifier,
         };
+        if (OperatingSystem.IsMacOSVersionAtLeast(15, 2))
+            ids.Add(NSToolbar.NSToolbarWritingToolsItemIdentifier);
+
         return ids.Distinct().ToArray();
     }
 
@@ -1316,9 +1320,9 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
         // Shell: pop via ShellSection navigation
         if (_shell?.CurrentItem?.CurrentItem is ShellSection section)
         {
-            var navStack = section.Navigation?.NavigationStack;
-            if (navStack != null && navStack.Count > 1)
-                section.Navigation.PopAsync();
+            var navigation = section.Navigation;
+            if (navigation.NavigationStack.Count > 1)
+                navigation.PopAsync();
         }
     }
 
@@ -1831,10 +1835,12 @@ public class MacOSToolbarManager : NSObject, INSToolbarDelegate
             }
 
             nsItem.View = itemView;
+#pragma warning disable CA1422 // NSToolbarItem still requires these compatibility sizing properties.
             nsItem.MinSize = new CoreGraphics.CGSize(desiredWidth, desiredHeight);
             nsItem.MaxSize = new CoreGraphics.CGSize(
                 viewItem.MaxWidth > 0 ? (nfloat)viewItem.MaxWidth : desiredWidth,
                 desiredHeight);
+#pragma warning restore CA1422
         }
 
         return nsItem;

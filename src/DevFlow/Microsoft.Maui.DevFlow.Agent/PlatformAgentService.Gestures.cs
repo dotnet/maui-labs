@@ -4,7 +4,6 @@ using Microsoft.Maui.Graphics;
 using Android.Views;
 #endif
 #if IOS || MACCATALYST
-using System.Runtime.InteropServices;
 using ObjCRuntime;
 using UIKit;
 #endif
@@ -117,6 +116,29 @@ public partial class PlatformAgentService
 #endif
     }
 
+    protected override async Task<PointTouchResult> TryNativePointTapAsync(VisualElement element, Point point)
+    {
+#if ANDROID
+        return await AndroidPointTapAsync(element, point);
+#elif IOS || MACCATALYST
+        return await ApplePointTapAsync(element, point, RawTouchPolicy);
+#else
+        return await base.TryNativePointTapAsync(element, point);
+#endif
+    }
+
+    protected override async Task<PointTouchResult> TryNativePointDragAsync(
+        VisualElement element, Point from, VisualElement endElement, Point to, int holdMs, int durationMs, int steps)
+    {
+#if ANDROID
+        return await AndroidPointDragAsync(element, from, endElement, to, holdMs, durationMs, steps);
+#elif IOS || MACCATALYST
+        return await ApplePointDragAsync(element, from, endElement, to, holdMs, durationMs, steps, RawTouchPolicy);
+#else
+        return await base.TryNativePointDragAsync(element, from, endElement, to, holdMs, durationMs, steps);
+#endif
+    }
+
 #if ANDROID
     // MotionEvent.ACTION_POINTER_INDEX_SHIFT — the pointer index is packed into the
     // high bits of the action for ACTION_POINTER_DOWN/UP.
@@ -147,6 +169,18 @@ public partial class PlatformAgentService
         float Left, float Top, float Density, double Width, double Height)
     {
         internal PointF ToView(double x, double y) => new(Left + (float)(x * Density), Top + (float)(y * Density));
+
+        /// <summary>
+        /// A point given from the view's own top-left rather than the visible rect's, in the
+        /// view's pixels — or null when that part of the view is scrolled or clipped out of sight.
+        /// </summary>
+        internal PointF? FromViewOrigin(double x, double y)
+        {
+            float px = (float)(x * Density), py = (float)(y * Density);
+            return px >= Left && py >= Top && px < Left + Width * Density && py < Top + Height * Density
+                ? new PointF(px, py)
+                : null;
+        }
     }
 
     /// <summary>
@@ -176,6 +210,190 @@ public partial class PlatformAgentService
 
         return new AndroidTouchSurface(
             visible.Left, visible.Top, density, visible.Width() / density, visible.Height() / density);
+    }
+
+    /// <summary>
+    /// The view a finger at <paramref name="point"/> (in <paramref name="target"/>'s pixels) may
+    /// press instead of the target, or null when the touch reaches the target. Android offers a
+    /// down to the topmost child under it first and moves on only when that child does not take
+    /// it. Whether a view takes it cannot be read back — an <c>OnTouchListener</c>, which is how
+    /// SkiaSharp's canvas and MAUI's gesture recognizers take touches, is invisible from outside —
+    /// so this fails closed: a view drawn over the target lets the touch through only when it is
+    /// known not to take it (see <see cref="LetsDownThrough"/>), and anything else blocks.
+    /// </summary>
+    private static global::Android.Views.View? FindTouchBlocker(
+        VisualElement element, global::Android.Views.View target, PointF point)
+    {
+        if (target.RootView is not { } root)
+            return null;
+
+        HashSet<global::Android.Views.View>? gestureViews = null;
+
+        var location = new int[2];
+        target.GetLocationOnScreen(location);
+        float screenX = location[0] + point.X, screenY = location[1] + point.Y;
+        global::Android.Views.View? blocker = null;
+
+        bool Contains(global::Android.Views.View view)
+        {
+            view.GetLocationOnScreen(location);
+            return screenX >= location[0] && screenY >= location[1]
+                && screenX < location[0] + view.Width && screenY < location[1] + view.Height;
+        }
+
+        // true: the target is offered the touch first; false: another view takes it; null: nothing here does.
+        bool? Offer(global::Android.Views.View view)
+        {
+            if (ReferenceEquals(view, target))
+                return true;
+
+            if (view is ViewGroup group)
+            {
+                // Android's dispatch order: highest Z first, then the last drawn.
+                var children = Enumerable.Range(0, group.ChildCount)
+                    .Select(i => (Child: group.GetChildAt(i), Index: i))
+                    .Where(c => c.Child is { Visibility: ViewStates.Visible } && Contains(c.Child))
+                    .OrderByDescending(c => c.Child!.Elevation + c.Child.TranslationZ)
+                    .ThenByDescending(c => c.Index);
+                foreach (var candidate in children)
+                {
+                    if (Offer(candidate.Child!) is { } taken)
+                        return taken;
+                }
+            }
+
+            if (LetsDownThrough(view, gestureViews ??= ViewsWithGestures(element)))
+                return null;
+
+            blocker = view;
+            return false;
+        }
+
+        return Offer(root) == false ? blocker : null;
+    }
+
+    // The platform views MAUI itself creates and leaves without touch handling of their own:
+    // layouts, Border/ContentView, the wrapper for shadows and clips, Label, Image and BoxView.
+    // Exact types only — a subclass, such as GraphicsView's PlatformTouchGraphicsView or the
+    // scroll views, may handle touches the base does not.
+    private static readonly HashSet<Type> PassThroughViewTypes =
+    [
+        typeof(global::Android.Views.View),
+        typeof(global::Android.Widget.FrameLayout),
+        typeof(global::Android.Widget.LinearLayout),
+        typeof(global::Android.Widget.TextView),
+        typeof(global::Android.Widget.ImageView),
+        typeof(global::AndroidX.AppCompat.Widget.AppCompatTextView),
+        typeof(global::AndroidX.AppCompat.Widget.AppCompatImageView),
+        typeof(global::Microsoft.Maui.Platform.LayoutViewGroup),
+        typeof(global::Microsoft.Maui.Platform.ContentViewGroup),
+        typeof(global::Microsoft.Maui.Platform.WrapperView),
+        typeof(global::Microsoft.Maui.Platform.MauiTextView),
+        typeof(global::Microsoft.Maui.Platform.MauiShapeView),
+    ];
+
+    /// <summary>
+    /// Whether a view offered a down is known to pass it on. A view's default
+    /// <c>onTouchEvent</c> keeps the down only when it is clickable, long-clickable or
+    /// context-clickable, but a touch listener or an override can keep it too. An override is
+    /// ruled out by the exact types in <see cref="PassThroughViewTypes"/>; a listener, whether
+    /// MAUI attached it for a gesture recognizer or the app attached it natively, is read from
+    /// the view, and a view whose listener cannot be read keeps the down. A text view that
+    /// follows links or selects text keeps the touch as well.
+    /// </summary>
+    private static bool LetsDownThrough(global::Android.Views.View view, HashSet<global::Android.Views.View> gestureViews)
+    {
+        if (view.Clickable || view.LongClickable
+            || (OperatingSystem.IsAndroidVersionAtLeast(23) && view.ContextClickable))
+            return false;
+
+        if (!PassThroughViewTypes.Contains(view.GetType()) || gestureViews.Contains(view))
+            return false;
+
+        if (HasTouchListener(view) != false)
+            return false;
+
+        return view is not global::Android.Widget.TextView text
+            || (text.MovementMethod == null && !text.IsTextSelectable);
+    }
+
+    private static Java.Lang.Reflect.Field? _listenerInfoField;
+    private static Java.Lang.Reflect.Field? _onTouchListenerField;
+
+    /// <summary>
+    /// Whether <c>setOnTouchListener</c> has given the view a listener, which may keep any down
+    /// it is offered; null when that cannot be read. View has no public getter for it, so it is
+    /// read from the private <c>mListenerInfo.mOnTouchListener</c> that <c>dispatchTouchEvent</c>
+    /// consults. A runtime that hides those fields makes every listener unknown.
+    /// </summary>
+    private static bool? HasTouchListener(global::Android.Views.View view)
+    {
+        try
+        {
+            if (_listenerInfoField == null)
+            {
+                var field = Java.Lang.Class.FromType(typeof(global::Android.Views.View)).GetDeclaredField("mListenerInfo");
+                field.Accessible = true;
+                _listenerInfoField = field;
+            }
+
+            // Not disposed: Field.get hands back the live peers, and the listener can be the
+            // app's own managed object.
+            var info = _listenerInfoField.Get(view);
+            if (info == null)
+                return false;
+
+            if (_onTouchListenerField == null)
+            {
+                var field = info.Class.GetDeclaredField("mOnTouchListener");
+                field.Accessible = true;
+                _onTouchListenerField = field;
+            }
+
+            return _onTouchListenerField.Get(info) != null;
+        }
+        catch (Java.Lang.Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The platform views of every element on the target's window with a MAUI gesture recognizer,
+    /// including a label's span recognizers. MAUI takes those touches through a listener on the
+    /// view, so such a view keeps a down whatever its type.
+    /// </summary>
+    private static HashSet<global::Android.Views.View> ViewsWithGestures(VisualElement element)
+    {
+        var views = new HashSet<global::Android.Views.View>();
+
+        void Visit(IVisualTreeElement node)
+        {
+            var hasGestures = node switch
+            {
+                Label { FormattedText: { } text } label => label.GestureRecognizers.Count > 0
+                    || text.Spans.Any(span => span.GestureRecognizers.Count > 0),
+                Microsoft.Maui.Controls.View view => view.GestureRecognizers.Count > 0,
+                _ => false,
+            };
+            if (hasGestures && node is VisualElement { Handler: IViewHandler handler })
+            {
+                if (handler.PlatformView is global::Android.Views.View platformView)
+                    views.Add(platformView);
+                if (handler.ContainerView is global::Android.Views.View container)
+                    views.Add(container);
+            }
+
+            foreach (var child in node.GetVisualChildren())
+                Visit(child);
+        }
+
+        if (element.Window is IVisualTreeElement window)
+            Visit(window);
+        foreach (var modal in element.Window?.Page?.Navigation.ModalStack ?? [])
+            Visit(modal);
+
+        return views;
     }
 
     /// <summary>
@@ -392,6 +610,107 @@ public partial class PlatformAgentService
         return handled ? $"MotionEvent long press ({durationMs}ms)" : null;
     }
 
+    private static async Task<PointTouchResult> AndroidPointTapAsync(VisualElement element, Point point)
+    {
+        if (GetAndroidView(element) is not { } view || GetAndroidTouchSurface(view) is not { } surface)
+            return PointTouchResult.Failed($"{element.GetType().Name} is not laid out on screen");
+        if (surface.FromViewOrigin(point.X, point.Y) is not { } at)
+            return PointTouchResult.Failed(
+                $"Point ({point.X:0.#}, {point.Y:0.#}) is not in the visible part of {element.GetType().Name}");
+        // The tap is dispatched to the view itself, so it would reach it even through a cover.
+        if (FindTouchBlocker(element, view, at) is { } cover)
+            return PointTouchResult.Failed(
+                $"Point ({point.X:0.#}, {point.Y:0.#}) on {element.GetType().Name} is covered by {cover.GetType().Name}");
+
+        // Held briefly, as a finger is; a zero-length press reads as noise to some detectors.
+        var handled = await InjectAndroidTouchAsync(view, 1, _ => [at], 0, 0, holdMs: 50);
+        return handled
+            ? PointTouchResult.Delivered($"MotionEvent tap on {view.GetType().Name}")
+            : PointTouchResult.Failed(
+                $"{view.GetType().Name} did not take the touch at ({point.X:0.#}, {point.Y:0.#}); nothing there handles touches");
+    }
+
+    /// <summary>
+    /// A drag from a point, sent through the window at screen positions rather than to the
+    /// element's view. A drag is where the rest of the hierarchy matters: an enclosing scroller
+    /// may intercept the moves and cancel the element's gesture, exactly as it would take a real
+    /// finger's, and that is the behaviour a drag test exists to see. The start must be on the
+    /// visible part of the element and a drop target's end on the visible part of the target;
+    /// the stream then goes wherever Android routes it.
+    /// </summary>
+    private static async Task<PointTouchResult> AndroidPointDragAsync(
+        VisualElement element, Point from, VisualElement endElement, Point to, int holdMs, int durationMs, int steps)
+    {
+        if (GetAndroidView(element) is not { } view || GetAndroidTouchSurface(view) is not { } surface)
+            return PointTouchResult.Failed($"{element.GetType().Name} is not laid out on screen");
+        if (surface.FromViewOrigin(from.X, from.Y) is not { } start)
+            return PointTouchResult.Failed(
+                $"Start point ({from.X:0.#}, {from.Y:0.#}) is not in the visible part of {element.GetType().Name}");
+        // Only the down is checked: once a view holds it, later moves are its own, and an
+        // ancestor may still take them over as it would from a finger.
+        if (FindTouchBlocker(element, view, start) is { } cover)
+            return PointTouchResult.Failed(
+                $"Start point ({from.X:0.#}, {from.Y:0.#}) on {element.GetType().Name} is covered by {cover.GetType().Name}");
+
+        var root = view.RootView;
+        if (root == null)
+            return PointTouchResult.Failed($"{element.GetType().Name} is not attached to a window");
+
+        var endView = view;
+        PointF end;
+        if (ReferenceEquals(endElement, element))
+        {
+            end = new PointF((float)(to.X * surface.Density), (float)(to.Y * surface.Density));
+        }
+        else
+        {
+            // The target is not scrolled into view: it is dropped on where it is, and one off
+            // screen cannot be reached in the same stroke by a finger either.
+            if (GetAndroidView(endElement) is not { } targetView || !ReferenceEquals(targetView.RootView, root))
+                return PointTouchResult.Failed($"The drop target {endElement.GetType().Name} is not in the same window");
+
+            var visible = new global::Android.Graphics.Rect();
+            float tx = (float)(to.X * surface.Density), ty = (float)(to.Y * surface.Density);
+            if (!targetView.IsShown || !targetView.GetLocalVisibleRect(visible) || !visible.Contains((int)tx, (int)ty))
+                return PointTouchResult.Failed(
+                    $"End point ({to.X:0.#}, {to.Y:0.#}) is not in the visible part of the drop target {endElement.GetType().Name}");
+
+            end = new PointF(tx, ty);
+            if (FindTouchBlocker(endElement, targetView, end) is { } targetCover)
+                return PointTouchResult.Failed(
+                    $"End point ({to.X:0.#}, {to.Y:0.#}) on the drop target {endElement.GetType().Name} is covered by {targetCover.GetType().Name}");
+
+            endView = targetView;
+        }
+
+        var origin = new int[2];
+        root.GetLocationOnScreen(origin);
+        PointF InRoot(global::Android.Views.View owner, PointF point)
+        {
+            var at = new int[2];
+            owner.GetLocationOnScreen(at);
+            return new PointF(point.X + at[0] - origin[0], point.Y + at[1] - origin[1]);
+        }
+
+        var a = InRoot(view, start);
+        var b = InRoot(endView, end);
+        var handled = await InjectAndroidTouchAsync(
+            root,
+            pointerCount: 1,
+            positionsAt: t => [new PointF(a.X + (b.X - a.X) * (float)t, a.Y + (b.Y - a.Y) * (float)t)],
+            durationMs: durationMs > 0 ? durationMs : 200,
+            steps: steps,
+            holdMs: holdMs,
+            settleMs: 60);
+
+        var onto = ReferenceEquals(endElement, element) ? "" : $" on drop target {endElement.GetType().Name}";
+        return handled
+            ? PointTouchResult.Delivered(
+                $"MotionEvent drag from ({from.X:0.#}, {from.Y:0.#}) to ({to.X:0.#}, {to.Y:0.#}){onto}, through the window")
+            : PointTouchResult.Failed(
+                $"Nothing under ({from.X:0.#}, {from.Y:0.#}) on {element.GetType().Name} took the touch");
+    }
+
     private static async Task<string?> AndroidDoubleTapAsync(VisualElement element)
     {
         if (GetAndroidView(element) is not { } view || GetAndroidTouchSurface(view) is not { } surface)
@@ -410,25 +729,8 @@ public partial class PlatformAgentService
 #endif
 
 #if IOS || MACCATALYST
-    // UIGestureRecognizer.state is readonly in the public API. Driving it is how
-    // synthetic gestures reach recognizers we do not own; UIKit dispatches the
-    // recognizer's target actions on each state change.
-    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
-    private static extern void SetGestureRecognizerState(IntPtr receiver, IntPtr selector, nint state);
-
     private static bool TrySetState(UIGestureRecognizer recognizer, UIGestureRecognizerState state)
-    {
-        try
-        {
-            SetGestureRecognizerState(recognizer.Handle, Selector.GetHandle("setState:"), (nint)(long)state);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] setState: failed: {ex.GetBaseException().Message}");
-            return false;
-        }
-    }
+        => AppleTouchInjector.TrySetState(recognizer, state);
 
     private static UIView? GetAppleView(VisualElement element) => element.Handler?.PlatformView as UIView;
 
@@ -623,6 +925,28 @@ public partial class PlatformAgentService
             null);
         return policy.Resolve(view, center);
     }
+
+    /// <summary>
+    /// Scrolls every enclosing scroll view so the whole of <paramref name="view"/> is on screen, as
+    /// a user would before touching it — the Android tier does the same. Without it a point on
+    /// an element below the fold hit-tests to nothing.
+    /// </summary>
+    private static void ScrollIntoView(UIView view)
+    {
+        for (var ancestor = view.Superview; ancestor != null; ancestor = ancestor.Superview)
+        {
+            if (ancestor is UIScrollView scrollView)
+                scrollView.ScrollRectToVisible(view.ConvertRectToView(view.Bounds, scrollView), animated: false);
+        }
+
+        view.Window?.LayoutIfNeeded();
+    }
+
+    /// <summary>Why a point in window coordinates is not one a finger could touch, or null.</summary>
+    private static string? OffScreenReason(UIWindow window, CoreGraphics.CGPoint point, Point requested, string what)
+        => window.Bounds.Contains(point)
+            ? null
+            : $"Point ({requested.X:0.#}, {requested.Y:0.#}) on {what} is off screen and could not be scrolled into view";
 
     /// <summary>A point relative to <paramref name="view"/>'s bounds, in window coordinates.</summary>
     private static CoreGraphics.CGPoint ToWindow(UIView view, double x, double y)
@@ -871,6 +1195,299 @@ public partial class PlatformAgentService
         await Task.Delay(durationMs);
         TrySetState(recognizer, UIGestureRecognizerState.Ended);
         return $"UILongPressGestureRecognizer ({durationMs}ms)";
+    }
+
+    /// <summary>
+    /// A tap at a point, for content a canvas draws and hit-tests itself. The touch goes where a
+    /// finger at that point would: the view the window hit-tests there, which must be the element
+    /// or inside it. When that view or its ancestors up to the element carry gesture recognizers
+    /// — SkiaSharp's SKTouchHandler, Syncfusion's tap and touch recognizers — the tap is delivered
+    /// to them; a raw-touch view the policy accepts, such as GraphicsView, takes it directly.
+    /// </summary>
+    private static async Task<PointTouchResult> ApplePointTapAsync(
+        VisualElement element, Point point, AppleRawTouchPolicy? policy)
+    {
+        if (policy == null)
+            return PointTouchResult.Failed(
+                "Tap at a point needs AgentOptions.EnableSyntheticTouch on iOS and Mac Catalyst");
+
+        var view = GetAppleView(element);
+        if (view?.Window is not { } window)
+            return PointTouchResult.Failed($"{element.GetType().Name} is not in a window");
+
+        ScrollIntoView(view);
+        var at = ToWindow(view, point.X, point.Y);
+        if (OffScreenReason(window, at, point, element.GetType().Name) is { } offScreen)
+            return PointTouchResult.Failed(offScreen);
+
+        var hit = window.HitTest(at, null);
+        if (hit == null || !(ReferenceEquals(hit, view) || hit.IsDescendantOfView(view)))
+            return PointTouchResult.Failed(
+                $"Point ({point.X:0.#}, {point.Y:0.#}) on {element.GetType().Name} is covered by {hit?.GetType().Name ?? "nothing"}");
+
+        // Controls act from their own touch tracking and scroll views scroll from it; both are
+        // reached through the element tap, which invokes them properly.
+        if (hit is UIControl or UIScrollView)
+            return PointTouchResult.Failed(
+                $"Point ({point.X:0.#}, {point.Y:0.#}) lands on a {hit.GetType().Name}; tap that element by its id instead");
+
+        var recognizers = CollectTouchRecognizers(hit, view);
+        if (recognizers.Count > 0)
+        {
+            var received = await AppleTouchInjector.DriveRecognizersAsync(hit, recognizers, _ => at, holdMs: 50, durationMs: 0, steps: 0);
+            if (received == null)
+                return PointTouchResult.Failed("A synthetic UITouch could not be delivered on this OS version");
+            if (received.Count == 0)
+                return PointTouchResult.Failed($"Every recognizer on {hit.GetType().Name} declined the touch");
+
+            var recognized = received
+                .Where(r => r.State is UIGestureRecognizerState.Ended or UIGestureRecognizerState.Began)
+                .Select(r => r.GetType().Name)
+                .Distinct()
+                .ToList();
+
+            var via = recognized.Count > 0
+                ? $"recognized by {string.Join(", ", recognized)}"
+                : $"delivered to {string.Join(", ", received.Select(r => r.GetType().Name).Distinct())}";
+            return PointTouchResult.Delivered($"Synthetic UITouch tap on {hit.GetType().Name}, {via}");
+        }
+
+        if (policy.Accepts(hit)
+            && await AppleTouchInjector.InjectAsync(hit, _ => [at], 0, 0, holdMs: 50))
+            return PointTouchResult.Delivered($"Synthetic UITouch tap on {hit.GetType().Name}");
+
+        return PointTouchResult.Failed(
+            $"{hit.GetType().Name} has no gesture recognizer and is not a registered raw-touch view; "
+            + "add its type to AgentOptions.SyntheticTouchViewTypes if it overrides touchesBegan:");
+    }
+
+    /// <summary>
+    /// A drag from a point, fed to whatever a finger there would reach: the gesture recognizers
+    /// of the view under the point up to the element — MAUI's pan and tap, SkiaSharp's
+    /// SKTouchHandler — or, failing those, a raw-touch view the policy accepts. All of them see
+    /// one touch begin, move along the path and end, so the recognizers settle among themselves
+    /// as they do for a finger: a pan begins once the touch has travelled, and a tap on the same
+    /// view fails because it moved.
+    /// </summary>
+    private static async Task<PointTouchResult> ApplePointDragAsync(
+        VisualElement element, Point from, VisualElement endElement, Point to,
+        int holdMs, int durationMs, int steps, AppleRawTouchPolicy? policy)
+    {
+        if (policy == null)
+            return PointTouchResult.Failed(
+                "A drag from a point needs AgentOptions.EnableSyntheticTouch on iOS and Mac Catalyst");
+
+        var view = GetAppleView(element);
+        if (view?.Window is not { } window)
+            return PointTouchResult.Failed($"{element.GetType().Name} is not in a window");
+
+        var endView = ReferenceEquals(endElement, element) ? view : GetAppleView(endElement);
+        if (endView == null || !ReferenceEquals(endView.Window, window))
+            return PointTouchResult.Failed($"The drop target {endElement.GetType().Name} is not in the same window");
+
+        // The drag starts on the element, so it is the one brought on screen; a drop target that
+        // is then out of sight is dropped on where it is, as a finger would have to.
+        ScrollIntoView(view);
+        var start = ToWindow(view, from.X, from.Y);
+        var end = ToWindow(endView, to.X, to.Y);
+        if (OffScreenReason(window, start, from, element.GetType().Name) is { } offScreen)
+            return PointTouchResult.Failed(offScreen);
+
+        var hit = window.HitTest(start, null);
+        if (hit == null || !(ReferenceEquals(hit, view) || hit.IsDescendantOfView(view)))
+            return PointTouchResult.Failed(
+                $"Start point ({from.X:0.#}, {from.Y:0.#}) on {element.GetType().Name} is covered by {hit?.GetType().Name ?? "nothing"}");
+
+        // A drop target must be where a finger can release on it: on screen and uncovered. An end
+        // on the element itself may lie past its edge, so only a separate target is checked.
+        if (!ReferenceEquals(endView, view))
+        {
+            var targetName = $"the drop target {endElement.GetType().Name}";
+            if (!window.Bounds.Contains(end))
+                return PointTouchResult.Failed($"End point ({to.X:0.#}, {to.Y:0.#}) on {targetName} is off screen");
+
+            // Hidden and scrolled-out targets hit-test to something else, as covered ones do.
+            var endHit = window.HitTest(end, null);
+            if (endHit == null || !(ReferenceEquals(endHit, endView) || endHit.IsDescendantOfView(endView)))
+                return PointTouchResult.Failed(
+                    $"End point ({to.X:0.#}, {to.Y:0.#}) on {targetName} is hidden or covered by {endHit?.GetType().Name ?? "nothing"}");
+        }
+
+        // Controls and scroll views track touches themselves and are not handed synthetic ones;
+        // see AppleRawTouchPolicy.
+        if (hit is UIControl or UIScrollView)
+            return PointTouchResult.Failed(
+                $"Start point ({from.X:0.#}, {from.Y:0.#}) lands on a {hit.GetType().Name}, which tracks its own touches; " +
+                "drag it with set-property, or a pan on its container");
+
+        if (FindCompetingRecognizer(hit, view, start, end, holdMs) is { } competitor)
+            return PointTouchResult.Failed(
+                $"A drag from ({from.X:0.#}, {from.Y:0.#}) to ({to.X:0.#}, {to.Y:0.#}) would also reach "
+                + $"{competitor.GetType().Name} on the enclosing {competitor.View?.GetType().Name ?? "view"}, which can "
+                + "take a finger's drag over. Synthetic touches reach only the element's own recognizers and cannot "
+                + "reproduce that contest, so nothing was sent; drag along an axis the enclosing view does not use, "
+                + "or scroll it first");
+
+        CoreGraphics.CGPoint At(double t) => new(
+            (double)start.X + ((double)end.X - (double)start.X) * t,
+            (double)start.Y + ((double)end.Y - (double)start.Y) * t);
+        var dragDuration = durationMs > 0 ? durationMs : 200;
+        var onto = ReferenceEquals(endElement, element) ? "" : $" on drop target {endElement.GetType().Name}";
+        var path = $"from ({from.X:0.#}, {from.Y:0.#}) to ({to.X:0.#}, {to.Y:0.#}){onto}";
+
+        var recognizers = CollectTouchRecognizers(hit, view);
+        if (recognizers.Count > 0)
+        {
+            var received = await AppleTouchInjector.DriveRecognizersAsync(
+                hit, recognizers, At, holdMs, dragDuration, steps);
+            if (received == null)
+                return PointTouchResult.Failed("A synthetic UITouch could not be delivered on this OS version");
+            if (received.Count == 0)
+                return PointTouchResult.Failed($"Every recognizer on {hit.GetType().Name} declined the touch");
+
+            var recognized = received
+                .Where(r => r.State is UIGestureRecognizerState.Ended or UIGestureRecognizerState.Began
+                    or UIGestureRecognizerState.Changed)
+                .Select(r => r.GetType().Name)
+                .Distinct()
+                .ToList();
+            var via = recognized.Count > 0
+                ? $"recognized by {string.Join(", ", recognized)}"
+                : $"delivered to {string.Join(", ", received.Select(r => r.GetType().Name).Distinct())}";
+            return PointTouchResult.Delivered($"Synthetic UITouch drag {path}, into {hit.GetType().Name} {via}");
+        }
+
+        if (policy.Accepts(hit)
+            && await AppleTouchInjector.InjectAsync(hit, t => [At(t)], dragDuration, steps, holdMs))
+            return PointTouchResult.Delivered($"Synthetic UITouch drag {path}, into {hit.GetType().Name}");
+
+        return PointTouchResult.Failed(
+            $"{hit.GetType().Name} has no gesture recognizer and is not a registered raw-touch view; "
+            + "add its type to AgentOptions.SyntheticTouchViewTypes if it overrides touchesBegan:");
+    }
+
+    /// <summary>
+    /// The recognizers a finger on <paramref name="hit"/> would feed, walking up to
+    /// <paramref name="element"/> and no further: a recognizer above the element belongs to
+    /// something else, and a tap reported against the element must not act for it. Hover takes
+    /// no touches, and a scroll view's own recognizers scroll rather than tap.
+    /// </summary>
+    /// <remarks>
+    /// Recognizers a lone one-finger tap can never complete — a double tap, a two-finger tap, a
+    /// pinch, a rotation — are left out. UIKit fails them on a timer its gesture environment runs
+    /// for real touches only; fed this tap directly they keep it, and the next tap then completes
+    /// a stale "double tap" at this point. Neither <c>setState:</c> nor <c>reset</c> clears that.
+    /// </remarks>
+    private static List<UIGestureRecognizer> CollectTouchRecognizers(UIView hit, UIView element)
+    {
+        var found = new List<UIGestureRecognizer>();
+        for (var current = hit; current != null; current = current.Superview)
+        {
+            if (current is not UIScrollView && current.GestureRecognizers is { } recognizers)
+            {
+                foreach (var recognizer in recognizers)
+                {
+                    if (recognizer.Enabled
+                        && recognizer is not (UIHoverGestureRecognizer or UIScreenEdgePanGestureRecognizer
+                            or UIPinchGestureRecognizer or UIRotationGestureRecognizer)
+                        && recognizer is not UITapGestureRecognizer { NumberOfTapsRequired: > 1 }
+                        && recognizer is not UITapGestureRecognizer { NumberOfTouchesRequired: > 1 })
+                        found.Add(recognizer);
+                }
+            }
+
+            if (ReferenceEquals(current, element))
+                break;
+        }
+
+        return found;
+    }
+
+    // UIScrollView's pan begins once the touch has moved this far along an axis it scrolls.
+    private const double ScrollPanHysteresis = 10;
+
+    /// <summary>
+    /// A recognizer outside the element's own set that a finger dragged from
+    /// <paramref name="start"/> to <paramref name="end"/> would also feed, and that could take the
+    /// drag from the element: an enclosing scroll view's pan when the drag moves along an axis it
+    /// scrolls, or a pan, swipe, long press or unknown recognizer on an ancestor of the element.
+    /// UIKit settles that contest in its gesture environment, which synthetic touches do not run,
+    /// so a drag that would enter it is refused rather than reported as what a finger would do.
+    /// Taps are left out (the drag's movement fails them), as are recognizers that need more
+    /// fingers, swipes in directions the drag does not travel, long presses the drag does not
+    /// hold for, the screen-edge and hover recognizers, and those whose delegate declines the
+    /// touch — Shell's flyout pan takes only touches near the leading edge.
+    /// </summary>
+    private static UIGestureRecognizer? FindCompetingRecognizer(
+        UIView hit, UIView element, CoreGraphics.CGPoint start, CoreGraphics.CGPoint end, int holdMs)
+    {
+        double dx = Math.Abs((double)end.X - (double)start.X), dy = Math.Abs((double)end.Y - (double)start.Y);
+        var candidates = new List<UIGestureRecognizer>();
+        var aboveElement = false;
+
+        // The window's own recognizers are the system's gesture gates, not the app's.
+        for (var current = hit; current != null && current is not UIWindow; current = current.Superview)
+        {
+            if (current is UIScrollView scroller)
+            {
+                var insets = scroller.AdjustedContentInset;
+                var scrollsX = scroller.AlwaysBounceHorizontal
+                    || scroller.ContentSize.Width + insets.Left + insets.Right > scroller.Bounds.Width;
+                var scrollsY = scroller.AlwaysBounceVertical
+                    || scroller.ContentSize.Height + insets.Top + insets.Bottom > scroller.Bounds.Height;
+                if (scroller.ScrollEnabled
+                    && ((scrollsX && dx > ScrollPanHysteresis) || (scrollsY && dy > ScrollPanHysteresis))
+                    && scroller.PanGestureRecognizer is { Enabled: true } scrollPan)
+                    candidates.Add(scrollPan);
+            }
+
+            if (aboveElement && current.GestureRecognizers is { } recognizers)
+            {
+                foreach (var recognizer in recognizers)
+                {
+                    // A scroll view's own recognizers — its pan, weighed above, and the private
+                    // ones for touch delay, the scroll indicator and drag auto-scroll — are UIKit's
+                    // scrolling machinery; one an app attached to the scroll view still counts.
+                    if (current is UIScrollView
+                        && (recognizer.Class.Name?.StartsWith("UIScrollView", StringComparison.Ordinal) == true
+                            || recognizer.Class.Name?.StartsWith("_UI", StringComparison.Ordinal) == true))
+                        continue;
+
+                    if (!recognizer.Enabled
+                        || recognizer is UITapGestureRecognizer or UIHoverGestureRecognizer
+                            or UIScreenEdgePanGestureRecognizer or UIPinchGestureRecognizer
+                            or UIRotationGestureRecognizer
+                        || recognizer is UIPanGestureRecognizer { MinimumNumberOfTouches: > 1 }
+                        || recognizer is UISwipeGestureRecognizer { NumberOfTouchesRequired: > 1 }
+                        || (recognizer is UISwipeGestureRecognizer swipe && !MovesToward(swipe.Direction, start, end))
+                        || recognizer is UILongPressGestureRecognizer { NumberOfTouchesRequired: > 1 }
+                        // A long press the drag moves away from before it fires never fires.
+                        || (recognizer is UILongPressGestureRecognizer press
+                            && holdMs < press.MinimumPressDuration * 1000))
+                        continue;
+
+                    candidates.Add(recognizer);
+                }
+            }
+
+            if (ReferenceEquals(current, element))
+                aboveElement = true;
+        }
+
+        return candidates.Count == 0
+            ? null
+            : AppleTouchInjector.WouldReceive(hit, candidates, start)?.FirstOrDefault();
+    }
+
+    /// <summary>Whether a drag travels in any of a swipe's directions, so the swipe could fire.</summary>
+    private static bool MovesToward(
+        UISwipeGestureRecognizerDirection direction, CoreGraphics.CGPoint start, CoreGraphics.CGPoint end)
+    {
+        double dx = (double)end.X - (double)start.X, dy = (double)end.Y - (double)start.Y;
+        return (direction.HasFlag(UISwipeGestureRecognizerDirection.Right) && dx > ScrollPanHysteresis)
+            || (direction.HasFlag(UISwipeGestureRecognizerDirection.Left) && -dx > ScrollPanHysteresis)
+            || (direction.HasFlag(UISwipeGestureRecognizerDirection.Down) && dy > ScrollPanHysteresis)
+            || (direction.HasFlag(UISwipeGestureRecognizerDirection.Up) && -dy > ScrollPanHysteresis);
     }
 
     private static Task<string?> AppleDoubleTapAsync(VisualElement element)
