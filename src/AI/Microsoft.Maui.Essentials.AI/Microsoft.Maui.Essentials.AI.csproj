@@ -40,6 +40,10 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="buildTransitive/Microsoft.Maui.Essentials.AI.targets" Pack="true" PackagePath="buildTransitive/" />
+    <None Include="../AndroidNative/EssentialsAI/src/main/resources/META-INF/services/com.google.mlkit.genai.schema.guided.GenerableProvider"
+          Pack="true" PackagePath="buildTransitive/" />
+    <None Include="../AndroidNative/EssentialsAI/consumer-rules.pro" Pack="true" PackagePath="buildTransitive/" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />

@@ -14,6 +14,7 @@ on-device chat and embeddings through `Microsoft.Extensions.AI`.
 | [Apple Foundation Models](../../docs/ai/apple-foundation-models.md) | Apple toolchain, availability, images, native bridge, and validation |
 | [Windows AI language models](../../docs/ai/windows-ai-language-models.md) | Windows packaging, dependencies, model setup, and validation |
 | [Gemini Nano Android](../../docs/ai/gemini-nano-android.md) | Android binding, AICore readiness, download, and validation |
+| [Gemini Nano structured output](../../docs/ai/gemini-nano-structured-output.md) | MEAI schemas, native constraints, streaming, and packaging |
 | [Chat Playground](../../samples/AIExtensions.Sample.ChatPlayground/README.md) | Interactive provider comparison and diagnostics |
 
 Apple chat is supported on iOS, Mac Catalyst, and macOS 26+ with Apple Intelligence

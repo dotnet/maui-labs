@@ -7,3 +7,6 @@
 -keep class com.microsoft.maui.essentials.ai.NativeChatError { *; }
 -keep class com.microsoft.maui.essentials.ai.NativeCancellation { *; }
 -keep interface com.microsoft.maui.essentials.ai.NativeChatCallback { *; }
+-keepattributes Signature
+-keep class com.microsoft.maui.essentials.ai.NativeResponseObject* { *; }
+-keep class * implements com.google.mlkit.genai.schema.guided.GenerableProvider { *; }

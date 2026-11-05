@@ -67,6 +67,7 @@ fun checkStatus(
                     model.getBaseModelName(),
                 ).apply {
                     toolCallingAvailable = Feature.FUNCTION_CALLING in features
+                    structuredOutputAvailable = Feature.STRUCTURED_OUTPUT in features
                 }
             } finally {
                 model.close()
@@ -165,53 +166,72 @@ class GeminiNanoNativeClient {
         val job = operationScope.launch {
             var stream: NativeChatStream? = null
             val response = try {
-                val model = Generation.getClient(modelConfiguration(request.options.modelId))
-                val generatedResponse = try {
-                    ensureActive()
-                    val featureStatus = model.checkStatus()
-                    check(featureStatus == FeatureStatus.AVAILABLE) {
-                        "Gemini Nano is not ready (ML Kit FeatureStatus $featureStatus). Download the model explicitly before retrying."
+                val schema = request.options.responseSchemaJson?.let {
+                    require(request.options.toolsJson == null && !request.options.enableThinking) {
+                        "Gemini Nano structured output cannot be combined with native tools or thinking output."
                     }
-                    val nativeRequest = request.toNative()
-                    val features = if (nativeRequest.systemInstruction != null ||
-                        nativeRequest.enableThinking || request.options.toolsJson != null) {
-                        model.getAvailableFeatures()
-                    } else {
-                        emptyList()
-                    }
-                    if (request.options.toolsJson != null) {
-                        check(Feature.FUNCTION_CALLING in features) {
-                            "The selected Gemini Nano model does not support native function calling."
+                    NativeResponseSchema.parse(it)
+                }
+                val generatedResponse = NativeResponseProviders.withSchema(schema) {
+                    val model = Generation.getClient(modelConfiguration(request.options.modelId))
+                    try {
+                        ensureActive()
+                        val featureStatus = model.checkStatus()
+                        check(featureStatus == FeatureStatus.AVAILABLE) {
+                            "Gemini Nano is not ready (ML Kit FeatureStatus $featureStatus). Download the model explicitly before retrying."
                         }
-                    }
-                    if (nativeRequest.systemInstruction != null) {
-                        check(Feature.SYSTEM_PROMPT in features) {
-                            "The selected Gemini Nano model does not support native system instructions (requires Nano V3 or later)."
+                        val nativeRequest = request.toNative()
+                        val features = if (nativeRequest.systemInstruction != null ||
+                            nativeRequest.enableThinking || request.options.toolsJson != null || schema != null) {
+                            model.getAvailableFeatures()
+                        } else {
+                            emptyList()
                         }
-                    }
-                    if (nativeRequest.enableThinking) {
-                        check(Feature.THINKING_MODE in features) {
-                            "The selected Gemini Nano model does not support thinking mode (requires Nano V4 or later)."
+                        if (request.options.toolsJson != null) {
+                            check(Feature.FUNCTION_CALLING in features) {
+                                "The selected Gemini Nano model does not support native function calling."
+                            }
                         }
+                        if (nativeRequest.systemInstruction != null) {
+                            check(Feature.SYSTEM_PROMPT in features) {
+                                "The selected Gemini Nano model does not support native system instructions (requires Nano V3 or later)."
+                            }
+                        }
+                        if (nativeRequest.enableThinking) {
+                            check(Feature.THINKING_MODE in features) {
+                                "The selected Gemini Nano model does not support thinking mode (requires Nano V4 or later)."
+                            }
+                        }
+                        if (schema != null) {
+                            check(Feature.STRUCTURED_OUTPUT in features) {
+                                "The selected Gemini Nano model does not support native structured output."
+                            }
+                        }
+                        val modelName = model.getBaseModelName()
+                        if (schema != null) {
+                            generateStructuredResponse(model, nativeRequest, schema, modelName)
+                        } else {
+                            val tokenCount = model.countTokens(nativeRequest).totalTokens
+                            val generated = if (streaming) {
+                                val nativeStream = NativeChatStream(this, callback, modelName,
+                                    deferToolText = request.options.toolsJson != null)
+                                stream = nativeStream
+                                model.generateContent(nativeRequest, nativeStream)
+                            } else {
+                                model.generateContent(nativeRequest)
+                            }
+                            val response = generated.toNativeResponse(modelName, tokenCount)
+                            stream?.finish(response)
+                            response
+                        }
+                    } finally {
+                        model.close()
                     }
-                    val modelName = model.getBaseModelName()
-                    val tokenCount = model.countTokens(nativeRequest).totalTokens
-                    val generated = if (streaming) {
-                        val nativeStream = NativeChatStream(this, callback, modelName,
-                            deferToolText = request.options.toolsJson != null)
-                        stream = nativeStream
-                        model.generateContent(nativeRequest, nativeStream)
-                    } else {
-                        model.generateContent(nativeRequest)
-                    }
-
-                    val response = generated.toNativeResponse(modelName, tokenCount)
-                    stream?.finish(response)
-                    response
-                } finally {
-                    model.close()
                 }
                 ensureActive()
+                // Google has no typed streaming overload. Emit one validated JSON
+                // update after native inference, parsing, and model cleanup complete.
+                if (streaming && schema != null) callback.onText(generatedResponse.text, generatedResponse.modelName)
                 generatedResponse
             } catch (cause: Throwable) {
                 stream?.cancel()
@@ -327,7 +347,7 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
     builder.temperature = options.temperature
     builder.topK = options.topK
     builder.seed = options.seed
-    builder.maxOutputTokens = options.maxOutputTokens
+    builder.maxOutputTokens = options.maxOutputTokens ?: if (options.responseSchemaJson != null) 512 else null
     builder.enableThinking = options.enableThinking
     options.toolsJson?.let { builder.setTools(nativeTools(it)) }
     return builder.build()

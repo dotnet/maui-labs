@@ -216,12 +216,12 @@ public sealed class SettingsPaneViewModelTests
     }
 
     [Fact]
-    public void CreateChatOptions_GeminiDescriptor_DisablesToolsReasoningAndStructuredOutput()
+    public void CreateChatOptions_TextOnlyDescriptor_DoesNotApplyUnsupportedSettings()
     {
         using var client = new DescribedChatClient(
             new StubChatClient(),
             new ChatClientDescriptor(
-                "gemini-nano-chat", "Gemini Nano", "The first request confirms availability.",
+                "text-only", "Text only", "The first request confirms availability.",
                 SupportsImageInput: true, SupportsToolCalling: false, SupportsStructuredOutput: false));
         var settings = new SettingsPaneViewModel([client]) { UseStructuredJson = true };
 
@@ -239,6 +239,50 @@ public sealed class SettingsPaneViewModelTests
         Assert.False(settings.SelectedDescriptor.SupportsImageGeneration);
         Assert.False(settings.SelectedDescriptor.SupportsStructuredOutput);
         Assert.Contains("first request", settings.ClientStatus);
+    }
+
+    [Fact]
+    public void StructuredOutput_DisablesUnsupportedToolCombinationWithoutLosingSelections()
+    {
+        using var client = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("nano", "Nano", "Ready", SupportsToolCalling: true,
+                SupportsStructuredOutputWithTools: false));
+        var settings = new SettingsPaneViewModel([client])
+        {
+            ModelStatus = new(ChatModelAvailability.Available,
+                [ChatModelCapability.StructuredOutput, ChatModelCapability.ToolCalling]),
+            UseStructuredJson = true,
+        };
+        Assert.True(settings.SupportsStructuredOutput);
+        Assert.False(settings.SupportsToolCalling);
+        Assert.True(settings.UseCalculatorTool);
+        var options = settings.CreateChatOptions([]);
+        Assert.IsType<ChatResponseFormatJson>(options.ResponseFormat);
+        Assert.Null(options.Tools);
+        Assert.Same(ChatToolMode.None, options.ToolMode);
+
+        settings.UseStructuredJson = false;
+        Assert.True(settings.SupportsToolCalling);
+        Assert.True(settings.UseCalculatorTool);
+        var tool = AIFunctionFactory.Create(() => "value", "lookup");
+        Assert.Same(tool, Assert.Single(settings.CreateChatOptions([tool]).Tools!));
+    }
+
+    [Fact]
+    public void ModelCapabilities_ClearUnavailableStructuredSelectionAndEnableCapableProfiles()
+    {
+        using var client = CreateClient("Live", isReplay: false);
+        var settings = new SettingsPaneViewModel([client]) { UseStructuredJson = true };
+        settings.ModelStatus = new(ChatModelAvailability.Available, [ChatModelCapability.Text]);
+        Assert.False(settings.SupportsStructuredOutput);
+        Assert.False(settings.UseStructuredJson);
+        Assert.Null(settings.CreateChatOptions([]).ResponseFormat);
+
+        settings.ModelStatus = new(ChatModelAvailability.Available,
+            [ChatModelCapability.Text, ChatModelCapability.StructuredOutput]);
+        settings.UseStructuredJson = true;
+        Assert.True(settings.SupportsStructuredOutput);
+        Assert.IsType<ChatResponseFormatJson>(settings.CreateChatOptions([]).ResponseFormat);
     }
 
     private static IChatClient CreateClient(string name, bool isReplay) =>

@@ -278,7 +278,7 @@ public partial class ChatViewModel : ObservableObject
         {
             options = Settings.CreateChatOptions(tools);
         }
-        catch (ArgumentException exception)
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
         {
             Chat.StatusMessage = exception.Message;
             AddError(exception.Message);

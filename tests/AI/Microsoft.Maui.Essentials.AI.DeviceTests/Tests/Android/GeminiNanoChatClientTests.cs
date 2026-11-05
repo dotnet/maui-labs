@@ -59,7 +59,7 @@ public class GeminiNanoChatClientOptionsTests : ChatClientOptionsTestsBase<Gemin
 	protected override bool RejectsStatefulConversationOptions => true;
 	protected override bool SupportsReasoningEffortNone => true;
 
-	// The untyped ML Kit Prompt API adapter has no JSON guarantee, including schema-free JSON.
+	// Native structured output needs an explicit schema; schema-free JSON remains unsupported.
 	[Fact]
 	public override Task GetResponseAsync_WithResponseFormat_AcceptsJsonFormat() => RejectJsonAsync(false);
 
@@ -103,8 +103,8 @@ public class GeminiNanoChatClientUsageTests(ITestOutputHelper output) : ChatClie
 [Collection(nameof(GeminiNanoCollection))]
 public class GeminiNanoChatClientJsonSchemaTests : ChatClientJsonSchemaTestsBase<GeminiNanoChatClient>
 {
-	// The adapter deliberately rejects structured output rather than pretending a prompt is a schema guarantee.
-	protected override bool SupportsStructuredOutput => false;
+	protected override bool? RequiresExplicitJsonSchema => true;
+	protected override bool SupportsBaselineSamplingOptions => true;
 
 	// ML Kit's untyped Prompt API adapter also rejects schema-free JSON.
 	[Fact]
@@ -529,7 +529,6 @@ public class GeminiNanoChatClientInteropTests
 			Assert.Contains(ChatModelCapability.ImageInput, status.Capabilities!);
 			Assert.Contains(ChatModelCapability.TokenUsage, status.Capabilities!);
 			Assert.DoesNotContain(ChatModelCapability.ToolCalling, status.Capabilities!);
-			Assert.DoesNotContain(ChatModelCapability.StructuredOutput, status.Capabilities!);
 		}
 	}
 

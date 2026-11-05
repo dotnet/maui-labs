@@ -68,6 +68,7 @@
 
                     <CheckBox Grid.Row="1" IsChecked="{Binding UseStructuredJson}"
                               IsVisible="{Binding SelectedDescriptor.SupportsStructuredOutput}"
+                              IsEnabled="{Binding SupportsStructuredOutput}"
                               WidthRequest="{OnPlatform 44, MacCatalyst=32, WinUI=32}"
                               AutomationId="StructuredJsonCheckBox" />
                     <Label Grid.Row="1" Grid.Column="1" Text="Structured JSON" VerticalOptions="Center"
