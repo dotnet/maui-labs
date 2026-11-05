@@ -1,4 +1,5 @@
 #nullable enable
+using System.ComponentModel;
 using Comet.Backend;
 
 namespace Comet
@@ -6,7 +7,7 @@ namespace Comet
 	// Backend property emission + back-dismiss write-back for SelectorPanel.
 	public partial class SelectorPanel
 	{
-		bool _hooked;
+		PropertyChangedEventHandler? _selectorChanged;
 
 		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
 		{
@@ -17,10 +18,9 @@ namespace Comet
 			// growing/collapsing the footer as the panel's measured height changes.
 			node.ApplyProperty(PropertyIds.SelectorPanel_Index, PropertyValue.From(Selector.Peek()));
 
-			if (!_hooked)
+			if (_selectorChanged is null)
 			{
-				_hooked = true;
-				Selector.PropertyChanged += (_, _) =>
+				_selectorChanged = (_, _) =>
 				{
 					Node?.ApplyProperty(PropertyIds.SelectorPanel_Index, PropertyValue.From(Selector.Peek()));
 					// The panel's measured height changes with the index, so the layout must reflow (grow
@@ -29,6 +29,7 @@ namespace Comet
 					// backend's AfterFlush hook re-runs Yoga layout.
 					Comet.Reactive.ReactiveScheduler.EnsureFlushScheduled();
 				};
+				Selector.PropertyChanged += _selectorChanged;
 			}
 		}
 
@@ -37,6 +38,16 @@ namespace Comet
 			// The node intercepted a system back press while a panel was open — collapse it.
 			if (id == Backend.EventIds.SelectorPanelDismissed)
 				Selector.Value = 0;
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing && _selectorChanged is not null)
+			{
+				Selector.PropertyChanged -= _selectorChanged;
+				_selectorChanged = null;
+			}
+			base.Dispose(disposing);
 		}
 	}
 }

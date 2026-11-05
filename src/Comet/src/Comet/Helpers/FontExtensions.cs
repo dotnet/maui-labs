@@ -29,6 +29,11 @@ namespace Comet
 		public static T LineHeight<T>(this T view, double value) where T : View
 			=> view.SetEnvironment(EnvironmentKeys.Fonts.LineHeight, (object)value, true);
 
+		public static T CharacterSpacing<T>(this T view, double value) where T : View
+			=> view.SetEnvironment(nameof(ITextStyle.CharacterSpacing), (object)value, true);
+		public static T CharacterSpacing<T>(this T view, Func<double> value) where T : View
+			=> view.CharacterSpacing(value());
+
 		public static T FontWeight<T>(this T view, FontWeight value) where T : View
 			=> view.SetEnvironment(EnvironmentKeys.Fonts.Weight, (object)value, true);
 		public static T FontWeight<T>(this T view, Func<FontWeight> value) where T : View

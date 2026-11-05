@@ -5,7 +5,7 @@ using Microsoft.Maui.Layouts;
 
 namespace Comet
 {
-	public class Grid : AbstractLayout
+	public partial class Grid : AbstractLayout
 	{
 		public Grid(
 			object[] columns = null,

@@ -17,7 +17,7 @@ namespace Comet.Platform.Compose
 	/// (<see cref="IBackendManagesOwnContent"/>): the content subtree is laid out with the
 	/// shared Yoga engine to the window minus the active chrome, re-flowed on every reactive
 	/// flush and on every window-metrics change.</summary>
-	sealed class ComposeNavigationSuiteNode : ComposeNode, IBackendManagesOwnContent
+	sealed class ComposeNavigationSuiteNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		// M3 container sizes (dp): bar height, rail width; drawer sheet = the gold's max
 		// (PermanentNavigationDrawerContent sizeIn(minWidth 200, maxWidth 300)).
@@ -66,7 +66,7 @@ namespace Comet.Platform.Compose
 			if (newView is not NavigationSuite suite)
 				return;
 			_suite = suite;
-			if (!isHotReload)
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
 				return;
 			_built = false;
 			_items = System.Array.Empty<(ComposeNode, ComposeNode?)>();

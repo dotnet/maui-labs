@@ -17,6 +17,7 @@
          property doesn't leak into plain-classlib dependencies (NETSDK1203) — the same
          global-property trap Phase 4 hit with PublishTrimmed. -->
     <PublishAot Condition="'$(EnableProbeAot)' == 'true'">true</PublishAot>
+    <DefineConstants Condition="'$(EnableProbeRuntimeDiagnostics)' == 'true'">$(DefineConstants);COMET_RUNTIME_DIAGNOSTICS</DefineConstants>
   </PropertyGroup>
 
   <!-- Standalone per-sample apps: -p:CometSample=reply (or jetchat) builds this probe as
@@ -29,6 +30,20 @@
     <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1))</ApplicationTitle>
     <IntermediateOutputPath>obj/sample-$(CometSample)/</IntermediateOutputPath>
     <OutputPath>bin/sample-$(CometSample)/</OutputPath>
+  </PropertyGroup>
+
+  <!-- Optional side-by-side identity for NativeAOT runtime verification. Keep
+       the sample name last because AppDelegate derives the startup screen from it. -->
+  <PropertyGroup Condition="'$(EnableProbeAotTestIdentity)' == 'true' and '$(CometSample)' != ''">
+    <ApplicationId>com.comet.sample.aot.$(CometSample)</ApplicationId>
+    <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1)) NativeAOT</ApplicationTitle>
+  </PropertyGroup>
+
+  <!-- Keep NativeAOT compiler inputs separate from the normal sample profile,
+       including simulator builds that cannot be published with NativeAOT. -->
+  <PropertyGroup Condition="'$(EnableProbeAot)' == 'true' and '$(CometSample)' != ''">
+    <IntermediateOutputPath>obj/sample-$(CometSample)-nativeaot/</IntermediateOutputPath>
+    <OutputPath>bin/sample-$(CometSample)-nativeaot/</OutputPath>
   </PropertyGroup>
 
   <!-- App icon: one asset catalog per variant, each holding an AppIcon.appiconset with a
@@ -50,6 +65,7 @@
     <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,
          so the SAME M3 scheme is generated from a seed on both platforms (Apache-2.0). -->
     <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />
+    <Compile Include="..\Shared\SampleScreenResolver.cs" Link="Shared\SampleScreenResolver.cs" />
     <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
     <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
     <!-- Shared Reply sample (M1). -->
@@ -57,6 +73,8 @@
     <!-- Shared JetNews sample (M2). -->
     <Compile Include="..\Shared\JetNews\*.cs" Link="Shared\JetNews\%(Filename)%(Extension)" />
     <Compile Include="..\Shared\Jetsnack\*.cs" Link="Shared\Jetsnack\%(Filename)%(Extension)" />
+    <!-- Shared BaristaNotes sample (coffee-themed native-backend app). -->
+    <Compile Include="..\Shared\BaristaNotes\**\*.cs" Link="Shared\BaristaNotes\%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- Shared Jetcaster sample (M4): fixture feeds + artwork at the bundle root
          (explicit LogicalName — the SDK ignores subdir'd duplicates otherwise). -->
     <Compile Include="..\Shared\Jetcaster\*.cs" Link="Shared\Jetcaster\%(Filename)%(Extension)" />
@@ -70,6 +88,11 @@
     <BundleResource Include="Fonts\Karla-Bold.ttf" />
     <BundleResource Include="Fonts\MaterialIcons-Regular.ttf" />
     <BundleResource Include="Fonts\RobotoFlex-Regular.ttf" />
+    <!-- BaristaNotes fonts, copied unchanged from the reference app. -->
+    <BundleResource Include="Fonts\Manrope-Regular.ttf" />
+    <BundleResource Include="Fonts\Manrope-SemiBold.ttf" />
+    <BundleResource Include="Fonts\MaterialSymbols.ttf" />
+    <BundleResource Include="Fonts\coffee-icons.ttf" />
     <!-- Jetchat avatars/sticker at the bundle root so UIImage(named:) finds them. -->
     <BundleResource Include="Resources\ali.png"><LogicalName>ali.png</LogicalName></BundleResource>
     <BundleResource Include="Resources\jetnews_logo.png"><LogicalName>jetnews_logo.png</LogicalName></BundleResource>
@@ -117,6 +140,7 @@
       <Kind>Framework</Kind>
       <SmartLink>False</SmartLink>
     </NativeReference>
+    <LinkerArgument Include="-lsqlite3" />
   </ItemGroup>
 
 </Project>

@@ -26,14 +26,34 @@ namespace Comet
 			if (this.GetEnvironment<double?>(EnvironmentKeys.Fonts.LineHeight) is { } lineHeight)
 				node.ApplyProperty(PropertyIds.Text_LineHeight, PropertyValue.From(lineHeight));
 
+			if (this.GetEnvironment<string>(EnvironmentKeys.Fonts.Family) is { Length: > 0 } family)
+			{
+				var registration = FontFamilyRegistry.Resolve(family);
+				node.ApplyProperty(PropertyIds.Text_FontFamily, PropertyValue.From(registration.FaceName));
+				if (this.GetEnvironment<Microsoft.Maui.FontWeight?>(EnvironmentKeys.Fonts.Weight) is not { } &&
+					registration.PreferredWeight is { } registeredWeight)
+					node.ApplyProperty(PropertyIds.Text_FontWeight, PropertyValue.From((int)registeredWeight));
+			}
+
 			if (this.GetEnvironment<Microsoft.Maui.FontWeight?>(EnvironmentKeys.Fonts.Weight) is { } weight)
 				node.ApplyProperty(PropertyIds.Text_FontWeight, PropertyValue.From((int)weight));
 
-			if (this.GetEnvironment<string>(EnvironmentKeys.Fonts.Family) is { Length: > 0 } family)
-				node.ApplyProperty(PropertyIds.Text_FontFamily, PropertyValue.From(family));
-
 			if (this.GetEnvironment<int?>(EnvironmentKeys.Text.MaxLines) is { } maxLines and > 0)
 				node.ApplyProperty(PropertyIds.Text_MaxLines, PropertyValue.From(maxLines));
+
+			if (this.GetEnvironment<double?>(nameof(Microsoft.Maui.ITextStyle.CharacterSpacing)) is { } spacing)
+				node.ApplyProperty(PropertyIds.Text_CharacterSpacing, PropertyValue.From(spacing));
+
+			if (this.GetEnvironment<Microsoft.Maui.LineBreakMode?>(EnvironmentKeys.LineBreakMode.Mode) is { } mode)
+				node.ApplyProperty(PropertyIds.Text_LineBreakMode, PropertyValue.From(mode switch
+				{
+					Microsoft.Maui.LineBreakMode.CharacterWrap => 1,
+					Microsoft.Maui.LineBreakMode.NoWrap => 2,
+					Microsoft.Maui.LineBreakMode.HeadTruncation => 3,
+					Microsoft.Maui.LineBreakMode.TailTruncation => 4,
+					Microsoft.Maui.LineBreakMode.MiddleTruncation => 5,
+					_ => 0,
+				}));
 
 			if (this.GetEnvironment<TextLineBreak?>(EnvironmentKeys.Text.LineBreak) is { } lineBreak and not TextLineBreak.Default)
 				node.ApplyProperty(PropertyIds.Text_LineBreak, PropertyValue.From((int)lineBreak));

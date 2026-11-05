@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <_CometComposeBuildSupportDirectory Condition="'$(_CometComposeBuildSupportDirectory)' == ''">$(MSBuildThisFileDirectory)compose\</_CometComposeBuildSupportDirectory>
+  </PropertyGroup>
+  <Import Project="$(_CometComposeBuildSupportDirectory)Microsoft.AndroidX.Compose.targets"
+          Condition="'$(TargetFramework)' != '' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' and '$(_CometComposeBuildSupportImported)' != 'true'" />
+  <PropertyGroup Condition="'$(TargetFramework)' != '' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <_CometComposeBuildSupportImported>true</_CometComposeBuildSupportImported>
+  </PropertyGroup>
+</Project>

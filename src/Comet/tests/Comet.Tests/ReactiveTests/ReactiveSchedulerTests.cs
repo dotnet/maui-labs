@@ -117,13 +117,12 @@ namespace Comet.Tests
 				signal.Value = current + 1;
 			}, runImmediately: true);
 
-			// FlushSync should hit MaxFlushDepth and break the cycle.
-			// In DEBUG, the proposal says this throws InvalidOperationException.
-			// In Release, it logs a diagnostic and clears dirty sets.
+			// The first run establishes the dependency after its callback returns. The next
+			// write starts the synchronous recursive cycle in the unit-test dispatcher.
 #if DEBUG
-			Assert.Throws<InvalidOperationException>(() => ReactiveScheduler.FlushSync());
+			Assert.ThrowsAny<InvalidOperationException>(() => signal.Value++);
 #else
-			ReactiveScheduler.FlushSync(); // should not throw in Release
+			signal.Value++;
 #endif
 
 			// The scheduler should have broken out at MaxFlushDepth (100)

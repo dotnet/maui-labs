@@ -32,8 +32,23 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setDouble:property:value:")]
 		void SetDouble(CometNode node, string property, double value);
 
+		[Static, Export("setData:data:")]
+		void SetData(CometNode node, NSData data);
+
 		[Static, Export("scrollNodeToBottom:")]
 		void ScrollToBottom(CometNode node);
+
+		[Static, Export("scrollNode:toIndex:position:")]
+		void Scroll(CometNode node, nint index, nint position);
+
+		[Static, Export("scrollNode:toIndex:position:animated:")]
+		void ScrollAnimated(CometNode node, nint index, nint position, bool animated);
+
+		[Static, Export("markListContentReady:")]
+		void MarkListContentReady(CometNode node);
+
+		[Static, Export("resetListScrollReplay:")]
+		void ResetListScrollReplay(CometNode node);
 
 		[Static, Export("clearGradientStops:")]
 		void ClearGradientStops(CometNode node);
@@ -71,8 +86,17 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setDialogDismissHandler:handler:")]
 		void SetDialogDismissHandler(CometNode node, Action handler);
 
+		[Static, Export("setDialogConfirmHandler:handler:")]
+		void SetDialogConfirmHandler(CometNode node, Action handler);
+
+		[Static, Export("setDialogDismissActionHandler:handler:")]
+		void SetDialogDismissActionHandler(CometNode node, Action handler);
+
 		[Static, Export("setFocusHandler:handler:")]
 		void SetFocusHandler(CometNode node, Action handler);
+
+		[Static, Export("setCompletedHandler:handler:")]
+		void SetCompletedHandler(CometNode node, Action handler);
 
 		[Static, Export("setScrollHandler:handler:")]
 		void SetScrollHandler(CometNode node, Action<double> handler);
@@ -83,8 +107,29 @@ namespace Comet.SwiftUI.Interop
 		[Static, Export("setLongPressGestureHandler:handler:")]
 		void SetLongPressGestureHandler(CometNode node, Action handler);
 
+		[Static, Export("setRecordGestureHandler:handler:")]
+		void SetRecordGestureHandler(CometNode node, Action<double, double, double> handler);
+
 		[Static, Export("setRowVisibilityHandler:handler:")]
 		void SetRowVisibilityHandler(CometNode node, Action<double, double> handler);
+
+		[Static, Export("setSelectionChangedHandler:handler:")]
+		void SetSelectionChangedHandler(CometNode node, Action<double> handler);
+
+		[Static, Export("setDateChangedHandler:handler:")]
+		void SetDateChangedHandler(CometNode node, Action<double> handler);
+
+		[Static, Export("setRefreshHandler:handler:")]
+		void SetRefreshHandler(CometNode node, Action handler);
+
+		[Static, Export("setRefreshEndedHandler:handler:")]
+		void SetRefreshEndedHandler(CometNode node, Action handler);
+
+		[Static, Export("setBackRequestHandler:handler:")]
+		void SetBackRequestHandler(CometNode node, Action handler);
+
+		[Static, Export("setSystemThemeChangedHandler:handler:")]
+		void SetSystemThemeChangedHandler(CometNode node, Action handler);
 
 		[Static, Export("insertChild:atIndex:child:")]
 		void InsertChild(CometNode node, nint index, CometNode child);

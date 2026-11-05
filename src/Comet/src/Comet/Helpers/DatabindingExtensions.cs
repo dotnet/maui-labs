@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Comet.Backend;
 using Comet.HotReload;
 using Comet.Reactive;
 using Comet.Reflection;
@@ -94,10 +95,10 @@ namespace Comet
 			try
 			{
 				var type = typeof(T);
-				var typeName = val?.GetType().Name;
-				if ((typeName == "State`1" || typeName == "Reactive`1") && type.Name != "State`1" && type.Name != "Reactive`1")
+				if (val is Comet.Reactive.IUntypedValue valueSource &&
+					!type.IsInstanceOfType(val))
 				{
-					return val.GetPropValue<T>("Value");
+					return valueSource.UntypedValue.Cast<T>();
 				}
 				if (type == typeof(string))
 				{
@@ -248,19 +249,244 @@ namespace Comet
 			if (oldContainer is IList<View> oldContainerList && oldContainerList.Contains(mergedChild))
 			{
 				oldContainerList.Remove(mergedChild);
+				if (newContainer is View newOwner)
+				{
+					mergedChild.Parent = newOwner;
+					mergedChild.Navigation = newOwner.Navigation;
+				}
 			}
 		}
 
-		static void DetachRetainedOldChild(IContainerView oldContainer, IContainerView newContainer, View oldChild)
+		static void DetachRetainedChild(
+			IContainerView oldContainer,
+			IContainerView newContainer,
+			View mergedChild,
+			View oldChild)
 		{
-			if (oldChild is null)
+			if (ReferenceEquals(mergedChild, oldChild))
+				DetachMergedChild(oldContainer, newContainer, oldChild);
+		}
+
+		static bool HasBackendManagedContent(View view)
+			=> view?.Node is IBackendManagesOwnContent;
+
+		static bool ReconcilesBackendManagedContent(View view)
+			=> view?.Node is IBackendReconcilesOwnContent;
+
+		static bool RetainsLogicalContentOnOwnerTransfer(View view)
+			=> view?.Node is IBackendRetainsLogicalContentOnOwnerTransfer;
+
+		static bool HasMatchingReconciliationIdentity(
+			View newView,
+			View oldView,
+			bool checkRenderers)
+		{
+			if (!newView.AreSameType(oldView, checkRenderers))
+				return false;
+
+			var newKey = newView.GetKey();
+			var oldKey = oldView.GetKey();
+			return string.IsNullOrEmpty(newKey) && string.IsNullOrEmpty(oldKey)
+				|| string.Equals(newKey, oldKey, StringComparison.Ordinal);
+		}
+
+		static bool ShouldDetachOutgoingOwner(
+			View mergedChild,
+			View oldChild,
+			bool retainsLogicalContent)
+			=> ReferenceEquals(mergedChild, oldChild) ||
+				ShouldRetainOutgoingOwner(oldChild, retainsLogicalContent);
+
+		static bool ShouldRetainOutgoingOwner(
+			View oldChild,
+			bool retainsLogicalContent)
+			=> retainsLogicalContent &&
+				string.IsNullOrEmpty(oldChild.GetKey()) &&
+				(oldChild is not NavigationView navigation ||
+				 navigation.RetainsLogicalStackAfterOwnerTransfer);
+
+		static void ReconcileEquivalentNavigationRoot(
+			NavigationView newNavigation,
+			NavigationView oldNavigation,
+			bool checkRenderers)
+		{
+			var incoming = newNavigation.Content;
+			var outgoing = oldNavigation.Content;
+			if (incoming is null ||
+				outgoing is null ||
+				!NavigationView.HasSameBackendRoot(outgoing, incoming))
 				return;
-			if (ReferenceEquals(oldContainer, newContainer))
-				return;
-			if (oldContainer is IList<View> oldContainerList && oldContainerList.Contains(oldChild))
+
+			if (ReferenceEquals(incoming, outgoing))
 			{
-				oldContainerList.Remove(oldChild);
+				oldNavigation.Content = null;
+				incoming.Parent = newNavigation;
+				incoming.Navigation = newNavigation;
+				return;
 			}
+
+			var retainsLogicalContent =
+				RetainsLogicalContentOnOwnerTransfer(outgoing);
+			var merged = incoming.Diff(outgoing, checkRenderers);
+			if (!ReferenceEquals(merged, incoming))
+				newNavigation.Content = merged;
+
+			if (ShouldDetachOutgoingOwner(
+				merged,
+				outgoing,
+				retainsLogicalContent))
+				oldNavigation.Content = null;
+		}
+
+		static View ReconcileKeyedPlainView(
+			View newView,
+			View oldView,
+			bool checkRenderers)
+		{
+			// Keys retain and move backend identity, not stale declaration objects. The
+			// replacement view already owns the complete declarative payload: constructor
+			// scalars, subscriptions, callbacks, and owned content. DiffUpdate transfers the
+			// retained native node into that replacement.
+			//
+			return DiffUpdate(newView, oldView, checkRenderers);
+		}
+
+		static void DetachReplacedBackendManagedChild(
+			IContainerView oldContainer,
+			IContainerView newContainer,
+			View mergedChild,
+			View oldChild,
+			bool retainsLogicalContent)
+		{
+			// Unkeyed persistent controls can deliberately keep logical generations across
+			// an owner transfer. A keyed declaration is different: its replacement owns the
+			// complete new payload, so the outgoing owner remains in the old tree and is
+			// disposed normally after its backend node has moved.
+			if (ShouldRetainOutgoingOwner(oldChild, retainsLogicalContent) &&
+				!ReferenceEquals(mergedChild, oldChild))
+				DetachMergedChild(oldContainer, newContainer, oldChild);
+		}
+
+		static void InsertBackendChild(View parent, View child, int index)
+		{
+			var parentNode = parent.Node;
+			if (parentNode is null)
+				return;
+
+			var childNode = Backend.CometBackendBridge.MaterializeChild(child, parent);
+			parentNode.InsertChild(index, childNode);
+		}
+
+		static void RemoveBackendChild(
+			View parent,
+			IContainerView oldContainer,
+			IContainerView newContainer,
+			View child,
+			int index)
+		{
+			parent.Node?.RemoveChildAt(index);
+			DetachMergedChild(oldContainer, newContainer, child);
+			child.Dispose();
+		}
+
+		static void ReplaceBackendTail(
+			View parent,
+			IContainerView oldContainer,
+			IContainerView newContainer,
+			IReadOnlyList<View> oldChildren,
+			IReadOnlyList<View> newChildren,
+			int startIndex)
+		{
+			for (var removeIndex = oldChildren.Count - 1;
+				removeIndex >= startIndex;
+				removeIndex--)
+			{
+				RemoveBackendChild(
+					parent,
+					oldContainer,
+					newContainer,
+					oldChildren[removeIndex],
+					removeIndex);
+			}
+
+			for (var insertIndex = startIndex;
+				insertIndex < newChildren.Count;
+				insertIndex++)
+				InsertBackendChild(parent, newChildren[insertIndex], insertIndex);
+		}
+
+		static void ReconcileContentView(
+			ContentView newContentView,
+			ContentView oldContentView,
+			bool checkRenderers,
+			bool backendManagesContent)
+		{
+			var incoming = newContentView.Content;
+			var outgoing = oldContentView.Content;
+
+			if (incoming is not null &&
+				outgoing is not null &&
+				HasMatchingReconciliationIdentity(incoming, outgoing, checkRenderers))
+			{
+				var retainsLogicalContent =
+					RetainsLogicalContentOnOwnerTransfer(outgoing);
+				var merged = incoming.DiffUpdate(outgoing, checkRenderers);
+				if (!ReferenceEquals(merged, incoming))
+					newContentView.Content = merged;
+
+				if (!ReferenceEquals(newContentView, oldContentView) &&
+					ShouldDetachOutgoingOwner(
+						merged,
+						outgoing,
+						retainsLogicalContent))
+					oldContentView.Content = null;
+				return;
+			}
+
+			if (outgoing is not null)
+			{
+				if (!backendManagesContent)
+					oldContentView.Node?.RemoveChildAt(0);
+				oldContentView.Content = null;
+				outgoing.Dispose();
+			}
+
+			if (incoming is not null && !backendManagesContent)
+				InsertBackendChild(oldContentView, incoming, 0);
+		}
+
+		static List<View> NonNullChildren(IContainerView container)
+			=> container.GetChildren()
+				.Where(child => child is not null)
+				.ToList();
+
+		static void ReplaceContainerChildren(
+			IList<View> container,
+			IReadOnlyList<View> desiredChildren)
+		{
+			if (container.Any(child => child is null))
+			{
+				container.Clear();
+				for (var i = 0; i < desiredChildren.Count; i++)
+					container.Add(desiredChildren[i]);
+				return;
+			}
+
+			for (var i = 0; i < desiredChildren.Count; i++)
+			{
+				if (i < container.Count)
+				{
+					if (!ReferenceEquals(container[i], desiredChildren[i]))
+						container[i] = desiredChildren[i];
+				}
+				else
+				{
+					container.Add(desiredChildren[i]);
+				}
+			}
+
+			for (var i = container.Count - 1; i >= desiredChildren.Count; i--)
+				container.RemoveAt(i);
 		}
 
 		static View DiffUpdate(this View newView, View oldView, bool checkRenderers)
@@ -288,6 +514,11 @@ namespace Comet
 			if (newView.BuiltView is null && oldView.BuiltView?.Node is not null)
 				_ = newView.GetView();
 
+			if (newView is NavigationView reconciledNavigation &&
+				oldView is NavigationView previousNavigation &&
+				!ReferenceEquals(reconciledNavigation, previousNavigation))
+				reconciledNavigation.AdoptReconciledOwnerIdentityFrom(previousNavigation);
+
 			// Always diff the built views (the result of Body/Render)
 			// This is especially important for Components — their Render() output needs diffing
 			if (newView.BuiltView is not null && oldView.BuiltView is not null)
@@ -295,31 +526,59 @@ namespace Comet
 				newView.BuiltView.Diff(oldView.BuiltView,checkRenderers);
 			}
 
+			// Reconcile an equivalent NavigationView root before the stack-owning node
+			// transfers. This includes ordinary unkeyed positional re-renders, but excludes
+			// explicit owner switches and non-equivalent roots.
+			if (newView is NavigationView newNavigation &&
+				oldView is NavigationView oldNavigation &&
+				!ReferenceEquals(newNavigation, oldNavigation) &&
+				NavigationStackLifecycle.DetermineOwnerTransfer(
+					oldNavigation,
+					oldNavigation.GetBackendNavigationStack(),
+					newNavigation,
+					checkRenderers) == NavigationOwnerTransferAction.PreserveStack)
+				ReconcileEquivalentNavigationRoot(
+					newNavigation,
+					oldNavigation,
+					checkRenderers);
+
+			var oldManagedContent = HasBackendManagedContent(oldView);
+			var reconcilesManagedContent = ReconcilesBackendManagedContent(oldView);
 			if (newView is ContentView ncView && oldView is ContentView ocView)
 			{
-				ncView.Content?.DiffUpdate(ocView.Content, checkRenderers);
+				if (!oldManagedContent || reconcilesManagedContent)
+					ReconcileContentView(
+						ncView,
+						ocView,
+						checkRenderers,
+						oldManagedContent);
 			}
 			//Yes if one is IContainer, the other is too!
-			else if (newView is IContainerView newContainer && oldView is IContainerView oldContainer)
+			else if ((!oldManagedContent || reconcilesManagedContent) &&
+				newView is IContainerView newContainer &&
+				oldView is IContainerView oldContainer)
 			{
-				var newChildren = newContainer.GetChildren();
-				var oldChildren = oldContainer.GetChildren().ToList();
+				// The built-in containers reject null additions, but custom IContainerView
+				// implementations can surface sparse child lists. The backend child order is
+				// defined by materialized (non-null) views, so normalize both sides once before
+				// keyed or positional reconciliation.
+				var newChildren = NonNullChildren(newContainer);
+				var oldChildren = NonNullChildren(oldContainer);
 				
 				// Check if any children have keys — if so, use key-based reconciliation
-				var hasKeys = newChildren.Any(c => !string.IsNullOrEmpty(c?.GetKey()));
+				var hasKeys = newChildren.Any(c => !string.IsNullOrEmpty(c.GetKey()));
 				
 				if (hasKeys)
 				{
 					// Key-aware reconciliation: build a map of old children by key
 					var oldByKey = new Dictionary<string, View>();
 					var oldUnkeyed = new List<(int index, View view)>();
+					var desiredChildren = new List<View>(newChildren.Count);
+					var replacements = new Dictionary<View, View>();
 					
 					for (var i = 0; i < oldChildren.Count; i++)
 					{
 						var oldChild = oldChildren[i];
-						if (oldChild is null)
-							continue;
-						
 						var key = oldChild.GetKey();
 						if (!string.IsNullOrEmpty(key))
 							oldByKey[key] = oldChild;
@@ -331,10 +590,7 @@ namespace Comet
 					var unkeyedIndex = 0;
 					for (var i = 0; i < newChildren.Count; i++)
 					{
-						var newChild = newChildren.GetViewAtIndex(i);
-						if (newChild is null)
-							continue;
-						
+						var newChild = newChildren[i];
 						var key = newChild.GetKey();
 						View matchedOld = null;
 						
@@ -356,26 +612,76 @@ namespace Comet
 						
 						if (matchedOld is not null && newChild.AreSameType(matchedOld, checkRenderers))
 						{
-							// Key-aware reconciliation preserves the OLD instance for identity stability.
-							// For Components, DiffUpdate already returns the old instance (via TryMergeComponents).
-							// For non-Component views (e.g. Text), DiffUpdate returns the new instance and
-							// transfers the handler away from old — so we skip DiffUpdate and directly
-							// reuse the old instance, which retains its handler and state.
+							var retainsLogicalContent =
+								RetainsLogicalContentOnOwnerTransfer(matchedOld);
+							View mergedChild;
 							if (newChild is IComponentWithState || matchedOld is IComponentWithState)
 							{
-								var mergedChild = DiffUpdate(newChild, matchedOld, checkRenderers);
-								if (newContainer is IList<View> mutableContainer)
-								{
-									DetachMergedChild(oldContainer, newContainer, mergedChild);
-									DetachRetainedOldChild(oldContainer, newContainer, matchedOld);
-									mutableContainer[i] = mergedChild;
-								}
+								mergedChild = DiffUpdate(newChild, matchedOld, checkRenderers);
+								replacements[matchedOld] = mergedChild;
 							}
-							else if (newContainer is IList<View> mutableList)
+							else
 							{
-								DetachMergedChild(oldContainer, newContainer, matchedOld);
-								mutableList[i] = matchedOld;
+								mergedChild = ReconcileKeyedPlainView(
+									newChild,
+									matchedOld,
+									checkRenderers);
 							}
+							if (!ReferenceEquals(mergedChild, matchedOld))
+								replacements[matchedOld] = mergedChild;
+
+							desiredChildren.Add(mergedChild);
+							DetachRetainedChild(oldContainer, newContainer, mergedChild, matchedOld);
+							DetachReplacedBackendManagedChild(
+								oldContainer,
+								newContainer,
+								mergedChild,
+								matchedOld,
+								retainsLogicalContent);
+							continue;
+						}
+
+						desiredChildren.Add(newChild);
+					}
+
+					if (newContainer is IList<View> mutableContainer)
+						ReplaceContainerChildren(mutableContainer, desiredChildren);
+
+					if (oldView.Node is { } parentNode)
+					{
+						var currentChildren = oldChildren
+							.Select(child => replacements.TryGetValue(child, out var replacement)
+								? replacement
+								: child)
+							.ToList();
+
+						for (var desiredIndex = 0; desiredIndex < desiredChildren.Count; desiredIndex++)
+						{
+							var desiredChild = desiredChildren[desiredIndex];
+							var currentIndex = currentChildren.IndexOf(desiredChild);
+							if (currentIndex < 0)
+							{
+								InsertBackendChild(oldView, desiredChild, desiredIndex);
+								currentChildren.Insert(desiredIndex, desiredChild);
+							}
+							else if (currentIndex != desiredIndex)
+							{
+								parentNode.MoveChild(currentIndex, desiredIndex);
+								currentChildren.RemoveAt(currentIndex);
+								currentChildren.Insert(desiredIndex, desiredChild);
+							}
+						}
+
+						for (var removeIndex = currentChildren.Count - 1;
+							removeIndex >= desiredChildren.Count;
+							removeIndex--)
+						{
+							RemoveBackendChild(
+								oldView,
+								oldContainer,
+								newContainer,
+								currentChildren[removeIndex],
+								removeIndex);
 						}
 					}
 				}
@@ -388,6 +694,8 @@ namespace Comet
 						var o = oldChildren.GetViewAtIndex(i);
 						if (n.AreSameType(o, checkRenderers))
 						{
+							var retainsLogicalContent =
+								RetainsLogicalContentOnOwnerTransfer(o);
 							var merged = DiffUpdate(n, o, checkRenderers);
 							
 							// CRITICAL FIX: If DiffUpdate returned a different instance (e.g., merged component),
@@ -395,16 +703,49 @@ namespace Comet
 							if (merged != n && newContainer is IList<View> mutableContainer)
 							{
 								DetachMergedChild(oldContainer, newContainer, merged);
-								DetachRetainedOldChild(oldContainer, newContainer, o);
 								mutableContainer[i] = merged;
 							}
+							DetachRetainedChild(oldContainer, newContainer, merged, o);
+							DetachReplacedBackendManagedChild(
+								oldContainer,
+								newContainer,
+								merged,
+								o,
+								retainsLogicalContent);
 							continue;
 						}
 
 						if (i + 1 >= newChildren.Count || i + 1 >= oldChildren.Count)
 						{
-							//We are at the end, no point in searching
-							continue;
+							if (i >= newChildren.Count)
+							{
+								for (var removeIndex = oldChildren.Count - 1; removeIndex >= i; removeIndex--)
+									RemoveBackendChild(
+										oldView,
+										oldContainer,
+										newContainer,
+										oldChildren[removeIndex],
+										removeIndex);
+							}
+							else if (i >= oldChildren.Count)
+							{
+								for (var insertIndex = i; insertIndex < newChildren.Count; insertIndex++)
+									InsertBackendChild(
+										oldView,
+										newChildren[insertIndex],
+										insertIndex);
+							}
+							else
+							{
+								ReplaceBackendTail(
+									oldView,
+									oldContainer,
+									newContainer,
+									oldChildren,
+									newChildren,
+									i);
+							}
+							break;
 						}
 
 						//Lets see if the next 2 match
@@ -413,12 +754,20 @@ namespace Comet
 						if (n1.AreSameType(o1, checkRenderers))
 						{
 							Debug.WriteLine("The controls were replaced!");
-							//No big deal the control was replaced!
+							RemoveBackendChild(
+								oldView,
+								oldContainer,
+								newContainer,
+								o,
+								i);
+							InsertBackendChild(oldView, n, i);
 							continue;
 						}
 
 						if (n.AreSameType(o1, checkRenderers))
 						{
+							var retainsLogicalContent =
+								RetainsLogicalContentOnOwnerTransfer(o1);
 							//we removed one from the old Children and use the next one
 
 							Debug.WriteLine("One control was removed");
@@ -429,16 +778,27 @@ namespace Comet
 							if (merged != n && newContainer is IList<View> mutableContainer)
 							{
 								DetachMergedChild(oldContainer, newContainer, merged);
-								DetachRetainedOldChild(oldContainer, newContainer, o1);
 								mutableContainer[i] = merged;
 								Debug.WriteLine($"Component merge: replaced child at index {i} with merged instance");
 							}
+							DetachRetainedChild(oldContainer, newContainer, merged, o1);
+							DetachReplacedBackendManagedChild(
+								oldContainer,
+								newContainer,
+								merged,
+								o1,
+								retainsLogicalContent);
+							oldView.Node?.RemoveChildAt(i);
+							DetachMergedChild(oldContainer, newContainer, o);
+							o?.Dispose();
 							oldChildren.RemoveAt(i);
 							continue;
 						}
 
 						if (n1.AreSameType(o, checkRenderers))
 						{
+							var retainsLogicalContent =
+								RetainsLogicalContentOnOwnerTransfer(o);
 							//The next ones line up, so this was just a new one being inserted!
 							//Lets add an empty one to make them line up
 
@@ -453,13 +813,29 @@ namespace Comet
 								mutableContainer[i + 1] = merged;
 								Debug.WriteLine($"Component merge: replaced child at index {i + 1} with merged instance");
 							}
+							DetachRetainedChild(oldContainer, newContainer, merged, o);
+							DetachReplacedBackendManagedChild(
+								oldContainer,
+								newContainer,
+								merged,
+								o,
+								retainsLogicalContent);
+							InsertBackendChild(oldView, n, i);
 							oldChildren.Insert(i, null);
 							continue;
 						}
 
-						//They don't line up. Maybe we check if 2 were inserted? But for now we are just going to say oh well.
-						//The view will jsut be recreated for the restof these!
-						Debug.WriteLine("Oh WEll");
+						// The remaining declarations no longer have a stable positional
+						// alignment. Replace the tail as one generation transition so the
+						// native tree and dev registry cannot retain stale siblings while
+						// the new full-screen content is already the logical owner.
+						ReplaceBackendTail(
+							oldView,
+							oldContainer,
+							newContainer,
+							oldChildren,
+							newChildren,
+							i);
 						break;
 					}
 				}

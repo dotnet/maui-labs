@@ -18,6 +18,7 @@ namespace Comet.Platform.Compose
 		FilterChip _control;
 		readonly BackendContext _context;
 		readonly MutableState<bool> _selected = new(false);
+		readonly MutableState<int> _contentVersion = new(0);
 		ComposeNode? _labelNode;
 		ComposeNode? _leadingNode;
 
@@ -36,6 +37,7 @@ namespace Comet.Platform.Compose
 			_selected.Value = control.IsSelected;
 			_labelNode = null;   // slot views were rebuilt with the owner
 			_leadingNode = null;
+			_contentVersion.Value++;
 		}
 
 		protected override void ApplyControlProperty(PropertyId id, in PropertyValue value)
@@ -46,6 +48,7 @@ namespace Comet.Platform.Compose
 
 		public override Size Measure(double widthConstraint, double heightConstraint)
 		{
+			_ = _contentVersion.Value;
 			// The label view only measures once its backend node exists — materialize the
 			// slot first (idempotent; Render reuses the same node).
 			_labelNode ??= (ComposeNode)CometBackendBridge.Materialize(_control.LabelView, _context, _control);
@@ -58,6 +61,7 @@ namespace Comet.Platform.Compose
 
 		public override void Render(IComposer composer)
 		{
+			_ = _contentVersion.Value;
 			_labelNode ??= (ComposeNode)CometBackendBridge.Materialize(_control.LabelView, _context, _control);
 			if (_control.LeadingIconView is { } leading)
 				_leadingNode ??= (ComposeNode)CometBackendBridge.Materialize(leading, _context, _control);

@@ -34,6 +34,13 @@ namespace Comet
 		public IElementHandler NewHandler { get; }
 	}
 
+	[DynamicallyAccessedMembers(
+		DynamicallyAccessedMemberTypes.PublicFields |
+		DynamicallyAccessedMemberTypes.NonPublicFields |
+		DynamicallyAccessedMemberTypes.NonPublicMethods |
+		DynamicallyAccessedMemberTypes.PublicProperties |
+		DynamicallyAccessedMemberTypes.NonPublicProperties |
+		DynamicallyAccessedMemberTypes.PublicConstructors)]
 	public partial class View : ContextualObject, IDisposable, IView, IHotReloadableView, ISafeAreaView, IContentTypeHash, IAnimator, ITitledElement, IGestureView, IVisualTreeElement, IPadding
 	{
 		static internal readonly WeakList<IView> ActiveViews = new WeakList<IView>();
@@ -41,6 +48,8 @@ namespace Comet
 		HashSet<(string Field, string Key)> usedEnvironmentData = new HashSet<(string Field, string Key)>();
 		HashSet<IReactiveSource>? _bodyDependencies;
 		BodyDependencySubscriber? _bodySubscriber;
+		/// <summary>True when this view has an active body dependency subscriber.</summary>
+		internal bool HasActiveBodySubscriptions => _bodySubscriber is not null && _bodyDependencies is { Count: > 0 };
 		List<IDisposable>? _propertySubscriptions;
 		protected static Dictionary<string, string> HandlerPropertyMapper = new()
 		{
@@ -251,7 +260,6 @@ namespace Comet
 				}
 				var oldView = view.ViewHandler;
 				this.ReloadHandler = view.ReloadHandler;
-				this.Gestures = view.Gestures;
 				TransferBackendNodeFrom(view, isHotReload);
 				view.ViewHandler = null;
 				view.replacedView?.Dispose();
@@ -289,9 +297,11 @@ namespace Comet
 				var view = this.GetRenderView();
 				if (oldView is not null)
 					view = view.Diff(oldView, isHotReload);
-				if (view != oldView)
+				if (view != oldView &&
+					oldView?.TryRetainForOwnerTransfer() != true)
 					oldView?.Dispose();
-				if (view != oldParentView)
+				if (view != oldParentView &&
+					!ReferenceEquals(oldParentView, oldView))
 					oldParentView?.Dispose();
 				animations?.ForEach(x => x.Dispose());
 				ViewHandler?.SetVirtualView(this);
@@ -406,6 +416,7 @@ namespace Comet
 
 		internal View GetRenderViewReactive()
 		{
+			var declarationScope = BeginDeclarativeRender();
 			using var scope = ReactiveScope.BeginTracking();
 			View view;
 			try
@@ -413,6 +424,7 @@ namespace Comet
 				if (usedEnvironmentData.Any())
 					PopulateFromEnvironment();
 				view = Body.Invoke();
+				declarationScope.Bind(view);
 			}
 			catch
 			{
@@ -655,15 +667,8 @@ namespace Comet
 
 		void SetEnvironmentFields()
 		{
-			var fields = this.GetFieldsWithAttribute(typeof(EnvironmentAttribute));
-			if (!fields.Any())
-				return;
-			foreach (var f in fields)
-			{
-				var attribute = f.GetCustomAttributes(true).OfType<EnvironmentAttribute>().FirstOrDefault();
-				var key = attribute.Key ?? f.Name;
-				usedEnvironmentData.Add((f.Name, key));
-			}
+			foreach (var field in EnvironmentFieldCache.Get(this))
+				usedEnvironmentData.Add(field);
 		}
 		void PopulateFromEnvironment()
 		{
@@ -713,7 +718,7 @@ namespace Comet
 					value = viewThatWasReplaced.GetEnvironment(item.Key);
 				}
 				if (value is not null)
-					this.SetDeepPropertyValue(item.Field, value);
+					this.SetDirectPropertyValue(item.Field, value);
 			}
 		}
 		public bool IsDisposed => disposedValue;
@@ -726,7 +731,7 @@ namespace Comet
 			lock (ActiveViewsLock)
 				ActiveViews.Remove(this);
 
-
+			ReleaseDeclarativeLifetimeOwner();
 
 			if (_bodyDependencies is not null && _bodySubscriber is not null)
 			{
@@ -736,11 +741,29 @@ namespace Comet
 				_bodySubscriber = null;
 			}
 
+			DisposeDeclarativeMemberSubscriptions();
+			DisposeDeclarativeLifetimeChildren();
+
 			if (_propertySubscriptions is not null)
 			{
 				foreach (var sub in _propertySubscriptions)
 					sub.Dispose();
 				_propertySubscriptions = null;
+			}
+
+			if (this is IContainerView ownedContainer)
+			{
+				var disposedChildren = new HashSet<View>();
+				foreach (var child in ownedContainer.GetChildren())
+				{
+					// Constructor-owned slots can be shared into a replacement declaration.
+					// The replacement claims Parent before the outgoing owner is disposed;
+					// only dispose children that are still owned by this exact view.
+					if (child is not null &&
+						ReferenceEquals(child.Parent, this) &&
+						disposedChildren.Add(child))
+						child.Dispose();
+				}
 			}
 
 			var gestures = Gestures;
@@ -751,6 +774,7 @@ namespace Comet
 			}
 
 			MauiHotReloadHelper.UnRegister(this);
+			DevTools.CometDevRegistry.Unregister(this);
 
 			try
 			{
@@ -760,7 +784,8 @@ namespace Comet
 				// clears the old view's reference before this runs).
 				var node = Node;
 				Node = null;
-				node?.Dispose();
+				if (node is not null)
+					Backend.CometBackendBridge.DisposeNode(node);
 
 				var vh = ViewHandler;
 				ViewHandler = null;
@@ -1086,7 +1111,7 @@ namespace Comet
 				return;
 			TransferHotReloadStateToCore(newView);
 		}
-		[UnconditionalSuppressMessage("Trimming", "IL2070",
+		[UnconditionalSuppressMessage("Trimming", "IL2075",
 			Justification = "Hot reload is debug-only; trimming/AOT are disabled in debug builds")]
 		protected virtual void TransferHotReloadStateToCore(View newView)
 		{

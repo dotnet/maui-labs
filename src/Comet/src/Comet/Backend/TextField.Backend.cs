@@ -21,6 +21,27 @@ namespace Comet
 			if (this.GetEnvironment<Microsoft.Maui.Graphics.Color?>(EnvironmentKeys.Colors.Color) is { } color)
 				node.ApplyProperty(PropertyIds.TextField_TextColor, PropertyValue.From(color));
 
+			if (this.GetEnvironment<double?>(EnvironmentKeys.Fonts.Size) is { } fontSize)
+				node.ApplyProperty(PropertyIds.Text_FontSize, PropertyValue.From(fontSize));
+
+			if (this.GetEnvironment<string>(EnvironmentKeys.Fonts.Family) is { Length: > 0 } family)
+			{
+				var registration = FontFamilyRegistry.Resolve(family);
+				node.ApplyProperty(PropertyIds.Text_FontFamily, PropertyValue.From(registration.FaceName));
+				if (this.GetEnvironment<Microsoft.Maui.FontWeight?>(EnvironmentKeys.Fonts.Weight) is not { } &&
+					registration.PreferredWeight is { } registeredWeight)
+					node.ApplyProperty(PropertyIds.Text_FontWeight, PropertyValue.From((int)registeredWeight));
+			}
+
+			if (this.GetEnvironment<Microsoft.Maui.FontWeight?>(EnvironmentKeys.Fonts.Weight) is { } weight)
+				node.ApplyProperty(PropertyIds.Text_FontWeight, PropertyValue.From((int)weight));
+
+			if (this.GetEnvironment<Microsoft.Maui.FontSlant?>(EnvironmentKeys.Fonts.Slant) is
+				Microsoft.Maui.FontSlant.Italic or Microsoft.Maui.FontSlant.Oblique)
+			{
+				node.ApplyProperty(PropertyIds.Text_Italic, PropertyValue.From(true));
+			}
+
 			if (this.GetEnvironment<bool?>(this, "Comet.TextFieldBorderless", false) == true)
 				node.ApplyProperty(PropertyIds.TextField_Borderless, PropertyValue.From(true));
 
@@ -35,6 +56,26 @@ namespace Comet
 			// round-trip through the node-backend GetEnvironment read.
 			if (this.GetEnvironment<bool?>(this, "Comet.TextFieldSendAction", false) == true)
 				node.ApplyProperty(PropertyIds.TextField_ReturnType, PropertyValue.From((int)ReturnType.Send));
+
+			if (this.GetEnvironment<Microsoft.Maui.Keyboard>(EnvironmentKeys.Entry.Keyboard, false) is { } keyboard)
+			{
+				var code = MapKeyboard(keyboard);
+				if (code != 0)
+					node.ApplyProperty(PropertyIds.TextField_Keyboard, PropertyValue.From(code));
+			}
+		}
+
+		/// <summary>Maps a MAUI Keyboard instance to an int code for the backend property protocol.
+		/// 0=Default, 1=Numeric, 2=Email, 3=Url, 4=Telephone, 5=Chat, 6=Plain.</summary>
+		static int MapKeyboard(Microsoft.Maui.Keyboard keyboard)
+		{
+			if (keyboard == Microsoft.Maui.Keyboard.Numeric) return 1;
+			if (keyboard == Microsoft.Maui.Keyboard.Email) return 2;
+			if (keyboard == Microsoft.Maui.Keyboard.Url) return 3;
+			if (keyboard == Microsoft.Maui.Keyboard.Telephone) return 4;
+			if (keyboard == Microsoft.Maui.Keyboard.Chat) return 5;
+			if (keyboard == Microsoft.Maui.Keyboard.Plain) return 6;
+			return 0; // Default / Text
 		}
 
 		/// <summary>Makes the soft-keyboard action key a "Send" (ImeAction.Send) that fires

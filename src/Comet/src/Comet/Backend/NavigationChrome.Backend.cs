@@ -1,4 +1,5 @@
 #nullable enable
+using System.ComponentModel;
 using Comet.Backend;
 
 namespace Comet
@@ -9,52 +10,82 @@ namespace Comet
 
 	public partial class NavigationBar
 	{
-		bool _hooked;
+		PropertyChangedEventHandler? _selectedIndexChanged;
 
 		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
 		{
 			base.ApplyAllSetProperties(node);
 			node.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
-			if (!_hooked)
+			if (_selectedIndexChanged is null)
 			{
-				_hooked = true;
-				SelectedIndex.PropertyChanged += (_, _) =>
+				_selectedIndexChanged = (_, _) =>
 					Node?.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+				SelectedIndex.PropertyChanged += _selectedIndexChanged;
 			}
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing && _selectedIndexChanged is not null)
+			{
+				SelectedIndex.PropertyChanged -= _selectedIndexChanged;
+				_selectedIndexChanged = null;
+			}
+			base.Dispose(disposing);
 		}
 	}
 
 	public partial class NavigationRail
 	{
-		bool _hooked;
+		PropertyChangedEventHandler? _selectedIndexChanged;
 
 		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
 		{
 			base.ApplyAllSetProperties(node);
 			node.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
-			if (!_hooked)
+			if (_selectedIndexChanged is null)
 			{
-				_hooked = true;
-				SelectedIndex.PropertyChanged += (_, _) =>
+				_selectedIndexChanged = (_, _) =>
 					Node?.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+				SelectedIndex.PropertyChanged += _selectedIndexChanged;
 			}
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing && _selectedIndexChanged is not null)
+			{
+				SelectedIndex.PropertyChanged -= _selectedIndexChanged;
+				_selectedIndexChanged = null;
+			}
+			base.Dispose(disposing);
 		}
 	}
 
 	public partial class ContentSwitcher
 	{
-		bool _hooked;
+		PropertyChangedEventHandler? _indexChanged;
 
 		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
 		{
 			base.ApplyAllSetProperties(node);
 			node.ApplyProperty(PropertyIds.ContentSwitcher_Index, PropertyValue.From(Index.Peek()));
-			if (!_hooked)
+			if (_indexChanged is null)
 			{
-				_hooked = true;
-				Index.PropertyChanged += (_, _) =>
+				_indexChanged = (_, _) =>
 					Node?.ApplyProperty(PropertyIds.ContentSwitcher_Index, PropertyValue.From(Index.Peek()));
+				Index.PropertyChanged += _indexChanged;
 			}
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing && _indexChanged is not null)
+			{
+				Index.PropertyChanged -= _indexChanged;
+				_indexChanged = null;
+			}
+			base.Dispose(disposing);
 		}
 	}
 
@@ -78,24 +109,36 @@ namespace Comet
 
 	public partial class TabBar
 	{
-		bool _hooked;
+		PropertyChangedEventHandler? _selectedIndexChanged;
 
 		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
 		{
 			base.ApplyAllSetProperties(node);
 			node.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
-			if (!_hooked)
+			if (_selectedIndexChanged is null)
 			{
-				_hooked = true;
-				SelectedIndex.PropertyChanged += (_, _) =>
+				_selectedIndexChanged = (_, _) =>
 					Node?.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
+				SelectedIndex.PropertyChanged += _selectedIndexChanged;
 			}
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing && _selectedIndexChanged is not null)
+			{
+				SelectedIndex.PropertyChanged -= _selectedIndexChanged;
+				_selectedIndexChanged = null;
+			}
+			base.Dispose(disposing);
 		}
 	}
 
 	public partial class NavigationSuite
 	{
-		bool _hooked;
+		PropertyChangedEventHandler? _selectedIndexChanged;
+		PropertyChangedEventHandler? _drawerOpenChanged;
+		INotifyPropertyChanged? _hookedDrawerOpen;
 
 		protected internal override void ApplyAllSetProperties(ICometBackendNode node)
 		{
@@ -103,14 +146,24 @@ namespace Comet
 			node.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
 			if (DrawerOpen is { } drawer)
 				node.ApplyProperty(PropertyIds.Drawer_IsOpen, PropertyValue.From(drawer.Peek()));
-			if (!_hooked)
+			if (_selectedIndexChanged is null)
 			{
-				_hooked = true;
-				SelectedIndex.PropertyChanged += (_, _) =>
+				_selectedIndexChanged = (_, _) =>
 					Node?.ApplyProperty(PropertyIds.Nav_SelectedIndex, PropertyValue.From(SelectedIndex.Peek()));
-				if (DrawerOpen is { } d)
-					d.PropertyChanged += (_, _) =>
-						Node?.ApplyProperty(PropertyIds.Drawer_IsOpen, PropertyValue.From(d.Peek()));
+				SelectedIndex.PropertyChanged += _selectedIndexChanged;
+			}
+			if (!ReferenceEquals(_hookedDrawerOpen, DrawerOpen))
+			{
+				DetachDrawerOpenSubscription();
+				_hookedDrawerOpen = DrawerOpen;
+				if (_hookedDrawerOpen is not null)
+				{
+					_drawerOpenChanged = (_, _) =>
+						Node?.ApplyProperty(
+							PropertyIds.Drawer_IsOpen,
+							PropertyValue.From(DrawerOpen?.Peek() ?? false));
+					_hookedDrawerOpen.PropertyChanged += _drawerOpenChanged;
+				}
 			}
 		}
 
@@ -121,6 +174,28 @@ namespace Comet
 				drawer.Value = false;
 			else if (id == Backend.EventIds.DrawerOpened && DrawerOpen is { } opened)
 				opened.Value = true;
+		}
+
+		void DetachDrawerOpenSubscription()
+		{
+			if (_hookedDrawerOpen is not null && _drawerOpenChanged is not null)
+				_hookedDrawerOpen.PropertyChanged -= _drawerOpenChanged;
+			_hookedDrawerOpen = null;
+			_drawerOpenChanged = null;
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing)
+			{
+				if (_selectedIndexChanged is not null)
+				{
+					SelectedIndex.PropertyChanged -= _selectedIndexChanged;
+					_selectedIndexChanged = null;
+				}
+				DetachDrawerOpenSubscription();
+			}
+			base.Dispose(disposing);
 		}
 	}
 }

@@ -15,7 +15,7 @@ namespace Comet.Platform.Compose
 	/// synced to the drawer's animated state both ways. Owns its two children
 	/// (<see cref="IBackendManagesOwnContent"/>), laying the content out at full screen and the sheet
 	/// at the standard 360dp width with the shared Yoga engine.</summary>
-	sealed class ComposeDrawerNode : ComposeNode, IBackendManagesOwnContent
+	sealed class ComposeDrawerNode : ComposeNode, IBackendRetainsLogicalContentOnOwnerTransfer
 	{
 		// Material 3 ModalDrawerSheet is 360dp wide.
 		const float SheetWidthDp = 360f;
@@ -46,7 +46,7 @@ namespace Comet.Platform.Compose
 			if (newView is not Drawer drawer)
 				return;
 			_drawer = drawer;
-			if (!isHotReload)
+			if (!isHotReload && string.IsNullOrEmpty(newView.GetKey()))
 				return;
 			_sideNode = null;
 			_contentNode = null;

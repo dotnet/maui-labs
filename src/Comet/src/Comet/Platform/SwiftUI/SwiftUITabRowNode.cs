@@ -23,8 +23,12 @@ namespace Comet.Platform.SwiftUI
 
 		public override void OnOwnerViewChanged(View newView, bool isHotReload)
 		{
-			if (newView is TabBar bar)
-				_bar = bar;
+			if (newView is not TabBar bar)
+				return;
+			_bar = bar;
+			_selected = bar.SelectedIndex.Peek();
+			if (IsBuilt && (isHotReload || !string.IsNullOrEmpty(newView.GetKey())))
+				Refresh();
 		}
 
 		// In-flow footprint: a fixed 48dp row (the base's fill size would starve siblings).
