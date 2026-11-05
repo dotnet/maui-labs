@@ -281,16 +281,21 @@ jobs:
       DEVFLOW_TEST_IOS_ISOLATED: 'true'
       # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
       TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
-      # Keep the test device on 26.2; actool also needs the SDK-compatible 26.0.1 runtime.
+      # Keep the test device on 26.2 independently of the asset compiler's runtime.
       DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '26.2' }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Select Xcode
         run: |
-          # Match the net10 Apple packs carried by the pinned RC2 manifests.
+          # Only the MAUI lane needs newer net10 packs for the hosted actool runtime.
           COMPATIBLE="${COMPATIBLE:-}"
-          for candidate in /Applications/Xcode_26.0.app /Applications/Xcode_26.app; do
+          if [[ "${{ matrix.framework }}" == maui ]]; then
+            CANDIDATES=(/Applications/Xcode_26.4.app /Applications/Xcode_26.4.1.app)
+          else
+            CANDIDATES=(/Applications/Xcode_26.0.app /Applications/Xcode_26.app)
+          fi
+          for candidate in "${CANDIDATES[@]}"; do
             if [[ -d "$candidate" ]]; then
               COMPATIBLE="$candidate"
               break
@@ -301,8 +306,8 @@ jobs:
             echo "Using $SELECTED"
             sudo xcode-select -s "$SELECTED/Contents/Developer"
             ACTOOL_PATH="$(xcrun --find actool)"
-            DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd)"
-            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd)"
+            DEVELOPER_ROOT="$(cd "$(dirname "$ACTOOL_PATH")/../.." && pwd -P)"
+            XCODE_APP="$(cd "$DEVELOPER_ROOT/../.." && pwd -P)"
             echo "Resolved developer dir: $DEVELOPER_ROOT"
             echo "Resolved Xcode app: $XCODE_APP"
             export DEVELOPER_DIR="$DEVELOPER_ROOT"
@@ -324,7 +329,14 @@ jobs:
         # Keep this list to workloads the repo actually targets. The rollback file is pinned,
         # so requesting a workload nothing builds still hard-fails the job the day its runtime packs
         # rotate out of the feeds -- which is exactly how tvos broke the Windows job.
-        run: dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+        run: |
+          if [[ "${{ matrix.framework }}" == maui ]]; then
+            # The net10 manifest extends the current runtime workload, which is net11
+            # under this SDK. Install the explicit net10 runtime workload as well.
+            dotnet workload install maui ios macos maccatalyst android wasm-tools mobile-librarybuilder-net10 --from-rollback-file eng/workloads/dotnet11-rc2-ios-net10.json
+          else
+            dotnet workload install maui ios macos maccatalyst android wasm-tools --from-rollback-file ${{ env.DOTNET_WORKLOAD_ROLLBACK_FILE }}
+          fi
 
       - name: Install Apple simulator automation tool
         if: matrix.framework == 'maui'
@@ -335,17 +347,18 @@ jobs:
           brew install facebook/fb/idb-companion
           command -v idb_companion
 
-      - name: Install SDK-matching iOS simulator runtime
+      - name: Verify SDK-matching iOS simulator runtime
+        if: matrix.framework == 'maui'
         run: |
+          set -euo pipefail
           xcrun simctl list runtimes
-          # Apple's simulator catalog maps SDK 23A339 to runtime 23A8464 (26.0.1).
-          xcodebuild -downloadPlatform iOS -buildVersion 26.0.1
           xcrun simctl list runtimes --json | python3 -c '
           import json, sys
           runtimes = json.load(sys.stdin)["runtimes"]
-          assert any(runtime["version"] == "26.0.1" and runtime["isAvailable"]
+          if not any(runtime["version"] == "26.4.1" and runtime["isAvailable"]
                      and runtime["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
-                     for runtime in runtimes), "The iOS 26.0.1 runtime required by Xcode 26.0 actool is unavailable"
+                     for runtime in runtimes):
+              sys.exit("The iOS 26.4.1 runtime required by Xcode 26.4 actool is unavailable")
           '
 
       - name: List available iOS simulators

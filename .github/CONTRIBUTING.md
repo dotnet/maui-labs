@@ -32,9 +32,17 @@ packs for Xcode 27.0. Select the matching Xcode when building app heads.
 Resolve Xcode aliases with `pwd -P` before setting `DEVELOPER_DIR` and
 `MD_APPLE_SDK_ROOT`: the Apple pack's explicit SDK paths must use the physical
 Xcode application directory, not a runner alias such as `Xcode_26.0.app`.
-For iOS asset compilation, install the SDK-compatible simulator runtime with
-`xcodebuild -downloadPlatform iOS -buildVersion 26.0.1`, even when the test device
-uses a later runtime such as 26.2.
+The MAUI iOS integration job instead uses
+`eng/workloads/dotnet11-rc2-ios-net10.json`: it selects the released .NET 10 iOS
+26.4.10259 manifest from feature band `10.0.100` under the same exact SDK 11 RC2.
+Install `mobile-librarybuilder-net10` alongside the ordinary workloads so the
+SDK 11 resolver also has the .NET 10 runtime packs; the older iOS manifest extends
+the current runtime workload, which otherwise supplies .NET 11 runtime packs.
+This job uses Xcode 26.4 and verifies the hosted iOS 26.4.1 runtime for asset
+compilation, while keeping the test device on iOS 26.2. The native iOS job keeps
+the original RC2 manifests and Xcode 26.0. This job-specific manifest cannot build
+.NET 11 iOS targets; use the shared RC2 manifest for those. Do not mix entire
+.NET 10 workload sets into SDK 11 or bypass asset compilation/Xcode validation.
 Existing .NET 10 target frameworks and central MAUI package versions remain
 unchanged; AI's `UseXcode27Preview=true` adds .NET 11 OS 27 targets.
 

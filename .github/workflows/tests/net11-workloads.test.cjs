@@ -38,11 +38,20 @@ test("Apple build and device callers give the SDK a physical Xcode path", () => 
   }
 });
 
-test("iOS integration installs the actool runtime without changing the test-device runtime", () => {
+test("MAUI iOS uses installed Xcode 26.4 runtimes without changing native iOS or the test-device runtime", () => {
   const text = read(".github/workflows/devflow-integration.yml");
+  const rollback = JSON.parse(read("eng/workloads/dotnet11-rc2.json"));
+  const iosRollback = JSON.parse(read("eng/workloads/dotnet11-rc2-ios-net10.json"));
+  assert.equal(iosRollback["microsoft.net.sdk.ios"], "26.4.10259/10.0.100");
+  delete iosRollback["microsoft.net.sdk.ios"];
+  delete rollback["microsoft.net.sdk.ios"];
+  assert.deepEqual(iosRollback, rollback);
   assert.match(text, /DEVFLOW_TEST_IOS_VERSION: \$\{\{ inputs\.ios-runtime \|\| '26\.2' \}\}/);
-  assert.match(text, /xcodebuild -downloadPlatform iOS -buildVersion 26\.0\.1/);
-  assert.match(text, /runtime\["version"\] == "26\.0\.1" and runtime\["isAvailable"\]/);
+  assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then\n\s+CANDIDATES=\(\/Applications\/Xcode_26\.4\.app \/Applications\/Xcode_26\.4\.1\.app\)\n\s+else\n\s+CANDIDATES=\(\/Applications\/Xcode_26\.0\.app \/Applications\/Xcode_26\.app\)/);
+  assert.match(text, /if \[\[ "\$\{\{ matrix\.framework \}\}" == maui \]\]; then[\s\S]*?workload install .* mobile-librarybuilder-net10 --from-rollback-file eng\/workloads\/dotnet11-rc2-ios-net10\.json\n\s+else\n\s+dotnet workload install .* --from-rollback-file \$\{\{ env\.DOTNET_WORKLOAD_ROLLBACK_FILE \}\}/);
+  assert.match(text, /name: Verify SDK-matching iOS simulator runtime\n\s+if: matrix\.framework == 'maui'/);
+  assert.match(text, /runtime\["version"\] == "26\.4\.1" and runtime\["isAvailable"\]/);
+  assert.doesNotMatch(text, /xcodebuild -downloadPlatform/);
 });
 
 test("root-SDK callers do not reinstall a .NET 10 workload set", () => {
