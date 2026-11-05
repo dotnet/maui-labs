@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <!-- A sample-local SDK pin must not change Arcade's version/artifact root. -->
+    <RepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '../..'))</RepoRoot>
+  </PropertyGroup>
+  <Import Project="../../Directory.Build.props" />
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <MicrosoftMauiControlsVersion>10.0.110</MicrosoftMauiControlsVersion>
+    <MicrosoftMauiControlsCompatibilityVersion>10.0.110</MicrosoftMauiControlsCompatibilityVersion>
+    <MicrosoftMauiEssentialsVersion>10.0.110</MicrosoftMauiEssentialsVersion>
+    <MauiVersion>10.0.110</MauiVersion>
+    <ValidateXcodeVersion>true</ValidateXcodeVersion>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android36.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios26.5</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <RootNamespace>BespokeCollections.App</RootNamespace>
+    <ApplicationTitle>Bespoke Collections</ApplicationTitle>
+    <ApplicationId>org.dotnet.mauilabs.bespokecollections</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">16.0</SupportedOSPlatformVersion>
+    <EmbedAssembliesIntoApk Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">true</EmbedAssembliesIntoApk>
+  </PropertyGroup>
+  <ItemGroup>
+    <MauiIcon Include="Resources/AppIcon/appicon.svg" Color="#10223D" />
+    <MauiSplashScreen Include="Resources/AppIcon/appicon.svg" Color="#10223D" BaseSize="128,128" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+    <ProjectReference Include="../Core/BespokeCollections.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <ProjectReference Include="../../../src/DevFlow/Microsoft.Maui.DevFlow.Agent/Microsoft.Maui.DevFlow.Agent.csproj" />
+  </ItemGroup>
+</Project>

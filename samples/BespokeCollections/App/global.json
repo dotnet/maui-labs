@@ -1,0 +1,12 @@
+{
+  "sdk": {
+    "version": "10.0.401",
+    "workloadVersion": "10.0.401",
+    "rollForward": "disable",
+    "paths": [".dotnet", "$host$"],
+    "allowPrerelease": false
+  },
+  "msbuild-sdks": {
+    "Microsoft.DotNet.Arcade.Sdk": "10.0.0-beta.26357.114"
+  }
+}
