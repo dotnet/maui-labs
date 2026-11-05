@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Globalization;
 
@@ -59,11 +60,11 @@ internal static class ScreenshotImage
 
         var density = width switch
         {
-            1290 or 1320 or 1206 or 1170 or 1125 or 1242 => 3.0,
-            828 or 750 or 2048 or 2388 or 2360 => 2.0,
-            _ => width > 1000 ? 3.0 : 2.0
+            2048 or 2388 or 2360 => 2,
+            > 1000 => 3,
+            _ => 2
         };
-        var targetWidth = maxWidth ?? (int)(width / density);
+        var targetWidth = maxWidth ?? width / density;
         if (targetWidth <= 0 || targetWidth >= width)
             return (width, height);
 
@@ -78,8 +79,8 @@ internal static class ScreenshotImage
         if (png.Length < 24 || !png.AsSpan(0, 8).SequenceEqual(signature))
             return (0, 0);
 
-        int width = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
-        int height = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
+        var width = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16));
+        var height = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20));
         // Keep the Inspector's bounds for untrusted screenshot headers.
         const int MaxDimension = 32768;
         return width <= 0 || height <= 0 || width > MaxDimension || height > MaxDimension

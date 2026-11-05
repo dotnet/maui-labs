@@ -641,7 +641,7 @@ public class WindowsAppDriver : AppDriverBase, IAlertDriver
                 ? CaptureScreenRectangle(rect)
                 : null;
         }
-        catch (Exception ex) when (ex is ExternalException or System.ComponentModel.Win32Exception
+        catch (Exception ex) when (ex is ExternalException
             or IOException or UnauthorizedAccessException or InvalidOperationException
             or ArgumentException or OverflowException or DllNotFoundException or EntryPointNotFoundException
             or InvalidCastException or NotSupportedException)

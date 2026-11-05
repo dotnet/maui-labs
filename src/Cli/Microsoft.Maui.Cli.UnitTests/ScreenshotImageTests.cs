@@ -11,6 +11,10 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public sealed class ScreenshotImageTests : IDisposable
 {
     private readonly string _directory = Directory.CreateTempSubdirectory("devflow screenshot tests ").FullName;
+    private readonly TextWriter _previousError = Console.Error;
+    private readonly StringWriter _errors = new();
+
+    public ScreenshotImageTests() => Console.SetError(_errors);
 
     [Theory]
     [InlineData(1290, 2796, 430, 932)]
@@ -78,20 +82,10 @@ public sealed class ScreenshotImageTests : IDisposable
     {
         byte[] invalid = [1, 2, 3];
         var file = WriteImage(invalid);
-        var previousError = Console.Error;
-        using var errors = new StringWriter();
-        try
-        {
-            Console.SetError(errors);
-            Assert.Equal(invalid, await ScreenshotImage.ResizeSimulatorAsync(file, 100, runProcess: NeverRun));
-            Assert.Equal(invalid, await ScreenshotImage.ResizeSimulatorAsync(file, scale: "native", runProcess: NeverRun));
-        }
-        finally
-        {
-            Console.SetError(previousError);
-        }
 
-        Assert.Contains("invalid PNG header", errors.ToString());
+        Assert.Equal(invalid, await ScreenshotImage.ResizeSimulatorAsync(file, 100, runProcess: NeverRun));
+        Assert.Equal(invalid, await ScreenshotImage.ResizeSimulatorAsync(file, scale: "native", runProcess: NeverRun));
+        Assert.Contains("invalid PNG header", _errors.ToString());
     }
 
     [Fact]
@@ -121,29 +115,18 @@ public sealed class ScreenshotImageTests : IDisposable
     {
         var original = CreatePng(90, 60);
         var file = WriteImage(original);
-        var previousError = Console.Error;
-        using var errors = new StringWriter();
-        byte[] result;
-        try
+        var result = await ScreenshotImage.ResizeSimulatorAsync(file, 30, runProcess: async (_, _, token) =>
         {
-            Console.SetError(errors);
-            result = await ScreenshotImage.ResizeSimulatorAsync(file, 30, runProcess: async (_, _, token) =>
-            {
-                if (failure == "exit")
-                    throw new InvalidOperationException("sips failed (exit 1)");
-                if (failure == "missing")
-                    throw new Win32Exception("sips unavailable");
-                await File.WriteAllBytesAsync(file, failure == "malformed" ? [1, 2, 3] : CreatePng(20, 20), token);
-                return string.Empty;
-            });
-        }
-        finally
-        {
-            Console.SetError(previousError);
-        }
+            if (failure == "exit")
+                throw new InvalidOperationException("sips failed (exit 1)");
+            if (failure == "missing")
+                throw new Win32Exception("sips unavailable");
+            await File.WriteAllBytesAsync(file, failure == "malformed" ? [1, 2, 3] : CreatePng(20, 20), token);
+            return string.Empty;
+        });
 
         Assert.Equal(original, result);
-        Assert.Contains("returning native resolution", errors.ToString());
+        Assert.Contains("returning native resolution", _errors.ToString());
     }
 
     [Fact]
@@ -165,21 +148,11 @@ public sealed class ScreenshotImageTests : IDisposable
     {
         var original = CreatePng(90, 60);
         var file = WriteImage(original);
-        var previousError = Console.Error;
-        using var errors = new StringWriter();
-        try
-        {
-            Console.SetError(errors);
-            var result = await ScreenshotImage.ResizeSimulatorAsync(file, 30,
-                runProcess: (_, _, _) => throw new OperationCanceledException());
+        var result = await ScreenshotImage.ResizeSimulatorAsync(file, 30,
+            runProcess: (_, _, _) => throw new OperationCanceledException());
 
-            Assert.Equal(original, result);
-            Assert.Contains("resizing timed out", errors.ToString());
-        }
-        finally
-        {
-            Console.SetError(previousError);
-        }
+        Assert.Equal(original, result);
+        Assert.Contains("resizing timed out", _errors.ToString());
     }
 
     [Theory]
@@ -263,7 +236,12 @@ public sealed class ScreenshotImageTests : IDisposable
     private static Task<string> NeverRun(string executable, string[] arguments, CancellationToken token)
         => throw new XunitException("No image-processing subprocess should be needed.");
 
-    public void Dispose() => Directory.Delete(_directory, recursive: true);
+    public void Dispose()
+    {
+        Console.SetError(_previousError);
+        _errors.Dispose();
+        Directory.Delete(_directory, recursive: true);
+    }
 }
 
 [Collection("CLI")]

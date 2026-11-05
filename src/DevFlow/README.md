@@ -390,19 +390,15 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 
 ## Focus-safe capture and native dialogs
 
-iOS Simulator full-screen screenshots still use `simctl`, including system dialogs and
-other out-of-process UI. The CLI and Driver share the same logical-size calculation;
-the CLI also supports `--max-width` and `--scale native` / `--scale full`. Resizing uses
-macOS's built-in `/usr/bin/sips`, with the existing aspect-ratio rounding and no upscaling.
-Native/full captures bypass resizing. If resizing fails, a warning is written to stderr
-and the original native-resolution PNG is retained. Resampled pixels and PNG compression
-can differ from earlier SkiaSharp output.
+iOS Simulator full-screen screenshots use `simctl`, including system dialogs. CLI and
+Driver share resizing through macOS's built-in `/usr/bin/sips`, preserving logical sizing,
+aspect-ratio rounding and no-upscaling. The CLI supports `--max-width`; `--scale native`
+and `--scale full` bypass resizing. Resize failures warn on stderr and return the original
+PNG. Resampling and compression can differ from earlier SkiaSharp output.
 
-Windows host fallback screenshots retain the GDI capture bounds and top-down BGRA pixels.
-PNG encoding uses the OS-provided GDI+ flat API, ignoring GDI's unused alpha bytes.
-This avoids both bundled native graphics libraries and WPF/Windows Desktop or COM
-dependencies; the encoder uses a temporary PNG file and releases it after reading.
-Neither host path requires SkiaSharp. In-app agent image processing is unchanged.
+Windows host fallback uses GDI for capture and built-in GDI+ for PNG encoding, preserving
+bounds, top-down BGRA order and opaque alpha. Temporary files and native resources are
+released after capture. Neither host path bundles SkiaSharp; in-app agents are unchanged.
 
 AppKit screenshots prefer ScreenCaptureKit and fall back to CoreGraphics or in-process
 rendering without activating or reordering windows. On macOS 14.0–14.1, an attached sheet
