@@ -434,3 +434,6 @@ sim_tap.py
 .claude/settings.local.json
 .claude/skills/**/.skill-version
 test-results/
+
+# Cloudflare Wrangler local cache (contains account state)
+.wrangler/
