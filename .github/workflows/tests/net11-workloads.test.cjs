@@ -41,8 +41,8 @@ test("Apple build and device callers give the SDK a physical Xcode path", () => 
 test("iOS integration installs the actool runtime without changing the test-device runtime", () => {
   const text = read(".github/workflows/devflow-integration.yml");
   assert.match(text, /DEVFLOW_TEST_IOS_VERSION: \$\{\{ inputs\.ios-runtime \|\| '26\.2' \}\}/);
-  assert.match(text, /xcodebuild -downloadPlatform iOS -buildVersion 26\.0/);
-  assert.match(text, /runtime\["version"\] == "26\.0" and runtime\["isAvailable"\]/);
+  assert.match(text, /xcodebuild -downloadPlatform iOS -buildVersion 26\.0\.1/);
+  assert.match(text, /runtime\["version"\] == "26\.0\.1" and runtime\["isAvailable"\]/);
 });
 
 test("root-SDK callers do not reinstall a .NET 10 workload set", () => {

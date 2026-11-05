@@ -281,7 +281,7 @@ jobs:
       DEVFLOW_TEST_IOS_ISOLATED: 'true'
       # Shell navigation, AppTheme, Essentials storage/sensors and WebView CDP are MAUI-only.
       TEST_FILTER: ${{ matrix.framework == 'native' && '--filter framework!=maui' || '' }}
-      # Keep the test device on 26.2; actool also needs the SDK-matching 26.0 runtime.
+      # Keep the test device on 26.2; actool also needs the SDK-compatible 26.0.1 runtime.
       DEVFLOW_TEST_IOS_VERSION: ${{ inputs.ios-runtime || '26.2' }}
     steps:
       - uses: actions/checkout@v6
@@ -338,13 +338,14 @@ jobs:
       - name: Install SDK-matching iOS simulator runtime
         run: |
           xcrun simctl list runtimes
-          xcodebuild -downloadPlatform iOS -buildVersion 26.0
+          # Apple's simulator catalog maps SDK 23A339 to runtime 23A8464 (26.0.1).
+          xcodebuild -downloadPlatform iOS -buildVersion 26.0.1
           xcrun simctl list runtimes --json | python3 -c '
           import json, sys
           runtimes = json.load(sys.stdin)["runtimes"]
-          assert any(runtime["version"] == "26.0" and runtime["isAvailable"]
+          assert any(runtime["version"] == "26.0.1" and runtime["isAvailable"]
                      and runtime["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
-                     for runtime in runtimes), "The iOS 26.0 runtime required by Xcode 26.0 actool is unavailable"
+                     for runtime in runtimes), "The iOS 26.0.1 runtime required by Xcode 26.0 actool is unavailable"
           '
 
       - name: List available iOS simulators
