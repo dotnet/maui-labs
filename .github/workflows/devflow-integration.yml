@@ -337,6 +337,7 @@ jobs:
 
       - name: Install SDK-matching iOS simulator runtime
         run: |
+          xcrun simctl list runtimes
           xcodebuild -downloadPlatform iOS -buildVersion 26.0
           xcrun simctl list runtimes --json | python3 -c '
           import json, sys
