@@ -51,6 +51,54 @@ public class CommandConstructionTests
 		Assert.Empty(versionCommand.Subcommands);
 	}
 
+	[Theory]
+	[InlineData("--pr", "1234")]
+	[InlineData("--pull-request", "1234")]
+	[InlineData("--pr", "https://github.com/dotnet/maui/pull/1234")]
+	[InlineData("--pull-request", "https://github.com/dotnet/maui/pull/1234/")]
+	[InlineData("--pr", "https://github.com/dotnet/maui/pull/1234?diff=split#issuecomment-1")]
+	[InlineData("--pr", "https://GITHUB.COM/DOTNET/MAUI/pull/1234")]
+	public void ProjectVersionSet_PullRequestNumberOrUrl_ParsesNumber(string alias, string input)
+	{
+		var root = Program.BuildRootCommand();
+		var project = Assert.Single(root.Subcommands, command => command.Name == "project");
+		var version = Assert.Single(project.Subcommands, command => command.Name == "version");
+		var set = Assert.Single(version.Subcommands, command => command.Name == "set");
+		var option = Assert.IsType<Option<int?>>(Assert.Single(set.Options, option => option.Name == "--pr"));
+
+		var result = root.Parse(["project", "version", "set", alias, input]);
+
+		Assert.Empty(result.Errors);
+		Assert.Equal(1234, result.GetValue(option));
+	}
+
+	[Theory]
+	[InlineData("0")]
+	[InlineData("-1")]
+	[InlineData("2147483648")]
+	[InlineData("abc")]
+	[InlineData("https://github.com/dotnet/maui/pull/0")]
+	[InlineData("https://github.com/dotnet/maui/pull/2147483648")]
+	[InlineData("https://github.com/dotnet/maui-labs/pull/1234")]
+	[InlineData("https://github.com/dotnet/maui/issues/1234")]
+	[InlineData("https://github.com.example.com/dotnet/maui/pull/1234")]
+	[InlineData("http://github.com/dotnet/maui/pull/1234")]
+	[InlineData("https://github.com/dotnet/maui/pull/1234/files")]
+	public void ProjectVersionSet_InvalidPullRequest_FailsDuringParsing(string input)
+	{
+		var result = Program.BuildRootCommand().Parse(["project", "version", "set", "--pr", input]);
+
+		Assert.Contains(result.Errors, error => error.Message.Contains("--pr must be a positive pull request number", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public void ProjectVersionSet_MissingPullRequest_FailsDuringParsing()
+	{
+		var result = Program.BuildRootCommand().Parse("project version set --pr");
+
+		Assert.NotEmpty(result.Errors);
+	}
+
 	[Fact]
 	public void RootCommand_IncludesSelfUpdate()
 	{

@@ -3,6 +3,8 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Cli.Output;
 using Microsoft.Maui.Cli.Services;
@@ -114,7 +116,20 @@ public static partial class ProjectCommands
 		};
 		var prOption = new Option<int?>("--pr", "--pull-request")
 		{
-			Description = "Set the project to the package version produced by a dotnet/maui pull request build.",
+			Description = "Set the project to a dotnet/maui pull request build. Accepts a PR number or full https://github.com/dotnet/maui/pull/<number> URL.",
+			CustomParser = result =>
+			{
+				var input = result.Tokens.Single().Value;
+				var match = Regex.Match(input,
+					@"\Ahttps://github\.com/dotnet/maui/pull/([0-9]+)/?(?:[?#]\S*)?\z",
+					RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+				var number = match.Success ? match.Groups[1].Value : input;
+				if (int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out var prNumber) && prNumber > 0)
+					return prNumber;
+
+				result.AddError("--pr must be a positive pull request number or a full https://github.com/dotnet/maui/pull/<number> URL.");
+				return null;
+			},
 		};
 		var nugetConfigOption = new Option<bool>("--nuget-config")
 		{

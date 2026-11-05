@@ -204,6 +204,7 @@ maui project version set 10.0.60
 
 # Try packages from a dotnet/maui pull request build
 maui project version set --pr 24888
+maui project version set --pr https://github.com/dotnet/maui/pull/24888
 maui project version set --pr 24888 --framework net10.0
 maui project version set --pr 24888 --hive-path ~/.maui/hives
 
@@ -363,6 +364,10 @@ For these directory names, upgrade refuses to overwrite an existing `.csproj`, e
 including IDs generated with the previous eight-character fallback.
 
 Run `maui <command> --help` for detailed options on any command.
+
+`--pr` (alias `--pull-request`) accepts a positive PR number or a full
+`https://github.com/dotnet/maui/pull/<number>` URL. Run from a directory
+containing a single `.csproj`, or specify `--project` explicitly.
 
 PR build packages are downloaded into a managed MAUI hive under
 `~/.maui/hives/dotnet-maui/pr-<number>/build-<build-id>/` by default. The
