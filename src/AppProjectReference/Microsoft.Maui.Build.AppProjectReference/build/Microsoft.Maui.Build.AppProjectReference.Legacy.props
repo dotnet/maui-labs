@@ -1,0 +1,13 @@
+<Project>
+
+  <PropertyGroup>
+    <MauiAppRefBuildEnabled Condition="'$(MauiAppRefBuildEnabled)' == ''">true</MauiAppRefBuildEnabled>
+    <MauiAppRefBuildOnBuild Condition="'$(MauiAppRefBuildOnBuild)' == ''">true</MauiAppRefBuildOnBuild>
+    <MauiAppRefBuildOnTest Condition="'$(MauiAppRefBuildOnTest)' == ''">true</MauiAppRefBuildOnTest>
+    <MauiAppRefBuildBeforeTargets Condition="'$(MauiAppRefBuildBeforeTargets)' == ''">CoreCompile</MauiAppRefBuildBeforeTargets>
+    <MauiAppRefInnerBuildTarget Condition="'$(MauiAppRefInnerBuildTarget)' == ''">Build</MauiAppRefInnerBuildTarget>
+    <MauiAppRefFailIfNoArtifacts Condition="'$(MauiAppRefFailIfNoArtifacts)' == ''">true</MauiAppRefFailIfNoArtifacts>
+    <MauiAppRefSetPlatformOutputPaths Condition="'$(MauiAppRefSetPlatformOutputPaths)' == ''">true</MauiAppRefSetPlatformOutputPaths>
+  </PropertyGroup>
+
+</Project>
