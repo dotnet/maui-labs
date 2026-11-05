@@ -28,6 +28,16 @@ test("shared build and device workflows default to RC2 rollback installs", () =>
   }
 });
 
+test("Apple build and device callers give the SDK a physical Xcode path", () => {
+  for (const file of ["_build.yml", "_device-tests.yml", "ci-macos-appkit.yml"]) {
+    const text = read(`.github/workflows/${file}`);
+    assert.match(text, /developer_dir="\$\(cd \/Applications\/Xcode_[^\n]+ && pwd -P\)"/);
+    assert.match(text, /sudo xcode-select -s "\$developer_dir"/);
+    assert.match(text, /echo "DEVELOPER_DIR=\$developer_dir" >> "\$GITHUB_ENV"/);
+    assert.match(text, /echo "MD_APPLE_SDK_ROOT=\$\(cd "\$developer_dir\/\.\.\/\.\." && pwd -P\)" >> "\$GITHUB_ENV"/);
+  }
+});
+
 test("root-SDK callers do not reinstall a .NET 10 workload set", () => {
   for (const file of [
     ".github/workflows/ci-ai.yml",

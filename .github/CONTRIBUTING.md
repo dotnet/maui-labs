@@ -29,6 +29,9 @@ Use the exact pinned SDK with this rollback file; manifests are SDK-feature-band
 specific. Do not install a .NET 10 workload set into the .NET 11 SDK. The RC2
 manifests retain .NET 10 Apple packs for Xcode 26.0 alongside .NET 11 Apple
 packs for Xcode 27.0. Select the matching Xcode when building app heads.
+Resolve Xcode aliases with `pwd -P` before setting `DEVELOPER_DIR` and
+`MD_APPLE_SDK_ROOT`: the Apple pack's explicit SDK paths must use the physical
+Xcode application directory, not a runner alias such as `Xcode_26.0.app`.
 Existing .NET 10 target frameworks and central MAUI package versions remain
 unchanged; AI's `UseXcode27Preview=true` adds .NET 11 OS 27 targets.
 

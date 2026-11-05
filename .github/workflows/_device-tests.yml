@@ -66,7 +66,11 @@ jobs:
 
       - name: Select Xcode
         if: inputs.xcode-version != '' && runner.os == 'macOS'
-        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
+        run: |
+          developer_dir="$(cd /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer && pwd -P)"
+          sudo xcode-select -s "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          echo "MD_APPLE_SDK_ROOT=$(cd "$developer_dir/../.." && pwd -P)" >> "$GITHUB_ENV"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
