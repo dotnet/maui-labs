@@ -115,7 +115,14 @@ jobs:
 
       - name: Select Xcode
         if: inputs.xcode-version != '' && runner.os == 'macOS'
-        run: sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
+        run: |
+          sudo xcode-select -s /Applications/Xcode_${{ inputs.xcode-version }}.app/Contents/Developer
+          xcodebuild -version
+          xcodebuild -showsdks
+          ls -l "$(xcode-select -p)/Platforms/MacOSX.platform/Developer/SDKs"
+          sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
+          test -d "$sdk_path"
+          xcrun --sdk macosx --find install_name_tool
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
