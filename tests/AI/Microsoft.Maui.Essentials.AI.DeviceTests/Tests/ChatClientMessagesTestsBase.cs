@@ -116,8 +116,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 			[new UnsupportedContentForTesting(), new TextContent("Reply with only the word HELLO."),
 				new UnsupportedContentForTesting()]);
 		var response = streaming
-			? await client.GetStreamingResponseAsync([message]).ToChatResponseAsync()
-			: await client.GetResponseAsync([message]);
+			? await client.GetStreamingResponseAsync(new[] { message }).ToChatResponseAsync()
+			: await client.GetResponseAsync(new[] { message });
 
 		Assert.NotNull(response);
 		Assert.NotEmpty(response.Messages);
@@ -240,9 +240,9 @@ public abstract class ChatClientMessagesTestsBase<T>
 		var error = await Assert.ThrowsAsync<NotSupportedException>(async () =>
 		{
 			if (streaming)
-				await client.GetStreamingResponseAsync([message]).ToChatResponseAsync();
+				await client.GetStreamingResponseAsync(new[] { message }).ToChatResponseAsync();
 			else
-				await client.GetResponseAsync([message]);
+				await client.GetResponseAsync(new[] { message });
 		});
 		Assert.Contains(mediaType, error.Message, StringComparison.Ordinal);
 	}
@@ -262,8 +262,8 @@ public abstract class ChatClientMessagesTestsBase<T>
 		var message = new ChatMessage(ChatRole.User,
 			[CreateBinaryContent(mediaType), new TextContent("Reply with exactly HELLO and nothing else.")]);
 		var response = streaming
-			? await client.GetStreamingResponseAsync([message]).ToChatResponseAsync()
-			: await client.GetResponseAsync([message]);
+			? await client.GetStreamingResponseAsync(new[] { message }).ToChatResponseAsync()
+			: await client.GetResponseAsync(new[] { message });
 
 		Assert.NotNull(response);
 		Assert.Contains("HELLO", response.Text, StringComparison.OrdinalIgnoreCase);
