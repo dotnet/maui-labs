@@ -101,8 +101,11 @@ public partial class InspectorLayoutWorkspaceTests
         var networkCalls = 0;
         var initialStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseInitial = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSecond = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var pollStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releasePoll = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseUnexpectedListResponses = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var detailStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseDetail = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await _page.RouteAsync("**/api/network", async route =>
@@ -113,10 +116,19 @@ public partial class InspectorLayoutWorkspaceTests
                 initialStarted.TrySetResult();
                 await releaseInitial.Task;
             }
+            else if (call == 2)
+            {
+                secondStarted.TrySetResult();
+                await releaseSecond.Task;
+            }
             else if (call == 3)
             {
                 pollStarted.TrySetResult();
                 await releasePoll.Task;
+            }
+            else
+            {
+                await releaseUnexpectedListResponses.Task;
             }
             var marker = call == 1 ? "first" : call == 2 ? "second" : "third";
             await route.FulfillAsync(new()
@@ -148,10 +160,13 @@ public partial class InspectorLayoutWorkspaceTests
             await data.ClickAsync();
             await _page.Locator("#df-tab-network").ClickAsync();
             await initialStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            // Drive an automatic refresh before checking the initial loading state.
+            await _page.Clock.RunForAsync(2000);
+            await secondStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(2, networkCalls);
             await Expect(_page.Locator("#df-attach-data")).ToBeDisabledAsync();
 
-            await _page.RunAndWaitForResponseAsync(() => _page.Clock.RunForAsync(2000),
-                response => response.Url.EndsWith("/api/network", StringComparison.Ordinal));
+            await ReleaseResponseAsync(releaseSecond, "/api/network");
             await Expect(_page.Locator("#df-dock-body")).ToContainTextAsync("https://example.test/second");
             await ReleaseResponseAsync(releaseInitial, "/api/network");
             await _page.Clock.RunForAsync(2000);
@@ -189,7 +204,9 @@ public partial class InspectorLayoutWorkspaceTests
         finally
         {
             releaseInitial.TrySetResult();
+            releaseSecond.TrySetResult();
             releasePoll.TrySetResult();
+            releaseUnexpectedListResponses.TrySetResult();
             releaseDetail.TrySetResult();
         }
     }
