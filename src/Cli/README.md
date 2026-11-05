@@ -202,9 +202,15 @@ maui project version list --channel nightly --take 20
 # Pin a specific version and restore
 maui project version set 10.0.60
 
+# Try packages from a dotnet/maui pull request build
+maui project version set --pr 24888
+maui project version set --pr https://github.com/dotnet/maui/pull/24888
+maui project version set --pr 24888 --framework net10.0
+maui project version set --pr 24888 --hive-path ~/.maui/hives
+
 # Use the latest stable or nightly package version
 maui project version set --latest
-maui project version set --latest-nightly --nuget-config
+maui project version set --latest-nightly --nuget-config --framework net10.0
 
 # Switch back to the installed workload version
 maui project version use-workload
@@ -289,7 +295,7 @@ VS Code, GitHub Copilot desktop, and Copilot CLI setup.
 | `maui device list` | List connected devices, emulators, and simulators (including physical iPhones and iPads on macOS) |
 | `maui project version` | Show the effective .NET MAUI version for a project |
 | `maui project version list` | List available .NET MAUI package versions |
-| `maui project version set` | Pin a project to a specific, latest stable, nightly, or custom-source MAUI version |
+| `maui project version set` | Pin a project to a specific, latest stable, nightly, dotnet/maui PR build, or custom-source MAUI version |
 | `maui project version use-workload` | Use the installed MAUI workload version instead of a pinned project version |
 | `maui version` | Display version information |
 | **AI** | |
@@ -358,6 +364,25 @@ For these directory names, upgrade refuses to overwrite an existing `.csproj`, e
 including IDs generated with the previous eight-character fallback.
 
 Run `maui <command> --help` for detailed options on any command.
+
+`--pr` (alias `--pull-request`) accepts a positive PR number or a full
+`https://github.com/dotnet/maui/pull/<number>` URL. Run from a directory
+containing a single `.csproj`, or specify `--project` explicitly.
+
+PR build packages are downloaded into a managed MAUI hive under
+`~/.maui/hives/dotnet-maui/pr-<number>/build-<build-id>/` by default. The
+project `NuGet.config` is pointed at that hive's `packages/` folder. Use
+`--hive-path` to choose a different hives root; `--artifact-path` is also
+accepted as an alias with the same hive-root behavior.
+
+`maui project version set` keeps MAUI package versions aligned with the
+project's target framework when it can infer one. Use
+`--framework`/`--target-framework`/`-f` with a `netX.Y` value to update
+`<TargetFramework>` or `<TargetFrameworks>` in the project file, for example
+when a PR or nightly package is built for a newer .NET version. If a PR also
+has a newer build still running, the command warns that it is using the latest
+completed PackageArtifacts build; `--json` reports the in-progress build
+metadata for automation.
 
 For screen recording, select the platform and target when starting:
 

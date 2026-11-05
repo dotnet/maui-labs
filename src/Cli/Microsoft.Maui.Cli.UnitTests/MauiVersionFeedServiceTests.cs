@@ -34,6 +34,19 @@ public class MauiVersionFeedServiceTests
 		Assert.Equal("9.0.90-ci.main.25354.2", version.Version);
 	}
 
+	[Fact]
+	public async Task GetLatestVersionAsync_TargetFramework_ReturnsLatestCompatibleMajor()
+	{
+		var service = CreateService("""
+			{"versions":["9.0.90","10.0.1","9.0.100","10.0.2"]}
+			""");
+
+		var version = await service.GetLatestVersionAsync(MauiVersionChannel.Stable, includePrerelease: false, targetFramework: "net9.0");
+
+		Assert.NotNull(version);
+		Assert.Equal("9.0.100", version.Version);
+	}
+
 	static MauiVersionFeedService CreateService(string response) =>
 		new(new HttpClient(new StubHandler(response)));
 
