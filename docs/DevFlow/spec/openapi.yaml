@@ -2578,8 +2578,15 @@ paths:
         Downloads a file under an advertised storage root and returns base64-encoded
         content. The path parameter is a single URI-encoded relative path; path
         separators inside it must be percent-encoded. Omit `root` to use the
-        default `appData` root.
+        default `appData` root. Base64 downloads are limited to 16 MiB. Set
+        `raw=true` to stream application/octet-stream bytes without a file-sized agent buffer.
       parameters:
+        - name: raw
+          in: query
+          description: Stream raw bytes instead of the base64 JSON envelope.
+          schema:
+            type: boolean
+            default: false
         - name: path
           in: path
           required: true
@@ -2599,6 +2606,12 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/storage.json#/$defs/FileDownloadResponse"
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "413":
+          description: Base64 download exceeds 16 MiB; request raw=true.
         "400":
           $ref: "#/components/responses/InvalidPath"
         "404":
@@ -2613,7 +2626,12 @@ paths:
       description: >
         Creates or overwrites a file under an advertised storage root. Parent
         directories are created automatically after path sandbox validation.
-        Omit `root` to use the default `appData` root.
+        Omit `root` to use the default `appData` root. Accepts a base64 JSON
+        envelope or application/octet-stream. Raw bodies are staged on disk and
+        committed by atomic replacement only after complete framing and lease
+        validation. The wire-body limit is 64 MiB, including base64/JSON overhead.
+        Content-Length and chunked transfer framing are supported; incomplete
+        bodies are discarded. Body reads time out after 15 seconds of inactivity.
       parameters:
         - name: path
           in: path
@@ -2633,6 +2651,10 @@ paths:
           application/json:
             schema:
               $ref: "./schemas/storage.json#/$defs/FileUploadRequest"
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
       responses:
         "200":
           description: Uploaded file metadata.
@@ -2640,6 +2662,12 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/storage.json#/$defs/FileUploadResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "413":
+          description: Wire body exceeds 64 MiB.
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
         "400":
           $ref: "#/components/responses/InvalidPath"
         "500":
@@ -2670,10 +2698,477 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/storage.json#/$defs/FileDeleteResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
         "400":
           $ref: "#/components/responses/InvalidPath"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/files/move:
+    post:
+      operationId: moveStorageEntry
+      tags: [storage]
+      summary: Rename or move a file or directory
+      description: >
+        Renames or moves a file or a whole directory within one storage root.
+        Both ends are resolved against the same root - moving between roots would
+        cross a persistence and backup boundary silently. An existing destination
+        is refused unless `overwrite` is set, and a directory is never overwritten.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/storage.json#/$defs/FileMoveRequest"
+      responses:
+        "200":
+          description: Where it ended up.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/FileMoveResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/directories/{path}:
+    put:
+      operationId: createStorageDirectory
+      tags: [storage]
+      summary: Create a directory
+      description: >
+        Creates a directory under an advertised storage root, including any missing
+        parents. A directory that is already there is a success rather than an error,
+        and says so with `created: false`.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative directory path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: The directory as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/DirectoryCreateResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      operationId: deleteStorageDirectory
+      tags: [storage]
+      summary: Delete a directory
+      description: >
+        Deletes a directory under an advertised storage root. A non-empty directory
+        is refused unless `recursive` is set - emptying a tree by accident is the one
+        mistake here with no undo.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: URI-encoded relative directory path under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+        - name: recursive
+          in: query
+          description: Delete the directory and everything in it.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Deleted directory metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/storage.json#/$defs/DirectoryDeleteResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/schema:
+    get:
+      operationId: getDatabaseSchema
+      tags: [storage]
+      summary: Read a SQLite database schema
+      description: >
+        The tables and views in a SQLite file under an advertised storage root,
+        with their columns and indexes. The database is opened in the app's own
+        process against the live file, so this sees what the app is actually
+        storing rather than a snapshot. A file whose bytes are not a database is
+        reported as such rather than failing later inside a query. Requires the
+        host's registered SQLitePCLRaw provider (SQLite 3.35+); check storage.sqlite
+        capabilities first. Read endpoints open the database read-only.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Relative path to the database file under the selected storage root.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: Tables, views, columns and indexes.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseSchemaResponse"
+        "413":
+          description: Schema response exceeds 1 MiB.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/query:
+    post:
+      operationId: queryDatabase
+      tags: [storage]
+      summary: Run SQL against a database
+      description: >
+        Runs every statement in a SQL script and returns the first result set.
+        Earlier successful statements are not rolled back if a later statement fails;
+        use an explicit SQL transaction for atomic scripts. This can write: the pane it
+        serves is a database client, and it can UPDATE, DELETE and run DDL. What
+        it cannot do is leave the file - `ATTACH` and `load_extension` are refused
+        by SQLite's own authorizer while the statement is being prepared. A
+        statement that will not parse, names a missing table, or breaks a
+        constraint comes back as a 200 with `error` and `errorCode` set. The default
+        execution deadline is 20 seconds (host configurable up to 25), below the
+        client's 30-second transport timeout. Results are capped at 1000 rows and
+        1 MiB; values over 64 KiB are marked truncated in cells. Individual SQLite
+        values are limited to 8 MiB. The rows field is display-only; cells carries
+        typed values. Mutation lease ownership is required even for SELECT here.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryRequest"
+      responses:
+        "200":
+          description: What the statement did.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "413":
+          description: Request exceeds 64 MiB or response exceeds 1 MiB.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/rows:
+    get:
+      operationId: getDatabaseRows
+      tags: [storage]
+      summary: Read one table's rows
+      description: >
+        One table's rows, each carrying the rowid that names it - which is what an
+        editable grid is built from. A view is accepted and comes back with no
+        rowids, which is how a client is told it is read-only. Row IDs are signed
+        64-bit decimal strings. Rows/cells/rowVersions are parallel. Normal tables
+        use ascending rowid keyset pagination; read-only tables and views order by
+        visible columns and use offset pagination. Echo nextCursor as cursor to
+        continue. Cursors are scoped to database/table/schema. This is live data,
+        not a cross-page snapshot; concurrent writes can change later pages,
+        especially offset pages. Results are limited to 1000 rows and 1 MiB.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Relative path to the database file under the selected storage root.
+          schema:
+            type: string
+        - name: table
+          in: query
+          required: true
+          description: Table or view name.
+          schema:
+            type: string
+        - name: maxRows
+          in: query
+          description: Non-positive values use 500; positive values clamp to 1000. The byte budget may truncate sooner.
+          schema:
+            type: integer
+            format: int32
+            default: 500
+        - name: cursor
+          in: query
+          description: Opaque nextCursor from the previous page, URI-encoded. Omit for the first page.
+          schema:
+            type: string
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      responses:
+        "200":
+          description: Rows with their rowids.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseRowsResponse"
+        "413":
+          description: Response exceeds 1 MiB.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      operationId: insertDatabaseRow
+      tags: [storage]
+      summary: Insert a row
+      description: >
+        Adds one record and answers with it as it stands afterwards - read back
+        rather than echoed, because a column left out takes its default and an
+        INTEGER PRIMARY KEY takes the next rowid. Column names are checked against
+        the database's own schema; only identifiers it recognises reach a statement.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseInsertRequest"
+      responses:
+        "200":
+          description: The record as it stands after the insert.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "413":
+          description: Request exceeds 64 MiB or response exceeds 1 MiB.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      operationId: updateDatabaseRow
+      tags: [storage]
+      summary: Update a row
+      description: >
+        Changes cells of one record named by its rowid, and answers with the record
+        as it stands afterwards - SQLite applies the column's type affinity, so
+        "42" typed into an INTEGER column comes back as the number. Supply
+        expectedVersion from rowVersions to reject concurrent changes with a
+        200 result whose errorCode is conflict. Omit it for explicit last-write-wins.
+        Version checking, writing and reading back occur in one write transaction.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseUpdateRequest"
+      responses:
+        "200":
+          description: The record as it stands after the update.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "413":
+          description: Request exceeds 64 MiB or response exceeds 1 MiB.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/rows/delete:
+    post:
+      operationId: deleteDatabaseRow
+      tags: [storage]
+      summary: Delete a row
+      description: >
+        Removes one record named by its string rowid. Optional expectedVersion
+        guards against concurrent app writes atomically; mismatch returns a 200
+        result with errorCode=conflict and makes no change. Omission explicitly
+        selects last-write-wins.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseDeleteRequest"
+      responses:
+        "200":
+          description: What the delete did.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseQueryResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "413":
+          description: Request exceeds 64 MiB or response exceeds 1 MiB.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/storage/sqlite/create:
+    post:
+      operationId: createDatabase
+      tags: [storage]
+      summary: Create an empty database
+      description: >
+        Writes a new, empty SQLite file - a real one, with the header a file needs
+        to be opened as a database by anything it is later handed to. Refuses a
+        path where something already exists.
+      parameters:
+        - name: root
+          in: query
+          description: Storage root id. Defaults to `appData`. Use `/api/v1/storage/roots` to discover supported roots.
+          schema:
+            type: string
+            default: appData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/sqlite.json#/$defs/DatabaseCreateRequest"
+      responses:
+        "200":
+          description: The new database.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/sqlite.json#/$defs/DatabaseCreateResponse"
+        "409":
+          $ref: "#/components/responses/StorageMutationLeaseRequired"
+        "413":
+          description: Request exceeds 64 MiB.
+        "501":
+          $ref: "#/components/responses/BackendNotSupported"
+        "503":
+          $ref: "#/components/responses/StorageMutationBusy"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -3156,6 +3651,27 @@ components:
       additionalProperties: false
 
   responses:
+    StorageMutationLeaseRequired:
+      description: >
+        A mutation lease is required or held by another session. Claim through
+        POST /api/v1/agent/lease, then send X-DevFlow-Lease on mutations.
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
+    StorageMutationBusy:
+      description: >
+        Mutation admission timed out behind another operation, or lease authority
+        is unavailable. Honor Retry-After when supplied; reason/details identify
+        whether retry is appropriate.
+      headers:
+        Retry-After:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/common.json#/$defs/ProblemDetails"
     WebViewError:
       description: Missing or unknown WebView, invalid input, or bridge operation failure.
       content:

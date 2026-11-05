@@ -19,6 +19,9 @@ public class AgentOptions
     /// </summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>Optional host initialization and configuration for live database browsing.</summary>
+    public Sqlite.SqliteBrowserOptions Sqlite { get; } = new();
+
     /// <summary>
     /// Maximum tree walk depth. 0 = unlimited. Default: 0.
     /// </summary>

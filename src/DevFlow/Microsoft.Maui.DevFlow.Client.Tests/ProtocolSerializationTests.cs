@@ -11,6 +11,49 @@ namespace Microsoft.Maui.DevFlow.Client.Tests;
 public class ProtocolSerializationTests
 {
     [Fact]
+    public void StorageContracts_PreserveStringIdentitiesTypedCellsAndVersions()
+    {
+        var value = new SqliteRowsResponse
+        {
+            Columns = ["payload"],
+            RowIds = ["9223372036854775807"],
+            Rows = [["BLOB[2] 00FF"]],
+            Cells = [[new SqliteValue { Type = "blob", Value = "AP8=", ByteLength = 2 }]],
+            RowVersions = [new string('A', 64)],
+            NextCursor = "opaque"
+        };
+        var json = JsonSerializer.Serialize(value, StorageJsonContext.Default.SqliteRowsResponse);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(JsonValueKind.String, document.RootElement.GetProperty("rowIds")[0].ValueKind);
+        var parsed = JsonSerializer.Deserialize(json, StorageJsonContext.Default.SqliteRowsResponse)!;
+        Assert.Equal("9223372036854775807", parsed.RowIds[0]);
+        Assert.Equal("blob", parsed.Cells[0][0].Type);
+        Assert.Equal("AP8=", parsed.Cells[0][0].Value);
+        Assert.False(parsed.Cells[0][0].Truncated);
+        Assert.Equal(value.RowVersions, parsed.RowVersions);
+        Assert.Equal("opaque", parsed.NextCursor);
+    }
+
+    [Fact]
+    public void StorageRowRequest_PreservesNullBlobAndOptimisticPrecondition()
+    {
+        var value = new SqliteRowBody
+        {
+            Path = "app.db", Table = "people", RowId = "9007199254740993",
+            ExpectedVersion = new string('B', 64),
+            Values = [new SqliteCellBody { Column = "empty", Type = "null" },
+                new SqliteCellBody { Column = "blob", Type = "blob", Value = "" }]
+        };
+        var json = JsonSerializer.Serialize(value, StorageJsonContext.Default.SqliteRowBody);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal("9007199254740993", document.RootElement.GetProperty("rowId").GetString());
+        Assert.Equal(value.ExpectedVersion, document.RootElement.GetProperty("expectedVersion").GetString());
+        var parsed = JsonSerializer.Deserialize(json, StorageJsonContext.Default.SqliteRowBody)!;
+        Assert.Null(parsed.Values![0].Value);
+        Assert.Equal("", parsed.Values[1].Value);
+    }
+
+    [Fact]
     public void ElementTreeSnapshot_DiagnosticInputsRevision_RoundTripsGeneratedMetadata()
     {
         var snapshot = new ElementTreeSnapshot

@@ -29,6 +29,32 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         _server.MapPost("/api/v1/device/jobs/{identifier}/run", HandleUnsupportedJobs);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The platform's own answer, the same directory Essentials reports. On the Mac the user's
+    /// Caches folder is shared by every unsandboxed app, so the bundle's own folder inside it is the
+    /// root - and no bundle identifier means no root rather than the shared folder.
+    /// </remarks>
+    protected override string? GetCacheBasePath()
+    {
+#if ANDROID
+        return global::Android.App.Application.Context.CacheDir?.AbsolutePath;
+#elif IOS && !MACCATALYST
+        return global::Foundation.NSSearchPath.GetDirectories(
+            global::Foundation.NSSearchPathDirectory.CachesDirectory, global::Foundation.NSSearchPathDomain.User).FirstOrDefault();
+#elif MACCATALYST || MACOS
+        var caches = global::Foundation.NSSearchPath.GetDirectories(
+            global::Foundation.NSSearchPathDirectory.CachesDirectory, global::Foundation.NSSearchPathDomain.User).FirstOrDefault();
+        var bundleId = global::Foundation.NSBundle.MainBundle.BundleIdentifier;
+
+        return string.IsNullOrEmpty(caches) || string.IsNullOrEmpty(bundleId)
+            ? null
+            : Path.Combine(caches, bundleId);
+#else
+        return base.GetCacheBasePath();
+#endif
+    }
+
     // ── Framework identity ────────────────────────────────────────────────
 
     /// <inheritdoc />

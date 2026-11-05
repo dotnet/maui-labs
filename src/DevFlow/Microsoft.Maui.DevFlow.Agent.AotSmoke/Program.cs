@@ -89,7 +89,15 @@ http.DefaultRequestHeaders.Add("X-DevFlow-Lease", "smoke");
 
 var status = await Get("/api/v1/agent/status");
 Check(status.GetProperty("agent").GetProperty("name").GetString() == "Microsoft.Maui.DevFlow.Agent", "status");
-await Get("/api/v1/agent/capabilities");
+var capabilities = await Get("/api/v1/agent/capabilities");
+Check(!capabilities.GetProperty("capabilities").GetProperty("storage.sqlite").GetProperty("supported").GetBoolean(),
+    "SQLite without a host provider is advertised unsupported");
+using (var sqlite = await http.GetAsync("/api/v1/storage/sqlite/schema?path=app.db", ct))
+{
+    Check(sqlite.StatusCode == HttpStatusCode.NotImplemented, "SQLite without a provider returns 501");
+    using var error = JsonDocument.Parse(await sqlite.Content.ReadAsStringAsync(ct));
+    Check(error.RootElement.GetProperty("capability").GetString() == "storage.sqlite", "SQLite unsupported capability");
+}
 await Get("/api/v1/storage/roots");
 var lease = await Post("/api/v1/agent/lease", """{"ACTION":"acquire","LEASEID":"smoke"}""");
 Check(lease.GetProperty("authority").GetString() == "broker", "broker-authoritative lease");

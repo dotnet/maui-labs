@@ -41,7 +41,11 @@ internal static class FileStoragePathResolver
 
         var relative = Path.GetRelativePath(fullBasePath, fullPath);
         if (relative == ".")
+        {
+            if (!allowRoot)
+                throw new InvalidOperationException("The storage root itself cannot be changed");
             relative = string.Empty;
+        }
 
         relative = relative.Replace(Path.DirectorySeparatorChar, '/');
         if (Path.AltDirectorySeparatorChar != Path.DirectorySeparatorChar)
