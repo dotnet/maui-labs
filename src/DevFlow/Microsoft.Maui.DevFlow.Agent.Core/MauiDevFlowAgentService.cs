@@ -42,6 +42,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     private readonly RegisteredNativeElementRegistry? _nativeElementRegistry;
     private readonly IDisposable? _nativeElementSubscription;
+    private MauiDiagnosticsSubscriber? _mauiDiagnostics;
 
     /// <summary>
     /// Creates a new MAUI-backed agent service.
@@ -126,6 +127,10 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// <inheritdoc />
     protected override void PopulateCapabilities(Dictionary<string, object> capabilities)
     {
+        capabilities["maui.diagnostics"] = Capability(1, _mauiDiagnostics != null,
+            _mauiDiagnostics?.CapturedEvents.ToArray() ?? [],
+            reason: _mauiDiagnostics != null ? null
+                : "Enable CaptureMauiDiagnostics and EnableFileLogging at startup. MAUI diagnostic producers must also be enabled.");
         capabilities["ui.menus"] = new Dictionary<string, object?>
         {
             ["version"] = 1,
@@ -205,6 +210,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     /// <inheritdoc />
     protected override void DisposeBackendResources()
     {
+        _mauiDiagnostics?.Dispose();
+        _mauiDiagnostics = null;
         StopCaptureInvalidationHooks();
         _nativeElementSubscription?.Dispose();
         _nativeElementRegistry?.Clear();
@@ -213,8 +220,25 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
     protected override Task StopBackendAsync()
     {
+        _mauiDiagnostics?.Dispose();
+        _mauiDiagnostics = null;
         StopCaptureInvalidationHooks();
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    protected override void OnLogProviderAttached() => StartMauiDiagnostics();
+
+    /// <inheritdoc />
+    protected override void StartBackendResources() => StartMauiDiagnostics();
+
+    private void StartMauiDiagnostics()
+    {
+        if (!_disposed && _options.Enabled && _options.CaptureMauiDiagnostics
+            && _options.EnableFileLogging && _logProvider is { } provider)
+        {
+            _mauiDiagnostics ??= new MauiDiagnosticsSubscriber(provider.Writer.Write);
+        }
     }
 
     protected override void OnUiOperationSucceeded() => InvalidateUiCapture();

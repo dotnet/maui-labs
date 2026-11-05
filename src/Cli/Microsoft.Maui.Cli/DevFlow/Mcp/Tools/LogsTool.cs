@@ -9,14 +9,14 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class LogsTool
 {
-	[McpServerTool(Name = "maui_logs"), Description("Retrieve app logs (ILogger output and WebView console logs). Returns structured JSON log entries with timestamp, level, category, and message.")]
+	[McpServerTool(Name = "maui_logs"), Description("Retrieve app logs (ILogger output, WebView console logs, and opt-in MAUI diagnostics). Returns structured JSON log entries with timestamp, level, category, and message. MAUI diagnostic messages contain JSON snapshots; use source maui-diagnostics to filter them.")]
 	public static async Task<string> Logs(
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
 		[Description("Maximum number of log entries to return (default: 50)")] int limit = 50,
 		[Description("Number of newest entries to skip (for pagination)")] int skip = 0,
 		[Description("Minimum log level: trace, debug, info, warning, error, critical")] string? minLevel = null,
-		[Description("Log source filter: native, webview, or all (default: all)")] string? source = null)
+		[Description("Log source filter: native, webview, or maui-diagnostics (omit for all sources)")] string? source = null)
 	{
 		using var agent = await session.GetAgentClientAsync(agentPort);
 		var response = await agent.GetLogsAsync(limit, skip, source);

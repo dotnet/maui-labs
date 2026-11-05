@@ -297,7 +297,17 @@ public partial class DevFlowAgentService
     /// Called by AgentServiceExtensions during registration.
     /// </summary>
     public void SetLogProvider(FileLogProvider provider)
-        => _logProvider = provider;
+    {
+        _logProvider = provider;
+        OnLogProviderAttached();
+    }
+
+    /// <summary>
+    /// Attaches backend-specific log producers during registration, before UI creation.
+    /// </summary>
+    protected virtual void OnLogProviderAttached()
+    {
+    }
 
     /// <summary>
     /// Attaches the broker registration and stamps it with this backend's framework identity so the
