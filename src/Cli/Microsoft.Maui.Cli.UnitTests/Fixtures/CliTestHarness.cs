@@ -10,6 +10,9 @@ public sealed class CliTestHarness
     private static readonly FieldInfo? s_errorOccurredField =
         typeof(DevFlowCommands).GetField("_errorOccurred", BindingFlags.Static | BindingFlags.NonPublic);
 
+    private static readonly FieldInfo? s_agentLabelEmittedField =
+        typeof(DevFlowCommands).GetField("_agentLabelEmitted", BindingFlags.Static | BindingFlags.NonPublic);
+
     private readonly RootCommand _rootCommand;
     private readonly int _mockAgentPort;
 
@@ -42,9 +45,21 @@ public sealed class CliTestHarness
             Console.SetOut(stdOut);
             Console.SetError(stdErr);
             s_errorOccurredField?.SetValue(null, false);
+            s_agentLabelEmittedField?.SetValue(null, false);
 
             var parseResult = _rootCommand.Parse(args);
-            exitCode = await parseResult.InvokeAsync();
+
+            try
+            {
+                exitCode = await parseResult.InvokeAsync();
+            }
+            catch (Exception ex)
+            {
+                // Mirror Program.Main: command handlers may let exceptions (e.g. the
+                // multi-agent refusal) propagate; surface the message and fail the command.
+                Console.Error.WriteLine(ex.Message);
+                exitCode = 1;
+            }
 
             if (s_errorOccurredField?.GetValue(null) is true)
                 exitCode = 1;

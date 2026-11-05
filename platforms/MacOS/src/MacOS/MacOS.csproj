@@ -16,10 +16,20 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Platforms.MacOS.BlazorWebView" />
+    <!-- Lets VisualTreeWalker's MACOS branch reuse ToolbarItemInvocationOutcome (see
+         Platform/ToolbarItemInvocationOutcome.cs) without making it public API. -->
+    <InternalsVisibleTo Include="Microsoft.Maui.DevFlow.Agent" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <BundleResource Remove="Resources/MauiMenuBar.bundle/**" />
+    <BundleResource Include="Resources/MauiMenuBar.bundle/**">
+      <LogicalName>MauiMenuBar.bundle/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </BundleResource>
   </ItemGroup>
 
   <!-- Linker descriptor: preserve all public API types for AOT/trimming -->

@@ -23,11 +23,14 @@ public sealed class BatchTools
 		- {"action":"focus", "elementId":"<id>"}
 		- {"action":"scroll", "elementId":"<id>", "deltaX":0, "deltaY":200}
 		- {"action":"gesture", "type":"swipe", "elementId":"<id>", "direction":"up"}
+		- {"action":"gesture", "type":"pinch", "elementId":"<id>", "scale":2.0}
+		- {"action":"gesture", "type":"pan", "elementId":"<id>", "deltaX":0, "deltaY":-150}
 		- {"action":"navigate", "route":"//page"}
 		- {"action":"back"}
 
 		Note: The backend accepts both "action" and "type" fields. For gesture actions,
-		use "action":"gesture" with a separate "type" field for the gesture kind.
+		use "action":"gesture" with a separate "type" field for the gesture kind
+		(tap, doubletap, longpress, swipe, pan, pinch, rotate).
 
 		Example: [{"action":"fill","elementId":"entry1","text":"hello"},{"action":"tap","elementId":"btn1"}]
 		""")]
@@ -35,7 +38,9 @@ public sealed class BatchTools
 		McpAgentSession session,
 		[Description("JSON array of action objects. Each must have an 'action' or 'type' field (see tool description for schema)")] string actionsJson,
 		[Description("If true, continue executing remaining actions after a failure (default: false)")] bool continueOnError = false,
-		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
+		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
+		[Description("Capture epoch from maui_tree; the batch stops if its element snapshot becomes stale")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree")] long? registryGeneration = null)
 	{
 		JsonArray parsed;
 		try
@@ -68,8 +73,12 @@ public sealed class BatchTools
 
 		try
 		{
-			var agent = await session.GetAgentClientAsync(agentPort);
-			var result = await agent.BatchAsync(actions, continueOnError);
+			using var agent = await session.GetAgentClientAsync(agentPort);
+			var result = await agent.BatchAsync(
+				actions,
+				continueOnError,
+				captureEpoch,
+				registryGeneration);
 			return CliJson.SerializeUntyped(result, indented: false);
 		}
 		catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)

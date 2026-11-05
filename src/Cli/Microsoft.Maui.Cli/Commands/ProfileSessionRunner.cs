@@ -11,6 +11,7 @@ internal static class ProfileSessionRunner
 	{
 		var context = await ProfileSessionSetup.PrepareAsync(request, cancellationToken);
 		var stopRequestedByUser = false;
+		var appExitRequestedWhileTracing = false;
 		try
 		{
 			await ProfileSessionLaunch.StartAsync(context, cancellationToken);
@@ -24,29 +25,33 @@ internal static class ProfileSessionRunner
 					// newline (or close stdin) to stop. Other modes keep the existing
 					// "no manual stop in JSON" behavior.
 					allowManualStop: !context.UseJson || context.ManualStart,
+					context.EffectiveDuration,
+					context.TraceFinalizationStarted.Task,
+					context.TraceStopTimeout,
 					context.Formatter,
 					context.UseJson,
 					context.Verbose,
-					cancellationToken);
+					cancellationToken,
+					beforeCollectorStop: context.OutputFormat == TraceOutputFormat.Mibc && context.ExitControlServer is not null
+						? async token =>
+						{
+							appExitRequestedWhileTracing = await TryRequestAppExitAsync(context, token);
+							return appExitRequestedWhileTracing;
+						}
+						: null);
 			}
 
 			var postProcessingCancellationToken = ProfileCommand.ResolvePostProcessingCancellationToken(stopRequestedByUser, cancellationToken);
 
 			if (!context.UseRuntimeOwnedTraceCollection
-				&& context.ExitControlServer is not null)
+				&& context.ExitControlServer is not null
+				&& !appExitRequestedWhileTracing)
 				await TryRequestAppExitAsync(context, postProcessingCancellationToken);
 
 			if (context.OutputFormat == TraceOutputFormat.Mibc)
 			{
 				await ProfileCommand.ConvertNetTraceToMibcAsync(
-					context.Project,
-					context.Framework,
-					context.Configuration,
-					context.OutputPath,
-					context.PrimaryOutputPath,
-					context.Formatter,
-					context.UseJson,
-					context.Verbose,
+					context,
 					postProcessingCancellationToken);
 			}
 		}
@@ -84,27 +89,73 @@ internal static class ProfileSessionRunner
 		};
 	}
 
-	static async Task CleanupAsync(ProfileSessionContext context)
+	internal static async Task CleanupAsync(ProfileSessionContext context)
 	{
-		context.ReservedPorts?.Dispose();
-		context.ExitControlServer?.Dispose();
-
-		if (context.TraceProcess is not null)
+		try
 		{
-			await ProfileTraceLifecycle.StopBackgroundProcessAsync(context.TraceProcess.Process, "dotnet-trace", context.Formatter, context.UseJson, context.Verbose);
-			context.TraceProcess.Dispose();
+			try
+			{
+				if (context.TraceProcess is not null)
+				{
+					try
+					{
+						await ProfileTraceLifecycle.StopBackgroundProcessAsync(context.TraceProcess.Process, "dotnet-trace", context.Formatter, context.UseJson, context.Verbose);
+					}
+					finally
+					{
+						context.TraceProcess.Dispose();
+					}
+				}
+			}
+			finally
+			{
+				try
+				{
+					if (context.DsrouterProcess is not null)
+					{
+						try
+						{
+							await ProfileTraceLifecycle.StopBackgroundProcessAsync(context.DsrouterProcess.Process, "dotnet-dsrouter", context.Formatter, context.UseJson, context.Verbose);
+						}
+						finally
+						{
+							context.DsrouterProcess.Dispose();
+						}
+					}
+				}
+				finally
+				{
+					ProfileDsrouterRunner.DeleteIpcEndpoint(context.DsrouterIpcEndpoint);
+					try
+					{
+						if (context.Transport.RequiresManualExitControlPortRouting)
+						{
+							if (context.ReservedPorts is not null)
+							{
+								await ProfileCommandPortRouter.RemoveOwnedAdbReverseMappingsAsync(
+									context.Device,
+									context.ReservedPorts,
+									context.Formatter,
+									context.UseJson,
+									context.Verbose);
+							}
+						}
+					}
+					finally
+					{
+						context.ExitControlServer?.Dispose();
+						context.ReservedPorts?.Dispose();
+					}
+				}
+			}
 		}
-
-		if (context.Transport.RequiresManualExitControlPortRouting)
+		finally
 		{
-			if (context.ReservedPorts is not null)
-				await ProfileCommandPortRouter.RemoveAdbPortRoutingAsync(context.Device, context.Formatter, context.UseJson, context.Verbose, context.ReservedPorts.ExitControlPort);
-			else
-				await ProfileCommandPortRouter.RemoveAdbPortRoutingAsync(context.Device, context.Formatter, context.UseJson, context.Verbose, ProfileCommandPortRouter.GetExitControlPort(context.DiagnosticPort));
+			context.BuildWorkspace.Cleanup(context.Formatter, context.UseJson, context.Verbose);
 		}
 	}
 
-	internal static async Task TryRequestAppExitAsync(ProfileSessionContext context, CancellationToken cancellationToken)
+	internal static async Task<bool> TryRequestAppExitAsync(ProfileSessionContext context, CancellationToken cancellationToken)
 	{
 		var appExitRequested = await context.ExitControlServer!.TryRequestExitAsync(
 			ProfileCommand.s_exitControlConnectTimeout,
@@ -119,6 +170,8 @@ internal static class ProfileSessionRunner
 				: "The app did not connect to the startup profiling exit channel, so it may remain running and not flush PGO data. " +
 				  "Ensure it references Microsoft.Maui.ProfilingHelper and loads that assembly during startup.");
 		}
+
+		return appExitRequested;
 	}
 
 	static void EnsurePrimaryOutputExists(string primaryOutputPath)

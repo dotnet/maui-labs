@@ -81,14 +81,14 @@ public class EntryHandler : GtkViewHandler<IEntry, Gtk.Entry>
 
 	public static void MapTextColor(EntryHandler handler, IEntry entry)
 	{
-		if (entry.TextColor != null)
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(entry.TextColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			entry.TextColor != null ? $"color: {ToGtkColor(entry.TextColor)};" : null);
 	}
 
 	public static void MapFont(EntryHandler handler, IEntry entry)
 	{
 		var css = handler.BuildFontCss(entry.Font);
-		if (!string.IsNullOrEmpty(css)) handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapHorizontalTextAlignment(EntryHandler handler, IEntry entry)
@@ -104,7 +104,7 @@ public class EntryHandler : GtkViewHandler<IEntry, Gtk.Entry>
 
 	public static void MapCharacterSpacing(EntryHandler handler, IEntry entry)
 	{
-		handler.ApplyCss(handler.PlatformView, $"letter-spacing: {entry.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {entry.CharacterSpacing}px;");
 	}
 
 	public static void MapClearButtonVisibility(EntryHandler handler, IEntry entry)

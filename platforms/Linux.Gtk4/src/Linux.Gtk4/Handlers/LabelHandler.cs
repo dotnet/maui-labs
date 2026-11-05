@@ -46,18 +46,15 @@ public class LabelHandler : GtkViewHandler<ILabel, Gtk.Label>
 
 	public static void MapTextColor(LabelHandler handler, ILabel label)
 	{
-		if (label.TextColor != null)
-		{
-			handler.ApplyCss(handler.PlatformView, $"color: {ToGtkColor(label.TextColor)};");
-		}
+		handler.UpdateCss(handler.PlatformView,
+			label.TextColor != null ? $"color: {ToGtkColor(label.TextColor)};" : null);
 	}
 
 	public static void MapFont(LabelHandler handler, ILabel label)
 	{
 		var css = handler.BuildFontCss(label.Font);
 
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapHorizontalTextAlignment(LabelHandler handler, ILabel label)
@@ -90,19 +87,18 @@ public class LabelHandler : GtkViewHandler<ILabel, Gtk.Label>
 		else if (label.TextDecorations.HasFlag(TextDecorations.Strikethrough))
 			css = "text-decoration: line-through;";
 
-		if (!string.IsNullOrEmpty(css))
-			handler.ApplyCss(handler.PlatformView, css);
+		handler.UpdateCss(handler.PlatformView, css);
 	}
 
 	public static void MapCharacterSpacing(LabelHandler handler, ILabel label)
 	{
-		handler.ApplyCss(handler.PlatformView, $"letter-spacing: {label.CharacterSpacing}px;");
+		handler.UpdateCss(handler.PlatformView, $"letter-spacing: {label.CharacterSpacing}px;");
 	}
 
 	public static void MapLineHeight(LabelHandler handler, ILabel label)
 	{
-		if (label.LineHeight > 0)
-			handler.ApplyCss(handler.PlatformView, $"line-height: {label.LineHeight};");
+		handler.UpdateCss(handler.PlatformView,
+			label.LineHeight > 0 ? FormattableString.Invariant($"line-height: {label.LineHeight};") : null);
 	}
 
 	public static void MapVerticalTextAlignment(LabelHandler handler, ILabel label)

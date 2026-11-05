@@ -9,7 +9,7 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class ScreenshotTool
 {
-	[McpServerTool(Name = "maui_screenshot"), Description("Capture a screenshot of the running MAUI app. Returns the image directly for visual verification of layout, colors, contrast, and rendering.")]
+	[McpServerTool(Name = "maui_screenshot"), Description("Capture the running MAUI app directly. On macOS AppKit this includes native window chrome without activating the app or changing keyboard focus. Always use this tool instead of osascript, screencapture, mouse clicks, or app activation. Returns the image directly for visual verification of layout, colors, contrast, and rendering.")]
 	public static async Task<ContentBlock[]> Screenshot(
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null,
@@ -17,13 +17,29 @@ public sealed class ScreenshotTool
 		[Description("Element ID to capture a specific element")] string? elementId = null,
 		[Description("CSS selector to capture (first match, Blazor WebViews only)")] string? selector = null,
 		[Description("Resize screenshot to this max width in pixels (overrides auto-scaling)")] int? maxWidth = null,
-		[Description("Scale mode: 'native' keeps full HiDPI resolution, default auto-scales to 1x logical pixels")] string? scale = null)
+		[Description("Scale mode: 'native' keeps full HiDPI resolution, default auto-scales to 1x logical pixels")] string? scale = null,
+		[Description("Capture epoch from maui_tree to require a matching screenshot snapshot")] long? captureEpoch = null,
+		[Description("Native registry generation from maui_tree")] long? registryGeneration = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
-		var bytes = await agent.ScreenshotAsync(window, elementId, selector, maxWidth, scale);
-		if (bytes == null || bytes.Length == 0)
-			throw new McpException("Screenshot failed — no image data returned. Is the agent connected and the app visible?");
+		using var agent = await session.GetAgentClientAsync(agentPort);
+		var result = await agent.ScreenshotResultAsync(
+			window,
+			elementId,
+			selector,
+			maxWidth,
+			scale,
+			captureEpoch,
+			registryGeneration);
+		if (!result.Success || result.Data == null || result.Data.Length == 0)
+		{
+			var message = result.Error
+				?? "Screenshot failed — no image data returned. Is the agent connected and the app visible?";
+			if (result.Suggestions is { Count: > 0 })
+				message += "\n" + string.Join("\n", result.Suggestions);
+			throw new McpException(message);
+		}
 
+		var bytes = result.Data;
 		return [
 			new TextContentBlock { Text = $"Screenshot captured ({bytes.Length} bytes, PNG)" },
 			ImageContentBlock.FromBytes(bytes, "image/png")

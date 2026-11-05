@@ -42,8 +42,12 @@ All NuGet package versions are defined in **`Directory.Packages.props`** at the 
    ```xml
    <FileSignInfo Include="ThirdParty.dll" CertificateName="3PartySHA2" />
    ```
-6. Add the project to the solution: `MauiLabs.sln` and the product's `.slnf`
+6. Add the project to the solution: `MauiLabs.slnx` and the product's `.slnf`
 7. Add to `DevFlow.slnf` if it should be built by CI
+8. Check the product's build job in `eng/pipelines/devflow-official.yml`. Add the project to the exact
+   `.slnf` or `.slnx` used by that job; it may be narrower than the product's main solution.
+9. Check the product's NuGet.org publish stage in `eng/pipelines/devflow-official.yml`. Ensure its
+   `Copy-Item` package glob matches the new `<PackageId>`.
 
 ## Version Management
 
@@ -80,6 +84,7 @@ When adding a new third-party dependency that gets bundled into a NuGet package,
 - `dotnet-eng` — engineering infrastructure
 - `dotnet10` — version-specific feed
 - `dotnet11` — version-specific feed
+- `dotnet11-transport` — .NET 11 transport feed
 
 **Do NOT add `nuget.org` as a direct source.** All public packages are available through the dnceng proxy feeds.
 

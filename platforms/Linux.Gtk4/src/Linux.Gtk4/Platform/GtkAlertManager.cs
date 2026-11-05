@@ -20,15 +20,14 @@ public static class GtkAlertManager
 /// </summary>
 public static void Register(IServiceCollection services)
 {
-try
-{
+// MAUI 10.0.70 moved the interface out of AlertManager.
 var amType = typeof(Window).Assembly
 .GetType("Microsoft.Maui.Controls.Platform.AlertManager");
-if (amType == null) return;
 
-var iamsType = amType.GetNestedType("IAlertManagerSubscription",
-BindingFlags.Public | BindingFlags.NonPublic);
-if (iamsType == null) return;
+var iamsType = typeof(Window).Assembly
+.GetType("Microsoft.Maui.Controls.Platform.IAlertManagerSubscription")
+?? amType?.GetNestedType("IAlertManagerSubscription", BindingFlags.Public | BindingFlags.NonPublic)
+?? throw new NotSupportedException($"Cannot register GTK dialogs: IAlertManagerSubscription was not found in {typeof(Window).Assembly.FullName}.");
 
 var proxyType = typeof(AlertSubscriptionProxy<>).MakeGenericType(iamsType);
 var createMethod = typeof(DispatchProxy)
@@ -36,12 +35,9 @@ var createMethod = typeof(DispatchProxy)
 .First(m => m.Name == "Create" && m.GetGenericArguments().Length == 2)
 .MakeGenericMethod(iamsType, proxyType);
 
-var proxy = createMethod.Invoke(null, null);
-if (proxy == null) return;
+var proxy = createMethod.Invoke(null, null)!;
 
 services.AddSingleton(iamsType, proxy);
-}
-catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"GtkAlertManager registration failed: {ex.Message}"); }
 }
 
 static Gtk.Window? GetGtkWindow(object? page)
@@ -206,7 +202,7 @@ var sheetArgs = args[1]!;
 var title = GetProp<string>(sheetArgs, "Title") ?? "";
 var cancel = GetProp<string>(sheetArgs, "Cancel") ?? "Cancel";
 var destruction = GetProp<string>(sheetArgs, "Destruction");
-var buttons = GetProp<string[]>(sheetArgs, "Buttons");
+var buttons = GetProp<IEnumerable<string>>(sheetArgs, "Buttons")?.ToArray() ?? Array.Empty<string>();
 var result = GetProp<object>(sheetArgs, "Result");
 var trySetResult = result?.GetType().GetMethod("TrySetResult");
 

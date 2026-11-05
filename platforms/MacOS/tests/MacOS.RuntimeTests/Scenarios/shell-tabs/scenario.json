@@ -1,0 +1,43 @@
+{
+  "name": "shell-tabs",
+  "expectedCases": 1,
+  "expectedAssertions": 63,
+  "evidence": [
+    "initial.png",
+    "selected-sixth.png",
+    "assertions.txt",
+    "click-refresh.json",
+    "click-refresh-count.txt",
+    "click-refresh-traces.txt"
+  ],
+  "fixedEvidence": [
+    "passed.txt",
+    "wide-sidebar.png",
+    "disposed-view-state.txt",
+    "reentrant-destination-state.txt",
+    "reentrant-different-destination.png",
+    "flyout-sections.png",
+    "narrow-replacement.png",
+    "detached-item-selection.png",
+    "programmatic-selection.png",
+    "hide-active-section.png",
+    "remove-active-section.png",
+    "handler-rebind.png"
+  ],
+  "baseline": {
+    "overlays": [
+      {
+        "source": "platforms/MacOS/src/MacOS/Handlers/ShellHandler.cs",
+        "commit": "b0767ac6d972e2aaa5168339632822604c02a1f0"
+      },
+      {
+        "source": "platforms/MacOS/src/MacOS/Handlers/ShellHandler.Tabs.cs",
+        "commit": "b0767ac6d972e2aaa5168339632822604c02a1f0"
+      }
+    ],
+    "exitCode": 1,
+    "outcome": "failed",
+    "failureId": "shell-tabs.single-click-attachment",
+    "message": "native click attaches the selected page once (actual 3)"
+  }
+}

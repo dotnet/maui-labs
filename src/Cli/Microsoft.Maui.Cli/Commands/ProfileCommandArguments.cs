@@ -9,6 +9,9 @@ internal static class ProfileCommandArguments
 {
 	internal static string[] BuildCompileArguments(
 		string projectPath,
+		string artifactsPath,
+		string directoryBuildPropsPath,
+		string directoryBuildTargetsPath,
 		string framework,
 		string configuration,
 		ProfileTransportConfiguration transport,
@@ -20,6 +23,10 @@ internal static class ProfileCommandArguments
 		{
 			"build",
 			projectPath,
+			$"-p:ArtifactsPath={artifactsPath}",
+			$"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}",
+			$"-p:CustomAfterDirectoryBuildTargets={directoryBuildTargetsPath}",
+			$"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={directoryBuildTargetsPath}",
 			"-c", configuration,
 			"-f", framework,
 			"--nologo"
@@ -30,12 +37,15 @@ internal static class ProfileCommandArguments
 		if (!UsesRuntimeOwnedEventPipe(buildInjection))
 			AppendDiagnosticArguments(args, transport, diagnosticPort, diagnosticSuspend);
 
-		AppendBuildInjectionArguments(args, buildInjection);
+		AppendBuildInjectionArguments(args, projectPath, buildInjection);
 		return [.. args];
 	}
 
 	internal static string[] BuildLaunchArguments(
 		string projectPath,
+		string artifactsPath,
+		string directoryBuildPropsPath,
+		string directoryBuildTargetsPath,
 		string framework,
 		string configuration,
 		Device device,
@@ -48,6 +58,10 @@ internal static class ProfileCommandArguments
 		{
 			"build",
 			projectPath,
+			$"-p:ArtifactsPath={artifactsPath}",
+			$"-p:DirectoryBuildPropsPath={directoryBuildPropsPath}",
+			$"-p:CustomAfterDirectoryBuildTargets={directoryBuildTargetsPath}",
+			$"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={directoryBuildTargetsPath}",
 			"-t:Run",
 			"-c", configuration,
 			"-f", framework,
@@ -65,7 +79,43 @@ internal static class ProfileCommandArguments
 			args.Add("-p:_MlaunchWaitForExit=false");
 		}
 
-		AppendBuildInjectionArguments(args, buildInjection);
+		AppendBuildInjectionArguments(args, projectPath, buildInjection);
+		return [.. args];
+	}
+
+	internal static string[] BuildMibcPropertyArguments(ProfileSessionContext context, string? runtimeIdentifier = null)
+	{
+		var args = new List<string>
+		{
+			"msbuild",
+			context.Project.ProjectPath,
+			"-nologo",
+			$"-p:ArtifactsPath={context.BuildWorkspace.Path}",
+			$"-p:DirectoryBuildPropsPath={context.BuildWorkspace.DirectoryBuildPropsPath}",
+			$"-p:CustomAfterDirectoryBuildTargets={context.BuildWorkspace.DirectoryBuildTargetsPath}",
+			$"-p:CustomAfterMicrosoftCommonCrossTargetingTargets={context.BuildWorkspace.DirectoryBuildTargetsPath}",
+			$"-p:Configuration={context.Configuration}",
+			$"-p:TargetFramework={context.Framework}",
+			$"-p:Device={context.Device.Id}",
+			"-p:WaitForExit=false",
+			"-getProperty:IntermediateOutputPath,OutputPath,RuntimeIdentifier,RuntimeIdentifiers,PublishTrimmed,AndroidLinkMode,AndroidIncludeDebugSymbols",
+		};
+		AppendEnableDiagnosticsArgument(args);
+		if (!UsesRuntimeOwnedEventPipe(context.BuildInjection))
+			AppendDiagnosticArguments(args, context.Transport, context.DiagnosticPort, context.DiagnosticSuspend);
+		if (string.Equals(context.Transport.Platform, Platforms.iOS, StringComparison.OrdinalIgnoreCase))
+		{
+			args.Add("-p:_MlaunchWaitForExit=false");
+			// iOS computes PublishTrimmed during target execution, not property evaluation.
+			args.Add("-target:_ComputePublishTrimmed");
+		}
+		AppendBuildInjectionArguments(args, context.Project.ProjectPath, context.BuildInjection);
+		if (!string.IsNullOrWhiteSpace(runtimeIdentifier))
+		{
+			args.Add($"-p:RuntimeIdentifier={runtimeIdentifier}");
+			args.Add("-p:RuntimeIdentifiers=");
+			args.Add("-p:AppendRuntimeIdentifierToOutputPath=true");
+		}
 		return [.. args];
 	}
 
@@ -80,13 +130,13 @@ internal static class ProfileCommandArguments
 	static void AppendEnableDiagnosticsArgument(List<string> args)
 		=> args.Add("-p:EnableDiagnostics=true");
 
-	static void AppendBuildInjectionArguments(List<string> args, ProfilingBuildInjection? buildInjection)
+	static void AppendBuildInjectionArguments(List<string> args, string projectPath, ProfilingBuildInjection? buildInjection)
 	{
 		if (buildInjection is null)
 			return;
 
-		args.Add($"-p:CustomAfterMicrosoftCommonTargets={buildInjection.TargetsPath}");
 		args.Add("-p:MauiProfilingHelperInject=true");
+		args.Add($"-p:MauiProfilingHelperProjectFullPath={Path.GetFullPath(projectPath)}");
 		if (!string.IsNullOrWhiteSpace(buildInjection.ExitControlHost))
 			args.Add($"-p:MauiProfilingHelperExitHost={buildInjection.ExitControlHost}");
 		if (buildInjection.ExitControlPort > 0)

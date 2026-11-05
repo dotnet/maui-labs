@@ -1,0 +1,1 @@
+AppKit asset with spaces

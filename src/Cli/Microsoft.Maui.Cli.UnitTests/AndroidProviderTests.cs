@@ -83,10 +83,12 @@ public class SdkManagerTests : IDisposable
 			Directory.Delete(_tempDir, recursive: true);
 	}
 
-	[Fact]
-	public void SdkManagerPath_FindsVersionedCmdlineToolsLayout()
+	[Theory]
+	[InlineData("cmdline-tools", "16.0")]
+	[InlineData("cmdline-tools", "latest")]
+	public void SdkManagerPath_FindsSupportedLayouts(string directory, string version)
 	{
-		var sdkManagerPath = Path.Combine(_tempDir, "cmdline-tools", "16.0", "bin",
+		var sdkManagerPath = Path.Combine(_tempDir, directory, version, "bin",
 			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
 		Directory.CreateDirectory(Path.GetDirectoryName(sdkManagerPath)!);
 		File.WriteAllText(sdkManagerPath, string.Empty);
@@ -97,11 +99,96 @@ public class SdkManagerTests : IDisposable
 	}
 
 	[Fact]
-	public void ResolveSdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
+	public void SdkManagerPath_ReturnsNull_WhenSdkManagerIsMissing()
 	{
 		Directory.CreateDirectory(Path.Combine(_tempDir, "cmdline-tools", "latest", "bin"));
 
-		Assert.Null(SdkManager.ResolveSdkManagerPath(_tempDir));
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Null(sdkManager.SdkManagerPath);
+	}
+
+	[Theory]
+	[InlineData("cmdline-tools")]
+	[InlineData("tools")]
+	public void SdkManagerPath_IgnoresUnsupportedLayouts(string directory)
+	{
+		var barePath = Path.Combine(_tempDir, directory, "bin",
+			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
+		Directory.CreateDirectory(Path.GetDirectoryName(barePath)!);
+		File.WriteAllText(barePath, string.Empty);
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		Assert.Null(sdkManager.SdkManagerPath);
+		Assert.False(sdkManager.IsAvailable);
+	}
+
+	[Fact]
+	public void FindCommandLineTools_ReturnsPathAndRevision_FromSourceProperties()
+	{
+		var toolDir = Path.Combine(_tempDir, "cmdline-tools", "latest");
+		var sdkManagerPath = Path.Combine(toolDir, "bin",
+			OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager");
+		Directory.CreateDirectory(Path.GetDirectoryName(sdkManagerPath)!);
+		File.WriteAllText(sdkManagerPath, string.Empty);
+		File.WriteAllText(Path.Combine(toolDir, "source.properties"),
+			"Pkg.Revision=19.0\nPkg.Path=cmdline-tools;latest\n");
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		var tool = sdkManager.FindCommandLineTools();
+
+		Assert.NotNull(tool);
+		Assert.Equal(sdkManagerPath, tool!.Path);
+		Assert.Equal("19.0", tool.Revision);
+	}
+
+	[Fact]
+	public void FindCommandLineTools_ReturnsNull_WhenSdkPathIsNull()
+	{
+		using var sdkManager = new SdkManager(() => null, () => null);
+
+		Assert.Null(sdkManager.FindCommandLineTools());
+	}
+
+	[Theory]
+	[InlineData("latest", "19.0", "latest", "19.0")]
+	[InlineData("18.0", "23.0", "18.0", "23.0")]
+	[InlineData("18.0", null, "20.0", "20.0")]
+	public void FindCommandLineTools_PrefersLatestThenMetadataRevision(
+		string otherDirectory, string? otherRevision, string expectedDirectory, string expectedRevision)
+	{
+		var executable = OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager";
+		foreach (var (directory, revision) in new[] { ("20.0", "20.0"), (otherDirectory, otherRevision) })
+		{
+			var toolDir = Path.Combine(_tempDir, "cmdline-tools", directory);
+			Directory.CreateDirectory(Path.Combine(toolDir, "bin"));
+			File.WriteAllText(Path.Combine(toolDir, "bin", executable), string.Empty);
+			if (revision is not null)
+				File.WriteAllText(Path.Combine(toolDir, "source.properties"), $"Pkg.Revision={revision}\n");
+		}
+
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		var tool = sdkManager.FindCommandLineTools();
+
+		Assert.NotNull(tool);
+		Assert.Equal(Path.Combine(_tempDir, "cmdline-tools", expectedDirectory, "bin", executable), tool.Path);
+		Assert.Equal(expectedRevision, tool.Revision);
+		Assert.Equal(tool.Path, sdkManager.SdkManagerPath);
+	}
+
+	[Theory]
+	[InlineData(null)]
+	[InlineData("")]
+	[InlineData(" ")]
+	public async Task EnsureLatestCommandLineToolsAsync_Throws_OnInvalidTargetPath(string? targetPath)
+	{
+		using var sdkManager = new SdkManager(() => _tempDir, () => null);
+
+		await Assert.ThrowsAnyAsync<ArgumentException>(
+			() => sdkManager.EnsureLatestCommandLineToolsAsync(targetPath!));
 	}
 }
 
@@ -170,6 +257,38 @@ public class AndroidProviderTests
 		}
 	}
 
+	[Theory]
+	[InlineData("23.0")]
+	[InlineData(null)]
+	public async Task CheckHealthAsync_ReportsResolvedCommandLineTools(string? revision)
+	{
+		var tempSdk = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+		var toolDir = Path.Combine(tempSdk, "cmdline-tools", "latest");
+		var executable = OperatingSystem.IsWindows() ? "sdkmanager.bat" : "sdkmanager";
+		var toolPath = Path.Combine(toolDir, "bin", executable);
+		Directory.CreateDirectory(Path.GetDirectoryName(toolPath)!);
+		File.WriteAllText(toolPath, string.Empty);
+		if (revision is not null)
+			File.WriteAllText(Path.Combine(toolDir, "source.properties"), $"Pkg.Revision={revision}\n");
+
+		try
+		{
+			using var provider = new AndroidProvider(new StubJdkManager());
+			provider.OverrideSdkPath(tempSdk);
+
+			var checks = await provider.CheckHealthAsync();
+
+			var manager = Assert.Single(checks, c => c.Name == "SDK Manager");
+			Assert.Equal(CheckStatus.Ok, manager.Status);
+			Assert.Equal(toolPath, manager.Details!["path"]!.GetValue<string>());
+			Assert.Equal(revision, manager.Details["revision"]?.GetValue<string>());
+		}
+		finally
+		{
+			Directory.Delete(tempSdk, recursive: true);
+		}
+	}
+
 	[Fact]
 	public async Task GetMostRecentSystemImageAsync_ReturnsHighestApiLevel()
 	{
@@ -186,16 +305,8 @@ public class AndroidProviderTests
 		var provider = new FakeAndroidProvider
 		{
 			InstalledPackages = packages,
-			GetMostRecentSystemImageFunc = async ct =>
-			{
-				var pkgs = packages;
-				return pkgs
-					.Where(p => p.Path.StartsWith("system-images;android-", StringComparison.OrdinalIgnoreCase))
-					.Select(p => new { Package = p, ApiLevel = ExtractApiLevel(p.Path) })
-					.Where(x => x.ApiLevel > 0)
-					.OrderByDescending(x => x.ApiLevel)
-					.FirstOrDefault()?.Package.Path;
-			}
+			GetMostRecentSystemImageFunc = ct =>
+				Task.FromResult(AndroidProvider.FindMostRecentSystemImage(packages))
 		};
 
 		// Act
@@ -203,6 +314,73 @@ public class AndroidProviderTests
 
 		// Assert
 		Assert.Equal("system-images;android-35;google_apis;arm64-v8a", result);
+	}
+
+	[Fact]
+	public async Task GetMostRecentSystemImageAsync_HandlesMinorRevisionSuffix()
+	{
+		// API 37 ships as "android-37.0" (with a minor revision suffix). Regression test
+		// ensuring such images are not silently dropped by API-level parsing. Calls the real
+		// production selector (AndroidProvider.FindMostRecentSystemImage) so filter and sort
+		// logic stay covered.
+		var packages = new List<SdkPackage>
+		{
+			new SdkPackage { Path = "system-images;android-35;google_apis;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-37.0;google_apis_ps16k;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-36;google_apis;arm64-v8a" }
+		};
+
+		var provider = new FakeAndroidProvider
+		{
+			InstalledPackages = packages,
+			GetMostRecentSystemImageFunc = ct =>
+				Task.FromResult(AndroidProvider.FindMostRecentSystemImage(packages))
+		};
+
+		// Act
+		var result = await provider.GetMostRecentSystemImageAsync();
+
+		// Assert
+		Assert.Equal("system-images;android-37.0;google_apis_ps16k;arm64-v8a", result);
+	}
+
+	[Fact]
+	public void FindMostRecentSystemImage_PrefersHigherMinorRevision()
+	{
+		// Two minor revisions of the same major API level can coexist. The newer revision
+		// must win regardless of input order — guards against a stable OrderByDescending
+		// leaving the older "37.0" ahead of "37.1" when both parse to the same major.
+		var packages = new List<SdkPackage>
+		{
+			new SdkPackage { Path = "system-images;android-37.0;google_apis_ps16k;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-37.1;google_apis_ps16k;arm64-v8a" },
+			new SdkPackage { Path = "system-images;android-36.1;google_apis;arm64-v8a" }
+		};
+
+		// Act
+		var result = AndroidProvider.FindMostRecentSystemImage(packages);
+
+		// Assert
+		Assert.Equal("system-images;android-37.1;google_apis_ps16k;arm64-v8a", result);
+	}
+
+	[Fact]
+	public void FindMostRecentSystemImage_Throws_WhenPackagesNull()
+	{
+		Assert.Throws<ArgumentNullException>(() => AndroidProvider.FindMostRecentSystemImage(null!));
+	}
+
+	[Theory]
+	[InlineData("system-images;android-35;google_apis;arm64-v8a", "35.0")]
+	[InlineData("system-images;android-37.0;google_apis_ps16k;arm64-v8a", "37.0")]
+	[InlineData("system-images;android-37.0;google_apis_playstore_ps16k;x86_64", "37.0")]
+	[InlineData("system-images;android-37.1;google_apis_ps16k;arm64-v8a", "37.1")]
+	[InlineData("platform-tools", "0.0")]
+	[InlineData("build-tools;34.0.0", "0.0")]
+	[InlineData("system-images;android-VanillaIceCream;google_apis;arm64-v8a", "0.0")]
+	public void ExtractApiLevel_ParsesApiLevel(string systemImagePath, string expected)
+	{
+		Assert.Equal(Version.Parse(expected), AndroidProvider.ExtractApiLevel(systemImagePath));
 	}
 
 	[Fact]
@@ -295,11 +473,35 @@ public class AndroidProviderTests
 	}
 
 	[Fact]
+	public async Task GetDeviceProfilesAsync_ReturnsDeviceProfileList()
+	{
+		// Arrange
+		var provider = new FakeAndroidProvider
+		{
+			DeviceProfiles = new List<string> { "pixel_9_pro_fold", "Nexus 10" }
+		};
+
+		// Act
+		var result = await provider.GetDeviceProfilesAsync();
+
+		// Assert
+		Assert.Equal(2, result.Count);
+		Assert.Contains("pixel_9_pro_fold", result);
+		Assert.Contains("Nexus 10", result);
+	}
+
+	[Fact]
 	public async Task InstallAsync_ReportsProgress()
 	{
 		// Arrange
-		var progressMessages = new List<string>();
-		var progress = new Progress<string>(msg => progressMessages.Add(msg));
+		var progressMessages = new System.Collections.Concurrent.ConcurrentQueue<string>();
+		var progressCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var progress = new Progress<string>(msg =>
+		{
+			progressMessages.Enqueue(msg);
+			if (progressMessages.Count == 4)
+				progressCompleted.TrySetResult();
+		});
 
 		var provider = new FakeAndroidProvider
 		{
@@ -315,8 +517,7 @@ public class AndroidProviderTests
 		// Act
 		await provider.InstallAsync(progress: progress);
 
-		// Allow progress callbacks to complete
-		await Task.Delay(100);
+		await progressCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
 		// Assert
 		Assert.Contains(progressMessages, m => m.Contains("Step 1/4"));
@@ -436,23 +637,6 @@ public class AndroidProviderTests
 		Assert.Equal(4, allPackages.Count);
 		Assert.Equal(2, allPackages.Count(p => p.IsInstalled));
 		Assert.Equal(2, allPackages.Count(p => !p.IsInstalled));
-	}
-
-	// Helper method to extract API level from system image path
-	private static int ExtractApiLevel(string systemImagePath)
-	{
-		var parts = systemImagePath.Split(';');
-		if (parts.Length >= 2)
-		{
-			var androidPart = parts[1];
-			if (androidPart.StartsWith("android-", StringComparison.OrdinalIgnoreCase))
-			{
-				var levelStr = androidPart.Substring(8);
-				if (int.TryParse(levelStr, out var level))
-					return level;
-			}
-		}
-		return 0;
 	}
 }
 

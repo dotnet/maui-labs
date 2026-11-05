@@ -18,11 +18,34 @@ namespace Microsoft.Maui.DevFlow.Agent;
 /// Platform-specific agent service that provides native tap and screenshot
 /// implementations for Android, iOS, Mac Catalyst, Windows, and macOS AppKit.
 /// </summary>
-public class PlatformAgentService : DevFlowAgentService
+public partial class PlatformAgentService : MauiDevFlowAgentService
 {
     public PlatformAgentService(AgentOptions? options = null) : base(options) { }
 
-    protected override VisualTreeWalker CreateTreeWalker() => new PlatformVisualTreeWalker();
+    internal PlatformAgentService(
+        AgentOptions? options,
+        RegisteredNativeElementRegistry nativeElementRegistry,
+        IDisposable nativeElementSubscription)
+        : base(options, nativeElementRegistry, nativeElementSubscription)
+    {
+    }
+
+    protected override VisualTreeWalker CreateTreeWalker()
+        => NativeElementRegistry is null
+            ? new PlatformVisualTreeWalker()
+            : new PlatformVisualTreeWalker(NativeElementRegistry);
+
+    protected override string? DeviceIdentifier
+    {
+        get
+        {
+#if IOS
+            return Environment.GetEnvironmentVariable("SIMULATOR_UDID");
+#else
+            return null;
+#endif
+        }
+    }
 
     protected override double GetWindowDisplayDensity(IWindow? window)
     {
@@ -59,6 +82,39 @@ public class PlatformAgentService : DevFlowAgentService
             return base.GetWindowDisplayDensity(window);
         }
     }
+
+    protected override IReadOnlyCollection<string>? EnumerateNativePreferenceKeys(string? sharedName)
+    {
+#if IOS || MACCATALYST || MACOS || ANDROID
+        return NativePreferenceKeys.Enumerate(sharedName);
+#elif WINDOWS
+        if (Microsoft.Maui.ApplicationModel.AppInfo.PackagingModel ==
+            Microsoft.Maui.ApplicationModel.AppPackagingModel.Unpackaged)
+            return EnumerateUnpackagedWindowsPreferenceKeys(sharedName);
+
+        var localSettings = global::Windows.Storage.ApplicationData.Current.LocalSettings;
+        global::Windows.Storage.ApplicationDataContainer? container;
+        if (string.IsNullOrWhiteSpace(sharedName))
+            container = localSettings;
+        else
+            container = localSettings.Containers.ContainsKey(sharedName)
+                ? localSettings.Containers[sharedName]
+                : null;
+
+        return container is null ? Array.Empty<string>() : new List<string>(container.Values.Keys);
+#else
+        return base.EnumerateNativePreferenceKeys(sharedName);
+#endif
+    }
+
+#if WINDOWS
+    private static IReadOnlyCollection<string>? EnumerateUnpackagedWindowsPreferenceKeys(string? sharedName)
+    {
+        var path = global::System.IO.Path.Combine(
+            Microsoft.Maui.Storage.FileSystem.AppDataDirectory, "..", "Settings", "preferences.dat");
+        return ReadPreferenceFileKeys(path, sharedName, nestedStore: true);
+    }
+#endif
 
     protected override Task<bool> TryNativeScroll(VisualElement element, double deltaX, double deltaY)
     {
@@ -126,6 +182,9 @@ public class PlatformAgentService : DevFlowAgentService
                             null);
                         return Task.FromResult(true);
                     }
+#elif MACOS
+                    if (TryScrollMacOSView(platformView as NSView, deltaX, deltaY))
+                        return Task.FromResult(true);
 #endif
                 }
                 target = target.Parent as VisualElement;
@@ -191,6 +250,9 @@ public class PlatformAgentService : DevFlowAgentService
                     null);
                 return true;
             }
+#elif MACOS
+            if (TryScrollMacOSView(platformView as NSView, deltaX, deltaY))
+                return true;
 #endif
         }
         catch { }
@@ -277,6 +339,143 @@ public class PlatformAgentService : DevFlowAgentService
         }
         return null;
     }
+
+    private static void FindWinUIElementsByAutomationId(
+        Microsoft.UI.Xaml.DependencyObject? parent,
+        string automationId,
+        ICollection<Microsoft.UI.Xaml.FrameworkElement> matches)
+    {
+        if (parent is null)
+            return;
+
+        if (parent is Microsoft.UI.Xaml.FrameworkElement element
+            && string.Equals(
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(element),
+                automationId,
+                StringComparison.Ordinal))
+        {
+            matches.Add(element);
+        }
+
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent);
+        for (var i = 0; i < count; i++)
+        {
+            FindWinUIElementsByAutomationId(
+                Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i),
+                automationId,
+                matches);
+        }
+    }
+
+    private static Microsoft.UI.Xaml.FrameworkElement? FindWinUIRoot(IntPtr targetHwnd)
+    {
+        var app = Application.Current;
+        if (app is null)
+            return null;
+
+        foreach (var window in app.Windows)
+        {
+            if (window.Handler?.PlatformView is not Microsoft.UI.Xaml.Window nativeWindow
+                || nativeWindow.Content is not Microsoft.UI.Xaml.FrameworkElement root
+                || WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow) != targetHwnd)
+            {
+                continue;
+            }
+
+            return root;
+        }
+
+        return null;
+    }
+
+    private static bool TryInvokeWinUIElement(
+        Microsoft.UI.Xaml.FrameworkElement root,
+        string automationId)
+    {
+        var matches = new List<Microsoft.UI.Xaml.FrameworkElement>();
+        if (root.XamlRoot is not null)
+        {
+            foreach (var popup in Microsoft.UI.Xaml.Media.VisualTreeHelper
+                .GetOpenPopupsForXamlRoot(root.XamlRoot))
+            {
+                FindWinUIElementsByAutomationId(popup.Child, automationId, matches);
+            }
+        }
+
+        FindWinUIElementsByAutomationId(root, automationId, matches);
+        var uniqueMatches = new List<Microsoft.UI.Xaml.FrameworkElement>();
+        foreach (var match in matches)
+        {
+            if (!uniqueMatches.Any(existing => ReferenceEquals(existing, match)))
+                uniqueMatches.Add(match);
+        }
+        if (uniqueMatches.Count != 1)
+            return false;
+
+        var target = uniqueMatches[0];
+        var peer =
+            Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(target)
+            ?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(target);
+        if (peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+            is not Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invokeProvider)
+        {
+            return false;
+        }
+
+        invokeProvider.Invoke();
+        return true;
+    }
+#endif
+
+#if MACOS
+    private static bool TryScrollMacOSView(NSView? view, double deltaX, double deltaY)
+    {
+        var scrollView = view as NSScrollView
+            ?? FindMacOSDescendant<NSScrollView>(view)
+            ?? FindMacOSAncestor<NSScrollView>(view);
+        var documentView = scrollView?.DocumentView;
+        if (scrollView is null || documentView is null)
+            return false;
+
+        var clipView = scrollView.ContentView;
+        var current = clipView.Bounds.Location;
+        var maxX = Math.Max(0d, (double)(documentView.Bounds.Width - clipView.Bounds.Width));
+        var maxY = Math.Max(0d, (double)(documentView.Bounds.Height - clipView.Bounds.Height));
+        var newX = Math.Clamp((double)current.X + deltaX, 0d, maxX);
+        var yDelta = documentView.IsFlipped ? -deltaY : deltaY;
+        var newY = Math.Clamp((double)current.Y + yDelta, 0d, maxY);
+
+        clipView.ScrollToPoint(new CoreGraphics.CGPoint(newX, newY));
+        scrollView.ReflectScrolledClipView(clipView);
+        return true;
+    }
+
+    private static T? FindMacOSAncestor<T>(NSView? view) where T : NSView
+    {
+        var current = view?.Superview;
+        while (current is not null)
+        {
+            if (current is T match)
+                return match;
+            current = current.Superview;
+        }
+        return null;
+    }
+
+    private static T? FindMacOSDescendant<T>(NSView? view) where T : NSView
+    {
+        if (view is null)
+            return null;
+        foreach (var subview in view.Subviews)
+        {
+            if (subview is T match)
+                return match;
+            var nested = FindMacOSDescendant<T>(subview);
+            if (nested is not null)
+                return nested;
+        }
+        return null;
+    }
 #endif
 
     protected override IProfilerCollector CreateProfilerCollector()
@@ -288,11 +487,136 @@ public class PlatformAgentService : DevFlowAgentService
 #endif
     }
 
+#if ANDROID
+    private readonly string _jobsAgentInstanceId = Guid.NewGuid().ToString("N");
+    /// <summary>
+    /// Whether androidx.work is actually on the app's classpath. WorkManager is an opt-in
+    /// AndroidX dependency, not part of the platform, so an app that never referenced it has
+    /// no jobs capability at all — reporting "supported" for such an app would be a lie that
+    /// looks identical to "supported, but you have no jobs scheduled".
+    /// Probed once; the classpath cannot change while the process is alive.
+    /// </summary>
+    private static readonly Lazy<bool> s_workManagerAvailable = new(() => FindAndroidClass("androidx.work.WorkManager") != null);
+
+    /// <summary>
+    /// Re-wraps a Java object as a bound interface.
+    ///
+    /// <para>
+    /// <c>Java.Lang.Reflect.Method.Invoke</c> returns a plain <see cref="Java.Lang.Object"/>
+    /// wrapper regardless of the real runtime type, so <c>as Java.Util.IList</c> and
+    /// <c>is Java.Util.ICollection</c> always fail against it. Because those casts fail
+    /// quietly, the caller reads an empty collection instead of an error — which is exactly
+    /// how the jobs list came back empty while WorkManager plainly had work scheduled.
+    /// Re-wrapping by JNI handle produces the correctly typed proxy.
+    /// </para>
+    /// </summary>
+    private static T? AsJavaInterface<T>(Java.Lang.Object? value) where T : class, global::Android.Runtime.IJavaObject
+    {
+        if (value == null || value.Handle == IntPtr.Zero) return null;
+
+        if (value is T alreadyTyped) return alreadyTyped;
+
+        try
+        {
+            return Java.Lang.Object.GetObject<T>(value.Handle, global::Android.Runtime.JniHandleOwnership.DoNotTransfer);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Could not re-wrap {value.Class?.Name} as {typeof(T).Name}: {ex.GetBaseException().Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// WorkManager is present but the query could not be completed. Reported as supported with
+    /// an explicit error, never as an empty job list — an empty list means "no work scheduled".
+    /// </summary>
+    private static object WorkManagerProblem(string error) => new Dictionary<string, object?>
+    {
+        ["platform"] = "Android",
+        ["type"] = "WorkManager",
+        ["supported"] = true,
+        ["runSupported"] = false,
+        ["error"] = error,
+        ["jobs"] = Array.Empty<object>()
+    };
+
+    // JNI callers must use the app loader; the default boot loader cannot see AndroidX.
+    private static Java.Lang.Class? FindAndroidClass(string className)
+    {
+        try
+        {
+            var loader = global::Android.App.Application.Context?.ClassLoader;
+            if (loader == null) return null;
+            return Java.Lang.Class.ForName(className, initialize: false, loader);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Java class '{className}' not resolvable: {ex.GetBaseException().Message}");
+            return null;
+        }
+    }
+
+    private const string WorkManagerMissingReason =
+        "androidx.work.WorkManager is not on the app's classpath. Add the Xamarin.AndroidX.Work.Runtime " +
+        "package (or a library that depends on it) to enable background job inspection.";
+
+    private static List<object> GetScheduledWorkManagerJobs()
+    {
+        var scheduler = global::Android.App.Application.Context.GetSystemService(
+            global::Android.Content.Context.JobSchedulerService) as global::Android.App.Job.JobScheduler
+            ?? throw new InvalidOperationException("Android JobScheduler is unavailable.");
+        var jobs = new List<object>();
+        AddJobs(scheduler, null);
+        if (OperatingSystem.IsAndroidVersionAtLeast(34))
+            AddJobs(scheduler.ForNamespace("androidx.work.systemjobscheduler"), "androidx.work.systemjobscheduler");
+        return jobs;
+
+        void AddJobs(global::Android.App.Job.JobScheduler jobScheduler, string? jobNamespace)
+        {
+            foreach (var job in jobScheduler.AllPendingJobs
+                ?? throw new InvalidOperationException("JobScheduler returned no pending-job collection."))
+            {
+                if (job.Service?.ClassName != "androidx.work.impl.background.systemjob.SystemJobService")
+                    continue;
+                var workSpecId = job.Extras?.GetString("EXTRA_WORK_SPEC_ID");
+                if (!Guid.TryParse(workSpecId, out _))
+                    throw new InvalidOperationException($"WorkManager job {job.Id} has no valid EXTRA_WORK_SPEC_ID.");
+                jobs.Add(new Dictionary<string, object?>
+                {
+                    ["workSpecId"] = workSpecId,
+                    ["generation"] = job.Extras!.GetInt("EXTRA_WORK_SPEC_GENERATION", 0),
+                    ["jobId"] = job.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["namespace"] = jobNamespace
+                });
+            }
+        }
+    }
+#endif
+    protected override bool IsSyntheticTouchSupported
+    {
+        get
+        {
+#if IOS || MACCATALYST
+            return _options.EnableSyntheticTouch;
+#else
+            return base.IsSyntheticTouchSupported;
+#endif
+        }
+    }
+
     protected override bool IsJobsSupported
     {
         get
         {
-#if ANDROID || IOS || MACCATALYST
+#if ANDROID
+            // Gate on the real dependency rather than on the platform.
+            return s_workManagerAvailable.Value;
+#elif IOS || MACCATALYST
+            // BGTaskScheduler is part of the OS, so the capability always exists —
+            // whether any identifiers are registered is a separate question.
             return true;
 #else
             return base.IsJobsSupported;
@@ -305,7 +629,11 @@ public class PlatformAgentService : DevFlowAgentService
         get
         {
 #if IOS || MACCATALYST
-            return true;
+            // Triggering a BGTask needs a private selector that is compiled out of Release
+            // builds (see TrySimulateBgTaskLaunch), so a Release agent can list
+            // but never run. Advertising "run" there would hand callers a feature-detect that
+            // is guaranteed to fail.
+            return BgTaskRunSupported;
 #elif ANDROID
             return false;
 #else
@@ -317,86 +645,149 @@ public class PlatformAgentService : DevFlowAgentService
     protected override async Task<object?> GetPlatformJobsAsync()
     {
 #if ANDROID
+        // Distinguish "the app has no WorkManager" from "WorkManager returned no jobs".
+        // Both produce an empty array, and conflating them hides a missing dependency
+        // behind what looks like a healthy, idle queue.
+        if (!s_workManagerAvailable.Value)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["platform"] = "Android",
+                ["type"] = "WorkManager",
+                ["supported"] = false,
+                ["runSupported"] = false,
+                ["reason"] = WorkManagerMissingReason,
+                ["jobs"] = Array.Empty<object>()
+            };
+        }
+
         try
         {
             var context = global::Android.App.Application.Context;
-            var wmClass = Java.Lang.Class.ForName("androidx.work.WorkManager");
+            var wmClass = FindAndroidClass("androidx.work.WorkManager")!;
             var getInstanceMethod = wmClass.GetMethod("getInstance", Java.Lang.Class.FromType(typeof(global::Android.Content.Context)));
             var wm = getInstanceMethod?.Invoke(null, context);
+            // Present but not initialized is a configuration problem, not a missing capability,
+            // so this stays "supported" — the distinction tells you which thing to go fix.
             if (wm == null)
-                return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "WorkManager not initialized", jobs = Array.Empty<object>() };
+                return new Dictionary<string, object?> { ["platform"] = "Android", ["type"] = "WorkManager", ["supported"] = true, ["runSupported"] = false, ["error"] = "WorkManager not initialized", ["jobs"] = Array.Empty<object>() };
 
-            // Build WorkQuery for all states
-            var queryBuilderClass = Java.Lang.Class.ForName("androidx.work.WorkQuery$Builder");
-            var stateClass = Java.Lang.Class.ForName("androidx.work.WorkInfo$State");
+            // Query every terminal and non-terminal state — WorkQuery requires at least one
+            // filter, and the union of all states is the closest thing to "everything".
+            var queryBuilderClass = FindAndroidClass("androidx.work.WorkQuery$Builder")!;
+            var stateClass = FindAndroidClass("androidx.work.WorkInfo$State")!;
 
             var stateFields = new[] { "ENQUEUED", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "CANCELLED" };
             var stateList = new Java.Util.ArrayList();
             foreach (var fieldName in stateFields)
             {
-                var field = stateClass.GetField(fieldName);
-                var state = field?.Get(null);
+                var state = stateClass.GetField(fieldName)?.Get(null);
                 if (state != null)
                     stateList.Add(state);
             }
 
-            var fromStatesMethod = queryBuilderClass.GetMethod("fromStates", Java.Lang.Class.FromType(typeof(Java.Util.IList)));
+            if (stateList.Size() == 0)
+                return WorkManagerProblem("Could not read any androidx.work.WorkInfo$State enum values");
+
+            // The parameter type must be java.util.List. Class.FromType(typeof(Java.Util.IList))
+            // does not reliably resolve to it, so look the Java type up by name.
+            var listClass = FindAndroidClass("java.util.List");
+            if (listClass == null)
+                return WorkManagerProblem("Could not resolve java.util.List");
+
+            var fromStatesMethod = queryBuilderClass.GetMethod("fromStates", listClass);
             var builder = fromStatesMethod?.Invoke(null, stateList);
             if (builder == null)
-                return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = "Failed to create WorkQuery", jobs = Array.Empty<object>() };
+                return WorkManagerProblem("WorkQuery.Builder.fromStates returned null");
 
-            var buildMethod = builder.Class.GetMethod("build");
-            var query = buildMethod?.Invoke(builder);
+            var query = builder.Class.GetMethod("build")?.Invoke(builder);
+            if (query == null)
+                return WorkManagerProblem("WorkQuery.Builder.build returned null");
 
-            var getWorkInfosMethod = wm.Class.GetMethod("getWorkInfos", Java.Lang.Class.ForName("androidx.work.WorkQuery"));
-            var future = getWorkInfosMethod?.Invoke(wm, query!) as Java.Lang.Object;
+            var getWorkInfosMethod = wm.Class.GetMethod("getWorkInfos", FindAndroidClass("androidx.work.WorkQuery")!);
+            var future = getWorkInfosMethod?.Invoke(wm, query);
+            if (future == null)
+                return WorkManagerProblem("WorkManager.getWorkInfos returned null");
 
-            // ListenableFuture.get()
-            var getMethod = future?.Class.GetMethod("get");
-            var result = getMethod?.Invoke(future) as Java.Util.IList;
+            // ListenableFuture.get() blocks. Bound it here rather than via the
+            // get(long, TimeUnit) overload, whose primitive `long` parameter cannot be
+            // resolved with Class.FromType, and so a wedged future cannot hang the request.
+            var getMethod = future.Class.GetMethod("get");
+            if (getMethod == null)
+                return WorkManagerProblem("ListenableFuture has no get() method");
 
-            var jobs = new List<object>();
-            if (result != null)
+            Java.Lang.Object? resultObject;
+            try
             {
-                var iterator = result.Iterator();
-                while (iterator.HasNext)
-                {
-                    var info = iterator.Next()!;
-                    var infoClass = info.Class;
-
-                    var getId = infoClass.GetMethod("getId");
-                    var getTags = infoClass.GetMethod("getTags");
-                    var getState = infoClass.GetMethod("getState");
-                    var getRunAttemptCount = infoClass.GetMethod("getRunAttemptCount");
-
-                    var identifier = getId?.Invoke(info)?.ToString() ?? "";
-                    var tags = new List<string>();
-                    if (getTags?.Invoke(info) is Java.Util.ICollection tagSet)
-                    {
-                        var tagIter = tagSet.Iterator();
-                        while (tagIter.HasNext)
-                            tags.Add(tagIter.Next()?.ToString() ?? "");
-                    }
-                    var state = getState?.Invoke(info)?.ToString() ?? "";
-                    var runAttemptCount = 0;
-                    if (getRunAttemptCount?.Invoke(info) is Java.Lang.Integer countObj)
-                        runAttemptCount = countObj.IntValue();
-
-                    jobs.Add(new
-                    {
-                        identifier,
-                        tags = tags.ToArray(),
-                        state,
-                        runAttemptCount
-                    });
-                }
+                resultObject = await Task.Run(() => getMethod.Invoke(future))
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (TimeoutException)
+            {
+                return WorkManagerProblem("Timed out after 5s waiting for WorkManager.getWorkInfos");
             }
 
-            return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, jobs };
+            // Method.Invoke hands back a plain Java.Lang.Object wrapper, so `as Java.Util.IList`
+            // always fails and the list silently reads as empty. Re-wrap by handle instead.
+            var result = AsJavaInterface<Java.Util.IList>(resultObject);
+            if (result == null)
+                return WorkManagerProblem(
+                    $"Could not read the work-info list (got {resultObject?.Class?.Name ?? "null"})");
+
+            var jobs = new List<object>();
+            var iterator = result.Iterator();
+            while (iterator?.HasNext == true)
+            {
+                var info = iterator.Next();
+                if (info is not Java.Lang.Object infoObj) continue;
+                var infoClass = infoObj.Class;
+
+                var identifier = infoClass.GetMethod("getId")?.Invoke(infoObj)?.ToString() ?? "";
+                var state = infoClass.GetMethod("getState")?.Invoke(infoObj)?.ToString() ?? "";
+
+                var tags = new List<string>();
+                var tagSet = AsJavaInterface<Java.Util.ICollection>(infoClass.GetMethod("getTags")?.Invoke(infoObj));
+                if (tagSet != null)
+                {
+                    var tagIter = tagSet.Iterator();
+                    while (tagIter?.HasNext == true)
+                        tags.Add(tagIter.Next()?.ToString() ?? "");
+                }
+
+                // Boxed primitives come back as opaque wrappers too, so parse the string form.
+                var runAttemptCount = 0;
+                var countValue = infoClass.GetMethod("getRunAttemptCount")?.Invoke(infoObj)?.ToString();
+                if (countValue != null) int.TryParse(countValue, out runAttemptCount);
+                var generationMethod = infoClass.GetMethods().FirstOrDefault(method =>
+                    method.Name == "getGeneration" && method.GetParameterTypes().Length == 0);
+                var generation = generationMethod is null ? 0 : int.Parse(
+                    generationMethod.Invoke(infoObj)!.ToString()!, System.Globalization.CultureInfo.InvariantCulture);
+
+                jobs.Add(new Dictionary<string, object?>
+                {
+                    ["identifier"] = identifier,
+                    ["tags"] = tags.ToArray(),
+                    ["state"] = state,
+                    ["generation"] = generation,
+                    ["runAttemptCount"] = runAttemptCount
+                });
+            }
+
+            return new Dictionary<string, object?>
+            {
+                ["platform"] = "Android",
+                ["type"] = "WorkManager",
+                ["supported"] = true,
+                ["runSupported"] = false,
+                ["agentInstanceId"] = _jobsAgentInstanceId,
+                ["agentPort"] = Port,
+                ["jobs"] = jobs,
+                ["scheduledJobs"] = GetScheduledWorkManagerJobs()
+            };
         }
         catch (Exception ex)
         {
-            return new { platform = "Android", type = "WorkManager", supported = true, runSupported = false, error = ex.Message, jobs = Array.Empty<object>() };
+            return new Dictionary<string, object?> { ["platform"] = "Android", ["type"] = "WorkManager", ["supported"] = true, ["runSupported"] = false, ["error"] = ex.Message, ["jobs"] = Array.Empty<object>() };
         }
 #elif IOS || MACCATALYST
         try
@@ -408,20 +799,20 @@ public class PlatformAgentService : DevFlowAgentService
                 foreach (var req in requests)
                 {
                     var type = req is BGProcessingTaskRequest ? "processing" : "refresh";
-                    jobs.Add(new
+                    jobs.Add(new Dictionary<string, object?>
                     {
-                        identifier = req.Identifier,
-                        type,
-                        earliestBeginDate = req.EarliestBeginDate?.ToString() ?? ""
+                        ["identifier"] = req.Identifier,
+                        ["type"] = type,
+                        ["earliestBeginDate"] = req.EarliestBeginDate?.ToString() ?? ""
                     });
                 }
-                tcs.TrySetResult(new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = true, jobs });
+                tcs.TrySetResult(new Dictionary<string, object?> { ["platform"] = "iOS", ["type"] = "BGTaskScheduler", ["supported"] = true, ["runSupported"] = IsJobRunSupported, ["jobs"] = jobs });
             });
             return await tcs.Task;
         }
         catch (Exception ex)
         {
-            return new { platform = "iOS", type = "BGTaskScheduler", supported = true, runSupported = true, error = ex.Message, jobs = Array.Empty<object>() };
+            return new Dictionary<string, object?> { ["platform"] = "iOS", ["type"] = "BGTaskScheduler", ["supported"] = true, ["runSupported"] = IsJobRunSupported, ["error"] = ex.Message, ["jobs"] = Array.Empty<object>() };
         }
 #else
         return await base.GetPlatformJobsAsync();
@@ -431,45 +822,180 @@ public class PlatformAgentService : DevFlowAgentService
     protected override async Task<object?> RunPlatformJobAsync(string identifier, string? type = null)
     {
 #if ANDROID
-        return await Task.FromResult<object?>(new
+        return await Task.FromResult<object?>(new Dictionary<string, object?>
         {
-            success = false,
-            supported = false,
-            identifier,
-            error = $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
+            ["success"] = false,
+            ["supported"] = false,
+            ["identifier"] = identifier,
+            ["error"] = s_workManagerAvailable.Value
+                ? $"Running job '{identifier}' is not supported on Android because the original WorkManager worker type and request parameters cannot be reconstructed safely from the listed identifier or tags."
+                : WorkManagerMissingReason
         });
 #elif IOS || MACCATALYST
+#if !DEBUG
+        return await base.RunPlatformJobAsync(identifier, type);
+#else
         try
         {
             var taskType = await ResolveBgTaskRequestTypeAsync(identifier, type);
-            BGTaskRequest taskRequest = taskType.Equals("refresh", StringComparison.OrdinalIgnoreCase)
-                ? new BGAppRefreshTaskRequest(identifier)
-                : new BGProcessingTaskRequest(identifier);
 
-            taskRequest.EarliestBeginDate = null;
-
-            BGTaskScheduler.Shared.Submit(taskRequest, out var error);
-            if (error != null)
-                return new { success = false, error = error.LocalizedDescription, identifier };
-
-            return await Task.FromResult<object?>(new
+            // The request must be pending before it can be launched: iOS launches a *submitted*
+            // task, and simulating a launch for an unscheduled identifier is a no-op.
+            var wasPending = await IsBgTaskPendingAsync(identifier);
+            string? submitError = null;
+            if (!wasPending)
             {
-                success = true,
-                message = $"BGTask '{identifier}' submitted",
-                identifier,
-                type = taskType
-            });
+                BGTaskRequest taskRequest = taskType.Equals("refresh", StringComparison.OrdinalIgnoreCase)
+                    ? new BGAppRefreshTaskRequest(identifier)
+                    : new BGProcessingTaskRequest(identifier);
+                taskRequest.EarliestBeginDate = null;
+
+                BGTaskScheduler.Shared.Submit(taskRequest, out var error);
+                if (error != null)
+                    submitError = $"{error.LocalizedDescription} {DescribeBgTaskSchedulerError(error, identifier)}".Trim();
+            }
+
+            if (submitError != null)
+            {
+                return new Dictionary<string, object?>
+                {
+                    ["success"] = false,
+                    ["identifier"] = identifier,
+                    ["type"] = taskType,
+                    ["error"] = $"Could not schedule BGTask '{identifier}': {submitError}"
+                };
+            }
+
+            // Submitting only *schedules*; iOS decides when to launch, which organically may be
+            // never. Forcing the launch is the only way to actually run the handler on demand.
+            var launched = TrySimulateBgTaskLaunch(identifier, out var launchError);
+            if (!launched)
+            {
+                return new Dictionary<string, object?>
+                {
+                    ["success"] = false,
+                    ["identifier"] = identifier,
+                    ["type"] = taskType,
+                    ["scheduled"] = true,
+                    ["error"] = launchError
+                };
+            }
+
+            // A handler may reschedule its identifier immediately. Pending requests cannot
+            // prove either execution or completion; only acknowledge the launch request.
+            return new Dictionary<string, object?>
+            {
+                ["success"] = true,
+                ["identifier"] = identifier,
+                ["type"] = taskType,
+                ["launchRequested"] = true,
+                ["executionVerified"] = false,
+                ["completionVerified"] = false,
+                ["message"] = $"Launch requested for BGTask '{identifier}'.",
+                ["note"] = "This acknowledges the debug launch request, not handler execution or completion. " +
+                    "Assert on the handler's own recorded outcome; a pending request may be its next scheduled run."
+            };
         }
         catch (Exception ex)
         {
-            return new { success = false, error = ex.Message, identifier };
+            return new Dictionary<string, object?> { ["success"] = false, ["error"] = ex.Message, ["identifier"] = identifier };
         }
+#endif
 #else
         return await base.RunPlatformJobAsync(identifier, type);
 #endif
     }
 
 #if IOS || MACCATALYST
+    /// <summary>
+    /// Whether this build can actually trigger a BGTask. The only way to run one on demand is a
+    /// private selector, which is compiled out of Release builds, so the advertised capability
+    /// and <see cref="TrySimulateBgTaskLaunch"/> must be gated on the same condition.
+    /// </summary>
+#if DEBUG
+    private const bool BgTaskRunSupported = true;
+#else
+    private const bool BgTaskRunSupported = false;
+#endif
+
+    /// <summary>
+    /// Turns a BGTaskSchedulerErrorDomain code into the thing you actually need to go fix.
+    /// The three codes have completely different causes and conflating them sends people
+    /// looking in the wrong place.
+    /// </summary>
+    private static string DescribeBgTaskSchedulerError(NSError error, string identifier)
+    {
+        if (error.Domain != "BGTaskSchedulerErrorDomain")
+            return string.Empty;
+
+        return error.Code switch
+        {
+            // BGTaskSchedulerErrorCodeUnavailable
+            1 => "Background task scheduling is unavailable. BGTaskScheduler does not work on the " +
+                 "iOS Simulator — use a physical device — and Background App Refresh must be enabled.",
+            // BGTaskSchedulerErrorCodeTooManyPendingTaskRequests
+            2 => "Too many pending task requests; cancel some before submitting another.",
+            // BGTaskSchedulerErrorCodeNotPermitted
+            3 => $"'{identifier}' is not permitted. Add it to BGTaskSchedulerPermittedIdentifiers " +
+                 "in Info.plist and register a launch handler for it before the app finishes launching.",
+            _ => string.Empty
+        };
+    }
+
+    private static async Task<bool> IsBgTaskPendingAsync(string identifier)
+    {
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        BGTaskScheduler.Shared.GetPending(requests =>
+            tcs.TrySetResult(requests.Any(r => string.Equals(r.Identifier, identifier, StringComparison.Ordinal))));
+        return await tcs.Task;
+    }
+
+#if DEBUG
+    [System.Runtime.InteropServices.DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+    private static extern void SendSimulateLaunch(IntPtr receiver, IntPtr selector, IntPtr identifier);
+#endif
+
+    /// <summary>
+    /// Forces a submitted BGTask to run via <c>_simulateLaunchForTaskWithIdentifier:</c> — the
+    /// selector Apple documents for triggering background tasks from LLDB, invoked here in-process.
+    ///
+    /// <para>
+    /// <b>Debug builds only.</b> This is a private selector, and the agent compiles into the host
+    /// app; shipping it would expose consumers to App Store review rejection. There is no public
+    /// API that runs a BGTask on demand; release trigger requests are rejected before scheduling.
+    /// </para>
+    /// </summary>
+    private static bool TrySimulateBgTaskLaunch(string identifier, out string? error)
+    {
+#if DEBUG
+        try
+        {
+            var selector = new ObjCRuntime.Selector("_simulateLaunchForTaskWithIdentifier:");
+            var scheduler = BGTaskScheduler.Shared;
+
+            if (!scheduler.RespondsToSelector(selector))
+            {
+                error = "BGTaskScheduler does not respond to _simulateLaunchForTaskWithIdentifier: on this OS version.";
+                return false;
+            }
+
+            using var nsIdentifier = new NSString(identifier);
+            SendSimulateLaunch(scheduler.Handle, selector.Handle, nsIdentifier.Handle);
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to launch BGTask: {ex.GetBaseException().Message}";
+            return false;
+        }
+#else
+        error = "Triggering a BGTask requires a private API and is only available in Debug builds of the DevFlow agent. " +
+                "No task was scheduled.";
+        return false;
+#endif
+    }
+
     private static async Task<string> ResolveBgTaskRequestTypeAsync(string identifier, string? requestedType)
     {
         if (!string.IsNullOrWhiteSpace(requestedType))
@@ -509,10 +1035,7 @@ public class PlatformAgentService : DevFlowAgentService
             }
 #elif ANDROID
             if (platformView is global::Android.Views.View androidView && androidView.Clickable)
-            {
-                androidView.PerformClick();
-                return true;
-            }
+                return androidView.PerformClick();
 #elif MACOS
             if (platformView is NSButton button)
             {
@@ -530,8 +1053,9 @@ public class PlatformAgentService : DevFlowAgentService
         return false;
     }
 
-    protected override bool TryScheduleNativeTapFirst(VisualElement ve)
+    protected override async Task<bool> TryNativeTapFirstAsync(VisualElement ve)
     {
+        await Task.CompletedTask;
         try
         {
 #if WINDOWS
@@ -542,20 +1066,45 @@ public class PlatformAgentService : DevFlowAgentService
                     Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(buttonBase);
                 if (peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invokeProvider)
                 {
-                    // Wrap the dispatched lambda so a stale/disabled element doesn't
-                    // surface as CoreApplication.UnhandledErrorDetected and crash the
-                    // host app. The TryEnqueue bool only reports whether the work
-                    // item was queued, not whether the invoke itself succeeded.
-                    return buttonBase.DispatcherQueue.TryEnqueue(() =>
+                    var completion = new TaskCompletionSource<bool>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    var invocationState = 0;
+                    if (!buttonBase.DispatcherQueue.TryEnqueue(() =>
                     {
-                        try { invokeProvider.Invoke(); }
-                        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException
-                                                      or InvalidOperationException
-                                                      or UnauthorizedAccessException)
+                        if (Interlocked.CompareExchange(ref invocationState, 1, 0) != 0)
+                        {
+                            completion.TrySetResult(false);
+                            return;
+                        }
+
+                        try
+                        {
+                            invokeProvider.Invoke();
+                            completion.TrySetResult(true);
+                        }
+                        catch (Exception ex)
                         {
                             System.Diagnostics.Debug.WriteLine($"[Microsoft.Maui.DevFlow] WinUI native invoke skipped: {ex.GetBaseException().Message}");
+                            completion.TrySetResult(false);
                         }
-                    });
+                    }))
+                    {
+                        return false;
+                    }
+
+                    var winner = await Task.WhenAny(
+                        completion.Task,
+                        Task.Delay(TimeSpan.FromSeconds(5)));
+                    if (winner == completion.Task)
+                        return await completion.Task;
+
+                    if (Interlocked.CompareExchange(ref invocationState, 2, 0) == 0)
+                        return false;
+
+                    // Invocation already started. Treat it as handled so a modal or
+                    // long-running click handler does not block the automation request
+                    // or trigger the managed fallback a second time.
+                    return true;
                 }
             }
 #endif
@@ -565,50 +1114,488 @@ public class PlatformAgentService : DevFlowAgentService
         return false;
     }
 
+    protected override async Task<string?> TryNativeElementTapAsync(string elementId, object nativeElement)
+    {
+#if WINDOWS
+        if (nativeElement is System.Windows.Automation.AutomationElement automationElement)
+        {
+            try
+            {
+                var automationId = automationElement.Current.AutomationId;
+                var targetHwnd = Windows.NativeWindowProbe.TryGetTopLevelWindowHandle(
+                    automationElement);
+                if (!string.IsNullOrEmpty(automationId) && targetHwnd is { } hwnd)
+                {
+                    var root = await DispatchAsync(() => FindWinUIRoot(hwnd));
+                    if (root is not null)
+                    {
+                        var completion = new TaskCompletionSource<bool>(
+                            TaskCreationOptions.RunContinuationsAsynchronously);
+                        var invocationState = 0;
+                        if (root.DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (Interlocked.CompareExchange(ref invocationState, 1, 0) != 0)
+                            {
+                                completion.TrySetResult(false);
+                                return;
+                            }
+
+                            try
+                            {
+                                completion.TrySetResult(
+                                    TryInvokeWinUIElement(root, automationId));
+                            }
+                            catch (Exception ex) when (ex is
+                                InvalidOperationException
+                                or System.Runtime.InteropServices.COMException)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"[Microsoft.Maui.DevFlow] WinUI native element invocation skipped: {ex.Message}");
+                                completion.TrySetResult(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                completion.TrySetException(ex);
+                            }
+                        }))
+                        {
+                            var winner = await Task.WhenAny(
+                                completion.Task,
+                                Task.Delay(TimeSpan.FromSeconds(5)));
+                            if (winner == completion.Task)
+                            {
+                                if (await completion.Task)
+                                    return "ok";
+                            }
+                            else if (Interlocked.CompareExchange(ref invocationState, 2, 0) != 0)
+                            {
+                                return "ok";
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is
+                System.Windows.Automation.ElementNotAvailableException
+                or InvalidOperationException
+                or System.Runtime.InteropServices.COMException)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Microsoft.Maui.DevFlow] WinUI native element lookup skipped: {ex.Message}");
+            }
+        }
+#endif
+
+        return await base.TryNativeElementTapAsync(elementId, nativeElement);
+    }
+
+#if ANDROID || IOS || MACCATALYST
+    private const long MaxNativeElementScreenshotPixels = 16_777_216;
+
+#if ANDROID
+    protected override Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
+        => DispatchAsync(() => CaptureAndroidFullScreen(windowIndex));
+#endif
+
+    protected override bool SupportsNativeElementScreenshots => true;
+
+    protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+    {
+        try
+        {
+#if ANDROID
+            var view = nativeElement switch
+            {
+                global::Android.Views.View androidView => androidView,
+                global::Android.Views.IMenuItem menuItem => menuItem.ActionView,
+                _ => null
+            };
+            return Task.FromResult(CaptureAndroidView(view));
+#elif IOS || MACCATALYST
+            if (nativeElement is UIKit.UIView uiView)
+                return Task.FromResult(CaptureAppleView(uiView));
+
+            if (nativeElement is UIKit.UIViewController viewController)
+                return Task.FromResult(CaptureAppleView(viewController.View));
+
+            if (nativeElement is UIKit.UIBarButtonItem { CustomView: { } customView })
+                return Task.FromResult(CaptureAppleView(customView));
+
+            if (nativeElement is UIKit.UIBarItem barItem && !barItem.AccessibilityFrame.IsEmpty)
+            {
+                UIKit.UIWindow? ownerWindow = null;
+                if (elementInfo?.WindowId is int windowId
+                    && _app is not null
+                    && windowId >= 0
+                    && windowId < _app.Windows.Count
+                    && _app.Windows[windowId].Handler?.PlatformView is UIKit.UIWindow uiWindow)
+                {
+                    ownerWindow = uiWindow;
+                }
+
+                return Task.FromResult(CaptureAppleScreenRect(
+                    barItem.AccessibilityFrame,
+                    ownerWindow));
+            }
+
+            return Task.FromResult<byte[]?>(null);
+#endif
+        }
+        catch
+        {
+            return Task.FromResult<byte[]?>(null);
+        }
+    }
+
+#if ANDROID
+    private byte[]? CaptureAndroidFullScreen(int? windowIndex)
+    {
+        var window = _app is null || _app.Windows.Count == 0
+            ? null
+            : windowIndex is int index && index >= 0 && index < _app.Windows.Count
+                ? _app.Windows[index]
+                : _app.Windows[0];
+        var activity = window?.Handler?.PlatformView as global::Android.App.Activity
+            ?? Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+        var rootView = activity?.Window?.DecorView?.RootView;
+        if (rootView is null
+            || !rootView.IsAttachedToWindow
+            || rootView.Width <= 0
+            || rootView.Height <= 0
+            || (long)rootView.Width * rootView.Height > MaxNativeElementScreenshotPixels)
+        {
+            return null;
+        }
+
+        using var bitmap = global::Android.Graphics.Bitmap.CreateBitmap(
+            rootView.Width,
+            rootView.Height,
+            global::Android.Graphics.Bitmap.Config.Argb8888!);
+        using var canvas = new global::Android.Graphics.Canvas(bitmap);
+        rootView.Draw(canvas);
+
+        var rootLocation = new int[2];
+        rootView.GetLocationOnScreen(rootLocation);
+        var overlayRoots = new List<global::Android.Views.View>();
+        foreach (var registration in NativeElementRegistry?.GetSnapshot()
+            ?? Array.Empty<NativeElementRegistrationSnapshot>())
+        {
+            if (!registration.Role.Equals("Dialog", StringComparison.Ordinal)
+                && !registration.Role.Equals("ShellTabOverflow", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (registration.NativeElement is not global::Android.Views.View registeredView)
+                continue;
+            if (!ReferenceEquals(FindAndroidActivity(registeredView.Context), activity))
+                continue;
+
+            var overlayRoot = registeredView.RootView;
+            if (overlayRoot is null
+                || ReferenceEquals(overlayRoot, rootView)
+                || !overlayRoot.IsAttachedToWindow
+                || !overlayRoot.IsShown
+                || overlayRoot.Width <= 0
+                || overlayRoot.Height <= 0
+                || overlayRoots.Any(existing => ReferenceEquals(existing, overlayRoot)))
+            {
+                continue;
+            }
+
+            overlayRoots.Add(overlayRoot);
+        }
+
+        if (overlayRoots.Count > 0)
+        {
+            canvas.DrawColor(global::Android.Graphics.Color.Argb(80, 0, 0, 0));
+            foreach (var overlayRoot in overlayRoots)
+            {
+                var location = new int[2];
+                overlayRoot.GetLocationOnScreen(location);
+                var saveCount = canvas.Save();
+                canvas.Translate(
+                    location[0] - rootLocation[0],
+                    location[1] - rootLocation[1]);
+                overlayRoot.Draw(canvas);
+                canvas.RestoreToCount(saveCount);
+            }
+        }
+
+        return EncodeAndroidBitmap(bitmap);
+    }
+
+    private static global::Android.App.Activity? FindAndroidActivity(
+        global::Android.Content.Context? context)
+    {
+        while (context is global::Android.Content.ContextWrapper wrapper)
+        {
+            if (context is global::Android.App.Activity activity)
+                return activity;
+
+            var baseContext = wrapper.BaseContext;
+            if (ReferenceEquals(baseContext, context))
+                break;
+            context = baseContext;
+        }
+
+        return context as global::Android.App.Activity;
+    }
+
+    private static byte[]? CaptureAndroidView(global::Android.Views.View? view)
+    {
+        if (view is null
+            || !view.IsAttachedToWindow
+            || view.Width <= 0
+            || view.Height <= 0
+            || (long)view.Width * view.Height > MaxNativeElementScreenshotPixels)
+        {
+            return null;
+        }
+
+        using var bitmap = global::Android.Graphics.Bitmap.CreateBitmap(
+            view.Width,
+            view.Height,
+            global::Android.Graphics.Bitmap.Config.Argb8888!);
+        using var canvas = new global::Android.Graphics.Canvas(bitmap);
+        view.Draw(canvas);
+        return EncodeAndroidBitmap(bitmap);
+    }
+
+    private static byte[]? EncodeAndroidBitmap(global::Android.Graphics.Bitmap bitmap)
+    {
+        using var stream = new MemoryStream();
+        return bitmap.Compress(
+            global::Android.Graphics.Bitmap.CompressFormat.Png!,
+            quality: 100,
+            stream)
+                ? stream.ToArray()
+                : null;
+    }
+#elif IOS || MACCATALYST
+    private static byte[]? CaptureAppleView(UIKit.UIView? view)
+    {
+        if (view?.Window is not { } window
+            || view.Hidden
+            || view.Alpha <= 0
+            || view.Bounds.Width <= 0
+            || view.Bounds.Height <= 0
+            || !IsAppleCaptureSizeSupported(view.Bounds.Size, window.Screen.Scale))
+        {
+            return null;
+        }
+
+        using var format = new UIKit.UIGraphicsImageRendererFormat
+        {
+            Scale = window.Screen.Scale,
+            Opaque = view.Opaque
+        };
+        using var renderer = new UIKit.UIGraphicsImageRenderer(
+            new CoreGraphics.CGRect(0, 0, view.Bounds.Width, view.Bounds.Height),
+            format);
+        using var image = renderer.CreateImage(context =>
+        {
+            context.CGContext.TranslateCTM(-view.Bounds.X, -view.Bounds.Y);
+            if (!view.DrawViewHierarchy(view.Bounds, afterScreenUpdates: false))
+                view.Layer.RenderInContext(context.CGContext);
+        });
+        using var pngData = image.AsPNG();
+        return pngData?.ToArray();
+    }
+
+    private static byte[]? CaptureAppleScreenRect(
+        CoreGraphics.CGRect screenFrame,
+        UIKit.UIWindow? ownerWindow)
+    {
+        ownerWindow ??= FindAppleWindow(screenFrame);
+        var windowScene = ownerWindow?.WindowScene;
+        if (ownerWindow is null
+            || screenFrame.IsEmpty
+            || !IsAppleCaptureSizeSupported(screenFrame.Size, ownerWindow.Screen.Scale))
+        {
+            return null;
+        }
+
+        var ownerFrame = ownerWindow.ConvertRectFromCoordinateSpace(
+            screenFrame,
+            ownerWindow.Screen.CoordinateSpace);
+        if (!ownerWindow.Bounds.IntersectsWith(ownerFrame))
+            return null;
+
+        var windows = windowScene?.Windows;
+        if (windows is null)
+        {
+#pragma warning disable CA1422 // Legacy AppDelegate apps can have no UIWindowScene on current iOS versions.
+            windows = UIKit.UIApplication.SharedApplication.Windows;
+#pragma warning restore CA1422
+        }
+
+        var visibleWindows = windows
+            .Where(window => !window.Hidden && window.Alpha > 0)
+            .Where(window => ReferenceEquals(window.Screen, ownerWindow.Screen))
+            .OrderBy(window => (double)window.WindowLevel)
+            .ToList();
+        if (visibleWindows.Count == 0)
+            return null;
+
+        using var format = new UIKit.UIGraphicsImageRendererFormat
+        {
+            Scale = ownerWindow.Screen.Scale
+        };
+        using var renderer = new UIKit.UIGraphicsImageRenderer(
+            new CoreGraphics.CGRect(0, 0, screenFrame.Width, screenFrame.Height),
+            format);
+        using var image = renderer.CreateImage(context =>
+        {
+            context.CGContext.SaveState();
+            context.CGContext.TranslateCTM(-screenFrame.X, -screenFrame.Y);
+            foreach (var window in visibleWindows)
+            {
+                context.CGContext.SaveState();
+                context.CGContext.TranslateCTM(window.Frame.X, window.Frame.Y);
+                window.DrawViewHierarchy(window.Bounds, afterScreenUpdates: false);
+                context.CGContext.RestoreState();
+            }
+            context.CGContext.RestoreState();
+        });
+        using var pngData = image.AsPNG();
+        return pngData?.ToArray();
+    }
+
+    private static UIKit.UIWindow? FindAppleWindow(CoreGraphics.CGRect screenFrame)
+    {
+        UIKit.UIWindow? fallback = null;
+        foreach (var scene in UIKit.UIApplication.SharedApplication.ConnectedScenes)
+        {
+            if (scene is not UIKit.UIWindowScene windowScene)
+                continue;
+
+            foreach (var window in windowScene.Windows)
+            {
+                if (window.Hidden || window.Alpha <= 0)
+                    continue;
+
+                fallback ??= window;
+                var windowFrame = window.ConvertRectFromCoordinateSpace(
+                    screenFrame,
+                    window.Screen.CoordinateSpace);
+                if (window.Bounds.IntersectsWith(windowFrame))
+                    return window;
+            }
+        }
+
+#pragma warning disable CA1422 // Legacy AppDelegate apps can have no UIWindowScene on current iOS versions.
+        foreach (var window in UIKit.UIApplication.SharedApplication.Windows)
+#pragma warning restore CA1422
+        {
+            if (window.Hidden || window.Alpha <= 0)
+                continue;
+
+            fallback ??= window;
+            var windowFrame = window.ConvertRectFromCoordinateSpace(
+                screenFrame,
+                window.Screen.CoordinateSpace);
+            if (window.Bounds.IntersectsWith(windowFrame))
+                return window;
+        }
+
+        return fallback;
+    }
+
+    private static bool IsAppleCaptureSizeSupported(
+        CoreGraphics.CGSize logicalSize,
+        double scale)
+        => logicalSize.Width > 0
+            && logicalSize.Height > 0
+            && scale > 0
+            && logicalSize.Width * scale * logicalSize.Height * scale
+                <= MaxNativeElementScreenshotPixels;
+#endif
+#endif
+
 #if MACOS
+    protected override bool SupportsNativeElementScreenshots => true;
+
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
         try
         {
-            // Get the window - try KeyWindow first, then find any visible window via MAUI
-            var window = NSApplication.SharedApplication.KeyWindow;
-            if (window == null)
-            {
-                var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
-                if (mauiWindow?.Handler?.PlatformView is NSWindow nsWindow)
-                    window = nsWindow;
-            }
+            // Resolve the window without depending on the app being frontmost.
+            // NSApplication.KeyWindow is null when the app is not the active application,
+            // so prefer the NSWindow that actually owns the element being captured.
+            var window = ResolveCaptureWindow(rootElement);
+            var mauiWindow = rootElement.Window
+                ?? Microsoft.Maui.Controls.Application.Current?.Windows
+                    .FirstOrDefault(candidate => ReferenceEquals(candidate.Page, rootElement));
+            var ownerWindow = NSWindowFromPlatformView(mauiWindow?.Handler?.PlatformView);
+            var parentWindow = window is { IsSheet: true, SheetParent: { } sheetParent }
+                ? sheetParent
+                : ownerWindow ?? window;
 
-            // If a modal sheet is attached, capture it instead of the main window
-            if (window?.AttachedSheet is NSWindow sheet)
-                window = sheet;
-
-            // Use CGWindowListCreateImage for composited capture including layer-backed controls
+            // Capture the parent and its attached sheet as one WindowServer image.
+            // The private alert content may be layer-backed and cannot be reproduced
+            // reliably by rendering either NSView hierarchy in isolation.
+            var attachedSheet = parentWindow?.AttachedSheet
+                ?? parentWindow?.Sheets.LastOrDefault()
+                ?? FindRegisteredDialogWindow(parentWindow);
+            window = parentWindow;
             if (window != null)
             {
+                // ScreenCaptureKit captures the complete AppKit window, including native
+                // chrome and attached child windows, without activating or ordering it.
+                var capturedWindow = window;
+                var capturedImage = await AppKitScreenshotCapture.CaptureAsync(
+                    hasAttachedSheet: attachedSheet != null,
+                    () => CaptureWindowViaScreenCaptureKitAsync(capturedWindow),
+                    () => attachedSheet == null ? null : AppKitWindowCapture.CaptureWindows(capturedWindow, attachedSheet));
+                if (capturedImage != null)
+                    return capturedImage;
+
+                if (attachedSheet != null)
+                {
+                    // Quartz can only capture one window ID. Prefer the sheet when
+                    // compositing is unavailable so modal UI remains visible.
+                    window = attachedSheet;
+                }
+
+                // Primary: CGWindowListCreateImage gives a composited capture including
+                // layer-backed controls and WebView content. This can return null when the
+                // window is fully occluded (the window server may have purged its backing
+                // store), so we fall through to occlusion-independent paths below.
                 var pngBytes = CaptureWindowViaCG(window);
                 if (pngBytes != null)
                     return pngBytes;
-            }
 
-            // Fallback: DataWithPdfInsideRect (misses layer-backed controls like NSButton, NSSlider)
-            var contentView = window?.ContentView;
-            if (contentView != null)
-            {
-                var bounds = contentView.Bounds;
-                if (bounds.Width > 0 && bounds.Height > 0)
+                var contentView = window.ContentView;
+                if (contentView != null)
                 {
-                    var pdfData = contentView.DataWithPdfInsideRect(bounds);
-                    if (pdfData != null)
+                    // Occlusion-independent fallback: CacheDisplay re-renders the view
+                    // hierarchy directly, so it works even when the window is not frontmost.
+                    // Capture the theme frame when possible so native title-bar chrome is
+                    // included instead of limiting the result to the content view.
+                    var cached = CaptureNSView(contentView.Superview ?? contentView);
+                    if (cached != null)
+                        return cached;
+
+                    // Last resort: DataWithPdfInsideRect (misses layer-backed controls like NSButton, NSSlider)
+                    var bounds = contentView.Bounds;
+                    if (bounds.Width > 0 && bounds.Height > 0)
                     {
-                        var image = new NSImage(pdfData);
-                        var tiffData = image.AsTiff();
-                        if (tiffData != null)
+                        var pdfData = contentView.DataWithPdfInsideRect(bounds);
+                        if (pdfData != null)
                         {
-                            var bitmapRep = new NSBitmapImageRep(tiffData);
-                            var pngData = bitmapRep.RepresentationUsingTypeProperties(
-                                NSBitmapImageFileType.Png, new NSDictionary());
-                            return pngData?.ToArray();
+                            using var image = new NSImage(pdfData);
+                            var tiffData = image.AsTiff();
+                            if (tiffData != null)
+                            {
+                                using var bitmapRep = new NSBitmapImageRep(tiffData);
+                                using var pngProperties = new NSDictionary();
+                                var pngData = bitmapRep.RepresentationUsingTypeProperties(
+                                    NSBitmapImageFileType.Png, pngProperties);
+                                return pngData?.ToArray();
+                            }
                         }
                     }
                 }
@@ -617,6 +1604,136 @@ public class PlatformAgentService : DevFlowAgentService
         catch { }
 
         return await base.CaptureScreenshotAsync(rootElement);
+    }
+
+    NSWindow? FindRegisteredDialogWindow(NSWindow? parentWindow)
+    {
+        if (NativeElementRegistry == null)
+            return null;
+
+        foreach (var registration in NativeElementRegistry.GetSnapshot().Reverse())
+        {
+            if (!registration.Role.Equals("Dialog", StringComparison.Ordinal))
+                continue;
+
+            var candidate = registration.NativeElement switch
+            {
+                NSWindow nativeWindow => nativeWindow,
+                NSView nativeView => nativeView.Window,
+                _ => null
+            };
+            var registrationOwnerWindow = FindAppKitRegistrationOwnerWindow(
+                registration.Owner);
+            if (candidate != null
+                && candidate.WindowNumber > 0
+                && candidate.IsVisible
+                && candidate.Handle != parentWindow?.Handle
+                && (parentWindow == null
+                    || registrationOwnerWindow?.Handle == parentWindow.Handle)
+                && (candidate.SheetParent == null
+                    || candidate.SheetParent.Handle == parentWindow?.Handle))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static NSWindow? FindAppKitRegistrationOwnerWindow(object owner)
+    {
+        for (var element = owner as Element; element is not null; element = element.Parent)
+        {
+            if (element is Page page)
+                return NSWindowFromPlatformView(page.Window?.Handler?.PlatformView);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the NSWindow to capture without requiring the app to be frontmost.
+    /// Prefers the window that owns the element being captured (via its NSView), then the
+    /// MAUI application window's platform view, then key/main windows, and finally any
+    /// visible on-screen window.
+    /// </summary>
+    private static NSWindow? ResolveCaptureWindow(VisualElement rootElement)
+    {
+        // 1. The NSWindow that actually hosts the element's native view (focus-independent).
+        if (rootElement.Handler?.PlatformView is NSView elementView && elementView.Window is NSWindow ownerWindow)
+            return ownerWindow;
+
+        // 2. The MAUI application window's platform view.
+        var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+        if (NSWindowFromPlatformView(mauiWindow?.Handler?.PlatformView) is NSWindow mauiNsWindow)
+            return mauiNsWindow;
+
+        // 3. Key / main window (only non-null when the app is active).
+        var app = NSApplication.SharedApplication;
+        if (app.KeyWindow is NSWindow keyWindow)
+            return keyWindow;
+        if (app.MainWindow is NSWindow mainWindow)
+            return mainWindow;
+
+        // 4. Any visible, on-screen window owned by the app (fall back to the first window).
+        var appWindows = app.DangerousWindows;
+        if (appWindows != null)
+        {
+            NSWindow? firstWindow = null;
+            foreach (var candidate in appWindows)
+            {
+                if (candidate == null)
+                    continue;
+                firstWindow ??= candidate;
+                if (candidate.IsVisible && candidate.WindowNumber > 0)
+                    return candidate;
+            }
+
+            return firstWindow;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts an NSWindow from a MAUI platform view, which may be an NSWindow directly,
+    /// an NSView (use its Window), an NSWindowController, or an NSViewController.
+    /// </summary>
+    private static NSWindow? NSWindowFromPlatformView(object? platformView) => platformView switch
+    {
+        NSWindow window => window,
+        NSView view => view.Window,
+        NSWindowController controller => controller.Window,
+        NSViewController viewController => viewController.View?.Window,
+        _ => null
+    };
+
+    protected override ScreenshotCaptureFailure? DescribeScreenshotFailure()
+    {
+        try
+        {
+            var app = NSApplication.SharedApplication;
+
+            var mauiWindow = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
+            var nsWindow = NSWindowFromPlatformView(mauiWindow?.Handler?.PlatformView)
+                ?? app.KeyWindow ?? app.MainWindow;
+
+            if (nsWindow != null && (!nsWindow.IsVisible || nsWindow.IsMiniaturized))
+            {
+                return new ScreenshotCaptureFailure(
+                    "Failed to capture the app window because it is hidden or minimized.",
+                    "window-not-visible",
+                    retryable: true,
+                    suggestions: new[]
+                    {
+                        "Restore the app window without activating it, then retry.",
+                        "Ensure Screen & System Audio Recording permission is granted if native window capture is required."
+                    });
+            }
+        }
+        catch { }
+
+        return null;
     }
 
     protected override Task<byte[]?> CaptureElementScreenshotAsync(VisualElement element)
@@ -633,6 +1750,27 @@ public class PlatformAgentService : DevFlowAgentService
         catch { }
 
         return base.CaptureElementScreenshotAsync(element);
+    }
+
+    protected override Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+    {
+        try
+        {
+            var view = nativeElement switch
+            {
+                NSView nsView => nsView,
+                NSSearchToolbarItem searchItem => searchItem.SearchField,
+                NSToolbarItem toolbarItem => toolbarItem.View,
+                _ => null
+            };
+            if (view is not null)
+                return Task.FromResult<byte[]?>(CaptureNSView(view));
+        }
+        catch { }
+
+        return Task.FromResult<byte[]?>(null);
     }
 
     private static byte[]? CaptureNSView(NSView view)
@@ -682,6 +1820,109 @@ public class PlatformAgentService : DevFlowAgentService
         return pngData?.ToArray();
     }
 
+    private static async Task<byte[]?> CaptureWindowViaScreenCaptureKitAsync(NSWindow window)
+    {
+        // Never trigger the system screen-recording prompt from automation. Preflight is
+        // non-interactive; when access is absent we use the in-process rendering fallbacks.
+        if (!OperatingSystem.IsMacOSVersionAtLeast(14) ||
+            (!OperatingSystem.IsMacOSVersionAtLeast(14, 4) && !CGPreflightScreenCaptureAccess()))
+            return null;
+
+        try
+        {
+            using var content = await GetShareableContentAsync();
+            var windowId = (uint)window.WindowNumber;
+            var shareableWindow = content.Windows.FirstOrDefault(candidate => candidate.WindowId == windowId);
+            if (shareableWindow == null)
+                return null;
+
+            using var filter = new ScreenCaptureKit.SCContentFilter(shareableWindow);
+            using var configuration = new ScreenCaptureKit.SCStreamConfiguration
+            {
+                Width = (nuint)Math.Max(1, Math.Ceiling(shareableWindow.Frame.Width * window.BackingScaleFactor)),
+                Height = (nuint)Math.Max(1, Math.Ceiling(shareableWindow.Frame.Height * window.BackingScaleFactor)),
+                ShowsCursor = false,
+                PreservesAspectRatio = true,
+                IgnoreShadowsSingleWindow = true,
+                IgnoreGlobalClipSingleWindow = true,
+                CaptureResolution = ScreenCaptureKit.SCCaptureResolutionType.Best
+            };
+
+            if (OperatingSystem.IsMacOSVersionAtLeast(14, 2))
+                configuration.IncludeChildWindows = true;
+
+            var completion = new TaskCompletionSource<byte[]?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            ScreenCaptureKit.SCScreenshotManager.CaptureImage(
+                filter,
+                configuration,
+                (image, error) =>
+                {
+                    if (error != null || image == null)
+                    {
+                        completion.TrySetResult(null);
+                        return;
+                    }
+
+                    try
+                    {
+                        using var bitmapRep = new NSBitmapImageRep(image);
+                        using var properties = new NSDictionary();
+                        using var pngData = bitmapRep.RepresentationUsingTypeProperties(
+                            NSBitmapImageFileType.Png, properties);
+                        completion.TrySetResult(pngData?.ToArray());
+                    }
+                    catch
+                    {
+                        completion.TrySetResult(null);
+                    }
+                });
+
+            return await completion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("macos14.0")]
+    private static async Task<ScreenCaptureKit.SCShareableContent> GetShareableContentAsync()
+    {
+        var completion = new TaskCompletionSource<ScreenCaptureKit.SCShareableContent>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var registration = timeout.Token.Register(
+            () => completion.TrySetCanceled(timeout.Token));
+
+        void Complete(
+            ScreenCaptureKit.SCShareableContent content,
+            Foundation.NSError error)
+        {
+            if (error != null)
+                completion.TrySetException(new InvalidOperationException(error.LocalizedDescription));
+            else if (content == null)
+                completion.TrySetException(new InvalidOperationException("ScreenCaptureKit returned no shareable content."));
+            else if (!completion.TrySetResult(content))
+                content.Dispose();
+        }
+
+        if (OperatingSystem.IsMacOSVersionAtLeast(14, 4))
+            ScreenCaptureKit.SCShareableContent.GetCurrentProcessShareableContent(Complete);
+        else
+            ScreenCaptureKit.SCShareableContent.GetShareableContent(
+                excludeDesktopWindows: true,
+                onScreenWindowsOnly: false,
+                Complete);
+
+        return await completion.Task;
+    }
+
+    [System.Runtime.InteropServices.DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.U1)]
+    static extern bool CGPreflightScreenCaptureAccess();
+
     [System.Runtime.InteropServices.DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
     static extern IntPtr CGWindowListCreateImage(
         CoreGraphics.CGRect screenBounds,
@@ -693,27 +1934,45 @@ public class PlatformAgentService : DevFlowAgentService
     {
         try
         {
-            // kCGWindowListOptionIncludingWindow = 0x08, kCGWindowImageBoundsIgnoreFraming = 0x01
-            var cgImagePtr = CGWindowListCreateImage(
-                CoreGraphics.CGRect.Null, 0x08, (uint)window.WindowNumber, 0x01);
-
-            if (cgImagePtr == IntPtr.Zero)
-                return null;
-
-            var cgImage = ObjCRuntime.Runtime.GetINativeObject<CoreGraphics.CGImage>(
-                cgImagePtr, owns: true);
-            if (cgImage == null)
-                return null;
-
-            var bitmapRep = new NSBitmapImageRep(cgImage);
-            var pngData = bitmapRep.RepresentationUsingTypeProperties(
-                NSBitmapImageFileType.Png, new NSDictionary());
-            return pngData?.ToArray();
+            using var bitmapRep = CaptureWindowBitmapViaCG(window);
+            return EncodeBitmapRepresentation(bitmapRep);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static NSBitmapImageRep? CaptureWindowBitmapViaCG(NSWindow window)
+    {
+        // kCGWindowListOptionIncludingWindow = 0x08,
+        // kCGWindowImageBoundsIgnoreFraming = 0x01,
+        // kCGWindowImageBestResolution = 0x08.
+        var cgImagePtr = CGWindowListCreateImage(
+            CoreGraphics.CGRect.Null,
+            0x08,
+            (uint)window.WindowNumber,
+            0x09);
+        if (cgImagePtr == IntPtr.Zero)
+            return null;
+
+        using var cgImage = ObjCRuntime.Runtime.GetINativeObject<CoreGraphics.CGImage>(
+            cgImagePtr,
+            owns: true);
+        return cgImage == null
+            ? null
+            : new NSBitmapImageRep(cgImage);
+    }
+
+    private static byte[]? EncodeBitmapRepresentation(NSBitmapImageRep? bitmapRep)
+    {
+        if (bitmapRep == null)
+            return null;
+
+        var pngData = bitmapRep.RepresentationUsingTypeProperties(
+            NSBitmapImageFileType.Png,
+            new NSDictionary());
+        return pngData?.ToArray();
     }
 #elif IOS || MACCATALYST
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
@@ -724,7 +1983,7 @@ public class PlatformAgentService : DevFlowAgentService
         return await base.CaptureScreenshotAsync(rootElement);
     }
 
-    protected override Task<byte[]?> CaptureFullScreenAsync()
+    protected override Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
         => DispatchAsync(() => CaptureAllWindowsComposited());
 
     /// <summary>
@@ -799,6 +2058,200 @@ public class PlatformAgentService : DevFlowAgentService
         return pngData?.ToArray();
     }
 #elif WINDOWS
+    protected override bool SupportsNativeElementScreenshots => true;
+
+    protected override async Task<byte[]?> CaptureNativeElementScreenshotAsync(
+        object nativeElement,
+        ElementInfo? elementInfo)
+    {
+        if (nativeElement is System.Windows.Automation.AutomationElement automationElement)
+            return await Task.Run(() => Windows.NativeWindowProbe.CaptureElementScreenshot(automationElement));
+
+        if (nativeElement is not Microsoft.UI.Xaml.UIElement uiElement)
+            return null;
+
+        try
+        {
+            var renderTarget = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
+            await renderTarget.RenderAsync(uiElement);
+            if (renderTarget.PixelWidth <= 0 || renderTarget.PixelHeight <= 0)
+                return null;
+
+            var pixelBuffer = await renderTarget.GetPixelsAsync();
+            var pixels = new byte[checked((int)pixelBuffer.Length)];
+            using (var reader = global::Windows.Storage.Streams.DataReader.FromBuffer(pixelBuffer))
+                reader.ReadBytes(pixels);
+
+            using var bitmap = new SkiaSharp.SKBitmap(
+                renderTarget.PixelWidth,
+                renderTarget.PixelHeight,
+                SkiaSharp.SKColorType.Bgra8888,
+                SkiaSharp.SKAlphaType.Premul);
+            System.Runtime.InteropServices.Marshal.Copy(
+                pixels,
+                0,
+                bitmap.GetPixels(),
+                pixels.Length);
+            using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+            using var png = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+            return png.ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    protected override async Task<byte[]?> CaptureFullScreenAsync(int? windowIndex = null)
+    {
+        var target = await DispatchAsync(() =>
+        {
+            var index = windowIndex ?? 0;
+            var platformWindow = Application.Current?.Windows.ElementAtOrDefault(index)?
+                .Handler?.PlatformView as Microsoft.UI.Xaml.Window;
+            return (
+                Hwnd: platformWindow is null
+                    ? IntPtr.Zero
+                    : WinRT.Interop.WindowNative.GetWindowHandle(platformWindow),
+                Root: platformWindow?.Content);
+        });
+        if (target.Hwnd == IntPtr.Zero || target.Root is null)
+            return null;
+
+        var baseScreenshot = await Task.Run(
+            () => Windows.NativeWindowProbe.CaptureCompositedWindowScreenshot(target.Hwnd));
+        if (baseScreenshot is null)
+            return null;
+
+        try
+        {
+            return await DispatchAsync<byte[]>(
+                () => CompositeWinUiPopupsAsync(baseScreenshot, target.Root))
+                ?? baseScreenshot;
+        }
+        catch
+        {
+            return baseScreenshot;
+        }
+    }
+
+    private static async Task<byte[]?> CompositeWinUiPopupsAsync(
+        byte[] baseScreenshot,
+        Microsoft.UI.Xaml.UIElement root)
+    {
+        if (root.XamlRoot is null)
+            return baseScreenshot;
+
+        using var rootBitmap = SkiaSharp.SKBitmap.Decode(baseScreenshot);
+        if (rootBitmap is null)
+            return baseScreenshot;
+
+        using var canvas = new SkiaSharp.SKCanvas(rootBitmap);
+        var rootScaleX = root is Microsoft.UI.Xaml.FrameworkElement rootElement
+            && rootElement.ActualWidth > 0
+                ? rootBitmap.Width / rootElement.ActualWidth
+                : 1d;
+        var rootScaleY = root is Microsoft.UI.Xaml.FrameworkElement rootElementForHeight
+            && rootElementForHeight.ActualHeight > 0
+                ? rootBitmap.Height / rootElementForHeight.ActualHeight
+                : 1d;
+
+        using var popupCaptureCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var popupCount = 0;
+        foreach (var popup in Microsoft.UI.Xaml.Media.VisualTreeHelper
+            .GetOpenPopupsForXamlRoot(root.XamlRoot))
+        {
+            if (popupCaptureCts.IsCancellationRequested || popupCount >= 8)
+                break;
+            if (!popup.IsOpen || popup.Child is not Microsoft.UI.Xaml.UIElement popupChild)
+                continue;
+            popupCount++;
+
+            SkiaSharp.SKBitmap? renderedPopup;
+            try
+            {
+                renderedPopup = await RenderWinUiBitmapAsync(
+                    popupChild,
+                    popupCaptureCts.Token);
+            }
+            catch
+            {
+                continue;
+            }
+
+            using var popupBitmap = renderedPopup;
+            if (popupBitmap is null)
+                continue;
+
+            global::Windows.Foundation.Point origin;
+            try
+            {
+                origin = popupChild.TransformToVisual(root)
+                    .TransformPoint(new global::Windows.Foundation.Point(0, 0));
+            }
+            catch
+            {
+                origin = new global::Windows.Foundation.Point(
+                    popup.HorizontalOffset,
+                    popup.VerticalOffset);
+            }
+
+            canvas.DrawBitmap(
+                popupBitmap,
+                (float)(origin.X * rootScaleX),
+                (float)(origin.Y * rootScaleY));
+        }
+
+        canvas.Flush();
+        using var image = SkiaSharp.SKImage.FromBitmap(rootBitmap);
+        using var png = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        return png.ToArray();
+    }
+
+    private static async Task<SkiaSharp.SKBitmap?> RenderWinUiBitmapAsync(
+        Microsoft.UI.Xaml.UIElement element,
+        CancellationToken cancellationToken)
+    {
+        using var captureCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        captureCts.CancelAfter(TimeSpan.FromSeconds(2));
+
+        var renderTarget = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
+        await renderTarget.RenderAsync(element)
+            .AsTask(captureCts.Token);
+        if (renderTarget.PixelWidth <= 0 || renderTarget.PixelHeight <= 0)
+            return null;
+
+        const long MaxCapturePixels = 16_777_216;
+        var pixelCount = (long)renderTarget.PixelWidth * renderTarget.PixelHeight;
+        if (pixelCount > MaxCapturePixels)
+            return null;
+
+        var pixelBuffer = await renderTarget.GetPixelsAsync()
+            .AsTask(captureCts.Token);
+        if (pixelBuffer.Length > int.MaxValue
+            || pixelBuffer.Length > MaxCapturePixels * 4)
+        {
+            return null;
+        }
+
+        var pixels = new byte[(int)pixelBuffer.Length];
+        using (var reader = global::Windows.Storage.Streams.DataReader.FromBuffer(pixelBuffer))
+            reader.ReadBytes(pixels);
+
+        var bitmap = new SkiaSharp.SKBitmap(
+            renderTarget.PixelWidth,
+            renderTarget.PixelHeight,
+            SkiaSharp.SKColorType.Bgra8888,
+            SkiaSharp.SKAlphaType.Premul);
+        System.Runtime.InteropServices.Marshal.Copy(
+            pixels,
+            0,
+            bitmap.GetPixels(),
+            pixels.Length);
+        return bitmap;
+    }
+
     protected override async Task<byte[]?> CaptureScreenshotAsync(VisualElement rootElement)
     {
         // MAUI's VisualDiagnostics doesn't capture WebView2 GPU-rendered content on Windows.

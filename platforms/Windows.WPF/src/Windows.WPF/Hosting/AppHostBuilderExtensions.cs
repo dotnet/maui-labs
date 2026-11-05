@@ -131,8 +131,9 @@ namespace Microsoft.Maui.Controls.Hosting.WPF
 
 			// Register font services
 			builder.Services.AddSingleton<IFontRegistrar, Microsoft.Maui.Platforms.Windows.WPF.WPFFontRegistrar>();
-			builder.Services.AddSingleton<IEmbeddedFontLoader, Microsoft.Maui.Platforms.Windows.WPF.WPFEmbeddedFontLoader>();
-			builder.Services.AddSingleton<IFontManager, Microsoft.Maui.Platforms.Windows.WPF.WPFFontManager>();
+			builder.Services.AddSingleton<IEmbeddedFontLoader>(_ => new WPFEmbeddedFontLoader());
+			builder.Services.AddSingleton<WPFFontManager>();
+			builder.Services.AddSingleton<IFontManager>(services => services.GetRequiredService<WPFFontManager>());
 
 			// Register FontNamedSizeService
 			DependencyService.Register<Microsoft.Maui.Platforms.Windows.WPF.WPFFontNamedSizeService>();

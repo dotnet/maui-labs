@@ -8,6 +8,8 @@ using AppKit;
 
 using Microsoft.Maui.Platforms.MacOS.Platform;
 
+#pragma warning disable CS0618 // This handler provides compatibility for MAUI's obsolete ListView and cell types.
+
 namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 
 public partial class ListViewHandler : MacOSViewHandler<ListView, NSScrollView>
@@ -97,21 +99,21 @@ public partial class ListViewHandler : MacOSViewHandler<ListView, NSScrollView>
 		if (_headerView != null)
 		{
 			var headerSize = GetViewSize(_headerView, width);
-			_headerView.Frame = new CGRect(0, y, (double)width, headerSize.Height);
+			_headerView.SetLayoutFrame(new CGRect(0, y, (double)width, headerSize.Height));
 			y += headerSize.Height;
 		}
 
 		foreach (var subview in _itemViews)
 		{
 			var height = GetViewHeight(subview, width);
-			subview.Frame = new CGRect(0, (double)y, (double)width, (double)height);
+			subview.SetLayoutFrame(new CGRect(0, (double)y, (double)width, (double)height));
 			y += height;
 		}
 
 		if (_footerView != null)
 		{
 			var footerSize = GetViewSize(_footerView, width);
-			_footerView.Frame = new CGRect(0, (double)y, (double)width, footerSize.Height);
+			_footerView.SetLayoutFrame(new CGRect(0, (double)y, (double)width, footerSize.Height));
 			y += footerSize.Height;
 		}
 
@@ -123,7 +125,7 @@ public partial class ListViewHandler : MacOSViewHandler<ListView, NSScrollView>
 	{
 		// Plain NSView separators have a fixed 1px frame
 		if (view is not MacOSContainerView)
-			return view.Frame.Height > 0 ? view.Frame.Height : 1;
+			return view.Bounds.Height > 0 ? view.Bounds.Height : 1;
 
 		if (VirtualView != null && !VirtualView.HasUnevenRows && VirtualView.RowHeight > 0)
 			return VirtualView.RowHeight;
@@ -184,8 +186,8 @@ public partial class ListViewHandler : MacOSViewHandler<ListView, NSScrollView>
 			_itemsContainer.AddSubview(_footerView);
 		}
 
-		if (PlatformView.Frame.Width > 0)
-			LayoutItems(new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height));
+		if (PlatformView.Bounds.Width > 0)
+			LayoutItems(new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height));
 	}
 
 	void ReloadItems()
@@ -203,8 +205,8 @@ public partial class ListViewHandler : MacOSViewHandler<ListView, NSScrollView>
 		var itemsSource = VirtualView?.ItemsSource;
 		if (itemsSource == null)
 		{
-			if (PlatformView.Frame.Width > 0)
-				LayoutItems(new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height));
+			if (PlatformView.Bounds.Width > 0)
+				LayoutItems(new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height));
 			return;
 		}
 
@@ -226,8 +228,8 @@ public partial class ListViewHandler : MacOSViewHandler<ListView, NSScrollView>
 		UpdateHeaderFooter();
 		UpdateSelectionHighlight();
 
-		if (PlatformView.Frame.Width > 0)
-			LayoutItems(new Rect(0, 0, PlatformView.Frame.Width, PlatformView.Frame.Height));
+		if (PlatformView.Bounds.Width > 0)
+			LayoutItems(new Rect(0, 0, PlatformView.Bounds.Width, PlatformView.Bounds.Height));
 	}
 
 	void BuildFlatItems(IEnumerable itemsSource, Color? separatorColor)

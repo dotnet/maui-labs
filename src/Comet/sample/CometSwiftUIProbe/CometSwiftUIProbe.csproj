@@ -1,0 +1,122 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Phase 3 gate: a pure .NET iOS app (no MAUI) that renders a SwiftUI view driven
+       from C# via the CometSwiftUIShim binding. The iOS analog of CometComposeProbe. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
+    <RootNamespace>CometSwiftUIProbe</RootNamespace>
+    <ApplicationId>com.comet.swiftuiprobe</ApplicationId>
+    <ApplicationTitle>CometSwiftUI</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <!-- NativeAOT smoke test (gate: "NativeAOT where supported"): opt in per-app so the
+         property doesn't leak into plain-classlib dependencies (NETSDK1203) — the same
+         global-property trap Phase 4 hit with PublishTrimmed. -->
+    <PublishAot Condition="'$(EnableProbeAot)' == 'true'">true</PublishAot>
+  </PropertyGroup>
+
+  <!-- Standalone per-sample apps: -p:CometSample=reply (or jetchat) builds this probe as
+       its OWN app — unique bundle id + display name + isolated obj/bin — so samples install
+       side by side instead of replacing each other. AppDelegate defaults the screen from
+       the bundle id (com.comet.sample.<name>); the plain probe id stays for the smokes.
+       Requires the id/name to come from the csproj (NOT Info.plist) — see Info.plist note. -->
+  <PropertyGroup Condition="'$(CometSample)' != ''">
+    <ApplicationId>com.comet.sample.$(CometSample)</ApplicationId>
+    <ApplicationTitle>Comet $(CometSample.Substring(0,1).ToUpperInvariant())$(CometSample.Substring(1))</ApplicationTitle>
+    <IntermediateOutputPath>obj/sample-$(CometSample)/</IntermediateOutputPath>
+    <OutputPath>bin/sample-$(CometSample)/</OutputPath>
+  </PropertyGroup>
+
+  <!-- App icon: one asset catalog per variant, each holding an AppIcon.appiconset with a
+       1024 single-size icon; only the current variant's catalog is compiled (the default
+       item glob would include all three). Info.plist's XSAppIconAssets names the icon set.
+       The probe uses the Comet mark; the sample variants use their gold app's launcher art. -->
+  <PropertyGroup>
+    <CometIconVariant>probe</CometIconVariant>
+    <CometIconVariant Condition="'$(CometSample)' != ''">$(CometSample)</CometIconVariant>
+    <AppIcon>AppIcon</AppIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ImageAsset Remove="Icons\**" />
+    <ImageAsset Include="Icons\$(CometIconVariant).xcassets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Comet\Comet.csproj" />
+    <!-- Google's Material 3 dynamic-color algorithm (HCT -> tonal palettes -> roles), in C#,
+         so the SAME M3 scheme is generated from a seed on both platforms (Apache-2.0). -->
+    <PackageReference Include="MaterialColorUtilities" Version="0.3.0" />
+    <!-- Shared faithful Jetchat sample (identical tree on both backends). -->
+    <Compile Include="..\Shared\Jetchat\*.cs" Link="Shared\Jetchat\%(Filename)%(Extension)" />
+    <!-- Shared Reply sample (M1). -->
+    <Compile Include="..\Shared\Reply\*.cs" Link="Shared\Reply\%(Filename)%(Extension)" />
+    <!-- Shared JetNews sample (M2). -->
+    <Compile Include="..\Shared\JetNews\*.cs" Link="Shared\JetNews\%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\Jetsnack\*.cs" Link="Shared\Jetsnack\%(Filename)%(Extension)" />
+    <!-- Shared Jetcaster sample (M4): fixture feeds + artwork at the bundle root
+         (explicit LogicalName — the SDK ignores subdir'd duplicates otherwise). -->
+    <Compile Include="..\Shared\Jetcaster\*.cs" Link="Shared\Jetcaster\%(Filename)%(Extension)" />
+    <BundleResource Include="..\Shared\Jetcaster\fixtures\*.rss" LogicalName="%(Filename)%(Extension)" />
+    <BundleResource Include="..\Shared\Jetcaster\fixtures\*_art.jpg" LogicalName="%(Filename)%(Extension)" />
+    <!-- Jetchat's real fonts (Montserrat + Karla), registered via Info.plist UIAppFonts. -->
+    <BundleResource Include="Fonts\Montserrat-Regular.ttf" />
+    <BundleResource Include="Fonts\Montserrat-Medium.ttf" />
+    <BundleResource Include="Fonts\Montserrat-SemiBold.ttf" />
+    <BundleResource Include="Fonts\Karla-Regular.ttf" />
+    <BundleResource Include="Fonts\Karla-Bold.ttf" />
+    <BundleResource Include="Fonts\MaterialIcons-Regular.ttf" />
+    <BundleResource Include="Fonts\RobotoFlex-Regular.ttf" />
+    <!-- Jetchat avatars/sticker at the bundle root so UIImage(named:) finds them. -->
+    <BundleResource Include="Resources\ali.png"><LogicalName>ali.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\jetnews_logo.png"><LogicalName>jetnews_logo.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\jetnews_wordmark.png"><LogicalName>jetnews_wordmark.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\jetnews_badge.png"><LogicalName>jetnews_badge.png</LogicalName></BundleResource>
+    <!-- Jetsnack snack photos (drawable-nodpi jpgs from the gold). The SDK's default
+         glob bundles Resources/** keeping the subdir; Remove + re-Include flattens them
+         to the bundle root where the shim's UIImage lookup finds them. -->
+    <BundleResource Remove="Resources\snacks\*.jpg" />
+    <BundleResource Include="Resources\snacks\*.jpg" LogicalName="%(Filename)%(Extension)" />
+    <BundleResource Include="Resources\someone_else.jpg"><LogicalName>someone_else.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\sticker.png"><LogicalName>sticker.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\jetchat.png"><LogicalName>jetchat.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_0.jpg"><LogicalName>avatar_0.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_1.jpg"><LogicalName>avatar_1.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_10.jpg"><LogicalName>avatar_10.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_2.jpg"><LogicalName>avatar_2.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_3.jpg"><LogicalName>avatar_3.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_4.jpg"><LogicalName>avatar_4.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_5.jpg"><LogicalName>avatar_5.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_6.jpg"><LogicalName>avatar_6.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_7.jpg"><LogicalName>avatar_7.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_8.jpg"><LogicalName>avatar_8.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_9.jpg"><LogicalName>avatar_9.jpg</LogicalName></BundleResource>
+    <BundleResource Include="Resources\avatar_express.png"><LogicalName>avatar_express.png</LogicalName></BundleResource>
+    <!-- JetNews post images (M2). -->
+    <BundleResource Include="Resources\post_1.png"><LogicalName>post_1.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_1_thumb.png"><LogicalName>post_1_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_2.png"><LogicalName>post_2.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_2_thumb.png"><LogicalName>post_2_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_3.png"><LogicalName>post_3.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_3_thumb.png"><LogicalName>post_3_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_4.png"><LogicalName>post_4.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_4_thumb.png"><LogicalName>post_4_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_5.png"><LogicalName>post_5.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_5_thumb.png"><LogicalName>post_5_thumb.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_6.png"><LogicalName>post_6.png</LogicalName></BundleResource>
+    <BundleResource Include="Resources\post_6_thumb.png"><LogicalName>post_6_thumb.png</LogicalName></BundleResource>
+  </ItemGroup>
+
+  <!-- Link + embed the Swift framework directly in the app so the static registrar's
+       hard reference to _OBJC_CLASS_$_CometSwiftUIHost resolves. -->
+  <ItemGroup>
+    <NativeReference Include="..\..\src\Comet.SwiftUI.Shim\CometSwiftUIShim.xcframework">
+      <Kind>Framework</Kind>
+      <SmartLink>False</SmartLink>
+    </NativeReference>
+  </ItemGroup>
+
+</Project>

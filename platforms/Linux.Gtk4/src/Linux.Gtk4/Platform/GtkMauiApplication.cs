@@ -11,6 +11,7 @@ public abstract class GtkMauiApplication : IPlatformApplication
 {
 	private const string DefaultApplicationId = "com.maui.linux";
 	private const string MauiApplicationIdMetadataKey = "MauiApplicationId";
+
 	private Gtk.Application _gtkApp = null!;
 	private IApplication _mauiApp = null!;
 	private GtkMauiContext _applicationContext = null!;
@@ -33,13 +34,16 @@ public abstract class GtkMauiApplication : IPlatformApplication
 
 	public void Run(string[] args)
 	{
+		// Fail fast with a friendly message before any GirCore GTK initialization.
+		GtkRuntime.EnsureSupported();
+
 		var applicationId = string.IsNullOrWhiteSpace(ApplicationId) ? null : ApplicationId;
 		_gtkApp = Gtk.Application.New(applicationId, Gio.ApplicationFlags.DefaultFlags);
 
 		_gtkApp.OnActivate += OnActivate;
 		_gtkApp.OnShutdown += OnShutdown;
 
-		var exitCode = _gtkApp.Run(args);
+		var exitCode = _gtkApp.RunWithSynchronizationContext(args);
 		Environment.ExitCode = exitCode;
 	}
 
@@ -122,12 +126,10 @@ public abstract class GtkMauiApplication : IPlatformApplication
 	private void CreatePlatformWindow(GtkMauiContext applicationContext)
 	{
 		var virtualWindow = _mauiApp.CreateWindow(null);
-		var gtkWindow = CreateAndShowWindow(virtualWindow);
+		CreateAndShowWindow(virtualWindow);
 
 		var windowTitle = virtualWindow.Title ?? "Microsoft.Maui.Platforms.Linux.Gtk4";
 		_desktopEntryName = windowTitle;
-		gtkWindow.SetDefaultSize(1024, 768);
-		gtkWindow.SetSizeRequest(800, 600);
 	}
 
 	/// <summary>
@@ -138,6 +140,7 @@ public abstract class GtkMauiApplication : IPlatformApplication
 	{
 		var gtkWindow = new Gtk.Window();
 		gtkWindow.SetTitle(virtualWindow.Title ?? "Microsoft.Maui.Platforms.Linux.Gtk4");
+		gtkWindow.SetDefaultSize(1024, 768);
 
 		var windowContext = _applicationContext.MakeWindowScope(gtkWindow);
 		windowContext.AddSpecific(gtkWindow);

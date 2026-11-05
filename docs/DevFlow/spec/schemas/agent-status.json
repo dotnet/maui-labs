@@ -63,6 +63,10 @@
         "idiom"
       ],
       "properties": {
+        "id": {
+          "type": ["string", "null"],
+          "description": "Platform device identifier when safely available, such as the simulator UDID on iOS Simulator. Null when unavailable; it must not be used to infer a host device."
+        },
         "model": {
           "type": "string",
           "description": "Device model name (e.g. 'iPhone 15 Pro', 'Pixel 8')."
@@ -101,6 +105,11 @@
           "type": "string",
           "description": "Display name of the application."
         },
+        "processId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Operating-system process ID of the exact running app instance. Used for process-scoped desktop tooling."
+        },
         "version": {
           "type": "string",
           "description": "Application version string."
@@ -130,6 +139,22 @@
         "jobs": {
           "type": "boolean",
           "description": "Whether platform background jobs are supported by this agent."
+        },
+        "menus": {
+          "type": "boolean",
+          "description": "Whether application menu inspection and invocation are supported by this agent."
+        },
+        "theme": {
+          "type": "boolean",
+          "description": "Whether app theme endpoints are backed by an implementation."
+        },
+        "mutationLease": {
+          "type": "boolean",
+          "description": "Whether mutating endpoints require a DevFlow mutation lease."
+        },
+        "syntheticTouch": {
+          "type": "boolean",
+          "description": "Whether gestures can be delivered as synthesised touches to raw-touch views such as GraphicsView. True only on iOS and Mac Catalyst when AgentOptions.EnableSyntheticTouch is set."
         }
       },
       "additionalProperties": true

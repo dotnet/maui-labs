@@ -8,19 +8,27 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <Import Project="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.props"
+          Condition="Exists('..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.props')" />
+
   <ItemGroup>
-    <PackageReference Include="Platform.Maui.Linux.Gtk4" />
-    <PackageReference Include="Platform.Maui.Linux.Gtk4.BlazorWebView" />
-    <PackageReference Include="Platform.Maui.Linux.Gtk4.Essentials" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\Linux.Gtk4.csproj" />
+    <ProjectReference Include="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4.BlazorWebView\Linux.Gtk4.BlazorWebView.csproj" />
+    <ProjectReference Include="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4.Essentials\Linux.Gtk4.Essentials.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Gtk\Microsoft.Maui.DevFlow.Agent.Gtk.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Blazor.Gtk\Microsoft.Maui.DevFlow.Blazor.Gtk.csproj" />
+    <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Analyzers\Microsoft.Maui.DevFlow.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer" />
   </ItemGroup>
+
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.props" />
+  <Import Project="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent.Core\buildTransitive\Microsoft.Maui.DevFlow.Agent.Core.targets" />
 
   <!-- Link shared source files from DevFlow.Sample (excluding MauiProgram.cs and Platforms/) -->
   <ItemGroup>
@@ -30,6 +38,10 @@
     <Compile Include="..\DevFlow.Sample\BlazorTodoPage.xaml.cs" Link="BlazorTodoPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\DialogTestPage.xaml.cs" Link="DialogTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\InteractionTestPage.xaml.cs" Link="InteractionTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\LayoutDiagnosticsTestPage.xaml.cs" Link="LayoutDiagnosticsTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\GestureTestPage.xaml.cs" Link="GestureTestPage.xaml.cs" />
+    <Compile Include="..\DevFlow.Sample\DesiredSizeProbe.cs" Link="DesiredSizeProbe.cs" />
+    <Compile Include="..\DevFlow.Sample\PreferenceDiagnostics.cs" Link="PreferenceDiagnostics.cs" />
     <Compile Include="..\DevFlow.Sample\NetworkTestPage.xaml.cs" Link="NetworkTestPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\MultiBlazorPage.xaml.cs" Link="MultiBlazorPage.xaml.cs" />
     <Compile Include="..\DevFlow.Sample\ModalTestPage.xaml.cs" Link="ModalTestPage.xaml.cs" />
@@ -46,6 +58,8 @@
     <MauiXaml Include="..\DevFlow.Sample\BlazorTodoPage.xaml" Link="BlazorTodoPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\DialogTestPage.xaml" Link="DialogTestPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\InteractionTestPage.xaml" Link="InteractionTestPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\LayoutDiagnosticsTestPage.xaml" Link="LayoutDiagnosticsTestPage.xaml" />
+    <MauiXaml Include="..\DevFlow.Sample\GestureTestPage.xaml" Link="GestureTestPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\NetworkTestPage.xaml" Link="NetworkTestPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\MultiBlazorPage.xaml" Link="MultiBlazorPage.xaml" />
     <MauiXaml Include="..\DevFlow.Sample\ModalTestPage.xaml" Link="ModalTestPage.xaml" />
@@ -80,5 +94,8 @@
                      Overwrite="true"
                      Condition="!Exists('$(OutputPath)wwwroot/_framework/blazor.modules.json')" />
   </Target>
+
+  <Import Project="..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets"
+          Condition="Exists('..\..\platforms\Linux.Gtk4\src\Linux.Gtk4\buildTransitive\Microsoft.Maui.Platforms.Linux.Gtk4.targets')" />
 
 </Project>

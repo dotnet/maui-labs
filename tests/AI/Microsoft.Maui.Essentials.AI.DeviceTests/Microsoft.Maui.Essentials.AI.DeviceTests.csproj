@@ -2,8 +2,10 @@
 
   <PropertyGroup>
     <TargetFrameworks>net10.0-android</TargetFrameworks>
-    <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' != 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="'$(UseXcode27Preview)' == 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios27.0;net10.0-maccatalyst27.0</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <SupportedOSPlatformVersion Condition="'$(UseXcode27Preview)' == 'true' and $(TargetFramework.Contains('-maccatalyst'))">17.0</SupportedOSPlatformVersion>
     <OutputType>Exe</OutputType>
     <SingleProject>true</SingleProject>
     <UseMaui>true</UseMaui>
@@ -14,8 +16,18 @@
     <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'arm64'">maccatalyst-arm64</RuntimeIdentifier>
     <RuntimeIdentifiers Condition="$(TargetFramework.Contains('-android'))">android-arm64;android-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
-    <NoWarn>$(NoWarn);MAUIAI0001;CA1416</NoWarn>
+    <NoWarn>$(NoWarn);MAUIAI0001;CA1416;XCODE_27_0_PREVIEW</NoWarn>
     <UserSecretsId>808cc184-141a-409e-addd-565c973dbce6</UserSecretsId>
+    <!-- Required for DeviceRunners dotnet test integration -->
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
+    <!-- Live model generation can exceed the runner's default 30-second gap between results. -->
+    <DeviceRunnersDataTimeout>180</DeviceRunnersDataTimeout>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-android'))">26.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <!-- Opt in with -p:EnableOpenAIClient=true or -p:EnableOpenAITests=true. -->
+  <PropertyGroup Condition="'$(EnableOpenAIClient)' == 'true' or '$(EnableOpenAITests)' == 'true'">
+    <DefineConstants>$(DefineConstants);ENABLE_OPENAI_CLIENT</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -23,6 +35,18 @@
     <ApplicationId>com.microsoft.maui.ai.devicetests</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <!-- Prevent MSBuild from overriding MaxVersionTested (required for systemAIModels capability) -->
+    <AppxOSMinVersionReplaceManifestVersion>false</AppxOSMinVersionReplaceManifestVersion>
+    <AppxOSMaxVersionTestedReplaceManifestVersion>false</AppxOSMaxVersionTestedReplaceManifestVersion>
+  </PropertyGroup>
+
+  <!-- Windows: self-contained publish to bundle WinAppSDK experimental runtime -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- The experimental SDK's generated XAML metadata references experimental chart/table providers. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS8305</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,12 +61,14 @@
     <PackageReference Include="DeviceRunners.UITesting.Xunit" />
     <PackageReference Include="DeviceRunners.VisualRunners.Xunit" />
     <PackageReference Include="DeviceRunners.VisualRunners.Maui" />
+    <PackageReference Include="DeviceRunners.Testing.Targets" />
   </ItemGroup>
 
-  <!-- XHarness support for CI/headless runs -->
-  <ItemGroup Condition="'$(TestingMode)' == 'XHarness'">
-    <PackageReference Include="DeviceRunners.XHarness.Xunit" />
-    <PackageReference Include="DeviceRunners.XHarness.Maui" />
+  <!-- Windows AI WinRT APIs -->
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <PackageReference Include="Microsoft.WindowsAppSDK" VersionOverride="$(MicrosoftWindowsAppSDKVersion_Experimental)" />
+    <!-- Enables dotnet run for packaged MSIX apps (registers loose layout, activates via AUMID) -->
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -54,7 +80,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
   </ItemGroup>
-
+
+  <ItemGroup Condition="'$(EnableOpenAIClient)' == 'true' or '$(EnableOpenAITests)' == 'true'">
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="OpenAI" />
+  </ItemGroup>
+
   <Target Name="AddUserSecrets" BeforeTargets="PrepareForBuild" Condition=" '$(UserSecretsId)' != '' And '$(Configuration)' == 'Debug' ">
     <PropertyGroup>
       <UserSecretsFilePath Condition=" '$(OS)' == 'Windows_NT' ">

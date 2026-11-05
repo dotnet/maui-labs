@@ -1,0 +1,25 @@
+scenarios:
+  - name: "Make icon-only button accessible"
+    prompt: |
+      My MAUI toolbar uses an ImageButton with only a save icon, and the adjacent
+      text label already reads "Save draft". What accessibility metadata and test
+      hook should I add to the ImageButton, and what duplicate metadata should I
+      avoid adding to the Label because its Text is already the accessible name?
+      Also call out why AutomationId is not the accessible name.
+    assertions:
+      - type: "output_contains"
+        value: "SemanticProperties.Description"
+      - type: "output_contains"
+        value: "AutomationId"
+      - type: "output_matches"
+        pattern: "(?i)hint|SemanticProperties\\.Hint"
+      - type: "output_matches"
+        pattern: "(?i)accessible name|screen reader|a11y|accessibility label|semantic"
+      - type: "output_matches"
+        pattern: "(?i)Label.*Text.*already|redundant|duplicate"
+    rubric:
+      - "Adds SemanticProperties.Description for the accessible name"
+      - "Adds SemanticProperties.Hint when the action needs clarification"
+      - "Adds AutomationId for testing but does not treat it as the accessible label"
+      - "Avoids adding redundant SemanticProperties.Description to a Label whose Text already names it"
+    timeout: 240

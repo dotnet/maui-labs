@@ -8,13 +8,13 @@ namespace Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
 [McpServerToolType]
 public sealed class PreferencesTools
 {
-	[McpServerTool(Name = "maui_preferences_list"), Description("List all known preference keys from the app's key-value store.")]
+	[McpServerTool(Name = "maui_preferences_list"), Description("List preference keys from the app's key-value store. Where the platform store can be enumerated (macOS/iOS/MacCatalyst/Android/Windows/Linux/WPF), all persisted keys are returned and the response reports source=\"native\" with complete=true. If enumeration is unsupported, only DevFlow-tracked keys are returned with source=\"registry\" and complete=false (app-written keys may be missing).")]
 	public static async Task<string> ListPreferences(
 		McpAgentSession session,
 		[Description("Shared preferences name (optional, for shared containers)")] string? sharedName = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetPreferencesAsync(sharedName);
 		return result.ValueKind == JsonValueKind.Undefined ? "No preferences found." : result.ToString();
 	}
@@ -27,7 +27,7 @@ public sealed class PreferencesTools
 		[Description("Shared preferences name (optional)")] string? sharedName = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetPreferenceAsync(key, type, sharedName);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Preference '{key}' not found." : result.ToString();
 	}
@@ -41,7 +41,7 @@ public sealed class PreferencesTools
 		[Description("Shared preferences name (optional)")] string? sharedName = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.SetPreferenceAsync(key, value, type, sharedName);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Failed to set preference '{key}'." : result.ToString();
 	}
@@ -53,7 +53,7 @@ public sealed class PreferencesTools
 		[Description("Shared preferences name (optional)")] string? sharedName = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.DeletePreferenceAsync(key, sharedName);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Failed to delete preference '{key}'." : result.ToString();
 	}
@@ -64,7 +64,7 @@ public sealed class PreferencesTools
 		[Description("Shared preferences name (optional)")] string? sharedName = null,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.ClearPreferencesAsync(sharedName);
 		return success ? "Preferences cleared." : "Failed to clear preferences.";
 	}
@@ -75,7 +75,7 @@ public sealed class PreferencesTools
 		[Description("Secure storage key to retrieve")] string key,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.GetSecureStorageAsync(key);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Secure storage key '{key}' not found." : result.ToString();
 	}
@@ -87,7 +87,7 @@ public sealed class PreferencesTools
 		[Description("Value to store")] string value,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.SetSecureStorageAsync(key, value);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Failed to set secure storage key '{key}'." : result.ToString();
 	}
@@ -98,7 +98,7 @@ public sealed class PreferencesTools
 		[Description("Secure storage key to remove")] string key,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var result = await agent.DeleteSecureStorageAsync(key);
 		return result.ValueKind == JsonValueKind.Undefined ? $"Failed to delete secure storage key '{key}'." : result.ToString();
 	}
@@ -108,7 +108,7 @@ public sealed class PreferencesTools
 		McpAgentSession session,
 		[Description("Agent HTTP port (optional if only one agent connected)")] int? agentPort = null)
 	{
-		var agent = await session.GetAgentClientAsync(agentPort);
+		using var agent = await session.GetAgentClientAsync(agentPort);
 		var success = await agent.ClearSecureStorageAsync();
 		return success ? "Secure storage cleared." : "Failed to clear secure storage.";
 	}

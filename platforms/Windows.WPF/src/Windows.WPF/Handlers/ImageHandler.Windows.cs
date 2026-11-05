@@ -98,9 +98,17 @@ namespace Microsoft.Maui.Handlers.WPF
 		public static void MapSource(ImageHandler handler, IImage image)
 		{
 			if (image.Source == null)
+			{
+				handler.PlatformView.Source = null;
 				return;
+			}
 
-			if (image.Source is IFileImageSource fileImageSource)
+			if (image.Source is IFontImageSource fontSource)
+			{
+				handler.PlatformView.Source = Microsoft.Maui.Platforms.Windows.WPF.FontImageSourceHelper
+					.RenderGlyph(fontSource, handler.MauiContext);
+			}
+			else if (image.Source is IFileImageSource fileImageSource)
 			{
 				var fileName = fileImageSource.File;
 				if (!string.IsNullOrEmpty(fileName))

@@ -7,7 +7,12 @@
     {
       "name": "dotnet-maui",
       "source": "./plugins/dotnet-maui",
-      "description": "Skills for .NET MAUI development: DevFlow automation, profiling, accessibility, platform bindings, and diagnostics."
+      "description": "Skills for building .NET MAUI apps: architecture, UI, accessibility, testing, performance, platform integration, migration, and app features."
+    },
+    {
+      "name": "dotnet-maui-tooling",
+      "source": "./plugins/dotnet-maui-tooling",
+      "description": "Specialist .NET MAUI tooling skills for DevFlow automation, platform bindings, workload discovery, and diagnostics."
     }
   ]
 }

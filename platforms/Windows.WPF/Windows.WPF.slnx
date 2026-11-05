@@ -7,6 +7,7 @@
     <Project Path="samples/Windows.WPF.Sample/Windows.WPF.Sample.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Essentials.Tests/Windows.WPF.Essentials.Tests.csproj" />
     <Project Path="tests/HandlerTests/HandlerTests.csproj" />
     <Project Path="tests/UITests/UITests.csproj" />
   </Folder>

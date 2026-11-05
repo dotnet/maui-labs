@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:cc="http://web.resource.org/cc/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:googleplay="http://www.google.com/schemas/play-podcasts/1.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:media="http://search.yahoo.com/mrss/" xmlns:podcast="https://podcastindex.org/namespace/1.0" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" version="2.0">
+
+  <channel>
+    <atom:link href="https://rss.libsyn.com/shows/332855/destinations/2710847.xml" rel="self" type="application/rss+xml"/>
+    <title>Android Developers Backstage</title>
+    <pubDate>Wed, 18 Feb 2026 19:30:14 +0000</pubDate>
+    <lastBuildDate>Wed, 18 Feb 2026 19:30:14 +0000</lastBuildDate>
+    <generator>Libsyn RSSgen 1.0</generator>
+    <link>http://androidbackstage.blogspot.com/</link>
+    <language>en</language>
+    <copyright><![CDATA[2021 © Android Developers]]></copyright>
+    <docs>http://androidbackstage.blogspot.com/</docs>
+    <itunes:summary>Android Backstage, a podcast by and for Android developers. Hosted by developers from the Android engineering team, this show covers topics of interest to Android programmers, with in-depth discussions and interviews with engineers on the Android team at Google.</itunes:summary>
+    <image>
+      <url>https://static.libsyn.com/p/assets/c/9/e/0/c9e07a90cf263f3b40be95ea3302a6a1/Android_Devs_Backstage_Thumb_v2.png</url>
+      <title>Android Developers Backstage</title>
+      <link><![CDATA[http://androidbackstage.blogspot.com/]]></link>
+    </image>
+    <itunes:author>Android Developers</itunes:author>
+		
+
+    <itunes:image href="https://static.libsyn.com/p/assets/c/9/e/0/c9e07a90cf263f3b40be95ea3302a6a1/Android_Devs_Backstage_Thumb_v2.png"/>
+    <itunes:explicit>no</itunes:explicit>
+    
+    <description><![CDATA[Android Backstage, a podcast by and for Android developers. Hosted by developers from the Android engineering team, this show covers topics of interest to Android programmers, with in-depth discussions and interviews with engineers on the Android team at Google.
+
+Subscribe to Android Developers YouTube → https://goo.gle/AndroidDevs]]></description>
+    
+    <itunes:type>episodic</itunes:type>
+    
+
+    <itunes:keywords>Android,programming,development,software,mobile,mobile,programming</itunes:keywords>
+
+    
+
+    
+    <podcast:locked owner="gdevs.podcast@gmail.com">no</podcast:locked>
+    
+    
+    
+    
+    
+    <itunes:subtitle>Android developers talking to Android developers about Android development</itunes:subtitle><itunes:category text="Technology"><itunes:category text="Software How-To"/></itunes:category><itunes:category text="Technology"><itunes:category text="Tech News"/></itunes:category><itunes:owner><itunes:email>developers@android.com</itunes:email><itunes:name>Android Developers</itunes:name></itunes:owner><item>
+      <title>What's so great about R8?</title>
+      <itunes:title>What's so great about R8?</itunes:title>
+      <pubDate>Wed, 18 Feb 2026 19:26:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[9532ac76-ffc0-4944-8930-828db0983bd2]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/whats-so-great-about-r8]]></link>
+      <description><![CDATA[<p>Join hosts Tor and Romain as they sit down with Søren Gjesse, Chris Craik, and Shai Barack.</p> <p>This week, the team dives into R8, the whole-program optimizer that handles the "last mile" of your code before it runs on a device. Learn why implementing R8 is effectively like giving your users a "free hardware upgrade" by making their current devices perform like models that are years newer.</p> <p>Enable app optimization → https://goo.gle/R8-Optimizer</p> <p><br /> Chapters:<br /> 0:00 - Intro<br /> 0:23 - What is R8?<br /> 1:16 - R8 vs D8<br /> 1:40 - Tree Shaking & Dead Code<br /> 4:14 - Handling Reflection<br /> 10:10 - Performance Co-Optimization<br /> 13:03 - Kotlin-Specific Gains<br /> 16:22 - Real-World Impact<br /> 41:50 - Jetpack Compose & R8<br /> 50:51 - Keep annotations<br /> 1:03:49 - The "Free Hardware Upgrade"</p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Join hosts Tor and Romain as they sit down with Søren Gjesse, Chris Craik, and Shai Barack.</p> <p>This week, the team dives into R8, the whole-program optimizer that handles the "last mile" of your code before it runs on a device. Learn why implementing R8 is effectively like giving your users a "free hardware upgrade" by making their current devices perform like models that are years newer.</p> <p>Enable app optimization → https://goo.gle/R8-Optimizer</p> <p> Chapters: 0:00 - Intro 0:23 - What is R8? 1:16 - R8 vs D8 1:40 - Tree Shaking & Dead Code 4:14 - Handling Reflection 10:10 - Performance Co-Optimization 13:03 - Kotlin-Specific Gains 16:22 - Real-World Impact 41:50 - Jetpack Compose & R8 50:51 - Keep annotations 1:03:49 - The "Free Hardware Upgrade"</p>]]></content:encoded>
+      
+      
+      <enclosure length="63833908" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB223_v2.mp3?dest-id=2710847"/>
+      <itunes:duration>01:06:30</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>Join hosts Tor and Romain as they sit down with Søren Gjesse, Chris Craik, and Shai Barack. This week, the team dives into R8, the whole-program optimizer that handles the "last mile" of your code before it runs on a device. Learn why implementing R8 is effectively like giving your users a "free hardware upgrade" by making their current devices perform like models that are years newer. Enable app optimization → https://goo.gle/R8-Optimizer Chapters: 0:00 - Intro 0:23 - What is R8? 1:16 - R8 vs D8 1:40 - Tree Shaking &amp; Dead Code 4:14 - Handling Reflection 10:10 - Performance Co-Optimization 13:03 - Kotlin-Specific Gains 16:22 - Real-World Impact 41:50 - Jetpack Compose &amp; R8 50:51 - Keep annotations 1:03:49 - The "Free Hardware Upgrade"</itunes:subtitle><itunes:summary>Join hosts Tor and Romain as they sit down with Søren Gjesse, Chris Craik, and Shai Barack. This week, the team dives into R8, the whole-program optimizer that handles the "last mile" of your code before it runs on a device. Learn why implementing R8 is effectively like giving your users a "free hardware upgrade" by making their current devices perform like models that are years newer. Enable app optimization → https://goo.gle/R8-Optimizer Chapters: 0:00 - Intro 0:23 - What is R8? 1:16 - R8 vs D8 1:40 - Tree Shaking &amp; Dead Code 4:14 - Handling Reflection 10:10 - Performance Co-Optimization 13:03 - Kotlin-Specific Gains 16:22 - Real-World Impact 41:50 - Jetpack Compose &amp; R8 50:51 - Keep annotations 1:03:49 - The "Free Hardware Upgrade"</itunes:summary></item>
+<item>
+      <title>XR: Virtually here</title>
+      <itunes:title>XR: Virtually here</itunes:title>
+      <pubDate>Wed, 14 Jan 2026 19:50:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[15e5d205-52d8-4e06-9b50-6a5daad465ea]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/xr-virtually-here]]></link>
+      <description><![CDATA[<p>Join hosts Tor, Chet, and Romain as they sit down with Diego Perez (Android Studio) and Patrick Fuentes (Developer Relations) to explore the new frontiers of Android XR.</p> <p>This episode of Android Developers Backstage breaks down the latest announcements and Developer Preview 3, offering a technical look at how developers can start building for spatial environments today.</p> <p>Resources:<br /> Hello Android XR sample → https://goo.gle/3Nbnrre <br /> Build for AI Glasses with the Android XR SDK Developer Preview 3  → https://goo.gle/49lUjGr </p> <p>Chapters:<br /> 0:00 - Intro<br /> 4:42 - Latest announcements<br /> 5:46 - AI Glasses<br /> 8:28 -Developer preview 3<br /> 16:13 - Spatialization<br /> 18:29 - Tools team perspective<br /> 24:07 - Using the XR Emulator<br /> 29:00 - What is an Orbiter?<br /> 37:33 - What hardware is currently available<br /> 38:39 - Final thoughts</p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Join hosts Tor, Chet, and Romain as they sit down with Diego Perez (Android Studio) and Patrick Fuentes (Developer Relations) to explore the new frontiers of Android XR.</p> <p>This episode of Android Developers Backstage breaks down the latest announcements and Developer Preview 3, offering a technical look at how developers can start building for spatial environments today.</p> <p>Resources: Hello Android XR sample → https://goo.gle/3Nbnrre Build for AI Glasses with the Android XR SDK Developer Preview 3 → https://goo.gle/49lUjGr </p> <p>Chapters: 0:00 - Intro 4:42 - Latest announcements 5:46 - AI Glasses 8:28 -Developer preview 3 16:13 - Spatialization 18:29 - Tools team perspective 24:07 - Using the XR Emulator 29:00 - What is an Orbiter? 37:33 - What hardware is currently available 38:39 - Final thoughts</p>]]></content:encoded>
+      
+      
+      <enclosure length="104770438" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB222_v3.mp3?dest-id=2710847"/>
+      <itunes:duration>43:30</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>Join hosts Tor, Chet, and Romain as they sit down with Diego Perez (Android Studio) and Patrick Fuentes (Developer Relations) to explore the new frontiers of Android XR. This episode of Android Developers Backstage breaks down the latest announcements and Developer Preview 3, offering a technical look at how developers can start building for spatial environments today. Resources: Hello Android XR sample → https://goo.gle/3Nbnrre  Build for AI Glasses with the Android XR SDK Developer Preview 3  → https://goo.gle/49lUjGr  Chapters: 0:00 - Intro 4:42 - Latest announcements 5:46 - AI Glasses 8:28 -Developer preview 3 16:13 - Spatialization 18:29 - Tools team perspective 24:07 - Using the XR Emulator 29:00 - What is an Orbiter? 37:33 - What hardware is currently available 38:39 - Final thoughts</itunes:subtitle><itunes:summary>Join hosts Tor, Chet, and Romain as they sit down with Diego Perez (Android Studio) and Patrick Fuentes (Developer Relations) to explore the new frontiers of Android XR. This episode of Android Developers Backstage breaks down the latest announcements and Developer Preview 3, offering a technical look at how developers can start building for spatial environments today. Resources: Hello Android XR sample → https://goo.gle/3Nbnrre  Build for AI Glasses with the Android XR SDK Developer Preview 3  → https://goo.gle/49lUjGr  Chapters: 0:00 - Intro 4:42 - Latest announcements 5:46 - AI Glasses 8:28 -Developer preview 3 16:13 - Spatialization 18:29 - Tools team perspective 24:07 - Using the XR Emulator 29:00 - What is an Orbiter? 37:33 - What hardware is currently available 38:39 - Final thoughts</itunes:summary></item>
+<item>
+      <title>Bring your own model - Android Developers Backstage</title>
+      <itunes:title>Bring your own model - Android Developers Backstage</itunes:title>
+      <pubDate>Wed, 10 Dec 2025 22:09:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[32ddaf7e-9fd5-4ac7-b16d-70a2bd1bf849]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/bring-your-own-model-android-developers-backstage]]></link>
+      <description><![CDATA[<p dir="ltr">In this episode Tor and Chet chat with Raluca Saucic and Eugene Yakavets about the new "Bring Your Own Model" feature in Android Studio which allows using other models than Gemini for agent mode, including models from Anthropic,  OpenAI, and more. We also discuss using local models via Ollama and LM Studio.</p> <p dir="ltr">Resources:<br /> Use a remote model → <a href= "https://goo.gle/43N2Z5E">https://goo.gle/43N2Z5E</a></p> <p dir="ltr">Use a local model → <a href= "https://goo.gle/3Xij27V">https://goo.gle/3Xij27V</a>  </p> <p dir="ltr">Chapters:<br /> 0:00 - Intro<br /> 0:49 - Bring your own model<br /> 4:13 - Bring your own key<br /> 7:24 - Anthropic model<br /> 13:17- How often do you need to remind the model of the context?<br /> 17:40 - Thinking vs planning<br /> 20:25 - What happens when the API needs to give multiple answers to a complex question?<br /> 24:14 - Supported models<br /> 31:18 - Are there any barriers when using a different model?<br /> 34:07 - Support for code completion<br /> 38:16 - GitHub's relationship with agents<br /> 44:35 - Using agents for development<br /> 56:36 - Studiobot<br /> 57:56 - Wrap up</p> <p> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">In this episode Tor and Chet chat with Raluca Saucic and Eugene Yakavets about the new "Bring Your Own Model" feature in Android Studio which allows using other models than Gemini for agent mode, including models from Anthropic, OpenAI, and more. We also discuss using local models via Ollama and LM Studio.</p> <p dir="ltr">Resources: Use a remote model → <a href= "https://goo.gle/43N2Z5E">https://goo.gle/43N2Z5E</a></p> <p dir="ltr">Use a local model → <a href= "https://goo.gle/3Xij27V">https://goo.gle/3Xij27V</a> </p> <p dir="ltr">Chapters: 0:00 - Intro 0:49 - Bring your own model 4:13 - Bring your own key 7:24 - Anthropic model 13:17- How often do you need to remind the model of the context? 17:40 - Thinking vs planning 20:25 - What happens when the API needs to give multiple answers to a complex question? 24:14 - Supported models 31:18 - Are there any barriers when using a different model? 34:07 - Support for code completion 38:16 - GitHub's relationship with agents 44:35 - Using agents for development 56:36 - Studiobot 57:56 - Wrap up</p> <p> </p>]]></content:encoded>
+      
+      
+      <enclosure length="84907028" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB221_v1.mp3?dest-id=2710847"/>
+      <itunes:duration>58:26</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>In this episode Tor and Chet chat with Raluca Saucic and Eugene Yakavets about the new "Bring Your Own Model" feature in Android Studio which allows using other models than Gemini for agent mode, including models from Anthropic,  OpenAI, and more. We also discuss using local models via Ollama and LM Studio. Resources: Use a remote model → https://goo.gle/43N2Z5E Use a local model → https://goo.gle/3Xij27V   Chapters: 0:00 - Intro 0:49 - Bring your own model 4:13 - Bring your own key 7:24 - Anthropic model 13:17- How often do you need to remind the model of the context? 17:40 - Thinking vs planning 20:25 - What happens when the API needs to give multiple answers to a complex question? 24:14 - Supported models 31:18 - Are there any barriers when using a different model? 34:07 - Support for code completion 38:16 - GitHub's relationship with agents 44:35 - Using agents for development 56:36 - Studiobot 57:56 - Wrap up  </itunes:subtitle><itunes:summary>In this episode Tor and Chet chat with Raluca Saucic and Eugene Yakavets about the new "Bring Your Own Model" feature in Android Studio which allows using other models than Gemini for agent mode, including models from Anthropic,  OpenAI, and more. We also discuss using local models via Ollama and LM Studio. Resources: Use a remote model → https://goo.gle/43N2Z5E Use a local model → https://goo.gle/3Xij27V   Chapters: 0:00 - Intro 0:49 - Bring your own model 4:13 - Bring your own key 7:24 - Anthropic model 13:17- How often do you need to remind the model of the context? 17:40 - Thinking vs planning 20:25 - What happens when the API needs to give multiple answers to a complex question? 24:14 - Supported models 31:18 - Are there any barriers when using a different model? 34:07 - Support for code completion 38:16 - GitHub's relationship with agents 44:35 - Using agents for development 56:36 - Studiobot 57:56 - Wrap up  </itunes:summary></item>
+<item>
+      <title>From natural language to UI tests: A deep dive into Journeys for Android Studio</title>
+      <itunes:title>From natural language to UI tests: A deep dive into Journeys for Android Studio</itunes:title>
+      <pubDate>Tue, 14 Oct 2025 17:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[b9849018-0f1e-478d-a87d-05847ccca0eb]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/from-natural-language-to-ui-tests-a-deep-dive-into-journeys-for-android-studio]]></link>
+      <description><![CDATA[<p dir="ltr">Hosts Tor and Chet are joined by Adarsh Fernando, a Product Manager, and Ray Buse, a Software Engineer, to discuss Journeys for Android Studio. Powered by Gemini's vision and reasoning, Journeys aims to simplify end-to-end test creation and maintenance by converting the natural language you provide to describe the steps and assertions for each test, resulting in actions and evaluations performed directly on your app.</p> <p dir="ltr">Chapters:<br /> 0:00 - Intro<br /> 1:46 - Journeys: New AI-powered testing approach<br /> 3:40 - How Journeys Works with Gemini<br /> 4:27 - The natural language advantage<br /> 5:49 - Real-world use case: Google Maps<br /> 6:53 - Debugging with AI reasoning<br /> 8:08 - Why Journeys is important: Bridging the testing gap<br /> 9:56 - Journeys and End-to-End Testing<br /> 12:18 - Performance and Cached Journeys<br /> 24:14 - Android Studio and Firebase integration<br /> 25:27 - The development workflow<br /> 31:22 - AI for everyone: Beyond end-to-end testing<br /> 33:28 - Looking ahead: Feedback and the future </p> <p dir="ltr">Resources:<br /> Journeys for Android Studio → <a href= "https://goo.gle/4m9YOr3">https://goo.gle/4m9YOr3</a><br /> App Testing (Android) → <a href= "https://goo.gle/3HVKTqB">https://goo.gle/3HVKTqB</a>  <br /> Tor on Bluesky → <a href= "https://goo.gle/3ViCAYS">https://goo.gle/3ViCAYS</a><br /> Chet on Bluesky → <a href= "https://goo.gle/4gzpccM">https://goo.gle/4gzpccM</a><br /> Ardash on Bluesky → <a href= "https://goo.gle/47JGNw9">https://goo.gle/47JGNw9</a></p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Hosts Tor and Chet are joined by Adarsh Fernando, a Product Manager, and Ray Buse, a Software Engineer, to discuss Journeys for Android Studio. Powered by Gemini's vision and reasoning, Journeys aims to simplify end-to-end test creation and maintenance by converting the natural language you provide to describe the steps and assertions for each test, resulting in actions and evaluations performed directly on your app.</p> <p dir="ltr">Chapters: 0:00 - Intro 1:46 - Journeys: New AI-powered testing approach 3:40 - How Journeys Works with Gemini 4:27 - The natural language advantage 5:49 - Real-world use case: Google Maps 6:53 - Debugging with AI reasoning 8:08 - Why Journeys is important: Bridging the testing gap 9:56 - Journeys and End-to-End Testing 12:18 - Performance and Cached Journeys 24:14 - Android Studio and Firebase integration 25:27 - The development workflow 31:22 - AI for everyone: Beyond end-to-end testing 33:28 - Looking ahead: Feedback and the future </p> <p dir="ltr">Resources: Journeys for Android Studio → <a href= "https://goo.gle/4m9YOr3">https://goo.gle/4m9YOr3</a> App Testing (Android) → <a href= "https://goo.gle/3HVKTqB">https://goo.gle/3HVKTqB</a> Tor on Bluesky → <a href= "https://goo.gle/3ViCAYS">https://goo.gle/3ViCAYS</a> Chet on Bluesky → <a href= "https://goo.gle/4gzpccM">https://goo.gle/4gzpccM</a> Ardash on Bluesky → <a href= "https://goo.gle/47JGNw9">https://goo.gle/47JGNw9</a></p>]]></content:encoded>
+      
+      
+      <enclosure length="65373442" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB219_v1.mp3?dest-id=2710847"/>
+      <itunes:duration>44:57</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>Hosts Tor and Chet are joined by Adarsh Fernando, a Product Manager, and Ray Buse, a Software Engineer, to discuss Journeys for Android Studio. Powered by Gemini's vision and reasoning, Journeys aims to simplify end-to-end test creation and maintenance by converting the natural language you provide to describe the steps and assertions for each test, resulting in actions and evaluations performed directly on your app. Chapters: 0:00 - Intro 1:46 - Journeys: New AI-powered testing approach 3:40 - How Journeys Works with Gemini 4:27 - The natural language advantage 5:49 - Real-world use case: Google Maps 6:53 - Debugging with AI reasoning 8:08 - Why Journeys is important: Bridging the testing gap 9:56 - Journeys and End-to-End Testing 12:18 - Performance and Cached Journeys 24:14 - Android Studio and Firebase integration 25:27 - The development workflow 31:22 - AI for everyone: Beyond end-to-end testing 33:28 - Looking ahead: Feedback and the future  Resources: Journeys for Android Studio → https://goo.gle/4m9YOr3 App Testing (Android) → https://goo.gle/3HVKTqB   Tor on Bluesky → https://goo.gle/3ViCAYS Chet on Bluesky → https://goo.gle/4gzpccM Ardash on Bluesky → https://goo.gle/47JGNw9</itunes:subtitle><itunes:summary>Hosts Tor and Chet are joined by Adarsh Fernando, a Product Manager, and Ray Buse, a Software Engineer, to discuss Journeys for Android Studio. Powered by Gemini's vision and reasoning, Journeys aims to simplify end-to-end test creation and maintenance by converting the natural language you provide to describe the steps and assertions for each test, resulting in actions and evaluations performed directly on your app. Chapters: 0:00 - Intro 1:46 - Journeys: New AI-powered testing approach 3:40 - How Journeys Works with Gemini 4:27 - The natural language advantage 5:49 - Real-world use case: Google Maps 6:53 - Debugging with AI reasoning 8:08 - Why Journeys is important: Bridging the testing gap 9:56 - Journeys and End-to-End Testing 12:18 - Performance and Cached Journeys 24:14 - Android Studio and Firebase integration 25:27 - The development workflow 31:22 - AI for everyone: Beyond end-to-end testing 33:28 - Looking ahead: Feedback and the future  Resources: Journeys for Android Studio → https://goo.gle/4m9YOr3 App Testing (Android) → https://goo.gle/3HVKTqB   Tor on Bluesky → https://goo.gle/3ViCAYS Chet on Bluesky → https://goo.gle/4gzpccM Ardash on Bluesky → https://goo.gle/47JGNw9</itunes:summary></item>
+<item>
+      <title>Android developer verification</title>
+      <itunes:title>Android developer verification</itunes:title>
+      <pubDate>Tue, 30 Sep 2025 18:07:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[030dc1ff-99d8-42e2-91fa-570f8dcb582d]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/android-developer-verification]]></link>
+      <description><![CDATA[<p dir="ltr">To protect users from malware and scams, Android has announced a new layer of security: developer verification. While this is nothing new for Google Play Store apps, Android is extending this to the entire Android ecosystem. Host Tor is joined by Matthew, Patrick, Naheed, and Raz to discuss this latest security update that deters bad actors and creates a safer environment.</p> <p> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">To protect users from malware and scams, Android has announced a new layer of security: developer verification. While this is nothing new for Google Play Store apps, Android is extending this to the entire Android ecosystem. Host Tor is joined by Matthew, Patrick, Naheed, and Raz to discuss this latest security update that deters bad actors and creates a safer environment.</p> <p> </p>]]></content:encoded>
+      
+      
+      <enclosure length="65766224" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB220_v3.mp3?dest-id=2710847"/>
+      <itunes:duration>45:22</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>To protect users from malware and scams, Android has announced a new layer of security: developer verification. While this is nothing new for Google Play Store apps, Android is extending this to the entire Android ecosystem. Host Tor is joined by Matthew, Patrick, Naheed, and Raz to discuss this latest security update that deters bad actors and creates a safer environment.  </itunes:subtitle><itunes:summary>To protect users from malware and scams, Android has announced a new layer of security: developer verification. While this is nothing new for Google Play Store apps, Android is extending this to the entire Android ecosystem. Host Tor is joined by Matthew, Patrick, Naheed, and Raz to discuss this latest security update that deters bad actors and creates a safer environment.  </itunes:summary></item>
+<item>
+      <title>Autofill in Compose</title>
+      <itunes:title>Autofill in Compose</itunes:title>
+      <pubDate>Wed, 13 Aug 2025 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[7fa864a0-a048-4a61-845d-c9d88edf2e3a]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/autofill-in-compose]]></link>
+      <description><![CDATA[<p dir="ltr">In this episode of Android Back Stage, Hosts Tor, and Chet are joined by Melba and Ralston, Software Engineers on the Compose Team, to talk about Autofill in Compose. Learn about Autofill services, best practices, and more!</p> <p dir="ltr">Chapters:<br /> 0:00 - Intro<br /> 0:40 - What is Autofill?<br /> 1:21 - Autofill team journey and semantics<br /> 2:15 - Defining semantics in Compose<br /> 3:29 - Bridging views and Compose for Autofill<br /> 4:23 - Developer Experience: Early autofill in Compose<br /> 7:02 - Autofill services and communication flow<br /> 7:59 - User authentication and multiple autofill services<br /> 12:53 - The Autofill flow: From tap to fill<br /> 21:56 - Handling list types and saving credentials (commit)<br /> 30:11 - The "Asteriks" bug and semantics refractor<br /> 31:09 - Performance improvements in Autofill<br /> 37:48 - Compose's architectural advantages (composition over inheritance)<br /> 40:30 - Best practices and future improvements</p> <p> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">In this episode of Android Back Stage, Hosts Tor, and Chet are joined by Melba and Ralston, Software Engineers on the Compose Team, to talk about Autofill in Compose. Learn about Autofill services, best practices, and more!</p> <p dir="ltr">Chapters: 0:00 - Intro 0:40 - What is Autofill? 1:21 - Autofill team journey and semantics 2:15 - Defining semantics in Compose 3:29 - Bridging views and Compose for Autofill 4:23 - Developer Experience: Early autofill in Compose 7:02 - Autofill services and communication flow 7:59 - User authentication and multiple autofill services 12:53 - The Autofill flow: From tap to fill 21:56 - Handling list types and saving credentials (commit) 30:11 - The "Asteriks" bug and semantics refractor 31:09 - Performance improvements in Autofill 37:48 - Compose's architectural advantages (composition over inheritance) 40:30 - Best practices and future improvements</p> <p> </p>]]></content:encoded>
+      
+      
+      <enclosure length="42586514" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB218_v2.mp3?dest-id=2710847"/>
+      <itunes:duration>44:22</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>In this episode of Android Back Stage, Hosts Tor, and Chet are joined by Melba and Ralston, Software Engineers on the Compose Team, to talk about Autofill in Compose. Learn about Autofill services, best practices, and more! Chapters: 0:00 - Intro 0:40 - What is Autofill? 1:21 - Autofill team journey and semantics 2:15 - Defining semantics in Compose 3:29 - Bridging views and Compose for Autofill 4:23 - Developer Experience: Early autofill in Compose 7:02 - Autofill services and communication flow 7:59 - User authentication and multiple autofill services 12:53 - The Autofill flow: From tap to fill 21:56 - Handling list types and saving credentials (commit) 30:11 - The "Asteriks" bug and semantics refractor 31:09 - Performance improvements in Autofill 37:48 - Compose's architectural advantages (composition over inheritance) 40:30 - Best practices and future improvements  </itunes:subtitle><itunes:summary>In this episode of Android Back Stage, Hosts Tor, and Chet are joined by Melba and Ralston, Software Engineers on the Compose Team, to talk about Autofill in Compose. Learn about Autofill services, best practices, and more! Chapters: 0:00 - Intro 0:40 - What is Autofill? 1:21 - Autofill team journey and semantics 2:15 - Defining semantics in Compose 3:29 - Bridging views and Compose for Autofill 4:23 - Developer Experience: Early autofill in Compose 7:02 - Autofill services and communication flow 7:59 - User authentication and multiple autofill services 12:53 - The Autofill flow: From tap to fill 21:56 - Handling list types and saving credentials (commit) 30:11 - The "Asteriks" bug and semantics refractor 31:09 - Performance improvements in Autofill 37:48 - Compose's architectural advantages (composition over inheritance) 40:30 - Best practices and future improvements  </itunes:summary></item>
+<item>
+      <title>Back it up, bring it back: No data left behind</title>
+      <itunes:title>Back it up, bring it back: No data left behind</itunes:title>
+      <pubDate>Thu, 10 Jul 2025 20:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[4c9c9559-05d4-4cf2-8284-fe86c9760f74]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/back-it-up-bring-it-back-no-data-left-behind]]></link>
+      <description><![CDATA[<p dir="ltr">It can be a draw when setting up a new device. Some info transfers, while some don't. Learn how developers can ensure the best user experience when people backup and restore an Android device. Hosts Tor and Chet are joined by Graham and Piyush on the Android Consumer Experience team  and Alon on the Android Studio team to discuss Android backup and restore.</p> <p><strong> </strong></p> <p dir="ltr">Chapters:</p> <p dir="ltr">0:00 - Introduction & the user pain point</p> <p dir="ltr">1:38 - Why backup fails: Developer challenges</p> <p dir="ltr">4:00 - Evolution of backup testing: From scripts to Android Studio</p> <p dir="ltr">7:15 - Beyond testing: Backup for developer workflow</p> <p dir="ltr">8:50 - Cross-device backup & GMS core integration</p> <p dir="ltr">10:55 - Understanding backup types: Devices vs. Cloud</p> <p dir="ltr">14:55 - Data categories & developer control</p> <p dir="ltr">16:05 - System-level backup: Permissions & credentials</p> <p dir="ltr">18:35 - Default backup pitfalls & key-value agents</p> <p dir="ltr">28:15 - Database migrations & backup stress testing</p> <p dir="ltr">32:04 - Automated testing framework</p> <p dir="ltr">41:02 - Recap & feedback channels</p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">It can be a draw when setting up a new device. Some info transfers, while some don't. Learn how developers can ensure the best user experience when people backup and restore an Android device. Hosts Tor and Chet are joined by Graham and Piyush on the Android Consumer Experience team and Alon on the Android Studio team to discuss Android backup and restore.</p> <p> </p> <p dir="ltr">Chapters:</p> <p dir="ltr">0:00 - Introduction & the user pain point</p> <p dir="ltr">1:38 - Why backup fails: Developer challenges</p> <p dir="ltr">4:00 - Evolution of backup testing: From scripts to Android Studio</p> <p dir="ltr">7:15 - Beyond testing: Backup for developer workflow</p> <p dir="ltr">8:50 - Cross-device backup & GMS core integration</p> <p dir="ltr">10:55 - Understanding backup types: Devices vs. Cloud</p> <p dir="ltr">14:55 - Data categories & developer control</p> <p dir="ltr">16:05 - System-level backup: Permissions & credentials</p> <p dir="ltr">18:35 - Default backup pitfalls & key-value agents</p> <p dir="ltr">28:15 - Database migrations & backup stress testing</p> <p dir="ltr">32:04 - Automated testing framework</p> <p dir="ltr">41:02 - Recap & feedback channels</p>]]></content:encoded>
+      
+      
+      <enclosure length="118134033" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB217_V2.mp3?dest-id=2710847"/>
+      <itunes:duration>48:50</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>It can be a draw when setting up a new device. Some info transfers, while some don't. Learn how developers can ensure the best user experience when people backup and restore an Android device. Hosts Tor and Chet are joined by Graham and Piyush on the Android Consumer Experience team  and Alon on the Android Studio team to discuss Android backup and restore.   Chapters: 0:00 - Introduction &amp; the user pain point 1:38 - Why backup fails: Developer challenges 4:00 - Evolution of backup testing: From scripts to Android Studio 7:15 - Beyond testing: Backup for developer workflow 8:50 - Cross-device backup &amp; GMS core integration 10:55 - Understanding backup types: Devices vs. Cloud 14:55 - Data categories &amp; developer control 16:05 - System-level backup: Permissions &amp; credentials 18:35 - Default backup pitfalls &amp; key-value agents 28:15 - Database migrations &amp; backup stress testing 32:04 - Automated testing framework 41:02 - Recap &amp; feedback channels</itunes:subtitle><itunes:summary>It can be a draw when setting up a new device. Some info transfers, while some don't. Learn how developers can ensure the best user experience when people backup and restore an Android device. Hosts Tor and Chet are joined by Graham and Piyush on the Android Consumer Experience team  and Alon on the Android Studio team to discuss Android backup and restore.   Chapters: 0:00 - Introduction &amp; the user pain point 1:38 - Why backup fails: Developer challenges 4:00 - Evolution of backup testing: From scripts to Android Studio 7:15 - Beyond testing: Backup for developer workflow 8:50 - Cross-device backup &amp; GMS core integration 10:55 - Understanding backup types: Devices vs. Cloud 14:55 - Data categories &amp; developer control 16:05 - System-level backup: Permissions &amp; credentials 18:35 - Default backup pitfalls &amp; key-value agents 28:15 - Database migrations &amp; backup stress testing 32:04 - Automated testing framework 41:02 - Recap &amp; feedback channels</itunes:summary></item>
+<item>
+      <title>Bot to the Future: Two Years Later</title>
+      <itunes:title>Bot to the Future: Two Years Later</itunes:title>
+      <pubDate>Fri, 13 Jun 2025 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[8d100d1c-d3c6-423a-aa8b-44b921b5f28a]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/bot-to-the-future-two-years-later]]></link>
+      <description><![CDATA[<p dir="ltr">Join Tor and Siva Velusamy and Sandhya Mohan from the Android Studio team to learn about the latest updates to Studio Bot (Gemini in Android Studio) that dropped at Google I/O 2025 including Agent Mode. Building on their conversation from two years ago about the Studio Bot, they explore Gemini's role in every stage of development, from design to building, testing, and maintenance, the future of coding companions, and more.</p> <p dir="ltr"><br /> Studio Bot podcast episode → <a href= "https://goo.gle/3ZM0Wwx">https://goo.gle/3ZM0Wwx</a> </p> <p dir="ltr"> </p> <p> </p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Join Tor and Siva Velusamy and Sandhya Mohan from the Android Studio team to learn about the latest updates to Studio Bot (Gemini in Android Studio) that dropped at Google I/O 2025 including Agent Mode. Building on their conversation from two years ago about the Studio Bot, they explore Gemini's role in every stage of development, from design to building, testing, and maintenance, the future of coding companions, and more.</p> <p dir="ltr"> Studio Bot podcast episode → <a href= "https://goo.gle/3ZM0Wwx">https://goo.gle/3ZM0Wwx</a> </p> <p dir="ltr"> </p> <p> </p>]]></content:encoded>
+      
+      
+      <enclosure length="66892771" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB216_v2.mp3?dest-id=2710847"/>
+      <itunes:duration>46:27</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>Join Tor and Siva Velusamy and Sandhya Mohan from the Android Studio team to learn about the latest updates to Studio Bot (Gemini in Android Studio) that dropped at Google I/O 2025 including Agent Mode. Building on their conversation from two years ago about the Studio Bot, they explore Gemini's role in every stage of development, from design to building, testing, and maintenance, the future of coding companions, and more. Studio Bot podcast episode → https://goo.gle/3ZM0Wwx     </itunes:subtitle><itunes:summary>Join Tor and Siva Velusamy and Sandhya Mohan from the Android Studio team to learn about the latest updates to Studio Bot (Gemini in Android Studio) that dropped at Google I/O 2025 including Agent Mode. Building on their conversation from two years ago about the Studio Bot, they explore Gemini's role in every stage of development, from design to building, testing, and maintenance, the future of coding companions, and more. Studio Bot podcast episode → https://goo.gle/3ZM0Wwx     </itunes:summary></item>
+<item>
+      <title>​​Kotlin Multiplatform: Have your code and eat it too</title>
+      <itunes:title>​​Kotlin Multiplatform: Have your code and eat it too</itunes:title>
+      <pubDate>Wed, 07 May 2025 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[3b137f1e-23db-4270-a07e-058baee8ee15]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/kotlin-multiplatform-have-your-code-and-eat-it-too]]></link>
+      <description><![CDATA[<p dir="ltr">Software Engineers Dustin Lam and Yigit Boyar join host Tor Norbye to chat all about Kotlin Multiplatform. </p> <p dir="ltr"><br /> Resources:<br /> Tor's Bluesky → <a href= "https://goo.gle/4iLXEAg">https://goo.gle/4iLXEAg</a> </p> <p>Yigit's Bluesky → <a href= "https://goo.gle/4dmsYVj">https://goo.gle/4dmsYVj</a></p>]]></description>
+      
+      <content:encoded><![CDATA[<p dir="ltr">Software Engineers Dustin Lam and Yigit Boyar join host Tor Norbye to chat all about Kotlin Multiplatform. </p> <p dir="ltr"> Resources: Tor's Bluesky → <a href= "https://goo.gle/4iLXEAg">https://goo.gle/4iLXEAg</a> </p> <p>Yigit's Bluesky → <a href= "https://goo.gle/4dmsYVj">https://goo.gle/4dmsYVj</a></p>]]></content:encoded>
+      
+      
+      <enclosure length="112837205" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB215_V2.mp3?dest-id=2710847"/>
+      <itunes:duration>58:08</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>Software Engineers Dustin Lam and Yigit Boyar join host Tor Norbye to chat all about Kotlin Multiplatform.  Resources: Tor's Bluesky → https://goo.gle/4iLXEAg  Yigit's Bluesky → https://goo.gle/4dmsYVj</itunes:subtitle><itunes:author>Android Developers</itunes:author><itunes:summary>Software Engineers Dustin Lam and Yigit Boyar join host Tor Norbye to chat all about Kotlin Multiplatform.  Resources: Tor's Bluesky → https://goo.gle/4iLXEAg  Yigit's Bluesky → https://goo.gle/4dmsYVj</itunes:summary></item>
+<item>
+      <title>Linting on the Side of Caution: Safety &amp; Security</title>
+      <itunes:title>Linting on the Side of Caution: Safety &amp;amp; Security</itunes:title>
+      <pubDate>Thu, 10 Apr 2025 21:48:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[181ef00b-c623-4841-b37a-88fb67dd03a4]]></guid>
+      <link><![CDATA[https://adbackstage.libsyn.com/linting-on-the-side-of-caution-safety-security]]></link>
+      <description><![CDATA[<p>What is app safety for Android? What is the Android team working on to ensure developers and users alike enjoy safe and reliable apps? Watch along as Tor Norbye, Chet Haase, Romain Guy, Theresa Khuu, Naheed Vora take a deep dive backstage and discuss what's new in the Android safety space.</p> <p> </p> <p dir="ltr">Resources:</p> <p dir="ltr">Enhanced Tools for Secure & Efficient Development → <a href="https://goo.gle/42lo3i8" target="_blank" rel= "noopener">https://goo.gle/42lo3i8</a></p> <p><strong> </strong></p> <p dir="ltr">Watch more <span data-rich-links= "{"dde_di":"kix.346j8qrm3ico","dde-fdv":"Android Developers Backstage","dde-sii":"dropdownItem.8p3mnnbnfn6h","ddefe-ddi":{"cv":{"op":"set","opValue":[{"di-id":"dropdownItem.ty4ra8sogy4m","di-v":"Please Select","di-dv":"Please Select","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#ffcfc9"},"ts_fgc2":{"clr_type":0,"hclr_color":"#b10202"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.ps2dnj21xumx","di-v":"#TheAndroidShow","di-dv":"#TheAndroidShow","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.f516v0ie8flf","di-v":"Android Conference Talks","di-dv":"Android Conference Talks","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.gx4dyuffgxvs","di-v":"Android Developers Backstage","di-dv":"Android Developers Backstage","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.1ll5izo72mlc","di-v":"Android Developer Stories","di-dv":"Android Developer Stories","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.ly0dgdomha51","di-v":"Android Shorts","di-dv":"Android Shorts","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.guat0w3k7e11","di-v":"Compose Tips for Delightful UI","di-dv":"Compose Tips for Delightful UI","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.wpszotvzo9he","di-v":"Now in Android","di-dv":"Now in Android","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.fy4d3t86zfej","di-v":"What is Privacy Sandbox","di-dv":"What is Privacy Sandbox","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.fbnc3l9q4ikn","di-v":"What's New In Android Studio","di-dv":"What's New In Android Studio","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.iq4zgokntwzm","di-v":"Play PolicyBytes","di-dv":"Play PolicyBytes","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.j6mqbidtq6ax","di-v":"Play Report","di-dv":"Play Report","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.6f77j54l7y4a","di-v":"#WeArePlay","di-dv":"#WeArePlay","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.8p3mnnbnfn6h","di-v":"Android Developers Backstage","di-dv":"Android Developers Backstage","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}}]}},"ddefe-t":"Android/Play Series","type":"dropdown"}"> Android Developers Backstage</span> → <a href= "https://goo.gle/adb-podcast" target="_blank" rel= "noopener">https://goo.gle/<span data-rich-links= "{"dde_di":"kix.ecpmc86shzer","dde-fdv":"adb-podcast ","dde-sii":"dropdownItem.p0lp1d5ke7bz","ddefe-ddi":{"cv":{"op":"set","opValue":[{"di-id":"dropdownItem.2nvjoi1o9np1","di-v":"Please Select","di-dv":"Please Select","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#ffcfc9"},"ts_fgc2":{"clr_type":0,"hclr_color":"#b10202"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.ibbr4h37s77z","di-v":"ComposeTips","di-dv":"ComposeTips","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":null},"ts_fgc2":{"clr_type":0,"hclr_color":null},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.p0lp1d5ke7bz","di-v":"adb-podcast ","di-dv":"adb-podcast ","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":null},"ts_fgc2":{"clr_type":0,"hclr_color":null},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.2q363t1c0enc","di-v":"PlayPolicyBytes","di-dv":"PlayPolicyBytes","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":null},"ts_fgc2":{"clr_type":0,"hclr_color":null},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.ra38qg8442cj","di-v":"WeArePlay","di-dv":"WeArePlay","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.4blhonb0wy2o","di-v":"now-in-android","di-dv":"now-in-android","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.gkx4htyy0y53","di-v":"AndroidDevStories","di-dv":"AndroidDevStories","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}},{"di-id":"dropdownItem.oeaupx3ch6ca","di-v":"AndroidStudio-Tools","di-dv":"AndroidStudio-Tools","di-ts":{"ts_bd":false,"ts_fs":11,"ts_ff":"Arial","ts_it":false,"ts_sc":false,"ts_st":false,"ts_tw":400,"ts_un":false,"ts_va":"nor","ts_bgc2":{"clr_type":0,"hclr_color":"#e8eaed"},"ts_fgc2":{"clr_type":0,"hclr_color":"#000000"},"ts_bd_i":false,"ts_fs_i":false,"ts_ff_i":false,"ts_it_i":false,"ts_sc_i":false,"ts_st_i":false,"ts_un_i":false,"ts_va_i":false,"ts_bgc2_i":false,"ts_fgc2_i":false},"di-cv":{"dicv_v":0,"dicv_ft":0}}]}},"ddefe-t":"Android/Play playlist links","type":"dropdown"}">adb-podcast</span></a></p> <p dir="ltr">Subscribe to Android Developers → <a href= "https://goo.gle/AndroidDevs" target="_blank" rel= "noopener">https://goo.gle/AndroidDevs </a></p> <p><strong> </strong></p> <p dir="ltr">#Featured #Android #AndroidDevelopersBackstage</p> <p dir="ltr">Speakers: Tor Norbye, Chet Haase, Romain Guy, Theresa Khuu, Naheed Vora</p>]]></description>
+      
+      <content:encoded><![CDATA[<p>What is app safety for Android? What is the Android team working on to ensure developers and users alike enjoy safe and reliable apps? Watch along as Tor Norbye, Chet Haase, Romain Guy, Theresa Khuu, Naheed Vora take a deep dive backstage and discuss what's new in the Android safety space.</p> <p> </p> <p dir="ltr">Resources:</p> <p dir="ltr">Enhanced Tools for Secure & Efficient Development → <a href="https://goo.gle/42lo3i8" target="_blank" rel= "noopener">https://goo.gle/42lo3i8</a></p> <p> </p> <p dir="ltr">Watch more Android Developers Backstage → <a href= "https://goo.gle/adb-podcast" target="_blank" rel= "noopener">https://goo.gle/adb-podcast</a></p> <p dir="ltr">Subscribe to Android Developers → <a href= "https://goo.gle/AndroidDevs" target="_blank" rel= "noopener">https://goo.gle/AndroidDevs </a></p> <p> </p> <p dir="ltr">#Featured #Android #AndroidDevelopersBackstage</p> <p dir="ltr">Speakers: Tor Norbye, Chet Haase, Romain Guy, Theresa Khuu, Naheed Vora</p>]]></content:encoded>
+      
+      
+      <enclosure length="122603473" type="audio/mpeg" url="https://traffic.libsyn.com/secure/adbackstage/ADB214_V3.mp3?dest-id=2710847"/>
+      <itunes:duration>50:31</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      <itunes:keywords/>
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      <itunes:author>Google</itunes:author>
+      
+      
+      
+    <author>developers@android.com (Android Developers)</author><itunes:subtitle>What is app safety for Android? What is the Android team working on to ensure developers and users alike enjoy safe and reliable apps? Watch along as Tor Norbye, Chet Haase, Romain Guy, Theresa Khuu, Naheed Vora take a deep dive backstage and discuss what's new in the Android safety space.   Resources: Enhanced Tools for Secure &amp; Efficient Development → https://goo.gle/42lo3i8   Watch more Android Developers Backstage → https://goo.gle/adb-podcast Subscribe to Android Developers → https://goo.gle/AndroidDevs    #Featured #Android #AndroidDevelopersBackstage Speakers: Tor Norbye, Chet Haase, Romain Guy, Theresa Khuu, Naheed Vora</itunes:subtitle><itunes:summary>What is app safety for Android? What is the Android team working on to ensure developers and users alike enjoy safe and reliable apps? Watch along as Tor Norbye, Chet Haase, Romain Guy, Theresa Khuu, Naheed Vora take a deep dive backstage and discuss what's new in the Android safety space.   Resources: Enhanced Tools for Secure &amp; Efficient Development → https://goo.gle/42lo3i8   Watch more Android Developers Backstage → https://goo.gle/adb-podcast Subscribe to Android Developers → https://goo.gle/AndroidDevs    #Featured #Android #AndroidDevelopersBackstage Speakers: Tor Norbye, Chet Haase, Romain Guy, Theresa Khuu, Naheed Vora</itunes:summary></item>
+    
+  </channel>
+</rss>

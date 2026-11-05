@@ -7,7 +7,7 @@ using Microsoft.Maui.Graphics;
 
 namespace Comet
 {
-	public class Image : View, Microsoft.Maui.IImage
+	public partial class Image : View, Microsoft.Maui.IImage
 	{
 		protected static Dictionary<string, string> ImageHandlerPropertyMapper = new(HandlerPropertyMapper)
 		{

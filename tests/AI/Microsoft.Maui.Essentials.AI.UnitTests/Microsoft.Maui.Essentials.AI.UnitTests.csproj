@@ -20,6 +20,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\TestTraits.cs" Link="Conformance\TestTraits.cs" />
+    <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\ChatClientFunctionCallingTests.cs" Link="Conformance\ChatClientFunctionCallingTests.cs" />
+    <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\ChatClientGetServiceTestsBase.cs" Link="Conformance\ChatClientGetServiceTestsBase.cs" />
+    <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\ChatClientMessagesTestsBase.cs" Link="Conformance\ChatClientMessagesTestsBase.cs" />
+    <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\ChatClientOptionsTestsBase.cs" Link="Conformance\ChatClientOptionsTestsBase.cs" />
+    <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\ChatClientJsonSchemaTestsBase.cs" Link="Conformance\ChatClientJsonSchemaTestsBase.cs" />
+    <Compile Include="..\Microsoft.Maui.Essentials.AI.DeviceTests\Tests\ChatClientUsageTestsBase.cs" Link="Conformance\ChatClientUsageTestsBase.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\..\..\samples\EssentialsAISample\Models\**" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\StreamingJsonDeserializer.cs" Link="Services\StreamingJsonDeserializer.cs" />
     <Compile Include="..\..\..\samples\EssentialsAISample\Services\BufferedChatClient.cs" Link="Services\BufferedChatClient.cs" />

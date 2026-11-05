@@ -41,14 +41,36 @@ public interface IAndroidProvider : IDisposable
 	Task<List<HealthCheck>> CheckHealthAsync(CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// The platforms <see cref="GetDevicesAsync"/> can currently produce devices for.
+	/// </summary>
+	/// <remarks>
+	/// Declared by the provider rather than by its callers so the two cannot drift: a device
+	/// manager uses this to decide whether to query this provider at all, and then filters the
+	/// results on the same platform. If an implementation starts tagging devices with a new
+	/// platform it must list it here, otherwise those devices are never asked for.
+	/// </remarks>
+	IReadOnlyList<string> SupportedPlatforms { get; }
+
+	/// <summary>
 	/// Lists connected Android devices and running emulators.
 	/// </summary>
+	/// <remarks>
+	/// Every returned device must be tagged with a platform listed in
+	/// <see cref="SupportedPlatforms"/>, or it will be filtered out downstream.
+	/// </remarks>
 	Task<List<Device>> GetDevicesAsync(CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Lists available AVDs.
 	/// </summary>
 	Task<List<AvdInfo>> GetAvdsAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Lists available AVD device profile ids (e.g. "pixel_6", "Nexus 10") that can be
+	/// used as the device profile when creating an AVD. Returns an empty list if the
+	/// SDK's avdmanager is unavailable or the query fails.
+	/// </summary>
+	Task<List<string>> GetDeviceProfilesAsync(CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Creates a new AVD.
@@ -69,6 +91,36 @@ public interface IAndroidProvider : IDisposable
 	/// Stops a running emulator.
 	/// </summary>
 	Task StopEmulatorAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Lists active <c>adb forward</c> (host → device) port rules for a device.
+	/// </summary>
+	Task<IReadOnlyList<AndroidPortMapping>> ListForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Lists active <c>adb reverse</c> (device → host) port rules for a device.
+	/// </summary>
+	Task<IReadOnlyList<AndroidPortMapping>> ListReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Adds an <c>adb forward tcp:hostPort tcp:devicePort</c> rule.
+	/// </summary>
+	Task AddForwardPortAsync(string deviceSerial, int hostPort, int devicePort, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Adds an <c>adb reverse tcp:devicePort tcp:hostPort</c> rule.
+	/// </summary>
+	Task AddReversePortAsync(string deviceSerial, int devicePort, int hostPort, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Removes all <c>adb forward</c> rules for a device.
+	/// </summary>
+	Task ClearForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Removes all <c>adb reverse</c> rules for a device.
+	/// </summary>
+	Task ClearReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Lists installed SDK packages.
@@ -95,6 +147,12 @@ public interface IAndroidProvider : IDisposable
 	/// Installs SDK packages with per-package progress reporting.
 	/// </summary>
 	Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses, Action<string, int, int>? onProgress, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Installs SDK packages with live per-package progress (phase + percent) streamed from
+	/// <c>sdkmanager</c> so large downloads/extractions surface real progress instead of appearing to hang.
+	/// </summary>
+	Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses, Action<AndroidPackageInstallProgress>? onProgress, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Uninstalls SDK packages.
@@ -138,6 +196,14 @@ public interface IAndroidProvider : IDisposable
 	/// Installs Android SDK command-line tools with structured progress reporting.
 	/// </summary>
 	Task InstallSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Ensures the Android SDK at <paramref name="targetPath"/> contains the latest
+	/// <c>cmdline-tools;latest</c> package, bootstrapping and/or updating from the Google
+	/// catalog as needed. Returns the resolved command-line tools revision, or
+	/// <see langword="null"/> when the revision could not be determined.
+	/// </summary>
+	Task<string?> EnsureLatestSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Overrides the Android SDK path for the current session.
@@ -191,3 +257,19 @@ public record SdkPackage
 	public string? Location { get; init; }
 	public bool IsInstalled { get; init; }
 }
+
+/// <summary>
+/// Live progress for a single SDK package install, surfaced from the streamed
+/// <c>sdkmanager</c> stdout so long downloads/extractions don't appear to hang.
+/// </summary>
+/// <param name="Package">The package being installed (e.g. <c>system-images;android-37.0;google_apis_ps16k;arm64-v8a</c>).</param>
+/// <param name="PackageIndex">1-based index of this package within the overall batch.</param>
+/// <param name="PackageTotal">Total number of packages in the batch.</param>
+/// <param name="Phase">Human-readable phase parsed from sdkmanager output (e.g. <c>Downloading</c>, <c>Unzipping</c>), or empty when unknown.</param>
+/// <param name="Percent">Percent (0-100) for the current package, or -1 when sdkmanager has not reported a percentage yet.</param>
+public record AndroidPackageInstallProgress(
+	string Package,
+	int PackageIndex,
+	int PackageTotal,
+	string Phase,
+	int Percent);

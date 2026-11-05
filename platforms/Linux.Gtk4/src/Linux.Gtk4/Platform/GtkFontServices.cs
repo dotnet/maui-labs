@@ -246,7 +246,7 @@ internal sealed class GtkFontManager : IFontManager, IGtkFontManager
 		var css = new StringBuilder();
 
 		if (font.Size > 0 && !double.IsNaN(font.Size))
-			css.Append($"font-size: {font.Size}pt; ");
+			css.Append(FormattableString.Invariant($"font-size: {font.Size}px; "));
 
 		var family = ResolveFontFamily(font.Family);
 		if (!string.IsNullOrWhiteSpace(family))
@@ -265,7 +265,7 @@ internal sealed class GtkFontManager : IFontManager, IGtkFontManager
 		var css = new StringBuilder();
 
 		if (font.Size > 0 && !double.IsNaN(font.Size))
-			css.Append($"font-size: {font.Size}pt; ");
+			css.Append(FormattableString.Invariant($"font-size: {font.Size}px; "));
 
 		if (!string.IsNullOrWhiteSpace(font.Family))
 			css.Append($"font-family: \"{EscapeCss(font.Family)}\"; ");

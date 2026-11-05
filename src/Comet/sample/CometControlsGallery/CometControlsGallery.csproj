@@ -7,7 +7,6 @@
 		<OutputType>Exe</OutputType>
 		<RootNamespace>CometControlsGallery</RootNamespace>
 		<UseMaui Condition="!$(TargetFramework.Contains('-macos'))">true</UseMaui>
-		<MauiVersion Condition="$(TargetFramework.Contains('-macos')) AND '$(MauiVersion)' == ''">10.0.31</MauiVersion>
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>disable</ImplicitUsings>
 		<Nullable>enable</Nullable>
@@ -37,18 +36,16 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="AathifMahir.Maui.MauiIcons.Cupertino" Version="5.0.0" />
-		<PackageReference Include="Redth.MauiDevFlow.Agent" Version="*" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\Comet\Comet.csproj" />
 	</ItemGroup>
 
-	<!-- Override NuGet package with local project reference for mauidevflow -->
-	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
-		<PackageReference Remove="Redth.MauiDevFlow.Agent" />
-		<ProjectReference Include="..\..\..\mauidevflow\src\MauiDevFlow.Agent\MauiDevFlow.Agent.csproj" />
-	</ItemGroup>
+	<!-- The repo-local Microsoft.Maui.DevFlow.Agent ProjectReference is added for Debug
+	     builds by sample/Directory.Build.targets, which applies to every legacy sample
+	     uniformly (see .squad/decisions.md, "DevFlow Agent: One Registration Per Sample").
+	     Do not add a second PackageReference or ProjectReference to a DevFlow agent here. -->
 
 	<!-- Use shared Debug entitlements that include com.apple.security.network.server -->
 	<!-- This is set by sample/Directory.Build.targets for all samples in Debug mode -->

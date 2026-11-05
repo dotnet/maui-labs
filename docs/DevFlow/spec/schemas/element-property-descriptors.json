@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "element-property-descriptors.json",
+  "title": "ElementPropertyDescriptors",
+  "description": "Runtime-owned property editor metadata for one UI element.",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "properties"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Runtime element identifier."
+    },
+    "type": {
+      "type": "string",
+      "description": "Runtime control type name."
+    },
+    "properties": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PropertyDescriptor"
+      }
+    }
+  },
+  "$defs": {
+    "PropertyDescriptor": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "value",
+        "writable",
+        "choices",
+        "min",
+        "max",
+        "step"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Public property name."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "bool",
+            "enum",
+            "text",
+            "color",
+            "number"
+          ],
+          "description": "Editor kind selected from the runtime property type."
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Current value formatted with the runtime type converter."
+        },
+        "writable": {
+          "type": "boolean",
+          "description": "Whether the runtime exposes a public setter."
+        },
+        "choices": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Allowed enum names, or null for non-enum properties."
+        },
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Optional inclusive numeric minimum."
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Optional inclusive numeric maximum."
+        },
+        "step": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Optional recommended numeric editor step."
+        }
+      }
+    }
+  }
+}

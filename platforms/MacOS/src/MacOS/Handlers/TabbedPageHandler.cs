@@ -57,7 +57,7 @@ public class TabbedContainerView : MacOSContainerView
         _currentPageView?.RemoveFromSuperview();
         _currentPageView = view;
 
-        view.Frame = _contentArea.Bounds;
+        view.SetLayoutFrame(_contentArea.Bounds);
         view.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
         _contentArea.AddSubview(view);
     }
@@ -84,7 +84,7 @@ public class TabbedContainerView : MacOSContainerView
 
         if (_currentPageView != null)
         {
-            _currentPageView.Frame = _contentArea.Bounds;
+            _currentPageView.SetLayoutFrame(_contentArea.Bounds);
             OnContentLayout?.Invoke(_contentArea.Bounds);
         }
     }

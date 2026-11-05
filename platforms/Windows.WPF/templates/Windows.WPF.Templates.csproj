@@ -27,4 +27,20 @@
     <Compile Remove="**\*" />
   </ItemGroup>
 
+  <Target Name="PrepareWpfTemplate" BeforeTargets="_GetPackageFiles">
+    <Error Condition="'$(PackageVersion)' == '' or '$(MauiVersion)' == ''"
+           Text="WPF template packaging requires PackageVersion and MauiVersion." />
+    <PropertyGroup>
+      <_WpfTemplateProject>$(IntermediateOutputPath)templates\maui-wpf-app\MauiWpfApp.csproj</_WpfTemplateProject>
+      <_WpfTemplateContent>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\maui-wpf-app\MauiWpfApp.csproj'))</_WpfTemplateContent>
+      <_WpfTemplateContent>$(_WpfTemplateContent.Replace('__WPF_VERSION__', '$(PackageVersion)').Replace('__MAUI_VERSION__', '$(MauiVersion)'))</_WpfTemplateContent>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_WpfTemplateProject)" Lines="$(_WpfTemplateContent)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Content Remove="maui-wpf-app\MauiWpfApp.csproj" />
+      <Content Include="$(_WpfTemplateProject)" PackagePath="content\maui-wpf-app\MauiWpfApp.csproj" />
+    </ItemGroup>
+  </Target>
+
 </Project>

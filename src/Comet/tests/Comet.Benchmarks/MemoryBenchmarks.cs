@@ -1,3 +1,4 @@
+using Comet.Reactive;
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -131,7 +132,7 @@ namespace Comet.Benchmarks
 
 	public class MemCounterCometView : Comet.View
 	{
-		public readonly State<string> _text = new State<string>("");
+		public readonly Signal<string> _text = new Signal<string>("");
 		public MemCounterCometView()
 		{
 			Body = () => new Text(() => _text.Value);
@@ -141,7 +142,7 @@ namespace Comet.Benchmarks
 	public class LargeTreeCometView : Comet.View
 	{
 		readonly int _size;
-		public readonly State<int> _trigger = new State<int>(0);
+		public readonly Signal<int> _trigger = new Signal<int>(0);
 
 		public LargeTreeCometView(int size)
 		{
@@ -194,8 +195,8 @@ namespace Comet.Benchmarks
 
 	public class CascadeCometView : Comet.View
 	{
-		public readonly State<string> _firstName = new State<string>("");
-		public readonly State<string> _lastName = new State<string>("");
+		public readonly Signal<string> _firstName = new Signal<string>("");
+		public readonly Signal<string> _lastName = new Signal<string>("");
 
 		public CascadeCometView()
 		{

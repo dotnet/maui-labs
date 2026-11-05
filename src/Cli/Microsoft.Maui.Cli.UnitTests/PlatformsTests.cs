@@ -45,4 +45,19 @@ public class PlatformsTests
 	{
 		Assert.Equal(expected, Platforms.Normalize(input));
 	}
+
+	[Fact]
+	public void Supported_ContainsEveryValueAcceptedByIsValid()
+	{
+		Assert.All(Platforms.Supported, p => Assert.True(Platforms.IsValid(p), $"'{p}' is listed as supported but rejected by IsValid"));
+		Assert.Equal(new[] { "android", "ios", "maccatalyst", "windows", "all" }, Platforms.Supported);
+	}
+
+	[Fact]
+	public void Supported_IsJoinableAsAUserFacingList()
+	{
+		// Regression: `string.Join(", ", Platforms.All)` bound to the IEnumerable<char>
+		// overload and rendered "a, l, l" in the unknown-platform warning.
+		Assert.Equal("android, ios, maccatalyst, windows, all", string.Join(", ", Platforms.Supported));
+	}
 }

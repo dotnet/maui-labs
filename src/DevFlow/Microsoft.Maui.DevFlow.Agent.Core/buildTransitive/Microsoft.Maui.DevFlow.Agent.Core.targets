@@ -1,0 +1,28 @@
+<Project>
+
+  <ItemGroup>
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="DevFlowXaml" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(DevFlowXamlSourceMapsEnabled)' == 'true'">
+    <Analyzer Include="$(MSBuildThisFileDirectory)../analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll"
+              Condition="Exists('$(MSBuildThisFileDirectory)../analyzers/dotnet/cs/Microsoft.Maui.DevFlow.Analyzers.dll')" />
+  </ItemGroup>
+
+  <!-- MAUI prepares AdditionalFiles before editorconfig generation on every TFM.
+       Check its SDK marker at execution time: MAUI's targets may be imported after this file. -->
+  <Target Name="_DevFlowPromoteXamlSourceMaps"
+          AfterTargets="_MauiInjectXamlCssAdditionalFiles"
+          BeforeTargets="GenerateMSBuildEditorConfigFileCore"
+          Condition="'$(DevFlowXamlSourceMapsEnabled)' == 'true'">
+    <ItemGroup>
+      <AdditionalFiles Include="@(MauiXaml)"
+                       KeepDuplicates="false"
+                       DevFlowXaml="true"
+                       Condition="'$(UsingMicrosoftMauiControlsSdk)' != 'true' and '@(MauiXaml)' != ''" />
+      <AdditionalFiles DevFlowXaml="true"
+                       Condition="'%(AdditionalFiles.GenKind)' == 'Xaml'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

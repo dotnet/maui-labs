@@ -9,10 +9,12 @@ public class LinuxFileSystem : IFileSystem
 		get
 		{
 			var xdgCache = Environment.GetEnvironmentVariable("XDG_CACHE_HOME");
-			if (!string.IsNullOrEmpty(xdgCache))
-				return Path.Combine(xdgCache, AppDomain.CurrentDomain.FriendlyName);
-			return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-				".cache", AppDomain.CurrentDomain.FriendlyName);
+			var path = !string.IsNullOrEmpty(xdgCache)
+				? Path.Combine(xdgCache, AppDomain.CurrentDomain.FriendlyName)
+				: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+					".cache", AppDomain.CurrentDomain.FriendlyName);
+			Directory.CreateDirectory(path);
+			return path;
 		}
 	}
 
@@ -21,10 +23,12 @@ public class LinuxFileSystem : IFileSystem
 		get
 		{
 			var xdgData = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-			if (!string.IsNullOrEmpty(xdgData))
-				return Path.Combine(xdgData, AppDomain.CurrentDomain.FriendlyName);
-			return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-				".local", "share", AppDomain.CurrentDomain.FriendlyName);
+			var path = !string.IsNullOrEmpty(xdgData)
+				? Path.Combine(xdgData, AppDomain.CurrentDomain.FriendlyName)
+				: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+					".local", "share", AppDomain.CurrentDomain.FriendlyName);
+			Directory.CreateDirectory(path);
+			return path;
 		}
 	}
 

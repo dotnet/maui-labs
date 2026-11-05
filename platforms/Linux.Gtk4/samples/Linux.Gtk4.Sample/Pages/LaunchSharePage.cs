@@ -62,25 +62,6 @@ public class LaunchSharePage : ContentPage
 			}
 		};
 
-		// --- Email ---
-		var emailButton = new Button { Text = "✉️ Compose Email" };
-		emailButton.Clicked += async (s, e) =>
-		{
-			var email = IPlatformApplication.Current?.Services.GetService<IEmail>();
-			if (email is not null)
-			{
-				var msg = new EmailMessage
-				{
-					Subject = "Hello from Microsoft.Maui.Platforms.Linux.Gtk4!",
-					Body = "This email was composed using MAUI Essentials on Linux.",
-					To = new List<string> { "test@example.com" },
-				};
-				await email.ComposeAsync(msg);
-				statusLabel.Text = "Email composer opened!";
-				statusLabel.TextColor = Colors.Green;
-			}
-		};
-
 		// --- Share ---
 		var shareTextButton = new Button { Text = "📤 Share Text" };
 		shareTextButton.Clicked += async (s, e) =>
@@ -137,11 +118,6 @@ public class LaunchSharePage : ContentPage
 
 					SectionHeader("🗺️ Maps"),
 					mapButton,
-
-					Separator(),
-
-					SectionHeader("✉️ Email"),
-					emailButton,
 
 					Separator(),
 

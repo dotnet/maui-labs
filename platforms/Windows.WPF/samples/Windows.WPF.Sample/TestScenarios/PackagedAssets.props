@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup>
+    <MauiAsset Include="$(MSBuildThisFileDirectory)Resources\Raw\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiAsset Include="$(MSBuildThisFileDirectory)Resources\Renamed.txt" LogicalName="Config/settings.txt" Link="Ignored\name.txt" />
+    <MauiAsset Include="$(MSBuildThisFileDirectory)Resources\Fallback\**\*" />
+    <MauiAsset Include="$(MSBuildThisFileDirectory)Resources\Linked.txt" Link="Linked\asset.txt" />
+  </ItemGroup>
+</Project>

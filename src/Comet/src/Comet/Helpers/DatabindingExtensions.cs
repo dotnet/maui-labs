@@ -166,10 +166,15 @@ namespace Comet
 
 			if (ReferenceEquals(newView, oldView))
 			{
-				var replacement = CometHotReloadHelper.CreateReplacement(oldView);
+				// Reuse an already-installed replacement (AreSameType→GetView may have
+				// installed one moments earlier); creating a second instance would strand
+				// the state/backed node already transferred to the first.
+				var replacement = oldView.HotReloadReplacedView
+					?? CometHotReloadHelper.CreateReplacement(oldView);
 				if (replacement is not null && replacement != oldView)
 				{
-					oldView.SetHotReloadReplacement(replacement);
+					if (!ReferenceEquals(oldView.HotReloadReplacedView, replacement))
+						oldView.SetHotReloadReplacement(replacement);
 					return replacement;
 				}
 			}
@@ -277,6 +282,12 @@ namespace Comet
 					oldView = mergedComponent;
 			}
 			
+			// Node backend: a fresh hot-reload replacement has never rendered (BuiltView is
+			// null) and there is no lazy platform pull — patches are pushed at diff time —
+			// so build it now or the retained nodes never receive the replacement's output.
+			if (newView.BuiltView is null && oldView.BuiltView?.Node is not null)
+				_ = newView.GetView();
+
 			// Always diff the built views (the result of Body/Render)
 			// This is especially important for Components — their Render() output needs diffing
 			if (newView.BuiltView is not null && oldView.BuiltView is not null)
@@ -461,7 +472,12 @@ namespace Comet
 			// old handlers were already null by the time transfer ran).
 			if (mergedComponent is null || !reusedOldComponentInstance)
 			{
-				newView.UpdateFromOldView(oldView);
+				// checkRenderers is the hot-reload flag: ResetView passes isHotReload into
+				// Diff (View.cs), and the hot-reload replacement path passes true — every
+				// other diff (ordinary Component re-render) is false. Own-content nodes use
+				// it to preserve retained state on ordinary re-renders vs re-materialize on
+				// a real hot reload.
+				newView.UpdateFromOldView(oldView, checkRenderers);
 			}
 
 			return newView;

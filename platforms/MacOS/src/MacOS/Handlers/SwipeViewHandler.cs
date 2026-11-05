@@ -31,7 +31,6 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 	NSView? _contentView;
 	NSView? _actionContainer;
 	nfloat _panOffset;
-	bool _isOpen;
 	static readonly nfloat ActionWidth = 80;
 
 	public SwipeViewHandler() : base(Mapper, CommandMapper) { }
@@ -46,7 +45,7 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 	{
 		base.PlatformArrange(rect);
 		if (_contentView != null)
-			_contentView.Frame = new CGRect(_panOffset, 0, rect.Width, rect.Height);
+			_contentView.SetLayoutFrame(new CGRect(_panOffset, 0, rect.Width, rect.Height));
 	}
 
 	public static void MapContent(SwipeViewHandler handler, SwipeView view) => handler.UpdateContent();
@@ -118,7 +117,7 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 			DrawsBackground = false,
 			Alignment = NSTextAlignment.Center,
 			TextColor = NSColor.White,
-			Font = NSFont.SystemFontOfSize(12),
+			Font = NSFont.SystemFontOfSize(12)!,
 		};
 		label.SizeToFit();
 		label.Frame = new CGRect(0, (height - label.Frame.Height) / 2, ActionWidth, label.Frame.Height);
@@ -149,7 +148,7 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 				ShowActions(VirtualView.RightItems, true);
 
 			var bounds = _container.Bounds;
-			_contentView.Frame = new CGRect(_panOffset, 0, bounds.Width, bounds.Height);
+			_contentView.SetLayoutFrame(new CGRect(_panOffset, 0, bounds.Width, bounds.Height));
 		}
 		else
 		{
@@ -161,7 +160,6 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 				{
 					var targetOffset = _panOffset > 0 ? ActionWidth * items.Count : -ActionWidth * items.Count;
 					AnimateContent(targetOffset);
-					_isOpen = true;
 					return;
 				}
 			}
@@ -171,14 +169,13 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 
 	void CloseSwipe(bool animated)
 	{
-		_isOpen = false;
 		if (animated)
 			AnimateContent(0);
 		else
 		{
 			_panOffset = 0;
 			if (_contentView != null && _container != null)
-				_contentView.Frame = new CGRect(0, 0, _container.Bounds.Width, _container.Bounds.Height);
+				_contentView.SetLayoutFrame(new CGRect(0, 0, _container.Bounds.Width, _container.Bounds.Height));
 			_actionContainer?.RemoveFromSuperview();
 			_actionContainer = null;
 		}
@@ -193,7 +190,7 @@ public partial class SwipeViewHandler : MacOSViewHandler<SwipeView, NSView>
 		{
 			ctx.Duration = 0.25;
 			ctx.AllowsImplicitAnimation = true;
-			_contentView.Frame = new CGRect(targetX, 0, _container.Bounds.Width, _container.Bounds.Height);
+			_contentView.SetLayoutFrame(new CGRect(targetX, 0, _container.Bounds.Width, _container.Bounds.Height));
 		}, () =>
 		{
 			if (targetX == 0)

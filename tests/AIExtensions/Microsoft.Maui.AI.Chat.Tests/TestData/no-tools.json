@@ -1,0 +1,59 @@
+{
+  "format": "chat-client-playground-recording",
+  "schemaVersion": 2,
+  "interactions": [
+    {
+      "sequence": 0,
+      "isStreaming": false,
+      "request": {
+        "messages": [
+          {
+            "role": "user",
+            "contents": [
+              {
+                "$type": "text",
+                "text": "Reply with exactly the word cobalt."
+              }
+            ]
+          }
+        ],
+        "options": {
+          "reasoning": {
+            "effort": "Low",
+            "output": "Summary"
+          },
+          "toolMode": {
+            "$type": "none"
+          }
+        }
+      },
+      "updates": [],
+      "response": {
+        "messages": [
+          {
+            "createdAt": "2026-09-23T15:56:38+00:00",
+            "role": "assistant",
+            "contents": [
+              {
+                "$type": "text",
+                "text": "cobalt"
+              }
+            ],
+            "messageId": "msg_02c4603b7065780d006ab3f6b7745081959eff6f2bd98ef8e9"
+          }
+        ],
+        "responseId": "resp_02c4603b7065780d006ab3f6b6b2e08195b2318cb20c3a8e7d",
+        "conversationId": "resp_02c4603b7065780d006ab3f6b6b2e08195b2318cb20c3a8e7d",
+        "modelId": "gpt-6-luna",
+        "createdAt": "2026-09-23T15:56:38+00:00",
+        "usage": {
+          "inputTokenCount": 13,
+          "outputTokenCount": 6,
+          "totalTokenCount": 19,
+          "cachedInputTokenCount": 0,
+          "reasoningTokenCount": 0
+        }
+      }
+    }
+  ]
+}

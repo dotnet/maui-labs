@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <ApplicationId>com.microsoft.maui.appkit.runtimetests</ApplicationId>
+    <ApplicationTitle>MacOS.RuntimeTests</ApplicationTitle>
+    <AssemblyName>MacOS.RuntimeTests</AssemblyName>
+    <RootNamespace>MacOS.RuntimeTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsShipping>false</IsShipping>
+    <RuntimeTestsUseProjectReferences Condition="'$(RuntimeTestsUseProjectReferences)' == ''">true</RuntimeTestsUseProjectReferences>
+    <RuntimeTestBuildTarget Condition="'$(RuntimeTestBuildTarget)' == ''">Build</RuntimeTestBuildTarget>
+  </PropertyGroup>
+  <Import Project="Scenarios\*\*.props" Condition="'$(RuntimeTestScenario)' == ''" />
+  <Import Project="Scenarios\$(RuntimeTestScenario)\*.props" Condition="'$(RuntimeTestScenario)' != ''" />
+  <ItemGroup Condition="'$(RuntimeTestScenario)' != ''">
+    <Compile Remove="Scenarios\**\*.cs" />
+    <Compile Include="Scenarios\$(RuntimeTestScenario)\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RuntimeTestsUseProjectReferences)' == 'true'">
+    <ProjectReference Include="..\..\src\MacOS\MacOS.csproj" />
+    <ProjectReference Include="..\..\src\MacOS.Essentials\MacOS.Essentials.csproj" />
+  </ItemGroup>
+  <Import Project="Scenarios\*\*.targets" Condition="'$(RuntimeTestScenario)' == ''" />
+  <Import Project="Scenarios\$(RuntimeTestScenario)\*.targets" Condition="'$(RuntimeTestScenario)' != ''" />
+  <Target Name="_RecordRuntimeTestBuildOutput" AfterTargets="$(RuntimeTestBuildTarget)"
+          DependsOnTargets="_GetNativeExecutableName"
+          Condition="'$(RuntimeTestBuildMetadata)' != ''">
+    <Error Condition="'$(AppBundleDir)' == '' or '$(_NativeExecutable)' == ''"
+           Text="The Apple SDK did not resolve the runtime test bundle and native executable." />
+    <WriteLinesToFile File="$(RuntimeTestBuildMetadata)"
+                      Lines="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(AppBundleDir)'));$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(_NativeExecutable)'))"
+                      Overwrite="true" />
+  </Target>
+</Project>

@@ -1,4 +1,6 @@
 import Foundation
+import CoreGraphics
+import ImageIO
 import FoundationModels
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -14,6 +16,39 @@ public class AppleIntelligenceLogger: NSObject {
 }
 #endif
 
+/// Preserves request-local callback order while retaining the invocation queue as the execution target.
+final class CallbackDispatcher: @unchecked Sendable {
+    private let queue: DispatchQueue
+
+    init(target: DispatchQueue?) {
+        queue = DispatchQueue(label: "Microsoft.Maui.EssentialsAI.Callbacks", target: target)
+    }
+
+    func dispatch(_ callback: @escaping () -> Void) {
+        queue.async(execute: callback)
+    }
+}
+
+/// Known availability values returned through the Objective-C bridge.
+/// Unknown future reasons are still returned as their native string description.
+enum AppleIntelligenceModelAvailabilityNative {
+    static let available = "available"
+    static let deviceNotEligible = "deviceNotEligible"
+    static let appleIntelligenceNotEnabled = "appleIntelligenceNotEnabled"
+    static let modelNotReady = "modelNotReady"
+}
+
+/// Capability flags returned through the Objective-C bridge.
+/// Keep these values aligned with AppleIntelligenceModelCapabilitiesNative in managed code.
+struct AppleIntelligenceModelCapabilitiesNative: OptionSet {
+    let rawValue: UInt64
+
+    static let vision = Self(rawValue: 1 << 0)
+    static let guidedGeneration = Self(rawValue: 1 << 1)
+    static let reasoning = Self(rawValue: 1 << 2)
+    static let toolCalling = Self(rawValue: 1 << 3)
+}
+
 @objc(ChatClientError)
 public enum ChatClientError: Int {
     case emptyMessages = 1
@@ -25,6 +60,46 @@ public enum ChatClientError: Int {
 @objc(ChatClientNative)
 public class ChatClientNative: NSObject {
 
+    @objc public static func getModelAvailability() -> String {
+        availabilityName(SystemLanguageModel.default.availability)
+    }
+
+    static func availabilityName(_ availability: SystemLanguageModel.Availability) -> String {
+        switch availability {
+        case .available: return AppleIntelligenceModelAvailabilityNative.available
+        case .unavailable(let reason):
+            switch reason {
+            case .deviceNotEligible: return AppleIntelligenceModelAvailabilityNative.deviceNotEligible
+            case .appleIntelligenceNotEnabled: return AppleIntelligenceModelAvailabilityNative.appleIntelligenceNotEnabled
+            case .modelNotReady: return AppleIntelligenceModelAvailabilityNative.modelNotReady
+            @unknown default: return String(describing: reason)
+            }
+        }
+    }
+
+    @objc public static func getModelCapabilities() -> NSNumber? {
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            let capabilities = SystemLanguageModel.default.capabilities
+            var flags: AppleIntelligenceModelCapabilitiesNative = []
+            if capabilities.contains(.vision) { flags.insert(.vision) }
+            if capabilities.contains(.guidedGeneration) { flags.insert(.guidedGeneration) }
+            if capabilities.contains(.reasoning) { flags.insert(.reasoning) }
+            if capabilities.contains(.toolCalling) { flags.insert(.toolCalling) }
+            return NSNumber(value: flags.rawValue)
+        }
+        return nil
+    }
+
+    static func validateImageSupport(hasImages: Bool, supportsOS27: Bool, supportsVision: Bool) throws {
+        guard hasImages else { return }
+        guard supportsOS27 else {
+            throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.")
+        }
+        guard supportsVision else {
+            throw NSError.chatError(.invalidContent, description: "The current Apple Intelligence model does not report vision support.")
+        }
+    }
+
     // MARK: - Stream Response
 
     @objc public func streamResponse(
@@ -35,7 +110,8 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "streamResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let callbacks = CallbackDispatcher(target: OperationQueue.current?.underlyingQueue)
+        let textDeltas = PlainTextDeltaEmitter()
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -59,7 +135,9 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolCall, toolCallId: id, toolCallName: name, toolCallArguments: arguments)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    textDeltas.toolCall {
+                        callbacks.dispatch { onUpdate(update) }
+                    }
                 },
                 onToolResult: { id, name, result in
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -69,11 +147,11 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolResult, toolCallId: id, toolCallName: name, toolCallResult: result)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, callbacks, onComplete) { session, prompt, schema, genOptions in
 
             if let jsonSchema = schema {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -82,28 +160,35 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                let responseStream = session.streamResponse(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                // Keep the schema in the prompt as well as the grammar so nested fields retain their meaning.
+                let responseStream = session.streamResponse(to: prompt, schema: jsonSchema, options: genOptions)
 
-                for try await response in responseStream {
-                    try Task.checkCancellation()
-                    let text = response.content.jsonString
-                    guard !text.isEmpty else { continue }
+                // Native completion metadata yields append-only JSON deltas; the state is local to this response.
+                var deltas = StructuredJsonDeltas()
+                let emit: (String) -> Void = { delta in
+                    guard !delta.isEmpty else { return }
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
-                        log("[\(methodName)] Streaming update: \(text)")
+                        log("[\(methodName)] Streaming update: \(delta)")
                     }
 #endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    let update = ResponseUpdateNative(updateType: .content, text: delta)
+                    callbacks.dispatch { onUpdate(update) }
+                }
+
+                for try await snapshot in responseStream {
+                    try Task.checkCancellation()
+                    emit(try deltas.process(snapshot.rawContent))
                 }
 
                 let response = try await responseStream.collect()
+                emit(try deltas.process(response.rawContent, final: true))
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.jsonString.count)")
                 }
 #endif
-                return (response.content.jsonString, response.transcriptEntries)
+                return (response.content.jsonString, response.transcriptEntries, self.toUsageDetailsNative(response))
             } else {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
@@ -112,27 +197,30 @@ public class ChatClientNative: NSObject {
 #endif
 
                 let responseStream = session.streamResponse(to: prompt, options: genOptions)
+                let emit: (String) -> Void = { delta in
+                    guard !delta.isEmpty else { return }
+#if APPLE_INTELLIGENCE_LOGGING_ENABLED
+                    if let log = AppleIntelligenceLogger.log {
+                        log("[\(methodName)] Streaming update: \(delta)")
+                    }
+#endif
+                    let update = ResponseUpdateNative(updateType: .content, text: delta)
+                    callbacks.dispatch { onUpdate(update) }
+                }
 
                 for try await response in responseStream {
                     try Task.checkCancellation()
-                    let text = response.content
-                    guard !text.isEmpty else { continue }
-#if APPLE_INTELLIGENCE_LOGGING_ENABLED
-                    if let log = AppleIntelligenceLogger.log {
-                        log("[\(methodName)] Streaming update: \(text)")
-                    }
-#endif
-                    let update = ResponseUpdateNative(updateType: .content, text: text)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    try textDeltas.process(response.content, emit: emit)
                 }
 
                 let response = try await responseStream.collect()
+                try textDeltas.process(response.content, emit: emit)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
                     log("[\(methodName)] Stream collected, content length: \(response.content.count)")
                 }
 #endif
-                return (response.content, response.transcriptEntries)
+                return (response.content, response.transcriptEntries, self.toUsageDetailsNative(response))
             }
         }
 
@@ -148,7 +236,7 @@ public class ChatClientNative: NSObject {
     ) -> CancellationTokenNative? {
 
         let methodName = "getResponse"
-        let cq = OperationQueue.current?.underlyingQueue
+        let callbacks = CallbackDispatcher(target: OperationQueue.current?.underlyingQueue)
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -172,7 +260,7 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolCall, toolCallId: id, toolCallName: name, toolCallArguments: arguments)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 },
                 onToolResult: { id, name, result in
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -182,11 +270,11 @@ public class ChatClientNative: NSObject {
 #endif
 
                     let update = ResponseUpdateNative(updateType: .toolResult, toolCallId: id, toolCallName: name, toolCallResult: result)
-                    cq?.async { onUpdate(update) } ?? onUpdate(update)
+                    callbacks.dispatch { onUpdate(update) }
                 }
             )
 
-        return executeTask(methodName, messages, options, toolWatcher, onComplete) { session, prompt, schema, genOptions in
+        return executeTask(methodName, messages, options, toolWatcher, callbacks, onComplete) { session, prompt, schema, genOptions in
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
             if let log = AppleIntelligenceLogger.log {
@@ -196,13 +284,13 @@ public class ChatClientNative: NSObject {
 
             let response = try await {
                 if let jsonSchema = schema {
-                    let inner = try await session.respond(to: prompt, schema: jsonSchema, includeSchemaInPrompt: false, options: genOptions)
+                    let inner = try await session.respond(to: prompt, schema: jsonSchema, options: genOptions)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                     if let log = AppleIntelligenceLogger.log {
                         log("[\(methodName)] Response received, content length: \(inner.content.jsonString.count)")
                     }
 #endif
-                    return (inner.content.jsonString, inner.transcriptEntries)
+                    return (inner.content.jsonString, inner.transcriptEntries, self.toUsageDetailsNative(inner))
                 } else {
                     let inner = try await session.respond(to: prompt, options: genOptions)
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
@@ -210,7 +298,7 @@ public class ChatClientNative: NSObject {
                         log("[\(methodName)] Response received, content length: \(inner.content.count)")
                     }
 #endif
-                    return (inner.content, inner.transcriptEntries)
+                    return (inner.content, inner.transcriptEntries, self.toUsageDetailsNative(inner))
                 }
             }()
 
@@ -245,7 +333,15 @@ public class ChatClientNative: NSObject {
         let otherMessages = Array(messages.dropLast())
 
         let model = SystemLanguageModel.default
-        let tools = options?.tools?.map { ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
+        let hasImages = messages.contains(where: { message in message.contents.contains(where: { $0 is ImageContentNative }) })
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            try Self.validateImageSupport(hasImages: hasImages, supportsOS27: true, supportsVision: model.capabilities.contains(.vision))
+        } else {
+            try Self.validateImageSupport(hasImages: hasImages, supportsOS27: false, supportsVision: false)
+        }
+
+        let tools = try options?.toolCallingMode == .disallowed ? [] :
+            options?.tools?.map { try ToolNative($0, toolWatcher?.notifyToolCall, toolWatcher?.notifyToolResult) } ?? []
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log, let toolList = options?.tools {
@@ -275,19 +371,15 @@ public class ChatClientNative: NSObject {
             return nil
         }()
 
-        // Map options into GenerationOptions
-        let genOptions = GenerationOptions(
-            sampling: {
-                if let topK = options?.topK?.intValue {
-                    return .random(top: topK, seed: options?.seed?.uint64Value)
-                }
-                return .greedy
-            }(),
-            temperature: options?.temperature?.doubleValue,
-            maximumResponseTokens: options?.maxOutputTokens?.intValue
-        )
+        let genOptions = try (options ?? ChatOptionsNative()).toGenerationOptions()
 
-        let session = LanguageModelSession(model: model, tools: tools, transcript: transcript)
+        let availability = Self.getModelAvailability()
+        guard availability == AppleIntelligenceModelAvailabilityNative.available else {
+            throw NSError.chatError(.invalidContent, description: "Apple Intelligence system model is unavailable: \(availability)")
+        }
+
+        let session = Self.makeSession(model: model, tools: tools, transcript: transcript,
+                                       toolCallingMode: options?.toolCallingMode ?? .allowed)
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
         if let log = AppleIntelligenceLogger.log {
@@ -298,18 +390,45 @@ public class ChatClientNative: NSObject {
         return (session, prompt, schema, genOptions)
     }
 
+    static func makeSession(
+        model: SystemLanguageModel, tools: [ToolNative], transcript: Transcript, toolCallingMode: ToolCallingModeNative
+    ) -> LanguageModelSession {
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *), toolCallingMode == .required {
+            return LanguageModelSession(profile: RequiredToolProfile(model: model, tools: tools), history: transcript)
+        }
+        return LanguageModelSession(model: model, tools: tools, transcript: transcript)
+    }
+
+    private func toUsageDetailsNative<Content>(
+        _ response: LanguageModelSession.Response<Content>
+    ) -> UsageDetailsNative? where Content: Generable {
+#if compiler(>=6.4)
+        if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+            let usage = response.usage
+            return UsageDetailsNative(
+                inputTokenCount: usage.input.totalTokenCount,
+                outputTokenCount: usage.output.totalTokenCount,
+                totalTokenCount: usage.totalTokenCount,
+                cachedInputTokenCount: usage.input.cachedTokenCount,
+                reasoningTokenCount: usage.output.reasoningTokenCount
+            )
+        }
+#endif
+
+        return nil
+    }
+
     private func executeTask(
         _ methodName: String,
         _ messages: [ChatMessageNative],
         _ options: ChatOptionsNative?,
         _ toolWatcher: ToolCallWatcher?,
+        _ callbacks: CallbackDispatcher,
         _ onComplete: @escaping (ChatResponseNative?, NSError?) -> Void,
         operation:
             @escaping (LanguageModelSession, Prompt, GenerationSchema?, GenerationOptions) async throws
-            -> (String, ArraySlice<Transcript.Entry>)
+            -> (String, ArraySlice<Transcript.Entry>, UsageDetailsNative?)
     ) -> CancellationTokenNative? {
-
-        let cq = OperationQueue.current?.underlyingQueue
 
         guard !messages.isEmpty else {
             let error = NSError.chatError(.emptyMessages, description: "No messages provided.")
@@ -319,7 +438,7 @@ public class ChatClientNative: NSObject {
             }
 #endif
 
-            cq?.async { onComplete(nil, error.toNSError()) } ?? onComplete(nil, error.toNSError())
+            callbacks.dispatch { onComplete(nil, error.toNSError()) }
             return nil
         }
 
@@ -335,9 +454,12 @@ public class ChatClientNative: NSObject {
 
                 // Convert transcript entries to messages
                 let transcriptMessages = try result.1.compactMap(self.fromTranscriptEntry)
+                guard !result.0.isEmpty, !transcriptMessages.isEmpty else {
+                    throw NSError.chatError(.invalidContent, description: "Apple Intelligence returned an empty native response.")
+                }
 
                 // Create response with all transcript messages
-                let response = ChatResponseNative(messages: transcriptMessages)
+                let response = ChatResponseNative(messages: transcriptMessages, usage: result.2)
 
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
@@ -346,7 +468,7 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                cq?.async { onComplete(response, nil) } ?? onComplete(response, nil)
+                callbacks.dispatch { onComplete(response, nil) }
             } catch {
 #if APPLE_INTELLIGENCE_LOGGING_ENABLED
                 if let log = AppleIntelligenceLogger.log {
@@ -354,7 +476,8 @@ public class ChatClientNative: NSObject {
                 }
 #endif
 
-                cq?.async { onComplete(nil, error.toNSError()) } ?? onComplete(nil, error.toNSError())
+                let nativeError = error.toNSError(isCancelled: Task.isCancelled)
+                callbacks.dispatch { onComplete(nil, nativeError) }
             }
         }
 
@@ -363,29 +486,42 @@ public class ChatClientNative: NSObject {
 
     // MARK: - Conversion to Foundation Models Helpers
 
-    private func toPrompt(message: ChatMessageNative) throws -> Prompt {
+    func toPrompt(message: ChatMessageNative) throws -> Prompt {
         guard message.role == .user else {
             throw NSError.chatError(.invalidRole, description: "Only user messages can be prompts. Found: \(message.role)")
         }
 
-        return try Prompt {
-            try message.contents.map {
-                switch $0 {
-                case let textContent as TextContentNative:
-                    return textContent.text
-                default:
-                    throw NSError.chatError(.invalidContent, description: "Unsupported content type in prompt. Found: \(type(of: $0))")
+        // Build one Prompt fragment per content item, then combine so that text and image
+        // attachments interleave in order.
+        let fragments: [Prompt] = try message.contents.map { content in
+            switch content {
+            case let textContent as TextContentNative:
+                return Prompt { textContent.text }
+
+            case let imageContent as ImageContentNative:
+                if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                    let attachment = try imageContent.toAttachment()
+                    return Prompt { attachment }
+                } else {
+                    throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.")
                 }
+
+            default:
+                throw NSError.chatError(.invalidContent, description: "Unsupported content type in prompt. Found: \(type(of: content))")
             }
+        }
+
+        return Prompt {
+            for fragment in fragments { fragment }
         }
     }
 
-    private func toTranscriptEntries(message: ChatMessageNative) throws -> [Transcript.Entry] {
+    func toTranscriptEntries(message: ChatMessageNative) throws -> [Transcript.Entry] {
         switch message.role {
         case .user:
             return [try toUserEntry(message)]
         case .assistant:
-            return toAssistantEntries(message)
+            return try toAssistantEntries(message)
         case .system:
             return [try toSystemEntry(message)]
         case .tool:
@@ -395,22 +531,41 @@ public class ChatClientNative: NSObject {
         }
     }
 
-    private func toUserEntry(_ message: ChatMessageNative) throws -> Transcript.Entry {
-        let segments: [Transcript.Segment] = try message.contents.map { content in
-            guard let textContent = content as? TextContentNative else {
-                throw NSError.chatError(.invalidContent, description: "Unsupported content type in user message: \(type(of: content))")
-            }
+    /// Maps a single content item to a transcript segment (text or image attachment).
+    /// Shared by user prompts and system instructions so both can carry images.
+    private func toSegment(_ content: AIContentNative) throws -> Transcript.Segment {
+        switch content {
+        case let textContent as TextContentNative:
             return .text(Transcript.TextSegment(content: textContent.text))
+
+        case let imageContent as ImageContentNative:
+            if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                let attachment = try imageContent.toTranscriptAttachment()
+                return .attachment(Transcript.AttachmentSegment(content: attachment, label: imageContent.label))
+            } else {
+                throw NSError.chatError(.invalidContent, description: "Image input requires iOS, Mac Catalyst, or macOS 27.0 or later.")
+            }
+
+        default:
+            throw NSError.chatError(.invalidContent, description: "Unsupported content type in message: \(type(of: content))")
         }
+    }
+
+    private func toUserEntry(_ message: ChatMessageNative) throws -> Transcript.Entry {
+        let segments = try message.contents.map(self.toSegment)
         return .prompt(Transcript.Prompt(segments: segments))
     }
 
-    private func toAssistantEntries(_ message: ChatMessageNative) -> [Transcript.Entry] {
+    private func toAssistantEntries(_ message: ChatMessageNative) throws -> [Transcript.Entry] {
         // Process contents in order, flushing batches when the content type changes.
         // This preserves interleaving: [text, funcCall, text] → [.response, .toolCalls, .response]
         var entries: [Transcript.Entry] = []
-        var pendingTextSegments: [Transcript.Segment] = []
+        var pendingResponseSegments: [Transcript.Segment] = []
         var pendingToolCalls: [Transcript.ToolCall] = []
+
+        if message.contents.isEmpty {
+            return [.response(Transcript.Response(assetIDs: [], segments: [.text(Transcript.TextSegment(content: ""))]))]
+        }
 
         for content in message.contents {
             if let textContent = content as? TextContentNative {
@@ -418,19 +573,27 @@ public class ChatClientNative: NSObject {
                     entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
                     pendingToolCalls = []
                 }
-                pendingTextSegments.append(.text(Transcript.TextSegment(content: textContent.text)))
+                pendingResponseSegments.append(.text(Transcript.TextSegment(content: textContent.text)))
+            } else if let imageContent = content as? ImageContentNative {
+                if !pendingToolCalls.isEmpty {
+                    entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
+                    pendingToolCalls = []
+                }
+                pendingResponseSegments.append(try toSegment(imageContent))
             } else if let funcCall = content as? FunctionCallContentNative {
-                if !pendingTextSegments.isEmpty {
-                    entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingTextSegments)))
-                    pendingTextSegments = []
+                if !pendingResponseSegments.isEmpty {
+                    entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingResponseSegments)))
+                    pendingResponseSegments = []
                 }
                 let argsContent = (try? GeneratedContent(json: funcCall.arguments)) ?? GeneratedContent(funcCall.arguments)
                 pendingToolCalls.append(Transcript.ToolCall(id: funcCall.callId, toolName: funcCall.name, arguments: argsContent))
+            } else {
+                throw NSError.chatError(.invalidContent, description: "Unsupported content type in assistant history: \(type(of: content))")
             }
         }
 
-        if !pendingTextSegments.isEmpty {
-            entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingTextSegments)))
+        if !pendingResponseSegments.isEmpty {
+            entries.append(.response(Transcript.Response(assetIDs: [], segments: pendingResponseSegments)))
         }
         if !pendingToolCalls.isEmpty {
             entries.append(.toolCalls(Transcript.ToolCalls(pendingToolCalls)))
@@ -439,12 +602,7 @@ public class ChatClientNative: NSObject {
     }
 
     private func toSystemEntry(_ message: ChatMessageNative) throws -> Transcript.Entry {
-        let segments: [Transcript.Segment] = try message.contents.map { content in
-            guard let textContent = content as? TextContentNative else {
-                throw NSError.chatError(.invalidContent, description: "Unsupported content type in system message: \(type(of: content))")
-            }
-            return .text(Transcript.TextSegment(content: textContent.text))
-        }
+        let segments = try message.contents.map(self.toSegment)
         return .instructions(Transcript.Instructions(segments: segments, toolDefinitions: []))
     }
 
@@ -492,7 +650,8 @@ public class ChatClientNative: NSObject {
             message.contents = fromToolOutput(toolOutput)
             return message
 
-        @unknown default:
+        default:
+            // Reasoning and any future entry kinds are not surfaced as messages.
             return nil
         }
     }
@@ -510,7 +669,8 @@ public class ChatClientNative: NSObject {
                 resultText = textSegment.content
             case .structure(let structuredSegment):
                 resultText = structuredSegment.content.jsonString
-            @unknown default:
+            default:
+                // Attachment/custom/future tool-output segments are not represented as text.
                 return nil
             }
 
@@ -525,10 +685,20 @@ public class ChatClientNative: NSObject {
 
         case .structure(let structuredSegment):
             // For now, convert structured content to text
-            let jsonString = structuredSegment.content.jsonString
-            return TextContentNative(text: jsonString)
+            return TextContentNative(text: structuredSegment.content.jsonString)
 
-        @unknown default:
+        default:
+            // Image attachment segments are available on 27.0+. Match inside the availability
+            // guard so the case references compile against the 26.x deployment target. Other
+            // segment kinds (custom, future) are not represented as content.
+            if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *),
+               case .attachment(let attachmentSegment) = segment,
+               case .image(let image) = attachmentSegment.content {
+                return ImageContentNative(
+                    cgImage: image.cgImage,
+                    orientationValue: NSNumber(value: image.orientation.rawValue),
+                    label: attachmentSegment.label)
+            }
             return nil
         }
     }
@@ -559,6 +729,7 @@ public class ChatClientNative: NSObject {
     private func formatOptionsDetailed(_ options: ChatOptionsNative) -> String {
         var parts: [String] = []
         if let topK = options.topK { parts.append("topK=\(topK)") }
+        if let topP = options.topP { parts.append("topP=\(topP)") }
         if let temp = options.temperature { parts.append("temperature=\(temp)") }
         if let maxTokens = options.maxOutputTokens { parts.append("maxOutputTokens=\(maxTokens)") }
         if let seed = options.seed { parts.append("seed=\(seed)") }
@@ -592,9 +763,33 @@ public class ChatClientNative: NSObject {
 #endif
 }
 
+@available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+extension SessionPropertyValues {
+    @SessionPropertyEntry var essentialsAIRequiredToolCallCount: Int = 0
+}
+
+@available(iOS 27.0, macOS 27.0, visionOS 27.0, *)
+struct RequiredToolProfile: LanguageModelSession.DynamicProfile {
+    let model: SystemLanguageModel
+    let tools: [any Tool]
+
+    @SessionProperty(\.essentialsAIRequiredToolCallCount) var toolCallCount
+
+    static func toolCallingMode(for count: Int) -> GenerationOptions.ToolCallingMode {
+        count < 1 ? .required : .allowed
+    }
+
+    var body: some LanguageModelSession.DynamicProfile {
+        Profile { tools }
+            .model(model)
+            .toolCallingMode(Self.toolCallingMode(for: toolCallCount))
+            .onToolCall { toolCallCount += 1 }
+    }
+}
+
 extension NSError {
 
-    fileprivate static func chatError(_ code: ChatClientError, description: String) -> NSError {
+    static func chatError(_ code: ChatClientError, description: String) -> NSError {
         NSError(
             domain: "ChatClientNative",
             code: code.rawValue,
@@ -605,7 +800,11 @@ extension NSError {
 
 extension Error {
 
-    fileprivate func toNSError() -> NSError {
+    func toNSError(isCancelled: Bool = false) -> NSError {
+        if isCancelled || self is CancellationError {
+            return NSError.chatError(.cancelled, description: "Request was cancelled.")
+        }
+
         switch self
         {
         case let error as LanguageModelSession.GenerationError:
@@ -643,9 +842,6 @@ extension Error {
                     NSLocalizedDescriptionKey: error.localizedDescription,
                 ]
             )
-
-        case is CancellationError:
-            return NSError.chatError(.cancelled, description: "Request was cancelled.")
 
         case let error as NSError:
             return error

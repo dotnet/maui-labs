@@ -136,7 +136,7 @@ internal class MacOSModalManager
 			NSWindowStyle.Titled | NSWindowStyle.Closable | NSWindowStyle.Resizable,
 			NSBackingStore.Buffered,
 			deferCreation: false);
-		sheetWindow.ReleasedWhenClosed = false;
+		sheetWindow.ReleaseWhenClosed(false);
 
 		// Apply min size constraints to the sheet window
 		var minWidth = MacOSPage.GetModalSheetMinWidth(page);
@@ -148,7 +148,7 @@ internal class MacOSModalManager
 				minHeight > 0 ? minHeight : 0);
 		}
 
-		platformView.Frame = new CGRect(0, 0, sheetFrame.Width, sheetFrame.Height);
+		platformView.SetLayoutFrame(new CGRect(0, 0, sheetFrame.Width, sheetFrame.Height));
 		platformView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
 		sheetWindow.ContentView = platformView;
 
@@ -269,7 +269,7 @@ internal class MacOSModalManager
 			NSWindowStyle.Titled | NSWindowStyle.Resizable,
 			NSBackingStore.Buffered,
 			deferCreation: false);
-		modalWindow.ReleasedWhenClosed = false;
+		modalWindow.ReleaseWhenClosed(false);
 
 		var minWidth = MacOSPage.GetModalSheetMinWidth(page);
 		var minHeight = MacOSPage.GetModalSheetMinHeight(page);
@@ -280,7 +280,7 @@ internal class MacOSModalManager
 				minHeight > 0 ? minHeight : 0);
 		}
 
-		platformView.Frame = new CGRect(0, 0, modalSize.Width, modalSize.Height);
+		platformView.SetLayoutFrame(new CGRect(0, 0, modalSize.Width, modalSize.Height));
 		platformView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
 		modalWindow.ContentView = platformView;
 
@@ -378,7 +378,7 @@ internal class MacOSModalManager
 		effectView.Layer!.CornerRadius = 10;
 		effectView.Layer.MasksToBounds = true;
 
-		platformView.Frame = new CGRect(0, 0, pageFrame.Width, pageFrame.Height);
+		platformView.SetLayoutFrame(new CGRect(0, 0, pageFrame.Width, pageFrame.Height));
 		platformView.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
 		effectView.AddSubview(platformView);
 
@@ -414,7 +414,7 @@ internal class MacOSModalManager
 			entry.BackdropView.Frame = bounds;
 		if (entry.EffectView != null)
 			entry.EffectView.Frame = pageFrame;
-		entry.PageView.Frame = new CGRect(0, 0, pageFrame.Width, pageFrame.Height);
+		entry.PageView.SetLayoutFrame(new CGRect(0, 0, pageFrame.Width, pageFrame.Height));
 
 		// Trigger layout on the container — don't call page.Arrange directly
 		// because PlatformArrange would reset our frame to (0,0)

@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Text.Json;
 using Microsoft.Maui.Cli;
 using Microsoft.Maui.Cli.Commands;
 using Microsoft.Maui.Cli.UnitTests.Fakes;
@@ -532,6 +533,114 @@ public class AndroidCommandsTests
 		Assert.DoesNotContain(installCommand.Options, o => o.Name == "--sdk-path");
 	}
 
+	// --- Handler-level tests for 'android sdk update-tools' (cmdline-tools resolver API) ---
+
+	[Fact]
+	public void SdkCommand_HasUpdateToolsSubcommand()
+	{
+		var androidCommand = AndroidCommands.Create();
+		var sdkCommand = androidCommand.Subcommands.First(c => c.Name == "sdk");
+
+		Assert.Contains(sdkCommand.Subcommands, c => c.Name == "update-tools");
+	}
+
+	[Theory]
+	[InlineData("19.0")]
+	[InlineData(null)]
+	public async Task SdkUpdateToolsCommand_Json_ReportsReady_WithResolvedSdkPath(string? revision)
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			SdkPath = Path.Combine(Path.GetTempPath(), "sdk-update-tools-test"),
+			EnsureLatestSdkToolsRevision = revision
+		};
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		using var output = new StringWriter();
+		var originalOut = Console.Out;
+		try
+		{
+			Program.Services = testProvider;
+			Console.SetOut(output);
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android sdk update-tools --json");
+			var exitCode = await parseResult.InvokeAsync();
+
+			Assert.Equal(0, exitCode);
+			Assert.Single(fakeAndroid.EnsureLatestSdkToolsCalls);
+			Assert.Equal(fakeAndroid.SdkPath, fakeAndroid.EnsureLatestSdkToolsCalls[0]);
+			using var json = JsonDocument.Parse(output.ToString());
+			Assert.True(json.RootElement.GetProperty("success").GetBoolean());
+			Assert.Equal("ready", json.RootElement.GetProperty("status").GetString());
+			Assert.Equal(fakeAndroid.SdkPath, json.RootElement.GetProperty("path").GetString());
+			Assert.Equal(revision is null ? "Command-line tools are ready" : $"Command-line tools {revision} are ready",
+				json.RootElement.GetProperty("message").GetString());
+		}
+		finally
+		{
+			Console.SetOut(originalOut);
+			Program.ResetServices();
+		}
+	}
+
+	[Fact]
+	public async Task SdkUpdateToolsCommand_DryRun_DoesNotInvokeProvider()
+	{
+		var fakeAndroid = new FakeAndroidProvider
+		{
+			SdkPath = Path.Combine(Path.GetTempPath(), "sdk-update-tools-dryrun-test")
+		};
+
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		try
+		{
+			Program.Services = testProvider;
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse("android sdk update-tools --json --dry-run");
+			var exitCode = await parseResult.InvokeAsync();
+
+			Assert.Equal(0, exitCode);
+			Assert.Empty(fakeAndroid.EnsureLatestSdkToolsCalls);
+		}
+		finally
+		{
+			Program.ResetServices();
+		}
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task SdkUpdateToolsCommand_EmptySdkPath_ReturnsActionableError(bool dryRun)
+	{
+		var fakeAndroid = new FakeAndroidProvider { SdkPath = "" };
+		var testProvider = ServiceConfiguration.CreateTestServiceProvider(androidProvider: fakeAndroid);
+		using var output = new StringWriter();
+		var originalOut = Console.Out;
+		try
+		{
+			Program.Services = testProvider;
+			Console.SetOut(output);
+
+			var rootCommand = Program.BuildRootCommand();
+			var parseResult = rootCommand.Parse($"android sdk update-tools --json{(dryRun ? " --dry-run" : "")}");
+
+			Assert.NotEqual(0, await parseResult.InvokeAsync());
+			Assert.Empty(fakeAndroid.EnsureLatestSdkToolsCalls);
+			using var json = JsonDocument.Parse(output.ToString());
+			Assert.Equal("E2101", json.RootElement.GetProperty("code").GetString());
+			Assert.Equal("maui android install",
+				json.RootElement.GetProperty("remediation").GetProperty("command").GetString());
+		}
+		finally
+		{
+			Console.SetOut(originalOut);
+			Program.ResetServices();
+		}
+	}
+
 	// --- Handler-level tests for 'android sdk accept-licenses' exit code behaviour ---
 	// Verifies that the command returns non-zero when the user declines so that callers
 	// (e.g. the VS Code MAUI extension) can trust the exit code.
@@ -598,5 +707,84 @@ public class AndroidCommandsTests
 
 		Assert.Equal(1, exitCode);
 		Assert.Empty(fake.InstallCalls);
+	}
+
+	// --- Tests for device profile helpers added when 'emulator create' switched from a
+	// hardcoded Pixel device list to a live avdmanager query (AvdManagerRunner.ListDeviceProfilesAsync). ---
+
+	[Theory]
+	[InlineData("pixel_6", "Pixel 6")]
+	[InlineData("pixel_9_pro_fold", "Pixel 9 Pro Fold")]
+	[InlineData("medium_phone", "Medium Phone")]
+	[InlineData("automotive_1024p_landscape", "Automotive 1024p Landscape")]
+	public void HumanizeDeviceProfileId_ConvertsSnakeCaseToTitleCase(string id, string expected)
+	{
+		Assert.Equal(expected, AndroidCommands.HumanizeDeviceProfileId(id));
+	}
+
+	[Theory]
+	[InlineData("Nexus 10")]
+	[InlineData("Galaxy Nexus")]
+	[InlineData("")]
+	public void HumanizeDeviceProfileId_LeavesAlreadyFriendlyIdsUnchanged(string id)
+	{
+		Assert.Equal(id, AndroidCommands.HumanizeDeviceProfileId(id));
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_FallsBackToDefaults_WhenLiveListIsNull()
+	{
+		var choices = AndroidCommands.BuildDeviceProfileChoices(null);
+
+		Assert.NotEmpty(choices);
+		Assert.Contains(choices, c => c.Id == "pixel_6" && c.Name == "Pixel 6");
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_FallsBackToDefaults_WhenLiveListIsEmpty()
+	{
+		var choices = AndroidCommands.BuildDeviceProfileChoices(Array.Empty<string>());
+
+		Assert.NotEmpty(choices);
+		Assert.Contains(choices, c => c.Id == "pixel_6" && c.Name == "Pixel 6");
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_MapsLiveIds_ToHumanizedNames()
+	{
+		var liveProfileIds = new[] { "pixel_9_pro_fold", "Nexus 10" };
+
+		var choices = AndroidCommands.BuildDeviceProfileChoices(liveProfileIds);
+
+		Assert.Equal(2, choices.Count);
+		Assert.Equal(("pixel_9_pro_fold", "Pixel 9 Pro Fold"), choices[0]);
+		Assert.Equal(("Nexus 10", "Nexus 10"), choices[1]);
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_FallbackList_IsNotSharedReference()
+	{
+		// Regression test: the fallback path must return a fresh copy, not the
+		// shared static default list, so a caller mutating the result can never
+		// corrupt the fallback for later invocations.
+		var first = AndroidCommands.BuildDeviceProfileChoices(null);
+		var second = AndroidCommands.BuildDeviceProfileChoices(null);
+
+		Assert.NotSame(first, second);
+
+		first.Add(("mutated", "Mutated"));
+		Assert.DoesNotContain(second, c => c.Id == "mutated");
+	}
+
+	[Fact]
+	public void BuildDeviceProfileChoices_FiltersOutNullOrWhitespaceIds()
+	{
+		var liveProfileIds = new[] { "pixel_9_pro_fold", "", "   ", "Nexus 10" };
+
+		var choices = AndroidCommands.BuildDeviceProfileChoices(liveProfileIds);
+
+		Assert.Equal(2, choices.Count);
+		Assert.Equal(("pixel_9_pro_fold", "Pixel 9 Pro Fold"), choices[0]);
+		Assert.Equal(("Nexus 10", "Nexus 10"), choices[1]);
 	}
 }

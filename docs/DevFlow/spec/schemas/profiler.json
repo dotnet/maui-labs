@@ -6,16 +6,16 @@
   "$defs": {
     "ProfilerSample": {
       "type": "object",
-      "description": "A single profiler sample capturing a point-in-time snapshot of performance metrics.",
+      "description": "A single profiler sample capturing a point-in-time snapshot of performance metrics. Profiler DTO property names retain PascalCase on the wire.",
       "required": [
-        "tsUtc"
+        "TsUtc"
       ],
       "properties": {
-        "tsUtc": {
+        "TsUtc": {
           "$ref": "common.json#/$defs/Timestamp",
           "description": "UTC timestamp when this sample was captured."
         },
-        "fps": {
+        "Fps": {
           "type": [
             "number",
             "null"
@@ -23,7 +23,7 @@
           "description": "Frames per second at the time of sampling.",
           "minimum": 0
         },
-        "frameTimeMsP50": {
+        "FrameTimeMsP50": {
           "type": [
             "number",
             "null"
@@ -31,7 +31,7 @@
           "description": "Median (P50) frame time in milliseconds.",
           "minimum": 0
         },
-        "frameTimeMsP95": {
+        "FrameTimeMsP95": {
           "type": [
             "number",
             "null"
@@ -39,7 +39,7 @@
           "description": "95th percentile (P95) frame time in milliseconds.",
           "minimum": 0
         },
-        "worstFrameTimeMs": {
+        "WorstFrameTimeMs": {
           "type": [
             "number",
             "null"
@@ -47,7 +47,7 @@
           "description": "Worst (maximum) frame time in milliseconds during the sample interval.",
           "minimum": 0
         },
-        "managedBytes": {
+        "ManagedBytes": {
           "type": [
             "integer",
             "null"
@@ -55,7 +55,7 @@
           "description": "Managed heap memory usage in bytes.",
           "minimum": 0
         },
-        "gc0": {
+        "Gc0": {
           "type": [
             "integer",
             "null"
@@ -63,7 +63,7 @@
           "description": "Number of generation 0 garbage collections since last sample.",
           "minimum": 0
         },
-        "gc1": {
+        "Gc1": {
           "type": [
             "integer",
             "null"
@@ -71,7 +71,7 @@
           "description": "Number of generation 1 garbage collections since last sample.",
           "minimum": 0
         },
-        "gc2": {
+        "Gc2": {
           "type": [
             "integer",
             "null"
@@ -79,7 +79,7 @@
           "description": "Number of generation 2 garbage collections since last sample.",
           "minimum": 0
         },
-        "nativeMemoryBytes": {
+        "NativeMemoryBytes": {
           "type": [
             "integer",
             "null"
@@ -87,14 +87,14 @@
           "description": "Native (unmanaged) memory usage in bytes.",
           "minimum": 0
         },
-        "nativeMemoryKind": {
+        "NativeMemoryKind": {
           "type": [
             "string",
             "null"
           ],
           "description": "Kind of native memory measurement (e.g. 'resident', 'virtual', 'private')."
         },
-        "cpuPercent": {
+        "CpuPercent": {
           "type": [
             "number",
             "null"
@@ -103,7 +103,7 @@
           "minimum": 0,
           "maximum": 100
         },
-        "threadCount": {
+        "ThreadCount": {
           "type": [
             "integer",
             "null"
@@ -111,7 +111,7 @@
           "description": "Total number of threads in the process.",
           "minimum": 0
         },
-        "jankFrameCount": {
+        "JankFrameCount": {
           "type": [
             "integer",
             "null"
@@ -119,7 +119,7 @@
           "description": "Number of janky (dropped/slow) frames since last sample.",
           "minimum": 0
         },
-        "uiThreadStallCount": {
+        "UiThreadStallCount": {
           "type": [
             "integer",
             "null"
@@ -127,14 +127,14 @@
           "description": "Number of UI thread stalls since last sample.",
           "minimum": 0
         },
-        "frameSource": {
+        "FrameSource": {
           "type": [
             "string",
             "null"
           ],
           "description": "Source of frame timing data (e.g. 'choreographer', 'displayLink', 'estimated')."
         },
-        "frameQuality": {
+        "FrameQuality": {
           "type": [
             "string",
             "null"
@@ -147,24 +147,24 @@
       "type": "object",
       "description": "A discrete profiler marker event representing a notable occurrence.",
       "required": [
-        "tsUtc",
-        "type",
-        "name"
+        "TsUtc",
+        "Type",
+        "Name"
       ],
       "properties": {
-        "tsUtc": {
+        "TsUtc": {
           "$ref": "common.json#/$defs/Timestamp",
           "description": "UTC timestamp when this marker was recorded."
         },
-        "type": {
+        "Type": {
           "type": "string",
           "description": "Marker type category (e.g. 'gc', 'layout', 'navigation', 'user')."
         },
-        "name": {
+        "Name": {
           "type": "string",
           "description": "Human-readable name of the marker event."
         },
-        "payloadJson": {
+        "PayloadJson": {
           "type": [
             "string",
             "null"
@@ -177,91 +177,91 @@
       "type": "object",
       "description": "A profiler span representing a timed operation, compatible with OpenTelemetry span semantics.",
       "required": [
-        "spanId",
-        "startTsUtc",
-        "durationMs",
-        "kind",
-        "name"
+        "SpanId",
+        "StartTsUtc",
+        "DurationMs",
+        "Kind",
+        "Name"
       ],
       "properties": {
-        "spanId": {
+        "SpanId": {
           "type": "string",
           "description": "Unique identifier for this span."
         },
-        "parentSpanId": {
+        "ParentSpanId": {
           "type": [
             "string",
             "null"
           ],
           "description": "Identifier of the parent span, or null for root spans."
         },
-        "traceId": {
+        "TraceId": {
           "type": [
             "string",
             "null"
           ],
           "description": "Trace identifier grouping related spans."
         },
-        "startTsUtc": {
+        "StartTsUtc": {
           "$ref": "common.json#/$defs/Timestamp",
           "description": "UTC timestamp when this span started."
         },
-        "endTsUtc": {
+        "EndTsUtc": {
           "oneOf": [
             { "$ref": "common.json#/$defs/Timestamp" },
             { "type": "null" }
           ],
           "description": "UTC timestamp when this span ended, or null if still in progress."
         },
-        "durationMs": {
+        "DurationMs": {
           "type": "number",
           "description": "Duration of the span in milliseconds.",
           "minimum": 0
         },
-        "kind": {
+        "Kind": {
           "type": "string",
           "description": "Kind of span (e.g. 'layout', 'render', 'navigation', 'network', 'user')."
         },
-        "name": {
+        "Name": {
           "type": "string",
           "description": "Human-readable name describing the operation."
         },
-        "status": {
+        "Status": {
           "type": [
             "string",
             "null"
           ],
           "description": "Span status (e.g. 'ok', 'error', 'cancelled')."
         },
-        "threadId": {
+        "ThreadId": {
           "type": [
-            "string",
+            "integer",
             "null"
           ],
           "description": "Identifier of the thread this span executed on."
         },
-        "screen": {
+        "Screen": {
           "type": [
             "string",
             "null"
           ],
           "description": "Screen or page name where this span occurred."
         },
-        "elementPath": {
+        "ElementPath": {
           "type": [
             "string",
             "null"
           ],
           "description": "Path to the element in the visual tree associated with this span."
         },
-        "tagsJson": {
+        "TagsJson": {
           "type": [
             "string",
             "null"
           ],
           "description": "Optional JSON-encoded tags with additional span metadata."
         },
-        "error": {
+        "Error": {
           "type": [
             "string",
             "null"
@@ -274,57 +274,57 @@
       "type": "object",
       "description": "A batch of profiler data including samples, markers, and spans with cursor positions for pagination.",
       "required": [
-        "sessionId",
-        "samples",
-        "markers",
-        "spans",
-        "sampleCursor",
-        "markerCursor",
-        "spanCursor",
-        "isActive"
+        "SessionId",
+        "Samples",
+        "Markers",
+        "Spans",
+        "SampleCursor",
+        "MarkerCursor",
+        "SpanCursor",
+        "IsActive"
       ],
       "properties": {
-        "sessionId": {
+        "SessionId": {
           "type": "string",
           "description": "Identifier of the profiler session this batch belongs to."
         },
-        "samples": {
+        "Samples": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/ProfilerSample"
           },
           "description": "Array of profiler samples in this batch."
         },
-        "markers": {
+        "Markers": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/ProfilerMarker"
           },
           "description": "Array of profiler markers in this batch."
         },
-        "spans": {
+        "Spans": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/ProfilerSpan"
           },
           "description": "Array of profiler spans in this batch."
         },
-        "sampleCursor": {
+        "SampleCursor": {
           "type": "integer",
           "description": "Cursor position for the next page of samples.",
           "minimum": 0
         },
-        "markerCursor": {
+        "MarkerCursor": {
           "type": "integer",
           "description": "Cursor position for the next page of markers.",
           "minimum": 0
         },
-        "spanCursor": {
+        "SpanCursor": {
           "type": "integer",
           "description": "Cursor position for the next page of spans.",
           "minimum": 0
         },
-        "isActive": {
+        "IsActive": {
           "type": "boolean",
           "description": "Whether the profiler session is still actively collecting data."
         }
@@ -334,33 +334,33 @@
       "type": "object",
       "description": "A profiler hotspot identifying a frequently occurring or slow operation.",
       "required": [
-        "kind",
-        "name",
-        "count",
-        "avgDurationMs"
+        "Kind",
+        "Name",
+        "Count",
+        "AvgDurationMs"
       ],
       "properties": {
-        "kind": {
+        "Kind": {
           "type": "string",
           "description": "Kind of hotspot (e.g. 'layout', 'render', 'navigation', 'network')."
         },
-        "name": {
+        "Name": {
           "type": "string",
           "description": "Name of the operation that is a hotspot."
         },
-        "screen": {
+        "Screen": {
           "type": [
             "string",
             "null"
           ],
           "description": "Screen or page where this hotspot occurs."
         },
-        "count": {
+        "Count": {
           "type": "integer",
           "description": "Number of times this operation was observed.",
           "minimum": 0
         },
-        "errorCount": {
+        "ErrorCount": {
           "type": [
             "integer",
             "null"
@@ -368,12 +368,12 @@
           "description": "Number of times this operation resulted in an error.",
           "minimum": 0
         },
-        "avgDurationMs": {
+        "AvgDurationMs": {
           "type": "number",
           "description": "Average duration of this operation in milliseconds.",
           "minimum": 0
         },
-        "p95DurationMs": {
+        "P95DurationMs": {
           "type": [
             "number",
             "null"
@@ -381,7 +381,7 @@
           "description": "95th percentile duration in milliseconds.",
           "minimum": 0
         },
-        "maxDurationMs": {
+        "MaxDurationMs": {
           "type": [
             "number",
             "null"
@@ -395,26 +395,26 @@
       "type": "object",
       "description": "Information about an active or completed profiler session.",
       "required": [
-        "sessionId",
-        "startedAtUtc",
-        "sampleIntervalMs",
-        "isActive"
+        "SessionId",
+        "StartedAtUtc",
+        "SampleIntervalMs",
+        "IsActive"
       ],
       "properties": {
-        "sessionId": {
+        "SessionId": {
           "type": "string",
           "description": "Unique identifier for this profiler session."
         },
-        "startedAtUtc": {
+        "StartedAtUtc": {
           "$ref": "common.json#/$defs/Timestamp",
           "description": "UTC timestamp when the profiler session started."
         },
-        "sampleIntervalMs": {
+        "SampleIntervalMs": {
           "type": "integer",
           "description": "Interval between profiler samples in milliseconds.",
           "minimum": 1
         },
-        "isActive": {
+        "IsActive": {
           "type": "boolean",
           "description": "Whether the profiler session is currently active."
         }
@@ -437,6 +437,18 @@
         "threadCountSupported"
       ],
       "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "Whether profiler endpoints are enabled by agent options."
+        },
+        "supportedInBuild": {
+          "type": "boolean",
+          "description": "Whether the build includes profiler support."
+        },
+        "featureEnabled": {
+          "type": "boolean",
+          "description": "Current EnableProfiler option."
+        },
         "platform": {
           "type": "string",
           "description": "Platform identifier (e.g. 'ios', 'android', 'maccatalyst')."

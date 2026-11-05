@@ -14,30 +14,47 @@ namespace Comet.SourceGenerator
 	/// - Partial class with private state fields and ResolveCurrentStyle() method
 	/// </summary>
 	[Generator]
-	public class StyleInfrastructureGenerator : ISourceGenerator
+	public class StyleInfrastructureGenerator : IIncrementalGenerator
 	{
-		public void Initialize(GeneratorInitializationContext context)
+		public void Initialize(IncrementalGeneratorInitializationContext context)
 		{
-			context.RegisterForSyntaxNotifications(() => new SyntaxReceiver());
+			var controlStates = context.SyntaxProvider.CreateSyntaxProvider(
+					predicate: static (node, _) => node is AttributeSyntax attrib && IsCometControlStateName(attrib),
+					transform: static (ctx, _) => GetControlStateInfo(ctx))
+				.Where(static info => info != null)
+				.Collect();
+
+			var compilationAndControlStates = context.CompilationProvider.Combine(controlStates);
+
+			context.RegisterSourceOutput(compilationAndControlStates, static (spc, source) => Execute(source.Left, source.Right, spc));
 		}
 
-		public void Execute(GeneratorExecutionContext context)
+		static bool IsCometControlStateName(AttributeSyntax attrib)
 		{
-			if (!(context.SyntaxContextReceiver is SyntaxReceiver rx) || !rx.ControlStates.Any())
+			var name = attrib.Name;
+			while (name is Microsoft.CodeAnalysis.CSharp.Syntax.QualifiedNameSyntax qn)
+				name = qn.Right;
+			var id = (name as Microsoft.CodeAnalysis.CSharp.Syntax.SimpleNameSyntax)?.Identifier.ValueText;
+			return id == "CometControlState" || id == "CometControlStateAttribute";
+		}
+
+		static void Execute(Compilation compilation, System.Collections.Immutable.ImmutableArray<ControlStateInfo> controlStates, SourceProductionContext context)
+		{
+			if (controlStates.IsDefaultOrEmpty)
 				return;
 
-			foreach (var info in rx.ControlStates)
+			foreach (var info in controlStates)
 			{
-				EmitConfigurationStruct(context, info);
-				EmitStyleExtensions(context, info);
-				EmitResolveCurrentStyle(context, info);
+				EmitConfigurationStruct(context, compilation, info);
+				EmitStyleExtensions(context, compilation, info);
+				EmitResolveCurrentStyle(context, compilation, info);
 			}
 		}
 
-		static void EmitConfigurationStruct(GeneratorExecutionContext context, ControlStateInfo info)
+		static void EmitConfigurationStruct(SourceProductionContext context, Compilation compilation, ControlStateInfo info)
 		{
 			// Skip if hand-written version already exists in the compilation
-			var existing = context.Compilation.GetTypeByMetadataName(
+			var existing = compilation.GetTypeByMetadataName(
 				$"Comet.Styles.{info.ControlName}Configuration");
 			if (existing != null)
 				return;
@@ -74,10 +91,10 @@ namespace Comet.SourceGenerator
 			context.AddSource($"{info.ControlName}Configuration.g.cs", sb.ToString());
 		}
 
-		static void EmitStyleExtensions(GeneratorExecutionContext context, ControlStateInfo info)
+		static void EmitStyleExtensions(SourceProductionContext context, Compilation compilation, ControlStateInfo info)
 		{
 			// Skip if a style extension method already exists (e.g., hand-written ControlStyleExtensions)
-			if (HasExistingStyleExtension(context.Compilation, info.ControlName))
+			if (HasExistingStyleExtension(compilation, info.ControlName))
 				return;
 
 			var sb = new StringBuilder();
@@ -108,11 +125,11 @@ namespace Comet.SourceGenerator
 			context.AddSource($"{info.ControlName}StyleExtensions.g.cs", sb.ToString());
 		}
 
-		static void EmitResolveCurrentStyle(GeneratorExecutionContext context, ControlStateInfo info)
+		static void EmitResolveCurrentStyle(SourceProductionContext context, Compilation compilation, ControlStateInfo info)
 		{
 			// Look up the actual config struct from the compilation to match its fields
 			var configTypeName = $"Comet.Styles.{info.ControlName}Configuration";
-			var configType = context.Compilation.GetTypeByMetadataName(configTypeName);
+			var configType = compilation.GetTypeByMetadataName(configTypeName);
 
 			// Determine which state fields actually exist on the config struct
 			var validStates = new List<string>();
@@ -131,7 +148,7 @@ namespace Comet.SourceGenerator
 			}
 
 			// Check if Theme has the 2-type-param GetControlStyle<T, TConfig>() method
-			var themeType = context.Compilation.GetTypeByMetadataName("Comet.Styles.Theme");
+			var themeType = compilation.GetTypeByMetadataName("Comet.Styles.Theme");
 			var hasNewStyleApi = themeType != null && themeType.GetMembers("GetControlStyle")
 				.OfType<IMethodSymbol>()
 				.Any(m => m.TypeParameters.Length == 2);
@@ -249,90 +266,85 @@ namespace Comet.SourceGenerator
 				= new List<(string, string, string)>();
 		}
 
-		class SyntaxReceiver : ISyntaxContextReceiver
+		static ControlStateInfo GetControlStateInfo(GeneratorSyntaxContext context)
 		{
-			public List<ControlStateInfo> ControlStates { get; } = new List<ControlStateInfo>();
+			if (!(context.Node is AttributeSyntax attrib))
+				return null;
 
-			public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
+			var typeInfo = context.SemanticModel.GetTypeInfo(attrib);
+			var typeName = typeInfo.Type?.ToDisplayString();
+
+			if (typeName != "Comet.CometControlStateAttribute")
+				return null;
+
+			var args = attrib.ArgumentList?.Arguments;
+			if (args == null || args.Value.Count == 0)
+				return null;
+
+			// First argument: typeof(IButton)
+			if (!(args.Value[0].Expression is TypeOfExpressionSyntax typeOfExpr))
+				return null;
+
+			var interfaceSymbolInfo = context.SemanticModel.GetSymbolInfo(typeOfExpr.Type);
+			if (!(interfaceSymbolInfo.Symbol is INamedTypeSymbol interfaceSymbol))
+				return null;
+
+			var info = new ControlStateInfo
 			{
-				if (!(context.Node is AttributeSyntax attrib))
-					return;
+				InterfaceType = interfaceSymbol,
+				ControlName = interfaceSymbol.Name.TrimStart('I'),
+			};
 
-				var typeInfo = context.SemanticModel.GetTypeInfo(attrib);
-				var typeName = typeInfo.Type?.ToDisplayString();
+			// Parse named arguments
+			foreach (var arg in args.Value.Skip(1))
+			{
+				var argName = arg.NameEquals?.Name.Identifier.ValueText;
 
-				if (typeName != "Comet.CometControlStateAttribute")
-					return;
-
-				var args = attrib.ArgumentList?.Arguments;
-				if (args == null || args.Value.Count == 0)
-					return;
-
-				// First argument: typeof(IButton)
-				if (!(args.Value[0].Expression is TypeOfExpressionSyntax typeOfExpr))
-					return;
-
-				var interfaceSymbolInfo = context.SemanticModel.GetSymbolInfo(typeOfExpr.Type);
-				if (!(interfaceSymbolInfo.Symbol is INamedTypeSymbol interfaceSymbol))
-					return;
-
-				var info = new ControlStateInfo
+				if (argName == "ControlName")
 				{
-					InterfaceType = interfaceSymbol,
-					ControlName = interfaceSymbol.Name.TrimStart('I'),
-				};
-
-				// Parse named arguments
-				foreach (var arg in args.Value.Skip(1))
+					var constVal = context.SemanticModel.GetConstantValue(arg.Expression);
+					if (constVal.HasValue)
+						info.ControlName = constVal.Value.ToString();
+				}
+				else if (argName == "States")
 				{
-					var argName = arg.NameEquals?.Name.Identifier.ValueText;
-
-					if (argName == "ControlName")
+					foreach (var expr in GetArrayExpressions(arg.Expression))
 					{
-						var constVal = context.SemanticModel.GetConstantValue(arg.Expression);
-						if (constVal.HasValue)
-							info.ControlName = constVal.Value.ToString();
+						var val = context.SemanticModel.GetConstantValue(expr);
+						if (val.HasValue)
+							info.States.Add(val.Value.ToString());
 					}
-					else if (argName == "States")
+				}
+				else if (argName == "ConfigProperties")
+				{
+					foreach (var expr in GetArrayExpressions(arg.Expression))
 					{
-						foreach (var expr in GetArrayExpressions(arg.Expression))
+						var val = context.SemanticModel.GetConstantValue(expr);
+						if (val.HasValue)
 						{
-							var val = context.SemanticModel.GetConstantValue(expr);
-							if (val.HasValue)
-								info.States.Add(val.Value.ToString());
-						}
-					}
-					else if (argName == "ConfigProperties")
-					{
-						foreach (var expr in GetArrayExpressions(arg.Expression))
-						{
-							var val = context.SemanticModel.GetConstantValue(expr);
-							if (val.HasValue)
+							var parts = val.Value.ToString().Split(':');
+							if (parts.Length >= 2)
 							{
-								var parts = val.Value.ToString().Split(':');
-								if (parts.Length >= 2)
-								{
-									var name = parts[0].Trim();
-									var type = parts[1].Trim();
-									var source = parts.Length >= 3 ? parts[2].Trim() : name;
-									info.ConfigProperties.Add((name, type, source));
-								}
+								var name = parts[0].Trim();
+								var type = parts[1].Trim();
+								var source = parts.Length >= 3 ? parts[2].Trim() : name;
+								info.ConfigProperties.Add((name, type, source));
 							}
 						}
 					}
 				}
-
-				ControlStates.Add(info);
 			}
 
-			static IEnumerable<ExpressionSyntax> GetArrayExpressions(ExpressionSyntax expr)
-			{
-				if (expr is ImplicitArrayCreationExpressionSyntax iac)
-					return iac.Initializer.Expressions;
-				if (expr is ArrayCreationExpressionSyntax ac && ac.Initializer != null)
-					return ac.Initializer.Expressions;
-				return Enumerable.Empty<ExpressionSyntax>();
-			}
+			return info;
+		}
+
+		static IEnumerable<ExpressionSyntax> GetArrayExpressions(ExpressionSyntax expr)
+		{
+			if (expr is ImplicitArrayCreationExpressionSyntax iac)
+				return iac.Initializer.Expressions;
+			if (expr is ArrayCreationExpressionSyntax ac && ac.Initializer != null)
+				return ac.Initializer.Expressions;
+			return Enumerable.Empty<ExpressionSyntax>();
 		}
 	}
 }

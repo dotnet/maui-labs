@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Maui.Platforms.Linux.Gtk4.Platform;
 using WebKit;
 using WebView = WebKit.WebView;
 
@@ -47,6 +48,8 @@ public sealed class GtkBlazorWebView : IDisposable
 
 	private readonly IServiceProvider _serviceProvider;
 	private GtkWebViewManager? _webViewManager;
+	private UserContentManager? _userContentManager;
+	private bool _disposed;
 	private string? _hostPage;
 	private static int _moduleInitialized;
 
@@ -58,6 +61,10 @@ public sealed class GtkBlazorWebView : IDisposable
 	public static void InitializeWebKit()
 	{
 		if (Interlocked.Exchange(ref _moduleInitialized, 1) != 0) return;
+
+		// Fail fast with a friendly message if GTK is missing or too old, before any
+		// GirCore GTK/WebKit native initialization happens below.
+		GtkRuntime.EnsureSupported();
 
 		WebKitSandboxHelper.ConfigureSandbox();
 
@@ -96,6 +103,19 @@ public sealed class GtkBlazorWebView : IDisposable
 
 	public void Dispose()
 	{
+		if (_disposed)
+			return;
+		_disposed = true;
+
+		if (_userContentManager != null)
+		{
+			// The detailed signal connection is independent of the registered JS
+			// message handler and must be disconnected before releasing its owner.
+			UserContentManager.ScriptMessageReceivedSignal.Disconnect(_userContentManager, HandleScriptMessage);
+			_userContentManager.UnregisterScriptMessageHandler(InteropName, null);
+			_userContentManager = null;
+		}
+
 		if (_webViewManager != null)
 		{
 			// Offload blocking wait to thread pool to avoid deadlocking the GTK main thread
@@ -125,16 +145,16 @@ public sealed class GtkBlazorWebView : IDisposable
 		webView.SetSettings(settings);
 
 		// Handle JS→.NET messages
-		var userContentManager = webView.GetUserContentManager();
+		_userContentManager = webView.GetUserContentManager();
 		UserContentManager.ScriptMessageReceivedSignal.Connect(
-			userContentManager,
+			_userContentManager,
 			HandleScriptMessage,
 			after: false,
 			detail: InteropName);
-		userContentManager.RegisterScriptMessageHandler(InteropName, null);
+		_userContentManager.RegisterScriptMessageHandler(InteropName, null);
 
 		// Inject Blazor initialization script
-		userContentManager.AddScript(
+		_userContentManager.AddScript(
 			UserScript.New(
 				BlazorInitScript,
 				injectedFrames: UserContentInjectedFrames.AllFrames,
@@ -170,7 +190,7 @@ public sealed class GtkBlazorWebView : IDisposable
 			return;
 		}
 
-		string uri = request.GetUri();
+		string uri = UriHelpers.RemoveQueryAndFragment(request.GetUri());
 		bool allowFallbackOnHostPage = !System.IO.Path.HasExtension(uri);
 
 		if (_webViewManager.TryGetResponseContentInternal(

@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using Microsoft.Maui.Cli.DevFlow.Android;
 using Microsoft.Maui.Cli.DevFlow.Broker;
+using Microsoft.Maui.Cli.DevFlow.Mcp.Tools;
+using Microsoft.Maui.Cli.DevFlow.Inspector;
 using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.Cli.DevFlow;
@@ -19,6 +21,9 @@ namespace Microsoft.Maui.Cli.DevFlow;
 [JsonSerializable(typeof(NetworkRequest))]
 [JsonSerializable(typeof(List<NetworkRequest>))]
 [JsonSerializable(typeof(ThemeResult))]
+[JsonSerializable(typeof(FoldCapabilities))]
+[JsonSerializable(typeof(FoldState))]
+[JsonSerializable(typeof(FoldSetResult))]
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(AgentRegistration))]
 [JsonSerializable(typeof(List<AgentRegistration>))]
@@ -32,4 +37,12 @@ namespace Microsoft.Maui.Cli.DevFlow;
 [JsonSerializable(typeof(ExtensionToolInfo))]
 [JsonSerializable(typeof(ExtensionToolAnnotationsInfo))]
 [JsonSerializable(typeof(Dictionary<string, ExtensionDescriptor>))]
+[JsonSerializable(typeof(LayoutInspectionResult))]
+[JsonSerializable(typeof(LayoutFinding))]
+[JsonSerializable(typeof(CompactLayoutDiagnosticsResult))]
+[JsonSerializable(typeof(LayoutDiagnosticsPolicy))]
+[JsonSerializable(typeof(LayoutDiagnosticsDelta))]
+[JsonSerializable(typeof(InspectorServer.InspectorDiagnosticRequest))]
+[JsonSerializable(typeof(InspectorServer.InspectorLayoutScanRequest))]
+[JsonSerializable(typeof(InspectorServer.InspectorLayoutScanResponse))]
 internal sealed partial class DevFlowCliJsonContext : JsonSerializerContext;

@@ -1,0 +1,11 @@
+{
+  "solution": {
+    "path": "../../MauiLabs.slnx",
+    "projects": [
+      "samples\\DevFlow.Sample.Native\\Android\\DevFlow.Sample.Native.Android.csproj",
+      "samples\\DevFlow.Sample.Native\\iOS\\DevFlow.Sample.Native.iOS.csproj",
+      "samples\\DevFlow.Sample.Native\\MacCatalyst\\DevFlow.Sample.Native.MacCatalyst.csproj",
+      "samples\\DevFlow.Sample.Native\\MacOS\\DevFlow.Sample.Native.MacOS.csproj"
+    ]
+  }
+}

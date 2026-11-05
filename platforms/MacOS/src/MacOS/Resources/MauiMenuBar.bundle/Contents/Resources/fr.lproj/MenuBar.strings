@@ -1,0 +1,17 @@
+"AboutApp" = "À propos de {0}";
+"HideApp" = "Masquer {0}";
+"HideOthers" = "Masquer les autres";
+"ShowAll" = "Tout afficher";
+"QuitApp" = "Quitter {0}";
+"Edit" = "Édition";
+"Undo" = "Annuler";
+"Redo" = "Rétablir";
+"Cut" = "Couper";
+"Copy" = "Copier";
+"Paste" = "Coller";
+"Delete" = "Supprimer";
+"SelectAll" = "Tout sélectionner";
+"Window" = "Fenêtre";
+"Minimize" = "Placer dans le Dock";
+"Zoom" = "Réduire/agrandir";
+"EnterFullScreen" = "Activer le mode plein écran";

@@ -229,17 +229,6 @@ internal static class UIAutomationInterop
         return results;
     }
 
-    public static List<(IUIAutomationElement element, string name)> FindNamedButtons(IUIAutomationElement root, IReadOnlySet<string> names)
-    {
-        var buttons = FindButtons(root);
-        if (names.Count == 0)
-            return buttons;
-
-        return buttons
-            .Where(b => names.Contains(NormalizeLabel(b.name)))
-            .ToList();
-    }
-
     public static List<string> FindTexts(IUIAutomationElement root)
     {
         var uia = GetAutomation();

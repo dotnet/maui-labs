@@ -105,8 +105,8 @@ public class RefreshViewHandler : GtkViewHandler<IView, Gtk.Box>
 
 	public static void MapRefreshColor(RefreshViewHandler handler, IView view)
 	{
-		if (view is RefreshView rv && rv.RefreshColor != null && handler._spinner != null)
-			handler.ApplyCss(handler._spinner, $"color: {ToGtkColor(rv.RefreshColor)};");
+		handler.UpdateCss(handler._spinner,
+			view is RefreshView { RefreshColor: not null } rv ? $"color: {ToGtkColor(rv.RefreshColor)};" : null);
 	}
 
 	public static void MapIsEnabled(RefreshViewHandler handler, IView view)

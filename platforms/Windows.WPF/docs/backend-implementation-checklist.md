@@ -533,7 +533,7 @@ Every handler inherits these property mappings from `RemapForControls()` in `App
 | [x] **MauiIcon** | ✅ | MSBuild target copies icon to `Resources/` in output directory |
 | [x] **MauiImage** | ✅ | MSBuild target copies images to `Resources/Images/` |
 | [x] **MauiFont** | ✅ | MSBuild target copies fonts to `Resources/Fonts/` |
-| [x] **MauiAsset** | ✅ | MSBuild target copies raw assets to `Resources/Raw/` |
+| [x] **MauiAsset** | ✅ | MSBuild target preserves logical paths relative to the app root in build and publish output |
 | [x] **MauiSplashScreen** | ✅ | MSBuild target copies splash image to `Resources/` |
 
 > **WPF Implementation Note:** Use `AfterTargets="ResizetizeImages"` to hook processed images. See [dotnet/maui#34222](https://github.com/dotnet/maui/issues/34222).
@@ -709,5 +709,4 @@ D:\repos\rmarinho\maui.wpf\
 *Last updated: 2026-02-26*
 *Branch: `more-controls`*
 *Target Framework: `net10.0` | MAUI Version: `10.0.31`*
-
 

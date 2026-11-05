@@ -59,8 +59,8 @@ public class AotCompatibilityTests
             }
         };
 
-        var json = DriverJson.SerializeUntyped(requests);
-        var deserialized = DriverJson.Deserialize<List<NetworkRequest>>(json);
+        var json = ProtocolJson.SerializeUntyped(requests);
+        var deserialized = ProtocolJson.Deserialize<List<NetworkRequest>>(json);
 
         Assert.NotNull(deserialized);
         var request = Assert.Single(deserialized);

@@ -69,18 +69,23 @@
     </ItemGroup>
   </Target>
 
-  <!-- Workaround: On Windows, the Blazor wwwroot/ files (chobitsu.js, lib.module.js) get
-       indexed into the PRI by MakePri. The PRI is packed into lib/ but the wwwroot files
-       are packed into staticwebassets/ by the Razor SDK, so the PRI references paths that
-       don't exist in the NuGet package, causing MSB3030 in consuming projects. These files
-       are delivered via the Blazor static web asset pipeline (StaticWebAsset items), not
-       the Windows resource system, so exclude them from PRI generation entirely. -->
-  <Target Name="_ExcludeWwwrootFromPri"
-          BeforeTargets="GetMrtPackagingOutputs"
-          Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
-    <ItemGroup>
-      <Content Remove="wwwroot\**" />
-    </ItemGroup>
-  </Target>
+  <!-- On Windows the Blazor wwwroot/ files (chobitsu.js) are indexed into this project's PRI by
+       MakePri, while the Razor SDK packs them into staticwebassets/ and the PRI is packed into
+       lib/. Consumers expand every referenced .pri (WindowsAppSDK's MrtCore.PriGen.targets,
+       AddPriPayloadFilesToCopyToOutputDirectoryItems) and resolve its payload against the .pri's
+       OWN folder, so a consuming build demands
+       lib/<tfm>/Microsoft.Maui.DevFlow.Blazor/wwwroot/chobitsu.js and fails with MSB3030.
+
+       These files are delivered by the Blazor static web asset pipeline, not the Windows resource
+       system, so this project's PRI has no legitimate content at all — its only entry is the one
+       that breaks consumers. Don't pack it.
+
+       Two approaches that do NOT work, recorded so they are not retried:
+         - Removing the Content items before GetMrtPackagingOutputs (what this block used to do)
+           does not change what MakePri indexes; the shipped PRI still carried the wwwroot entry.
+         - AppxGeneratePriEnabled=false stops generation, but pack still expects the file: NU5026. -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+    <IncludeProjectPriFile>false</IncludeProjectPriFile>
+  </PropertyGroup>
 
 </Project>

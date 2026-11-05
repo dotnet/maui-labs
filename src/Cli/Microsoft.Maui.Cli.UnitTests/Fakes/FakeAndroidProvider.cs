@@ -23,7 +23,14 @@ public class FakeAndroidProvider : IAndroidProvider
 
 	public List<HealthCheck> HealthChecks { get; set; } = new();
 	public List<Device> Devices { get; set; } = new();
+
+	/// <summary>
+	/// Platforms this fake claims to serve. Settable so tests can simulate a provider that has
+	/// been extended to a new platform and assert the device manager follows it.
+	/// </summary>
+	public IReadOnlyList<string> SupportedPlatforms { get; set; } = [Platforms.Android];
 	public List<AvdInfo> Avds { get; set; } = new();
+	public List<string> DeviceProfiles { get; set; } = new();
 	public List<SdkPackage> InstalledPackages { get; set; } = new();
 	public List<SdkPackage> AvailablePackages { get; set; } = new();
 	public string? MostRecentSystemImage { get; set; }
@@ -60,8 +67,26 @@ public class FakeAndroidProvider : IAndroidProvider
 	public int AcceptLicensesCalled { get; private set; }
 	public List<(string? SdkPath, string? JdkPath, int? JdkVersion, List<string>? AdditionalPackages)> InstallCalls { get; } = new();
 	public List<string> InstallSdkToolsCalls { get; } = new();
+	public List<string> EnsureLatestSdkToolsCalls { get; } = new();
+	public string? EnsureLatestSdkToolsRevision { get; set; }
 	public List<int?> InstallJdkCalls { get; } = new();
 	public bool Disposed { get; private set; }
+
+	/// <summary>Number of times <see cref="GetDevicesAsync"/> was invoked.</summary>
+	public int GetDevicesCallCount { get; private set; }
+
+	/// <summary>Number of times <see cref="GetAvdsAsync"/> was invoked.</summary>
+	public int GetAvdsCallCount { get; private set; }
+
+	// --- Port management: configurable return values + call tracking ---
+
+	public List<AndroidPortMapping> ForwardPorts { get; set; } = new();
+	public List<AndroidPortMapping> ReversePorts { get; set; } = new();
+
+	public List<(string Serial, int HostPort, int DevicePort)> AddedForwardPorts { get; } = new();
+	public List<(string Serial, int DevicePort, int HostPort)> AddedReversePorts { get; } = new();
+	public List<string> ClearedForwardPorts { get; } = new();
+	public List<string> ClearedReversePorts { get; } = new();
 
 	// --- IAndroidProvider implementation ---
 
@@ -69,10 +94,19 @@ public class FakeAndroidProvider : IAndroidProvider
 		=> Task.FromResult(HealthChecks);
 
 	public Task<List<Device>> GetDevicesAsync(CancellationToken cancellationToken = default)
-		=> Task.FromResult(Devices);
+	{
+		GetDevicesCallCount++;
+		return Task.FromResult(Devices);
+	}
 
 	public Task<List<AvdInfo>> GetAvdsAsync(CancellationToken cancellationToken = default)
-		=> Task.FromResult(Avds);
+	{
+		GetAvdsCallCount++;
+		return Task.FromResult(Avds);
+	}
+
+	public Task<List<string>> GetDeviceProfilesAsync(CancellationToken cancellationToken = default)
+		=> Task.FromResult(DeviceProfiles);
 
 	public Task<AvdInfo> CreateAvdAsync(string name, string deviceProfile, string systemImage, bool force = false, CancellationToken cancellationToken = default)
 	{
@@ -100,6 +134,36 @@ public class FakeAndroidProvider : IAndroidProvider
 	public Task StopEmulatorAsync(string deviceSerial, CancellationToken cancellationToken = default)
 	{
 		StoppedEmulators.Add(deviceSerial);
+		return Task.CompletedTask;
+	}
+
+	public Task<IReadOnlyList<AndroidPortMapping>> ListForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+		=> Task.FromResult<IReadOnlyList<AndroidPortMapping>>(ForwardPorts);
+
+	public Task<IReadOnlyList<AndroidPortMapping>> ListReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+		=> Task.FromResult<IReadOnlyList<AndroidPortMapping>>(ReversePorts);
+
+	public Task AddForwardPortAsync(string deviceSerial, int hostPort, int devicePort, CancellationToken cancellationToken = default)
+	{
+		AddedForwardPorts.Add((deviceSerial, hostPort, devicePort));
+		return Task.CompletedTask;
+	}
+
+	public Task AddReversePortAsync(string deviceSerial, int devicePort, int hostPort, CancellationToken cancellationToken = default)
+	{
+		AddedReversePorts.Add((deviceSerial, devicePort, hostPort));
+		return Task.CompletedTask;
+	}
+
+	public Task ClearForwardPortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+	{
+		ClearedForwardPorts.Add(deviceSerial);
+		return Task.CompletedTask;
+	}
+
+	public Task ClearReversePortsAsync(string deviceSerial, CancellationToken cancellationToken = default)
+	{
+		ClearedReversePorts.Add(deviceSerial);
 		return Task.CompletedTask;
 	}
 
@@ -131,6 +195,18 @@ public class FakeAndroidProvider : IAndroidProvider
 		{
 			for (var i = 0; i < pkgList.Count; i++)
 				onProgress(pkgList[i], i + 1, pkgList.Count);
+		}
+		return Task.CompletedTask;
+	}
+
+	public Task InstallPackagesAsync(IEnumerable<string> packages, bool acceptLicenses, Action<AndroidPackageInstallProgress>? onProgress, CancellationToken cancellationToken = default)
+	{
+		var pkgList = packages.ToList();
+		InstalledPackageSets.Add(pkgList);
+		if (onProgress is not null)
+		{
+			for (var i = 0; i < pkgList.Count; i++)
+				onProgress(new AndroidPackageInstallProgress(pkgList[i], i + 1, pkgList.Count, "Installing", 100));
 		}
 		return Task.CompletedTask;
 	}
@@ -176,6 +252,12 @@ public class FakeAndroidProvider : IAndroidProvider
 	{
 		InstallSdkToolsCalls.Add(targetPath);
 		return Task.CompletedTask;
+	}
+
+	public Task<string?> EnsureLatestSdkToolsAsync(string targetPath, Action<string, int, string>? onProgress = null, CancellationToken cancellationToken = default)
+	{
+		EnsureLatestSdkToolsCalls.Add(targetPath);
+		return Task.FromResult(EnsureLatestSdkToolsRevision);
 	}
 
 	public void OverrideSdkPath(string path) => SdkPath = path;

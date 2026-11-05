@@ -14,12 +14,13 @@ public static class MauiProgram
 			.CreateBuilder()
 			.UseMauiAppWPF<MainApp>()
 			.UseWPFEssentials()
-			.AddMauiDevFlowAgent();
+			.AddMauiDevFlowAgent(options =>
+			{
+				options.EnableLayoutDiagnostics = true;
+				options.EnableFileLogging = false;
+			});
 
-		builder.ConfigureFonts(fonts =>
-		{
-			fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-		});
+		builder.ConfigureFonts(SampleFontRegistration.Configure);
 
 		// Blazor hybrid
 		builder.Services.AddMauiBlazorWebView();

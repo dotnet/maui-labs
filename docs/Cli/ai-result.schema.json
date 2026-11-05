@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dotnet/maui-labs/main/docs/Cli/ai-result.schema.json",
+  "title": "maui ai command result, version 1",
+  "description": "Handled AI command results. Parser errors and cancellation are outside this envelope. Consumers must tolerate additional fields and unknown state/reason codes.",
+  "type": "object",
+  "required": ["schemaVersion", "command", "dryRun", "status", "results", "messages", "environments"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "command": { "type": "string", "enum": ["init", "list", "status", "update", "add skill", "add agent", "add mcp"] },
+    "dryRun": { "type": "boolean" },
+    "status": { "type": "string", "enum": ["success", "failed"] },
+    "environments": {
+      "type": "array",
+      "description": "Effective selected clients and the configuration evidence for selection; not proof that executables are installed or connected.",
+      "items": {
+        "type": "object",
+        "required": ["name", "reasonCode", "markerPath", "scope", "skillsPath", "mcpPath", "mcpScope"],
+        "properties": {
+          "name": { "type": "string" },
+          "reasonCode": { "type": "string" },
+          "markerPath": { "type": ["string", "null"] },
+          "scope": { "type": "string", "enum": ["project", "user"] },
+          "skillsPath": { "type": "string" },
+          "mcpPath": { "type": "string" },
+          "mcpScope": { "type": "string", "enum": ["project", "user"] }
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "name", "environments", "scope", "path", "entryKey", "owner", "origin", "managed", "recommended", "state", "action", "outcome", "reasonCode", "message", "requiresForce", "error"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["skill", "agent", "mcp"] },
+          "name": { "type": "string", "description": "Canonical asset name; empty for a command-level preflight failure." },
+          "environments": { "type": "array", "items": { "type": "string" } },
+          "scope": { "type": "string", "enum": ["project", "user"] },
+          "path": { "type": "string", "description": "Installation destination. May be empty for catalog or preflight-only rows." },
+          "entryKey": { "type": ["string", "null"] },
+          "owner": { "type": "string" },
+          "origin": {
+            "type": ["object", "null"],
+            "required": ["repo", "branch", "path", "resolvedCommit"],
+            "properties": {
+              "repo": { "type": "string" },
+              "branch": { "type": "string", "description": "Tracked source ref, or an explicitly pinned commit; not replaced with the transient plan snapshot." },
+              "path": { "type": "string" },
+              "resolvedCommit": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{40}$", "description": "Immutable repository commit used to read this remote source, when resolved." }
+            }
+          },
+          "managed": { "type": "boolean" },
+          "recommended": { "type": "boolean" },
+          "state": { "type": "string", "description": "Extensible observed-state vocabulary; not a connectivity assertion." },
+          "action": { "type": "string", "enum": ["create", "replace", "adopt", "skip"] },
+          "outcome": { "type": "string", "enum": ["planned", "succeeded", "skipped", "blocked", "failed", "not-executed"] },
+          "reasonCode": { "type": "string", "description": "Extensible machine-readable reason. Do not parse message instead." },
+          "message": { "type": "string" },
+          "requiresForce": { "type": "boolean" },
+          "error": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "messages": { "type": "array", "items": { "type": "string" } }
+  }
+}

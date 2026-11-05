@@ -4,8 +4,12 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/ci-essentialsai.yml'
+      - '.github/workflows/_build.yml'
+      - '.github/workflows/_device-tests.yml'
       - 'src/AI/**'
       - 'tests/AI/**'
+      - 'tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/**'
       - 'samples/EssentialsAISample/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -15,10 +19,13 @@ on:
       - 'NuGet.config'
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
     paths:
+      - '.github/workflows/ci-essentialsai.yml'
+      - '.github/workflows/_build.yml'
+      - '.github/workflows/_device-tests.yml'
       - 'src/AI/**'
       - 'tests/AI/**'
+      - 'tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/**'
       - 'samples/EssentialsAISample/**'
       - 'eng/**'
       - 'Directory.Build.props'
@@ -28,17 +35,25 @@ on:
       - 'NuGet.config'
 
 jobs:
-  # Step 1: Build on macOS — compiles Swift xcframeworks, produces .resources.zip,
+  native-apple-tests:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run Swift bridge tests
+        run: swift test --package-path src/AI/AppleNative
+
+  # Step 1: Build on Xcode 27 — compiles Swift xcframeworks, produces .resources.zip,
   # and uploads them as native-apple-essentialsai artifact via _build.yml.
   build-macos:
     uses: ./.github/workflows/_build.yml
     with:
       project-path: src/AI/EssentialsAI.slnf
       project-name: essentialsai
-      os: '["macos-latest"]'
+      os: '["xcode-27"]'
       run-tests: true
       pack: true
-      xcode-version: '26.3'
+      workload-version: '10.0.401'
+      skip-xcode-version-validation: true
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
 
   # Step 2: Build on Windows — downloads native .resources.zip from macOS build
@@ -49,8 +64,34 @@ jobs:
     with:
       project-path: src/AI/EssentialsAI.slnf
       project-name: essentialsai
-      os: '["windows-latest"]'
+      os: '["windows-2025-vs2026"]'
       run-tests: true
       pack: true
+      workload-version: '10.0.401'
       pre-build-artifact: native-apple-essentialsai
       android-project: src/AI/Microsoft.Maui.Essentials.AI/Microsoft.Maui.Essentials.AI.csproj
+
+  # Step 3: Run device tests on Mac Catalyst via DeviceRunners + dotnet test.
+  device-tests-maccatalyst:
+    uses: ./.github/workflows/_device-tests.yml
+    with:
+      project-path: tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
+      project-name: essentialsai
+      target-framework: net10.0-maccatalyst27.0
+      filter: 'RequiresModel!=true'
+      os: xcode-27
+      workload-version: '10.0.401'
+
+  # Step 4: Run model-free Windows device tests. Hosted runners do not have
+  # Windows AI models, but they can execute readiness, policy, lifecycle, and
+  # other deterministic Windows-specific coverage.
+  device-tests-windows:
+    uses: ./.github/workflows/_device-tests.yml
+    with:
+      project-path: tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/Microsoft.Maui.Essentials.AI.DeviceTests.csproj
+      project-name: essentialsai
+      target-framework: net10.0-windows10.0.19041.0
+      filter: 'RequiresModel!=true'
+      os: windows-2025-vs2026
+      workloads: maui
+      workload-version: '10.0.401'

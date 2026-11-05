@@ -66,7 +66,14 @@ namespace Comet
 			=> state == ControlState.Default ? key : $"{state}.{key}";
 
 		internal object GetValue(string key, ContextualObject current, View view, string styledKey, string typedKey, bool cascades)
+			=> GetValue(key, current, view, styledKey, typedKey, cascades, depth: 0);
+
+		internal object GetValue(string key, ContextualObject current, View view, string styledKey, string typedKey, bool cascades, int depth)
 		{
+			// A parent CYCLE (re-parenting bugs) would recurse forever and stack-overflow the
+			// process; no real tree is 256 levels deep — treat deeper as "not found".
+			if (depth > 256)
+				return null;
 			try
 			{
 				//Example Environment lookup...
@@ -124,7 +131,7 @@ namespace Comet
 					if (result.hasValue)
 						return result.value;
 				}
-				return view?.GetValue(key, current, view.Parent, styledKey, typedKey, cascades);
+				return view?.GetValue(key, current, view.Parent, styledKey, typedKey, cascades, depth + 1);
 			}
 			catch
 			{

@@ -1,0 +1,23 @@
+{
+  "name": "collection-view-grid",
+  "expectedCases": 4,
+  "expectedAssertions": 8,
+  "evidence": [
+    "tall-content.png",
+    "tall-content.json",
+    "span-change.png",
+    "span-change.json",
+    "resize.json",
+    "header.png",
+    "header.json",
+    "assertions.txt"
+  ],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/CollectionViewHandler.cs",
+    "commit": "9206e7c5c6486a7f422efd36a7635c6fe9609000",
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "collection-view-grid.runtime-layout",
+    "message": "BASELINE_598: tall cards, live Span changes, resize remeasurement, and spanning headers are incorrect."
+  }
+}

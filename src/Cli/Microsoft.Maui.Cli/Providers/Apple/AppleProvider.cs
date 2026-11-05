@@ -20,6 +20,7 @@ public class AppleProvider : IAppleProvider
 {
 	readonly XcodeManager? _xcodeManager;
 	readonly SimulatorService? _simulatorService;
+	readonly PhysicalDeviceService? _physicalDeviceService;
 	readonly RuntimeService? _runtimeService;
 	readonly CommandLineTools? _commandLineTools;
 	readonly EnvironmentChecker? _environmentChecker;
@@ -30,13 +31,22 @@ public class AppleProvider : IAppleProvider
 		if (!PlatformDetector.IsMacOS)
 			return;
 
-		var logger = ConsoleLogger.Instance;
+		// Deliberately not ConsoleLogger.Instance: it writes Info/Debug/Warning to stdout,
+		// which corrupts --json output. See StandardErrorToolsLogger.
+		var logger = new StandardErrorToolsLogger();
 		_xcodeManager = new XcodeManager(logger);
 		_simulatorService = new SimulatorService(logger);
+		_physicalDeviceService = new PhysicalDeviceService(logger);
 		_runtimeService = new RuntimeService(logger);
 		_commandLineTools = new CommandLineTools(logger);
 		_environmentChecker = new EnvironmentChecker(logger);
 		_appleInstaller = new AppleInstaller(logger);
+	}
+
+	// Test seam: lets tests supply devicectl output on any host.
+	internal AppleProvider(PhysicalDeviceService physicalDeviceService)
+	{
+		_physicalDeviceService = physicalDeviceService;
 	}
 
 	public List<XcodeInstallation> GetXcodeInstallations()
@@ -189,6 +199,81 @@ public class AppleProvider : IAppleProvider
 		return _simulatorService?.GetAppContainer(udid, bundleIdentifier, containerType);
 	}
 
+	public bool SetPrivacy(string action, string udid, PrivacyPermission permission, string? bundleIdentifier = null)
+	{
+		if (_simulatorService is null)
+			return false;
+
+		var privacy = _simulatorService.Privacy;
+		return action switch
+		{
+			"grant" => privacy.Grant(udid, permission, bundleIdentifier),
+			"revoke" => privacy.Revoke(udid, permission, bundleIdentifier),
+			"reset" => privacy.Reset(udid, permission, bundleIdentifier),
+			_ => throw new ArgumentException($"Unknown privacy action '{action}'. Expected 'grant', 'revoke', or 'reset'.", nameof(action)),
+		};
+	}
+
+	public bool SetAppearance(string udid, SimulatorAppearance appearance)
+	{
+		return _simulatorService?.SetAppearance(udid, appearance) ?? false;
+	}
+
+	public SimulatorAppearance? GetAppearance(string udid)
+	{
+		return _simulatorService?.GetAppearance(udid);
+	}
+
+	public bool OverrideStatusBar(string udid, StatusBarOverrides overrides)
+	{
+		return _simulatorService?.StatusBar.Override(udid, overrides) ?? false;
+	}
+
+	public bool ClearStatusBar(string udid)
+	{
+		return _simulatorService?.StatusBar.Clear(udid) ?? false;
+	}
+
+	public bool OpenUrl(string udid, string url)
+	{
+		return _simulatorService?.OpenUrl(udid, url) ?? false;
+	}
+
+	public bool PushNotification(string udid, string bundleIdentifier, string payloadJsonOrPath)
+	{
+		return _simulatorService?.Push(udid, bundleIdentifier, payloadJsonOrPath) ?? false;
+	}
+
+	public bool SetLocation(string udid, double latitude, double longitude)
+	{
+		return _simulatorService?.Location.Set(udid, latitude, longitude) ?? false;
+	}
+
+	public bool ClearLocation(string udid)
+	{
+		return _simulatorService?.Location.Clear(udid) ?? false;
+	}
+
+	public bool RunLocation(string udid, string gpxPath)
+	{
+		return _simulatorService?.Location.Run(udid, gpxPath) ?? false;
+	}
+
+	public bool AddMedia(string udid, IEnumerable<string> paths)
+	{
+		return _simulatorService?.AddMedia(udid, paths) ?? false;
+	}
+
+	public bool Screenshot(string udid, string outputPath, ScreenshotFormat format = ScreenshotFormat.Png)
+	{
+		return _simulatorService?.ScreenCapture.Screenshot(udid, outputPath, format) ?? false;
+	}
+
+	public IDisposable? StartRecording(string udid, string outputPath, RecordingOptions? options = null)
+	{
+		return _simulatorService?.ScreenCapture.StartRecording(udid, outputPath, options);
+	}
+
 	public List<HealthCheck> CheckHealth()
 	{
 		var checks = new List<HealthCheck>();
@@ -228,6 +313,13 @@ public class AppleProvider : IAppleProvider
 		// License check only meaningful when Xcode is present
 		if (result.Xcode is not null)
 			checks.Add(MapXcodeLicenseCheck());
+
+		// Xcode compatibility check for SDK packs
+		if (result.Xcode is not null)
+		{
+			var compatibilityChecker = new XcodeCompatibilityChecker(_xcodeManager);
+			checks.Add(compatibilityChecker.CheckXcodeCompatibility());
+		}
 
 		checks.Add(MapRuntimesCheck(result));
 
@@ -428,7 +520,28 @@ public class AppleProvider : IAppleProvider
 		}, cancellationToken);
 	}
 
+	/// <inheritdoc />
+	/// <remarks>
+	/// Scoped to iOS because <see cref="GetDevices"/> tags every simulator and physical device with
+	/// <see cref="Platforms.iOS"/>. tvOS/watchOS/visionOS simulators are returned by
+	/// <c>simctl</c> but are not yet recognized in the shared Platforms model; when they are,
+	/// add them both here and to the tagging below.
+	/// </remarks>
+	public IReadOnlyList<string> SupportedPlatforms { get; } = [Platforms.iOS];
+
 	public List<Device> GetDevices()
+	{
+		// Start devicectl first so it overlaps the slower, blocking simctl call.
+		var physical = _physicalDeviceService?.ListAsync();
+
+		var devices = GetSimulatorDevices();
+		if (physical is not null)
+			devices.AddRange(physical.GetAwaiter().GetResult().Devices.Where(IsConnectedIosDevice).Select(ToDevice));
+
+		return devices;
+	}
+
+	List<Device> GetSimulatorDevices()
 	{
 		if (_simulatorService is null)
 			return new List<Device>();
@@ -464,5 +577,37 @@ public class AppleProvider : IAppleProvider
 				}
 			};
 		}).ToList();
+	}
+
+	// devicectl also lists remembered devices that are not currently attached or reachable.
+	static bool IsConnectedIosDevice(PhysicalDeviceInfo d)
+		=> d.HasHardwareUdid && d.IsReachable && d.Kind is PhysicalDeviceKind.IPhone or PhysicalDeviceKind.IPad;
+
+	static Device ToDevice(PhysicalDeviceInfo d)
+	{
+		// An unpaired device is listed but unusable until trusted, like Android's "unauthorized".
+		var paired = string.Equals(d.PairingState, "paired", StringComparison.OrdinalIgnoreCase);
+
+		return new Device
+		{
+			// The hardware UDID, never the CoreDevice identifier, which changes between connections.
+			Id = d.HardwareUdid,
+			Name = d.Name,
+			Platforms = new[] { Platforms.iOS },
+			Type = DeviceType.Physical,
+			State = paired ? DeviceState.Connected : DeviceState.Disconnected,
+			IsRunning = paired,
+			ConnectionType = d.TransportType switch
+			{
+				"wired" => Models.ConnectionType.Usb,
+				"localNetwork" => Models.ConnectionType.Wifi,
+				_ => Models.ConnectionType.Unknown
+			},
+			Model = string.IsNullOrEmpty(d.MarketingName) ? d.ProductType : d.MarketingName,
+			Manufacturer = "Apple",
+			Version = d.OSVersion,
+			VersionName = $"{d.Platform} {d.OSVersion}",
+			Idiom = d.Kind == PhysicalDeviceKind.IPad ? DeviceIdiom.Tablet : DeviceIdiom.Phone
+		};
 	}
 }

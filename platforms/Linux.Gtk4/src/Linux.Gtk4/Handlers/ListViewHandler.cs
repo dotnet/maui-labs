@@ -566,8 +566,8 @@ public class ListViewHandler : GtkViewHandler<ListView, Gtk.ScrolledWindow>
 	public static void MapGroupHeaderTemplate(ListViewHandler handler, ListView view) => handler.RebuildRows();
 	public static void MapBackgroundColor(ListViewHandler handler, ListView view)
 	{
-		if (view.BackgroundColor != null)
-			handler.ApplyCss(handler.PlatformView, $"background-color: {ToGtkColor(view.BackgroundColor)};");
+		handler.UpdateCss(handler.PlatformView,
+			view.BackgroundColor != null ? $"background-color: {ToGtkColor(view.BackgroundColor)};" : null);
 	}
 }
 #pragma warning restore CS0618

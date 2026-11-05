@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Microsoft.Maui.Cli.Utils;
@@ -151,40 +152,50 @@ public static class ProcessRunner
 		Action<string>? onErrorData = null,
 		CancellationToken cancellationToken = default)
 	{
-		var stopwatch = Stopwatch.StartNew();
-		var stdoutBuilder = new StringBuilder();
-		var stderrBuilder = new StringBuilder();
-
-		using var process = new Process();
-		process.StartInfo = new ProcessStartInfo
+		var startInfo = new ProcessStartInfo
 		{
 			FileName = fileName,
-			WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory,
-			UseShellExecute = false,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true,
-			RedirectStandardInput = continuousInput != null,
-			CreateNoWindow = true
+			WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory
 		};
 
 		foreach (var arg in args)
-			process.StartInfo.ArgumentList.Add(arg);
+			startInfo.ArgumentList.Add(arg);
 
 		// Remove inherited env vars first (e.g. MSBuild SDK path vars set by a parent dotnet run)
 		if (environmentVariablesToRemove != null)
 		{
 			foreach (var key in environmentVariablesToRemove)
-				process.StartInfo.EnvironmentVariables.Remove(key);
+				startInfo.EnvironmentVariables.Remove(key);
 		}
 
 		if (environmentVariables != null)
 		{
 			foreach (var kvp in environmentVariables)
 			{
-				process.StartInfo.EnvironmentVariables[kvp.Key] = kvp.Value;
+				startInfo.EnvironmentVariables[kvp.Key] = kvp.Value;
 			}
 		}
 
+		return await RunAsync(startInfo, timeout, continuousInput, onOutputData, onErrorData, cancellationToken).ConfigureAwait(false);
+	}
+
+	internal static async Task<ProcessResult> RunAsync(
+		ProcessStartInfo startInfo,
+		TimeSpan? timeout = null,
+		string? continuousInput = null,
+		Action<string>? onOutputData = null,
+		Action<string>? onErrorData = null,
+		CancellationToken cancellationToken = default)
+	{
+		var stopwatch = Stopwatch.StartNew();
+		var stdoutBuilder = new StringBuilder();
+		var stderrBuilder = new StringBuilder();
+		startInfo.UseShellExecute = false;
+		startInfo.RedirectStandardOutput = true;
+		startInfo.RedirectStandardError = true;
+		startInfo.RedirectStandardInput = continuousInput != null;
+		startInfo.CreateNoWindow = true;
+		using var process = new Process { StartInfo = startInfo };
 		var outputTcs = new TaskCompletionSource<bool>();
 		var errorTcs = new TaskCompletionSource<bool>();
 
@@ -251,10 +262,13 @@ public static class ProcessRunner
 			}
 			catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
 			{
-				try
-				{ process.Kill(entireProcessTree: true); }
-				catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"Kill after async timeout failed: {ex.Message}"); }
-				throw new TimeoutException($"Process '{fileName}' timed out after {effectiveTimeout.TotalSeconds}s");
+				await KillAndWaitForExitAsync(process, "async timeout");
+				throw new TimeoutException($"Process '{startInfo.FileName}' timed out after {effectiveTimeout.TotalSeconds}s");
+			}
+			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+			{
+				await KillAndWaitForExitAsync(process, "caller cancellation");
+				throw;
 			}
 
 			// Wait for input task to complete if present
@@ -290,6 +304,176 @@ public static class ProcessRunner
 			};
 		}
 	}
+
+	static async Task KillAndWaitForExitAsync(Process process, string reason)
+	{
+		var descendants = CaptureDescendantProcesses(process.Id);
+		if (!process.HasExited)
+		{
+			try
+			{
+				process.Kill(entireProcessTree: true);
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Trace.WriteLine($"Kill after {reason} failed: {ex.Message}");
+			}
+		}
+
+		await WaitForExitAsync(process, reason);
+		foreach (var descendant in descendants)
+		{
+			try
+			{
+				if (!descendant.HasExited)
+					descendant.Kill(entireProcessTree: false);
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Trace.WriteLine($"Kill descendant PID {descendant.Id} after {reason} failed: {ex.Message}");
+			}
+
+			await WaitForExitAsync(descendant, reason);
+			descendant.Dispose();
+		}
+	}
+
+	static async Task WaitForExitAsync(Process process, string reason)
+	{
+		try
+		{
+			await process.WaitForExitAsync();
+		}
+		catch (InvalidOperationException)
+		{
+			// The process exited before a wait handle could be created.
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Trace.WriteLine($"Wait for PID {process.Id} after {reason} failed: {ex.Message}");
+		}
+	}
+
+	static IReadOnlyList<Process> CaptureDescendantProcesses(int rootProcessId)
+	{
+		try
+		{
+			var parentsByProcess = OperatingSystem.IsWindows()
+				? GetWindowsProcessParents()
+				: GetUnixProcessParents();
+			var descendants = new List<Process>();
+			var queue = new Queue<int>();
+			queue.Enqueue(rootProcessId);
+
+			while (queue.Count > 0)
+			{
+				var parentProcessId = queue.Dequeue();
+				foreach (var (processId, candidateParentProcessId) in parentsByProcess)
+				{
+					if (candidateParentProcessId != parentProcessId)
+						continue;
+
+					try
+					{
+						descendants.Add(Process.GetProcessById(processId));
+						queue.Enqueue(processId);
+					}
+					catch (ArgumentException)
+					{
+						// Process exited after the snapshot.
+					}
+				}
+			}
+
+			return descendants;
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Trace.WriteLine($"Capture descendant processes failed: {ex.Message}");
+			return [];
+		}
+	}
+
+	static IReadOnlyList<(int ProcessId, int ParentProcessId)> GetUnixProcessParents()
+	{
+		var result = RunSync("ps", ["-eo", "pid=,ppid="], timeout: TimeSpan.FromSeconds(5));
+		if (!result.Success)
+			return [];
+
+		var processParents = new List<(int, int)>();
+		foreach (var line in result.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+		{
+			var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+			if (parts.Length == 2
+				&& int.TryParse(parts[0], out var processId)
+				&& int.TryParse(parts[1], out var parentProcessId))
+			{
+				processParents.Add((processId, parentProcessId));
+			}
+		}
+
+		return processParents;
+	}
+
+	static IReadOnlyList<(int ProcessId, int ParentProcessId)> GetWindowsProcessParents()
+	{
+		var snapshot = CreateToolhelp32Snapshot(0x00000002, 0);
+		if (snapshot == new IntPtr(-1))
+			return [];
+
+		try
+		{
+			var entry = new ProcessEntry32
+			{
+				Size = (uint)Marshal.SizeOf<ProcessEntry32>()
+			};
+			var processParents = new List<(int, int)>();
+			if (!Process32First(snapshot, ref entry))
+				return processParents;
+
+			do
+			{
+				processParents.Add(((int)entry.ProcessId, (int)entry.ParentProcessId));
+				entry.Size = (uint)Marshal.SizeOf<ProcessEntry32>();
+			}
+			while (Process32Next(snapshot, ref entry));
+
+			return processParents;
+		}
+		finally
+		{
+			CloseHandle(snapshot);
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+	struct ProcessEntry32
+	{
+		internal uint Size;
+		internal uint Usage;
+		internal uint ProcessId;
+		internal IntPtr DefaultHeapId;
+		internal uint ModuleId;
+		internal uint Threads;
+		internal uint ParentProcessId;
+		internal int PriorityClassBase;
+		internal uint Flags;
+
+		[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+		internal string ExecutableFile;
+	}
+
+	[DllImport("kernel32.dll", SetLastError = true)]
+	static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+	[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+	static extern bool Process32First(IntPtr snapshot, ref ProcessEntry32 entry);
+
+	[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+	static extern bool Process32Next(IntPtr snapshot, ref ProcessEntry32 entry);
+
+	[DllImport("kernel32.dll", SetLastError = true)]
+	static extern bool CloseHandle(IntPtr handle);
 
 	static void InvokeCallbackSafely(Action<string>? callback, string data, string streamName)
 	{

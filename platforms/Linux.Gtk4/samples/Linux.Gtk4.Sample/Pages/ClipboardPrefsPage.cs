@@ -3,7 +3,6 @@ using Microsoft.Maui.ApplicationModel.DataTransfer;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Storage;
-using Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Storage;
 
 namespace Microsoft.Maui.Platforms.Linux.Gtk4.Sample.Pages;
 
@@ -79,45 +78,6 @@ public class ClipboardPrefsPage : ContentPage
 			prefsResult.TextColor = Colors.OrangeRed;
 		};
 
-		// --- Secure Storage section ---
-		var secureKey = new Entry { Placeholder = "Key", Text = "api_token" };
-		var secureValue = new Entry { Placeholder = "Secret value", Text = "my-example-secret-value" };
-		var secureResult = new Label { Text = "(no value)", FontSize = 14, TextColor = Colors.Gray };
-
-		var secureBackendLabel = new Label { Text = "Backend: probing...", FontSize = 12, TextColor = Colors.Gray };
-		// Resolve backend on load
-		var secureStorage = IPlatformApplication.Current?.Services.GetService<ISecureStorage>();
-		if (secureStorage is LinuxSecureStorage linuxSecure)
-		{
-			var backend = linuxSecure.Backend;
-			secureBackendLabel.Text = $"Backend: {backend}";
-			secureBackendLabel.TextColor = backend == "libsecret" ? Colors.Green : Colors.Orange;
-		}
-
-		var secSaveButton = new Button { Text = "🔐 Store Secret" };
-		secSaveButton.Clicked += async (s, e) =>
-		{
-			var secure = IPlatformApplication.Current?.Services.GetService<ISecureStorage>();
-			if (secure is not null && !string.IsNullOrEmpty(secureKey.Text))
-			{
-				await secure.SetAsync(secureKey.Text, secureValue.Text ?? "");
-				secureResult.Text = $"Stored secret for key: {secureKey.Text}";
-				secureResult.TextColor = Colors.Green;
-			}
-		};
-
-		var secLoadButton = new Button { Text = "🔓 Retrieve Secret" };
-		secLoadButton.Clicked += async (s, e) =>
-		{
-			var secure = IPlatformApplication.Current?.Services.GetService<ISecureStorage>();
-			if (secure is not null && !string.IsNullOrEmpty(secureKey.Text))
-			{
-				var value = await secure.GetAsync(secureKey.Text);
-				secureResult.Text = value is not null ? $"Retrieved: \"{value}\"" : "(not found)";
-				secureResult.TextColor = value is not null ? Colors.DodgerBlue : Colors.Gray;
-			}
-		};
-
 		Content = new ScrollView
 		{
 			Content = new VerticalStackLayout
@@ -144,11 +104,8 @@ public class ClipboardPrefsPage : ContentPage
 
 					Separator(),
 
-					SectionHeader("🔐 Secure Storage"),
-				secureBackendLabel,
-					new HorizontalStackLayout { Spacing = 8, Children = { secureKey, secureValue } },
-					new HorizontalStackLayout { Spacing = 8, Children = { secSaveButton, secLoadButton } },
-					secureResult,
+					SectionHeader("🔐 SecureStorage"),
+					new Label { Text = "The .NET MAUI Microsoft.Maui.Storage.SecureStorage API is not supported on Linux.", TextColor = Colors.Gray },
 				}
 			}
 		};

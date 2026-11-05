@@ -14,6 +14,25 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 public static class MenuBarManager
 {
     static MacOSMenuBarOptions _options = new();
+    static readonly Lazy<NSBundle> _menuResources = new(() =>
+    {
+        var path = NSBundle.MainBundle.PathForResource("MauiMenuBar", "bundle")
+            ?? throw new InvalidOperationException("The MauiMenuBar.bundle localization resources are missing.");
+        return NSBundle.FromPath(path)
+            ?? throw new InvalidOperationException($"Cannot load menu localization bundle '{path}'.");
+    });
+
+    static string Localize(string key) =>
+        NSBundle.MainBundle.GetLocalizedString(key,
+            _menuResources.Value.GetLocalizedString(key, key, "MenuBar"), "MauiMenuBar");
+
+    static void ClearWindowMenu()
+    {
+        // AppKit accepts nil here, but the .NET property setter rejects it.
+        using var key = new NSString("windowsMenu");
+        using var values = NSDictionary.FromObjectAndKey(NSNull.Null, key);
+        NSApplication.SharedApplication.SetValuesForKeysWithDictionary(values);
+    }
 
     /// <summary>
     /// Sets up the default macOS menu bar with standard App, Edit, and Window menus.
@@ -22,6 +41,7 @@ public static class MenuBarManager
     public static void SetupDefaultMenuBar(MacOSMenuBarOptions? options = null)
     {
         _options = options ?? new MacOSMenuBarOptions();
+        ClearWindowMenu();
 
         var mainMenu = new NSMenu();
         NSApplication.SharedApplication.MainMenu = mainMenu;
@@ -46,6 +66,7 @@ public static class MenuBarManager
 
         // Keep the application menu (index 0) if it exists
         var appMenuItem = mainMenu.Count > 0 ? mainMenu.ItemAt(0) : null;
+        ClearWindowMenu();
         mainMenu.RemoveAllItems();
 
         if (appMenuItem != null)
@@ -88,10 +109,12 @@ public static class MenuBarManager
         // Re-append default Edit/Window menus unless overridden by custom items
         if (_options.IncludeDefaultMenus)
         {
-            if (_options.IncludeDefaultEditMenu && !customTitles.Contains("Edit"))
+            if (_options.IncludeDefaultEditMenu &&
+                !customTitles.Contains("Edit") && !customTitles.Contains(Localize("Edit")))
                 AddDefaultEditMenu(mainMenu);
 
-            if (_options.IncludeDefaultWindowMenu && !customTitles.Contains("Window"))
+            if (_options.IncludeDefaultWindowMenu &&
+                !customTitles.Contains("Window") && !customTitles.Contains(Localize("Window")))
                 AddDefaultWindowMenu(mainMenu);
         }
     }
@@ -141,12 +164,11 @@ public static class MenuBarManager
 
     static string GetAppName()
     {
-        var infoDict = NSBundle.MainBundle.InfoDictionary;
-        if (infoDict != null)
-        {
-            if (infoDict.TryGetValue(new NSString("CFBundleName"), out var name) && name is NSString nsName)
-                return nsName.ToString();
-        }
+        var bundle = NSBundle.MainBundle;
+        if (bundle.ObjectForInfoDictionary("CFBundleDisplayName") is NSString displayName)
+            return displayName.ToString();
+        if (bundle.ObjectForInfoDictionary("CFBundleName") is NSString name)
+            return name.ToString();
         return NSProcessInfo.ProcessInfo.ProcessName;
     }
 
@@ -157,34 +179,34 @@ public static class MenuBarManager
         var appSubmenu = new NSMenu();
 
         appSubmenu.AddItem(new NSMenuItem(
-            $"About {appName}",
+            Localize("AboutApp").Replace("{0}", appName, StringComparison.Ordinal),
             new ObjCRuntime.Selector("orderFrontStandardAboutPanel:"),
             string.Empty));
 
         appSubmenu.AddItem(NSMenuItem.SeparatorItem);
 
         var hideItem = new NSMenuItem(
-            $"Hide {appName}",
+            Localize("HideApp").Replace("{0}", appName, StringComparison.Ordinal),
             new ObjCRuntime.Selector("hide:"),
             "h");
         appSubmenu.AddItem(hideItem);
 
         var hideOthersItem = new NSMenuItem(
-            "Hide Others",
+            Localize("HideOthers"),
             new ObjCRuntime.Selector("hideOtherApplications:"),
             "h");
         hideOthersItem.KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask;
         appSubmenu.AddItem(hideOthersItem);
 
         appSubmenu.AddItem(new NSMenuItem(
-            "Show All",
+            Localize("ShowAll"),
             new ObjCRuntime.Selector("unhideAllApplications:"),
             string.Empty));
 
         appSubmenu.AddItem(NSMenuItem.SeparatorItem);
 
         appSubmenu.AddItem(new NSMenuItem(
-            $"Quit {appName}",
+            Localize("QuitApp").Replace("{0}", appName, StringComparison.Ordinal),
             new ObjCRuntime.Selector("terminate:"),
             "q"));
 
@@ -194,22 +216,22 @@ public static class MenuBarManager
 
     static void AddDefaultEditMenu(NSMenu mainMenu)
     {
-        var editMenuItem = new NSMenuItem("Edit");
-        var editMenu = new NSMenu("Edit");
+        var editMenuItem = new NSMenuItem(Localize("Edit"));
+        var editMenu = new NSMenu(Localize("Edit"));
 
-        editMenu.AddItem(new NSMenuItem("Undo", new ObjCRuntime.Selector("undo:"), "z"));
+        editMenu.AddItem(new NSMenuItem(Localize("Undo"), new ObjCRuntime.Selector("undo:"), "z"));
 
-        var redoItem = new NSMenuItem("Redo", new ObjCRuntime.Selector("redo:"), "z");
+        var redoItem = new NSMenuItem(Localize("Redo"), new ObjCRuntime.Selector("redo:"), "z");
         redoItem.KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ShiftKeyMask;
         editMenu.AddItem(redoItem);
 
         editMenu.AddItem(NSMenuItem.SeparatorItem);
 
-        editMenu.AddItem(new NSMenuItem("Cut", new ObjCRuntime.Selector("cut:"), "x"));
-        editMenu.AddItem(new NSMenuItem("Copy", new ObjCRuntime.Selector("copy:"), "c"));
-        editMenu.AddItem(new NSMenuItem("Paste", new ObjCRuntime.Selector("paste:"), "v"));
-        editMenu.AddItem(new NSMenuItem("Delete", new ObjCRuntime.Selector("delete:"), string.Empty));
-        editMenu.AddItem(new NSMenuItem("Select All", new ObjCRuntime.Selector("selectAll:"), "a"));
+        editMenu.AddItem(new NSMenuItem(Localize("Cut"), new ObjCRuntime.Selector("cut:"), "x"));
+        editMenu.AddItem(new NSMenuItem(Localize("Copy"), new ObjCRuntime.Selector("copy:"), "c"));
+        editMenu.AddItem(new NSMenuItem(Localize("Paste"), new ObjCRuntime.Selector("paste:"), "v"));
+        editMenu.AddItem(new NSMenuItem(Localize("Delete"), new ObjCRuntime.Selector("delete:"), string.Empty));
+        editMenu.AddItem(new NSMenuItem(Localize("SelectAll"), new ObjCRuntime.Selector("selectAll:"), "a"));
 
         editMenuItem.Submenu = editMenu;
         mainMenu.AddItem(editMenuItem);
@@ -217,22 +239,22 @@ public static class MenuBarManager
 
     static void AddDefaultWindowMenu(NSMenu mainMenu)
     {
-        var windowMenuItem = new NSMenuItem("Window");
-        var windowMenu = new NSMenu("Window");
+        var windowMenuItem = new NSMenuItem(Localize("Window"));
+        var windowMenu = new NSMenu(Localize("Window"));
 
-        windowMenu.AddItem(new NSMenuItem("Minimize", new ObjCRuntime.Selector("performMiniaturize:"), "m"));
-        windowMenu.AddItem(new NSMenuItem("Zoom", new ObjCRuntime.Selector("performZoom:"), string.Empty));
-
+        windowMenu.AddItem(new NSMenuItem(Localize("Minimize"), new ObjCRuntime.Selector("performMiniaturize:"), "m"));
+        windowMenu.AddItem(new NSMenuItem(Localize("Zoom"), new ObjCRuntime.Selector("performZoom:"), string.Empty));
         windowMenu.AddItem(NSMenuItem.SeparatorItem);
-
-        var fullScreenItem = new NSMenuItem("Toggle Full Screen", new ObjCRuntime.Selector("toggleFullScreen:"), "f");
-        fullScreenItem.KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ControlKeyMask;
+        var fullScreenItem = new NSMenuItem(Localize("EnterFullScreen"), new ObjCRuntime.Selector("toggleFullScreen:"), "f")
+        {
+            KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ControlKeyMask
+        };
         windowMenu.AddItem(fullScreenItem);
 
         windowMenuItem.Submenu = windowMenu;
         mainMenu.AddItem(windowMenuItem);
 
-        // Let macOS auto-add open windows to this menu
+        // Register the native Window menu so AppKit can manage the window list and update commands.
         NSApplication.SharedApplication.WindowsMenu = windowMenu;
     }
 

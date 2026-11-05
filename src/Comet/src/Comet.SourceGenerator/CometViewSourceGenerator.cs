@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 namespace Comet.SourceGenerator
 {
 	[Generator]
-	public class CometViewSourceGenerator : ISourceGenerator
+	public class CometViewSourceGenerator : IIncrementalGenerator
 	{
 		private const string attributeSource = @"
   	[System.AttributeUsage(System.AttributeTargets.Assembly, AllowMultiple = true)]
@@ -244,25 +244,39 @@ namespace {{NameSpace}} {
 			};
 		}
 
-		Stubble.Core.StubbleVisitorRenderer stubble = new StubbleBuilder().Build();
-		public void Execute(GeneratorExecutionContext context)
+		static readonly Stubble.Core.StubbleVisitorRenderer stubble = new StubbleBuilder().Build();
+
+		public void Initialize(IncrementalGeneratorInitializationContext context)
 		{
+			context.RegisterPostInitializationOutput(pi => pi.AddSource("CometGenerationAttribute__", attributeSource));
 
-			var rx = (SyntaxReceiver)context.SyntaxContextReceiver!;
+			var templateInfos = context.SyntaxProvider.CreateSyntaxProvider(
+					predicate: static (node, _) => node is AttributeSyntax attrib && IsCometGenerateAttributeName(attrib),
+					transform: static (ctx, _) => GetTemplateInfo(ctx))
+				.Where(static info => info != null);
 
-			foreach (var item in rx.TemplateInfo)
+			context.RegisterSourceOutput(templateInfos, static (spc, item) =>
 			{
-				var input = GetModelData(item.name, item.interfaceType, item.keyProperties, item.nameSpace, item.baseClass, item.propertyNameTransforms, item.propertyDefaultValues, item.skippedProperties);
+				var input = GetModelData(item.Name, item.InterfaceType, item.KeyProperties, item.NameSpace, item.BaseClass, item.PropertyNameTransforms, item.PropertyDefaultValues, item.SkippedProperties);
 				var classSource = stubble.Render(classMustacheTemplate, input);
 
-				context.AddSource($"{item.name}.g.cs", classSource);
+				spc.AddSource($"{item.Name}.g.cs", classSource);
 
 				var extensionSource = stubble.Render(extensionMustacheTemplate, input);
-				context.AddSource($"{item.name}Extension.g.cs", extensionSource);
+				spc.AddSource($"{item.Name}Extension.g.cs", extensionSource);
 
 				var factorySource = stubble.Render(factoryMustacheTemplate, input);
-				context.AddSource($"{item.name}Factory.g.cs", factorySource);
-			}
+				spc.AddSource($"{item.Name}Factory.g.cs", factorySource);
+			});
+		}
+
+		static bool IsCometGenerateAttributeName(AttributeSyntax attrib)
+		{
+			var name = attrib.Name;
+			while (name is QualifiedNameSyntax qn)
+				name = qn.Right;
+			var id = (name as SimpleNameSyntax)?.Identifier.ValueText;
+			return id == "CometGenerate" || id == "CometGenerateAttribute";
 		}
 		public static string GetFullName(ISymbol symbol, string ending = null)
 		{
@@ -288,7 +302,7 @@ namespace {{NameSpace}} {
 			return $"{first}.{second}";
 		}
 
-		dynamic GetModelData(string name, INamedTypeSymbol interfaceType, List<string> keyProperties, string nameSpace, INamedTypeSymbol baseClass, Dictionary<string, string> propertyNameTransforms, Dictionary<string, string> propertyDefaultValues, List<string> skippedProperties)
+		static dynamic GetModelData(string name, INamedTypeSymbol interfaceType, List<string> keyProperties, string nameSpace, INamedTypeSymbol baseClass, Dictionary<string, string> propertyNameTransforms, Dictionary<string, string> propertyDefaultValues, List<string> skippedProperties)
 		{
 			var interfaces = interfaceType.AllInterfaces.ToList();
 			interfaces.Insert(0, interfaceType);
@@ -570,181 +584,176 @@ namespace {{NameSpace}} {
 			return input;
 		}
 
-		public void Initialize(GeneratorInitializationContext context)
+		sealed class TemplateInfo
 		{
-			//if (!Debugger.IsAttached)
-			//{
-			//	Debugger.Launch();
-			//}
-
-			context.RegisterForPostInitialization((pi) => pi.AddSource("CometGenerationAttribute__", attributeSource));
-			context.RegisterForSyntaxNotifications(() => new SyntaxReceiver());
+			public string Name;
+			public INamedTypeSymbol InterfaceType;
+			public List<string> KeyProperties;
+			public string NameSpace;
+			public INamedTypeSymbol BaseClass;
+			public Dictionary<string, string> PropertyNameTransforms;
+			public Dictionary<string, string> PropertyDefaultValues;
+			public List<string> SkippedProperties;
 		}
-		static INamedTypeSymbol cometViewSymbol;
-		class SyntaxReceiver : ISyntaxContextReceiver
+
+		static TemplateInfo GetTemplateInfo(GeneratorSyntaxContext context)
 		{
-			public List<(string name, INamedTypeSymbol interfaceType, List<string> keyProperties, string nameSpace, INamedTypeSymbol baseClass, Dictionary<string, string> propertyNameTransforms, Dictionary<string, string> propertyDefaultValues, List<string> skippedProperties)> TemplateInfo = new();
+			var cometView = context.SemanticModel.Compilation.GetTypeByMetadataName("Comet.View");
+			var attrib = context.Node as AttributeSyntax;
+			if (attrib == null)
+				return null;
+			if (context.SemanticModel.GetTypeInfo(attrib).Type?.ToDisplayString() != "CometGenerateAttribute")
+				return null;
 
-			public void OnVisitSyntaxNode(GeneratorSyntaxContext context)
+			var f = attrib.ArgumentList.Arguments[0].Expression as TypeOfExpressionSyntax;
+			var realClass = GetType(context, f, cometView);
+
+			var keyProperties = new List<string>();
+			string name = null;
+			string nameSpace = null;
+			INamedTypeSymbol baseClass = cometView;
+			List<string> defaultValues = new();
+			List<string> skippedProperties = new();
+
+			foreach (var arg in attrib.ArgumentList.Arguments.Skip(1))
 			{
-				var cometView = context.SemanticModel.Compilation.GetTypeByMetadataName("Comet.View");
-				cometViewSymbol ??= cometView;
-				var attrib = context.Node as AttributeSyntax;
-				if (attrib != null)
+				var constVal = context.SemanticModel.GetConstantValue(arg.Expression);
+				var symbol = context.SemanticModel.GetSymbolInfo(arg.Expression);
+				var argName = arg.NameEquals?.Name.Identifier.ValueText;
+				if (argName == "ClassName")
 				{
-					var type = context.SemanticModel.GetTypeInfo(attrib);
-					if (context.SemanticModel.GetTypeInfo(attrib).Type?.ToDisplayString() == "CometGenerateAttribute")
+					name = constVal.ToString();
+					continue;
+				}
+
+				if (argName == "Namespace")
+				{
+					nameSpace = constVal.ToString();
+					continue;
+				}
+				if (argName == "DefaultValues")
+				{
+					var iac = (arg.Expression as ImplicitArrayCreationExpressionSyntax).Initializer.Expressions;
+					foreach (var i in iac)
 					{
-						{
-
-							var f = attrib.ArgumentList.Arguments[0].Expression as TypeOfExpressionSyntax;
-							var realClass = GetType(context, f);
-
-							var keyProperties = new List<string>();
-							string name = null;
-							string nameSpace = null;
-							INamedTypeSymbol baseClass = cometView;
-							List<string> defaultValues = new();
-							List<string> skippedProperties = new();
-
-							foreach (var arg in attrib.ArgumentList.Arguments.Skip(1))
-							{
-								var constVal = context.SemanticModel.GetConstantValue(arg.Expression);
-								var symbol = context.SemanticModel.GetSymbolInfo(arg.Expression);
-								var argName = arg.NameEquals?.Name.Identifier.ValueText;
-								if (argName == "ClassName")
-								{
-									name = constVal.ToString();
-									continue;
-								}
-
-								if (argName == "Namespace")
-								{
-									nameSpace = constVal.ToString();
-									continue;
-								}
-								if (argName == "DefaultValues")
-								{
-									var iac = (arg.Expression as ImplicitArrayCreationExpressionSyntax).Initializer.Expressions;
-									foreach (var i in iac)
-									{
-										var fif = context.SemanticModel.GetConstantValue(i);
-										defaultValues.Add(fif.ToString());
-									}
-								}
-								if (argName == "Skip")
-								{
-									var iac = (arg.Expression as ImplicitArrayCreationExpressionSyntax).Initializer.Expressions;
-									foreach (var i in iac)
-									{
-										var fif = context.SemanticModel.GetConstantValue(i);
-										skippedProperties.Add(fif.ToString());
-									}
-								}
-								//Strings which can only be key properties
-								if (arg.Expression is LiteralExpressionSyntax || (arg.Expression is InvocationExpressionSyntax && constVal.HasValue) || arg.Expression is InterpolatedStringExpressionSyntax)
-								{
-									keyProperties.Add(constVal.ToString());
-									continue;
-								}
-
-
-								if (arg.Expression is TypeOfExpressionSyntax toe)
-								{
-									//this is our base class!
-									baseClass = GetType(context, toe);
-									continue;
-								}
-
-								var exp = arg.Expression;
-							}
-							name ??= realClass.Name?.TrimStart('I');
-							nameSpace ??= GetFullName(realClass.ContainingNamespace);
-
-							Dictionary<string, string> propertyTransform = new();
-							Dictionary<string, string> propertyDefaultValues = new();
-							(bool hasParts, string key) getParts(string oldKey)
-							{
-								var hasName = oldKey.Contains(':');
-								var hasValue = oldKey.Contains('=');
-
-								if (!hasName && !hasValue)
-								{
-									return (false, null);
-								}
-								var parts = oldKey.Split(':', '=');
-								var key = parts[0].Trim();
-								var newName = hasName ? parts[1].Trim() : null;
-								var defaultValue = hasValue ? parts.Last().Trim() : null;
-
-
-								if (newName != null)
-									propertyTransform[key] = newName;
-
-								if (defaultValue != null)
-									propertyDefaultValues[key] = defaultValue;
-								return (true, key);
-							}
-							foreach (var oldKey in keyProperties.ToList())
-							{
-								(bool hasParts, string key) = getParts(oldKey);
-								if (!hasParts)
-								{
-									continue;
-								}
-								var oldIndex = keyProperties.IndexOf(oldKey);
-								keyProperties.RemoveAt(oldIndex);
-								keyProperties.Insert(oldIndex, key);
-							}
-
-
-							foreach (var oldKey in defaultValues)
-							{
-								(bool hasParts, string key) = getParts(oldKey);
-							}
-							foreach (var oldKey in skippedProperties.ToList())
-							{
-								(bool hasParts, string key) = getParts(oldKey);
-								if (!hasParts)
-								{
-									continue;
-								}
-								skippedProperties.Remove(oldKey);
-								skippedProperties.Add(key);
-							}
-
-
-							//string name = context.SemanticModel.GetTypeInfo(attrib.ArgumentList.Arguments[0].Expression).ToString();
-							//string template = context.SemanticModel.GetConstantValue(attrib.ArgumentList.Arguments[1].Expression).ToString();
-							//string hash = context.SemanticModel.GetConstantValue(attrib.ArgumentList.Arguments[2].Expression).ToString();
-
-							TemplateInfo.Add((name, realClass, keyProperties, nameSpace, baseClass, propertyTransform, propertyDefaultValues, skippedProperties));
-						}
+						var fif = context.SemanticModel.GetConstantValue(i);
+						defaultValues.Add(fif.ToString());
 					}
 				}
-			}
-
-			static INamedTypeSymbol GetType(GeneratorSyntaxContext context, TypeOfExpressionSyntax expression)
-			{
-				var interfaceType = context.SemanticModel.GetSymbolInfo(expression.Type);
-				var symbol = interfaceType.Symbol;
-				if (symbol == null && interfaceType.CandidateSymbols.Length > 1)
+				if (argName == "Skip")
 				{
-					symbol = interfaceType.CandidateSymbols.OfType<INamedTypeSymbol>().Where(x=> IsSublcassOfCometView(x)).FirstOrDefault();
+					var iac = (arg.Expression as ImplicitArrayCreationExpressionSyntax).Initializer.Expressions;
+					foreach (var i in iac)
+					{
+						var fif = context.SemanticModel.GetConstantValue(i);
+						skippedProperties.Add(fif.ToString());
+					}
 				}
-				var s = GetFullName(symbol);
-				return context.SemanticModel.Compilation.GetTypeByMetadataName(s);
+				//Strings which can only be key properties
+				if (arg.Expression is LiteralExpressionSyntax || (arg.Expression is InvocationExpressionSyntax && constVal.HasValue) || arg.Expression is InterpolatedStringExpressionSyntax)
+				{
+					keyProperties.Add(constVal.ToString());
+					continue;
+				}
+
+
+				if (arg.Expression is TypeOfExpressionSyntax toe)
+				{
+					//this is our base class!
+					baseClass = GetType(context, toe, cometView);
+					continue;
+				}
+
+				var exp = arg.Expression;
 			}
-			static bool IsSublcassOfCometView(INamedTypeSymbol symbol)
+			name ??= realClass.Name?.TrimStart('I');
+			nameSpace ??= GetFullName(realClass.ContainingNamespace);
+
+			Dictionary<string, string> propertyTransform = new();
+			Dictionary<string, string> propertyDefaultValues = new();
+			(bool hasParts, string key) getParts(string oldKey)
 			{
-				if (symbol.BaseType == null)
-					return false;
-				if (symbol.BaseType == cometViewSymbol)
-					return true;
+				var hasName = oldKey.Contains(':');
+				var hasValue = oldKey.Contains('=');
 
-				return IsSublcassOfCometView(symbol.BaseType);
+				if (!hasName && !hasValue)
+				{
+					return (false, null);
+				}
+				var parts = oldKey.Split(':', '=');
+				var key = parts[0].Trim();
+				var newName = hasName ? parts[1].Trim() : null;
+				var defaultValue = hasValue ? parts.Last().Trim() : null;
+
+
+				if (newName != null)
+					propertyTransform[key] = newName;
+
+				if (defaultValue != null)
+					propertyDefaultValues[key] = defaultValue;
+				return (true, key);
+			}
+			foreach (var oldKey in keyProperties.ToList())
+			{
+				(bool hasParts, string key) = getParts(oldKey);
+				if (!hasParts)
+				{
+					continue;
+				}
+				var oldIndex = keyProperties.IndexOf(oldKey);
+				keyProperties.RemoveAt(oldIndex);
+				keyProperties.Insert(oldIndex, key);
 			}
 
+
+			foreach (var oldKey in defaultValues)
+			{
+				(bool hasParts, string key) = getParts(oldKey);
+			}
+			foreach (var oldKey in skippedProperties.ToList())
+			{
+				(bool hasParts, string key) = getParts(oldKey);
+				if (!hasParts)
+				{
+					continue;
+				}
+				skippedProperties.Remove(oldKey);
+				skippedProperties.Add(key);
+			}
+
+			return new TemplateInfo
+			{
+				Name = name,
+				InterfaceType = realClass,
+				KeyProperties = keyProperties,
+				NameSpace = nameSpace,
+				BaseClass = baseClass,
+				PropertyNameTransforms = propertyTransform,
+				PropertyDefaultValues = propertyDefaultValues,
+				SkippedProperties = skippedProperties,
+			};
+		}
+
+		static INamedTypeSymbol GetType(GeneratorSyntaxContext context, TypeOfExpressionSyntax expression, INamedTypeSymbol cometViewSymbol)
+		{
+			var interfaceType = context.SemanticModel.GetSymbolInfo(expression.Type);
+			var symbol = interfaceType.Symbol;
+			if (symbol == null && interfaceType.CandidateSymbols.Length > 1)
+			{
+				symbol = interfaceType.CandidateSymbols.OfType<INamedTypeSymbol>().Where(x => IsSublcassOfCometView(x, cometViewSymbol)).FirstOrDefault();
+			}
+			var s = GetFullName(symbol);
+			return context.SemanticModel.Compilation.GetTypeByMetadataName(s);
+		}
+
+		static bool IsSublcassOfCometView(INamedTypeSymbol symbol, INamedTypeSymbol cometViewSymbol)
+		{
+			if (symbol.BaseType == null)
+				return false;
+			if (SymbolEqualityComparer.Default.Equals(symbol.BaseType, cometViewSymbol))
+				return true;
+
+			return IsSublcassOfCometView(symbol.BaseType, cometViewSymbol);
 		}
 	}
 }

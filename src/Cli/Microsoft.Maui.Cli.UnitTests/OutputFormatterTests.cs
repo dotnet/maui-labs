@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Maui.Cli.Errors;
 using Microsoft.Maui.Cli.Commands;
@@ -85,6 +86,71 @@ public class OutputFormatterTests
 		Assert.Contains("\"command\": \"sdkmanager\"", output);
 		Assert.Contains("\"arguments\": \"--licenses\"", output);
 		Assert.Contains("\"full_command\": \"sdkmanager --licenses\"", output);
+	}
+
+	[Theory]
+	[InlineData("nettrace", false)]
+	[InlineData("nettrace", true)]
+	[InlineData("speedscope", false)]
+	[InlineData("speedscope", true)]
+	[InlineData("mibc", false)]
+	[InlineData("mibc", true)]
+	public void JsonOutputFormatter_WriteMauiProfileResult_ProducesExpectedJson(string format, bool usedStoppingEvent)
+	{
+		using var writer = new StringWriter();
+		var formatter = new JsonOutputFormatter(writer);
+		var outputPath = format switch
+		{
+			"speedscope" => "/profiles/MyApp.speedscope.json",
+			"mibc" => "/profiles/MyApp.mibc",
+			_ => "/profiles/MyApp.nettrace"
+		};
+		var rawTracePath = format == "nettrace" ? null : "/profiles/MyApp.nettrace";
+		var startedAtUtc = new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
+		var completedAtUtc = startedAtUtc.AddSeconds(15);
+
+		formatter.Write(new MauiProfileResult
+		{
+			ProjectPath = "/projects/MyApp/MyApp.csproj",
+			ProjectName = "MyApp",
+			Framework = "net11.0-android",
+			Platform = "android",
+			DeviceId = "device-123",
+			DeviceName = "Pixel 5",
+			Configuration = "Release",
+			Format = format,
+			OutputPath = outputPath,
+			RawTracePath = rawTracePath,
+			DsrouterKind = "android",
+			DiagnosticAddress = "127.0.0.1",
+			DiagnosticPort = 9000,
+			UsedStoppingEvent = usedStoppingEvent,
+			StartedAtUtc = startedAtUtc,
+			CompletedAtUtc = completedAtUtc
+		});
+
+		using var document = JsonDocument.Parse(writer.ToString());
+		var result = document.RootElement;
+		Assert.Equal(rawTracePath is null ? 15 : 16, result.EnumerateObject().Count());
+		Assert.Equal("/projects/MyApp/MyApp.csproj", result.GetProperty("project_path").GetString());
+		Assert.Equal("MyApp", result.GetProperty("project_name").GetString());
+		Assert.Equal("net11.0-android", result.GetProperty("framework").GetString());
+		Assert.Equal("android", result.GetProperty("platform").GetString());
+		Assert.Equal("device-123", result.GetProperty("device_id").GetString());
+		Assert.Equal("Pixel 5", result.GetProperty("device_name").GetString());
+		Assert.Equal("Release", result.GetProperty("configuration").GetString());
+		Assert.Equal(format, result.GetProperty("format").GetString());
+		Assert.Equal(outputPath, result.GetProperty("output_path").GetString());
+		if (rawTracePath is null)
+			Assert.False(result.TryGetProperty("raw_trace_path", out _));
+		else
+			Assert.Equal(rawTracePath, result.GetProperty("raw_trace_path").GetString());
+		Assert.Equal("android", result.GetProperty("dsrouter_kind").GetString());
+		Assert.Equal("127.0.0.1", result.GetProperty("diagnostic_address").GetString());
+		Assert.Equal(9000, result.GetProperty("diagnostic_port").GetInt32());
+		Assert.Equal(usedStoppingEvent, result.GetProperty("used_stopping_event").GetBoolean());
+		Assert.Equal("2026-10-08T12:00:00+00:00", result.GetProperty("started_at_utc").GetString());
+		Assert.Equal("2026-10-08T12:00:15+00:00", result.GetProperty("completed_at_utc").GetString());
 	}
 
 	[Fact]

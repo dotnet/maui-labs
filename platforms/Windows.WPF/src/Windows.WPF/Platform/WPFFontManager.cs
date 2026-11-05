@@ -1,159 +1,199 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
+using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Media;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Controls;
 
-namespace Microsoft.Maui.Platforms.Windows.WPF
+namespace Microsoft.Maui.Platforms.Windows.WPF;
+
+/// <summary>Resolves MAUI fonts to native WPF families.</summary>
+public class WPFFontManager : IFontManager
 {
-	/// <summary>
-	/// WPF implementation of IFontManager — resolves MAUI Font to WPF FontFamily + size + weight + style.
-	/// </summary>
-	public class WPFFontManager : IFontManager
+	readonly ConcurrentDictionary<string, (FontFamily Family, bool Resolved)> _fontCache = new();
+	readonly ConcurrentDictionary<string, byte> _warnedFamilies = new();
+	readonly IFontRegistrar _fontRegistrar;
+	readonly ILogger<WPFFontManager>? _logger;
+
+	public WPFFontManager(IFontRegistrar fontRegistrar, ILogger<WPFFontManager>? logger = null)
 	{
-		readonly ConcurrentDictionary<string, FontFamily> _fontCache = new();
-		readonly IFontRegistrar _fontRegistrar;
-		readonly ILogger<WPFFontManager>? _logger;
-
-		public WPFFontManager(IFontRegistrar fontRegistrar, ILogger<WPFFontManager>? logger = null)
-		{
-			_fontRegistrar = fontRegistrar;
-			_logger = logger;
-		}
-
-		public double DefaultFontSize => 14.0;
-
-		public FontFamily DefaultFontFamily => SystemFonts.MessageFontFamily;
-
-		public FontFamily GetFontFamily(Font font)
-		{
-			if (string.IsNullOrEmpty(font.Family))
-				return DefaultFontFamily;
-
-			return _fontCache.GetOrAdd(font.Family, family =>
-			{
-				var fontPath = _fontRegistrar.GetFont(family);
-				if (!string.IsNullOrEmpty(fontPath))
-				{
-					try
-					{
-						if (File.Exists(fontPath))
-						{
-							var dir = Path.GetDirectoryName(fontPath)!;
-							var fontName = Path.GetFileNameWithoutExtension(fontPath);
-							return new FontFamily(new Uri(dir + "/"), $"./{Path.GetFileName(fontPath)}#{fontName}");
-						}
-					}
-					catch (Exception ex)
-					{
-						_logger?.LogWarning(ex, "Failed to load embedded font: {FontPath}", fontPath);
-					}
-				}
-
-				try
-				{
-					return new FontFamily(family);
-				}
-				catch
-				{
-					_logger?.LogWarning("Font family not found: {Family}", family);
-					return DefaultFontFamily;
-				}
-			});
-		}
-
-		public double GetFontSize(Font font, double defaultFontSize = 0)
-		{
-			if (font.Size > 0)
-				return font.Size;
-			return defaultFontSize > 0 ? defaultFontSize : DefaultFontSize;
-		}
+		_fontRegistrar = fontRegistrar;
+		_logger = logger;
 	}
 
-	/// <summary>
-	/// WPF implementation of IFontRegistrar — manages embedded font registration.
-	/// </summary>
-	public class WPFFontRegistrar : IFontRegistrar
-	{
-		readonly ConcurrentDictionary<string, string> _fonts = new();
-		readonly ConcurrentDictionary<string, string> _aliasFonts = new();
-		string? _fontDir;
+	public double DefaultFontSize => 14.0;
+	public FontFamily DefaultFontFamily => SystemFonts.MessageFontFamily;
 
-		string FontDir
+	public FontFamily GetFontFamily(Font font)
+		=> TryGetFontFamily(font, out var family) ? family : DefaultFontFamily;
+
+	internal bool TryGetFontFamily(Font font, out FontFamily family)
+	{
+		family = DefaultFontFamily;
+		if (string.IsNullOrEmpty(font.Family))
+			return true;
+		if (_fontCache.TryGetValue(font.Family, out var cached))
 		{
-			get
+			family = cached.Family;
+			return cached.Resolved;
+		}
+
+		try
+		{
+			var path = _fontRegistrar.GetFont(font.Family);
+			if (path != null)
 			{
-				if (_fontDir == null)
-				{
-					_fontDir = Path.Combine(Path.GetTempPath(), "MauiWPFFonts", AppDomain.CurrentDomain.FriendlyName);
-					Directory.CreateDirectory(_fontDir);
-				}
-				return _fontDir;
+				// Let WPF determine its family name (which can differ from GlyphTypeface.FamilyNames).
+				var absolutePath = Path.GetFullPath(path, AppContext.BaseDirectory);
+				family = Fonts.GetFontFamilies(new Uri(absolutePath).AbsoluteUri).FirstOrDefault(candidate =>
+					candidate.GetTypefaces().Any(face => face.TryGetGlyphTypeface(out var glyph) &&
+						string.Equals(glyph.FontUri.LocalPath, absolutePath, StringComparison.OrdinalIgnoreCase)))
+					?? throw new FileNotFoundException($"No native font family found in '{absolutePath}'.", absolutePath);
 			}
-		}
+			else
+				family = new FontFamily(font.Family);
 
-		public string? GetFont(string font)
-		{
-			if (_aliasFonts.TryGetValue(font, out var aliasPath))
-				return aliasPath;
-			if (_fonts.TryGetValue(font, out var path))
-				return path;
-			return null;
-		}
+			// Composite families map text to other fonts rather than a single physical typeface.
+			if (family.FamilyMaps.Count == 0 && !family.GetTypefaces().Any(face => face.TryGetGlyphTypeface(out _)))
+				throw new FileNotFoundException($"No native typeface found for '{font.Family}'.", path);
 
-		public void Register(string filename, string? alias, System.Reflection.Assembly assembly)
-		{
-			if (!string.IsNullOrEmpty(alias))
-				_aliasFonts[alias!] = filename;
-			_fonts[filename] = filename;
+			_fontCache.TryAdd(font.Family, (family, true));
+			return true;
 		}
-
-		public void Register(string filename, string? alias)
+		catch (Exception ex) when (ex is IOException or FileFormatException or ArgumentException or InvalidOperationException or NotSupportedException or UnauthorizedAccessException)
 		{
-			if (!string.IsNullOrEmpty(alias))
-				_aliasFonts[alias!] = filename;
-			_fonts[filename] = filename;
+			family = DefaultFontFamily;
+			if (ex is FileNotFoundException)
+				_fontCache.TryAdd(font.Family, (family, false));
+			if (_warnedFamilies.TryAdd(font.Family, 0))
+			{
+				if (_logger != null)
+					_logger.LogWarning(ex, "Unable to resolve font {Family}; using the default font for text.", font.Family);
+				else
+					System.Diagnostics.Trace.TraceWarning("Unable to resolve font {0}: {1}", font.Family, ex.Message);
+			}
+			return false;
 		}
 	}
 
-	/// <summary>
-	/// WPF implementation of IEmbeddedFontLoader.
-	/// </summary>
-	public class WPFEmbeddedFontLoader : IEmbeddedFontLoader
+	internal static WPFFontManager FromContext(IMauiContext? context)
+		=> context?.Services.GetRequiredService<IFontManager>() as WPFFontManager
+			?? context?.Services.GetRequiredService<WPFFontManager>()
+			?? throw new InvalidOperationException("A WPF font manager is required to resolve fonts.");
+
+	internal static void ApplyFontFamily(DependencyObject target, Font font, IMauiContext? context)
 	{
-		readonly IFontRegistrar _registrar;
+		if (string.IsNullOrEmpty(font.Family))
+			target.ClearValue(System.Windows.Documents.TextElement.FontFamilyProperty);
+		else
+			target.SetValue(System.Windows.Documents.TextElement.FontFamilyProperty, FromContext(context).GetFontFamily(font));
+	}
 
-		public WPFEmbeddedFontLoader(IFontRegistrar registrar)
-		{
-			_registrar = registrar;
-		}
+	public double GetFontSize(Font font, double defaultFontSize = 0)
+		=> font.Size > 0 ? font.Size : defaultFontSize > 0 ? defaultFontSize : DefaultFontSize;
+}
 
-		public string? LoadFont(EmbeddedFont font)
+/// <summary>Maps registered filenames and aliases to app-local or extracted font files.</summary>
+public class WPFFontRegistrar : IFontRegistrar
+{
+	readonly ConcurrentDictionary<string, Lazy<string>> _fonts = new(StringComparer.Ordinal);
+	readonly IEmbeddedFontLoader _loader;
+
+	public WPFFontRegistrar() : this(new WPFEmbeddedFontLoader()) { }
+
+	public WPFFontRegistrar(IEmbeddedFontLoader loader)
+	{
+		ArgumentNullException.ThrowIfNull(loader);
+		_loader = loader;
+	}
+
+	public string? GetFont(string font) => _fonts.TryGetValue(font, out var path) ? path.Value : null;
+
+	public void Register(string filename, string? alias, Assembly assembly)
+	{
+		var path = new Lazy<string>(() =>
 		{
+			var names = assembly.GetManifestResourceNames();
+			var resource = names.FirstOrDefault(name => name.Equals(filename, StringComparison.Ordinal));
+			if (resource == null)
+			{
+				var matches = names.Where(name => name.EndsWith("." + filename, StringComparison.OrdinalIgnoreCase)).ToArray();
+				if (matches.Length > 1)
+					throw new FileLoadException($"Embedded font '{filename}' is ambiguous: {string.Join(", ", matches)}. Register its full resource name.");
+				resource = matches.SingleOrDefault();
+			}
+			if (resource == null)
+				throw new FileNotFoundException($"Embedded font '{filename}' was not found in '{assembly.FullName}'.");
+			using var stream = assembly.GetManifestResourceStream(resource)!;
+			return _loader.LoadFont(new EmbeddedFont { FontName = filename, ResourceStream = stream })
+				?? throw new IOException($"Unable to extract embedded font '{filename}'.");
+		}, LazyThreadSafetyMode.PublicationOnly);
+		Register(filename, alias, path);
+	}
+
+	public void Register(string filename, string? alias)
+	{
+		var path = new Lazy<string>(() =>
+		{
+			if (Path.IsPathFullyQualified(filename))
+				return filename;
+			var packagedPath = Path.Combine(AppContext.BaseDirectory, "Resources", "Fonts", Path.GetFileName(filename));
+			return File.Exists(packagedPath) ? packagedPath : Path.GetFullPath(filename, AppContext.BaseDirectory);
+		}, LazyThreadSafetyMode.PublicationOnly);
+		Register(filename, alias, path);
+	}
+
+	void Register(string filename, string? alias, Lazy<string> path)
+	{
+		_fonts[filename] = path;
+		if (!string.IsNullOrEmpty(alias))
+			_fonts[alias] = path;
+	}
+}
+
+/// <summary>Extracts embedded font content without installing system fonts.</summary>
+public class WPFEmbeddedFontLoader : IEmbeddedFontLoader
+{
+	public WPFEmbeddedFontLoader() { }
+
+	// Retained for callers of the original public constructor; extraction does not require a registrar.
+	public WPFEmbeddedFontLoader(IFontRegistrar registrar) { }
+
+	public string? LoadFont(EmbeddedFont font)
+	{
+		ArgumentNullException.ThrowIfNull(font);
+		if (font.ResourceStream == null || string.IsNullOrEmpty(font.FontName))
+			throw new ArgumentException("An embedded font requires a name and resource stream.", nameof(font));
+
+		using var content = new MemoryStream();
+		font.ResourceStream.CopyTo(content);
+		var bytes = content.ToArray();
+		var hash = Convert.ToHexString(SHA256.HashData(bytes));
+		var directory = Path.Combine(Path.GetTempPath(), "MauiWPFFonts", hash);
+		Directory.CreateDirectory(directory);
+		var path = Path.Combine(directory, Path.GetFileName(font.FontName));
+		if (!File.Exists(path))
+		{
+			var temporary = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".tmp");
 			try
 			{
-				if (font.ResourceStream == null || string.IsNullOrEmpty(font.FontName))
-					return null;
-
-				var fontDir = Path.Combine(Path.GetTempPath(), "MauiWPFFonts", AppDomain.CurrentDomain.FriendlyName);
-				Directory.CreateDirectory(fontDir);
-
-				var targetPath = Path.Combine(fontDir, font.FontName);
-				if (!File.Exists(targetPath))
+				File.WriteAllBytes(temporary, bytes);
+				try
 				{
-					using var fs = File.Create(targetPath);
-					font.ResourceStream.CopyTo(fs);
+					File.Move(temporary, path);
 				}
-
-				return targetPath;
+				catch (IOException) when (File.Exists(path))
+				{
+					// Another caller already published this same content-addressed font.
+				}
 			}
-			catch
+			finally
 			{
-				return null;
+				File.Delete(temporary);
 			}
 		}
+		return path;
 	}
 }

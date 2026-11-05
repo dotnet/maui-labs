@@ -16,22 +16,7 @@ public class LinuxAppInfo : IAppInfo
 	public string BuildString => _entry.Value.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
 		?.InformationalVersion ?? VersionString;
 
-	public AppTheme RequestedTheme
-	{
-		get
-		{
-			try
-			{
-				var settings = Gtk.Settings.GetDefault();
-				if (settings is null) return AppTheme.Unspecified;
-				return settings.GtkApplicationPreferDarkTheme ? AppTheme.Dark : AppTheme.Light;
-			}
-			catch
-			{
-				return AppTheme.Unspecified;
-			}
-		}
-	}
+	public AppTheme RequestedTheme => Platform.GtkThemeManager.GetCurrentTheme();
 
 	public AppPackagingModel PackagingModel => AppPackagingModel.Unpackaged;
 	public LayoutDirection RequestedLayoutDirection => LayoutDirection.LeftToRight;

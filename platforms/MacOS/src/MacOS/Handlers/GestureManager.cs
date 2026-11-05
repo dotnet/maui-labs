@@ -58,7 +58,11 @@ public static class GestureManager
                 toRemove.Add(gr);
         }
         foreach (var gr in toRemove)
+        {
+            if (gr is MacOSTapGestureRecognizer tap)
+                tap.Disconnect();
             view.RemoveGestureRecognizer(gr);
+        }
 
         // Remove tracking areas for pointer gestures
         foreach (var area in view.TrackingAreas())
@@ -73,6 +77,7 @@ public static class GestureManager
         var recognizer = new MacOSTapGestureRecognizer(tap)
         {
             NumberOfClicksRequired = (nint)tap.NumberOfTapsRequired,
+            ButtonMask = (nuint)tap.Buttons,
         };
         view.AddGestureRecognizer(recognizer);
 
@@ -130,12 +135,37 @@ public static class GestureManager
 internal class MacOSTapGestureRecognizer : NSClickGestureRecognizer
 {
     readonly TapGestureRecognizer _tapGesture;
+    bool _isConnected;
 
     public MacOSTapGestureRecognizer(TapGestureRecognizer tapGesture)
     {
         _tapGesture = tapGesture;
+        _tapGesture.PropertyChanged += OnTapGesturePropertyChanged;
+        _isConnected = true;
         Action = new ObjCRuntime.Selector("handleTap:");
         Target = this;
+    }
+
+    void OnTapGesturePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TapGestureRecognizer.Buttons))
+            ButtonMask = (nuint)_tapGesture.Buttons;
+    }
+
+    public void Disconnect()
+    {
+        if (!_isConnected)
+            return;
+
+        _tapGesture.PropertyChanged -= OnTapGesturePropertyChanged;
+        _isConnected = false;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            Disconnect();
+        base.Dispose(disposing);
     }
 
     [Foundation.Export("handleTap:")]
