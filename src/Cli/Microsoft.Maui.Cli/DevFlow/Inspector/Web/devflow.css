@@ -219,7 +219,7 @@ body.df-replaying #df-viewport-wrap::after {
 /* ── Panes (tree | screenshot | properties) each with an uppercase section header ── */
 .df-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .df-pane-grow { flex: 1 1 auto; }
-#df-view-pane { position: relative; min-width: 180px; min-height: 180px; container: preview-pane / inline-size; }
+#df-view-pane { --df-preview-header-height: 33px; position: relative; min-width: 180px; min-height: 180px; container: preview-pane / inline-size; }
 .df-pane-header { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 4px 10px;
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--df-muted);
   background: var(--df-surface); border-bottom: 1px solid var(--df-border-subtle); user-select: none; white-space: nowrap; }
@@ -282,7 +282,7 @@ body.df-tree-hidden #df-tree-pane { display: none; }
 /* ── Connection state ── */
 .df-connection-overlay {
   position: absolute;
-  inset: 33px 0 0;
+  inset: var(--df-preview-header-height) 0 0;
   z-index: 62;
   display: flex;
   align-items: center;
@@ -322,7 +322,7 @@ body.df-disconnected #df-viewport-wrap {
 }
 .df-health-banner {
   position: absolute;
-  top: 25px;
+  top: var(--df-preview-header-height);
   left: 0;
   right: 0;
   z-index: 61;
