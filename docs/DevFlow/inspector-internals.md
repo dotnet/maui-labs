@@ -7,6 +7,10 @@ The broker-hosted DevFlow Web Inspector mirrors a running app as a screenshot pl
 visual-tree overlay. The VS Code and GitHub Copilot Canvas hosts embed this same page and add
 host-specific source, workflow, and Copilot integrations.
 
+The research decision for an optional live media presentation layer is documented in
+[Optional live video Preview transport spike](inspector-video-preview-spike.md). PNG and semantic
+frames remain authoritative; no production video protocol is currently approved.
+
 ## Shared host model
 
 The browser page is served under `http://localhost:19223/inspector/`. VS Code and Canvas discover
