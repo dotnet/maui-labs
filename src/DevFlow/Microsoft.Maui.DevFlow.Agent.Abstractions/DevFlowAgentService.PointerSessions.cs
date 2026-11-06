@@ -189,9 +189,11 @@ public partial class DevFlowAgentService
     private sealed record PointerSessionTombstone(
         string SessionId,
         int LastSequence,
+        int ReplaySequence,
         string? OperationKind,
         string? Fingerprint,
         PointerSessionReply Reply,
+        int ResponseStatusCode,
         long CreatedTicks);
 
     private sealed record PointerStartCancellation(
@@ -501,7 +503,7 @@ public partial class DevFlowAgentService
                 PointerType = pointerType,
                 BackendState = backend.State,
                 Cancellation = sessionCancellation,
-                ActionCorrelation = CreatePointerActionCorrelation(request, body.Correlation),
+                ActionCorrelation = CreateUiActionCorrelation(request),
                 StartX = body.X,
                 StartY = body.Y,
                 LastX = body.X,
@@ -657,14 +659,20 @@ public partial class DevFlowAgentService
                     return await TerminatePointerSessionAfterFailureAsync(
                         active,
                         "Pointer session was cancelled while applying a move.",
-                        "pointer-session-cancelled").ConfigureAwait(false);
+                        "pointer-session-cancelled",
+                        "move",
+                        fingerprint,
+                        body.Sequence).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     return await TerminatePointerSessionAfterFailureAsync(
                         active,
                         $"Pointer move failed: {ex.GetBaseException().Message}",
-                        "pointer-move-failed").ConfigureAwait(false);
+                        "pointer-move-failed",
+                        "move",
+                        fingerprint,
+                        body.Sequence).ConfigureAwait(false);
                 }
             }
 
@@ -674,6 +682,9 @@ public partial class DevFlowAgentService
                     active,
                     backend.Error ?? "The backend rejected the pointer move.",
                     backend.Reason ?? "pointer-move-failed",
+                    "move",
+                    fingerprint,
+                    body.Sequence,
                     backend.StatusCode).ConfigureAwait(false);
             }
 
@@ -782,7 +793,10 @@ public partial class DevFlowAgentService
                 return await TerminatePointerSessionAfterFailureAsync(
                     active,
                     $"Pointer end failed: {ex.GetBaseException().Message}",
-                    "pointer-end-failed").ConfigureAwait(false);
+                    "pointer-end-failed",
+                    "end",
+                    fingerprint,
+                    body.Sequence).ConfigureAwait(false);
             }
 
             if (!backend.Success)
@@ -791,6 +805,9 @@ public partial class DevFlowAgentService
                     active,
                     backend.Error ?? "The backend rejected the pointer end.",
                     backend.Reason ?? "pointer-end-failed",
+                    "end",
+                    fingerprint,
+                    body.Sequence,
                     backend.StatusCode).ConfigureAwait(false);
             }
 
@@ -850,7 +867,7 @@ public partial class DevFlowAgentService
                 {
                     PrunePointerTombstonesNoLock();
                     if (_pointerSessionTombstones.TryGetValue(sessionId, out var tombstone))
-                        return PointerResponse(tombstone.Reply);
+                        return PointerResponse(tombstone.Reply, tombstone.ResponseStatusCode);
                     RecordPointerStartCancellationNoLock(
                         sessionId,
                         GetRequestLeaseId(request),
@@ -1012,11 +1029,11 @@ public partial class DevFlowAgentService
             PrunePointerTombstonesNoLock();
             if (_pointerSessionTombstones.TryGetValue(sessionId, out var tombstone))
             {
-                if (sequence == tombstone.LastSequence
+                if (sequence == tombstone.ReplaySequence
                     && string.Equals(operationKind, tombstone.OperationKind, StringComparison.Ordinal)
                     && string.Equals(fingerprint, tombstone.Fingerprint, StringComparison.Ordinal))
                 {
-                    return PointerResponse(tombstone.Reply);
+                    return PointerResponse(tombstone.Reply, tombstone.ResponseStatusCode);
                 }
 
                 return PointerError(
@@ -1035,6 +1052,9 @@ public partial class DevFlowAgentService
         PointerSessionState active,
         string error,
         string reason,
+        string operationKind,
+        string fingerprint,
+        int replaySequence,
         int statusCode = 409)
     {
         active.Cancellation.Cancel();
@@ -1064,7 +1084,13 @@ public partial class DevFlowAgentService
             Error = combined,
             Detail = cancellation.Detail
         };
-        CompletePointerSession(active, reply, "cancel", fingerprint: null);
+        CompletePointerSession(
+            active,
+            reply,
+            operationKind,
+            fingerprint,
+            replaySequence,
+            statusCode);
         return PointerResponse(reply, statusCode);
     }
 
@@ -1095,15 +1121,23 @@ public partial class DevFlowAgentService
             Error = backend.Error,
             Detail = backend.Detail
         };
-        CompletePointerSession(active, reply, "cancel", fingerprint: null);
-        return PointerResponse(reply, backend.Success ? 200 : backend.StatusCode);
+        var responseStatusCode = backend.Success ? 200 : backend.StatusCode;
+        CompletePointerSession(
+            active,
+            reply,
+            "cancel",
+            fingerprint: null,
+            responseStatusCode: responseStatusCode);
+        return PointerResponse(reply, responseStatusCode);
     }
 
     private void CompletePointerSession(
         PointerSessionState active,
         PointerSessionReply reply,
         string operationKind,
-        string? fingerprint)
+        string? fingerprint,
+        int? replaySequence = null,
+        int responseStatusCode = 200)
     {
         if (string.Equals(operationKind, "cancel", StringComparison.Ordinal))
         {
@@ -1134,9 +1168,11 @@ public partial class DevFlowAgentService
             _pointerSessionTombstones[active.SessionId] = new PointerSessionTombstone(
                 active.SessionId,
                 reply.LastSequence,
+                replaySequence ?? reply.LastSequence,
                 operationKind,
                 fingerprint,
                 reply,
+                responseStatusCode,
                 Environment.TickCount64);
             while (_pointerSessionTombstones.Count > PointerSessionTombstoneLimit)
             {
