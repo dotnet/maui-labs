@@ -97,6 +97,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let refreshGeneration = 0;
   let activeRefresh = null;
   const STATE_FETCH_TIMEOUT_MS = 10000;
+  const STATE_REFRESH_RETRY_MS = 3000;
 
   // Inspector selection and tree state. Declared early so the event
   // handlers registered below can read them (they only run after init has set them).
@@ -233,8 +234,6 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const tap = latestTap;
     if (activeRefresh) {
       if (!force) return activeRefresh.promise;
-      if (tap !== null && activeRefresh.tap === tap) return activeRefresh.promise;
-      activeRefresh.cancelReason = 'superseded';
       activeRefresh.controller.abort();
     }
 
@@ -242,11 +241,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       generation: ++refreshGeneration,
       tap,
       controller: new AbortController(),
-      cancelReason: null,
       promise: null,
     };
-    const isSuperseded = () =>
-      activeRefresh !== refresh || refresh.generation !== refreshGeneration;
+    const isSuperseded = () => refresh.generation !== refreshGeneration;
     const followReplacement = () =>
       activeRefresh && activeRefresh !== refresh ? activeRefresh.promise : null;
     const ensureCurrent = () => {
@@ -261,7 +258,6 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     refresh.promise = (async () => {
       const timeout = setTimeout(() => {
         if (isSuperseded()) return;
-        refresh.cancelReason = 'timeout';
         refresh.controller.abort();
       }, STATE_FETCH_TIMEOUT_MS);
       disconnectedOverlay?.setAttribute('aria-busy', 'true');
@@ -279,11 +275,10 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           if (!ensureCurrent()) return followReplacement();
           if (!navigator.onLine) return null;
         }
-        if (!ensureCurrent()) return followReplacement();
 
         // Commit the complete frame synchronously so tree, screenshot, geometry, and metadata
         // cannot be mixed with a superseded refresh.
-        if (screenshot && image) {
+        if (image) {
           screenshot.src = image.src;
         }
         markConnected(true);
@@ -319,7 +314,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           const renderedStateSignature = JSON.stringify(renderedState);
           if (renderedStateSignature !== tap.previewStateSignature || tap.unchangedCaptures > 0) {
             latestTap = null;
-            if (refreshTimer && refreshTimerDelay === 3000) {
+            if (refreshTimer && refreshTimerDelay === STATE_REFRESH_RETRY_MS) {
               clearTimeout(refreshTimer);
               refreshTimer = null;
               refreshTimerDelay = null;
@@ -332,7 +327,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         }
         return state;
       } catch (err) {
-        if (refresh.cancelReason === 'superseded' || isSuperseded()) {
+        if (isSuperseded()) {
           return followReplacement();
         }
         markConnected(false);
@@ -388,7 +383,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     if (label) label.textContent = 'Checking…';
     setStatus(checkingStatus);
     try {
-      // Forced: wait for any in-flight poll, then check again rather than reusing its result.
+      // Forced: replace any in-flight refresh rather than reusing its result.
       await refreshState(true);
     } finally {
       retryConnectionBtn.disabled = false;
@@ -521,12 +516,14 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
       refreshTimerDelay = null;
-      // A refresh already in flight may predate the tap, so wait for it and capture again.
-      const state = await refreshState(latestTap !== null);
-      if (!state && latestTap !== null && !activeRefresh) scheduleRefresh(3000);
+      const tap = latestTap;
+      const state = tap !== null && activeRefresh?.tap === tap
+        ? await activeRefresh.promise
+        : await refreshState(tap !== null);
+      if (!state && latestTap !== null && !activeRefresh) scheduleRefresh(STATE_REFRESH_RETRY_MS);
     }, delayMs);
   }
-  if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(3000));
+  if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(STATE_REFRESH_RETRY_MS));
 
   // ── Click → Tap (with text-input awareness) ──
   // Element types that should open a text editor instead of just tapping.
