@@ -476,10 +476,10 @@ public partial class DevFlowAgentService
         _server.MapGet("/api/v1/invoke/actions", HandleListActions);
         _server.MapPost(
             "/api/v1/invoke/actions/{name}",
-            request => ExecuteUiActionLifecycleAsync(
+            request => ExecuteUiActionMutationAsync(
                 request,
-                CreateUiActionDescriptor("invoke-action", request),
-                () => HandleInvokeAction(request)));
+                "invoke-action",
+                HandleInvokeAction));
 
         RegisterExtensionRoutes();
     }
