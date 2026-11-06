@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Maui.DevFlow.Agent.Core.Profiling;
@@ -14,6 +15,11 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 
 public partial class DevFlowAgentService
 {
+    protected const double MinimumScreenshotTargetScale = 0.1;
+    protected const double MaximumScreenshotTargetScale = 4;
+    protected const int MaximumScreenshotPixelDimension = 16_384;
+    protected const long MaximumScreenshotPixels = 16_777_216;
+
     protected readonly AgentOptions _options;
 
     protected readonly AgentHttpServer _server;
@@ -659,6 +665,351 @@ public partial class DevFlowAgentService
             return pngData;
         }
     }
+
+    protected static bool TryParseScreenshotResolutionHints(
+        HttpRequest request,
+        out ScreenshotResolutionHints? hints,
+        out HttpResponse? error)
+    {
+        hints = null;
+        error = null;
+        var hasHint = false;
+        var clamped = false;
+        double? targetScale = null;
+        int? maxPixelWidth = null;
+        int? maxPixelHeight = null;
+        long? maxPixels = null;
+
+        if (request.QueryParams.TryGetValue("targetScale", out var targetScaleText))
+        {
+            hasHint = true;
+            if (!double.TryParse(
+                    targetScaleText,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var parsed)
+                || double.IsNaN(parsed)
+                || double.IsInfinity(parsed)
+                || parsed <= 0)
+            {
+                error = InvalidScreenshotHint("targetScale");
+                return false;
+            }
+
+            var bounded = Math.Min(MaximumScreenshotTargetScale, Math.Max(MinimumScreenshotTargetScale, parsed));
+            clamped |= bounded != parsed;
+            targetScale = bounded;
+        }
+
+        if (!TryParseScreenshotIntHint(
+                request,
+                "maxPixelWidth",
+                MaximumScreenshotPixelDimension,
+                ref hasHint,
+                ref clamped,
+                out maxPixelWidth,
+                out error)
+            || !TryParseScreenshotIntHint(
+                request,
+                "maxPixelHeight",
+                MaximumScreenshotPixelDimension,
+                ref hasHint,
+                ref clamped,
+                out maxPixelHeight,
+                out error))
+        {
+            return false;
+        }
+
+        if (request.QueryParams.TryGetValue("maxPixels", out var maxPixelsText))
+        {
+            hasHint = true;
+            if (!long.TryParse(
+                    maxPixelsText,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var parsed)
+                || parsed <= 0)
+            {
+                error = InvalidScreenshotHint("maxPixels");
+                return false;
+            }
+
+            maxPixels = Math.Min(parsed, MaximumScreenshotPixels);
+            clamped |= maxPixels != parsed;
+        }
+
+        if (hasHint)
+        {
+            hints = new ScreenshotResolutionHints(
+                targetScale,
+                maxPixelWidth,
+                maxPixelHeight,
+                maxPixels,
+                clamped);
+        }
+
+        return true;
+    }
+
+    protected static ScreenshotImageResult ProcessScreenshotPng(
+        byte[] pngData,
+        int? maxWidth,
+        double nativeScale,
+        bool autoScale,
+        bool scaleModeExplicit,
+        ScreenshotResolutionHints? hints,
+        bool includeMetadata = true)
+    {
+        nativeScale = NormalizeScreenshotScale(nativeScale);
+        byte[]? output;
+        var clamped = false;
+
+        if (hints is null)
+        {
+            output = ResizePngIfNeeded(pngData, maxWidth, nativeScale, autoScale);
+        }
+        else
+        {
+            (output, clamped) = ResizeNegotiatedScreenshot(
+                pngData,
+                maxWidth,
+                nativeScale,
+                autoScale,
+                scaleModeExplicit,
+                hints);
+        }
+
+        if (output is null)
+        {
+            return new ScreenshotImageResult(
+                Data: null,
+                Error: "Failed to resize the screenshot within the requested pixel limits.",
+                Reason: "screenshot-resolution-failed");
+        }
+
+        if (!includeMetadata
+            || !TryGetPngDimensions(pngData, out var sourceWidth, out var sourceHeight)
+            || !TryGetPngDimensions(output, out var pixelWidth, out var pixelHeight))
+        {
+            return new ScreenshotImageResult(output);
+        }
+
+        var logicalWidth = sourceWidth / nativeScale;
+        var logicalHeight = sourceHeight / nativeScale;
+        var captureScale = logicalWidth > 0 ? pixelWidth / logicalWidth : nativeScale;
+
+        return new ScreenshotImageResult(
+            output,
+            pixelWidth,
+            pixelHeight,
+            logicalWidth,
+            logicalHeight,
+            captureScale,
+            nativeScale,
+            hints is null ? false : hints.WasClamped || clamped);
+    }
+
+    protected static HttpResponse BuildScreenshotResponse(ScreenshotImageResult image)
+    {
+        if (image.Data is null)
+        {
+            return HttpResponse.Error(
+                image.Error ?? "Failed to process the screenshot.",
+                statusCode: 500,
+                reason: image.Reason ?? "screenshot-resolution-failed");
+        }
+
+        var response = HttpResponse.Png(image.Data);
+        if (image.PixelWidth.HasValue
+            && image.PixelHeight.HasValue
+            && image.LogicalWidth.HasValue
+            && image.LogicalHeight.HasValue
+            && image.CaptureScale.HasValue
+            && image.NativeScale.HasValue)
+        {
+            response.Headers["X-DevFlow-Screenshot-Pixel-Width"] =
+                image.PixelWidth.Value.ToString(CultureInfo.InvariantCulture);
+            response.Headers["X-DevFlow-Screenshot-Pixel-Height"] =
+                image.PixelHeight.Value.ToString(CultureInfo.InvariantCulture);
+            response.Headers["X-DevFlow-Screenshot-Logical-Width"] =
+                image.LogicalWidth.Value.ToString("R", CultureInfo.InvariantCulture);
+            response.Headers["X-DevFlow-Screenshot-Logical-Height"] =
+                image.LogicalHeight.Value.ToString("R", CultureInfo.InvariantCulture);
+            response.Headers["X-DevFlow-Screenshot-Capture-Scale"] =
+                image.CaptureScale.Value.ToString("R", CultureInfo.InvariantCulture);
+            response.Headers["X-DevFlow-Screenshot-Native-Scale"] =
+                image.NativeScale.Value.ToString("R", CultureInfo.InvariantCulture);
+            response.Headers["X-DevFlow-Screenshot-Format"] = "png";
+            response.Headers["X-DevFlow-Screenshot-Clamped"] =
+                (image.ResolutionClamped ?? false).ToString();
+        }
+
+        return response;
+    }
+
+    private static bool TryParseScreenshotIntHint(
+        HttpRequest request,
+        string name,
+        int maximum,
+        ref bool hasHint,
+        ref bool clamped,
+        out int? value,
+        out HttpResponse? error)
+    {
+        value = null;
+        error = null;
+        if (!request.QueryParams.TryGetValue(name, out var text))
+            return true;
+
+        hasHint = true;
+        if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            || parsed <= 0)
+        {
+            error = InvalidScreenshotHint(name);
+            return false;
+        }
+
+        value = Math.Min(parsed, maximum);
+        clamped |= value != parsed;
+        return true;
+    }
+
+    private static HttpResponse InvalidScreenshotHint(string name)
+        => HttpResponse.Error(
+            $"Screenshot hint '{name}' must be a positive finite number.",
+            statusCode: 400,
+            reason: "invalid-screenshot-hint",
+            details: new Dictionary<string, object?> { ["parameter"] = name });
+
+    private static (byte[]? Data, bool Clamped) ResizeNegotiatedScreenshot(
+        byte[] pngData,
+        int? maxWidth,
+        double nativeScale,
+        bool autoScale,
+        bool scaleModeExplicit,
+        ScreenshotResolutionHints hints)
+    {
+        try
+        {
+            using var original = SkiaSharp.SKBitmap.Decode(pngData);
+            if (original == null || original.Width <= 0 || original.Height <= 0)
+                return (null, hints.WasClamped);
+
+            var requestedFactor = hints.TargetScale.HasValue
+                ? hints.TargetScale.Value / nativeScale
+                : maxWidth.HasValue && !scaleModeExplicit
+                    ? 1d
+                    : autoScale
+                        ? 1d / nativeScale
+                        : 1d;
+            var factor = Math.Min(1d, requestedFactor);
+            var clamped = hints.WasClamped || requestedFactor > 1d;
+
+            void ApplyCap(double candidate)
+            {
+                if (candidate < factor)
+                {
+                    factor = candidate;
+                    clamped = true;
+                }
+            }
+
+            if (maxWidth is > 0)
+                ApplyCap((double)maxWidth.Value / original.Width);
+            if (hints.MaxPixelWidth is > 0)
+                ApplyCap((double)hints.MaxPixelWidth.Value / original.Width);
+            if (hints.MaxPixelHeight is > 0)
+                ApplyCap((double)hints.MaxPixelHeight.Value / original.Height);
+            if (hints.MaxPixels is > 0)
+            {
+                var sourcePixels = (double)original.Width * original.Height;
+                ApplyCap(Math.Sqrt(hints.MaxPixels.Value / sourcePixels));
+            }
+
+            factor = Math.Min(1d, Math.Max(0d, factor));
+            if (factor >= 1d)
+                return (pngData, clamped);
+
+            var targetWidth = Math.Max(1, (int)Math.Floor(original.Width * factor));
+            var targetHeight = Math.Max(1, (int)Math.Floor(original.Height * factor));
+            if (hints.MaxPixels is > 0
+                && (long)targetWidth * targetHeight > hints.MaxPixels.Value)
+            {
+                targetWidth = (int)Math.Min(
+                    targetWidth,
+                    Math.Max(1, hints.MaxPixels.Value / targetHeight));
+                if ((long)targetWidth * targetHeight > hints.MaxPixels.Value)
+                {
+                    targetHeight = (int)Math.Min(
+                        targetHeight,
+                        Math.Max(1, hints.MaxPixels.Value / targetWidth));
+                }
+                clamped = true;
+            }
+            using var resized = original.Resize(
+                new SkiaSharp.SKImageInfo(targetWidth, targetHeight),
+                SkiaSharp.SKSamplingOptions.Default);
+            if (resized == null)
+                return (null, true);
+
+            using var image = SkiaSharp.SKImage.FromBitmap(resized);
+            using var encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+            return encoded == null ? (null, true) : (encoded.ToArray(), clamped);
+        }
+        catch
+        {
+            return (null, true);
+        }
+    }
+
+    private static double NormalizeScreenshotScale(double scale)
+        => double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0
+            ? 1d
+            : scale;
+
+    private static bool TryGetPngDimensions(byte[] png, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        ReadOnlySpan<byte> signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        if (png.Length < 24 || !png.AsSpan(0, 8).SequenceEqual(signature))
+            return false;
+
+        var unsignedWidth = ((uint)png[16] << 24)
+            | ((uint)png[17] << 16)
+            | ((uint)png[18] << 8)
+            | png[19];
+        var unsignedHeight = ((uint)png[20] << 24)
+            | ((uint)png[21] << 16)
+            | ((uint)png[22] << 8)
+            | png[23];
+        if (unsignedWidth is 0 or > int.MaxValue || unsignedHeight is 0 or > int.MaxValue)
+            return false;
+
+        width = (int)unsignedWidth;
+        height = (int)unsignedHeight;
+        return true;
+    }
+
+    protected sealed record ScreenshotResolutionHints(
+        double? TargetScale,
+        int? MaxPixelWidth,
+        int? MaxPixelHeight,
+        long? MaxPixels,
+        bool WasClamped);
+
+    protected sealed record ScreenshotImageResult(
+        byte[]? Data,
+        int? PixelWidth = null,
+        int? PixelHeight = null,
+        double? LogicalWidth = null,
+        double? LogicalHeight = null,
+        double? CaptureScale = null,
+        double? NativeScale = null,
+        bool? ResolutionClamped = null,
+        string? Error = null,
+        string? Reason = null);
 
     protected record ResizeRequest(int Width, int Height);
 

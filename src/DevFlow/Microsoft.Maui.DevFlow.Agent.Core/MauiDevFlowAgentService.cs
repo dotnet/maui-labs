@@ -149,11 +149,19 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             ["gestures"] = SupportedGestures,
             ["reason"] = (string?)null
         };
-        capabilities["ui.screenshot"] = Capability(2, supported: true,
-            SupportsNativeElementScreenshots
-                ? ["element", "native-element", "fullscreen", "selector", "capture-epoch"]
-                : ["element", "fullscreen", "selector", "capture-epoch"],
-            reason: null);
+        var screenshotFeatures = SupportsNativeElementScreenshots
+            ? new List<string> { "element", "native-element", "fullscreen", "selector", "capture-epoch" }
+            : new List<string> { "element", "fullscreen", "selector", "capture-epoch" };
+        if (SupportsScreenshotResolutionHints)
+            screenshotFeatures.Add("resolution-hints");
+
+        capabilities["ui.screenshot"] = new Dictionary<string, object?>
+        {
+            ["version"] = SupportsScreenshotResolutionHints ? 3 : 2,
+            ["supported"] = true,
+            ["features"] = screenshotFeatures,
+            ["reason"] = (string?)null
+        };
     }
 
     /// <inheritdoc />
@@ -2016,6 +2024,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
     {
         if (_app == null) return HttpResponse.Error("Agent not bound to app");
 
+        ScreenshotResolutionHints? resolutionHints = null;
+        if (SupportsScreenshotResolutionHints
+            && !TryParseScreenshotResolutionHints(request, out resolutionHints, out var resolutionError))
+        {
+            return resolutionError!;
+        }
+
         var requestedWindowIndex = ParseWindowIndex(request);
         var requestedEpoch = ParseLongQueryParameter(request, "captureEpoch");
         var requestedRegistryGeneration = ParseLongQueryParameter(request, "registryGeneration");
@@ -2052,7 +2067,30 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
         }
 
-        HttpResponse CompleteScreenshot(byte[] data)
+        int? maxWidth = null;
+        if (request.QueryParams.TryGetValue("maxWidth", out var mwStr) && int.TryParse(mwStr, out var mw) && mw > 0)
+            maxWidth = mw;
+
+        // Auto-scale to 1x by default on HiDPI displays. Override with scale=native to keep full resolution.
+        bool autoScale = true;
+        var scaleModeExplicit = request.QueryParams.TryGetValue("scale", out var scaleParam);
+        if (scaleModeExplicit)
+        {
+            autoScale = !string.Equals(scaleParam, "native", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(scaleParam, "full", StringComparison.OrdinalIgnoreCase);
+        }
+
+        ScreenshotImageResult ProcessScreenshot(byte[] data, double density)
+            => ProcessScreenshotPng(
+                data,
+                maxWidth,
+                density,
+                autoScale,
+                scaleModeExplicit,
+                resolutionHints,
+                includeMetadata: SupportsScreenshotResolutionHints);
+
+        HttpResponse CompleteScreenshot(ScreenshotImageResult image)
         {
             if (requestedEpoch.HasValue)
             {
@@ -2071,7 +2109,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 return BuildCaptureChangedResponse(capture);
             }
 
-            var response = HttpResponse.Png(data);
+            var response = BuildScreenshotResponse(image);
             response.Headers["X-DevFlow-Capture-Epoch"] = capture.Epoch.ToString();
             response.Headers["X-DevFlow-Registry-Generation"] = capture.RegistryGeneration.ToString();
             if (capture.WindowId.HasValue)
@@ -2084,18 +2122,6 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 ? BuildCaptureChangedResponse(capture)
                 : failure;
 
-        int? maxWidth = null;
-        if (request.QueryParams.TryGetValue("maxWidth", out var mwStr) && int.TryParse(mwStr, out var mw) && mw > 0)
-            maxWidth = mw;
-
-        // Auto-scale to 1x by default on HiDPI displays. Override with scale=native to keep full resolution.
-        bool autoScale = true;
-        if (request.QueryParams.TryGetValue("scale", out var scaleParam))
-        {
-            autoScale = !scaleParam.Equals("native", StringComparison.OrdinalIgnoreCase)
-                     && !scaleParam.Equals("full", StringComparison.OrdinalIgnoreCase);
-        }
-
         // Check for fullscreen mode (captures all windows including dialogs)
         if (request.QueryParams.TryGetValue("fullscreen", out var fs) &&
             fs.Equals("true", StringComparison.OrdinalIgnoreCase))
@@ -2107,7 +2133,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 {
                     var density = await DispatchAsync(
                         () => GetWindowDisplayDensity(GetWindow(windowIndex)));
-                    return CompleteScreenshot(ResizePngIfNeeded(pngData, maxWidth, density, autoScale));
+                    return CompleteScreenshot(ProcessScreenshot(pngData, density));
                 }
                 return CompleteScreenshotFailure(
                     HttpResponse.Error("Full-screen capture not supported on this platform"));
@@ -2161,12 +2187,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             outcome?.Failure,
                             $"Capture returned null for element '{elementId}'"));
 
-                return CompleteScreenshot(
-                    ResizePngIfNeeded(
-                        outcome.Data,
-                        maxWidth,
-                        outcome.Density,
-                        autoScale));
+                return CompleteScreenshot(ProcessScreenshot(outcome.Data, outcome.Density));
             }
             catch (Exception ex)
             {
@@ -2224,12 +2245,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             outcome?.Failure,
                             $"Capture returned null for element '{matchId}'"));
 
-                return CompleteScreenshot(
-                    ResizePngIfNeeded(
-                        outcome.Data,
-                        maxWidth,
-                        outcome.Density,
-                        autoScale));
+                return CompleteScreenshot(ProcessScreenshot(outcome.Data, outcome.Density));
             }
             catch (FormatException ex)
             {
@@ -2299,12 +2315,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                         outcome?.Failure,
                         "Failed to capture screenshot"));
 
-            return CompleteScreenshot(
-                ResizePngIfNeeded(
-                    outcome.Data,
-                    maxWidth,
-                    outcome.Density,
-                    autoScale));
+            return CompleteScreenshot(ProcessScreenshot(outcome.Data, outcome.Density));
         }
         catch (Exception ex)
         {
@@ -2341,6 +2352,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         => Task.FromResult<byte[]?>(null);
 
     protected virtual bool SupportsNativeElementScreenshots => false;
+
+    protected virtual bool SupportsScreenshotResolutionHints => true;
 
     /// <summary>
     /// Captures a full-screen screenshot including all windows (dialogs, popups, etc.).

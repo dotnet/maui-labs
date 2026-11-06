@@ -38,6 +38,30 @@ public sealed class ScreenshotResult
     /// <summary>Window index associated with the screenshot.</summary>
     public int? WindowId { get; init; }
 
+    /// <summary>Actual returned PNG width in pixels.</summary>
+    public int? PixelWidth { get; init; }
+
+    /// <summary>Actual returned PNG height in pixels.</summary>
+    public int? PixelHeight { get; init; }
+
+    /// <summary>Captured logical width reported by the agent.</summary>
+    public double? LogicalWidth { get; init; }
+
+    /// <summary>Captured logical height reported by the agent.</summary>
+    public double? LogicalHeight { get; init; }
+
+    /// <summary>Actual returned pixels per logical unit.</summary>
+    public double? CaptureScale { get; init; }
+
+    /// <summary>Native capture pixels per logical unit before negotiated downsampling.</summary>
+    public double? NativeScale { get; init; }
+
+    /// <summary>Actual image format. Current agents return <c>png</c>.</summary>
+    public string? Format { get; init; }
+
+    /// <summary>Whether the agent bounded the requested resolution.</summary>
+    public bool? ResolutionClamped { get; init; }
+
     public static ScreenshotResult Ok(byte[] data) =>
         Ok(data, captureEpoch: null, registryGeneration: null, windowId: null);
 
@@ -46,13 +70,48 @@ public sealed class ScreenshotResult
         long? captureEpoch,
         long? registryGeneration,
         int? windowId) =>
+        Ok(
+            data,
+            captureEpoch,
+            registryGeneration,
+            windowId,
+            pixelWidth: null,
+            pixelHeight: null,
+            logicalWidth: null,
+            logicalHeight: null,
+            captureScale: null,
+            nativeScale: null,
+            format: null,
+            resolutionClamped: null);
+
+    public static ScreenshotResult Ok(
+        byte[] data,
+        long? captureEpoch,
+        long? registryGeneration,
+        int? windowId,
+        int? pixelWidth,
+        int? pixelHeight,
+        double? logicalWidth,
+        double? logicalHeight,
+        double? captureScale,
+        double? nativeScale,
+        string? format,
+        bool? resolutionClamped) =>
         new()
         {
             Success = true,
             Data = data,
             CaptureEpoch = captureEpoch,
             RegistryGeneration = registryGeneration,
-            WindowId = windowId
+            WindowId = windowId,
+            PixelWidth = pixelWidth,
+            PixelHeight = pixelHeight,
+            LogicalWidth = logicalWidth,
+            LogicalHeight = logicalHeight,
+            CaptureScale = captureScale,
+            NativeScale = nativeScale,
+            Format = format,
+            ResolutionClamped = resolutionClamped
         };
 
     public static ScreenshotResult Failure(

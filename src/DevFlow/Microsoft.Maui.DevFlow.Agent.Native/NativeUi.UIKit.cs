@@ -46,6 +46,17 @@ internal static partial class NativeUi
 
     public static double DisplayDensity => UIScreen.MainScreen.Scale;
 
+    public static double GetCaptureDensity(object? viewObject)
+        => viewObject switch
+        {
+            UIWindow window => window.Screen.Scale,
+            UIView view => view.Window?.Screen.Scale ?? DisplayDensity,
+            _ => DisplayDensity
+        };
+
+    public static double ScreenCaptureDensity
+        => GetCaptureDensity(GetRoots().FirstOrDefault());
+
     public static IReadOnlyList<object> GetRoots()
     {
         var roots = new List<object>();
@@ -413,7 +424,7 @@ internal static partial class NativeUi
         var renderer = new UIGraphicsImageRenderer(view.Bounds.Size, new UIGraphicsImageRendererFormat
         {
             Opaque = false,
-            Scale = UIScreen.MainScreen.Scale,
+            Scale = (System.Runtime.InteropServices.NFloat)GetCaptureDensity(view),
         });
 
         using var image = renderer.CreateImage(context =>

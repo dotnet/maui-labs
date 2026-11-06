@@ -61,7 +61,19 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             _agent.MapGet("/api/v1/agent/capabilities", () => Results.Json(new
             {
                 agent = new { framework = "maui" },
-                capabilities = new Dictionary<string, object>(),
+                capabilities = new Dictionary<string, object>
+                {
+                    ["ui.screenshot"] = new
+                    {
+                        version = 3,
+                        features = new[]
+                        {
+                            "element",
+                            "fullscreen",
+                            "resolution-hints"
+                        }
+                    }
+                },
             }));
             _agent.MapPost("/api/v1/agent/recording", () => Results.Json(new { ok = true, recording = false, steps = 0 }));
             _agent.MapGet("/api/v1/ui/tree", () =>
@@ -841,6 +853,65 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
         await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Resize_NegotiatesOneBucketedScreenshotAfterDebounce()
+    {
+        var negotiatedRequests = new ConcurrentQueue<string>();
+        var negotiated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Page.Request += (_, request) =>
+        {
+            if (request.Url.Contains("/api/state?", StringComparison.Ordinal)
+                && request.Url.Contains("targetScale=", StringComparison.Ordinal))
+            {
+                negotiatedRequests.Enqueue(request.Url);
+                negotiated.TrySetResult();
+            }
+        };
+
+        await Page.EvaluateAsync("""
+            () => {
+              const wrap = document.querySelector('#df-viewport-wrap');
+              wrap.style.flex = '0 0 80px';
+              wrap.style.width = '80px';
+              wrap.style.height = '60px';
+              document.querySelector('#df-toggle-fit').click();
+              document.querySelector('#df-toggle-fit').click();
+            }
+            """);
+        Assert.Contains(
+            "scale(",
+            await Page.Locator("#app-viewport").GetAttributeAsync("style") ?? string.Empty,
+            StringComparison.Ordinal);
+        await Page.EvaluateAsync("""
+            () => {
+              const wrap = document.querySelector('#df-viewport-wrap');
+              wrap.style.flexBasis = '84px';
+              wrap.style.width = '84px';
+              document.querySelector('#df-toggle-fit').click();
+              document.querySelector('#df-toggle-fit').click();
+              wrap.style.flexBasis = '82px';
+              wrap.style.width = '82px';
+              document.querySelector('#df-toggle-fit').click();
+              document.querySelector('#df-toggle-fit').click();
+            }
+            """);
+        for (var refresh = 0; refresh < 10 && !negotiated.Task.IsCompleted; refresh++)
+        {
+            await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+            await Page.WaitForTimeoutAsync(300);
+        }
+        Assert.True(
+            negotiated.Task.IsCompleted,
+            "Continuous app refreshes postponed the stable resolution downgrade.");
+        await negotiated.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Page.WaitForTimeoutAsync(250);
+
+        var request = Assert.Single(negotiatedRequests);
+        Assert.Matches(@"[?&]targetScale=(?:0\.25|0\.5|0\.75|1\.5|2|3|4)(?:&|$)", request);
+        await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
         Assert.Empty(_pageErrors);
     }
 

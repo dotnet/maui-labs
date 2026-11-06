@@ -24,8 +24,14 @@
       ]
     },
     "ui.screenshot": {
-      "version": 1,
-      "features": ["element", "fullscreen", "selector"]
+      "version": 3,
+      "features": [
+        "element",
+        "fullscreen",
+        "selector",
+        "capture-epoch",
+        "resolution-hints"
+      ]
     },
     "ui.menus": {
       "version": 1,

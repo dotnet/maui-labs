@@ -1438,7 +1438,30 @@ public class AgentClient : IDisposable
             maxWidth,
             scale,
             captureEpoch,
-            registryGeneration);
+            registryGeneration,
+            resolution: null);
+        return result.Success ? result.Data : null;
+    }
+
+    public async Task<byte[]?> ScreenshotAsync(
+        int? window,
+        string? elementId,
+        string? selector,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration,
+        ScreenshotResolutionOptions? resolution)
+    {
+        var result = await ScreenshotResultAsync(
+            window,
+            elementId,
+            selector,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            resolution);
         return result.Success ? result.Data : null;
     }
 
@@ -1464,7 +1487,8 @@ public class AgentClient : IDisposable
             maxWidth,
             scale,
             captureEpoch: null,
-            registryGeneration: null);
+            registryGeneration: null,
+            resolution: null);
 
     public Task<ScreenshotResult> ScreenshotResultAsync(
         int? window,
@@ -1482,6 +1506,27 @@ public class AgentClient : IDisposable
             scale,
             captureEpoch,
             registryGeneration,
+            resolution: null,
+            fullscreen: false);
+
+    public Task<ScreenshotResult> ScreenshotResultAsync(
+        int? window,
+        string? elementId,
+        string? selector,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration,
+        ScreenshotResolutionOptions? resolution)
+        => ScreenshotResultCoreAsync(
+            window,
+            elementId,
+            selector,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            resolution,
             fullscreen: false);
 
     public async Task<byte[]?> FullscreenScreenshotAsync(
@@ -1490,6 +1535,21 @@ public class AgentClient : IDisposable
         string? scale = null,
         long? captureEpoch = null,
         long? registryGeneration = null)
+        => await FullscreenScreenshotAsync(
+            window,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            resolution: null);
+
+    public async Task<byte[]?> FullscreenScreenshotAsync(
+        int? window,
+        int? maxWidth,
+        string? scale,
+        long? captureEpoch,
+        long? registryGeneration,
+        ScreenshotResolutionOptions? resolution)
     {
         var result = await ScreenshotResultCoreAsync(
             window,
@@ -1499,9 +1559,28 @@ public class AgentClient : IDisposable
             scale,
             captureEpoch,
             registryGeneration,
+            resolution,
             fullscreen: true);
         return result.Success ? result.Data : null;
     }
+
+    public Task<ScreenshotResult> FullscreenScreenshotResultAsync(
+        int? window = null,
+        int? maxWidth = null,
+        string? scale = null,
+        long? captureEpoch = null,
+        long? registryGeneration = null,
+        ScreenshotResolutionOptions? resolution = null)
+        => ScreenshotResultCoreAsync(
+            window,
+            elementId: null,
+            selector: null,
+            maxWidth,
+            scale,
+            captureEpoch,
+            registryGeneration,
+            resolution,
+            fullscreen: true);
 
     private async Task<ScreenshotResult> ScreenshotResultCoreAsync(
         int? window,
@@ -1511,6 +1590,7 @@ public class AgentClient : IDisposable
         string? scale,
         long? captureEpoch,
         long? registryGeneration,
+        ScreenshotResolutionOptions? resolution,
         bool fullscreen)
     {
         try
@@ -1520,10 +1600,22 @@ public class AgentClient : IDisposable
             if (window != null) queryParams.Add($"window={window}");
             if (elementId != null) queryParams.Add($"elementId={Uri.EscapeDataString(elementId)}");
             if (selector != null) queryParams.Add($"selector={Uri.EscapeDataString(selector)}");
-            if (maxWidth != null) queryParams.Add($"maxWidth={maxWidth}");
-            if (scale != null) queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
+            var fallbackMaxWidth = MinPositive(maxWidth, resolution?.MaxPixelWidth);
+            if (fallbackMaxWidth != null) queryParams.Add($"maxWidth={fallbackMaxWidth}");
+            if (scale != null)
+                queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
+            else if (resolution != null && maxWidth == null)
+                queryParams.Add("scale=auto");
             if (captureEpoch != null) queryParams.Add($"captureEpoch={captureEpoch}");
             if (registryGeneration != null) queryParams.Add($"registryGeneration={registryGeneration}");
+            if (resolution?.TargetScale != null)
+                queryParams.Add($"targetScale={resolution.TargetScale.Value.ToString(CultureInfo.InvariantCulture)}");
+            if (resolution?.MaxPixelWidth != null)
+                queryParams.Add($"maxPixelWidth={resolution.MaxPixelWidth.Value}");
+            if (resolution?.MaxPixelHeight != null)
+                queryParams.Add($"maxPixelHeight={resolution.MaxPixelHeight.Value}");
+            if (resolution?.MaxPixels != null)
+                queryParams.Add($"maxPixels={resolution.MaxPixels.Value}");
 
             var url = queryParams.Count > 0
                 ? $"{_baseUrl}{UiApi}/screenshot?{string.Join("&", queryParams)}"
@@ -1535,11 +1627,52 @@ public class AgentClient : IDisposable
                 using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
                 if (response.IsSuccessStatusCode)
                 {
+                    var data = await response.Content.ReadAsByteArrayAsync();
+                    var (fallbackPixelWidth, fallbackPixelHeight) = GetPngDimensions(data);
+                    var headerPixelWidth = GetHeaderInt32(response, "X-DevFlow-Screenshot-Pixel-Width");
+                    var headerPixelHeight = GetHeaderInt32(response, "X-DevFlow-Screenshot-Pixel-Height");
+                    var pixelWidth = fallbackPixelWidth ?? headerPixelWidth;
+                    var pixelHeight = fallbackPixelHeight ?? headerPixelHeight;
+                    var logicalWidth = GetHeaderDouble(response, "X-DevFlow-Screenshot-Logical-Width");
+                    var logicalHeight = GetHeaderDouble(response, "X-DevFlow-Screenshot-Logical-Height");
+                    var captureScale = GetHeaderDouble(response, "X-DevFlow-Screenshot-Capture-Scale");
+                    var nativeScale = GetHeaderDouble(response, "X-DevFlow-Screenshot-Native-Scale");
+                    var metadataValid = (!fallbackPixelWidth.HasValue
+                            || !headerPixelWidth.HasValue
+                            || fallbackPixelWidth == headerPixelWidth)
+                        && (!fallbackPixelHeight.HasValue
+                            || !headerPixelHeight.HasValue
+                            || fallbackPixelHeight == headerPixelHeight)
+                        && DimensionsMatchScale(
+                            pixelWidth,
+                            pixelHeight,
+                            logicalWidth,
+                            logicalHeight,
+                            captureScale);
+                    if (!metadataValid)
+                    {
+                        logicalWidth = null;
+                        logicalHeight = null;
+                        captureScale = null;
+                        nativeScale = null;
+                    }
+
                     return ScreenshotResult.Ok(
-                        await response.Content.ReadAsByteArrayAsync(),
+                        data,
                         GetHeaderInt64(response, "X-DevFlow-Capture-Epoch"),
                         GetHeaderInt64(response, "X-DevFlow-Registry-Generation"),
-                        GetHeaderInt32(response, "X-DevFlow-Window-Id"));
+                        GetHeaderInt32(response, "X-DevFlow-Window-Id"),
+                        pixelWidth,
+                        pixelHeight,
+                        logicalWidth,
+                        logicalHeight,
+                        captureScale,
+                        nativeScale,
+                        GetHeaderString(response, "X-DevFlow-Screenshot-Format")
+                            ?? (response.Content.Headers.ContentType?.MediaType == "image/png" ? "png" : null),
+                        metadataValid
+                            ? GetHeaderBoolean(response, "X-DevFlow-Screenshot-Clamped")
+                            : null);
                 }
 
                 var body = await response.Content.ReadAsStringAsync();
@@ -2181,6 +2314,83 @@ public class AgentClient : IDisposable
             && int.TryParse(values.FirstOrDefault(), out var value)
                 ? value
                 : null;
+
+    private static double? GetHeaderDouble(HttpResponseMessage response, string name)
+    {
+        if (!response.Headers.TryGetValues(name, out var values)
+            || !double.TryParse(
+                values.FirstOrDefault(),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var value)
+            || double.IsNaN(value)
+            || double.IsInfinity(value)
+            || value <= 0)
+        {
+            return null;
+        }
+
+        return value;
+    }
+
+    private static bool? GetHeaderBoolean(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+            && bool.TryParse(values.FirstOrDefault(), out var value)
+                ? value
+                : null;
+
+    private static string? GetHeaderString(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values)
+            ? values.FirstOrDefault()
+            : null;
+
+    private static int? MinPositive(int? first, int? second)
+    {
+        if (first is <= 0) first = null;
+        if (second is <= 0) second = null;
+        return first.HasValue && second.HasValue
+            ? Math.Min(first.Value, second.Value)
+            : first ?? second;
+    }
+
+    private static bool DimensionsMatchScale(
+        int? pixelWidth,
+        int? pixelHeight,
+        double? logicalWidth,
+        double? logicalHeight,
+        double? captureScale)
+    {
+        var metadataCount = (logicalWidth.HasValue ? 1 : 0)
+            + (logicalHeight.HasValue ? 1 : 0)
+            + (captureScale.HasValue ? 1 : 0);
+        if (metadataCount == 0)
+            return true;
+        if (metadataCount != 3 || !pixelWidth.HasValue || !pixelHeight.HasValue)
+            return false;
+
+        const double tolerance = 1.5;
+        return Math.Abs(logicalWidth!.Value * captureScale!.Value - pixelWidth.Value) <= tolerance
+            && Math.Abs(logicalHeight!.Value * captureScale.Value - pixelHeight.Value) <= tolerance;
+    }
+
+    private static (int? Width, int? Height) GetPngDimensions(byte[] png)
+    {
+        ReadOnlySpan<byte> signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        if (png.Length < 24 || !png.AsSpan(0, 8).SequenceEqual(signature))
+            return (null, null);
+
+        var width = ((uint)png[16] << 24)
+            | ((uint)png[17] << 16)
+            | ((uint)png[18] << 8)
+            | png[19];
+        var height = ((uint)png[20] << 24)
+            | ((uint)png[21] << 16)
+            | ((uint)png[22] << 8)
+            | png[23];
+        return width is > 0 and <= int.MaxValue && height is > 0 and <= int.MaxValue
+            ? ((int)width, (int)height)
+            : (null, null);
+    }
 
     private async Task<bool> PostActionAsync(string path, JsonNode body)
     {

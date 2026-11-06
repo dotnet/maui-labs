@@ -20,8 +20,8 @@ public static class HtmlRenderer
     public static string Render(
         List<ElementInfo> tree,
         bool hasScreenshot,
-        int screenshotWidth = 0,
-        int screenshotHeight = 0,
+        double screenshotWidth = 0,
+        double screenshotHeight = 0,
         double density = 1,
         double elementScale = 1,
         double rootOffsetX = 0,
@@ -52,8 +52,8 @@ public static class HtmlRenderer
         // invariant explicit and resistant to a future refactor that
         // reorders these replacements.
         var scalarsReplaced = template
-            .Replace("{{VIEWPORT_WIDTH}}", viewportWidth.ToString("F0", CultureInfo.InvariantCulture))
-            .Replace("{{VIEWPORT_HEIGHT}}", viewportHeight.ToString("F0", CultureInfo.InvariantCulture))
+            .Replace("{{VIEWPORT_WIDTH}}", viewportWidth.ToString("0.####", CultureInfo.InvariantCulture))
+            .Replace("{{VIEWPORT_HEIGHT}}", viewportHeight.ToString("0.####", CultureInfo.InvariantCulture))
             .Replace("{{DENSITY}}", density.ToString("F1", CultureInfo.InvariantCulture))
             .Replace("{{ELEMENT_SCALE}}", elementScale.ToString("F4", CultureInfo.InvariantCulture))
             .Replace("{{ROOT_OFFSET_X}}", rootOffsetX.ToString("F4", CultureInfo.InvariantCulture))
@@ -104,7 +104,7 @@ public static class HtmlRenderer
         return sb.ToString();
     }
 
-    private static (double width, double height) ComputeViewportSize(List<ElementInfo> tree, int screenshotWidth, int screenshotHeight)
+    private static (double width, double height) ComputeViewportSize(List<ElementInfo> tree, double screenshotWidth, double screenshotHeight)
     {
         if (screenshotWidth > 0 && screenshotHeight > 0)
             return (screenshotWidth, screenshotHeight);
