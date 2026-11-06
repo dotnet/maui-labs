@@ -13,6 +13,7 @@ import {
   CoordinateSpace,
   appLogicalToWindowLogical,
   buildActionCorrelation,
+  clientToAppLogical,
   hasExplicitFrameIdentity,
   normalizeFrameDescriptor,
   shouldCommitFrame,
@@ -487,6 +488,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
   let gesturePointerId = null;
   let isGesturing = false;
   let isDragging = false;
+  let dragResetTimer = null;
   let refreshGeneration = 0;
   let refreshRequestVersion = 0;
   let activeRefresh = null;
@@ -524,11 +526,11 @@ import { createViewportController } from './inspector-viewport-controller.js';
     frame = committedFrame,
     renderedViewport = viewport.getBoundingClientRect(),
   ) {
-    return viewportController.toAppLogical(
+    return clientToAppLogical(
       clientX,
       clientY,
-      frame,
-      renderedViewport);
+      renderedViewport,
+      frame);
   }
 
   function getElementCaptureMetadata(el) {
@@ -801,7 +803,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
             learnedMaximumScreenshotScale,
             actualCaptureScale);
         }
-        if (learnedMaximumScreenshotScale !== previousMaximum) scheduleScale();
+        if (learnedMaximumScreenshotScale !== previousMaximum)
+          viewportController?.scheduleLayout();
         const treeRevision = committedFrame.treeRevision;
         const diagnosticInputsRevision = committedFrame.diagnosticInputsRevision;
         const renderedState = [...viewport.querySelectorAll('.devflow-element')].map(element =>
@@ -1557,6 +1560,10 @@ import { createViewportController } from './inspector-viewport-controller.js';
     if (e.defaultPrevented) return;
     if (e.button !== 0 || !e.isPrimary || isGesturing) return;
     if (!ensureCanInteract()) return;
+    if (dragResetTimer) {
+      clearTimeout(dragResetTimer);
+      dragResetTimer = null;
+    }
     gesturePointerId = e.pointerId;
     gestureFrame = committedFrame;
     gestureViewportRect = viewport.getBoundingClientRect();
@@ -1586,33 +1593,37 @@ import { createViewportController } from './inspector-viewport-controller.js';
 
   viewport.addEventListener('pointerup', async (e) => {
     if (!isGesturing || e.pointerId !== gesturePointerId) return;
+    const points = gesturePoints;
+    const frame = gestureFrame || committedFrame;
     isGesturing = false;
+    gesturePoints = [];
+    gestureFrame = null;
+    gestureViewportRect = null;
+    gesturePointerId = null;
+    viewportController?.scheduleLayout();
+    dragResetTimer = setTimeout(() => {
+      dragResetTimer = null;
+      if (!isGesturing) isDragging = false;
+    }, 50);
 
-    if (gesturePoints.length >= 2) {
-      const first = gesturePoints[0];
-      const last = gesturePoints[gesturePoints.length - 1];
+    if (points.length >= 2) {
+      const first = points[0];
+      const last = points[points.length - 1];
       // Threshold on screen distance (scale-independent); send app-coordinate points to the app.
       const screenDist = Math.hypot(last.sx - first.sx, last.sy - first.sy);
 
       if (mode === 'interact' && screenDist > 12) {
-        if (!ensureCanInteract()) {
-          gesturePoints = [];
-          gestureFrame = null;
-          gestureViewportRect = null;
-          gesturePointerId = null;
-          setTimeout(() => { isDragging = false; }, 50);
-          return;
-        }
+        if (!ensureCanInteract()) return;
         try {
           const response = await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(correlatedPayload(
               {
-                points: gesturePoints.map((p) => ({ x: p.x, y: p.y, t: p.t })),
+                points: points.map((p) => ({ x: p.x, y: p.y, t: p.t })),
               },
               CoordinateSpace.appLogical,
-              gestureFrame || committedFrame))
+              frame))
           });
           if (await responseHasFrameCorrelationError(response))
             scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
@@ -1624,11 +1635,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
       }
     }
 
-    gesturePoints = [];
-    gestureFrame = null;
-    gestureViewportRect = null;
-    gesturePointerId = null;
-    setTimeout(() => { isDragging = false; }, 50);
   });
   function cancelAppGesture(event) {
     if (!isGesturing || event.pointerId !== gesturePointerId) return;
@@ -1638,6 +1644,12 @@ import { createViewportController } from './inspector-viewport-controller.js';
     gestureFrame = null;
     gestureViewportRect = null;
     gesturePointerId = null;
+    viewportController?.scheduleLayout();
+    if (dragResetTimer) clearTimeout(dragResetTimer);
+    dragResetTimer = setTimeout(() => {
+      dragResetTimer = null;
+      if (!isGesturing) isDragging = false;
+    }, 50);
   }
   viewport.addEventListener('pointercancel', cancelAppGesture);
   viewport.addEventListener('lostpointercapture', cancelAppGesture);
@@ -1844,12 +1856,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
     takeControl: document.getElementById('df-take-control'),
   };
   const toolbarCommands = COMMAND_DEFINITIONS
-    .filter(command => command.group !== 'viewport')
     .map(command => document.getElementById(command.id))
     .filter(button => button instanceof HTMLButtonElement);
-  const toolbarCommandOrder = COMMAND_DEFINITIONS
-    .filter(command => command.group !== 'viewport')
-    .map(command => command.id);
+  const toolbarCommandOrder = COMMAND_DEFINITIONS.map(command => command.id);
   const toolbarActions = tb.secondary ? [...tb.secondary.querySelectorAll(':scope > button')] : [];
   const toolbarPriorities = new Map([
     ['df-goto-checkpoint', 10],
@@ -2198,8 +2207,12 @@ import { createViewportController } from './inspector-viewport-controller.js';
       scheduleToolbarLayout();
     }
     const viewportControls = document.getElementById('df-viewport-controls');
-    if (viewportControls)
-      viewportControls.hidden = nextStates['df-toggle-fit']?.visible === false;
+    if (viewportControls) {
+      const hideViewportControls = nextStates['df-toggle-fit']?.visible === false;
+      if (hideViewportControls && viewportControls.contains(focused))
+        restoreFocus(vpWrap, document.getElementById('df-toggle-fit'));
+      viewportControls.hidden = hideViewportControls;
+    }
     viewportController?.syncControls();
   }
 
@@ -4391,9 +4404,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
       scheduleRefresh(0, REFRESH_INTENT_EVIDENCE, true);
     }, delay);
   }
-  function scheduleScale() {
-    viewportController?.scheduleLayout();
-  }
   // ── Inspector-only viewport navigation ──────────────────────────────────────
   const fitBtn = document.getElementById('df-toggle-fit');
   viewportController = createViewportController({
@@ -4408,10 +4418,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
     zoomPreset: document.getElementById('df-zoom-preset'),
     zoomIndicator: document.getElementById('df-zoom-indicator'),
     zoomAnnouncement: document.getElementById('df-zoom-announcement'),
-    resetButton: document.getElementById('df-reset-view'),
-    getFrame: () => committedFrame,
     isEditing: () => !!activeEditor,
     isCommandEnabled: id => commandStates[id]?.enabled !== false,
+    canNavigate: () => !isGesturing,
     onTransformChanged: ({ bounds, transform }) =>
       scheduleScreenshotResolution(bounds.contentWidth, bounds.contentHeight, transform.scale),
   });

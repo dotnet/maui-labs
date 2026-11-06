@@ -48,24 +48,6 @@ export const COMMAND_DEFINITIONS = Object.freeze([
     requiredCapabilities: ['ui.screenshot'],
   }),
   Object.freeze({
-    id: 'df-zoom-out',
-    name: 'Zoom out',
-    group: 'viewport',
-    requiredCapabilities: [Object.freeze({ key: 'ui.screenshot' })],
-  }),
-  Object.freeze({
-    id: 'df-zoom-in',
-    name: 'Zoom in',
-    group: 'viewport',
-    requiredCapabilities: [Object.freeze({ key: 'ui.screenshot' })],
-  }),
-  Object.freeze({
-    id: 'df-reset-view',
-    name: 'Reset view',
-    group: 'viewport',
-    requiredCapabilities: [Object.freeze({ key: 'ui.screenshot' })],
-  }),
-  Object.freeze({
     id: 'df-toggle-record',
     name: 'Record',
     group: 'primary',
