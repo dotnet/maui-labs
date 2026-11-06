@@ -5164,9 +5164,9 @@ public sealed class InspectorServer : IDisposable
                             frame.DiagnosticInputsRevision,
                             diagnosticInputsRevision,
                             StringComparison.Ordinal)
-                        && (registryGeneration is null
-                            || frame.RegistryGeneration == registryGeneration)
-                        && (windowId is null || frame.WindowId == windowId))
+                        && (windowId is null
+                            || frame.WindowId is null
+                            || frame.WindowId == windowId))
                     .MaxBy(static frame => frame.CreatedUtc);
             }
             else if (captureEpoch is not null)

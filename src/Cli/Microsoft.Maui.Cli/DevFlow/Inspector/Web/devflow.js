@@ -793,6 +793,21 @@ import { createViewportController } from './inspector-viewport-controller.js';
           screenshotResolutionSupported = true;
         }
 
+        const sameExplicitFrame = tap !== null
+          && tap === latestTap
+          && hasExplicitFrameIdentity(state)
+          && frame.frameId
+          && frame.frameId === committedFrame.frameId
+          && frame.streamId === committedFrame.streamId
+          && frame.frameRevision === committedFrame.frameRevision;
+        if (sameExplicitFrame) {
+          tap.unchangedCaptures++;
+          renderPreviewPending();
+          scheduleRefresh(300);
+          reportCaptureSuccess(false);
+          return state;
+        }
+
         // Keep the previous frame intact until its replacement image is ready.
         let image = null;
         if (state.screenshotUrl) {
@@ -856,6 +871,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
             renderPreviewPending();
           } else {
             tap.unchangedCaptures++;
+            renderPreviewPending();
             scheduleRefresh(300, REFRESH_INTENT_RETRY);
           }
         }
@@ -2044,13 +2060,20 @@ import { createViewportController } from './inspector-viewport-controller.js';
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestPayload),
           });
+          const failure = response.ok
+            ? null
+            : await response.clone().json().catch(() => null);
+          const reason = failure?.reason || failure?.error || `HTTP ${response.status}`;
           if (await responseHasFrameCorrelationError(response))
             scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
           scheduleRefresh(
             300,
             response.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
-          await response.arrayBuffer().catch(() => {});
-          if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
+          if (response.ok) {
+            if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
+          } else {
+            setStatus(`Gesture did not run — ${reason}`);
+          }
         } catch (error) {
           console.error('Gesture fallback failed:', error);
         }

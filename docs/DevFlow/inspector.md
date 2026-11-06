@@ -36,9 +36,9 @@ updates are coalesced, target text is bounded, and continuous pointer actions ar
 after their final tap, swipe, long-press, or drag classification is known.
 
 The marker remains visible briefly while the screenshot and tree refresh, and reduced-motion
-clients receive a static marker and path instead of animation. A local Inspector action is rendered
-optimistically and correlated by `actionId`, so its websocket echo is suppressed in the originating
-tab while other Inspector tabs still see it.
+clients receive a static marker and path instead of animation. Local Inspector actions retain their
+normal direct input and status feedback; their correlated websocket echoes are suppressed in the
+originating tab while other Inspector tabs still see them.
 
 Action events reference the frame they used when that identity is available. During compatibility
 with agents that expose only capture metadata, the Inspector matches `captureEpoch`,
