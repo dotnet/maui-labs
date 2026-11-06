@@ -8,6 +8,10 @@ using Microsoft.Maui.Graphics;
 
 namespace MacOS.RuntimeTests.Scenarios.BackgroundReset;
 
+// The sibling scenario namespace MacOS.RuntimeTests.Scenarios.Picker shadows the control type when every
+// scenario compiles together (no RuntimeTestScenario selector), so name the control explicitly.
+using MauiPicker = Microsoft.Maui.Controls.Picker;
+
 static class Registration
 {
     [ModuleInitializer]
@@ -43,7 +47,7 @@ sealed class BackgroundResetScenario : MauiRuntimeScenario
     Grid _direct = null!;
     Grid _triggered = null!;
     ContentView _content = null!;
-    Picker _picker = null!;
+    MauiPicker _picker = null!;
     ImageButton _imageButton = null!;
 
     static CALayer? LayerOf(VisualElement view) => (view.Handler?.PlatformView as NSView)?.Layer;
@@ -149,7 +153,7 @@ sealed class BackgroundResetScenario : MauiRuntimeScenario
         _triggered.Triggers.Add(trigger);
 
         _content = new ContentView { AutomationId = "Content", HeightRequest = 40, Content = new Label { Text = "ContentView" } };
-        _picker = new Picker { AutomationId = "Picker", ItemsSource = new[] { "One", "Two" } };
+        _picker = new MauiPicker { AutomationId = "Picker", ItemsSource = new[] { "One", "Two" } };
         _imageButton = new ImageButton { AutomationId = "ImageButton", WidthRequest = 40, HeightRequest = 40 };
 
         return new(new ContentPage
