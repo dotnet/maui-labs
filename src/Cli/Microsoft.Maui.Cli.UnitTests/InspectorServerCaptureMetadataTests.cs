@@ -924,7 +924,7 @@ public class InspectorServerCaptureMetadataTests
     }
 
     [Fact]
-    public async Task CorrelatedHitTest_SupersededCoordinateFrame_IsRejectedWithoutRetargeting()
+    public async Task CorrelatedHitTest_EquivalentNewerFrame_DoesNotInvalidateDisplayedCoordinates()
     {
         await using var agent = new MockAgentServer
         {
@@ -974,12 +974,140 @@ public class InspectorServerCaptureMetadataTests
                 $"http://localhost:{inspectorPort}/api/hitTest",
                 request);
 
+            response.EnsureSuccessStatusCode();
+            Assert.Contains(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedHitTest_ChangedGeometryFrame_IsRejectedWithoutRetargeting()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = OffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var firstResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            firstResponse.EnsureSuccessStatusCode();
+            using var firstState = JsonDocument.Parse(
+                await firstResponse.Content.ReadAsStringAsync());
+            var firstFrame = firstState.RootElement.GetProperty("frame");
+
+            agent.VisualTreeResponse = OffsetVisualTree.Replace(
+                "\"x\": 10, \"y\": 20",
+                "\"x\": 30, \"y\": 20",
+                StringComparison.Ordinal);
+            using var backResponse = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/back",
+                content: null);
+            backResponse.EnsureSuccessStatusCode();
+            using var secondResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            secondResponse.EnsureSuccessStatusCode();
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-superseded",
+                    source = "inspector",
+                    streamId = firstFrame.GetProperty("streamId").GetString(),
+                    frameId = firstFrame.GetProperty("frameId").GetString(),
+                    frameRevision = firstFrame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
             using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             Assert.Equal("frame-superseded", error.RootElement.GetProperty("error").GetString());
             Assert.DoesNotContain(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/hit-test");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedCoordinateTap_RehitTestsWithFreshCaptureForParentFallback()
+    {
+        await using var agent = new MockAgentServer(
+            failFirstHitTestCandidate: true,
+            changeHitTestCandidates: true)
+        {
+            VisualTreeResponse = OffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-parent-fallback",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                request);
+
+            response.EnsureSuccessStatusCode();
+            var taps = agent.RecordedRequests
+                .Where(recorded => recorded.Path == "/api/v1/ui/actions/tap")
+                .ToArray();
+            Assert.Equal(2, taps.Length);
+            using var firstTap = JsonDocument.Parse(taps[0].Body!);
+            using var secondTap = JsonDocument.Parse(taps[1].Body!);
+            Assert.NotEqual(
+                firstTap.RootElement.GetProperty("captureEpoch").GetInt64(),
+                secondTap.RootElement.GetProperty("captureEpoch").GetInt64());
         }
         finally
         {
@@ -1053,9 +1181,12 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var initialState = await client.GetAsync(
+            using var initialStateResponse = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state");
-            initialState.EnsureSuccessStatusCode();
+            initialStateResponse.EnsureSuccessStatusCode();
+            using var initialState = JsonDocument.Parse(
+                await initialStateResponse.Content.ReadAsStringAsync());
+            var frame = initialState.RootElement.GetProperty("frame");
 
             using var backResponse = await client.PostAsync(
                 $"http://localhost:{inspectorPort}/api/back",
@@ -1065,6 +1196,31 @@ public class InspectorServerCaptureMetadataTests
             using var failedState = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state");
             Assert.Equal(HttpStatusCode.ServiceUnavailable, failedState.StatusCode);
+
+            agent.ClearRecordedRequests();
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-after-failed-capture",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
+            response.EnsureSuccessStatusCode();
+            Assert.Contains(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
         }
         finally
         {

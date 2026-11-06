@@ -5,6 +5,7 @@ import { confirmModal } from './inspector-dialog.js';
 import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from './inspector-data-context.js';
 import {
   CoordinateSpace,
+  appLogicalToWindowLogical,
   buildActionCorrelation,
   clientToAppLogical,
   hasExplicitFrameIdentity,
@@ -64,10 +65,6 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   viewport.style.height = committedFrame.logicalHeight + 'px';
   viewport.dataset.width = String(committedFrame.logicalWidth);
   viewport.dataset.height = String(committedFrame.logicalHeight);
-  if (screenshot) {
-    screenshot.style.width = '100%';
-    screenshot.style.height = '100%';
-  }
 
   function correlatedPayload(
     payload,
@@ -75,7 +72,20 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     frame = committedFrame,
   ) {
     const correlation = buildActionCorrelation(frame, coordinateSpace);
-    return correlation ? { ...payload, correlation } : payload;
+    if (correlation) return { ...payload, correlation };
+    if (coordinateSpace !== CoordinateSpace.appLogical) return payload;
+
+    const converted = { ...payload };
+    if (Number.isFinite(payload.x) && Number.isFinite(payload.y)) {
+      Object.assign(converted, appLogicalToWindowLogical(payload, frame));
+    }
+    if (Array.isArray(payload.points)) {
+      converted.points = payload.points.map(point => ({
+        ...point,
+        ...appLogicalToWindowLogical(point, frame),
+      }));
+    }
+    return converted;
   }
 
   const inspectorAgent = Object.freeze({
@@ -675,6 +685,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(correlatedPayload({ x, y })),
       });
+      if (response.status === 409 || response.status === 410) scheduleRefresh(0);
       const result = response.ok ? await response.json().catch(() => null) : null;
       if (token !== inspectHitToken) return;
       if (result && result.ok && result.elementId) {
@@ -980,6 +991,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
             CoordinateSpace.appLogical,
             frame))
         });
+        if (resp.status === 409 || resp.status === 410) scheduleRefresh(0);
         if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
         scheduleRefresh(300);
       } catch (err) {
@@ -1036,7 +1048,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           return;
         }
         try {
-          await fetch(`${basePath}/api/gesture`, {
+          const response = await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(correlatedPayload(
@@ -1046,6 +1058,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
               CoordinateSpace.appLogical,
               gestureFrame || committedFrame))
           });
+          if (response.status === 409 || response.status === 410) scheduleRefresh(0);
           scheduleRefresh(300);
           if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
         } catch (err) {
@@ -1173,9 +1186,13 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     post: (path, body) => inspectorApi.post(
       path,
       path === '/api/setProperty' ? correlatedPayload(body) : body),
-    postDetailed: (path, body) => inspectorApi.postDetailed(
-      path,
-      path === '/api/setProperty' ? correlatedPayload(body) : body),
+    postDetailed: async (path, body) => {
+      const response = await inspectorApi.postDetailed(
+        path,
+        path === '/api/setProperty' ? correlatedPayload(body) : body);
+      if (response.status === 409 || response.status === 410) scheduleRefresh(0);
+      return response;
+    },
   });
   const propertyGrid = createPropertyGridController({
     pane: propsPaneEl,

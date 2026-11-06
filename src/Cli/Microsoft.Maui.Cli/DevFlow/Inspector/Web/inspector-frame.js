@@ -41,7 +41,7 @@ function optionalString(value) {
 function frameIdFromScreenshotUrl(url) {
   if (typeof url !== 'string' || url.length === 0) return null;
   try {
-    return new URL(url, 'http://localhost/').searchParams.get('frame');
+    return optionalString(new URL(url, 'http://localhost/').searchParams.get('frame'));
   } catch {
     return null;
   }
@@ -51,7 +51,7 @@ export function hasExplicitFrameIdentity(state) {
   const stateObject = objectOrEmpty(state);
   return (stateObject.frame && typeof stateObject.frame === 'object')
     || optionalString(stateObject.frameId) !== null
-    || optionalString(stateObject.screenshotUrl) !== null;
+    || frameIdFromScreenshotUrl(stateObject.screenshotUrl) !== null;
 }
 
 function deepFreeze(value, seen = new WeakSet()) {
@@ -66,132 +66,85 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
   const fallbackObject = objectOrEmpty(fallback);
   const raw = objectOrEmpty(stateObject.frame || stateObject);
   const fallbackFrame = objectOrEmpty(fallbackObject.frame || fallbackObject);
+  const pick = key => raw[key] ?? stateObject[key];
+  const pickFallback = key => fallbackFrame[key] ?? fallbackObject[key];
   const explicitFrameId = optionalString(
-    raw.frameId
-    ?? stateObject.frameId
+    pick('frameId')
     ?? frameIdFromScreenshotUrl(stateObject.screenshotUrl),
   );
   const fallbackFrameId = optionalString(
-    fallbackFrame.frameId
-    ?? fallbackObject.frameId
+    pickFallback('frameId')
     ?? frameIdFromScreenshotUrl(fallbackObject.screenshotUrl),
   );
-  const canInheritFrameMetadata = !explicitFrameId || explicitFrameId === fallbackFrameId;
+  const hasIdentity = hasExplicitFrameIdentity(stateObject);
+  const sameFrame = explicitFrameId !== null && explicitFrameId === fallbackFrameId;
+  const canInheritGeometry = !hasIdentity || sameFrame;
+  const currentOrFallback = (key, inherit = canInheritGeometry) =>
+    pick(key) ?? (inherit ? pickFallback(key) : null);
 
   const pixelWidth = positiveNumber(
-    raw.pixelWidth,
-    stateObject.pixelWidth,
-    raw.logicalWidth,
-    stateObject.viewportWidth,
-    canInheritFrameMetadata ? fallbackFrame.pixelWidth : null,
-    canInheritFrameMetadata ? fallbackObject.pixelWidth : null,
-    canInheritFrameMetadata ? fallbackFrame.logicalWidth : null,
-    canInheritFrameMetadata ? fallbackObject.viewportWidth : null,
+    currentOrFallback('pixelWidth'),
+    currentOrFallback('logicalWidth'),
+    currentOrFallback('viewportWidth'),
   ) || 1;
   const pixelHeight = positiveNumber(
-    raw.pixelHeight,
-    stateObject.pixelHeight,
-    raw.logicalHeight,
-    stateObject.viewportHeight,
-    canInheritFrameMetadata ? fallbackFrame.pixelHeight : null,
-    canInheritFrameMetadata ? fallbackObject.pixelHeight : null,
-    canInheritFrameMetadata ? fallbackFrame.logicalHeight : null,
-    canInheritFrameMetadata ? fallbackObject.viewportHeight : null,
+    currentOrFallback('pixelHeight'),
+    currentOrFallback('logicalHeight'),
+    currentOrFallback('viewportHeight'),
   ) || 1;
   const logicalWidth = positiveNumber(
-    raw.logicalWidth,
-    stateObject.logicalWidth,
-    stateObject.viewportWidth,
-    canInheritFrameMetadata ? fallbackFrame.logicalWidth : null,
-    canInheritFrameMetadata ? fallbackObject.logicalWidth : null,
-    canInheritFrameMetadata ? fallbackObject.viewportWidth : null,
+    currentOrFallback('logicalWidth'),
+    currentOrFallback('viewportWidth'),
     pixelWidth,
   ) || 1;
   const logicalHeight = positiveNumber(
-    raw.logicalHeight,
-    stateObject.logicalHeight,
-    stateObject.viewportHeight,
-    canInheritFrameMetadata ? fallbackFrame.logicalHeight : null,
-    canInheritFrameMetadata ? fallbackObject.logicalHeight : null,
-    canInheritFrameMetadata ? fallbackObject.viewportHeight : null,
+    currentOrFallback('logicalHeight'),
+    currentOrFallback('viewportHeight'),
     pixelHeight,
   ) || 1;
   const scaleX = pixelWidth / logicalWidth;
   const scaleY = pixelHeight / logicalHeight;
   const captureScale = positiveNumber(
-    raw.captureScale,
-    stateObject.captureScale,
-    canInheritFrameMetadata ? fallbackFrame.captureScale : null,
-    canInheritFrameMetadata ? fallbackObject.captureScale : null,
+    currentOrFallback('captureScale'),
     Math.abs(scaleX - scaleY) <= Math.max(scaleX, scaleY) * 0.005 ? scaleX : 1,
   ) || 1;
 
   return deepFreeze({
     streamId: optionalString(
-      raw.streamId
-      ?? stateObject.streamId
-      ?? (canInheritFrameMetadata ? fallbackFrame.streamId ?? fallbackObject.streamId : null),
+      pick('streamId') ?? (sameFrame ? pickFallback('streamId') : null),
     ),
-    frameId: explicitFrameId ?? fallbackFrameId,
+    frameId: explicitFrameId,
     frameRevision: safeInteger(
-      raw.frameRevision
-      ?? stateObject.frameRevision
-      ?? (canInheritFrameMetadata ? fallbackFrame.frameRevision ?? fallbackObject.frameRevision : null),
+      pick('frameRevision') ?? (sameFrame ? pickFallback('frameRevision') : null),
       0,
     ) ?? 0,
     captureEpoch: safeInteger(
-      raw.captureEpoch
-      ?? stateObject.captureEpoch
-      ?? (canInheritFrameMetadata ? fallbackFrame.captureEpoch ?? fallbackObject.captureEpoch : null),
+      pick('captureEpoch') ?? (sameFrame ? pickFallback('captureEpoch') : null),
       1,
     ),
     registryGeneration: safeInteger(
-      raw.registryGeneration
-      ?? stateObject.registryGeneration
-      ?? (canInheritFrameMetadata
-        ? fallbackFrame.registryGeneration ?? fallbackObject.registryGeneration
-        : null),
+      pick('registryGeneration') ?? (sameFrame ? pickFallback('registryGeneration') : null),
       0,
     ),
     windowId: safeInteger(
-      raw.windowId
-      ?? stateObject.windowId
-      ?? (canInheritFrameMetadata ? fallbackFrame.windowId ?? fallbackObject.windowId : null),
+      currentOrFallback('windowId'),
       0,
     ),
     treeRevision: optionalString(
-      raw.treeRevision
-      ?? stateObject.treeRevision
-      ?? (canInheritFrameMetadata ? fallbackFrame.treeRevision ?? fallbackObject.treeRevision : null),
+      currentOrFallback('treeRevision'),
     ) ?? '',
     diagnosticInputsRevision: optionalString(
-      raw.diagnosticInputsRevision
-      ?? stateObject.diagnosticInputsRevision
-      ?? (canInheritFrameMetadata
-        ? fallbackFrame.diagnosticInputsRevision ?? fallbackObject.diagnosticInputsRevision
-        : null),
+      currentOrFallback('diagnosticInputsRevision'),
     ),
     logicalWidth,
     logicalHeight,
     pixelWidth,
     pixelHeight,
-    rootOffsetX: finiteNumber(
-      raw.rootOffsetX,
-      stateObject.rootOffsetX,
-      canInheritFrameMetadata ? fallbackFrame.rootOffsetX : null,
-      canInheritFrameMetadata ? fallbackObject.rootOffsetX : null,
-    ),
-    rootOffsetY: finiteNumber(
-      raw.rootOffsetY,
-      stateObject.rootOffsetY,
-      canInheritFrameMetadata ? fallbackFrame.rootOffsetY : null,
-      canInheritFrameMetadata ? fallbackObject.rootOffsetY : null,
-    ),
+    rootOffsetX: finiteNumber(currentOrFallback('rootOffsetX')),
+    rootOffsetY: finiteNumber(currentOrFallback('rootOffsetY')),
     captureScale,
     createdAt: optionalString(
-      raw.createdAt
-      ?? stateObject.createdAt
-      ?? (canInheritFrameMetadata ? fallbackFrame.createdAt ?? fallbackObject.createdAt : null),
+      pick('createdAt') ?? (sameFrame ? pickFallback('createdAt') : null),
     ),
   });
 }
@@ -199,6 +152,8 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
 export function shouldCommitFrame(committed, candidate) {
   if (!candidate) return false;
   if (!committed) return true;
+  if (!candidate.streamId && !candidate.frameId &&
+      (committed.streamId || committed.frameId)) return false;
 
   if (candidate.streamId && committed.streamId) {
     if (candidate.streamId !== committed.streamId) return true;
