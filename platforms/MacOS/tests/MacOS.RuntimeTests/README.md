@@ -23,6 +23,7 @@ A timeout is a failure, not accepted baseline evidence.
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
 | `tap-buttons` | 3 | Left click routed to secondary recognizer / primary, secondary and dynamic `Buttons` changes |
+| `focus-state` | 5 | Entry is first responder but `IsFocused` stays false / Entry, focus moves, Editor, `Unfocus()` with ordered Focused/Unfocused events, focus redirected from an `Unfocused` handler (13 assertions) |
 | `bundle-resources` | 4 | Linked image missing / assets included and loaded from the built app bundle |
 | `menu-localization` | 5 per launch | English defaults in a German app / native bundle localization, app overrides, localized app names, responder actions, custom-menu replacement and option resets |
 
