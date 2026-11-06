@@ -29,6 +29,7 @@ public class AgentHttpServer : IDisposable
     public int Port => _port;
     public bool IsRunning => _listenTask != null && !_listenTask.IsCompleted;
     internal Func<HttpRequest, Task<MutationLeaseStatus>>? MutationLeaseValidator { get; set; }
+    internal Func<HttpRequest, HttpResponse?>? MutationAdmissionValidator { get; set; }
     internal Func<HttpRequest, HttpResponse, Task>? MutationObserver { get; set; }
     /// <summary>
     /// How long a mutation waits for the one ahead of it before giving up with a retryable 503.
@@ -46,14 +47,26 @@ public class AgentHttpServer : IDisposable
         => _getRoutes[path.TrimEnd('/')] = new RouteHandler(handler, RequiresMutationLease: false);
 
     public void MapPost(string path, Func<HttpRequest, Task<HttpResponse>> handler, bool requiresMutationLease = true)
-        => MapPost(path, handler, requiresMutationLease, mutationLeaseExemption: null);
+        => MapPost(path, handler, requiresMutationLease, mutationLeaseExemption: null, serializeMutation: true);
 
     public void MapPost(
         string path,
         Func<HttpRequest, Task<HttpResponse>> handler,
         bool requiresMutationLease,
         Func<HttpRequest, bool>? mutationLeaseExemption)
-        => _postRoutes[path.TrimEnd('/')] = new RouteHandler(handler, requiresMutationLease, mutationLeaseExemption);
+        => MapPost(path, handler, requiresMutationLease, mutationLeaseExemption, serializeMutation: true);
+
+    public void MapPost(
+        string path,
+        Func<HttpRequest, Task<HttpResponse>> handler,
+        bool requiresMutationLease,
+        Func<HttpRequest, bool>? mutationLeaseExemption,
+        bool serializeMutation)
+        => _postRoutes[path.TrimEnd('/')] = new RouteHandler(
+            handler,
+            requiresMutationLease,
+            mutationLeaseExemption,
+            serializeMutation);
 
     public void MapPut(string path, Func<HttpRequest, Task<HttpResponse>> handler, bool requiresMutationLease = true)
         => _putRoutes[path.TrimEnd('/')] = new RouteHandler(handler, requiresMutationLease);
@@ -415,11 +428,13 @@ public class AgentHttpServer : IDisposable
         var requiresMutationLease = route.RequiresMutationLease &&
             !(route.MutationLeaseExemption?.Invoke(request) ?? false);
 
-        // Only mutations are admitted one at a time. Lease control (/api/v1/agent/lease) must
+        // Most mutations are admitted one at a time. A route may opt out while keeping lease
+        // validation when it exists to cancel the mutation currently holding this gate.
+        // Lease control (/api/v1/agent/lease) must
         // stay OUT of this gate: a forced takeover exists precisely to preempt a mutation that
         // is stuck — typically on a blocked UI dispatcher — so queueing it behind that mutation
         // would deadlock the one escape hatch. MutationLeaseCoordinator serializes itself.
-        if (!route.RequiresMutationLease)
+        if (!route.RequiresMutationLease || !route.SerializeMutation)
             return await RunRouteAsync(route, request, requiresMutationLease).ConfigureAwait(false);
 
         if (!await _mutationAdmissionGate.WaitAsync(MutationAdmissionTimeout, ct).ConfigureAwait(false))
@@ -475,6 +490,12 @@ public class AgentHttpServer : IDisposable
                         ["Authority"] = status.Authority
                     }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value));
             }
+        }
+
+        if (requiresMutationLease
+            && MutationAdmissionValidator?.Invoke(request) is { } admissionFailure)
+        {
+            return admissionFailure;
         }
 
         var response = await route.Handler(request).ConfigureAwait(false);
@@ -547,7 +568,8 @@ public class AgentHttpServer : IDisposable
     private sealed record RouteHandler(
         Func<HttpRequest, Task<HttpResponse>> Handler,
         bool RequiresMutationLease,
-        Func<HttpRequest, bool>? MutationLeaseExemption = null);
+        Func<HttpRequest, bool>? MutationLeaseExemption = null,
+        bool SerializeMutation = true);
 
     private sealed class RequestBodyTooLargeException : Exception;
 
