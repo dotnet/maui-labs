@@ -1,7 +1,7 @@
 {
   "name": "focus-state",
-  "expectedCases": 4,
-  "expectedAssertions": 10,
+  "expectedCases": 5,
+  "expectedAssertions": 13,
   "evidence": [
     "focus.jsonl",
     "assertions.txt"

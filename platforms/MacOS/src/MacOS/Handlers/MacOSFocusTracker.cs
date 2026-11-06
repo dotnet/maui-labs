@@ -1,4 +1,5 @@
 using AppKit;
+using CoreFoundation;
 using Foundation;
 
 namespace Microsoft.Maui.Platforms.MacOS.Handlers;
@@ -10,6 +11,12 @@ namespace Microsoft.Maui.Platforms.MacOS.Handlers;
 /// window covers every control - including text fields, whose first responder is the window's shared
 /// field editor rather than the field itself.
 /// </summary>
+/// <remarks>
+/// AppKit moves the first responder in steps (a text field, then its field editor), so notifications are
+/// coalesced and settled on the next turn of the main queue - outside AppKit's own transition. That also
+/// lets an <c>Unfocused</c> handler move focus elsewhere and have that win. <c>IsFocused</c> therefore
+/// follows a <c>Focus()</c> call one main-queue turn later.
+/// </remarks>
 internal sealed class MacOSFocusTracker : NSObject
 {
     static readonly NSString FirstResponderKey = new("firstResponder");
@@ -17,6 +24,8 @@ internal sealed class MacOSFocusTracker : NSObject
     readonly WeakReference<NSWindow> _window;
     WeakReference<IView>? _focused;
     bool _observing;
+    bool _updateQueued;
+    int _transition;
 
     public MacOSFocusTracker(NSWindow window)
     {
@@ -28,9 +37,23 @@ internal sealed class MacOSFocusTracker : NSObject
     public override void ObserveValue(NSString keyPath, NSObject ofObject, NSDictionary change, IntPtr context)
     {
         if (keyPath == FirstResponderKey)
-            Update();
+            QueueUpdate();
         else
             base.ObserveValue(keyPath, ofObject, change, context);
+    }
+
+    void QueueUpdate()
+    {
+        if (_updateQueued)
+            return;
+
+        _updateQueued = true;
+        DispatchQueue.MainQueue.DispatchAsync(() =>
+        {
+            _updateQueued = false;
+            if (_observing)
+                Update();
+        });
     }
 
     void Update()
@@ -44,9 +67,19 @@ internal sealed class MacOSFocusTracker : NSObject
         if (ReferenceEquals(previous, next))
             return;
 
+        var transition = ++_transition;
         _focused = next is null ? null : new WeakReference<IView>(next);
+
         if (previous is not null)
+        {
+            // Unfocused handlers run synchronously here and may move focus again or close the window
+            // (detaching this tracker). Either way this transition is stale and must not mark `next`
+            // focused: a move queues another update, which settles on the new first responder.
             previous.IsFocused = false;
+            if (transition != _transition || !_observing || !ReferenceEquals(Resolve(window.FirstResponder), next))
+                return; // the queued update for the newer first responder settles the state
+        }
+
         if (next is not null)
             next.IsFocused = true;
     }
@@ -79,6 +112,7 @@ internal sealed class MacOSFocusTracker : NSObject
         if (_observing && _window.TryGetTarget(out var window))
             window.RemoveObserver(this, FirstResponderKey);
         _observing = false;
+        _transition++;
 
         if (_focused is not null && _focused.TryGetTarget(out var focused))
             focused.IsFocused = false;

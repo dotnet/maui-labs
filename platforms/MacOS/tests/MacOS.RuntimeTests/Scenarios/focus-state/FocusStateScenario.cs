@@ -9,8 +9,8 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("focus-state", 4, context => new FocusStateScenario().CreateDelegate(context),
-            ExpectedAssertions: 10));
+        ScenarioRegistry.Register(new("focus-state", 5, context => new FocusStateScenario().CreateDelegate(context),
+            ExpectedAssertions: 13));
 }
 
 /// <summary>
@@ -23,6 +23,8 @@ sealed class FocusStateScenario : MauiRuntimeScenario
     Entry _first = null!;
     Entry _second = null!;
     Editor _editor = null!;
+    Entry _redirectTarget = null!;
+    bool _redirectOnUnfocus;
     readonly List<string> _events = [];
 
     void Track(VisualElement view, string name)
@@ -88,6 +90,29 @@ sealed class FocusStateScenario : MauiRuntimeScenario
         evidence.Assert(nativeWindow.FirstResponder is not NSTextView, "The text view is no longer first responder.", "focus-state.unfocus-responder");
         evidence.Assert(_events.SequenceEqual(["editor:unfocused"]), $"Unfocused fires once; events: {string.Join(",", _events)}.", "focus-state.unfocus-event");
         evidence.Pass("unfocus");
+
+        // An Unfocused handler that moves focus elsewhere: the redirect wins and only one view is focused.
+        _first.Focus();
+        await SettleAsync();
+        _events.Clear();
+        _redirectOnUnfocus = true;
+        _second.Focus();
+        await SettleAsync();
+        _redirectOnUnfocus = false;
+        evidence.AppendJson("focus.jsonl", new
+        {
+            step = "redirect",
+            first = _first.IsFocused,
+            second = _second.IsFocused,
+            target = _redirectTarget.IsFocused,
+            events = _events.ToArray()
+        });
+        evidence.Assert(_redirectTarget.IsFocused, "Focus redirected from an Unfocused handler lands on the redirect target.", "focus-state.redirect-target");
+        evidence.Assert(!_first.IsFocused && !_second.IsFocused,
+            $"No other view is left focused; first={_first.IsFocused}, second={_second.IsFocused}.", "focus-state.redirect-single");
+        evidence.Assert(!_events.Contains("second:focused") || _events.LastIndexOf("second:unfocused") > _events.LastIndexOf("second:focused"),
+            $"The superseded view does not end up focused; events: {string.Join(",", _events)}.", "focus-state.redirect-events");
+        evidence.Pass("unfocused-handler-redirect");
     }
 
     public override Window CreateWindow(IActivationState? activationState)
@@ -98,6 +123,13 @@ sealed class FocusStateScenario : MauiRuntimeScenario
         Track(_first, "first");
         Track(_second, "second");
         Track(_editor, "editor");
+        _redirectTarget = new Entry { AutomationId = "RedirectTarget", Placeholder = "Redirect target" };
+        Track(_redirectTarget, "target");
+        _first.Unfocused += (_, _) =>
+        {
+            if (_redirectOnUnfocus)
+                _redirectTarget.Focus();
+        };
 
         return new(new ContentPage
         {
@@ -105,7 +137,7 @@ sealed class FocusStateScenario : MauiRuntimeScenario
             {
                 Padding = 16,
                 Spacing = 8,
-                Children = { _first, _second, _editor }
+                Children = { _first, _second, _editor, _redirectTarget }
             }
         })
         {
