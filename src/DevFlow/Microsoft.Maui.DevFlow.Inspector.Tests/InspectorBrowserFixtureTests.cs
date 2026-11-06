@@ -997,6 +997,16 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     public async Task ViewportZoom_KeepsTheCursorAnchoredInAppCoordinates()
     {
         await Page.Locator("#df-props-close").ClickAsync();
+        await Page.Locator("#df-zoom-preset").SelectOptionAsync("1");
+        var pixelAlignedTranslation = await Page.Locator("#app-viewport").EvaluateAsync<double[]>("""
+            element => {
+              const matrix = new DOMMatrix(getComputedStyle(element).transform);
+              const density = devicePixelRatio || 1;
+              return [matrix.e * density, matrix.f * density];
+            }
+            """);
+        Assert.All(pixelAlignedTranslation, value =>
+            Assert.InRange(Math.Abs(value - Math.Round(value)), 0, 0.001));
         await Page.RouteAsync("**/api/tap", route => route.FulfillAsync(new()
         {
             Status = 200,
@@ -1047,30 +1057,54 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 System.Text.RegularExpressions.Regex.Escape(anchoredTransform)));
 
         var scrollBodies = new ConcurrentQueue<string>();
-        await Page.RouteAsync("**/api/scroll", route =>
+        var firstScrollStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstScroll = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondScrollStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var scrollRequest = 0;
+        await Page.RouteAsync("**/api/scroll", async route =>
         {
             scrollBodies.Enqueue(route.Request.PostData!);
-            return route.FulfillAsync(new()
+            if (Interlocked.Increment(ref scrollRequest) == 1)
+            {
+                firstScrollStarted.TrySetResult();
+                await releaseFirstScroll.Task;
+            }
+            else
+            {
+                secondScrollStarted.TrySetResult();
+            }
+            await route.FulfillAsync(new()
             {
                 Status = 200,
                 ContentType = "application/json",
                 Body = """{"ok":true}"""
             });
         });
-        await Page.Mouse.MoveAsync(clientX, clientY);
-        await Page.Mouse.WheelAsync(0, 60);
-        await Page.Keyboard.DownAsync("Control");
         try
         {
-            await Page.Mouse.WheelAsync(0, -120);
+            await Page.Mouse.MoveAsync(clientX, clientY);
+            await Page.Mouse.WheelAsync(0, 60);
+            await Page.Keyboard.DownAsync("Control");
+            try
+            {
+                await Page.Mouse.WheelAsync(0, -120);
+            }
+            finally
+            {
+                await Page.Keyboard.UpAsync("Control");
+            }
+            await firstScrollStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Page.Mouse.MoveAsync(clientX + 40, clientY);
+            await Page.Mouse.WheelAsync(0, 80);
+            await Page.WaitForTimeoutAsync(180);
+            Assert.False(secondScrollStarted.Task.IsCompleted);
+            releaseFirstScroll.TrySetResult();
+            await secondScrollStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally
         {
-            await Page.Keyboard.UpAsync("Control");
+            releaseFirstScroll.TrySetResult();
         }
-        await Page.Mouse.MoveAsync(clientX + 40, clientY);
-        await Page.Mouse.WheelAsync(0, 80);
-        await Page.WaitForTimeoutAsync(180);
         Assert.Equal(2, scrollBodies.Count);
         var scrolls = scrollBodies.Select(body => JsonDocument.Parse(body)).ToArray();
         try
@@ -1086,6 +1120,100 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             foreach (var scroll in scrolls) scroll.Dispose();
         }
         Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task AppGesture_OverlappingRequestKeepsNextGestureSessionIndependent()
+    {
+        await Page.Locator("#df-props-close").ClickAsync();
+        await Page.EvaluateAsync("""
+            () => {
+              window.fixtureOriginalGestureFetch = window.fetch;
+              window.fixtureOriginalSetPointerCapture =
+                document.getElementById('app-viewport').setPointerCapture;
+              document.getElementById('app-viewport').setPointerCapture = () => {};
+              window.fixtureGestureRequestCount = 0;
+              window.fixtureGesturePointer = (type, pointerId, x) =>
+                document.getElementById('app-viewport').dispatchEvent(new PointerEvent(type, {
+                  bubbles: true,
+                  cancelable: true,
+                  pointerId,
+                  pointerType: 'mouse',
+                  isPrimary: true,
+                  button: 0,
+                  clientX: x,
+                  clientY: 200,
+                }));
+              window.fixtureDispatchGesture = (pointerId, deltaX) => {
+                window.fixtureGesturePointer('pointerdown', pointerId, 120);
+                window.fixtureGesturePointer('pointermove', pointerId, 120 + deltaX);
+                window.fixtureGesturePointer('pointerup', pointerId, 120 + deltaX);
+              };
+              window.fetch = (url, options) => {
+                if (typeof url === 'string' && url.endsWith('/api/gesture')) {
+                  const count = ++window.fixtureGestureRequestCount;
+                  document.body.dataset.fixtureGestureRequests = String(count);
+                  if (count === 1) {
+                    return new Promise(resolve => {
+                      window.fixtureReleaseGesture = () => resolve(new Response(
+                        '{"ok":true}',
+                        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+                    });
+                  }
+                  return Promise.resolve(new Response(
+                    '{"ok":true}',
+                    { status: 200, headers: { 'Content-Type': 'application/json' } }));
+                }
+                return window.fixtureOriginalGestureFetch(url, options);
+              };
+            }
+            """);
+
+        try
+        {
+            await Page.EvaluateAsync("""
+                () => {
+                  const viewport = document.getElementById('app-viewport');
+                  window.fixtureGesturePointer('pointerdown', 41, 120);
+                  window.fixtureGesturePointer('pointermove', 41, 150);
+                  const transform = viewport.style.transform;
+                  viewport.dispatchEvent(new WheelEvent('wheel', {
+                    bubbles: true,
+                    cancelable: true,
+                    ctrlKey: true,
+                    deltaY: -120,
+                    clientX: 150,
+                    clientY: 200,
+                  }));
+                  document.body.dataset.fixtureGestureTransformStable =
+                    String(viewport.style.transform === transform);
+                  window.fixtureGesturePointer('pointerup', 41, 150);
+                }
+                """);
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-gesture-transform-stable", "true");
+            await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-gesture-requests", "1");
+
+            await Page.EvaluateAsync("() => window.fixtureDispatchGesture(42, 35)");
+            await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-gesture-requests", "2");
+            await Page.EvaluateAsync("() => window.fixtureReleaseGesture?.()");
+            await Page.EvaluateAsync("() => window.fixtureDispatchGesture(43, 40)");
+            await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-gesture-requests", "3");
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            await Page.EvaluateAsync("""
+                () => {
+                  window.fixtureReleaseGesture?.();
+                  if (window.fixtureOriginalGestureFetch)
+                    window.fetch = window.fixtureOriginalGestureFetch;
+                  const viewport = document.getElementById('app-viewport');
+                  if (window.fixtureOriginalSetPointerCapture)
+                    viewport.setPointerCapture = window.fixtureOriginalSetPointerCapture;
+                }
+                """);
+        }
     }
 
     [InspectorBrowserFixtureFact]
@@ -1205,7 +1333,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Contains("gesture", appRequests);
         while (appRequests.TryDequeue(out _)) { }
 
-        await Page.Locator("#df-reset-view").ClickAsync();
+        await Page.Locator("#df-toggle-fit").ClickAsync();
         await Expect(Page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "true");
         await Expect(Page.Locator("#df-zoom-preset")).ToHaveValueAsync("fit");
 
@@ -1267,7 +1395,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         }
         await Expect(Page.Locator("#df-zoom-indicator")).Not.ToHaveTextAsync("50%");
         Assert.Empty(appRequests);
-        await Page.Locator("#df-reset-view").ClickAsync();
+        await Page.Locator("#df-toggle-fit").ClickAsync();
         Assert.Empty(_pageErrors);
     }
 
@@ -1288,7 +1416,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Expect(Page.Locator("#df-viewport-wrap")).ToHaveAttributeAsync("tabindex", "0");
 
         var wrap = Page.Locator("#df-viewport-wrap");
-        await Page.Locator("#df-reset-view").FocusAsync();
+        await Page.Locator("#df-zoom-in").FocusAsync();
         await Page.Keyboard.PressAsync("Tab");
         Assert.Equal("df-viewport-wrap", await Page.EvaluateAsync<string>("document.activeElement?.id"));
         var focusRing = await wrap.EvaluateAsync<string>("""
@@ -1355,6 +1483,10 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await wrap.PressAsync("0");
         await Expect(Page.Locator("#df-zoom-preset")).ToHaveValueAsync("fit");
         await Expect(Page.Locator("#df-zoom-announcement")).ToContainTextAsync("Fit view");
+        var fittedTransform = await viewport.EvaluateAsync<string>("element => element.style.transform");
+        await wrap.PressAsync("ArrowRight");
+        await Expect(Page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "true");
+        Assert.Equal(fittedTransform, await viewport.EvaluateAsync<string>("element => element.style.transform"));
         Assert.Empty(_pageErrors);
     }
 

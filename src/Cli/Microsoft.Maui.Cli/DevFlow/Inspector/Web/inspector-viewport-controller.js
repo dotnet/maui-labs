@@ -1,6 +1,5 @@
 import {
   appLogicalToInspectorCss,
-  clientToAppLogical,
   inspectorCssToAppLogical,
   inspectorCssToTransformedViewport,
   transformedViewportToInspectorCss,
@@ -44,10 +43,9 @@ export function createViewportController(options) {
     zoomPreset,
     zoomIndicator,
     zoomAnnouncement,
-    resetButton,
-    getFrame,
     isEditing = () => false,
     isCommandEnabled = () => true,
+    canNavigate = () => true,
     onTransformWillChange = () => {},
     onTransformChanged = () => {},
   } = options;
@@ -60,7 +58,6 @@ export function createViewportController(options) {
   let lastBounds = null;
   let layoutFrame = 0;
   let announcementTimer = 0;
-  let pointerInside = false;
   let spacePanArmed = false;
   let panSession = null;
   let suppressedClick = null;
@@ -74,14 +71,19 @@ export function createViewportController(options) {
     };
   }
 
-  function renderedTransform(transform = view.transform) {
+  function snapToDevicePixel(value) {
+    const density = Number(window.devicePixelRatio) || 1;
+    return Math.round(value * density) / density;
+  }
+
+  function renderedTransform() {
     const origin = stage.getBoundingClientRect();
     return {
       originX: origin.left,
       originY: origin.top,
-      scale: transform.scale,
-      translateX: transform.translateX,
-      translateY: transform.translateY,
+      scale: view.transform.scale,
+      translateX: snapToDevicePixel(view.transform.translateX),
+      translateY: snapToDevicePixel(view.transform.translateY),
     };
   }
 
@@ -102,9 +104,9 @@ export function createViewportController(options) {
     return isCommandEnabled(id) !== false;
   }
 
-  function syncActionButton(button, commandId, limited = false) {
+  function syncActionButton(button, limited = false) {
     if (!button) return;
-    button.setAttribute('aria-disabled', String(!commandEnabled(commandId) || limited));
+    button.setAttribute('aria-disabled', String(!commandEnabled('df-toggle-fit') || limited));
   }
 
   function syncControls() {
@@ -139,24 +141,19 @@ export function createViewportController(options) {
 
     syncActionButton(
       zoomOutButton,
-      'df-zoom-out',
       view.transform.scale <= VIEWPORT_MIN_SCALE + ZOOM_EPSILON);
     syncActionButton(
       zoomInButton,
-      'df-zoom-in',
       view.transform.scale >= VIEWPORT_MAX_SCALE - ZOOM_EPSILON);
-    syncActionButton(resetButton, 'df-reset-view');
   }
 
   function render(announce = false) {
     const bounds = readBounds();
-    if (wrap.scrollLeft) wrap.scrollLeft = 0;
-    if (wrap.scrollTop) wrap.scrollTop = 0;
+    const rendered = renderedTransform();
     stage.style.width = `${bounds.viewportWidth}px`;
     stage.style.height = `${bounds.viewportHeight}px`;
     viewport.style.transform =
-      `translate(${view.transform.translateX}px, ${view.transform.translateY}px) scale(${view.transform.scale})`;
-    wrap.classList.toggle('df-fit-active', view.mode === 'fit');
+      `translate(${rendered.translateX}px, ${rendered.translateY}px) scale(${rendered.scale})`;
     syncControls();
     onTransformChanged({
       bounds,
@@ -167,7 +164,7 @@ export function createViewportController(options) {
   }
 
   function applyLayout({ preserveCenter = true, announce = false } = {}) {
-    onTransformWillChange();
+    if (!canNavigate() && lastBounds) return false;
     const bounds = readBounds();
     if (view.mode === 'fit') {
       view.transform = centerViewportTransform(fitViewportScale(bounds), bounds);
@@ -185,6 +182,7 @@ export function createViewportController(options) {
     }
     lastBounds = bounds;
     render(announce);
+    return true;
   }
 
   function scheduleLayout(options = {}) {
@@ -196,12 +194,20 @@ export function createViewportController(options) {
   }
 
   function setFit({ announce = true } = {}) {
+    if (!canNavigate()) return false;
+    const bounds = readBounds();
+    const next = centerViewportTransform(fitViewportScale(bounds), bounds);
+    if (view.mode === 'fit' && sameTransform(next, view.transform)) return false;
+    onTransformWillChange();
     view.mode = 'fit';
-    applyLayout({ preserveCenter: false, announce });
+    view.transform = next;
+    lastBounds = bounds;
+    render(announce);
+    return true;
   }
 
   function setScaleAtClient(scale, clientX, clientY, { announce = true } = {}) {
-    onTransformWillChange();
+    if (!canNavigate()) return false;
     const nextScale = clampViewportScale(scale);
     const currentTransform = renderedTransform();
     const anchor = { x: clientX, y: clientY };
@@ -216,41 +222,13 @@ export function createViewportController(options) {
         translateX: 0,
         translateY: 0,
       });
-    view.mode = 'custom';
-    view.transform = clampViewportTransform({
+    const next = clampViewportTransform({
       scale: nextScale,
       translateX: anchor.x - projected.x,
       translateY: anchor.y - projected.y,
     }, readBounds(), { centerSmallContent: false });
-    lastBounds = readBounds();
-    render(announce);
-  }
-
-  function setScaleAtCenter(scale, options = {}) {
-    const rect = stage.getBoundingClientRect();
-    setScaleAtClient(scale, rect.left + rect.width / 2, rect.top + rect.height / 2, options);
-  }
-
-  function stepScale(direction, clientX = null, clientY = null) {
-    const next = stepViewportScale(view.transform.scale, direction);
-    if ((direction > 0 && next <= view.transform.scale + ZOOM_EPSILON)
-      || (direction < 0 && next >= view.transform.scale - ZOOM_EPSILON))
-      return;
-    if (clientX === null || clientY === null) {
-      setScaleAtCenter(next);
-      return;
-    }
-    setScaleAtClient(next, clientX, clientY);
-  }
-
-  function panBy(deltaX, deltaY, { announce = false } = {}) {
+    if (view.mode === 'custom' && sameTransform(next, view.transform)) return false;
     onTransformWillChange();
-    const next = clampViewportTransform({
-      scale: view.transform.scale,
-      translateX: view.transform.translateX + deltaX,
-      translateY: view.transform.translateY + deltaY,
-    }, readBounds(), { centerSmallContent: false });
-    if (sameTransform(next, view.transform)) return false;
     view.mode = 'custom';
     view.transform = next;
     lastBounds = readBounds();
@@ -258,13 +236,33 @@ export function createViewportController(options) {
     return true;
   }
 
-  function toAppLogical(
-    clientX,
-    clientY,
-    frame = getFrame(),
-    renderedViewport = viewport.getBoundingClientRect(),
-  ) {
-    return clientToAppLogical(clientX, clientY, renderedViewport, frame);
+  function setScaleAtCenter(scale, options = {}) {
+    const rect = stage.getBoundingClientRect();
+    setScaleAtClient(scale, rect.left + rect.width / 2, rect.top + rect.height / 2, options);
+  }
+
+  function stepScale(direction) {
+    const next = stepViewportScale(view.transform.scale, direction);
+    if ((direction > 0 && next <= view.transform.scale + ZOOM_EPSILON)
+      || (direction < 0 && next >= view.transform.scale - ZOOM_EPSILON))
+      return;
+    setScaleAtCenter(next);
+  }
+
+  function panBy(deltaX, deltaY, { announce = false } = {}) {
+    if (!canNavigate()) return false;
+    const next = clampViewportTransform({
+      scale: view.transform.scale,
+      translateX: view.transform.translateX + deltaX,
+      translateY: view.transform.translateY + deltaY,
+    }, readBounds(), { centerSmallContent: view.mode === 'fit' });
+    if (sameTransform(next, view.transform)) return false;
+    onTransformWillChange();
+    view.mode = 'custom';
+    view.transform = next;
+    lastBounds = readBounds();
+    render(announce);
+    return true;
   }
 
   function setPanArmed(armed) {
@@ -300,12 +298,6 @@ export function createViewportController(options) {
     if (wrap.hasPointerCapture?.(session.pointerId)) {
       try { wrap.releasePointerCapture(session.pointerId); } catch {}
     }
-    if (event) {
-      const bounds = wrap.getBoundingClientRect();
-      pointerInside = event.type === 'pointerup'
-        && event.clientX >= bounds.left && event.clientX <= bounds.right
-        && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
-    }
     if (expectClick && suppressedClick?.pointerId === session.pointerId) {
       suppressedClick.timer = window.setTimeout(clearSuppressedClick, 700);
     } else if (suppressedClick?.pointerId === session.pointerId) {
@@ -332,21 +324,16 @@ export function createViewportController(options) {
         wrap.focus({ preventScroll: true, focusVisible: false });
       return;
     }
-    if (isEditing() || !commandEnabled('df-toggle-fit')) {
+    if (isEditing() || !commandEnabled('df-toggle-fit') || !canNavigate()) {
       event.preventDefault();
-      event.stopImmediatePropagation();
       return;
     }
     event.preventDefault();
-    event.stopImmediatePropagation();
     wrap.focus({ preventScroll: true, focusVisible: false });
     panSession = {
       pointerId: event.pointerId,
-      pointerType: event.pointerType,
-      button: event.button,
       lastClientX: event.clientX,
       lastClientY: event.clientY,
-      moved: false,
       cancelled: false,
       cancelTimer: 0,
     };
@@ -359,31 +346,17 @@ export function createViewportController(options) {
   function onPointerMove(event) {
     if (!panSession || event.pointerId !== panSession.pointerId) return;
     event.preventDefault();
-    event.stopImmediatePropagation();
     if (panSession.cancelled) return;
     const deltaX = event.clientX - panSession.lastClientX;
     const deltaY = event.clientY - panSession.lastClientY;
     panSession.lastClientX = event.clientX;
     panSession.lastClientY = event.clientY;
-    const next = clampViewportTransform({
-      scale: view.transform.scale,
-      translateX: view.transform.translateX + deltaX,
-      translateY: view.transform.translateY + deltaY,
-    }, readBounds(), { centerSmallContent: false });
-    panSession.moved ||= Math.hypot(deltaX, deltaY) > 2;
-    if (!sameTransform(next, view.transform)) {
-      onTransformWillChange();
-      view.mode = 'custom';
-      view.transform = next;
-      lastBounds = readBounds();
-      render();
-    }
+    panBy(deltaX, deltaY);
   }
 
   function onPointerEnd(event) {
     if (!panSession || event.pointerId !== panSession.pointerId) return;
     event.preventDefault();
-    event.stopImmediatePropagation();
     finishPan(event, { expectClick: event.type === 'pointerup' });
   }
 
@@ -403,9 +376,8 @@ export function createViewportController(options) {
 
   function onWheel(event) {
     if (!event.ctrlKey && !event.metaKey) return;
-    if (!commandEnabled('df-toggle-fit')) return;
+    if (!commandEnabled('df-toggle-fit') || !canNavigate()) return;
     event.preventDefault();
-    event.stopImmediatePropagation();
     const unit = event.deltaMode === 1
       ? 16
       : (event.deltaMode === 2 ? Math.max(1, wrap.clientHeight) : 1);
@@ -428,14 +400,11 @@ export function createViewportController(options) {
     }
     if (event.code !== 'Space' || event.repeat || event.ctrlKey || event.metaKey || event.altKey)
       return;
-    const activeElement = document.activeElement;
-    const focusAllowsPan = !activeElement
-      || activeElement === document.body
-      || activeElement === document.documentElement
-      || activeElement === wrap
-      || wrap.contains(activeElement);
-    const viewportActive = wrap === activeElement || (pointerInside && focusAllowsPan);
-    if (!viewportActive || isEditing() || isEditableTarget(event.target, window)) return;
+    if (!wrap.contains(document.activeElement)
+      || isEditing()
+      || !canNavigate()
+      || isEditableTarget(event.target, window))
+      return;
     event.preventDefault();
     setPanArmed(true);
   }
@@ -447,17 +416,17 @@ export function createViewportController(options) {
   }
 
   function onViewportKeyDown(event) {
-    if (isEditing() || isEditableTarget(event.target, window)
+    if (isEditing() || !canNavigate() || isEditableTarget(event.target, window)
       || event.altKey || event.ctrlKey || event.metaKey)
       return;
     let handled = true;
     if ((event.key === '+' || event.key === '=' || event.key === 'Add')
-      && commandEnabled('df-zoom-in')) {
+      && commandEnabled('df-toggle-fit')) {
       stepScale(1);
     } else if ((event.key === '-' || event.key === '_' || event.key === 'Subtract')
-      && commandEnabled('df-zoom-out')) {
+      && commandEnabled('df-toggle-fit')) {
       stepScale(-1);
-    } else if (event.key === '0' && commandEnabled('df-reset-view')) {
+    } else if (event.key === '0' && commandEnabled('df-toggle-fit')) {
       setFit();
     } else if (event.key === '1' && commandEnabled('df-toggle-fit')) {
       setScaleAtCenter(1);
@@ -475,23 +444,15 @@ export function createViewportController(options) {
     if (handled) event.preventDefault();
   }
 
-  function cancelPanState() {
-    cancelActivePan();
-  }
-
   fitButton?.addEventListener('click', () => {
     if (!commandEnabled('df-toggle-fit')) return;
-    if (view.mode === 'fit') setScaleAtCenter(1);
-    else setFit();
+    setFit();
   });
   zoomOutButton?.addEventListener('click', () => {
     if (zoomOutButton.getAttribute('aria-disabled') !== 'true') stepScale(-1);
   });
   zoomInButton?.addEventListener('click', () => {
     if (zoomInButton.getAttribute('aria-disabled') !== 'true') stepScale(1);
-  });
-  resetButton?.addEventListener('click', () => {
-    if (resetButton.getAttribute('aria-disabled') !== 'true') setFit();
   });
   zoomPreset?.addEventListener('change', () => {
     if (!commandEnabled('df-toggle-fit')) return;
@@ -503,8 +464,6 @@ export function createViewportController(options) {
     if (Number.isFinite(scale)) setScaleAtCenter(scale);
   });
 
-  wrap.addEventListener('pointerenter', () => { pointerInside = true; }, true);
-  wrap.addEventListener('pointerleave', () => { if (!panSession) pointerInside = false; }, true);
   wrap.addEventListener('pointerdown', onPointerDown, true);
   wrap.addEventListener('pointermove', onPointerMove, true);
   wrap.addEventListener('pointerup', onPointerEnd, true);
@@ -516,9 +475,9 @@ export function createViewportController(options) {
   wrap.addEventListener('keydown', onViewportKeyDown);
   document.addEventListener('keydown', onDocumentKeyDown, true);
   document.addEventListener('keyup', onDocumentKeyUp, true);
-  window.addEventListener('blur', cancelPanState);
+  window.addEventListener('blur', cancelActivePan);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) cancelPanState();
+    if (document.hidden) cancelActivePan();
   });
 
   if (window.ResizeObserver) {
@@ -552,12 +511,5 @@ export function createViewportController(options) {
     scheduleLayout,
     syncControls,
     revealElement,
-    setFit,
-    setScaleAtClient,
-    setScaleAtCenter,
-    panBy,
-    toAppLogical,
-    get mode() { return view.mode; },
-    get transform() { return { ...view.transform }; },
   });
 }

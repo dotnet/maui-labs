@@ -577,15 +577,15 @@ public partial class InspectorLayoutWorkspaceTests
         var compactHeader = await _page.Locator("#df-view-pane > .df-pane-header").BoundingBoxAsync();
         var compactControls = await _page.Locator("#df-viewport-controls").BoundingBoxAsync();
         var pending = await _page.Locator("#df-preview-pending").BoundingBoxAsync();
-        var reset = await _page.Locator("#df-reset-view").BoundingBoxAsync();
+        var zoomIn = await _page.Locator("#df-zoom-in").BoundingBoxAsync();
         Assert.NotNull(compactHeader);
         Assert.NotNull(compactControls);
         Assert.NotNull(pending);
-        Assert.NotNull(reset);
+        Assert.NotNull(zoomIn);
         Assert.True(compactControls.X + compactControls.Width <= compactHeader.X + compactHeader.Width + 0.5,
             $"Viewport controls escaped the compact header with Properties open: controls right={compactControls.X + compactControls.Width}, header right={compactHeader.X + compactHeader.Width}");
         Assert.True(pending.Width <= 8.5, $"Expected a compact pending cue, got {pending.Width}px.");
-        await _page.Locator("#df-reset-view").ClickAsync(new() { Trial = true });
+        await _page.Locator("#df-zoom-in").ClickAsync(new() { Trial = true });
         await Expect(_page.Locator("#df-zoom-indicator")).ToHaveTextAsync("200%");
         await _page.EvaluateAsync("""
             () => {
@@ -608,7 +608,7 @@ public partial class InspectorLayoutWorkspaceTests
         Assert.True(controls.X >= header.X - 0.5 && controls.X + controls.Width <= header.X + header.Width + 0.5,
             $"Viewport controls escaped the shared host header: controls={controls.X}..{controls.X + controls.Width}, header={header.X}..{header.X + header.Width}");
 
-        await _page.Locator("#df-reset-view").ClickAsync();
+        await _page.Locator("#df-toggle-fit").ClickAsync();
         await Expect(_page.Locator("#df-zoom-preset")).ToHaveValueAsync("fit");
         await Expect(_page.Locator("#df-toggle-fit")).ToHaveAttributeAsync("aria-pressed", "true");
     }
