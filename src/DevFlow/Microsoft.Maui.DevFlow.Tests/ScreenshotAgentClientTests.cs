@@ -131,6 +131,42 @@ public class ScreenshotAgentClientTests
     }
 
     [Fact]
+    public async Task ScreenshotResultAsync_ExplicitLegacyWidthWithResolutionCaps_DoesNotForceAutoScale()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            var request = await ReadRequestAsync(stream);
+            Assert.Contains("maxWidth=800", request, StringComparison.Ordinal);
+            Assert.Contains("maxPixels=1000000", request, StringComparison.Ordinal);
+            Assert.DoesNotContain("scale=auto", request, StringComparison.Ordinal);
+            await WriteResponseAsync(stream, 200, "OK", "image/png", SamplePng);
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync(
+            window: null,
+            elementId: null,
+            selector: null,
+            maxWidth: 800,
+            scale: null,
+            captureEpoch: null,
+            registryGeneration: null,
+            resolution: new ScreenshotResolutionOptions
+            {
+                MaxPixels = 1_000_000
+            });
+
+        Assert.True(result.Success);
+        await serverTask;
+    }
+
+    [Fact]
     public async Task ScreenshotResultAsync_MetadataDisagreesWithPng_IgnoresLogicalMetadata()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);

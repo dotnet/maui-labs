@@ -1604,7 +1604,7 @@ public class AgentClient : IDisposable
             if (fallbackMaxWidth != null) queryParams.Add($"maxWidth={fallbackMaxWidth}");
             if (scale != null)
                 queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
-            else if (resolution != null)
+            else if (resolution != null && maxWidth == null)
                 queryParams.Add("scale=auto");
             if (captureEpoch != null) queryParams.Add($"captureEpoch={captureEpoch}");
             if (registryGeneration != null) queryParams.Add($"registryGeneration={registryGeneration}");
