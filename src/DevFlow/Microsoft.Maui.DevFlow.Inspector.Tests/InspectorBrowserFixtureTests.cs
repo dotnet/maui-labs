@@ -209,6 +209,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         _screenshotGate = gate;
         await Expect(hint).ToBeHiddenAsync();
 
+        // A Playwright route cannot expose a late response after the browser aborts it.
         await Page.EvaluateAsync("""
             () => {
               const realFetch = window.fetch.bind(window);
@@ -232,11 +233,14 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                     document.body.dataset.fixtureHeldStateStarted = 'true';
                     return new Promise(resolve => {
                       window.fixtureReleaseHeldState = () => {
-                        resolve(new Response(body, responseInit));
-                        return new Promise(done => setTimeout(() => {
-                          document.body.dataset.fixtureHeldStateReleased = 'true';
-                          done();
-                        }, 0));
+                        const staleResponse = new Response(body, responseInit);
+                        const readJson = staleResponse.json.bind(staleResponse);
+                        staleResponse.json = async () => {
+                          const value = await readJson();
+                          document.body.dataset.fixtureHeldStateConsumed = 'true';
+                          return value;
+                        };
+                        resolve(staleResponse);
                       };
                     });
                   });
@@ -266,13 +270,18 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 "() => document.querySelector('#screenshot').src");
 
             await Page.EvaluateAsync("""
-                () => {
+                async () => {
                   window.fixtureReleaseHeldState();
                   window.fixtureRestoreFetch();
+                  await new Promise(resolve => setTimeout(resolve, 0));
+                  await new Promise(resolve => setTimeout(resolve, 0));
+                  document.body.dataset.fixtureHeldStateSettled = 'true';
                 }
                 """);
             await Expect(Page.Locator("body"))
-                .ToHaveAttributeAsync("data-fixture-held-state-released", "true");
+                .ToHaveAttributeAsync("data-fixture-held-state-settled", "true");
+            await Expect(Page.Locator("body")).Not
+                .ToHaveAttributeAsync("data-fixture-held-state-consumed", "true");
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
             Assert.Equal(currentScreenshot, await Page.EvaluateAsync<string>(
                 "() => document.querySelector('#screenshot').src"));
@@ -292,7 +301,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
-    public async Task Tap_ForcedRefreshSupersedesStalledImageDecodeWithoutClearingPendingFeedback()
+    public async Task Tap_ScheduledRefreshSharesStalledCapture_ButExplicitRefreshSupersedesIt()
     {
         var hint = Page.Locator("#df-preview-pending");
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -357,6 +366,19 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Expect(Page.Locator("#df-disconnected-overlay"))
                 .ToHaveAttributeAsync("aria-busy", "true");
 
+            var explicitRefreshStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Page.Request += (_, request) =>
+            {
+                if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                    explicitRefreshStarted.TrySetResult();
+            };
+            await Page.Locator("#df-retry-connection").DispatchEventAsync("click");
+            await explicitRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(requestsBeforeTap + 2, Volatile.Read(ref stateRequests));
+            await Expect(hint).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+
             gate.TrySetResult();
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
             await Expect(hint).ToBeHiddenAsync();
@@ -382,6 +404,52 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                   window.fixtureRestoreSetTimeout?.();
                 }
                 """);
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_NewerAcceptedTapKeepsPendingFeedbackUntilItsFrameCommits()
+    {
+        var hint = Page.Locator("#df-preview-pending");
+        var button = Page.Locator(".devflow-element[data-id='fixture-button']");
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _screenshotGate = gate;
+        var stateRequests = 0;
+        Page.Request += (_, request) =>
+        {
+            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                Interlocked.Increment(ref stateRequests);
+        };
+        var requestsBeforeTap = Volatile.Read(ref stateRequests);
+
+        try
+        {
+            await button.ClickAsync();
+            await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(hint).ToBeVisibleAsync();
+            Assert.Equal(requestsBeforeTap + 1, Volatile.Read(ref stateRequests));
+
+            var secondRefreshStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Page.Request += (_, request) =>
+            {
+                if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                    secondRefreshStarted.TrySetResult();
+            };
+            await button.ClickAsync();
+            await secondRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(requestsBeforeTap + 2, Volatile.Read(ref stateRequests));
+            await Expect(hint).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+
+            gate.TrySetResult();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(hint).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            gate.TrySetResult();
         }
     }
 
@@ -544,6 +612,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         {
             await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
             await Expect(Page.Locator("#df-status")).ToContainTextAsync("Tap sent to");
+            await Page.Locator("#screenshot").DispatchEventAsync("error");
             await Page.Clock.RunForAsync(50);
             await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-decode-started", "true");
             await Expect(Page.Locator("#df-disconnected-overlay")).ToHaveAttributeAsync("aria-busy", "true");
