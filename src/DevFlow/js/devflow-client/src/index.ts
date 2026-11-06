@@ -358,12 +358,16 @@ export class DevFlowClient {
 
   async screenshot(opts: ScreenshotOptions = {}): Promise<DevFlowResult<Buffer>> {
     if (this.disposed) return this.disposedErr("screenshot");
+    const hasResolutionHints = opts.targetScale !== undefined
+      || opts.maxPixelWidth !== undefined
+      || opts.maxPixelHeight !== undefined
+      || opts.maxPixels !== undefined;
     const path = `/api/v1/ui/screenshot${buildQuery({
       window: opts.window,
       elementId: opts.elementId,
       selector: opts.selector,
       maxWidth: minPositive(opts.maxWidth, opts.maxPixelWidth),
-      scale: opts.scale,
+      scale: opts.scale ?? (hasResolutionHints ? "auto" : undefined),
       targetScale: opts.targetScale,
       maxPixelWidth: opts.maxPixelWidth,
       maxPixelHeight: opts.maxPixelHeight,

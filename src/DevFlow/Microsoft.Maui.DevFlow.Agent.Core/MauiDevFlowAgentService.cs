@@ -153,31 +153,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             ? new List<string> { "element", "native-element", "fullscreen", "selector", "capture-epoch" }
             : new List<string> { "element", "fullscreen", "selector", "capture-epoch" };
         if (SupportsScreenshotResolutionHints)
-        {
-            screenshotFeatures.AddRange(
-                ["resolution-hints", "resolution-metadata", "post-capture-downsample", "png"]);
-        }
+            screenshotFeatures.Add("resolution-hints");
 
-        var screenshotCapability = new Dictionary<string, object?>
+        capabilities["ui.screenshot"] = new Dictionary<string, object?>
         {
             ["version"] = SupportsScreenshotResolutionHints ? 3 : 2,
             ["supported"] = true,
             ["features"] = screenshotFeatures,
             ["reason"] = (string?)null
         };
-        if (SupportsScreenshotResolutionHints)
-        {
-            screenshotCapability["resolution"] = new Dictionary<string, object?>
-            {
-                ["minScale"] = MinimumScreenshotTargetScale,
-                ["maxScale"] = MaximumScreenshotTargetScale,
-                ["maxDimension"] = MaximumScreenshotPixelDimension,
-                ["maxPixels"] = MaximumScreenshotPixels,
-                ["upscale"] = false,
-                ["format"] = "png"
-            };
-        }
-        capabilities["ui.screenshot"] = screenshotCapability;
     }
 
     /// <inheritdoc />
@@ -2089,10 +2073,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         // Auto-scale to 1x by default on HiDPI displays. Override with scale=native to keep full resolution.
         bool autoScale = true;
-        if (request.QueryParams.TryGetValue("scale", out var scaleParam))
+        var scaleModeExplicit = request.QueryParams.TryGetValue("scale", out var scaleParam);
+        if (scaleModeExplicit)
         {
-            autoScale = !scaleParam.Equals("native", StringComparison.OrdinalIgnoreCase)
-                     && !scaleParam.Equals("full", StringComparison.OrdinalIgnoreCase);
+            autoScale = !string.Equals(scaleParam, "native", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(scaleParam, "full", StringComparison.OrdinalIgnoreCase);
         }
 
         ScreenshotImageResult ProcessScreenshot(byte[] data, double density)
@@ -2101,6 +2086,7 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 maxWidth,
                 density,
                 autoScale,
+                scaleModeExplicit,
                 resolutionHints,
                 includeMetadata: SupportsScreenshotResolutionHints);
 

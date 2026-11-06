@@ -631,6 +631,8 @@ public class InspectorServerCaptureMetadataTests
             Assert.Contains("fullscreen=true", screenshotRequest.QueryString);
             Assert.Contains("captureEpoch=42", screenshotRequest.QueryString);
             Assert.Contains("registryGeneration=7", screenshotRequest.QueryString);
+            Assert.Contains("targetScale=1", screenshotRequest.QueryString);
+            Assert.Contains("maxPixels=8388608", screenshotRequest.QueryString);
         }
         finally
         {
@@ -676,9 +678,95 @@ public class InspectorServerCaptureMetadataTests
                 .Where(request => request.Path == "/api/v1/ui/screenshot")
                 .ToArray();
             Assert.Equal(2, screenshotRequests.Length);
-            Assert.DoesNotContain("targetScale", screenshotRequests[0].QueryString);
+            Assert.Contains("targetScale=1", screenshotRequests[0].QueryString);
+            Assert.Contains("maxPixels=8388608", screenshotRequests[0].QueryString);
             Assert.Contains("targetScale=2", screenshotRequests[1].QueryString);
             Assert.Contains("maxPixels=8388608", screenshotRequests[1].QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_LegacyAgent_DoesNotSendResolutionHints()
+    {
+        await using var agent = new MockAgentServer(supportsCaptureEpoch: false);
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            response.EnsureSuccessStatusCode();
+
+            var screenshotRequest = Assert.Single(
+                agent.RecordedRequests,
+                request => request.Path == "/api/v1/ui/screenshot");
+            Assert.DoesNotContain("targetScale", screenshotRequest.QueryString);
+            Assert.DoesNotContain("maxPixelWidth", screenshotRequest.QueryString);
+            Assert.DoesNotContain("maxPixelHeight", screenshotRequest.QueryString);
+            Assert.DoesNotContain("maxPixels", screenshotRequest.QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Root_SupportedAgent_AppliesInitialPixelBudget()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = """
+                [
+                  {
+                    "id": "window-root",
+                    "type": "Window",
+                    "isVisible": true,
+                    "isEnabled": true,
+                    "children": [
+                      {
+                        "id": "page-root",
+                        "type": "ContentPage",
+                        "isVisible": true,
+                        "isEnabled": true,
+                        "bounds": { "x": 0, "y": 0, "width": 4096, "height": 2160 },
+                        "windowBounds": { "x": 0, "y": 0, "width": 4096, "height": 2160 },
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+                """
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/");
+            response.EnsureSuccessStatusCode();
+
+            var screenshotRequest = Assert.Single(
+                agent.RecordedRequests,
+                request => request.Path == "/api/v1/ui/screenshot");
+            Assert.Contains("targetScale=1", screenshotRequest.QueryString);
+            Assert.Contains("maxPixelWidth=4096", screenshotRequest.QueryString);
+            Assert.Contains("maxPixelHeight=2160", screenshotRequest.QueryString);
+            Assert.Contains("maxPixels=8388608", screenshotRequest.QueryString);
         }
         finally
         {

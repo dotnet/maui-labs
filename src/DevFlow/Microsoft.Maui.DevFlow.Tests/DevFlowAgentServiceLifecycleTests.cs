@@ -94,10 +94,6 @@ public class DevFlowAgentServiceLifecycleTests
         Assert.Contains(
             "resolution-hints",
             screenshotCapabilities.GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
-        Assert.False(screenshotCapabilities.GetProperty("resolution").GetProperty("upscale").GetBoolean());
-        Assert.Equal(
-            16_777_216,
-            screenshotCapabilities.GetProperty("resolution").GetProperty("maxPixels").GetInt64());
         var jobsCapabilities = capabilityMap.GetProperty("device.jobs");
         Assert.False(jobsCapabilities.GetProperty("supported").GetBoolean());
         Assert.Empty(jobsCapabilities.GetProperty("features").EnumerateArray());

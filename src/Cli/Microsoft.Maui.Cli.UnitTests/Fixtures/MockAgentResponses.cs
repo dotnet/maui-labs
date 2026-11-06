@@ -64,7 +64,7 @@ internal static class MockAgentResponses
             },
             "ui.screenshot": {
               "version": 3,
-              "features": ["element", "fullscreen", "resolution-hints", "resolution-metadata"]
+              "features": ["element", "fullscreen", "resolution-hints"]
             },
             "webview": { "version": 1, "features": ["contexts", "evaluate", "source"] },
             "network": { "version": 1, "features": ["list", "detail", "clear"] },

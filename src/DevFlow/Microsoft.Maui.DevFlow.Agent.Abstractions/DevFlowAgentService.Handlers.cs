@@ -757,11 +757,12 @@ public partial class DevFlowAgentService
         int? maxWidth,
         double nativeScale,
         bool autoScale,
+        bool scaleModeExplicit,
         ScreenshotResolutionHints? hints,
         bool includeMetadata = true)
     {
         nativeScale = NormalizeScreenshotScale(nativeScale);
-        byte[] output;
+        byte[]? output;
         var clamped = false;
 
         if (hints is null)
@@ -775,7 +776,16 @@ public partial class DevFlowAgentService
                 maxWidth,
                 nativeScale,
                 autoScale,
+                scaleModeExplicit,
                 hints);
+        }
+
+        if (output is null)
+        {
+            return new ScreenshotImageResult(
+                Data: null,
+                Error: "Failed to resize the screenshot within the requested pixel limits.",
+                Reason: "screenshot-resolution-failed");
         }
 
         if (!includeMetadata
@@ -802,6 +812,14 @@ public partial class DevFlowAgentService
 
     protected static HttpResponse BuildScreenshotResponse(ScreenshotImageResult image)
     {
+        if (image.Data is null)
+        {
+            return HttpResponse.Error(
+                image.Error ?? "Failed to process the screenshot.",
+                statusCode: 500,
+                reason: image.Reason ?? "screenshot-resolution-failed");
+        }
+
         var response = HttpResponse.Png(image.Data);
         if (image.PixelWidth.HasValue
             && image.PixelHeight.HasValue
@@ -864,24 +882,27 @@ public partial class DevFlowAgentService
             reason: "invalid-screenshot-hint",
             details: new Dictionary<string, object?> { ["parameter"] = name });
 
-    private static (byte[] Data, bool Clamped) ResizeNegotiatedScreenshot(
+    private static (byte[]? Data, bool Clamped) ResizeNegotiatedScreenshot(
         byte[] pngData,
         int? maxWidth,
         double nativeScale,
         bool autoScale,
+        bool scaleModeExplicit,
         ScreenshotResolutionHints hints)
     {
         try
         {
             using var original = SkiaSharp.SKBitmap.Decode(pngData);
             if (original == null || original.Width <= 0 || original.Height <= 0)
-                return (pngData, hints.WasClamped);
+                return (null, hints.WasClamped);
 
             var requestedFactor = hints.TargetScale.HasValue
                 ? hints.TargetScale.Value / nativeScale
-                : autoScale
-                    ? 1d / nativeScale
-                    : 1d;
+                : maxWidth.HasValue && !scaleModeExplicit
+                    ? 1d
+                    : autoScale
+                        ? 1d / nativeScale
+                        : 1d;
             var factor = Math.Min(1d, requestedFactor);
             var clamped = hints.WasClamped || requestedFactor > 1d;
 
@@ -930,15 +951,15 @@ public partial class DevFlowAgentService
                 new SkiaSharp.SKImageInfo(targetWidth, targetHeight),
                 SkiaSharp.SKSamplingOptions.Default);
             if (resized == null)
-                return (pngData, true);
+                return (null, true);
 
             using var image = SkiaSharp.SKImage.FromBitmap(resized);
             using var encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
-            return encoded == null ? (pngData, true) : (encoded.ToArray(), clamped);
+            return encoded == null ? (null, true) : (encoded.ToArray(), clamped);
         }
         catch
         {
-            return (pngData, true);
+            return (null, true);
         }
     }
 
@@ -979,14 +1000,16 @@ public partial class DevFlowAgentService
         bool WasClamped);
 
     protected sealed record ScreenshotImageResult(
-        byte[] Data,
+        byte[]? Data,
         int? PixelWidth = null,
         int? PixelHeight = null,
         double? LogicalWidth = null,
         double? LogicalHeight = null,
         double? CaptureScale = null,
         double? NativeScale = null,
-        bool? ResolutionClamped = null);
+        bool? ResolutionClamped = null,
+        string? Error = null,
+        string? Reason = null);
 
     protected record ResizeRequest(int Width, int Height);
 

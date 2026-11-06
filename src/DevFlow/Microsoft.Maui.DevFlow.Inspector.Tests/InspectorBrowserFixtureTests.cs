@@ -70,8 +70,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                         {
                             "element",
                             "fullscreen",
-                            "resolution-hints",
-                            "resolution-metadata"
+                            "resolution-hints"
                         }
                     }
                 },
@@ -886,9 +885,6 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             "scale(",
             await Page.Locator("#app-viewport").GetAttributeAsync("style") ?? string.Empty,
             StringComparison.Ordinal);
-        await Page.WaitForTimeoutAsync(1200);
-        Assert.False(negotiated.Task.IsCompleted);
-
         await Page.EvaluateAsync("""
             () => {
               const wrap = document.querySelector('#df-viewport-wrap');
@@ -902,15 +898,16 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
               document.querySelector('#df-toggle-fit').click();
             }
             """);
-        for (var refresh = 0; refresh < 4; refresh++)
+        for (var refresh = 0; refresh < 10 && !negotiated.Task.IsCompleted; refresh++)
         {
             await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
             await Page.WaitForTimeoutAsync(300);
         }
-        Assert.False(negotiated.Task.IsCompleted);
-        await Page.WaitForTimeoutAsync(400);
+        Assert.True(
+            negotiated.Task.IsCompleted,
+            "Continuous app refreshes postponed the stable resolution downgrade.");
         await negotiated.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        await Page.WaitForTimeoutAsync(100);
+        await Page.WaitForTimeoutAsync(250);
 
         var request = Assert.Single(negotiatedRequests);
         Assert.Matches(@"[?&]targetScale=(?:0\.25|0\.5|0\.75|1\.5|2|3|4)(?:&|$)", request);
