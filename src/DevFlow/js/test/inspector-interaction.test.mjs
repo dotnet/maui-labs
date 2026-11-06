@@ -30,7 +30,10 @@ test("Interact binds the rendered target while both modes share hover feedback",
   assert.match(source, /Interactive element/);
   assert.match(source, /Scrollable element/);
   assert.match(source, /Visual element/);
-  assert.match(css, /\.devflow-element\.df-action-target/);
+  assert.match(source, /createActionOverlayController/);
+  assert.match(css, /#df-action-overlay/);
+  assert.match(css, /\.df-action-ripple/);
+  assert.match(css, /\.df-action-path/);
   assert.match(css, /#df-badge\[data-kind="interactive"\]/);
   assert.match(source, /viewportWidth - b\.offsetWidth/);
   assert.match(source, /return clientToAppLogical\(/);
@@ -41,6 +44,9 @@ test("Interact binds the rendered target while both modes share hover feedback",
     html,
     /id="df-preview-surface"[\s\S]*id="df-hit-candidates"[\s\S]*id="df-viewport-wrap"/,
   );
+  assert.match(html, /id="df-action-announcer"[\s\S]*aria-live="polite"/);
+  assert.match(html, /id="df-action-overlay"/);
+  assert.match(html, /id="df-action-chrome"[^>]*aria-hidden="true"/);
 });
 
 test("active destinations use an accent border without competing with the active mode", () => {

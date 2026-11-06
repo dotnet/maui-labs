@@ -89,6 +89,7 @@ public class DevFlowAgentServiceLifecycleTests
         var capabilityMap = capabilities.GetProperty("capabilities");
         Assert.Contains("property-descriptors", capabilityMap.GetProperty("ui.actions").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
         Assert.Contains("subscribe", capabilityMap.GetProperty("ui.events").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
+        Assert.Contains("action-lifecycle", capabilityMap.GetProperty("ui.events").GetProperty("features").EnumerateArray().Select(feature => feature.GetString()));
         var screenshotCapabilities = capabilityMap.GetProperty("ui.screenshot");
         Assert.Equal(3, screenshotCapabilities.GetProperty("version").GetInt32());
         Assert.Contains(

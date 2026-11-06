@@ -239,6 +239,48 @@ public class ProtocolSpecTests
     }
 
     [Fact]
+    public void UiActionEvents_DocumentSafeCorrelationAndSubscriptionTypes()
+    {
+        var asyncApi = LoadDocument(Path.Combine(SpecRoot.Value, "asyncapi.yaml"));
+        var messages = asyncApi["channels"]!["uiEvents"]!["messages"]!.AsObject();
+        foreach (var messageName in new[] { "uiActionStarted", "uiActionUpdated", "uiActionCompleted" })
+        {
+            var dataNode = messages[messageName]!["payload"]!["properties"]!["data"]!;
+            if (dataNode["$ref"] is not null)
+                dataNode = messages["uiActionStarted"]!["payload"]!["properties"]!["data"]!;
+            var data = dataNode.AsObject();
+            var properties = data["properties"]!.AsObject();
+            Assert.Contains("correlation", properties.Select(property => property.Key));
+            Assert.Contains("kind", properties.Select(property => property.Key));
+            Assert.Contains("diagnosticInputsRevision", properties.Select(property => property.Key));
+            Assert.DoesNotContain(
+                properties.Select(property => property.Key),
+                name => name is "text" or "key" or "value" or "route" or "stackTrace");
+
+            var correlationVariants = properties["correlation"]!["anyOf"]!.AsArray();
+            Assert.Equal(
+                "./schemas/frame.json#/$defs/ActionCorrelation",
+                correlationVariants[0]!["$ref"]!.GetValue<string>());
+            var correlation = correlationVariants[1]!.AsObject();
+            Assert.Equal(
+                ["actionId", "source"],
+                correlation["required"]!.AsArray().Select(value => value!.GetValue<string>()));
+            Assert.Equal(
+                ["inspector", "cli", "mcp", "replay"],
+                correlation["properties"]!["source"]!["enum"]!.AsArray()
+                    .Select(value => value!.GetValue<string>()));
+        }
+
+        var subscribedEvents = messages["uiSubscribe"]!["payload"]!["properties"]!["data"]!
+            ["properties"]!["events"]!["items"]!["enum"]!.AsArray()
+            .Select(value => value!.GetValue<string>())
+            .ToArray();
+        Assert.Contains("ui-action-started", subscribedEvents);
+        Assert.Contains("ui-action-updated", subscribedEvents);
+        Assert.Contains("ui-action-completed", subscribedEvents);
+    }
+
+    [Fact]
     public void PointerExists_HandlesEscapedSegmentsAndNullValues()
     {
         var document = JsonNode.Parse(
