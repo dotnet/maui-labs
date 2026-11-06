@@ -1717,7 +1717,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         {
             lock (_captureStateGate)
             {
-                if (response is { StatusCode: >= 200 and < 300 })
+                if (response is { StatusCode: >= 200 and < 300 }
+                    && !IsPointerSessionHeartbeat(request))
                 {
                     _uiMutationGeneration++;
                     _captureLeases.Clear();
@@ -1726,6 +1727,28 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 _uiMutationInProgress = 0;
             }
             _uiMutationGate.Release();
+        }
+    }
+
+    private static bool IsPointerSessionHeartbeat(HttpRequest request)
+    {
+        if (!request.Path.Contains("/pointer-sessions/", StringComparison.Ordinal)
+            || !request.Path.EndsWith("/move", StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(request.Body))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(request.Body);
+            return document.RootElement.TryGetProperty("samples", out var samples)
+                && samples.ValueKind == JsonValueKind.Array
+                && samples.GetArrayLength() == 0;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

@@ -436,46 +436,6 @@ public partial class DevFlowAgentService
             .ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
-    private static Dictionary<string, object?> CreatePointerActionCorrelation(
-        HttpRequest request,
-        PointerActionCorrelation? pointerCorrelation)
-    {
-        var correlation = CreateUiActionCorrelation(request);
-        if (pointerCorrelation is null)
-            return correlation;
-
-        var actionId = ReadSafeToken(pointerCorrelation.ActionId, 128);
-        var source = pointerCorrelation.Source?.Trim().ToLowerInvariant() switch
-        {
-            "inspector" => "inspector",
-            "cli" => "cli",
-            "mcp" => "mcp",
-            "replay" => "replay",
-            _ => null
-        };
-        var streamId = ReadSafeToken(pointerCorrelation.StreamId, 128);
-        var frameId = ReadSafeToken(pointerCorrelation.FrameId, 128);
-        var coordinateSpace = pointerCorrelation.CoordinateSpace switch
-        {
-            "appLogical" => "appLogical",
-            "windowLogical" => "windowLogical",
-            "screenshotPixel" => "screenshotPixel",
-            "inspectorCss" => "inspectorCss",
-            "transformedViewport" => "transformedViewport",
-            _ => null
-        };
-
-        if (actionId is not null) correlation["actionId"] = actionId;
-        if (source is not null) correlation["source"] = source;
-        if (streamId is not null) correlation["streamId"] = streamId;
-        if (frameId is not null) correlation["frameId"] = frameId;
-        if (pointerCorrelation.FrameRevision is > 0)
-            correlation["frameRevision"] = pointerCorrelation.FrameRevision;
-        if (coordinateSpace is not null)
-            correlation["coordinateSpace"] = coordinateSpace;
-        return correlation;
-    }
-
     private static Dictionary<string, object?> CreateUiActionEventData(
         UiActionDescriptor action,
         Dictionary<string, object?> correlation,

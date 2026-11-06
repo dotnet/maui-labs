@@ -324,6 +324,42 @@ public class SetPropertyBindableTests
     }
 
     [Fact]
+    public async Task PointerHeartbeat_DoesNotAdvanceDiagnosticInputsRevision()
+    {
+        using var harness = await SetPropertyTestHarness.CreateAsync(new Button
+        {
+            AutomationId = "heartbeat-button",
+            Text = "Run"
+        });
+
+        var start = await harness.Client.StartPointerSessionAsync(new PointerSessionStartRequest
+        {
+            SessionId = "heartbeat-session",
+            PointerId = 1,
+            PointerType = "touch",
+            CoordinateSpace = "windowLogical",
+            X = 5,
+            Y = 6,
+            ElapsedMs = 0
+        });
+        Assert.True(start.Success);
+
+        var before = await harness.Client.GetTreeSnapshotAsync(includeNative: false);
+        Assert.NotNull(before);
+        Assert.True((await harness.Client.MovePointerSessionAsync(
+            "heartbeat-session",
+            1,
+            [])).Success);
+        var after = await harness.Client.GetTreeSnapshotAsync(includeNative: false);
+        Assert.NotNull(after);
+        Assert.Equal(before.DiagnosticInputsRevision, after.DiagnosticInputsRevision);
+
+        Assert.True((await harness.Client.CancelPointerSessionAsync(
+            "heartbeat-session",
+            "test-cleanup")).Success);
+    }
+
+    [Fact]
     public async Task UiEventsWebSocket_DoesNotPublishSensitiveActionPayloads()
     {
         using var harness = await SetPropertyTestHarness.CreateAsync(new Entry
@@ -650,6 +686,35 @@ public class SetPropertyBindableTests
         public VisualTreeWalker Walker { get; private set; } = null!;
 
         protected override VisualTreeWalker CreateTreeWalker() => Walker = base.CreateTreeWalker();
+
+        protected override PointerStreamSupport GetPointerStreamSupport()
+            => new(
+                Supported: true,
+                Fidelity: "test",
+                RequiresOptIn: false,
+                Reason: null);
+
+        protected override Task<PointerSessionBackendStartResult> StartPointerSessionBackendAsync(
+            PointerSessionStartRequest request,
+            CancellationToken cancellationToken)
+            => Task.FromResult(PointerSessionBackendStartResult.Started(new object(), "test"));
+
+        protected override Task<PointerSessionBackendResult> MovePointerSessionBackendAsync(
+            object state,
+            IReadOnlyList<PointerSessionSample> samples,
+            CancellationToken cancellationToken)
+            => Task.FromResult(PointerSessionBackendResult.Applied());
+
+        protected override Task<PointerSessionBackendResult> EndPointerSessionBackendAsync(
+            object state,
+            PointerSessionSample sample,
+            CancellationToken cancellationToken)
+            => Task.FromResult(PointerSessionBackendResult.Applied());
+
+        protected override Task<PointerSessionBackendResult> CancelPointerSessionBackendAsync(
+            object state,
+            string reason)
+            => Task.FromResult(PointerSessionBackendResult.Applied());
     }
 
     private sealed class SourceMappedView : ContentView;
