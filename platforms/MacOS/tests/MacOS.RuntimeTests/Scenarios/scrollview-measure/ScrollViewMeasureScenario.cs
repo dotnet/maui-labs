@@ -10,14 +10,15 @@ static class Registration
 {
     [ModuleInitializer]
     public static void Register() =>
-        ScenarioRegistry.Register(new("scrollview-measure", 3, context => new ScrollViewMeasureScenario().CreateDelegate(context),
-            ExpectedAssertions: 7));
+        ScenarioRegistry.Register(new("scrollview-measure", 5, context => new ScrollViewMeasureScenario().CreateDelegate(context),
+            ExpectedAssertions: 11));
 }
 
 /// <summary>
 /// A ScrollView sized by its parent - an Auto row, a stack - used to measure as ~0 because the handler
 /// asked NSScrollView for a fitting size it doesn't have. A horizontal ScrollView in an Auto row
 /// collapsed to nothing (e.g. a toolbar or ribbon body), and MaximumHeightRequest had nothing to clamp.
+/// Content is measured inside the ScrollView's own width request and padding.
 /// </summary>
 sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
 {
@@ -29,6 +30,10 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
     ScrollView _capped = null!;
     ScrollView _fill = null!;
     View _horizontalContent = null!;
+    ScrollView _wrapping = null!;
+    Label _wrappingLabel = null!;
+    ScrollView _padded = null!;
+    View _paddedContent = null!;
 
     public override async Task RunAsync(RuntimeTestContext evidence, Window window)
     {
@@ -45,7 +50,9 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
         {
             horizontal = new { _horizontal.Width, _horizontal.Height, native = native.Frame.Height },
             capped = new { _capped.Width, _capped.Height },
-            fill = new { _fill.Width, _fill.Height }
+            fill = new { _fill.Width, _fill.Height },
+            wrapping = new { _wrapping.Width, _wrapping.Height, label = new { _wrappingLabel.Width, _wrappingLabel.Height } },
+            padded = new { _padded.Height, content = new { _paddedContent.X, _paddedContent.Y, _paddedContent.Height } }
         });
 
         if (_horizontal.Height < 1)
@@ -83,6 +90,22 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             $"The star-row ScrollView scrolls its full content; content height {_fill.ContentSize.Height}.",
             "scrollview-measure.fill-row-content");
         evidence.Pass("fill-row");
+
+        evidence.Assert(_wrappingLabel.Width <= 201,
+            $"Content is measured inside the ScrollView's WidthRequest; label width {_wrappingLabel.Width}.",
+            "scrollview-measure.wrapping-width");
+        evidence.Assert(_wrapping.Height >= _wrappingLabel.Height - 1 && _wrappingLabel.Height > 20,
+            $"The ScrollView is tall enough for the text wrapped at that width; scroller {_wrapping.Height}, label {_wrappingLabel.Height}.",
+            "scrollview-measure.wrapping-height");
+        evidence.Pass("wrapping-width");
+
+        evidence.Assert(Math.Abs(_padded.Height - (ItemHeight + 20)) < 1,
+            $"Padding is part of the measured size; expected {ItemHeight + 20}, actual {_padded.Height}.",
+            "scrollview-measure.padding-height");
+        evidence.Assert(Math.Abs(_paddedContent.X - 10) < 1 && Math.Abs(_paddedContent.Y - 10) < 1,
+            $"Content is arranged inside the padding; content at {_paddedContent.X},{_paddedContent.Y}.",
+            "scrollview-measure.padding-offset");
+        evidence.Pass("padding");
     }
 
     public override Window CreateWindow(IActivationState? activationState)
@@ -120,10 +143,34 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
             Content = new BoxView { HeightRequest = 2000, Color = Colors.SeaGreen }
         };
 
+        _wrappingLabel = new Label
+        {
+            Text = string.Join(" ", Enumerable.Repeat("Wrapping text measured at the scroller's own width.", 6)),
+            LineBreakMode = LineBreakMode.WordWrap
+        };
+        _wrapping = new ScrollView
+        {
+            AutomationId = "WrappingScroll",
+            WidthRequest = 200,
+            HorizontalOptions = LayoutOptions.Start,
+            Content = _wrappingLabel
+        };
+
+        _paddedContent = new BoxView { WidthRequest = 900, HeightRequest = ItemHeight, Color = Colors.Plum };
+        _padded = new ScrollView
+        {
+            AutomationId = "PaddedScroll",
+            Orientation = ScrollOrientation.Horizontal,
+            Padding = 10,
+            Content = _paddedContent
+        };
+
         var grid = new Grid
         {
             RowDefinitions =
             {
+                new RowDefinition(GridLength.Auto),
+                new RowDefinition(GridLength.Auto),
                 new RowDefinition(GridLength.Auto),
                 new RowDefinition(GridLength.Auto),
                 new RowDefinition(GridLength.Star)
@@ -132,13 +179,15 @@ sealed class ScrollViewMeasureScenario : MauiRuntimeScenario
         };
         grid.Add(_horizontal, 0, 0);
         grid.Add(_capped, 0, 1);
-        grid.Add(_fill, 0, 2);
+        grid.Add(_wrapping, 0, 2);
+        grid.Add(_padded, 0, 3);
+        grid.Add(_fill, 0, 4);
 
         return new(new ContentPage { Content = grid })
         {
             Title = "AppKit ScrollView measure regression",
             Width = 600,
-            Height = 700
+            Height = 900
         };
     }
 }
