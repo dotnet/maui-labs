@@ -138,11 +138,7 @@ public static class DevFlowAgent
     {
         lock (s_gate)
         {
-            if (s_service is { } service)
-            {
-                try { service.StopAsync().GetAwaiter().GetResult(); }
-                finally { service.Dispose(); }
-            }
+            s_service?.Dispose();
             s_service = null;
             s_logProvider = null;
         }

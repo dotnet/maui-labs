@@ -517,21 +517,6 @@
           "type": "number",
           "minimum": 0,
           "description": "Monotonic milliseconds since the pointer session started."
-        },
-        "pressure": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1
-        },
-        "buttons": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 0
         }
       }
     },
@@ -581,21 +566,6 @@
           "type": "number",
           "minimum": 0
         },
-        "pressure": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "minimum": 0,
-          "maximum": 1
-        },
-        "buttons": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 0
-        },
         "windowId": {
           "type": [
             "integer",
@@ -608,9 +578,6 @@
         },
         "registryGeneration": {
           "$ref": "#/$defs/RegistryGeneration"
-        },
-        "correlation": {
-          "$ref": "#/$defs/ActionCorrelation"
         }
       }
     },

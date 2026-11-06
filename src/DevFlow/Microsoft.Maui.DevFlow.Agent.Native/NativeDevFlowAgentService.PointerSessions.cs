@@ -8,10 +8,6 @@ public partial class NativeDevFlowAgentService
                 Supported: true,
                 Fidelity: "native",
                 RequiresOptIn: false,
-                SupportsCoalescedSamples: true,
-                SupportsPressure: false,
-                SupportsButtons: false,
-                PointerTypes: ["touch"],
                 Reason: null)
             : PointerStreamSupport.Unsupported(NativeUi.PointerSessionUnsupportedReason);
 
@@ -20,6 +16,7 @@ public partial class NativeDevFlowAgentService
         CancellationToken cancellationToken)
         => DispatchAsync(() =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!_bound)
                 return PointerSessionBackendStartResult.Failed("Agent not bound to app");
 
@@ -37,7 +34,7 @@ public partial class NativeDevFlowAgentService
                         error ?? "The native backend rejected the pointer start.",
                         NativeUi.PointerSessionsSupported ? 422 : 501,
                         NativeUi.PointerSessionsSupported ? "pointer-start-rejected" : "not_supported");
-        }, cancellationToken);
+        });
 
     protected override Task<PointerSessionBackendResult> MovePointerSessionBackendAsync(
         object state,

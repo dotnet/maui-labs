@@ -16,19 +16,18 @@ public partial class DevFlowAgentService
     private readonly SemaphoreSlim _pointerSessionOperationGate = new(1, 1);
     private readonly Dictionary<string, PointerSessionTombstone> _pointerSessionTombstones =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PointerStartCancellation> _pointerStartCancellations =
+        new(StringComparer.Ordinal);
     private PointerSessionState? _activePointerSession;
     private PendingPointerStart? _pendingPointerStart;
     private CancellationTokenSource? _pointerSessionWatchdogCts;
     private Task? _pointerSessionWatchdogTask;
+    private int _pointerSessionsDisposed;
 
     protected readonly record struct PointerStreamSupport(
         bool Supported,
         string Fidelity,
         bool RequiresOptIn,
-        bool SupportsCoalescedSamples,
-        bool SupportsPressure,
-        bool SupportsButtons,
-        string[] PointerTypes,
         string? Reason)
     {
         public static PointerStreamSupport Unsupported(string reason)
@@ -36,10 +35,6 @@ public partial class DevFlowAgentService
                 Supported: false,
                 Fidelity: "unsupported",
                 RequiresOptIn: false,
-                SupportsCoalescedSamples: false,
-                SupportsPressure: false,
-                SupportsButtons: false,
-                PointerTypes: [],
                 Reason: reason);
     }
 
@@ -87,10 +82,7 @@ public partial class DevFlowAgentService
         public double X { get; set; }
         public double Y { get; set; }
         public double ElapsedMs { get; set; }
-        public double? Pressure { get; set; }
-        public int? Buttons { get; set; }
         public int? WindowId { get; set; }
-        public PointerActionCorrelation? Correlation { get; set; }
     }
 
     protected sealed class PointerSessionMoveRequest
@@ -115,18 +107,6 @@ public partial class DevFlowAgentService
         public double X { get; set; }
         public double Y { get; set; }
         public double ElapsedMs { get; set; }
-        public double? Pressure { get; set; }
-        public int? Buttons { get; set; }
-    }
-
-    protected sealed class PointerActionCorrelation
-    {
-        public string? ActionId { get; set; }
-        public string? Source { get; set; }
-        public string? StreamId { get; set; }
-        public string? FrameId { get; set; }
-        public long? FrameRevision { get; set; }
-        public string? CoordinateSpace { get; set; }
     }
 
     private sealed class PointerSessionReply
@@ -171,7 +151,6 @@ public partial class DevFlowAgentService
         public required string StartFingerprint { get; init; }
         public required string PointerType { get; init; }
         public required object BackendState { get; init; }
-        public required PointerStreamSupport Support { get; init; }
         public required CancellationTokenSource Cancellation { get; init; }
         public string? LeaseId { get; init; }
         public int LastSequence { get; set; }
@@ -181,6 +160,7 @@ public partial class DevFlowAgentService
         public string? LastOperationFingerprint { get; set; }
         public string? LastOperationKind { get; set; }
         public PointerSessionReply? LastOperationReply { get; set; }
+        public int CleanupStarted;
     }
 
     private sealed class PendingPointerStart
@@ -196,6 +176,11 @@ public partial class DevFlowAgentService
         string? OperationKind,
         string? Fingerprint,
         PointerSessionReply Reply,
+        long CreatedTicks);
+
+    private sealed record PointerStartCancellation(
+        string? LeaseId,
+        string Reason,
         long CreatedTicks);
 
     protected virtual PointerStreamSupport GetPointerStreamSupport()
@@ -259,23 +244,17 @@ public partial class DevFlowAgentService
                     "cancel",
                     "sequence-validation",
                     "idle-timeout",
-                    support.SupportsCoalescedSamples ? "coalesced" : null,
-                    support.SupportsPressure ? "pressure" : null,
-                    support.SupportsButtons ? "buttons" : null
-                }.Where(static feature => feature is not null).ToArray()
+                    "coalesced"
+                }
                 : [],
             ["fidelity"] = support.Fidelity,
             ["requiresOptIn"] = support.RequiresOptIn,
-            ["pointerTypes"] = support.PointerTypes,
-            ["pressure"] = support.SupportsPressure,
-            ["buttons"] = support.SupportsButtons,
-            ["maxConcurrentPointers"] = 1,
-            ["maxInFlightMoves"] = 1,
+            ["pointerTypes"] = support.Supported ? new[] { "touch" } : [],
+            ["coordinateSpaces"] = support.Supported ? new[] { "windowLogical" } : [],
             ["maxSamplesPerMove"] = PointerMaxSamplesPerMove,
             ["maxRequestBytes"] = PointerMaxRequestBytes,
             ["idleTimeoutMs"] = PointerIdleTimeoutMs,
             ["maxDurationMs"] = PointerMaxDurationMs,
-            ["coordinateSpaces"] = support.Supported ? new[] { "windowLogical" } : [],
             ["reason"] = support.Reason
         };
     }
@@ -316,7 +295,7 @@ public partial class DevFlowAgentService
             return PointerError("", "A pointer session start body is required.", 400, "invalid-request");
         if (ValidateSessionId(body.SessionId) is { } sessionIdError)
             return PointerError(body.SessionId ?? "", sessionIdError, 400, "invalid-session-id");
-        if (ValidateSample(body.X, body.Y, body.ElapsedMs, body.Pressure, body.Buttons, support) is { } sampleError)
+        if (ValidateSample(body.X, body.Y, body.ElapsedMs) is { } sampleError)
             return PointerError(body.SessionId!, sampleError, 422, "invalid-sample");
         if (body.ElapsedMs > PointerMaxDurationMs)
             return PointerError(body.SessionId!, "elapsedMs exceeds the maximum pointer session duration.", 422, "invalid-sample");
@@ -324,11 +303,11 @@ public partial class DevFlowAgentService
         var pointerType = string.IsNullOrWhiteSpace(body.PointerType)
             ? "touch"
             : body.PointerType.Trim().ToLowerInvariant();
-        if (!support.PointerTypes.Contains(pointerType, StringComparer.Ordinal))
+        if (!string.Equals(pointerType, "touch", StringComparison.Ordinal))
         {
             return PointerError(
                 body.SessionId!,
-                $"Pointer type '{pointerType}' is not supported. Supported types: {string.Join(", ", support.PointerTypes)}.",
+                $"Pointer type '{pointerType}' is not supported. Supported type: touch.",
                 422,
                 "unsupported-pointer-type");
         }
@@ -340,21 +319,14 @@ public partial class DevFlowAgentService
                 422,
                 "unsupported-coordinate-space");
         }
-        if (body.Correlation is { CoordinateSpace: { } correlationSpace }
-            && !string.Equals(correlationSpace, body.CoordinateSpace, StringComparison.Ordinal))
-        {
-            return PointerError(
-                body.SessionId!,
-                "correlation.coordinateSpace must match the pointer payload coordinateSpace.",
-                422,
-                "invalid-correlation");
-        }
-
         body.PointerType = pointerType;
         var fingerprint = Fingerprint(request.Body);
         await _pointerSessionOperationGate.WaitAsync(request.CancellationToken).ConfigureAwait(false);
         try
         {
+            if (Volatile.Read(ref _pointerSessionsDisposed) != 0)
+                return PointerError(body.SessionId!, "The agent is shutting down.", 503, "agent-stopped");
+
             PrunePointerTombstones();
             PointerSessionState? active;
             lock (_pointerSessionStateGate)
@@ -385,6 +357,18 @@ public partial class DevFlowAgentService
 
             lock (_pointerSessionStateGate)
             {
+                PrunePointerStartCancellationsNoLock();
+                if (TryConsumePointerStartCancellationNoLock(
+                        body.SessionId!,
+                        GetRequestLeaseId(request),
+                        out var cancelledReason))
+                {
+                    return PointerError(
+                        body.SessionId!,
+                        $"Pointer session start was cancelled ({cancelledReason}).",
+                        409,
+                        "pointer-start-cancelled");
+                }
                 if (_pointerSessionTombstones.ContainsKey(body.SessionId!))
                 {
                     return PointerError(
@@ -398,12 +382,12 @@ public partial class DevFlowAgentService
             if (await PreparePointerSessionStartAsync(request, body) is { } preparationError)
                 return preparationError;
 
-            var cancellation = CancellationTokenSource.CreateLinkedTokenSource(request.CancellationToken);
-            cancellation.CancelAfter(PointerIdleTimeoutMs);
+            var startCancellation = CancellationTokenSource.CreateLinkedTokenSource(request.CancellationToken);
+            startCancellation.CancelAfter(PointerIdleTimeoutMs);
             var pending = new PendingPointerStart
             {
                 SessionId = body.SessionId!,
-                Cancellation = cancellation,
+                Cancellation = startCancellation,
                 LeaseId = GetRequestLeaseId(request)
             };
             lock (_pointerSessionStateGate)
@@ -411,12 +395,12 @@ public partial class DevFlowAgentService
             PointerSessionBackendStartResult backend;
             try
             {
-                backend = await StartPointerSessionBackendAsync(body, cancellation.Token).ConfigureAwait(false);
+                backend = await StartPointerSessionBackendAsync(body, startCancellation.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            catch (OperationCanceledException) when (startCancellation.IsCancellationRequested)
             {
                 ClearPendingPointerStart(pending);
-                cancellation.Dispose();
+                startCancellation.Dispose();
                 return PointerError(
                     body.SessionId!,
                     "Pointer session start was cancelled before it completed.",
@@ -426,7 +410,7 @@ public partial class DevFlowAgentService
             catch (Exception ex)
             {
                 ClearPendingPointerStart(pending);
-                cancellation.Dispose();
+                startCancellation.Dispose();
                 return PointerError(
                     body.SessionId!,
                     $"Pointer session start failed: {ex.GetBaseException().Message}",
@@ -436,24 +420,22 @@ public partial class DevFlowAgentService
             if (!backend.Success || backend.State is null)
             {
                 ClearPendingPointerStart(pending);
-                cancellation.Dispose();
+                startCancellation.Dispose();
                 return PointerError(
                     body.SessionId!,
                     backend.Error ?? "The backend rejected the pointer session.",
                     backend.StatusCode,
                     backend.Reason);
             }
-            cancellation.CancelAfter(Timeout.InfiniteTimeSpan);
-
             var now = Environment.TickCount64;
+            var sessionCancellation = new CancellationTokenSource();
             var state = new PointerSessionState
             {
                 SessionId = body.SessionId!,
                 StartFingerprint = fingerprint,
                 PointerType = pointerType,
                 BackendState = backend.State,
-                Support = support,
-                Cancellation = cancellation,
+                Cancellation = sessionCancellation,
                 LeaseId = GetRequestLeaseId(request),
                 LastSequence = 0,
                 LastElapsedMs = body.ElapsedMs,
@@ -465,18 +447,20 @@ public partial class DevFlowAgentService
             {
                 if (ReferenceEquals(_pendingPointerStart, pending))
                     _pendingPointerStart = null;
-                if (cancellation.IsCancellationRequested)
+                if (startCancellation.IsCancellationRequested
+                    || Volatile.Read(ref _pointerSessionsDisposed) != 0)
                     cancelledBeforeActivation = true;
                 else
                     _activePointerSession = state;
             }
+            startCancellation.Dispose();
             if (cancelledBeforeActivation)
             {
                 try { await CancelPointerSessionBackendAsync(backend.State, "pointer-start-cancelled").ConfigureAwait(false); }
                 catch { }
                 try { DisposePointerSessionBackendState(backend.State); }
                 catch { }
-                cancellation.Dispose();
+                sessionCancellation.Dispose();
                 return PointerError(
                     body.SessionId!,
                     "Pointer session start was cancelled before activation.",
@@ -544,13 +528,7 @@ public partial class DevFlowAgentService
             var previousElapsedMs = active.LastElapsedMs;
             foreach (var sample in body.Samples)
             {
-                if (ValidateSample(
-                        sample.X,
-                        sample.Y,
-                        sample.ElapsedMs,
-                        sample.Pressure,
-                        sample.Buttons,
-                        active.Support) is { } sampleError)
+                if (ValidateSample(sample.X, sample.Y, sample.ElapsedMs) is { } sampleError)
                 {
                     return PointerError(sessionId, sampleError, 422, "invalid-sample", active.LastSequence);
                 }
@@ -665,13 +643,7 @@ public partial class DevFlowAgentService
             }
             if (ValidateSequence(active, body.Sequence, "end", fingerprint) is { } sequenceResponse)
                 return sequenceResponse;
-            if (ValidateSample(
-                    body.Sample.X,
-                    body.Sample.Y,
-                    body.Sample.ElapsedMs,
-                    body.Sample.Pressure,
-                    body.Sample.Buttons,
-                    active.Support) is { } sampleError)
+            if (ValidateSample(body.Sample.X, body.Sample.Y, body.Sample.ElapsedMs) is { } sampleError)
             {
                 return PointerError(sessionId, sampleError, 422, "invalid-sample", active.LastSequence);
             }
@@ -773,6 +745,10 @@ public partial class DevFlowAgentService
                     PrunePointerTombstonesNoLock();
                     if (_pointerSessionTombstones.TryGetValue(sessionId, out var tombstone))
                         return PointerResponse(tombstone.Reply);
+                    RecordPointerStartCancellationNoLock(
+                        sessionId,
+                        GetRequestLeaseId(request),
+                        reason);
                 }
 
                 return PointerResponse(new PointerSessionReply
@@ -1050,16 +1026,7 @@ public partial class DevFlowAgentService
         }
 
         active.Cancellation.Cancel();
-        active.Cancellation.Dispose();
-        try
-        {
-            DisposePointerSessionBackendState(active.BackendState);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(
-                $"[Microsoft.Maui.DevFlow] Pointer session cleanup failed: {ex.GetBaseException().Message}");
-        }
+        DisposePointerSessionState(active);
     }
 
     private void SignalPointerSessionCancellation(string? sessionId = null)
@@ -1212,12 +1179,15 @@ public partial class DevFlowAgentService
 
     private void DisposePointerSessions()
     {
+        Interlocked.Exchange(ref _pointerSessionsDisposed, 1);
         PointerSessionState? active;
         PendingPointerStart? pending;
+        CancellationTokenSource? watchdogCts;
+        Task? watchdogTask;
         lock (_pointerSessionStateGate)
         {
-            _pointerSessionWatchdogCts?.Cancel();
-            _pointerSessionWatchdogCts?.Dispose();
+            watchdogCts = _pointerSessionWatchdogCts;
+            watchdogTask = _pointerSessionWatchdogTask;
             _pointerSessionWatchdogCts = null;
             _pointerSessionWatchdogTask = null;
             active = _activePointerSession;
@@ -1225,44 +1195,54 @@ public partial class DevFlowAgentService
             pending = _pendingPointerStart;
             _pendingPointerStart = null;
             _pointerSessionTombstones.Clear();
+            _pointerStartCancellations.Clear();
         }
 
+        watchdogCts?.Cancel();
+        if (watchdogCts is not null)
+        {
+            if (watchdogTask is null)
+            {
+                watchdogCts.Dispose();
+            }
+            else
+            {
+                _ = watchdogTask.ContinueWith(
+                    static (_, state) => ((CancellationTokenSource)state!).Dispose(),
+                    watchdogCts,
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+        }
         pending?.Cancellation.Cancel();
-        pending?.Cancellation.Dispose();
         if (active is not null)
         {
             active.Cancellation.Cancel();
-            active.Cancellation.Dispose();
+            _ = CancelDisposedPointerSessionAsync(active);
+        }
+    }
+
+    private async Task CancelDisposedPointerSessionAsync(PointerSessionState active)
+    {
+        await _pointerSessionOperationGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (Volatile.Read(ref active.CleanupStarted) != 0)
+                return;
             try
             {
-                var cancelTask = CancelPointerSessionBackendAsync(
+                await CancelPointerSessionBackendAsync(
                     active.BackendState,
-                    "agent-disposed");
-                if (cancelTask.Wait(TimeSpan.FromSeconds(1)))
-                {
-                    DisposePointerSessionBackendState(active.BackendState);
-                }
-                else
-                {
-                    _ = cancelTask.ContinueWith(
-                        task =>
-                        {
-                            _ = task.Exception;
-                            try { DisposePointerSessionBackendState(active.BackendState); }
-                            catch { }
-                        },
-                        CancellationToken.None,
-                        TaskContinuationOptions.ExecuteSynchronously,
-                        TaskScheduler.Default);
-                }
+                    "agent-disposed").ConfigureAwait(false);
             }
-            catch
-            {
-                try { DisposePointerSessionBackendState(active.BackendState); }
-                catch { }
-            }
+            catch { }
+            DisposePointerSessionState(active);
         }
-        _pointerSessionOperationGate.Dispose();
+        finally
+        {
+            _pointerSessionOperationGate.Release();
+        }
     }
 
     private bool RequestTooLarge(HttpRequest request)
@@ -1282,13 +1262,7 @@ public partial class DevFlowAgentService
         return null;
     }
 
-    private static string? ValidateSample(
-        double x,
-        double y,
-        double elapsedMs,
-        double? pressure,
-        int? buttons,
-        PointerStreamSupport support)
+    private static string? ValidateSample(double x, double y, double elapsedMs)
     {
         if (!double.IsFinite(x) || !double.IsFinite(y)
             || Math.Abs(x) > MaxPointerCoordinate || Math.Abs(y) > MaxPointerCoordinate)
@@ -1297,20 +1271,6 @@ public partial class DevFlowAgentService
         }
         if (!double.IsFinite(elapsedMs) || elapsedMs < 0)
             return "elapsedMs must be a finite non-negative value.";
-        if (pressure.HasValue)
-        {
-            if (!support.SupportsPressure)
-                return "This pointer backend does not support pressure.";
-            if (!double.IsFinite(pressure.Value) || pressure.Value is < 0 or > 1)
-                return "pressure must be between 0 and 1.";
-        }
-        if (buttons.HasValue)
-        {
-            if (!support.SupportsButtons)
-                return "This pointer backend does not support buttons.";
-            if (buttons.Value < 0)
-                return "buttons must be non-negative.";
-        }
         return null;
     }
 
@@ -1365,6 +1325,70 @@ public partial class DevFlowAgentService
             .ToArray())
         {
             _pointerSessionTombstones.Remove(id);
+        }
+    }
+
+    private bool TryConsumePointerStartCancellationNoLock(
+        string sessionId,
+        string? leaseId,
+        out string reason)
+    {
+        reason = string.Empty;
+        if (!_pointerStartCancellations.TryGetValue(sessionId, out var cancellation)
+            || !string.Equals(cancellation.LeaseId, leaseId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _pointerStartCancellations.Remove(sessionId);
+        reason = cancellation.Reason;
+        return true;
+    }
+
+    private void RecordPointerStartCancellationNoLock(
+        string sessionId,
+        string? leaseId,
+        string reason)
+    {
+        PrunePointerStartCancellationsNoLock();
+        _pointerStartCancellations[sessionId] = new PointerStartCancellation(
+            leaseId,
+            reason,
+            Environment.TickCount64);
+        while (_pointerStartCancellations.Count > PointerSessionTombstoneLimit)
+        {
+            var oldest = _pointerStartCancellations.MinBy(static pair => pair.Value.CreatedTicks);
+            if (oldest.Key is null)
+                break;
+            _pointerStartCancellations.Remove(oldest.Key);
+        }
+    }
+
+    private void PrunePointerStartCancellationsNoLock()
+    {
+        var now = Environment.TickCount64;
+        foreach (var id in _pointerStartCancellations
+            .Where(pair => now - pair.Value.CreatedTicks > PointerSessionTombstoneLifetime.TotalMilliseconds)
+            .Select(static pair => pair.Key)
+            .ToArray())
+        {
+            _pointerStartCancellations.Remove(id);
+        }
+    }
+
+    private void DisposePointerSessionState(PointerSessionState active)
+    {
+        if (Interlocked.Exchange(ref active.CleanupStarted, 1) != 0)
+            return;
+        active.Cancellation.Dispose();
+        try
+        {
+            DisposePointerSessionBackendState(active.BackendState);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Microsoft.Maui.DevFlow] Pointer session cleanup failed: {ex.GetBaseException().Message}");
         }
     }
 }

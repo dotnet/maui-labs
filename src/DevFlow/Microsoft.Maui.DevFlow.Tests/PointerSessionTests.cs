@@ -261,6 +261,46 @@ public class PointerSessionTests
     }
 
     [Fact]
+    public async Task PointerSession_CancelBeforeStartRegistration_PreventsLaterStart()
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            var cancel = await client.CancelPointerSessionAsync("cancel-before-start", "pointercancel");
+            var start = await client.StartPointerSessionAsync(Start("cancel-before-start"));
+
+            Assert.True(cancel.Success);
+            Assert.Equal("unknown", cancel.State);
+            Assert.False(start.Success);
+            Assert.Equal("pointer-start-cancelled", start.Reason);
+            Assert.DoesNotContain("start", service.Events);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_CancelAfterBackendStart_CompensatesWithNativeCancel()
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            service.BlockAfterStart = true;
+            var startTask = client.StartPointerSessionAsync(Start("committed-start"));
+            await service.StartStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var cancelTask = client.CancelPointerSessionAsync("committed-start", "pointercancel");
+            await service.StartCancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            service.ReleaseStart.TrySetResult();
+
+            var cancel = await cancelTask.WaitAsync(TimeSpan.FromSeconds(5));
+            var start = await startTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.True(cancel.Success);
+            Assert.Equal("unknown", cancel.State);
+            Assert.False(start.Success);
+            Assert.Equal("pointer-start-cancelled", start.Reason);
+            Assert.Single(service.Events, value => value == "cancel:pointer-start-cancelled");
+        });
+    }
+
+    [Fact]
     public async Task PointerSession_ForcedLeaseTakeover_CancelsOldPointer()
     {
         var options = new AgentOptions
@@ -430,7 +470,12 @@ public class PointerSessionTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StartStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseStart { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource StartCancellationObserved { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool BlockStarts { get; set; }
+        public bool BlockAfterStart { get; set; }
         public bool BlockMoves { get; set; }
         public bool RejectRepeatedPrepare { get; set; }
         public int PrepareStartCalls { get; private set; }
@@ -441,10 +486,6 @@ public class PointerSessionTests
                 Supported: true,
                 Fidelity: "test",
                 RequiresOptIn: false,
-                SupportsCoalescedSamples: true,
-                SupportsPressure: false,
-                SupportsButtons: false,
-                PointerTypes: ["touch"],
                 Reason: null);
 
         protected override Task<HttpResponse?> PreparePointerSessionStartAsync(
@@ -462,11 +503,19 @@ public class PointerSessionTests
             PointerSessionStartRequest request,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Events.Enqueue("start");
             if (BlockStarts)
             {
                 StartStarted.TrySetResult();
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            if (BlockAfterStart)
+            {
+                using var registration = cancellationToken.Register(
+                    () => StartCancellationObserved.TrySetResult());
+                StartStarted.TrySetResult();
+                await ReleaseStart.Task;
             }
             return PointerSessionBackendStartResult.Started(new object(), "test start");
         }
@@ -476,6 +525,7 @@ public class PointerSessionTests
             IReadOnlyList<PointerSessionSample> samples,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Events.Enqueue($"move:{samples.Count}");
             if (BlockMoves)
             {
@@ -490,6 +540,7 @@ public class PointerSessionTests
             PointerSessionSample sample,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Events.Enqueue("end");
             return Task.FromResult(PointerSessionBackendResult.Applied());
         }

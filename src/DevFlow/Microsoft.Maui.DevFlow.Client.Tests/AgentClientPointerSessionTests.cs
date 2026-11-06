@@ -21,13 +21,7 @@ public class AgentClientPointerSessionTests
             X = 10,
             Y = 20,
             CaptureEpoch = 5,
-            RegistryGeneration = 3,
-            Correlation = new ActionCorrelation
-            {
-                Source = "inspector",
-                FrameId = "frame-1",
-                CoordinateSpace = "windowLogical"
-            }
+            RegistryGeneration = 3
         });
         var move = await client.MovePointerSessionAsync(
             "pointer-1",
@@ -53,7 +47,6 @@ public class AgentClientPointerSessionTests
         using var startBody = JsonDocument.Parse(agent.Requests[0].Body);
         Assert.Equal("windowLogical", startBody.RootElement.GetProperty("coordinateSpace").GetString());
         Assert.Equal(5, startBody.RootElement.GetProperty("captureEpoch").GetInt64());
-        Assert.Equal("frame-1", startBody.RootElement.GetProperty("correlation").GetProperty("frameId").GetString());
 
         using var moveBody = JsonDocument.Parse(agent.Requests[1].Body);
         Assert.Equal(1, moveBody.RootElement.GetProperty("sequence").GetInt32());

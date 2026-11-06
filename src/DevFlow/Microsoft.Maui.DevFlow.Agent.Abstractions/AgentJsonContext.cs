@@ -83,7 +83,6 @@ public partial class DevFlowAgentService
     [JsonSerializable(typeof(PointerSessionEndRequest))]
     [JsonSerializable(typeof(PointerSessionCancelRequest))]
     [JsonSerializable(typeof(PointerSessionSample))]
-    [JsonSerializable(typeof(PointerActionCorrelation))]
     [JsonSerializable(typeof(PointerSessionReply))]
     [JsonSerializable(typeof(BatchRequest))]
     [JsonSerializable(typeof(SetPropertyRequest))]

@@ -53,8 +53,15 @@ public class AgentHttpServer : IDisposable
         string path,
         Func<HttpRequest, Task<HttpResponse>> handler,
         bool requiresMutationLease,
+        Func<HttpRequest, bool>? mutationLeaseExemption)
+        => MapPost(path, handler, requiresMutationLease, mutationLeaseExemption, serializeMutation: true);
+
+    public void MapPost(
+        string path,
+        Func<HttpRequest, Task<HttpResponse>> handler,
+        bool requiresMutationLease,
         Func<HttpRequest, bool>? mutationLeaseExemption,
-        bool serializeMutation = true)
+        bool serializeMutation)
         => _postRoutes[path.TrimEnd('/')] = new RouteHandler(
             handler,
             requiresMutationLease,
