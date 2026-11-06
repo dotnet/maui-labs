@@ -77,7 +77,6 @@ using Microsoft.Maui.DevFlow.Driver;
 [assembly: TypeForwardedTo(typeof(ProfilerSample))]
 [assembly: TypeForwardedTo(typeof(ProfilerSessionInfo))]
 [assembly: TypeForwardedTo(typeof(ProfilerSpan))]
-[assembly: TypeForwardedTo(typeof(ActionCorrelation))]
 [assembly: TypeForwardedTo(typeof(PointerSessionResult))]
 [assembly: TypeForwardedTo(typeof(PointerSessionSample))]
 [assembly: TypeForwardedTo(typeof(PointerSessionStartRequest))]

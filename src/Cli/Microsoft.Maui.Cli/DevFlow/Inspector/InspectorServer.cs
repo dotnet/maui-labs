@@ -1103,7 +1103,11 @@ public sealed class InspectorServer : IDisposable
                     "/api/tap" => await HandleProxyTapAsync(request.Body),
                     "/api/scroll" => await HandleProxyScrollAsync(request.Body),
                     "/api/gesture" => await HandleProxyGestureAsync(request.Body),
-                    "/api/pointer/start" => await HandleProxyPointerStartAsync(request.Body),
+                    "/api/pointer/start" => await HandleProxyPointerStartAsync(
+                        request.Body,
+                        leaseId,
+                        holderKind,
+                        holderLabel),
                     "/api/pointer/move" => await HandleProxyPointerMoveAsync(request.Body),
                     "/api/pointer/end" => await HandleProxyPointerEndAsync(request.Body),
                     "/api/pointer/cancel" => await HandleProxyPointerCancelAsync(request.Body),
@@ -3042,7 +3046,11 @@ public sealed class InspectorServer : IDisposable
         return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"points array required\"}"));
     }
 
-    private async Task<(int, string, byte[])> HandleProxyPointerStartAsync(string? body)
+    private async Task<(int, string, byte[])> HandleProxyPointerStartAsync(
+        string? body,
+        string leaseId,
+        string holderKind,
+        string holderLabel)
     {
         if (!TryReadPointerBody(body, out InspectorPointerStartRequest? start, out var error))
             return JsonResponse(400, new { ok = false, error });
@@ -3092,30 +3100,21 @@ public sealed class InspectorServer : IDisposable
             ElapsedMs = start.ElapsedMs,
             WindowId = frame.WindowId,
             CaptureEpoch = frame.CaptureEpoch,
-            RegistryGeneration = frame.RegistryGeneration,
-            Correlation = start.Correlation is null
-                ? null
-                : new ActionCorrelation
-                {
-                    ActionId = start.Correlation.ActionId,
-                    Source = start.Correlation.Source,
-                    StreamId = start.Correlation.StreamId,
-                    FrameId = start.Correlation.FrameId,
-                    FrameRevision = start.Correlation.FrameRevision,
-                    CoordinateSpace = "windowLogical"
-                }
+            RegistryGeneration = frame.RegistryGeneration
         });
 
-        var fallback = !result.TransportFailure
-            && (result.Unsupported || result.StatusCode is 400 or 422);
+        var fallback = CanFallbackPointerStart(result);
         if (result.Success)
         {
-            string[] staleSessionIds;
+            PointerProxySession[] staleSessions;
             lock (_pointerProxyGate)
             {
                 PrunePointerProxySessionsNoLock();
-                staleSessionIds = _pointerProxySessions.Keys
-                    .Where(id => !string.Equals(id, start.SessionId, StringComparison.Ordinal))
+                staleSessions = _pointerProxySessions.Values
+                    .Where(session => !string.Equals(
+                        session.SessionId,
+                        start.SessionId,
+                        StringComparison.Ordinal))
                     .ToArray();
                 _pointerProxySessions.Clear();
                 _pointerProxySessions[start.SessionId] = new PointerProxySession(
@@ -3126,13 +3125,23 @@ public sealed class InspectorServer : IDisposable
                     frame.RootOffsetY,
                     frame.LogicalWidth,
                     frame.LogicalHeight,
+                    leaseId,
+                    holderKind,
+                    holderLabel,
                     DateTime.UtcNow.AddMilliseconds(
                         Math.Clamp(result.MaxDurationMs > 0 ? result.MaxDurationMs : 60_000, 500, 300_000)
                         + 5_000));
             }
-            foreach (var staleSessionId in staleSessionIds)
+            foreach (var staleSession in staleSessions)
             {
-                try { await _client.CancelPointerSessionAsync(staleSessionId, "superseded"); }
+                try
+                {
+                    using var staleLease = _client.UseMutationLease(
+                        staleSession.LeaseId,
+                        staleSession.HolderKind,
+                        staleSession.HolderLabel);
+                    await _client.CancelPointerSessionAsync(staleSession.SessionId, "superseded");
+                }
                 catch { }
             }
         }
@@ -3156,6 +3165,20 @@ public sealed class InspectorServer : IDisposable
                 result.TransportFailure
             });
     }
+
+    internal static bool CanFallbackPointerStart(PointerSessionResult result)
+        => CanFallbackPointerStart(
+            result.TransportFailure,
+            result.Unsupported,
+            result.Reason);
+
+    internal static bool CanFallbackPointerStart(
+        bool transportFailure,
+        bool unsupported,
+        string? reason)
+        => !transportFailure
+            && (unsupported
+                || reason is "pointer-target-unsupported" or "pointer-not-handled");
 
     private async Task<(int, string, byte[])> HandleProxyPointerMoveAsync(string? body)
     {
@@ -3304,15 +3327,22 @@ public sealed class InspectorServer : IDisposable
 
     private async Task CancelProxyPointerSessionsAsync(string reason)
     {
-        string[] sessionIds;
+        PointerProxySession[] sessions;
         lock (_pointerProxyGate)
         {
-            sessionIds = _pointerProxySessions.Keys.ToArray();
+            sessions = _pointerProxySessions.Values.ToArray();
             _pointerProxySessions.Clear();
         }
-        foreach (var sessionId in sessionIds)
+        foreach (var session in sessions)
         {
-            try { await _client.CancelPointerSessionAsync(sessionId, reason); }
+            try
+            {
+                using var lease = _client.UseMutationLease(
+                    session.LeaseId,
+                    session.HolderKind,
+                    session.HolderLabel);
+                await _client.CancelPointerSessionAsync(session.SessionId, reason);
+            }
             catch { }
         }
     }
@@ -3373,6 +3403,9 @@ public sealed class InspectorServer : IDisposable
         double RootOffsetY,
         double LogicalWidth,
         double LogicalHeight,
+        string LeaseId,
+        string HolderKind,
+        string HolderLabel,
         DateTime ExpiresUtc);
 
     private sealed class InspectorPointerStartRequest
@@ -3382,7 +3415,6 @@ public sealed class InspectorServer : IDisposable
         public double X { get; set; }
         public double Y { get; set; }
         public double ElapsedMs { get; set; }
-        public ActionCorrelation? Correlation { get; set; }
     }
 
     private sealed class InspectorPointerMoveRequest

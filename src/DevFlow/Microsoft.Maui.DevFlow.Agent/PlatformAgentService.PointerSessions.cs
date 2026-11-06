@@ -20,20 +20,12 @@ public partial class PlatformAgentService
             Supported: true,
             Fidelity: "native",
             RequiresOptIn: false,
-            SupportsCoalescedSamples: true,
-            SupportsPressure: false,
-            SupportsButtons: false,
-            PointerTypes: ["touch"],
             Reason: null);
 #elif IOS || MACCATALYST
         return new PointerStreamSupport(
             Supported: _options.EnableSyntheticTouch,
             Fidelity: "synthetic",
             RequiresOptIn: true,
-            SupportsCoalescedSamples: true,
-            SupportsPressure: false,
-            SupportsButtons: false,
-            PointerTypes: ["touch"],
             Reason: _options.EnableSyntheticTouch
                 ? null
                 : "Pointer streaming on iOS and Mac Catalyst requires AgentOptions.EnableSyntheticTouch.");
@@ -48,9 +40,17 @@ public partial class PlatformAgentService
         CancellationToken cancellationToken)
     {
 #if ANDROID
-        return DispatchAsync(() => StartAndroidPointerSession(request), cancellationToken);
+        return DispatchAsync(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return StartAndroidPointerSession(request);
+        });
 #elif IOS || MACCATALYST
-        return DispatchAsync(() => StartApplePointerSession(request), cancellationToken);
+        return DispatchAsync(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return StartApplePointerSession(request);
+        });
 #else
         return base.StartPointerSessionBackendAsync(request, cancellationToken);
 #endif

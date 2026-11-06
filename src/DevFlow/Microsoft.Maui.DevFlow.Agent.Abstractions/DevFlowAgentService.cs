@@ -683,9 +683,7 @@ public partial class DevFlowAgentService : IDisposable, IMarkerPublisher
     protected virtual Task<HttpResponse> ExecuteUiMutationAsync(
         HttpRequest request,
         Func<HttpRequest, Task<HttpResponse>> handler)
-        => RejectMutationDuringPointerSession(request) is { } rejected
-            ? Task.FromResult(rejected)
-            : handler(request);
+        => handler(request);
 
     /// <summary>Installs automatic UI correlation hooks used by the profiler.</summary>
     protected virtual void EnsureAutoUiHooks()

@@ -30,7 +30,6 @@ public class AgentClientCompatibilityTests
         Assert.Contains(typeof(PointerSessionStartRequest), forwarded);
         Assert.Contains(typeof(PointerSessionSample), forwarded);
         Assert.Contains(typeof(PointerSessionResult), forwarded);
-        Assert.Contains(typeof(ActionCorrelation), forwarded);
         Assert.Equal("Microsoft.Maui.DevFlow.Client", typeof(PointerSessionResult).Assembly.GetName().Name);
     }
 
