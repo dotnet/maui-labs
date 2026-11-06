@@ -951,12 +951,23 @@ public class InspectorPropertyEndpointTests
                     var (method, path, body) = await ReadRequest(stream, ct);
 
                     string json = "{\"error\":\"not found\"}";
+                    byte[]? binaryPayload = null;
+                    var contentType = "application/json";
                     var status = "404 Not Found";
                     if (method == "GET" &&
                         _element is not null &&
                         path.Equals($"/api/v1/ui/elements/{_element.Id}", StringComparison.Ordinal))
                     {
                         json = JsonSerializer.Serialize(_element);
+                        status = "200 OK";
+                    }
+
+                    if (method == "GET"
+                        && path.StartsWith("/api/v1/ui/screenshot", StringComparison.Ordinal))
+                    {
+                        binaryPayload = Convert.FromBase64String(
+                            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+                        contentType = "image/png";
                         status = "200 OK";
                     }
 
@@ -1061,8 +1072,8 @@ public class InspectorPropertyEndpointTests
                         }
                     }
 
-                    var payload = Encoding.UTF8.GetBytes(json);
-                    var header = $"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
+                    var payload = binaryPayload ?? Encoding.UTF8.GetBytes(json);
+                    var header = $"HTTP/1.1 {status}\r\nContent-Type: {contentType}\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
                     await stream.WriteAsync(Encoding.UTF8.GetBytes(header), ct);
                     await stream.WriteAsync(payload, ct);
                     await stream.FlushAsync(ct);

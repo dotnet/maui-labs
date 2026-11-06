@@ -1919,6 +1919,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Page.Clock.RunForAsync(50);
         await firstStateCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+        await Expect(Page.Locator("#df-preview-pending")).ToHaveAttributeAsync("data-state", "retry");
         await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
         await Expect(Page.Locator("#df-view-pane")).Not.ToHaveAttributeAsync("aria-busy", "true");
 
@@ -2994,7 +2995,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
-    public async Task LocalTapLifecycleEcho_IsRenderedOnlyOnce()
+    public async Task LocalTapLifecycleEcho_IsSuppressedWithoutOverlay()
     {
         await WaitForUiEventSocketAsync();
         _emitActionEvents = true;
@@ -3004,14 +3005,12 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 
         await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync(
             new() { Position = new() { X = 80, Y = 22 } });
-        await Page.WaitForFunctionAsync(
-            "count => Number(document.querySelector('#df-action-overlay').dataset.renderCount || 0) === count",
-            initialRenderCount + 1);
         await Page.WaitForTimeoutAsync(250);
 
         Assert.Equal(
-            initialRenderCount + 1,
+            initialRenderCount,
             await overlay.EvaluateAsync<int>("element => Number(element.dataset.renderCount || 0)"));
+        await Expect(Page.Locator(".df-action-cursor")).ToBeHiddenAsync();
         Assert.Empty(_pageErrors);
     }
 
