@@ -59,6 +59,9 @@ public partial class InspectorLayoutWorkspaceTests
             await _page.RunAndWaitForResponseAsync(() => _page.Clock.RunForAsync(4000),
                 response => response.Url.EndsWith("/api/control", StringComparison.Ordinal));
             await Expect(_page.Locator("#df-presence")).ToContainTextAsync("Read-only");
+            await Expect(_page.Locator("#df-preview-badges")).ToHaveTextAsync("Polling");
+            await Expect(_page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
+            await Expect(_page.Locator("#df-preview-health-label")).ToHaveTextAsync("Live");
 
             await _page.Locator(".df-tree-node[data-tree-id='layout-target']").ClickAsync();
             await descriptorsStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));

@@ -9,6 +9,9 @@ The broker serves the Inspector as embedded static assets from `Web/`.
 | `devflow.js` | Application orchestration: live state refresh, app interaction, recording/replay, host bridge, Data dock, layout, and theme coordination. |
 | `inspector-api.js` | Token-aware JSON POST wrapper used by feature controllers. |
 | `inspector-dialog.js` | Host-independent accessible confirmation dialog. |
+| `inspector-frame.js` | Immutable committed-frame normalization, ordering, correlation, and coordinate conversion. |
+| `inspector-presentation.js` | Pure Preview health normalization, presentation derivation, accessibility announcement deduplication, and shared status-line ownership. |
+| `inspector-resolution.js` | Pure screenshot scale bucketing for resize-driven capture negotiation. |
 | `inspector-tree.js` | Visual-tree rendering, expansion state, selection, and keyboard navigation. |
 | `inspector-properties.js` | Property descriptors, typed editors, live updates, and XAML persistence controls. |
 | `inspector-data-context.js` | Pure Data snapshot bounding and secret redaction. It must remain DOM-independent so its security contract can be tested directly. |
