@@ -122,7 +122,7 @@
     },
     "ActionCorrelation": {
       "type": "object",
-      "description": "Optional action identity and the immutable Inspector frame that produced its element or coordinates. Target-specific x/y, points, and elementId remain on the containing action payload. The Inspector proxy validates cached frame references; direct agent endpoints accept correlation as advisory metadata and require coordinate-form operations to use windowLogical space.",
+      "description": "Optional tracing metadata for the immutable Inspector frame that produced an action target. Target-specific x/y, points, and elementId remain on the containing action payload. frameId is sufficient for cache lookup; streamId and frameRevision add consistency checks when known. The Inspector proxy validates cached frame references; direct agent endpoints accept correlation as advisory metadata and require coordinate-form operations to use windowLogical space.",
       "required": [
         "actionId",
         "source",
@@ -132,7 +132,7 @@
       "properties": {
         "actionId": {
           "type": "string",
-          "description": "Caller-generated opaque action identity."
+          "description": "Caller-generated opaque tracing identity. It is not an idempotency key or replay-protection token."
         },
         "source": {
           "type": "string",
@@ -159,7 +159,7 @@
         },
         "coordinateSpace": {
           "$ref": "#/$defs/CoordinateSpace",
-          "description": "Space used by coordinates on the containing action payload. Direct agent coordinate operations use windowLogical; Inspector hosts may submit another space to the Inspector proxy for conversion."
+          "description": "Space used by coordinates on the containing action payload. Direct agent coordinate operations use windowLogical. transformedViewport must be converted by the host because its scale and translation are not part of this object."
         }
       }
     }

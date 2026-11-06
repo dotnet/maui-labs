@@ -312,7 +312,6 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const tap = latestTap;
     if (activeRefresh) {
       if (!force) return activeRefresh.promise;
-      if (tap !== null && activeRefresh.tap === tap) return activeRefresh.promise;
       activeRefresh.cancelReason = 'superseded';
       activeRefresh.controller.abort();
     }
