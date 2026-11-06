@@ -61,6 +61,27 @@ public class InspectorServerCaptureMetadataTests
         """;
 
     [Theory]
+    [InlineData("not_supported", false, true)]
+    [InlineData("pointer-target-unsupported", false, true)]
+    [InlineData("pointer-not-handled", false, true)]
+    [InlineData("pointer-blocked-by-dialog", false, false)]
+    [InlineData("pointer-outside-window", false, false)]
+    [InlineData("invalid-request", false, false)]
+    [InlineData("not_supported", true, false)]
+    public void PointerStartFallback_OnlyReplaysSafePreCommitRejections(
+        string reason,
+        bool transportFailure,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            InspectorServer.CanFallbackPointerStart(
+                transportFailure,
+                unsupported: reason == "not_supported",
+                reason));
+    }
+
+    [Theory]
     [InlineData(
         "/api/tap",
         "/api/v1/ui/actions/tap",

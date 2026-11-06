@@ -17,39 +17,6 @@ public sealed class PointerSessionSample
     /// <summary>Monotonic milliseconds since the pointer session started.</summary>
     [JsonPropertyName("elapsedMs")]
     public double ElapsedMs { get; set; }
-
-    [JsonPropertyName("pressure")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public double? Pressure { get; set; }
-
-    [JsonPropertyName("buttons")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? Buttons { get; set; }
-}
-
-/// <summary>
-/// Optional action correlation metadata shared with the Inspector frame contract.
-/// Coordinates in the action payload remain authoritative.
-/// </summary>
-public sealed class ActionCorrelation
-{
-    [JsonPropertyName("actionId")]
-    public string? ActionId { get; set; }
-
-    [JsonPropertyName("source")]
-    public string? Source { get; set; }
-
-    [JsonPropertyName("streamId")]
-    public string? StreamId { get; set; }
-
-    [JsonPropertyName("frameId")]
-    public string? FrameId { get; set; }
-
-    [JsonPropertyName("frameRevision")]
-    public long? FrameRevision { get; set; }
-
-    [JsonPropertyName("coordinateSpace")]
-    public string? CoordinateSpace { get; set; }
 }
 
 /// <summary>Starts one continuous pointer session.</summary>
@@ -76,14 +43,6 @@ public sealed class PointerSessionStartRequest
     [JsonPropertyName("elapsedMs")]
     public double ElapsedMs { get; set; }
 
-    [JsonPropertyName("pressure")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public double? Pressure { get; set; }
-
-    [JsonPropertyName("buttons")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? Buttons { get; set; }
-
     [JsonPropertyName("windowId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? WindowId { get; set; }
@@ -96,9 +55,6 @@ public sealed class PointerSessionStartRequest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? RegistryGeneration { get; set; }
 
-    [JsonPropertyName("correlation")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ActionCorrelation? Correlation { get; set; }
 }
 
 /// <summary>Reports the applied or terminal state of a pointer session operation.</summary>

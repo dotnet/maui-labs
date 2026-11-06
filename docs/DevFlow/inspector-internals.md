@@ -187,6 +187,8 @@ identity or action payloads.
 Resolution-only replacement frames remain coordinate-equivalent when the recursive element
 geometry, logical viewport, root offset, and window identity are unchanged; PNG pixel dimensions
 do not create a second coordinate contract.
+For pointer sessions, correlation remains on the Inspector proxy request; the agent receives the
+validated `windowLogical` sample plus the window, capture-epoch, and registry-generation guards.
 
 ### Continuous pointer sessions
 

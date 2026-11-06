@@ -31,7 +31,6 @@ namespace Microsoft.Maui.DevFlow.Driver;
 [JsonSerializable(typeof(MutationLeaseStatus))]
 [JsonSerializable(typeof(MutationRecordingObservation))]
 [JsonSerializable(typeof(MutationRecordingStatus))]
-[JsonSerializable(typeof(ActionCorrelation))]
 [JsonSerializable(typeof(PointerSessionResult))]
 [JsonSerializable(typeof(PointerSessionSample))]
 [JsonSerializable(typeof(List<PointerSessionSample>))]

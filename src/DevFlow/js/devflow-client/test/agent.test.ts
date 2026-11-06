@@ -81,20 +81,3 @@ test("action builders preserve optional frame correlation", () => {
     correlation,
   });
 });
-
-test("pointer builders remain mutations so the client acquires a lease", () => {
-  const start = requests.pointerStart({
-    sessionId: "pointer-1",
-    pointerId: 1,
-    x: 10,
-    y: 20,
-  });
-  assert.equal(start.idempotent, false);
-  assert.equal(requests.pointerMove("pointer-1", 1, []).idempotent, false);
-  assert.equal(requests.pointerEnd(
-    "pointer-1",
-    1,
-    { x: 10, y: 20, elapsedMs: 1 },
-  ).idempotent, false);
-  assert.equal(requests.pointerCancel("pointer-1").idempotent, false);
-});

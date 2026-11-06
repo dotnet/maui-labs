@@ -1463,9 +1463,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
         session.maxBatch = Math.max(1, Math.min(
           POINTER_BATCH_LIMIT,
           Number(result.maxSamplesPerMove) || POINTER_BATCH_LIMIT));
-        session.maxRequestBytes = Math.max(
-          1024,
-          Number(result.maxRequestBytes) || 16 * 1024);
+        session.maxRequestBytes = Math.min(
+          16 * 1024,
+          Math.max(1024, Number(result.maxRequestBytes) || 16 * 1024));
         if (session.cancelled) {
           sendPointerCancelKeepalive(session, 'cancelled-before-start-reply');
           return;
@@ -1814,7 +1814,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       cancelActivePointerSessionKeepalive('visibility-hidden');
-      sendLeaseReleaseKeepalive();
     }
   });
 
