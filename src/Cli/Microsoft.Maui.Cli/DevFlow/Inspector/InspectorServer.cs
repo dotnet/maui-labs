@@ -3161,7 +3161,7 @@ public sealed class InspectorServer : IDisposable
     {
         lock (_cacheLock)
         {
-            var latest = _newestFrameId is { } newest
+            var latest = _latestCompleteFrameId is { } newest
                 && _frames.TryGetValue(newest, out var cached)
                     ? cached
                     : _latestFrame;

@@ -1331,7 +1331,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
   }
 
   viewport.addEventListener('wheel', (e) => {
-    if (e.defaultPrevented) return;
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     e.preventDefault();
     if (!ensureCanDrive()) return;
     if (scrollFrame && scrollFrame !== committedFrame) {
@@ -1653,6 +1653,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
       final.sy - session.startClientY);
 
     if (session.fallback) {
+      session.completed = true;
+      finishPointerSessionState(session);
       if (screenDistance > 12 && ensureCanDrive()) {
         try {
           const response = await fetch(`${basePath}/api/gesture`, {
@@ -1663,15 +1665,13 @@ import { createViewportController } from './inspector-viewport-controller.js';
               CoordinateSpace.appLogical,
               session.frame)),
           });
-          await response.arrayBuffer().catch(() => {});
           scheduleRefresh(300);
+          await response.arrayBuffer().catch(() => {});
           if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
         } catch (error) {
           console.error('Gesture fallback failed:', error);
         }
       }
-      session.completed = true;
-      finishPointerSessionState(session);
       return;
     }
 

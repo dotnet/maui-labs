@@ -28,7 +28,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private IPage? _page;
     private readonly ConcurrentQueue<(string Name, string Value)> _writes = new();
     private readonly ConcurrentQueue<string> _pointerEvents = new();
-    private readonly ConcurrentQueue<(string? FrameId, long? FrameRevision, string? CoordinateSpace)> _pointerStarts = new();
+    private readonly ConcurrentQueue<(string? CoordinateSpace, bool HasCorrelation)> _pointerStarts = new();
     private readonly ConcurrentQueue<int> _pointerMoveBytes = new();
     private readonly ConcurrentQueue<string> _pageErrors = new();
     private readonly ConcurrentDictionary<IRequest, byte> _pendingRequests = new();
@@ -143,11 +143,9 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 using var body = await JsonDocument.ParseAsync(context.Request.Body);
                 var root = body.RootElement;
                 var sessionId = root.GetProperty("sessionId").GetString();
-                var correlation = root.GetProperty("correlation");
                 _pointerStarts.Enqueue((
-                    correlation.GetProperty("frameId").GetString(),
-                    correlation.TryGetProperty("frameRevision", out var revision) ? revision.GetInt64() : null,
-                    correlation.GetProperty("coordinateSpace").GetString()));
+                    root.GetProperty("coordinateSpace").GetString(),
+                    root.TryGetProperty("correlation", out _)));
                 _pointerEvents.Enqueue($"start:{sessionId}");
                 return Results.Json(new
                 {
@@ -683,9 +681,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Page.Mouse.DownAsync();
         await WaitForPointerEventAsync("start:");
         var start = Assert.Single(_pointerStarts);
-        Assert.False(string.IsNullOrWhiteSpace(start.FrameId));
-        Assert.True(start.FrameRevision > 0);
         Assert.Equal("windowLogical", start.CoordinateSpace);
+        Assert.False(start.HasCorrelation);
         await Page.WaitForTimeoutAsync(250);
         await Page.RunAndWaitForResponseAsync(
             () => Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
@@ -767,6 +764,63 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Page.Mouse.UpAsync();
         Assert.DoesNotContain(_pointerEvents, value => value.StartsWith("end:", StringComparison.Ordinal));
         Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerVisibilityHidden_CancelsWithoutReleasingLease()
+    {
+        await ReloadWithPointerStreamAsync();
+        await Page.RouteAsync("**/api/pointer/cancel", async route =>
+        {
+            using var body = JsonDocument.Parse(route.Request.PostData ?? "{}");
+            _pointerEvents.Enqueue($"cancel:{body.RootElement.GetProperty("reason").GetString()}");
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        }, new() { Times = 1 });
+        var controlActions = new ConcurrentQueue<string>();
+        await Page.RouteAsync("**/api/control", async route =>
+        {
+            using var body = JsonDocument.Parse(route.Request.PostData ?? "{}");
+            controlActions.Enqueue(body.RootElement.GetProperty("action").GetString() ?? "");
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        });
+        var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+        Assert.NotNull(box);
+        await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+        await Page.Mouse.DownAsync();
+        await WaitForPointerEventAsync("start:");
+
+        await Page.EvaluateAsync("""
+            () => {
+              Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+              Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+              document.dispatchEvent(new Event('visibilitychange'));
+            }
+            """);
+
+        await WaitForPointerEventAsync("cancel:visibility-hidden");
+        await WaitForPointerIdleAsync();
+        Assert.DoesNotContain("release", controlActions);
+        Assert.Empty(_pageErrors);
+        await Page.EvaluateAsync("""
+            () => {
+              delete document.hidden;
+              delete document.visibilityState;
+              document.dispatchEvent(new Event('visibilitychange'));
+            }
+            """);
+        for (var attempt = 0; attempt < 100 && !_pendingRequests.IsEmpty; attempt++)
+            await Task.Delay(50);
+        Assert.Empty(_pendingRequests);
     }
 
     [InspectorBrowserFixtureFact]
