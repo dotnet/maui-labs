@@ -75,19 +75,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             {
                 "element",
                 "fullscreen",
-                "resolution-hints",
-                "resolution-metadata",
-                "post-capture-downsample",
-                "png"
-            },
-            ["resolution"] = new Dictionary<string, object?>
-            {
-                ["minScale"] = MinimumScreenshotTargetScale,
-                ["maxScale"] = MaximumScreenshotTargetScale,
-                ["maxDimension"] = MaximumScreenshotPixelDimension,
-                ["maxPixels"] = MaximumScreenshotPixels,
-                ["upscale"] = false,
-                ["format"] = "png"
+                "resolution-hints"
             },
             ["reason"] = (string?)null
         };
@@ -473,10 +461,11 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         }
 
         var autoScale = true;
-        if (request.QueryParams.TryGetValue("scale", out var scale))
+        var scaleModeExplicit = request.QueryParams.TryGetValue("scale", out var scale);
+        if (scaleModeExplicit)
         {
-            autoScale = !scale.Equals("native", StringComparison.OrdinalIgnoreCase)
-                     && !scale.Equals("full", StringComparison.OrdinalIgnoreCase);
+            autoScale = !string.Equals(scale, "native", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(scale, "full", StringComparison.OrdinalIgnoreCase);
         }
 
         var hasElementId = request.QueryParams.TryGetValue("id", out var elementId)
@@ -518,6 +507,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
                     maxWidth,
                     result.Density,
                     autoScale,
+                    scaleModeExplicit,
                     resolutionHints));
         }
         catch (Exception ex)

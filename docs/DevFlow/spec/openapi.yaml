@@ -572,7 +572,10 @@ paths:
           description: >
             Legacy maximum width in pixels. The image is scaled down if wider.
             New clients should also send maxPixelWidth so older agents can still
-            honor the width cap.
+            honor the width cap. When maxWidth is supplied with new hints but
+            targetScale and scale are omitted, it retains its legacy precedence
+            over automatic density scaling. New clients mark synthesized legacy
+            fallback requests with scale=auto.
           schema:
             type: integer
             minimum: 1
@@ -612,7 +615,9 @@ paths:
           description: >
             Scale mode. `native` returns at device pixel density; `auto`
             returns a reasonable size for agent consumption. targetScale takes
-            precedence when both are supplied.
+            precedence when both are supplied. New clients send explicit `auto`
+            when maxWidth is present only as a compatibility fallback for older
+            agents.
           schema:
             type: string
             enum: [native, auto]

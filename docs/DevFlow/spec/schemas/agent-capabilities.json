@@ -146,19 +146,8 @@
               "fullscreen",
               "selector",
               "capture-epoch",
-              "resolution-hints",
-              "resolution-metadata",
-              "post-capture-downsample",
-              "png"
-            ],
-            "resolution": {
-              "minScale": 0.1,
-              "maxScale": 4,
-              "maxDimension": 16384,
-              "maxPixels": 16777216,
-              "upscale": false,
-              "format": "png"
-            }
+              "resolution-hints"
+            ]
           },
           "ui.menus": {
             "version": 1,

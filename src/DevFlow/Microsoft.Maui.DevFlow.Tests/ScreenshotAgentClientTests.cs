@@ -105,6 +105,7 @@ public class ScreenshotAgentClientTests
             Assert.Contains("maxPixelWidth=800", request, StringComparison.Ordinal);
             Assert.Contains("maxPixelHeight=600", request, StringComparison.Ordinal);
             Assert.Contains("maxPixels=480000", request, StringComparison.Ordinal);
+            Assert.Contains("scale=auto", request, StringComparison.Ordinal);
             await WriteResponseAsync(stream, 200, "OK", "image/png", SamplePng);
         });
 

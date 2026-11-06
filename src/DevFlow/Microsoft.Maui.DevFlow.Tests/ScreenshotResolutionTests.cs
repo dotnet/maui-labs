@@ -101,6 +101,60 @@ public class ScreenshotResolutionTests
         Assert.Equal(1, result.CaptureScale);
     }
 
+    [Fact]
+    public void ProcessScreenshotPng_ExplicitLegacyWidth_PreservesWidthOverride()
+    {
+        var result = TestAgent.Process(
+            SamplePng,
+            nativeScale: 2,
+            autoScale: true,
+            targetScale: null,
+            maxPixelWidth: 1000,
+            maxPixelHeight: 1000,
+            maxPixels: 1_000_000,
+            maxWidth: 300,
+            scaleModeExplicit: false);
+
+        Assert.Equal(300, result.PixelWidth);
+        Assert.Equal(225, result.PixelHeight);
+        Assert.Equal(1.5, result.CaptureScale);
+    }
+
+    [Fact]
+    public void ProcessScreenshotPng_CompatibilityWidthWithExplicitAuto_PreservesAutoScaling()
+    {
+        var result = TestAgent.Process(
+            SamplePng,
+            nativeScale: 2,
+            autoScale: true,
+            targetScale: null,
+            maxPixelWidth: 300,
+            maxPixelHeight: 1000,
+            maxPixels: 1_000_000,
+            maxWidth: 300,
+            scaleModeExplicit: true);
+
+        Assert.Equal(200, result.PixelWidth);
+        Assert.Equal(150, result.PixelHeight);
+        Assert.Equal(1, result.CaptureScale);
+    }
+
+    [Fact]
+    public void ProcessScreenshotPng_InvalidPngWithHints_ReturnsStructuredFailure()
+    {
+        var response = TestAgent.ProcessResponse(
+            [0x01, 0x02, 0x03],
+            nativeScale: 2,
+            autoScale: true,
+            targetScale: 1,
+            maxPixelWidth: 200,
+            maxPixelHeight: 200,
+            maxPixels: 40_000);
+
+        Assert.Equal(500, response.StatusCode);
+        Assert.Contains("screenshot-resolution-failed", response.Body, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("targetScale", "NaN")]
     [InlineData("targetScale", "0")]
@@ -151,24 +205,17 @@ public class ScreenshotResolutionTests
             double? targetScale,
             int? maxPixelWidth,
             int? maxPixelHeight,
-            long? maxPixels)
+            long? maxPixels,
+            int? maxWidth = null,
+            bool scaleModeExplicit = false)
         {
-            ScreenshotResolutionHints? hints = targetScale.HasValue
-                || maxPixelWidth.HasValue
-                || maxPixelHeight.HasValue
-                || maxPixels.HasValue
-                    ? new ScreenshotResolutionHints(
-                        targetScale,
-                        maxPixelWidth,
-                        maxPixelHeight,
-                        maxPixels,
-                        WasClamped: false)
-                    : null;
+            var hints = CreateHints(targetScale, maxPixelWidth, maxPixelHeight, maxPixels);
             var result = ProcessScreenshotPng(
                 data,
-                maxWidth: null,
+                maxWidth,
                 nativeScale,
                 autoScale,
+                scaleModeExplicit,
                 hints);
             return new ProcessResult(
                 result.PixelWidth!.Value,
@@ -179,6 +226,22 @@ public class ScreenshotResolutionTests
                 result.NativeScale!.Value,
                 result.ResolutionClamped ?? false);
         }
+
+        public static HttpResponse ProcessResponse(
+            byte[] data,
+            double nativeScale,
+            bool autoScale,
+            double? targetScale,
+            int? maxPixelWidth,
+            int? maxPixelHeight,
+            long? maxPixels)
+            => BuildScreenshotResponse(ProcessScreenshotPng(
+                data,
+                maxWidth: null,
+                nativeScale,
+                autoScale,
+                scaleModeExplicit: true,
+                CreateHints(targetScale, maxPixelWidth, maxPixelHeight, maxPixels)));
 
         public static ParseResult Parse(string name, string value)
             => Parse([(name, value)]);
@@ -202,6 +265,23 @@ public class ScreenshotResolutionTests
                 hints?.MaxPixels,
                 hints?.WasClamped ?? false);
         }
+
+        private static ScreenshotResolutionHints? CreateHints(
+            double? targetScale,
+            int? maxPixelWidth,
+            int? maxPixelHeight,
+            long? maxPixels)
+            => targetScale.HasValue
+                || maxPixelWidth.HasValue
+                || maxPixelHeight.HasValue
+                || maxPixels.HasValue
+                    ? new ScreenshotResolutionHints(
+                        targetScale,
+                        maxPixelWidth,
+                        maxPixelHeight,
+                        maxPixels,
+                        WasClamped: false)
+                    : null;
     }
 
     private sealed record ProcessResult(

@@ -1602,7 +1602,10 @@ public class AgentClient : IDisposable
             if (selector != null) queryParams.Add($"selector={Uri.EscapeDataString(selector)}");
             var fallbackMaxWidth = MinPositive(maxWidth, resolution?.MaxPixelWidth);
             if (fallbackMaxWidth != null) queryParams.Add($"maxWidth={fallbackMaxWidth}");
-            if (scale != null) queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
+            if (scale != null)
+                queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
+            else if (resolution != null)
+                queryParams.Add("scale=auto");
             if (captureEpoch != null) queryParams.Add($"captureEpoch={captureEpoch}");
             if (registryGeneration != null) queryParams.Add($"registryGeneration={registryGeneration}");
             if (resolution?.TargetScale != null)
