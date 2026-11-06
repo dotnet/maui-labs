@@ -193,17 +193,21 @@ export function createViewportController(options) {
     });
   }
 
+  function commitTransform(mode, transform, bounds, announce) {
+    onTransformWillChange();
+    view.mode = mode;
+    view.transform = transform;
+    lastBounds = bounds;
+    render(announce);
+    return true;
+  }
+
   function setFit({ announce = true } = {}) {
     if (!canNavigate()) return false;
     const bounds = readBounds();
     const next = centerViewportTransform(fitViewportScale(bounds), bounds);
     if (view.mode === 'fit' && sameTransform(next, view.transform)) return false;
-    onTransformWillChange();
-    view.mode = 'fit';
-    view.transform = next;
-    lastBounds = bounds;
-    render(announce);
-    return true;
+    return commitTransform('fit', next, bounds, announce);
   }
 
   function setScaleAtClient(scale, clientX, clientY, { announce = true } = {}) {
@@ -222,18 +226,14 @@ export function createViewportController(options) {
         translateX: 0,
         translateY: 0,
       });
+    const bounds = readBounds();
     const next = clampViewportTransform({
       scale: nextScale,
       translateX: anchor.x - projected.x,
       translateY: anchor.y - projected.y,
-    }, readBounds(), { centerSmallContent: false });
+    }, bounds, { centerSmallContent: false });
     if (view.mode === 'custom' && sameTransform(next, view.transform)) return false;
-    onTransformWillChange();
-    view.mode = 'custom';
-    view.transform = next;
-    lastBounds = readBounds();
-    render(announce);
-    return true;
+    return commitTransform('custom', next, bounds, announce);
   }
 
   function setScaleAtCenter(scale, options = {}) {
@@ -251,18 +251,14 @@ export function createViewportController(options) {
 
   function panBy(deltaX, deltaY, { announce = false } = {}) {
     if (!canNavigate()) return false;
+    const bounds = readBounds();
     const next = clampViewportTransform({
       scale: view.transform.scale,
       translateX: view.transform.translateX + deltaX,
       translateY: view.transform.translateY + deltaY,
-    }, readBounds(), { centerSmallContent: view.mode === 'fit' });
+    }, bounds, { centerSmallContent: view.mode === 'fit' });
     if (sameTransform(next, view.transform)) return false;
-    onTransformWillChange();
-    view.mode = 'custom';
-    view.transform = next;
-    lastBounds = readBounds();
-    render(announce);
-    return true;
+    return commitTransform('custom', next, bounds, announce);
   }
 
   function setPanArmed(armed) {
