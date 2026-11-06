@@ -122,6 +122,42 @@ public partial class ScrollViewHandler : MacOSViewHandler<IScrollView, NSScrollV
         }
     }
 
+    /// <summary>
+    /// NSScrollView has no useful intrinsic or fitting size, so the base measure reported ~0 and a
+    /// ScrollView sized by its parent (an Auto row, a stack, a horizontal ScrollView's height) collapsed.
+    /// Measure the content the way the other MAUI backends do - unconstrained along the scrolling axis -
+    /// then honour the constraints, explicit sizes and minimum/maximum requests.
+    /// </summary>
+    public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
+    {
+        var scrollView = VirtualView;
+        if (scrollView == null || PlatformView == null)
+            return base.GetDesiredSize(widthConstraint, heightConstraint);
+
+        if (double.IsNaN(widthConstraint))
+            widthConstraint = double.PositiveInfinity;
+        if (double.IsNaN(heightConstraint))
+            heightConstraint = double.PositiveInfinity;
+
+        var measured = scrollView.CrossPlatformMeasure(widthConstraint, heightConstraint);
+
+        var width = IsExplicitSize(scrollView.Width) ? scrollView.Width : Math.Min(measured.Width, widthConstraint);
+        var height = IsExplicitSize(scrollView.Height) ? scrollView.Height : Math.Min(measured.Height, heightConstraint);
+
+        if (IsExplicitSize(scrollView.MinimumWidth))
+            width = Math.Max(width, scrollView.MinimumWidth);
+        if (IsExplicitSize(scrollView.MinimumHeight))
+            height = Math.Max(height, scrollView.MinimumHeight);
+        if (IsExplicitSize(scrollView.MaximumWidth))
+            width = Math.Min(width, scrollView.MaximumWidth);
+        if (IsExplicitSize(scrollView.MaximumHeight))
+            height = Math.Min(height, scrollView.MaximumHeight);
+
+        return new Size(double.IsInfinity(width) ? 0 : width, double.IsInfinity(height) ? 0 : height);
+    }
+
+    static bool IsExplicitSize(double value) => !double.IsNaN(value) && value >= 0 && !double.IsInfinity(value);
+
     public override void PlatformArrange(Rect rect)
     {
         base.PlatformArrange(rect);
