@@ -135,7 +135,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
   ) {
     const correlation = buildActionCorrelation(frame, coordinateSpace);
     if (correlation) {
-      actionOverlay.rememberLocalCorrelation(correlation);
       return { ...payload, correlation };
     }
     if (coordinateSpace !== CoordinateSpace.appLogical) return payload;
@@ -668,6 +667,21 @@ import { createViewportController } from './inspector-viewport-controller.js';
           screenshotResolutionSupported = true;
         }
 
+        const sameExplicitFrame = tap !== null
+          && tap === latestTap
+          && hasExplicitFrameIdentity(state)
+          && frame.frameId
+          && frame.frameId === committedFrame.frameId
+          && frame.streamId === committedFrame.streamId
+          && frame.frameRevision === committedFrame.frameRevision;
+        if (sameExplicitFrame) {
+          tap.unchangedCaptures++;
+          renderPreviewPending();
+          scheduleRefresh(300);
+          reportCaptureSuccess(false);
+          return state;
+        }
+
         // Keep the previous frame intact until its replacement image is ready.
         let image = null;
         if (screenshot && state.screenshotUrl) {
@@ -681,7 +695,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
         }
         if (!ensureCurrent()) return followReplacement();
         phase = 'apply';
-        if (!commitFrame(state, frame, image)) return followReplacement();
+        if (!commitFrame(state, frame, image)) {
+          return followReplacement();
+        }
         reportCaptureSuccess();
 
         committedScreenshotScale = Number(frame.requestedCaptureScale) || requestedScale;
@@ -721,6 +737,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
             renderPreviewPending();
           } else {
             tap.unchangedCaptures++;
+            renderPreviewPending();
             scheduleRefresh(300);
           }
         }
@@ -923,6 +940,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
+    previewPending.dataset.state = pendingTapRequests > 0
+      ? 'request'
+      : latestTap?.unchangedCaptures > 0 ? 'retry' : latestTap ? 'waiting' : 'idle';
     previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
   }
   function scheduleRefresh(delayMs = 300, force = false) {
@@ -1077,17 +1097,19 @@ import { createViewportController } from './inspector-viewport-controller.js';
 
   async function commitEditor(editor, retryStaleCapture) {
     try {
+      const requestPayload = correlatedPayload(
+        {
+          elementId: editor.dataset.elementId,
+          text: editor.value,
+          ...getElementCaptureMetadata(editor),
+        },
+        CoordinateSpace.appLogical,
+        editorFrames.get(editor) || committedFrame);
+      actionOverlay.rememberLocalCorrelation(requestPayload.correlation);
       const response = await fetch(`${basePath}/api/fill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(correlatedPayload(
-          {
-            elementId: editor.dataset.elementId,
-            text: editor.value,
-            ...getElementCaptureMetadata(editor),
-          },
-          CoordinateSpace.appLogical,
-          editorFrames.get(editor) || committedFrame)),
+        body: JSON.stringify(requestPayload),
       });
 
       if (response.ok) {
@@ -1209,10 +1231,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
     const payload = correlatedPayload({ x, y, ...getElementCaptureMetadata(targetEl) });
     if (targetId) payload.elementId = targetId;
     const previewSignature = previewStateSignature();
-    const localAction = actionOverlay.prepareLocalRequest(
-      'tap',
-      { x, y, elementId: targetId || undefined },
-      { render: true, correlation: payload.correlation });
+    actionOverlay.rememberLocalCorrelation(payload.correlation);
 
     pendingTapRequests++;
     renderPreviewPending();
@@ -1223,13 +1242,11 @@ import { createViewportController } from './inspector-viewport-controller.js';
         const reason = result && typeof result.reason === 'string'
           ? result.reason
           : 'The app did not accept the tap.';
-        actionOverlay.finishLocalAction(localAction.actionId, false, reason);
         setStatus(`Tap did not run — ${reason}`);
         return { ok: false, result, target: targetEl };
       }
 
       const actual = result.elementId ? (elById(result.elementId) || targetEl) : targetEl;
-      actionOverlay.finishLocalAction(localAction.actionId, true);
       const label = actual ? elementLabel(actual) : targetLabel;
       setStatus(label ? `Tap sent to ${label}.` : 'Tap sent to the app.');
       const tap = {
@@ -1333,16 +1350,12 @@ import { createViewportController } from './inspector-viewport-controller.js';
     scrollRequestQueue = scrollRequestQueue
       .catch(() => {})
       .then(async () => {
-        let localAction = null;
         try {
           const requestPayload = correlatedPayload(
             { x: point.x, y: point.y, deltaX: dx, deltaY: dy },
             CoordinateSpace.appLogical,
             frame);
-          localAction = actionOverlay.prepareLocalRequest(
-            'scroll',
-            { x: point.x, y: point.y, deltaX: dx, deltaY: dy },
-            { render: true, correlation: requestPayload.correlation });
+          actionOverlay.rememberLocalCorrelation(requestPayload.correlation);
           const resp = await fetch(`${basePath}/api/scroll`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1352,7 +1365,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
             ? null
             : await resp.clone().json().catch(() => null);
           const reason = failure?.reason || failure?.error || `HTTP ${resp.status}`;
-          actionOverlay.finishLocalAction(localAction.actionId, resp.ok, resp.ok ? null : reason);
           if (resp.ok) {
             if (recordingId) recordStep('scroll', null, { dx, dy });
             scheduleRefresh(300);
@@ -1361,8 +1373,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
             setStatus(`Scroll did not run — ${reason}`);
           }
         } catch (err) {
-          if (localAction)
-            actionOverlay.finishLocalAction(localAction.actionId, false, 'transport-failure');
           console.error('Scroll failed:', err);
           setStatus('Scroll did not run — the Inspector could not reach the app.');
         }
@@ -1501,10 +1511,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
       const result = await response.json().catch(() => null);
       if (response.ok && result?.ok === true) {
         session.started = true;
-        session.localAction = actionOverlay.prepareLocalRequest(
-          'pointer',
-          { x: session.start.x, y: session.start.y },
-          { render: true, correlation });
         session.sequence = result.lastSequence || 0;
         session.maxBatch = Math.max(1, Math.min(
           POINTER_BATCH_LIMIT,
@@ -1647,8 +1653,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
     session.pending.length = 0;
     try { await session.startPromise; } catch {}
     try { await sendPointerCancelRequest(session, reason, keepalive); } catch {}
-    if (session.localAction)
-      actionOverlay.finishLocalAction(session.localAction.actionId, false, reason, 'cancelled');
     session.completed = true;
     finishPointerSessionState(session);
   }
@@ -1665,16 +1669,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
     session.cancelled = true;
     if (session.started || session.ambiguousStart) suppressPointerClick(session);
     sendPointerCancelKeepalive(session, reason);
-    if (session.localAction)
-      actionOverlay.finishLocalAction(session.localAction.actionId, false, reason, 'cancelled');
     session.completed = true;
     finishPointerSessionState(session);
-  }
-
-  function pointerActionKind(distance, elapsedMs) {
-    if (distance <= 12) return elapsedMs >= 500 ? 'longpress' : 'tap';
-    const speed = distance / Math.max(1, elapsedMs);
-    return elapsedMs <= 750 && speed >= 0.5 ? 'swipe' : 'drag';
   }
 
   async function finishPointerSession(session, event) {
@@ -1712,22 +1708,12 @@ import { createViewportController } from './inspector-viewport-controller.js';
       session.completed = true;
       finishPointerSessionState(session);
       if (screenDistance > 12 && ensureCanDrive()) {
-        let localAction = null;
         try {
           const requestPayload = correlatedPayload(
             { points: session.fallbackPoints },
             CoordinateSpace.appLogical,
             session.frame);
-          localAction = actionOverlay.prepareLocalRequest(
-            pointerActionKind(screenDistance, final.elapsedMs),
-            {
-              points: session.fallbackPoints,
-              x: session.start.x,
-              y: session.start.y,
-              toX: final.x,
-              toY: final.y,
-            },
-            { render: true, correlation: requestPayload.correlation });
+          actionOverlay.rememberLocalCorrelation(requestPayload.correlation);
           const response = await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1737,7 +1723,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
             ? null
             : await response.clone().json().catch(() => null);
           const reason = failure?.reason || failure?.error || `HTTP ${response.status}`;
-          actionOverlay.finishLocalAction(localAction.actionId, response.ok, response.ok ? null : reason);
           if (response.ok) {
             scheduleRefresh(300);
             if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
@@ -1745,8 +1730,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
             setStatus(`Gesture did not run — ${reason}`);
           }
         } catch (error) {
-          if (localAction)
-            actionOverlay.finishLocalAction(localAction.actionId, false, 'transport-failure');
           console.error('Gesture fallback failed:', error);
           setStatus('Gesture did not run — the Inspector could not reach the app.');
         }
@@ -1762,24 +1745,11 @@ import { createViewportController } from './inspector-viewport-controller.js';
 
     await pumpPointerMoves(session);
     if (session.failed || session.cancelled) {
-      if (session.localAction)
-        actionOverlay.finishLocalAction(session.localAction.actionId, false, 'move-failed');
       session.completed = true;
       finishPointerSessionState(session);
       return;
     }
 
-    const pointerKind = pointerActionKind(screenDistance, final.elapsedMs);
-    if (session.localAction) {
-      actionOverlay.updateLocalAction(session.localAction.actionId, {
-        kind: pointerKind,
-        x: session.start.x,
-        y: session.start.y,
-        toX: final.x,
-        toY: final.y,
-        durationMs: final.elapsedMs,
-      });
-    }
     const sequence = ++session.sequence;
     try {
       const response = await fetch(`${basePath}/api/pointer/end`, {
@@ -1794,16 +1764,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
       const result = await response.json().catch(() => null);
       if (!response.ok || result?.ok !== true) {
         await sendPointerCancelRequest(session, 'end-failed').catch(() => {});
-        if (session.localAction) {
-          actionOverlay.finishLocalAction(
-            session.localAction.actionId,
-            false,
-            result?.reason || result?.error || `HTTP ${response.status}`);
-        }
         setStatus(`Pointer interaction did not finish cleanly — ${result?.error || result?.reason || `HTTP ${response.status}`}.`);
       } else {
-        if (session.localAction)
-          actionOverlay.finishLocalAction(session.localAction.actionId, true);
         scheduleRefresh(300);
         if (recordingId) {
           if (screenDistance <= 12 && session.target)
@@ -1814,8 +1776,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
       }
     } catch (error) {
       await sendPointerCancelRequest(session, 'end-transport-failure').catch(() => {});
-      if (session.localAction)
-        actionOverlay.finishLocalAction(session.localAction.actionId, false, 'transport-failure');
       console.error('Pointer end failed:', error);
       setStatus('Pointer interaction did not finish — the Inspector could not reach the app.');
     }
@@ -2056,14 +2016,19 @@ import { createViewportController } from './inspector-viewport-controller.js';
   const propsElLabel = document.getElementById('df-props-el');
   const propsCloseBtn = document.getElementById('df-props-close');
   let propsReturnFocus = null;
+  function propertyRequestBody(path, body) {
+    if (path !== '/api/setProperty') return body;
+    const payload = correlatedPayload(body);
+    actionOverlay.rememberLocalCorrelation(payload.correlation);
+    return payload;
+  }
+
   const propertyApi = Object.freeze({
-    post: (path, body) => inspectorApi.post(
-      path,
-      path === '/api/setProperty' ? correlatedPayload(body) : body),
+    post: (path, body) => inspectorApi.post(path, propertyRequestBody(path, body)),
     postDetailed: async (path, body) => {
       const response = await inspectorApi.postDetailed(
         path,
-        path === '/api/setProperty' ? correlatedPayload(body) : body);
+        propertyRequestBody(path, body));
       if (response.status === 409 || response.status === 410) scheduleRefresh(0);
       return response;
     },
@@ -3242,10 +3207,12 @@ import { createViewportController } from './inspector-viewport-controller.js';
   async function gotoCheckpoint() {
     if (!checkpointRoute || replaying) return;
     try {
+      const requestPayload = correlatedPayload({ route: checkpointRoute });
+      actionOverlay.rememberLocalCorrelation(requestPayload.correlation);
       const r = await fetch(`${basePath}/api/navigate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(correlatedPayload({ route: checkpointRoute })),
+        body: JSON.stringify(requestPayload),
       });
       setStatus(r.ok
         ? `Returned to ${checkpointLabel || 'start'} (${checkpointRoute}). Navigation only — app data is not reset.`

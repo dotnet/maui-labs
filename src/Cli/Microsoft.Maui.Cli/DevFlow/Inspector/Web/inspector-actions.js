@@ -39,8 +39,7 @@ function correlationOf(data) {
     : {};
 }
 
-function sourceLabel(data, local) {
-  if (local) return 'Inspector';
+function sourceLabel(data) {
   const source = correlationOf(data).source;
   return Object.hasOwn(SOURCE_LABELS, source) ? SOURCE_LABELS[source] : 'DevFlow';
 }
@@ -109,19 +108,22 @@ export function createActionOverlayController({
 
   function rememberLocal(id, ttl = LOCAL_ACTION_ACTIVE_TTL_MS) {
     if (!id) return;
-    const previous = localActions.get(id);
-    if (previous) clearTimeout(previous);
-    const timer = setTimeout(() => localActions.delete(id), ttl);
-    localActions.set(id, timer);
+    localActions.set(id, Date.now() + ttl);
     while (localActions.size > MAX_LOCAL_ACTIONS) {
       const oldest = localActions.keys().next().value;
-      clearTimeout(localActions.get(oldest));
       localActions.delete(oldest);
     }
   }
 
+  function hasLocalAction(id) {
+    const expiresAt = localActions.get(id);
+    if (expiresAt === undefined) return false;
+    if (expiresAt > Date.now()) return true;
+    localActions.delete(id);
+    return false;
+  }
+
   function clearLocalActions() {
-    for (const timer of localActions.values()) clearTimeout(timer);
     localActions.clear();
     for (const timer of pendingFailures.values()) clearTimeout(timer);
     pendingFailures.clear();
@@ -136,55 +138,7 @@ export function createActionOverlayController({
     rememberLocal(correlation?.actionId);
   }
 
-  function prepareLocalRequest(kind, data = {}, { render = false, correlation = null } = {}) {
-    const frame = frameSnapshot();
-    const resolvedCorrelation = correlation && typeof correlation === 'object'
-      ? correlation
-      : {
-          actionId: actionId(),
-          source: 'inspector',
-          frameId: frame?.frameId || undefined,
-          coordinateSpace: CoordinateSpace.appLogical,
-        };
-    const id = resolvedCorrelation.actionId || actionId();
-    rememberLocal(id);
-    const eventData = {
-      ...data,
-      kind,
-      captureEpoch: frame?.captureEpoch ?? undefined,
-      registryGeneration: frame?.registryGeneration ?? undefined,
-      windowId: frame?.windowId ?? undefined,
-      correlation: { ...resolvedCorrelation, actionId: id },
-    };
-    if (render) renderStarted(eventData, true);
-    return { actionId: id, data: eventData };
-  }
-
-  function finishLocalAction(id, success, reason = null, outcome = null) {
-    rememberLocal(id, LOCAL_ACTION_TERMINAL_TTL_MS);
-    const entry = activeActions.get(id);
-    if (!entry) return;
-    renderCompleted({
-      ...entry.data,
-      success,
-      outcome: outcome || (success ? 'completed' : 'failed'),
-      reason,
-    }, true);
-  }
-
-  function updateLocalAction(id, data) {
-    rememberLocal(id);
-    const entry = activeActions.get(id);
-    if (!entry) return;
-    renderStarted({
-      ...entry.data,
-      ...data,
-      correlation: entry.data.correlation,
-    }, true);
-  }
-
-  function currentFrameStatus(data, local) {
-    if (local) return 'current';
+  function currentFrameStatus(data) {
     const frame = frameSnapshot();
     if (!frame) return 'unmapped';
     const correlation = correlationOf(data);
@@ -395,7 +349,7 @@ export function createActionOverlayController({
     announcementTimer = setTimeout(publish, delay);
   }
 
-  function moveCursor(point, data, local) {
+  function moveCursor(point, data) {
     if (cursorHideTimer) {
       clearTimeout(cursorHideTimer);
       cursorHideTimer = null;
@@ -406,7 +360,7 @@ export function createActionOverlayController({
     cursor.dataset.y = String(Math.round(point.y * 100) / 100);
     cursor.style.left = `${point.x}px`;
     cursor.style.top = `${point.y}px`;
-    cursorLabel.textContent = sourceLabel(data, local);
+    cursorLabel.textContent = sourceLabel(data);
   }
 
   function renderRipple(point, data) {
@@ -466,7 +420,7 @@ export function createActionOverlayController({
     }
   }
 
-  function renderStarted(data, local = false) {
+  function renderStarted(data) {
     const correlation = correlationOf(data);
     const id = correlation.actionId || actionId();
     const normalized = { ...data, correlation: { ...correlation, actionId: id } };
@@ -482,11 +436,10 @@ export function createActionOverlayController({
       cleanupEntry(activeActions.values().next().value);
     }
 
-    const frameStatus = currentFrameStatus(normalized, local);
+    const frameStatus = currentFrameStatus(normalized);
     const entry = {
       id,
       data: normalized,
-      local,
       pointerSession: existing?.pointerSession || normalized.kind === 'pointer',
       startedAt: Date.now(),
       nodes: [],
@@ -499,8 +452,8 @@ export function createActionOverlayController({
 
     if (NON_SPATIAL_KINDS.has(normalized.kind)) {
       entry.nodes.push(renderBadge(normalized, 'info'));
-      if (!local && !retrying) {
-        announce(`${sourceLabel(normalized, false)} ${actionVerb(normalized)}.`);
+      if (!retrying) {
+        announce(`${sourceLabel(normalized)} ${actionVerb(normalized)}.`);
       }
       scheduleCleanup(entry, 1_500);
       return entry;
@@ -508,16 +461,16 @@ export function createActionOverlayController({
 
     if (frameStatus !== 'current') {
       entry.nodes.push(renderBadge(normalized, frameStatus));
-      if (!local && !retrying && normalized.kind !== 'pointer') {
+      if (!retrying && normalized.kind !== 'pointer') {
         announce(
-          `${sourceLabel(normalized, false)} ${actionDescription(normalized)} could not be placed on this Preview.`);
+          `${sourceLabel(normalized)} ${actionDescription(normalized)} could not be placed on this Preview.`);
       }
       scheduleCleanup(entry, 1_500);
       return entry;
     }
 
     const start = resolveStart(normalized);
-    moveCursor(start, normalized, local);
+    moveCursor(start, normalized);
     if (['tap', 'doubletap', 'longpress'].includes(normalized.kind)) {
       entry.nodes.push(renderRipple(start, normalized));
     } else if (['swipe', 'pan', 'drag', 'scroll'].includes(normalized.kind)) {
@@ -525,16 +478,16 @@ export function createActionOverlayController({
       if (path) entry.nodes.push(path);
     }
 
-    if (!local && !retrying && normalized.kind !== 'pointer') {
+    if (!retrying && normalized.kind !== 'pointer') {
       announce(
-        `${sourceLabel(normalized, false)} started ${actionDescription(normalized)}${targetLabel(normalized)}.`);
+        `${sourceLabel(normalized)} started ${actionDescription(normalized)}${targetLabel(normalized)}.`);
     }
     // A wedged action or lost terminal event must not leave the Preview permanently pressed.
     scheduleCleanup(entry, 10_000);
     return entry;
   }
 
-  function renderCompleted(data, local = false) {
+  function renderCompleted(data) {
     const id = correlationOf(data).actionId;
     const pendingFailure = id ? pendingFailures.get(id) : null;
     if (pendingFailure) {
@@ -542,11 +495,7 @@ export function createActionOverlayController({
       pendingFailures.delete(id);
     }
     const entry = id ? activeActions.get(id) : null;
-    if (data.success === false && local) {
-      if (entry) markFailedEntry(entry, data, false);
-      return;
-    }
-    if (data.success === false && !local) {
+    if (data.success === false) {
       const timer = setTimeout(() => {
         pendingFailures.delete(id);
         renderFailedCompletion(data, entry);
@@ -560,8 +509,8 @@ export function createActionOverlayController({
     }
 
     entry.data = { ...entry.data, ...data };
-    if (!local && entry.pointerSession) {
-      announce(`${sourceLabel(entry.data, false)} ${actionVerb(entry.data)}${targetLabel(entry.data)}.`);
+    if (entry.pointerSession) {
+      announce(`${sourceLabel(entry.data)} ${actionVerb(entry.data)}${targetLabel(entry.data)}.`);
     }
     scheduleCleanup(entry);
   }
@@ -579,7 +528,6 @@ export function createActionOverlayController({
       const fallback = {
         id,
         data: failure,
-        local: false,
         startedAt: Date.now(),
         nodes: [renderBadge(failure, 'failed')],
         cleanupTimer: null,
@@ -589,7 +537,7 @@ export function createActionOverlayController({
       }
       activeActions.set(id, fallback);
       const outcome = failure.outcome === 'cancelled' ? 'cancelled' : 'failed';
-      announce(`${sourceLabel(failure, false)} ${actionDescription(failure)} ${outcome}.`);
+      announce(`${sourceLabel(failure)} ${actionDescription(failure)} ${outcome}.`);
       scheduleCleanup(fallback, 1_500);
       return;
     }
@@ -601,7 +549,7 @@ export function createActionOverlayController({
     entry.data = { ...entry.data, ...data };
     if (cursor.dataset.actionId === entry.id) {
       cursor.classList.add('df-action-failed');
-      cursorLabel.textContent = `${sourceLabel(entry.data, entry.local)} · failed`;
+      cursorLabel.textContent = `${sourceLabel(entry.data)} · failed`;
     }
     for (const node of entry.nodes) node.classList.add('df-action-failed');
     if (announceFailure) {
@@ -611,7 +559,7 @@ export function createActionOverlayController({
       const reason = reasonText ? ` (${reasonText})` : '';
       const outcome = data.outcome === 'cancelled' ? 'cancelled' : 'failed';
       announce(
-        `${sourceLabel(entry.data, false)} ${actionDescription(entry.data)} ${outcome}${reason}.`);
+        `${sourceLabel(entry.data)} ${actionDescription(entry.data)} ${outcome}${reason}.`);
     }
     scheduleCleanup(entry, 1_500);
   }
@@ -636,7 +584,7 @@ export function createActionOverlayController({
     const data = message.data;
     if (!data || typeof data !== 'object') return true;
     const id = correlationOf(data).actionId;
-    if (id && localActions.has(id)) {
+    if (id && hasLocalAction(id)) {
       rememberLocal(
         id,
         message.type === 'ui-action-completed'
@@ -646,9 +594,9 @@ export function createActionOverlayController({
     }
 
     if (message.type === 'ui-action-started' || message.type === 'ui-action-updated')
-      renderStarted(data, false);
+      renderStarted(data);
     else
-      renderCompleted(data, false);
+      renderCompleted(data);
     return true;
   }
 
@@ -668,9 +616,6 @@ export function createActionOverlayController({
 
   return {
     rememberLocalCorrelation,
-    prepareLocalRequest,
-    updateLocalAction,
-    finishLocalAction,
     handleEvent,
     clear,
   };

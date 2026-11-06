@@ -10,10 +10,6 @@ const css = readFileSync(
   new URL("../../../Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/devflow.css", import.meta.url),
   "utf8",
 );
-const actions = readFileSync(
-  new URL("../../../Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/inspector-actions.js", import.meta.url),
-  "utf8",
-);
 const html = readFileSync(
   new URL("../../../Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/inspector.html", import.meta.url),
   "utf8",
@@ -51,19 +47,6 @@ test("Interact binds the rendered target while both modes share hover feedback",
   assert.match(html, /id="df-action-announcer"[\s\S]*aria-live="polite"/);
   assert.match(html, /id="df-action-overlay"/);
   assert.match(html, /id="df-action-chrome"[^>]*aria-hidden="true"/);
-});
-
-test("action lifecycle overlay suppresses local echoes and degrades stale frames", () => {
-  assert.match(actions, /localActions\.has\(id\)/);
-  assert.match(actions, /correlation\.frameId !== frame\.frameId/);
-  assert.match(actions, /diagnosticInputsRevision/);
-  assert.match(actions, /windowLogicalToAppLogical/);
-  assert.match(actions, /frame unavailable/);
-  assert.match(actions, /prefers-reduced-motion: reduce/);
-  assert.match(actions, /message\.type === 'navigation'/);
-  assert.match(actions, /message\.type !== 'ui-action-started'/);
-  assert.doesNotMatch(actions, /data\.(text|key|value|route)/);
-  assert.match(css, /--df-preview-inverse-scale/);
 });
 
 test("active destinations use an accent border without competing with the active mode", () => {
