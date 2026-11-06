@@ -91,9 +91,27 @@ test("only explicit frame identity enforces immutable commit ordering", () => {
     treeRevision: "legacy-refresh",
     elements: "<div></div>",
   }), false);
+  assert.equal(hasExplicitFrameIdentity({ screenshotUrl: "screenshot.png" }), false);
   assert.equal(hasExplicitFrameIdentity({ frame: {} }), true);
   assert.equal(hasExplicitFrameIdentity({ frameId: "frame-a" }), true);
   assert.equal(hasExplicitFrameIdentity({ screenshotUrl: "screenshot.png?frame=frame-a" }), true);
+  assert.equal(shouldCommitFrame(frame, normalizeFrameDescriptor({ frame: {} }, frame)), false);
+});
+
+test("identity-less refreshes drop stale correlation identity but keep current geometry defaults", () => {
+  const legacy = normalizeFrameDescriptor({
+    screenshotUrl: "screenshot.png",
+    rootOffsetX: 30,
+    treeRevision: "legacy-refresh",
+  }, frame);
+
+  assert.equal(legacy.frameId, null);
+  assert.equal(legacy.streamId, null);
+  assert.equal(legacy.frameRevision, 0);
+  assert.equal(legacy.rootOffsetX, 30);
+  assert.equal(legacy.logicalWidth, 400);
+  assert.equal(legacy.treeRevision, "legacy-refresh");
+  assert.equal(buildActionCorrelation(legacy), null);
 });
 
 test("coordinate conversions round-trip root offsets and capture scale", () => {
@@ -122,7 +140,7 @@ test("client conversion covers fit, 1:1, and translated viewport rectangles", ()
   );
 });
 
-test("future viewport scale and translation round-trip without UI policy", () => {
+test("viewport scale and translation round-trip without UI policy", () => {
   const transform = {
     originX: 100,
     originY: 50,
