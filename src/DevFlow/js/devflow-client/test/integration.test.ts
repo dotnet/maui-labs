@@ -184,6 +184,7 @@ test("integration: screenshot sends resolution hints with a legacy width fallbac
     assert.match(request, /maxPixelWidth=800/);
     assert.match(request, /maxPixelHeight=600/);
     assert.match(request, /maxPixels=480000/);
+    assert.match(request, /scale=auto/);
   } finally {
     client.dispose();
     await fake.close();

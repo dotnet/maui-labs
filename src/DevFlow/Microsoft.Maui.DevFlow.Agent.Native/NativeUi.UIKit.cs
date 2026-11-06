@@ -424,7 +424,7 @@ internal static partial class NativeUi
         var renderer = new UIGraphicsImageRenderer(view.Bounds.Size, new UIGraphicsImageRendererFormat
         {
             Opaque = false,
-            Scale = UIScreen.MainScreen.Scale,
+            Scale = (System.Runtime.InteropServices.NFloat)GetCaptureDensity(view),
         });
 
         using var image = renderer.CreateImage(context =>

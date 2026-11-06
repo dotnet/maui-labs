@@ -1186,7 +1186,10 @@ public sealed class InspectorServer : IDisposable
         // "disconnected" overlay and keeps polling /api/state, which is the endpoint that reports
         // an unavailable agent.
         var screenshotResolutionSupported = await SupportsScreenshotResolutionAsync();
-        var frame = await CreateFrameAsync(ScreenshotResolutionKey.Default);
+        var frame = await CreateFrameAsync(
+            screenshotResolutionSupported
+                ? ScreenshotResolutionKey.SupportedDefault
+                : ScreenshotResolutionKey.Legacy);
         var hasPublishedFrame = frame.FrameRevision > 0 && frame.Png.Length > 0;
         var html = HtmlRenderer.RenderWithViewport(
             frame.Tree,
@@ -1919,7 +1922,9 @@ public sealed class InspectorServer : IDisposable
         out ScreenshotResolutionKey resolution,
         out string? error)
     {
-        resolution = ScreenshotResolutionKey.Default;
+        resolution = supported
+            ? ScreenshotResolutionKey.SupportedDefault
+            : ScreenshotResolutionKey.Legacy;
         error = null;
         if (!supported || string.IsNullOrWhiteSpace(value))
             return true;
@@ -1941,7 +1946,7 @@ public sealed class InspectorServer : IDisposable
             ScreenshotScaleBuckets[^1],
             Math.Max(ScreenshotScaleBuckets[0], parsed));
         var normalized = ScreenshotScaleBuckets.MinBy(bucket => Math.Abs(bucket - bounded));
-        resolution = new ScreenshotResolutionKey(normalized);
+        resolution = new ScreenshotResolutionKey(Enabled: true, TargetScale: normalized);
         return true;
     }
 
@@ -1960,7 +1965,7 @@ public sealed class InspectorServer : IDisposable
 
         if (png is null && !string.IsNullOrWhiteSpace(frameId))
             return (404, "text/plain", Encoding.UTF8.GetBytes("Inspector frame expired"));
-        png ??= (await CreateFrameAsync(ScreenshotResolutionKey.Default)).Png;
+        png ??= (await CreateFrameAsync(ScreenshotResolutionKey.Legacy)).Png;
         if (png == null || png.Length == 0)
             return (404, "text/plain", Encoding.UTF8.GetBytes("No screenshot available"));
         return (200, "image/png", png);
@@ -2222,21 +2227,13 @@ public sealed class InspectorServer : IDisposable
         }
 
         ScreenshotResolutionOptions? resolutionOptions = null;
-        if (resolution != ScreenshotResolutionKey.Default)
+        if (resolution.Enabled)
         {
             resolutionOptions = new ScreenshotResolutionOptions
             {
                 TargetScale = resolution.TargetScale,
-                MaxPixelWidth = logicalWidth > 0
-                    ? Math.Min(
-                        InspectorScreenshotMaxDimension,
-                        Math.Max(1, (int)Math.Ceiling(logicalWidth * resolution.TargetScale)))
-                    : null,
-                MaxPixelHeight = logicalHeight > 0
-                    ? Math.Min(
-                        InspectorScreenshotMaxDimension,
-                        Math.Max(1, (int)Math.Ceiling(logicalHeight * resolution.TargetScale)))
-                    : null,
+                MaxPixelWidth = GetBoundedPixelDimension(logicalWidth, resolution.TargetScale),
+                MaxPixelHeight = GetBoundedPixelDimension(logicalHeight, resolution.TargetScale),
                 MaxPixels = InspectorScreenshotPixelBudget
             };
         }
@@ -2244,7 +2241,7 @@ public sealed class InspectorServer : IDisposable
         var fresh = fullscreen
             ? await _client.FullscreenScreenshotResultAsync(
                 window: null,
-                maxWidth: resolutionOptions?.MaxPixelWidth,
+                maxWidth: null,
                 scale: null,
                 captureEpoch: captureEpoch,
                 registryGeneration: registryGeneration,
@@ -2253,7 +2250,7 @@ public sealed class InspectorServer : IDisposable
                 window: null,
                 elementId: elementId,
                 selector: null,
-                maxWidth: resolutionOptions?.MaxPixelWidth,
+                maxWidth: null,
                 scale: null,
                 captureEpoch: captureEpoch,
                 registryGeneration: registryGeneration,
@@ -2299,6 +2296,20 @@ public sealed class InspectorServer : IDisposable
             }
         }
         return screenshot;
+    }
+
+    private static int? GetBoundedPixelDimension(double logicalSize, double targetScale)
+    {
+        if (!double.IsFinite(logicalSize) || logicalSize <= 0
+            || !double.IsFinite(targetScale) || targetScale <= 0)
+        {
+            return null;
+        }
+
+        var requested = Math.Ceiling(logicalSize * targetScale);
+        return (int)Math.Min(
+            InspectorScreenshotMaxDimension,
+            Math.Max(1d, requested));
     }
 
     // ── Proxy handlers ──
@@ -3047,9 +3058,10 @@ public sealed class InspectorServer : IDisposable
         double? NativeScale,
         bool? ResolutionClamped);
 
-    private readonly record struct ScreenshotResolutionKey(double TargetScale)
+    private readonly record struct ScreenshotResolutionKey(bool Enabled, double TargetScale)
     {
-        public static ScreenshotResolutionKey Default { get; } = new(1);
+        public static ScreenshotResolutionKey Legacy { get; } = new(false, 1);
+        public static ScreenshotResolutionKey SupportedDefault { get; } = new(true, 1);
     }
 
     private async Task<(int, string, byte[])> HandleProxyBackAsync()
