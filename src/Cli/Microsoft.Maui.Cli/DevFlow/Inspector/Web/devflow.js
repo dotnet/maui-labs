@@ -1,6 +1,12 @@
 // DevFlow Web Inspector — Interaction Script
 // Composition root: coordinates browser events, app transport, recording, hosts, and feature modules.
 import { createInspectorApi } from './inspector-api.js';
+import {
+  COMMAND_DEFINITIONS,
+  evaluateCommandStates,
+  normalizeAgentCapabilities,
+  resolveCommandFocus,
+} from './inspector-command-policy.js';
 import { confirmModal } from './inspector-dialog.js';
 import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from './inspector-data-context.js';
 import {
@@ -178,6 +184,12 @@ import {
   let presentationReady = false;
   let driveGateStatusToken = null;
   let disconnectReturnFocus = null;
+  let agentCapabilities = normalizeAgentCapabilities(null);
+  let capabilityRefreshPromise = null;
+  let capabilityRefreshController = null;
+  let capabilityRefreshGeneration = 0;
+  const CAPABILITY_FETCH_TIMEOUT_MS = 10000;
+  const CAPABILITY_REFRESH_MS = 60000;
   // Layout scans are explicit or opt-in live operations, independent of screenshot polling.
   let layoutPanel = null;
   const layoutEventTracker = createLayoutEventTracker();
@@ -299,6 +311,8 @@ import {
 
     renderWriterPresence(presentation.presence);
     updateFlowButtons();
+    if (!previous.connected && presentation.connected)
+      refreshCapabilities(true);
   }
 
   function updateHealth(patch, announce = true) {
@@ -708,6 +722,40 @@ import {
       updateHealth({ retrying: false });
     }
   }
+
+  async function refreshCapabilities(force = false) {
+    if (capabilityRefreshPromise && !force) return capabilityRefreshPromise;
+    if (force) capabilityRefreshController?.abort();
+    const generation = ++capabilityRefreshGeneration;
+    const controller = new AbortController();
+    capabilityRefreshController = controller;
+    const timeout = setTimeout(() => controller.abort(), CAPABILITY_FETCH_TIMEOUT_MS);
+    const request = (async () => {
+      try {
+        const response = await fetch(`${basePath}/api/capabilities`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const payload = await response.json().catch(() => null);
+        if (generation !== capabilityRefreshGeneration ||
+            !payload || typeof payload.capabilities !== 'object' || Array.isArray(payload.capabilities)) return;
+        agentCapabilities = normalizeAgentCapabilities(payload);
+        updateCommandStates();
+      } catch {
+        // Keep the last valid document; Preview health owns transport presentation.
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+    capabilityRefreshPromise = request;
+    try {
+      await request;
+    } finally {
+      if (capabilityRefreshPromise === request) capabilityRefreshPromise = null;
+      if (capabilityRefreshController === controller) capabilityRefreshController = null;
+    }
+  }
   for (const button of [retryConnectionBtn, retryCaptureBtn]) {
     if (!button) continue;
     button.addEventListener('click', () => {
@@ -865,12 +913,15 @@ import {
     'EditText', 'NSTextField',
   ]);
 
+  function elementCapabilities(el) {
+    return (el?.dataset.capabilities || '').toLowerCase().split(',').map(value => value.trim()).filter(Boolean);
+  }
+
   function isTextInput(el) {
     if (!el || !el.classList || !el.classList.contains('devflow-element')) return false;
     const type = el.dataset.type || '';
     if (TEXT_INPUT_TYPES.has(type)) return true;
-    const capabilities = (el.dataset.capabilities || '').toLowerCase().split(',');
-    if (capabilities.includes('set-value')) return true;
+    if (elementCapabilities(el).includes('set-value')) return true;
     // Heuristic: traits often expose "TextInput" / "Editable"
     const traits = (el.dataset.traits || '').toLowerCase();
     return traits.includes('textinput') || traits.includes('editable');
@@ -882,7 +933,7 @@ import {
     // A tap recognizer may open a picker or navigate away. Drive that action, not an editor.
     const gestures = (el.dataset.gestures || '').toLowerCase().split(',');
     if (gestures.includes('tap')) return false;
-    const capabilities = (el.dataset.capabilities || '').toLowerCase().split(',').filter(Boolean);
+    const capabilities = elementCapabilities(el);
     return capabilities.length === 0 || capabilities.includes('set-value');
   }
 
@@ -890,12 +941,7 @@ import {
     if (presentation.driveAllowed) return true;
     driveGateStatusToken = setStatus(
       presentation.driveMessage || 'This action is currently unavailable.');
-    const takeControl = document.getElementById('df-take-control');
-    if (presentation.healthy && takeControl && !takeControl.classList.contains('df-hidden')) {
-      takeControl.classList.add('df-attention');
-      takeControl.focus({ preventScroll: true });
-      setTimeout(() => takeControl.classList.remove('df-attention'), 1200);
-    }
+    if (presentation.healthy) drawAttentionToTakeControl(true);
     return false;
   }
 
@@ -1424,6 +1470,7 @@ import {
   window.addEventListener('online', () => {
     if (!replaying) scheduleRefresh(0);
     if (!eventsWs || eventsWs.readyState >= WebSocket.CLOSING) connectEvents();
+    refreshCapabilities(true);
   });
 
   // ── Periodic safety refresh for app-side changes (AJAX, no flash) ──
@@ -1510,6 +1557,9 @@ import {
   // Everything here lives in the SHARED bundle, so the browser, canvas, and VS Code hosts
   // all inherit it. Nothing host-specific belongs in this file.
   const tb = {
+    toolbar: document.getElementById('df-toolbar'),
+    modes: document.querySelector('#df-toolbar > .df-modes'),
+    separator: document.querySelector('#df-toolbar > .df-sep'),
     interact: document.getElementById('df-mode-interact'),
     inspect: document.getElementById('df-mode-inspect'),
     tree: document.getElementById('df-toggle-tree'),
@@ -1518,7 +1568,12 @@ import {
     secondary: document.getElementById('df-toolbar-secondary'),
     overflow: document.getElementById('df-toolbar-overflow'),
     status: document.getElementById('df-status'),
+    takeControl: document.getElementById('df-take-control'),
   };
+  const toolbarCommands = COMMAND_DEFINITIONS
+    .map(command => document.getElementById(command.id))
+    .filter(button => button instanceof HTMLButtonElement);
+  const toolbarCommandOrder = COMMAND_DEFINITIONS.map(command => command.id);
   const toolbarActions = tb.secondary ? [...tb.secondary.querySelectorAll(':scope > button')] : [];
   const toolbarPriorities = new Map([
     ['df-goto-checkpoint', 10],
@@ -1534,6 +1589,17 @@ import {
     button.dataset.toolbarOrder = String(index);
     button.dataset.toolbarPriority = String(toolbarPriorities.get(button.id) || 40);
   });
+  for (const button of toolbarCommands) {
+    const label = button.getAttribute('aria-label') ||
+      button.querySelector('.df-btn-label')?.textContent?.trim() ||
+      button.textContent?.trim() ||
+      button.id;
+    button.dataset.dfCommandName = label;
+    button.dataset.dfBaseTitle = button.title || label;
+    if (!button.hasAttribute('aria-label')) button.setAttribute('aria-label', label);
+  }
+  let commandStates = {};
+  let commandLayoutSignature = '';
   let toolbarLayoutFrame = 0;
   const treePanel = document.getElementById('df-tree');
   const paneScrim = document.getElementById('df-pane-scrim');
@@ -1586,7 +1652,7 @@ import {
 
   function overflowButtons() {
     return tb.overflow
-      ? [...tb.overflow.querySelectorAll(':scope > button:not(:disabled)')]
+      ? [...tb.overflow.querySelectorAll(':scope > button')].filter(button => !button.hidden)
       : [];
   }
 
@@ -1600,23 +1666,24 @@ import {
   }
 
   function toolbarFits() {
-    const toolbar = document.getElementById('df-toolbar');
-    return !!toolbar && toolbar.scrollWidth <= toolbar.clientWidth + 1;
+    return !!tb.toolbar && tb.toolbar.scrollWidth <= tb.toolbar.clientWidth + 1;
   }
 
   function layoutToolbarActions() {
     toolbarLayoutFrame = 0;
     if (!tb.secondary || !tb.overflow || !tb.more) return;
     const focused = document.activeElement;
-    setMoreOpen(false);
+    const wasOpen = document.body.classList.contains('df-more-open');
     for (const button of toolbarActions)
       moveToolbarAction(tb.secondary, button);
+    tb.secondary.hidden = toolbarActions.every(button => button.hidden);
     tb.more.classList.add('df-hidden');
 
     if (!toolbarFits()) {
       tb.more.classList.remove('df-hidden');
-      while (!toolbarFits() && tb.secondary.children.length > 0) {
-        const candidate = [...tb.secondary.children]
+      while (!toolbarFits()) {
+        const candidate = [...tb.secondary.querySelectorAll(':scope > button')]
+          .filter(button => !button.hidden)
           .sort((a, b) =>
             Number(a.dataset.toolbarPriority) - Number(b.dataset.toolbarPriority) ||
             Number(b.dataset.toolbarOrder) - Number(a.dataset.toolbarOrder))[0];
@@ -1625,13 +1692,27 @@ import {
       }
     }
 
-    if (tb.overflow.children.length === 0)
+    const visibleOverflow = overflowButtons();
+    tb.secondary.hidden = ![...tb.secondary.querySelectorAll(':scope > button')]
+      .some(button => !button.hidden);
+    if (visibleOverflow.length === 0)
       tb.more.classList.add('df-hidden');
+    if (wasOpen && visibleOverflow.length > 0)
+      setMoreOpen(true);
+    else if (visibleOverflow.length === 0)
+      setMoreOpen(false);
     if (focused instanceof HTMLElement && toolbarActions.includes(focused)) {
-      if (tb.overflow.contains(focused))
+      if (focused.hidden) {
+        const fallbackId = resolveCommandFocus(toolbarCommandOrder, commandStates, focused.id);
+        const fallback = fallbackId ? document.getElementById(fallbackId) : null;
+        restoreFocus(fallback, tb.more);
+      } else if (tb.overflow.contains(focused) && !wasOpen) {
         tb.more.focus({ preventScroll: true });
-      else if (focused.isConnected)
+      } else if (focused.isConnected) {
         focused.focus({ preventScroll: true });
+      }
+    } else if (focused === tb.more && tb.more.classList.contains('df-hidden')) {
+      restoreFocus(toolbarCommands.find(button => !button.hidden), null);
     }
     tb.more.classList.toggle('df-active', !!tb.overflow.querySelector('.df-tool-btn.df-active'));
   }
@@ -1642,7 +1723,7 @@ import {
   }
 
   function setMoreOpen(open, focusMenu = false, restore = false) {
-    if (!tb.overflow || !tb.more || tb.overflow.children.length === 0)
+    if (!tb.overflow || !tb.more || overflowButtons().length === 0)
       open = false;
     if (!open) {
       closeCopilotMenu();
@@ -1666,6 +1747,188 @@ import {
     if (open && focusMenu) overflowButtons()[0]?.focus({ preventScroll: true });
     if (!open && restore) restoreFocus(tb.more);
   }
+
+  function setDescribedByToken(element, token, present) {
+    const values = new Set((element.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
+    if (present) values.add(token);
+    else values.delete(token);
+    if (values.size > 0) element.setAttribute('aria-describedby', [...values].join(' '));
+    else element.removeAttribute('aria-describedby');
+  }
+
+  function commandReasonNode(button) {
+    const id = `${button.id}-availability`;
+    let node = document.getElementById(id);
+    if (!node) {
+      node = document.createElement('span');
+      node.id = id;
+      node.hidden = true;
+      document.body.appendChild(node);
+    }
+    return node;
+  }
+
+  function currentCommandInputs() {
+    const selected = selectedId ? elById(selectedId) : null;
+    return {
+      agent: agentCapabilities,
+      access: {
+        known: leaseAuthority !== null,
+        connected: presentation.connected,
+        driveAllowed: presentation.driveAllowed,
+        controlAllowed: presentation.controlAllowed,
+        driveMessage: presentation.driveMessage,
+        isWriter,
+        heldByOther: leaseHeldByOther,
+        owner: otherLeaseLabel,
+      },
+      element: {
+        selected: !!selected,
+        hasSource: selected?.getAttribute('data-hasSource') === 'true',
+      },
+      workflow: {
+        recording: !!recordingId,
+        recordingStopping,
+        replaying,
+        loaded: !!lastMarkdown,
+        checkpoint: !!checkpointRoute,
+      },
+      data: {
+        available: !!dockSnapshot && supportsDataContextScope(dockSnapshot.scope),
+      },
+    };
+  }
+
+  function visibleDockTabs() {
+    return dockTabButtons.filter(button => !button.hidden);
+  }
+
+  function syncCapabilitySurfaces() {
+    const treeVisible = commandStates['df-toggle-tree']?.visible !== false;
+    if (!treeVisible && !document.body.classList.contains('df-tree-hidden'))
+      setTreeVisible(false);
+
+    const boundsVisible = commandStates['df-toggle-bounds']?.visible !== false;
+    if (!boundsVisible && document.body.classList.contains('df-show-all')) {
+      document.body.classList.remove('df-show-all');
+      tb.bounds?.classList.remove('df-active');
+      tb.bounds?.setAttribute('aria-pressed', 'false');
+    }
+
+    const layoutVisible = commandStates['df-toggle-diagnostics']?.visible !== false;
+    const layoutTab = document.getElementById('df-tab-layout');
+    const active = document.activeElement;
+    const layoutHadFocus = active === layoutTab ||
+      document.getElementById('df-dock-body')?.contains(active);
+    if (layoutTab) layoutTab.hidden = !layoutVisible;
+    if (!layoutVisible && dockActiveTab === 'layout') {
+      layoutPanel?.deactivate();
+      const fallback = visibleDockTabs()[0];
+      if (fallback) {
+        loadTab(fallback.getAttribute('data-tab'));
+        if (layoutHadFocus) fallback.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  function applyCommandStates(nextStates) {
+    const focused = document.activeElement;
+    commandStates = nextStates;
+
+    for (const command of COMMAND_DEFINITIONS) {
+      const button = document.getElementById(command.id);
+      const state = nextStates[command.id];
+      if (!(button instanceof HTMLButtonElement) || !state) continue;
+
+      button.classList.remove('df-hidden');
+      button.hidden = !state.visible;
+      button.disabled = false;
+      button.setAttribute('aria-disabled', String(!state.enabled));
+      button.dataset.dfAvailability = state.availability;
+      if (state.reason) button.dataset.dfReason = state.reason.code;
+      else delete button.dataset.dfReason;
+
+      const reasonNode = commandReasonNode(button);
+      reasonNode.textContent = state.visible && state.reason ? state.reason.text : '';
+      setDescribedByToken(button, reasonNode.id, !!reasonNode.textContent);
+      const baseTitle = button.dataset.dfBaseTitle || button.dataset.dfCommandName || command.name;
+      button.title = state.reason ? `${baseTitle} - ${state.reason.text}` : baseTitle;
+      for (const mirrorId of command.mirrors || []) {
+        const mirror = document.getElementById(mirrorId);
+        if (!(mirror instanceof HTMLButtonElement)) continue;
+        mirror.disabled = !state.visible || !state.enabled;
+        mirror.setAttribute('aria-disabled', String(mirror.disabled));
+        mirror.dataset.dfAvailability = state.availability;
+        if (state.reason) mirror.dataset.dfReason = state.reason.code;
+        else delete mirror.dataset.dfReason;
+        mirror.title = state.reason?.text || '';
+      }
+    }
+
+    const groups = new Set(COMMAND_DEFINITIONS
+      .filter(command => nextStates[command.id]?.visible)
+      .map(command => command.group));
+    if (tb.modes) tb.modes.hidden = !groups.has('modes');
+    if (tb.separator) tb.separator.hidden = !groups.has('modes') ||
+      !['primary', 'secondary', 'lease'].some(group => groups.has(group));
+
+    const activeMode = mode === 'interact' ? 'df-mode-interact' : 'df-mode-inspect';
+    if (nextStates[activeMode]?.visible === false) {
+      const fallbackMode = ['df-mode-interact', 'df-mode-inspect']
+        .find(id => nextStates[id]?.visible !== false);
+      if (fallbackMode)
+        setMode(fallbackMode === 'df-mode-interact' ? 'interact' : 'inspect');
+    }
+
+    syncCapabilitySurfaces();
+
+    if (focused instanceof HTMLButtonElement && toolbarCommands.includes(focused) && focused.hidden) {
+      const fallbackId = resolveCommandFocus(toolbarCommandOrder, nextStates, focused.id);
+      const fallback = fallbackId ? document.getElementById(fallbackId) : null;
+      if (tb.overflow?.contains(focused) && !document.body.classList.contains('df-more-open'))
+        restoreFocus(tb.more, fallback);
+      else
+        restoreFocus(fallback, tb.more);
+    }
+
+    const signature = JSON.stringify(toolbarCommands.map(button => [
+      button.id,
+      !button.hidden,
+      button.querySelector('.df-btn-label')?.textContent || '',
+    ]));
+    if (signature !== commandLayoutSignature) {
+      commandLayoutSignature = signature;
+      scheduleToolbarLayout();
+    }
+  }
+
+  function updateCommandStates() {
+    applyCommandStates(evaluateCommandStates(currentCommandInputs()));
+  }
+
+  function drawAttentionToTakeControl(focus) {
+    const takeControl = tb.takeControl;
+    if (!takeControl || takeControl.hidden) return;
+    takeControl.classList.add('df-attention');
+    if (focus) takeControl.focus({ preventScroll: true });
+    setTimeout(() => takeControl.classList.remove('df-attention'), 1200);
+  }
+
+  tb.toolbar?.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    const state = button ? commandStates[button.id] : null;
+    if (!state || state.enabled) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const message = state.reason?.text || 'This action is currently unavailable.';
+    if (state.availability === 'readOnly' || state.availability === 'disconnected' ||
+        state.reason?.code === 'preview-not-current') {
+      driveGateStatusToken = setStatus(message);
+    } else {
+      setStatus(message);
+    }
+    if (state.availability === 'readOnly') drawAttentionToTakeControl(true);
+  }, true);
 
   function isDiagnosticsPaneVisible() {
     return document.body.classList.contains('df-dock-open') &&
@@ -1753,12 +2016,6 @@ import {
     tb.overflow.addEventListener('click', (e) => {
       const button = e.target.closest('button');
       if (!button) return;
-      if (button.getAttribute('aria-disabled') === 'true') {
-        e.preventDefault();
-        e.stopPropagation();
-        setStatus(button.title || 'This action is currently unavailable.');
-        return;
-      }
       if (button === copilotBtn) return;
       setMoreOpen(false, false, true);
     }, true);
@@ -2057,10 +2314,12 @@ import {
     // (setting textContent here would wipe the .df-btn-label wrapper the toolbar relies on).
     const lbl = recordBtn.querySelector('.df-btn-label');
     const label = recordingStopping ? 'Stopping…' : (recordingId ? `Rec (${recStepCount})` : 'Record');
+    const changed = lbl ? lbl.textContent !== label : recordBtn.textContent !== `\u25CF ${label}`;
     if (lbl) lbl.textContent = label;
-    else recordBtn.textContent = recordingId ? `\u25CF ${label}` : `\u25CF ${label}`;
+    else recordBtn.textContent = `\u25CF ${label}`;
+    recordBtn.setAttribute('aria-label', label);
     if (cancelRecordingBtn) cancelRecordingBtn.classList.toggle('df-hidden', !recordingId);
-    scheduleToolbarLayout();
+    if (changed) scheduleToolbarLayout();
   }
 
   // Highest-precedence DURABLE selector for the element (automationId > text > id). We never send a
@@ -2146,8 +2405,14 @@ import {
         timelineStop(j.steps);
         // Host-side save when a host advertises it (VS Code / canvas know workspace conventions);
         // otherwise download in the browser. Gated by the authenticated host bridge.
-        if (hostHas('saveRecording') && postToHost('devflow:recordingComplete', { name: j.name, steps: j.steps, markdown: j.markdown })) {
+        const completedRecording = { name: j.name, steps: j.steps, markdown: j.markdown, prefix: pre };
+        if (hostHas('saveRecording') && postToHost('devflow:recordingComplete', completedRecording)) {
           setStatus(`${pre}Recorded ${j.steps} step(s) — handed to the host to save. Replay is now available.`);
+        } else if (framed && bridgeId && hostCaps === null) {
+          pendingHostRecording = completedRecording;
+          setStatus(`${pre}Recorded ${j.steps} step(s) — waiting for the host to save it. Replay is now available.`);
+        } else if (framed) {
+          setStatus(`${pre}Recorded ${j.steps} step(s). This host cannot save the file; Replay is still available.`);
         } else {
           downloadText(fname, j.markdown);
           setStatus(`${pre}Recorded ${j.steps} step(s) → ${fname}. Replay is now available.`);
@@ -2271,12 +2536,12 @@ import {
     workflowSelect.append(new Option('Project tests…', ''));
     if (!result || result.ok !== true) {
       workflowSelect.append(new Option('Could not list project tests', ''));
-      workflowSelect.disabled = false;
+      workflowSelect.disabled = commandStates['df-load-flow']?.enabled === false;
       return;
     }
     if (result.supported === false) {
       workflowSelect.append(new Option('Project unavailable — choose a file', ''));
-      workflowSelect.disabled = false;
+      workflowSelect.disabled = commandStates['df-load-flow']?.enabled === false;
       return;
     }
     for (const test of (result.tests || [])) {
@@ -2287,7 +2552,7 @@ import {
     }
     if (workflowSelect.options.length === 1)
       workflowSelect.append(new Option('No tests in maui-tests', ''));
-    workflowSelect.disabled = false;
+    workflowSelect.disabled = commandStates['df-load-flow']?.enabled === false;
   }
 
   async function loadProjectWorkflow(name) {
@@ -2362,26 +2627,18 @@ import {
   const checkpointBtn = document.getElementById('df-goto-checkpoint');
 
   function updateFlowButtons() {
-    const canDrive = presentation.driveAllowed;
-    const canControlRecording = presentation.controlAllowed;
     updateRecordButton();
-    if (recordBtn) {
-      recordBtn.disabled = recordingStopping || replaying
-        || (recordingId ? !canControlRecording : !canDrive);
-    }
+    updateCommandStates();
+    const enabled = id => commandStates[id]?.enabled !== false;
     if (cancelRecordingBtn) {
-      cancelRecordingBtn.disabled = !recordingId || recordingStopping || replaying || !canControlRecording;
+      cancelRecordingBtn.disabled =
+        !recordingId || recordingStopping || replaying || !presentation.controlAllowed;
     }
-    setExplainedDisabled(assertBtn, !recordingId || !selectedId || replaying || !canDrive);
-    setExplainedDisabled(replayBtn, !lastMarkdown || !!recordingId || replaying || !canDrive);
-    setExplainedDisabled(checkpointBtn, !checkpointRoute || replaying || !canDrive);
-    if (loadFlowBtn) loadFlowBtn.disabled = !!recordingId || replaying;
-    if (workflowSelect) workflowSelect.disabled = !!recordingId || replaying;
-    if (workflowFileBtn) workflowFileBtn.disabled = !!recordingId || replaying;
-    if (workflowReplayBtn) workflowReplayBtn.disabled = !lastMarkdown || !!recordingId || replaying || !canDrive;
+    if (workflowSelect) workflowSelect.disabled = !enabled('df-load-flow');
+    if (workflowFileBtn) workflowFileBtn.disabled = !enabled('df-load-flow');
     propertyGrid.updateWriterState();
     document.querySelectorAll('#df-dock .df-alert-actions button').forEach((button) => {
-      button.disabled = !canDrive;
+      button.disabled = !presentation.driveAllowed;
     });
   }
 
@@ -2436,11 +2693,28 @@ import {
   }
 
   async function replay() {
+    const canReplay = () => commandStates['df-toggle-replay']?.enabled !== false;
+    const explainReplay = () => setStatus(
+      commandStates['df-toggle-replay']?.reason?.text || 'Replay is currently unavailable.');
+    if (!canReplay()) {
+      explainReplay();
+      return;
+    }
     if (!lastMarkdown || recordingId || replaying) return;
     const workflowLabel = lastMarkdownName ? ` “${lastMarkdownName}”` : '';
     if (!(await confirmModal(`Replay${workflowLabel} will drive the LIVE app and may change its data. Continue?`, 'Replay'))) return;
+    updateCommandStates();
+    if (!canReplay()) {
+      explainReplay();
+      return;
+    }
     // Auto-capture a "before replay" checkpoint so you can return to where you were.
     await captureCheckpoint('before replay');
+    updateCommandStates();
+    if (!canReplay()) {
+      explainReplay();
+      return;
+    }
     setReplayUi(true);
     setStatus('Replaying…');
     try {
@@ -2497,7 +2771,6 @@ import {
   if (replayBtn) replayBtn.addEventListener('click', replay);
   if (workflowReplayBtn) workflowReplayBtn.addEventListener('click', replay);
   if (checkpointBtn) checkpointBtn.addEventListener('click', gotoCheckpoint);
-  updateFlowButtons();
 
   // ── Host bridge: send-to-Copilot + open-XAML-source over a nonce-authenticated
   // iframe->host channel. The host (VS Code webview / canvas shell) advertises capabilities; a plain
@@ -2513,6 +2786,7 @@ import {
     : [];
   const sourceBtn = document.getElementById('df-open-source');
   const attachDataBtn = document.getElementById('df-attach-data');
+  let pendingHostRecording = null;
   let dockSnapshot = null;
   let dockActiveTab = null;
   const pendingHostRequests = new Map();
@@ -2594,6 +2868,15 @@ import {
       updateHostLayout();
       if (hsTimer) { clearTimeout(hsTimer); hsTimer = null; }
       updateHostButtons();
+      if (pendingHostRecording) {
+        const recording = pendingHostRecording;
+        pendingHostRecording = null;
+        if (hostHas('saveRecording') && postToHost('devflow:recordingComplete', recording)) {
+          setStatus(`${recording.prefix || ''}Recorded ${recording.steps} step(s) — handed to the host to save. Replay is now available.`);
+        } else {
+          setStatus(`${recording.prefix || ''}Recorded ${recording.steps} step(s). This host cannot save the file; Replay is still available.`);
+        }
+      }
       if (d.theme) applyTheme(d.theme);                  // host may bundle its theme with the capability ack
     } else if (d.type === 'devflow:theme') {
       if (d.profile) applyHostProfile(d.profile);
@@ -2603,18 +2886,10 @@ import {
 
   function selectedElement() { return selectedId ? elById(selectedId) : null; }
 
-  function setExplainedDisabled(button, disabled) {
-    if (!button) return;
-    button.disabled = false;
-    button.setAttribute('aria-disabled', String(!!disabled));
-  }
-
   function updateHostButtons() {
+    updateCommandStates();
     const el = selectedElement();
-    // Source: enabled only when the selected element has a XAML source map.
-    setExplainedDisabled(sourceBtn, !(el && el.getAttribute('data-hasSource') === 'true'));
     const dataAvailable = !!dockSnapshot && supportsDataContextScope(dockSnapshot.scope);
-    setExplainedDisabled(copilotBtn, !(el || lastMarkdown || dataAvailable));
     for (const item of copilotMenuItems) {
       const kind = item.getAttribute('data-copilot-context');
       item.disabled =
@@ -2657,8 +2932,8 @@ import {
         setStatus(`Opening ${shortFile(j.file)}:${j.line || 1}…`);
       } else {
         const loc = `${j.file}:${j.line || 1}`;
-        await copyText(loc);
-        setStatus(`Source: ${loc} (copied)`);
+        const copied = await copyText(loc);
+        setStatus(copied ? `Source: ${loc} (copied)` : `Source: ${loc}. Could not copy from this host.`);
       }
     } catch (err) { setStatus('Could not resolve source.'); }
   }
@@ -3520,6 +3795,9 @@ import {
   }
 
   async function loadTab(name) {
+    const requestedTab = dockTabButtons.find(button =>
+      !button.hidden && button.getAttribute('data-tab') === name);
+    if (!requestedTab) return;
     layoutPanel?.deactivate();
     const generation = ++dockViewGeneration;
     dockActiveTab = name;
@@ -3607,12 +3885,13 @@ import {
   for (const b of dockTabButtons) {
     b.addEventListener('click', () => loadTab(b.getAttribute('data-tab')));
     b.addEventListener('keydown', (e) => {
-      const index = dockTabButtons.indexOf(b);
+      const tabs = visibleDockTabs();
+      const index = tabs.indexOf(b);
       let target = null;
-      if (e.key === 'ArrowRight') target = dockTabButtons[(index + 1) % dockTabButtons.length];
-      else if (e.key === 'ArrowLeft') target = dockTabButtons[(index - 1 + dockTabButtons.length) % dockTabButtons.length];
-      else if (e.key === 'Home') target = dockTabButtons[0];
-      else if (e.key === 'End') target = dockTabButtons[dockTabButtons.length - 1];
+      if (e.key === 'ArrowRight') target = tabs[(index + 1 + tabs.length) % tabs.length];
+      else if (e.key === 'ArrowLeft') target = tabs[(index - 1 + tabs.length) % tabs.length];
+      else if (e.key === 'Home') target = tabs[0];
+      else if (e.key === 'End') target = tabs[tabs.length - 1];
       else return;
       e.preventDefault();
       target.focus();
@@ -3667,14 +3946,12 @@ import {
       ? Number(expiresInMs)
       : null;
     leaseAuthority = typeof authority === 'string' ? authority : null;
-    if (presentationReady) renderHealthPresentation(presentation, false);
-    const t = document.getElementById('df-take-control');
-    if (t) {
-      t.classList.toggle('df-hidden', writer);
-      t.title = heldByOther
+    if (tb.takeControl) {
+      tb.takeControl.dataset.dfBaseTitle = heldByOther
         ? `${otherLeaseLabel || 'Another session'} is driving this app; take control`
-        : 'No session is driving this app, click to take control';
+        : 'No session is driving this app; take control';
     }
+    if (presentationReady) renderHealthPresentation(presentation, false);
     // Recording is app-scoped: another valid lease holder can continue it after handoff. This tab
     // becomes a passive observer and can resume the existing recording if it takes control again.
     if (lostLease && recordingId) {
@@ -3718,11 +3995,20 @@ import {
     button.addEventListener('keydown', (e) => {
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
       e.preventDefault();
+      const modes = [tb.interact, tb.inspect].filter(candidate => !candidate.hidden);
+      const index = modes.indexOf(button);
       const next = e.key === 'Home'
-        ? tb.interact
-        : (e.key === 'End' ? tb.inspect : (button === tb.interact ? tb.inspect : tb.interact));
-      setMode(next === tb.interact ? 'interact' : 'inspect');
+        ? modes[0]
+        : (e.key === 'End'
+          ? modes[modes.length - 1]
+          : modes[(index + 1 + modes.length) % modes.length]);
+      if (!next) return;
       next.focus({ preventScroll: true });
+      if (next.getAttribute('aria-disabled') === 'true') {
+        setStatus(commandStates[next.id]?.reason?.text || 'This mode is currently unavailable.');
+        return;
+      }
+      setMode(next === tb.interact ? 'interact' : 'inspect');
     });
   }
   tb.tree.addEventListener('click', () => {
@@ -4047,5 +4333,9 @@ import {
   presentationReady = true;
   renderHealthPresentation(presentation, false);
   settleInitialScreenshot();
+  refreshCapabilities();
+  setInterval(() => {
+    if (!document.hidden) refreshCapabilities();
+  }, CAPABILITY_REFRESH_MS);
 
 })();

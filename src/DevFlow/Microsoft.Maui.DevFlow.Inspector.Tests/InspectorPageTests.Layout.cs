@@ -581,7 +581,8 @@ public partial class InspectorLayoutWorkspaceTests
         });
 
     private async Task PrepareLayoutWorkspaceAsync(Func<int>? position = null, bool eventsSupported = false,
-        Func<string>? treeRevision = null, string? elements = null, Func<string>? diagnosticInputsRevision = null)
+        Func<string>? treeRevision = null, string? elements = null, Func<string>? diagnosticInputsRevision = null,
+        Func<string>? controlResponse = null, Func<string>? capabilityResponse = null)
     {
         await _page.Clock.InstallAsync();
         await CaptureClipboardWritesAsync();
@@ -591,9 +592,17 @@ public partial class InspectorLayoutWorkspaceTests
         }));
         await _page.RouteAsync("**/api/control", route => route.FulfillAsync(new()
         {
-            ContentType = "application/json", Body = """{"youAreWriter":true,"heldByOther":false}"""
+            ContentType = "application/json",
+            Body = controlResponse?.Invoke() ?? """{"youAreWriter":true,"heldByOther":false}"""
         }));
         var browserFrameRevision = 0;
+        if (capabilityResponse is not null)
+        {
+            await _page.RouteAsync("**/api/capabilities", route => route.FulfillAsync(new()
+            {
+                ContentType = "application/json", Body = capabilityResponse()
+            }));
+        }
         await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new()
         {
             ContentType = "application/json",
