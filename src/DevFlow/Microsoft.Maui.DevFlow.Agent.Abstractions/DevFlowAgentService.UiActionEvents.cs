@@ -63,7 +63,7 @@ public partial class DevFlowAgentService
         try
         {
             var response = await handler().ConfigureAwait(false);
-            var success = response.StatusCode is >= 200 and < 300;
+            var success = IsSuccessfulActionResponse(response);
             PublishUiEvent(
                 "ui-action-completed",
                 CreateUiActionEventData(
@@ -140,7 +140,7 @@ public partial class DevFlowAgentService
                 descriptor,
                 () => executeAction(action));
 
-            var succeeded = response.StatusCode < 400;
+            var succeeded = IsSuccessfulActionResponse(response);
             allSucceeded &= succeeded;
             results.Add(new Dictionary<string, object?>
             {
@@ -160,6 +160,9 @@ public partial class DevFlowAgentService
             ["results"] = results
         });
     }
+
+    private static bool IsSuccessfulActionResponse(HttpResponse response)
+        => response.StatusCode is >= 200 and < 300;
 
     protected Task<HttpResponse> ExecuteBatchActionHandlerAsync(
         BatchActionRequest action,
