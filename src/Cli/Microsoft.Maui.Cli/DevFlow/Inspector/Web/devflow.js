@@ -623,7 +623,6 @@ import {
     }
     refreshTimerDelay = delayMs;
     refreshTimer = setTimeout(async () => {
-      const forceRefresh = refreshTimerForce;
       refreshTimer = null;
       refreshTimerDelay = null;
       const forceRefresh = refreshTimerForce;

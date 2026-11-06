@@ -2220,7 +2220,7 @@ public sealed class InspectorServer : IDisposable
         var pixelWidth = fresh.PixelWidth ?? 0;
         var pixelHeight = fresh.PixelHeight ?? 0;
         if (pixelWidth <= 0 || pixelHeight <= 0)
-            (pixelWidth, pixelHeight) = GetPngDimensions(fresh.Data);
+            (pixelWidth, pixelHeight) = ScreenshotImage.GetPngDimensions(fresh.Data);
         var screenshot = new InspectorScreenshot(
             fresh.Data,
             pixelWidth,

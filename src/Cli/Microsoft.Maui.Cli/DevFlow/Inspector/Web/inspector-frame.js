@@ -118,14 +118,14 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
   const nativeScale = positiveNumber(
     raw.nativeScale,
     stateObject.nativeScale,
-    canInheritFrameMetadata ? fallbackFrame.nativeScale : null,
-    canInheritFrameMetadata ? fallbackObject.nativeScale : null,
+    canInheritGeometry ? fallbackFrame.nativeScale : null,
+    canInheritGeometry ? fallbackObject.nativeScale : null,
   ) || null;
   const requestedCaptureScale = positiveNumber(
     raw.requestedCaptureScale,
     stateObject.requestedCaptureScale,
-    canInheritFrameMetadata ? fallbackFrame.requestedCaptureScale : null,
-    canInheritFrameMetadata ? fallbackObject.requestedCaptureScale : null,
+    canInheritGeometry ? fallbackFrame.requestedCaptureScale : null,
+    canInheritGeometry ? fallbackObject.requestedCaptureScale : null,
     1,
   ) || 1;
 
@@ -168,8 +168,8 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
     resolutionClamped: optionalBoolean(
       raw.resolutionClamped,
       stateObject.resolutionClamped,
-      canInheritFrameMetadata ? fallbackFrame.resolutionClamped : null,
-      canInheritFrameMetadata ? fallbackObject.resolutionClamped : null,
+      canInheritGeometry ? fallbackFrame.resolutionClamped : null,
+      canInheritGeometry ? fallbackObject.resolutionClamped : null,
     ),
     createdAt: optionalString(
       pick('createdAt') ?? (sameFrame ? pickFallback('createdAt') : null),

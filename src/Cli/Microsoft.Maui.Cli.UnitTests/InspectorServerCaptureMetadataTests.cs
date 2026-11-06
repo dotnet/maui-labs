@@ -1327,6 +1327,14 @@ public class InspectorServerCaptureMetadataTests
             using var secondResponse = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state?targetScale=2");
             secondResponse.EnsureSuccessStatusCode();
+            using var secondState = JsonDocument.Parse(
+                await secondResponse.Content.ReadAsStringAsync());
+            var secondFrame = secondState.RootElement.GetProperty("frame");
+            Assert.NotEqual(
+                firstFrame.GetProperty("frameId").GetString(),
+                secondFrame.GetProperty("frameId").GetString());
+            Assert.Equal(1, firstFrame.GetProperty("requestedCaptureScale").GetDouble());
+            Assert.Equal(2, secondFrame.GetProperty("requestedCaptureScale").GetDouble());
             agent.ClearRecordedRequests();
 
             var requestJson = JsonSerializer.Serialize(new
