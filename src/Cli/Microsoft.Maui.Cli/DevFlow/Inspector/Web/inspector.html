@@ -19,6 +19,8 @@
     <symbol id="i-tree" viewBox="0 0 24 24"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
     <symbol id="i-bounds" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 4"/></symbol>
     <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
     <symbol id="i-record" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="7"/></symbol>
     <symbol id="i-assert" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-replay" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 3v18l14-9z"/></symbol>
@@ -92,12 +94,26 @@
       </aside>
       <section id="df-view-pane" class="df-pane df-pane-grow" role="main" aria-label="Live app preview" tabindex="-1">
         <div class="df-pane-header">
-          <h2 class="df-pane-title">Screenshot</h2>
+          <h2 class="df-pane-title df-preview-title">Screenshot</h2>
           <span id="df-preview-health" class="df-preview-health" data-tone="success">
             <span id="df-preview-health-label">Live</span>
             <span id="df-preview-badges" class="df-preview-badges"></span>
           </span>
           <span id="df-preview-pending" class="df-pane-count df-hidden">Updating…</span>
+          <div id="df-viewport-controls" class="df-viewport-controls" role="group" aria-label="Viewport zoom and pan">
+            <button id="df-zoom-out" class="df-icon-btn" type="button" title="Zoom out (-)" aria-label="Zoom out"><svg class="df-ic"><use href="#i-minus"/></svg></button>
+            <label class="df-sr-only" for="df-zoom-preset">Zoom preset</label>
+            <select id="df-zoom-preset" class="df-field df-zoom-preset" title="Zoom preset">
+              <option value="fit">Fit</option>
+              <option value="0.5">50%</option>
+              <option value="1">100%</option>
+              <option value="2">200%</option>
+              <option value="custom" hidden>Custom</option>
+            </select>
+            <span id="df-zoom-indicator" class="df-zoom-indicator" aria-hidden="true">Fit</span>
+            <button id="df-zoom-in" class="df-icon-btn" type="button" title="Zoom in (+)" aria-label="Zoom in"><svg class="df-ic"><use href="#i-plus"/></svg></button>
+          </div>
+          <span id="df-zoom-announcement" class="df-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
         </div>
         <div id="df-health-banner" class="df-health-banner df-hidden" role="note" aria-labelledby="df-health-banner-heading" aria-describedby="df-health-banner-detail">
           <svg class="df-health-icon"><use href="#i-refresh"/></svg>
@@ -117,7 +133,8 @@
         </div>
         <div id="df-preview-surface">
           <div id="df-hit-candidates" class="df-hit-candidates df-hidden" role="listbox" aria-label="Elements at selected point"></div>
-          <div id="df-viewport-wrap" role="region" aria-label="Live app viewport">
+          <span id="df-viewport-help" class="df-sr-only">Use plus or minus to zoom, 0 to Fit, 1 for 100 percent, arrow keys to pan, or hold Space while dragging. Middle-button drag also pans the Inspector view without driving the app.</span>
+          <div id="df-viewport-wrap" role="region" aria-label="Live app viewport" aria-describedby="df-viewport-help" tabindex="0">
             <div id="df-stage">
               <div id="app-viewport" data-width="{{VIEWPORT_WIDTH}}" data-height="{{VIEWPORT_HEIGHT}}" data-root-offset-x="{{ROOT_OFFSET_X}}" data-root-offset-y="{{ROOT_OFFSET_Y}}" style="width:{{VIEWPORT_WIDTH}}px; height:{{VIEWPORT_HEIGHT}}px;">
                 {{SCREENSHOT}}

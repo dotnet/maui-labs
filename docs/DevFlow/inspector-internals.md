@@ -94,6 +94,39 @@ command's `visible`, `enabled`, `availability`, and disabled reason.
 - Capability presentation is not enforcement. The Inspector server and agent mutation lease remain
   authoritative for every operation.
 
+## Viewport navigation
+
+The Preview has one Inspector-owned viewport transform containing a CSS scale and translation.
+Fit remains the default and never upscales past 100%. The preset control exposes Fit, 50%, 100%,
+and 200%; the adjacent buttons step through additional useful scales between 25% and 400%.
+The Fit control and `0` shortcut recenter the app.
+
+Zoom and pan change only browser presentation. They do not bypass the shared screenshot-resolution
+scheduler, acquire the mutation lease, add recording steps, or define another frame identity.
+The shared `inspector-frame.js` conversions map the transformed Preview back to app-logical
+coordinates so taps, hit testing, hover, selection, and app gestures target the committed frame.
+
+| Input | Owner |
+|---|---|
+| Click or ordinary drag | App tap or gesture |
+| Ordinary wheel | App scroll |
+| Ctrl/Cmd+wheel, including trackpad pinch represented as modified wheel | Inspector cursor-centered zoom |
+| Space+drag or middle-button drag | Inspector pan |
+| Direct touch gestures and pinch pointers | App interaction |
+
+The viewport region is keyboard focusable. Unmodified `+`/`-` change zoom, `0` returns to Fit,
+`1` selects 100%, and the arrow keys pan enlarged content (Shift uses a larger step). Browser and
+host Ctrl/Cmd keyboard shortcuts remain untouched. Space only arms pan while the Preview owns
+focus and no editable control owns the key. Pointer cancel, lost capture, window blur, and document
+hiding end Inspector pan without sending an app gesture. A dedicated polite announcement reports
+zoom changes without overwriting the Inspector's shared status line.
+
+Custom zoom preserves its visible app point across frame commits and host/pane resize. The wrapper
+does not maintain a native scroll offset; reveal and keyboard operations update the tracked
+transform instead. Translations are clamped so some or all of the app remains reachable, and Fit
+always recovers a centered view. Fit recomputes after app resize or rotation; custom zoom is
+preserved and clamped to the new logical dimensions.
+
 ## Coordinated frames and coordinates
 
 Each Inspector refresh creates one immutable frame containing the visual tree, exact screenshot
@@ -147,8 +180,9 @@ Inspector actions send `appLogical` coordinates plus optional correlation contai
 correlation and retain window-logical behavior. The Inspector proxy validates and converts
 correlated coordinates; direct `/api/v1` agent coordinate calls must already use `windowLogical`.
 
-Fit and 1:1 are transform values, not separate coordinate contracts. Future zoom/pan can supply
-its scale and translation to the same helpers without changing frame identity or action payloads.
+Fit, presets, cursor zoom, and pan are transform values, not separate coordinate contracts. The
+viewport controller supplies its scale and translation to the same helpers without changing frame
+identity or action payloads.
 
 Resolution-only replacement frames remain coordinate-equivalent when the recursive element
 geometry, logical viewport, root offset, and window identity are unchanged; PNG pixel dimensions

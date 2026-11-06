@@ -219,12 +219,13 @@ body.df-replaying #df-viewport-wrap::after {
 /* ── Panes (tree | screenshot | properties) each with an uppercase section header ── */
 .df-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .df-pane-grow { flex: 1 1 auto; }
-#df-view-pane { position: relative; min-width: 180px; min-height: 180px; }
+#df-view-pane { --df-preview-header-height: 33px; position: relative; min-width: 180px; min-height: 180px; container: preview-pane / inline-size; }
 .df-pane-header { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 4px 10px;
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--df-muted);
   background: var(--df-surface); border-bottom: 1px solid var(--df-border-subtle); user-select: none; white-space: nowrap; }
 .df-pane-title { margin: 0; font: inherit; font-weight: 600; }
 .df-pane-count { color: var(--df-muted); font-weight: 400; }
+.df-preview-title, #df-preview-pending { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .df-preview-health { display: inline-flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 5px; overflow: hidden; font-weight: 600; text-transform: none; letter-spacing: 0; }
 #df-preview-health-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .df-preview-health[data-tone="success"] { color: var(--df-success); }
@@ -253,6 +254,25 @@ body.df-replaying #df-viewport-wrap::after {
 .df-pane-el { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--df-type); text-transform: none; letter-spacing: 0; font-weight: 600; }
 .df-pane-close { margin-left: auto; padding: 2px; }
+.df-viewport-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.df-viewport-controls .df-icon-btn { width: 24px; height: 24px; padding: 3px; border-color: var(--df-border-subtle); }
+.df-zoom-indicator {
+  min-width: 38px;
+  color: var(--df-fg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+#df-zoom-announcement { text-transform: none; letter-spacing: normal; }
+.df-viewport-controls .df-icon-btn[aria-disabled="true"] { opacity: .45; cursor: default; }
+.df-viewport-controls .df-icon-btn[aria-disabled="true"]:hover { background: transparent; }
 
 /* ── Tree sidebar ── */
 #df-tree-pane { flex: 0 0 clamp(190px, 24vw, 300px); border-right: 1px solid var(--df-border-subtle); background: var(--df-bg); }
@@ -262,7 +282,7 @@ body.df-tree-hidden #df-tree-pane { display: none; }
 /* ── Connection state ── */
 .df-connection-overlay {
   position: absolute;
-  inset: 25px 0 0;
+  inset: var(--df-preview-header-height) 0 0;
   z-index: 62;
   display: flex;
   align-items: center;
@@ -302,7 +322,7 @@ body.df-disconnected #df-viewport-wrap {
 }
 .df-health-banner {
   position: absolute;
-  top: 25px;
+  top: var(--df-preview-header-height);
   left: 0;
   right: 0;
   z-index: 61;
@@ -380,13 +400,27 @@ input.df-field[type="checkbox"] { width: auto; flex: 0 0 auto; }
 
 /* ── Screenshot viewport (fit-to-container scaling via #df-stage) ── */
 #df-preview-surface { flex: 1 1 auto; min-width: 0; min-height: 0; position: relative; display: flex; }
-#df-viewport-wrap { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; position: relative; display: flex; align-items: safe center; justify-content: safe center; }
-#df-viewport-wrap.df-fit-active { overflow: hidden; }
+#df-viewport-wrap { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: clip; position: relative; display: flex; align-items: safe center; justify-content: safe center; }
 #df-stage { position: relative; flex: none; }
 #app-viewport { position: absolute; top: 0; left: 0; transform-origin: top left; }
 #screenshot { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
 #screenshot:not([src]) { display: none; }
 body.df-mode-inspect #app-viewport { cursor: crosshair; }
+body.df-viewport-pan-armed #df-viewport-wrap,
+body.df-viewport-pan-armed #app-viewport { cursor: grab; }
+body.df-viewport-panning #df-viewport-wrap,
+body.df-viewport-panning #app-viewport { cursor: grabbing; }
+#df-viewport-wrap:focus-visible { outline: none; }
+#df-viewport-wrap:focus-visible::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4999;
+  border: 2px solid var(--df-focus);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.df-viewport-controls select.df-zoom-preset { width: 68px; height: 24px; padding: 2px 4px; }
 .df-hit-candidates { position: absolute; z-index: 34; top: 4px; left: 8px; right: 8px;
   display: flex; align-items: center; gap: 5px; overflow-x: auto; max-width: calc(100% - 16px);
   padding: 4px 8px; border: 1px solid var(--df-border-subtle); border-radius: var(--df-radius-sm);
@@ -598,6 +632,33 @@ body:not([data-host-layout="wide"]) .df-tool-btn { padding: 4px 8px; }
     border: 0;
   }
 }
+@container preview-pane (max-width: 360px) {
+  .df-preview-title,
+  #df-preview-health { display: none; }
+  #df-preview-pending:not(.df-hidden) {
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    border-radius: 50%;
+    background: var(--df-accent);
+  }
+}
+@container preview-pane (max-width: 260px) {
+  .df-zoom-indicator {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
 
 /* Compact editor: tree and properties both stay docked, so Fit re-fits around them. */
 body[data-host-layout="compact"] #df-tree-pane { flex: 0 0 clamp(190px, 25vw, 240px); }
@@ -712,6 +773,7 @@ html[data-reduced-motion="true"] *, html[data-reduced-motion="true"] *::before, 
     border-color: Highlight;
     box-shadow: inset 0 -3px 0 Highlight;
   }
+  #df-viewport-wrap:focus-visible::before { border-color: Highlight; }
 }
 
 #diagnostic-overlays {
