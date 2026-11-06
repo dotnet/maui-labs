@@ -122,6 +122,64 @@ public partial class ScrollViewHandler : MacOSViewHandler<IScrollView, NSScrollV
         }
     }
 
+    /// <summary>
+    /// NSScrollView has no useful intrinsic or fitting size, so the base measure reported ~0 and a
+    /// ScrollView sized by its parent (an Auto row, a stack, a horizontal ScrollView's height) collapsed.
+    /// Measure the content the way the other MAUI backends do - unconstrained along the scrolling axis,
+    /// inside the ScrollView's own size requests and padding - then honour the constraints, explicit sizes
+    /// and minimum/maximum requests.
+    /// </summary>
+    public override Size GetDesiredSize(double widthConstraint, double heightConstraint)
+    {
+        var scrollView = VirtualView;
+        if (scrollView == null || PlatformView == null)
+            return base.GetDesiredSize(widthConstraint, heightConstraint);
+
+        if (double.IsNaN(widthConstraint))
+            widthConstraint = double.PositiveInfinity;
+        if (double.IsNaN(heightConstraint))
+            heightConstraint = double.PositiveInfinity;
+
+        // The ScrollView's own size requests bound what its content may use (wrapping text in a scroller
+        // with WidthRequest=200 must be measured at 200, not at the parent's width) ...
+        var padding = scrollView.Padding;
+        var outerWidth = ResolveConstraint(widthConstraint, scrollView.Width, scrollView.MaximumWidth);
+        var outerHeight = ResolveConstraint(heightConstraint, scrollView.Height, scrollView.MaximumHeight);
+
+        // ... and CrossPlatformMeasure measures only the content, so padding is taken out here and added back.
+        var content = scrollView.CrossPlatformMeasure(
+            Math.Max(0, outerWidth - padding.HorizontalThickness),
+            Math.Max(0, outerHeight - padding.VerticalThickness));
+        var measuredWidth = content.Width + padding.HorizontalThickness;
+        var measuredHeight = content.Height + padding.VerticalThickness;
+
+        var width = IsExplicitSize(scrollView.Width) ? scrollView.Width : Math.Min(measuredWidth, widthConstraint);
+        var height = IsExplicitSize(scrollView.Height) ? scrollView.Height : Math.Min(measuredHeight, heightConstraint);
+
+        if (IsExplicitSize(scrollView.MinimumWidth))
+            width = Math.Max(width, scrollView.MinimumWidth);
+        if (IsExplicitSize(scrollView.MinimumHeight))
+            height = Math.Max(height, scrollView.MinimumHeight);
+        if (IsExplicitSize(scrollView.MaximumWidth))
+            width = Math.Min(width, scrollView.MaximumWidth);
+        if (IsExplicitSize(scrollView.MaximumHeight))
+            height = Math.Min(height, scrollView.MaximumHeight);
+
+        // ComputeDesiredSize passes negative constraints when margins exceed the space available.
+        return new Size(SanitizeSize(width), SanitizeSize(height));
+    }
+
+    static double ResolveConstraint(double constraint, double explicitSize, double maximum)
+    {
+        if (IsExplicitSize(explicitSize))
+            return explicitSize;
+        return IsExplicitSize(maximum) ? Math.Min(constraint, maximum) : constraint;
+    }
+
+    static double SanitizeSize(double value) => double.IsNaN(value) || double.IsInfinity(value) || value < 0 ? 0 : value;
+
+    static bool IsExplicitSize(double value) => !double.IsNaN(value) && value >= 0 && !double.IsInfinity(value);
+
     public override void PlatformArrange(Rect rect)
     {
         base.PlatformArrange(rect);
@@ -135,31 +193,36 @@ public partial class ScrollViewHandler : MacOSViewHandler<IScrollView, NSScrollV
             if (VirtualView?.PresentedContent is IView content && content.Handler != null && _documentView != null)
             {
                 var orientation = VirtualView.Orientation;
+                var padding = VirtualView.Padding;
+                var viewportWidth = Math.Max(0, rect.Width - padding.HorizontalThickness);
+                var viewportHeight = Math.Max(0, rect.Height - padding.VerticalThickness);
 
                 // Measure the content with appropriate constraints based on scroll orientation
                 double measureWidth = orientation == ScrollOrientation.Horizontal || orientation == ScrollOrientation.Both
                     ? double.PositiveInfinity
-                    : rect.Width;
+                    : viewportWidth;
 
                 double measureHeight = orientation == ScrollOrientation.Vertical || orientation == ScrollOrientation.Both
                     ? double.PositiveInfinity
-                    : rect.Height;
+                    : viewportHeight;
 
                 var contentSize = content.Measure(measureWidth, measureHeight);
 
                 var arrangeWidth = orientation == ScrollOrientation.Vertical
-                    ? rect.Width
-                    : Math.Max(rect.Width, contentSize.Width);
+                    ? viewportWidth
+                    : Math.Max(viewportWidth, contentSize.Width);
 
                 var arrangeHeight = orientation == ScrollOrientation.Horizontal
-                    ? rect.Height
-                    : Math.Max(rect.Height, contentSize.Height);
+                    ? viewportHeight
+                    : Math.Max(viewportHeight, contentSize.Height);
 
-                // Set document view frame first so AppKit knows the scrollable area,
-                // then arrange content. AutoresizesSubviews=false prevents the
+                // Set document view frame first so AppKit knows the scrollable area (content plus padding),
+                // then arrange content inside the padding. AutoresizesSubviews=false prevents the
                 // document view from overwriting MAUI-managed child frames.
-                _documentView.Frame = new CGRect(0, 0, arrangeWidth, arrangeHeight);
-                content.Arrange(new Rect(0, 0, arrangeWidth, arrangeHeight));
+                _documentView.Frame = new CGRect(0, 0,
+                    arrangeWidth + padding.HorizontalThickness,
+                    arrangeHeight + padding.VerticalThickness);
+                content.Arrange(new Rect(padding.Left, padding.Top, arrangeWidth, arrangeHeight));
             }
         }
         finally

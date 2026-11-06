@@ -1,0 +1,20 @@
+{
+  "name": "scrollview-measure",
+  "expectedCases": 5,
+  "expectedAssertions": 11,
+  "evidence": [
+    "sizes.json",
+    "assertions.txt"
+  ],
+  "baseline": {
+    "source": "platforms/MacOS/src/MacOS/Handlers/ScrollViewHandler.cs",
+    "replace": {
+      "old": "    public override Size GetDesiredSize(double widthConstraint, double heightConstraint)\n    {\n        var scrollView = VirtualView;\n",
+      "new": "    Size UnusedGetDesiredSize(double widthConstraint, double heightConstraint)\n    {\n        var scrollView = VirtualView;\n"
+    },
+    "exitCode": 42,
+    "outcome": "regression",
+    "failureId": "scrollview-measure.horizontal-collapsed",
+    "message": "BASELINE_SCROLL: horizontal ScrollView in an Auto row measured 0 tall."
+  }
+}
