@@ -94,8 +94,10 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let gesturePoints = [];
   let isGesturing = false;
   let isDragging = false;
-  let refreshPromise = null;
+  let refreshGeneration = 0;
+  let activeRefresh = null;
   const STATE_FETCH_TIMEOUT_MS = 10000;
+  const STATE_REFRESH_RETRY_MS = 3000;
 
   // Inspector selection and tree state. Declared early so the event
   // handlers registered below can read them (they only run after init has set them).
@@ -229,27 +231,54 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Refresh state via AJAX (no full page reload — avoids flash)
   async function refreshState(force = false) {
-    if (refreshPromise) {
-      if (!force) return refreshPromise;
-      await refreshPromise;
-      // Another forced caller may already have started the fresh refresh; share it.
-      if (refreshPromise) return refreshPromise;
+    const tap = latestTap;
+    if (activeRefresh) {
+      if (!force) return activeRefresh.promise;
+      activeRefresh.controller.abort();
     }
 
-    const currentRefresh = (async () => {
-      const tap = latestTap;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), STATE_FETCH_TIMEOUT_MS);
+    const refresh = {
+      generation: ++refreshGeneration,
+      tap,
+      controller: new AbortController(),
+      promise: null,
+    };
+    const isSuperseded = () => refresh.generation !== refreshGeneration;
+    const followReplacement = () =>
+      activeRefresh && activeRefresh !== refresh ? activeRefresh.promise : null;
+    const ensureCurrent = () => {
+      if (isSuperseded()) return false;
+      if (refresh.controller.signal.aborted) {
+        throw refresh.controller.signal.reason
+          || new DOMException('State refresh aborted.', 'AbortError');
+      }
+      return true;
+    };
+    activeRefresh = refresh;
+    refresh.promise = (async () => {
+      const timeout = setTimeout(() => {
+        if (isSuperseded()) return;
+        refresh.controller.abort();
+      }, STATE_FETCH_TIMEOUT_MS);
       disconnectedOverlay?.setAttribute('aria-busy', 'true');
       try {
-        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: controller.signal });
+        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: refresh.controller.signal });
+        if (!ensureCurrent()) return followReplacement();
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();
+        if (!ensureCurrent()) return followReplacement();
 
         // Keep the previous frame intact until its replacement image is ready.
+        let image = null;
         if (screenshot && state.screenshotUrl) {
-          const image = await loadDecodedImage(state.screenshotUrl, controller.signal);
+          image = await loadDecodedImage(state.screenshotUrl, refresh.controller.signal);
+          if (!ensureCurrent()) return followReplacement();
           if (!navigator.onLine) return null;
+        }
+
+        // Commit the complete frame synchronously so tree, screenshot, geometry, and metadata
+        // cannot be mixed with a superseded refresh.
+        if (image) {
           screenshot.src = image.src;
         }
         markConnected(true);
@@ -285,6 +314,11 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           const renderedStateSignature = JSON.stringify(renderedState);
           if (renderedStateSignature !== tap.previewStateSignature || tap.unchangedCaptures > 0) {
             latestTap = null;
+            if (refreshTimer && refreshTimerDelay === STATE_REFRESH_RETRY_MS) {
+              clearTimeout(refreshTimer);
+              refreshTimer = null;
+              refreshTimerDelay = null;
+            }
             renderPreviewPending();
           } else {
             tap.unchangedCaptures++;
@@ -293,19 +327,23 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         }
         return state;
       } catch (err) {
+        if (isSuperseded()) {
+          return followReplacement();
+        }
         markConnected(false);
         console.error('State refresh failed:', err);
         return null;
       } finally {
         clearTimeout(timeout);
-        disconnectedOverlay?.removeAttribute('aria-busy');
       }
     })();
-    refreshPromise = currentRefresh;
     try {
-      return await currentRefresh;
+      return await refresh.promise;
     } finally {
-      if (refreshPromise === currentRefresh) refreshPromise = null;
+      if (activeRefresh === refresh) {
+        activeRefresh = null;
+        disconnectedOverlay?.removeAttribute('aria-busy');
+      }
     }
   }
 
@@ -345,7 +383,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     if (label) label.textContent = 'Checking…';
     setStatus(checkingStatus);
     try {
-      // Forced: wait for any in-flight poll, then check again rather than reusing its result.
+      // Forced: replace any in-flight refresh rather than reusing its result.
       await refreshState(true);
     } finally {
       retryConnectionBtn.disabled = false;
@@ -463,21 +501,29 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Debounced refresh — coalesce rapid calls
   let refreshTimer = null;
+  let refreshTimerDelay = null;
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
     previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
   }
   function scheduleRefresh(delayMs = 300) {
-    if (refreshTimer) clearTimeout(refreshTimer);
+    if (refreshTimer) {
+      if (refreshTimerDelay === 0 && delayMs > 0) return;
+      clearTimeout(refreshTimer);
+    }
+    refreshTimerDelay = delayMs;
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
-      // A refresh already in flight may predate the tap, so wait for it and capture again.
-      const state = await refreshState(latestTap !== null);
-      if (!state && latestTap !== null) scheduleRefresh(3000);
+      refreshTimerDelay = null;
+      const tap = latestTap;
+      const state = tap !== null && activeRefresh?.tap === tap
+        ? await activeRefresh.promise
+        : await refreshState(tap !== null);
+      if (!state && latestTap !== null && !activeRefresh) scheduleRefresh(STATE_REFRESH_RETRY_MS);
     }, delayMs);
   }
-  if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(3000));
+  if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(STATE_REFRESH_RETRY_MS));
 
   // ── Click → Tap (with text-input awareness) ──
   // Element types that should open a text editor instead of just tapping.
