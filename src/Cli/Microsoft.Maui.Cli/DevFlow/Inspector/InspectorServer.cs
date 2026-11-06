@@ -69,7 +69,7 @@ public sealed class InspectorServer : IDisposable
     private long _cacheGeneration;
     private long _frameRevision;
     private readonly string _frameStreamId = Guid.NewGuid().ToString("N");
-    private string? _newestFrameId;
+    private string? _latestCompleteFrameId;
     private readonly Dictionary<string, InspectorFrame> _frames = new(StringComparer.Ordinal);
     // Last observed capture epoch, used only to decide whether this agent enforces capture-bound
     // mutations. Per-frame capture metadata lives on InspectorFrame, which is the source of truth
@@ -1866,6 +1866,7 @@ public sealed class InspectorServer : IDisposable
                     force) ?? Array.Empty<byte>();
                 var hasScreenshot = screenshot.Length > 0;
                 var (width, height) = hasScreenshot ? ScreenshotImage.GetPngDimensions(screenshot) : (0, 0);
+                var hasCompleteScreenshot = hasScreenshot && width > 0 && height > 0;
                 if (width <= 0 || height <= 0)
                 {
                     width = 800;
@@ -1916,18 +1917,21 @@ public sealed class InspectorServer : IDisposable
                         throw new InvalidOperationException("Inspector state changed repeatedly while capturing a frame.");
                     }
 
+                    if (frame.Tree.Count == 0 || !hasCompleteScreenshot)
+                        return frame;
+
                     _captureEpoch = captureEpoch;
                     frame = frame with { FrameRevision = ++_frameRevision };
 
                     _frames[frame.Id] = frame;
                     _latestFrame = frame;
-                    _newestFrameId = frame.Id;
+                    _latestCompleteFrameId = frame.Id;
                     PruneFramesLocked();
                     while (_frames.Count > MaxCachedFrames ||
                         (_frames.Count > 1 && GetCachedFrameBytesLocked() > MaxCachedFrameBytes))
                     {
                         var oldest = _frames
-                            .Where(pair => !string.Equals(pair.Key, _newestFrameId, StringComparison.Ordinal))
+                            .Where(pair => !string.Equals(pair.Key, _latestCompleteFrameId, StringComparison.Ordinal))
                             .MinBy(static pair => pair.Value.CreatedUtc);
                         if (oldest.Key is null) break;
                         _frames.Remove(oldest.Key);
@@ -1987,7 +1991,7 @@ public sealed class InspectorServer : IDisposable
         foreach (var id in _frames
             .Where(pair =>
                 pair.Value.CreatedUtc < cutoff &&
-                !string.Equals(pair.Key, _newestFrameId, StringComparison.Ordinal))
+                !string.Equals(pair.Key, _latestCompleteFrameId, StringComparison.Ordinal))
             .Select(static pair => pair.Key)
             .ToArray())
         {
@@ -2181,8 +2185,12 @@ public sealed class InspectorServer : IDisposable
         }
 
         coordinateSpace = ReadOptionalString(correlation, "coordinateSpace") ?? "windowLogical";
-        if (hasCoordinates &&
-            coordinateSpace is not ("appLogical" or "windowLogical" or "screenshotPixel" or "inspectorCss"))
+        if (coordinateSpace is not ("appLogical" or "windowLogical" or "screenshotPixel" or "inspectorCss" or "transformedViewport"))
+            return ActionCorrelationError(
+                400,
+                "invalid-correlation",
+                $"Coordinate space '{coordinateSpace}' is invalid.");
+        if (hasCoordinates && coordinateSpace == "transformedViewport")
         {
             return ActionCorrelationError(
                 400,
@@ -2195,8 +2203,7 @@ public sealed class InspectorServer : IDisposable
             PruneFramesLocked();
             if (!_frames.TryGetValue(frameId, out frame))
                 return ActionCorrelationError(410, "frame-expired", "The referenced Inspector frame has expired.");
-            if (hasCoordinates &&
-                !string.Equals(frameId, _newestFrameId, StringComparison.Ordinal))
+            if (hasCoordinates && !IsCoordinateFrameCurrentLocked(frame))
             {
                 return ActionCorrelationError(
                     409,
@@ -2210,6 +2217,79 @@ public sealed class InspectorServer : IDisposable
 
         return null;
     }
+
+    private bool IsCoordinateFrameCurrentLocked(InspectorFrame frame)
+    {
+        if (string.IsNullOrEmpty(_latestCompleteFrameId) ||
+            string.Equals(frame.Id, _latestCompleteFrameId, StringComparison.Ordinal) ||
+            !_frames.TryGetValue(_latestCompleteFrameId, out var latest))
+        {
+            return true;
+        }
+
+        if (frame.WindowId != latest.WindowId ||
+            !NearlyEqual(frame.LogicalWidth, latest.LogicalWidth) ||
+            !NearlyEqual(frame.LogicalHeight, latest.LogicalHeight) ||
+            frame.PixelWidth != latest.PixelWidth ||
+            frame.PixelHeight != latest.PixelHeight ||
+            !NearlyEqual(frame.RootOffsetX, latest.RootOffsetX) ||
+            !NearlyEqual(frame.RootOffsetY, latest.RootOffsetY))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(frame.TreeRevision) ||
+            !string.IsNullOrEmpty(latest.TreeRevision))
+        {
+            return string.Equals(frame.TreeRevision, latest.TreeRevision, StringComparison.Ordinal);
+        }
+
+        return HaveEquivalentElementGeometry(frame.Tree, latest.Tree);
+    }
+
+    private static bool HaveEquivalentElementGeometry(
+        IReadOnlyList<ElementInfo> left,
+        IReadOnlyList<ElementInfo> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (var index = 0; index < left.Count; index++)
+        {
+            var leftElement = left[index];
+            var rightElement = right[index];
+            if (!string.Equals(leftElement.Id, rightElement.Id, StringComparison.Ordinal) ||
+                !string.Equals(leftElement.ParentId, rightElement.ParentId, StringComparison.Ordinal) ||
+                !string.Equals(leftElement.Type, rightElement.Type, StringComparison.Ordinal) ||
+                !string.Equals(leftElement.Framework, rightElement.Framework, StringComparison.Ordinal) ||
+                leftElement.IsVisible != rightElement.IsVisible ||
+                !HaveEquivalentBounds(
+                    leftElement.WindowBounds ?? leftElement.Bounds,
+                    rightElement.WindowBounds ?? rightElement.Bounds) ||
+                !HaveEquivalentElementGeometry(
+                    leftElement.Children ?? [],
+                    rightElement.Children ?? []))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HaveEquivalentBounds(BoundsInfo? left, BoundsInfo? right)
+    {
+        if (left is null || right is null)
+            return left is null && right is null;
+
+        return NearlyEqual(left.X, right.X) &&
+            NearlyEqual(left.Y, right.Y) &&
+            NearlyEqual(left.Width, right.Width) &&
+            NearlyEqual(left.Height, right.Height);
+    }
+
+    private static bool NearlyEqual(double left, double right)
+        => Math.Abs(left - right) <= 0.0001;
 
     private static (int, string, byte[]) ActionCorrelationError(
         int statusCode,
@@ -2238,9 +2318,11 @@ public sealed class InspectorServer : IDisposable
         if (coordinateSpace is "appLogical" or "inspectorCss")
             return (x + frame.RootOffsetX, y + frame.RootOffsetY);
 
+        var pixelWidth = frame.PixelWidth > 0 ? frame.PixelWidth : 1;
+        var pixelHeight = frame.PixelHeight > 0 ? frame.PixelHeight : 1;
         return (
-            x * frame.LogicalWidth / frame.PixelWidth + frame.RootOffsetX,
-            y * frame.LogicalHeight / frame.PixelHeight + frame.RootOffsetY);
+            x * frame.LogicalWidth / pixelWidth + frame.RootOffsetX,
+            y * frame.LogicalHeight / pixelHeight + frame.RootOffsetY);
     }
 
     private async Task<(int, string, byte[])> HandleProxyTapAsync(string? body)
@@ -2338,8 +2420,8 @@ public sealed class InspectorServer : IDisposable
                 attemptedCandidates++;
                 var outcome = await _client.TapResultAsync(
                     elementId!,
-                    correlatedFrame?.CaptureEpoch ?? captureEpoch,
-                    correlatedFrame?.RegistryGeneration ?? registryGeneration);
+                    captureEpoch,
+                    registryGeneration);
                 if (outcome.Success)
                 {
                     InvalidateScreenshotCache();
@@ -2461,8 +2543,8 @@ public sealed class InspectorServer : IDisposable
                     itemIndex: null,
                     groupIndex: null,
                     scrollToPosition: null,
-                    captureEpoch: correlatedFrame?.CaptureEpoch ?? captureEpoch,
-                    registryGeneration: correlatedFrame?.RegistryGeneration ?? registryGeneration);
+                    captureEpoch: captureEpoch,
+                    registryGeneration: registryGeneration);
                 if (outcome.Success)
                 {
                     InvalidateScreenshotCache();
