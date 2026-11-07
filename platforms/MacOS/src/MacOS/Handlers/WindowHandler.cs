@@ -131,6 +131,7 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
     MacOSToolbarManager? _toolbarManager;
     MacOSModalManager? _modalManager;
     MacOSWindowDelegate? _windowDelegate;
+    MacOSFocusTracker? _focusTracker;
     readonly WindowCloseCoordinator _closeCoordinator = new();
     static int _windowCascadeOffset;
 
@@ -170,6 +171,9 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
 
     protected override void DisconnectHandler(NSWindow platformView)
     {
+        _focusTracker?.Dispose();
+        _focusTracker = null;
+
         if (platformView.Delegate == _windowDelegate)
             platformView.Delegate = null;
         _windowDelegate = null;
@@ -230,6 +234,9 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
 
         // Create the modal manager
         _modalManager = new MacOSModalManager(_contentContainer, window);
+
+        // Keep IView.IsFocused (Focused/Unfocused events, Focused visual state) in step with the first responder
+        _focusTracker = new MacOSFocusTracker(window);
 
         // Set the window delegate to handle close events
         _windowDelegate = new MacOSWindowDelegate(this);
