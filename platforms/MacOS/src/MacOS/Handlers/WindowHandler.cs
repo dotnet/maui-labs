@@ -297,7 +297,10 @@ public partial class WindowHandler : ElementHandler<IWindow, NSWindow>
             // Recreate modal manager with the new content view
             var contentView = handler.PlatformView.ContentView;
             if (contentView != null)
+            {
+                handler._modalManager?.ClearModalStack();
                 handler._modalManager = new MacOSModalManager(contentView, handler.PlatformView);
+            }
 
             handler.SubscribeModalEvents(window);
             handler.ObservePageChanges(page);
