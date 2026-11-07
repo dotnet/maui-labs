@@ -112,12 +112,9 @@ internal class MacOSModalManager
             return;
         }
 
-        foreach (var modalEntry in _modalStack)
+        foreach (var modalEntry in _modalStack.Where(modalEntry => modalEntry.ModalWindow is not null))
         {
-            if (modalEntry.ModalWindow is not null)
-            {
-                modalEntry.ModalWindow.OrderOut(null);
-            }
+            modalEntry.ModalWindow?.OrderOut(null);
         }
 
         while (HasModals)
