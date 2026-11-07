@@ -6,9 +6,14 @@ import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Content
+import com.google.mlkit.genai.prompt.Feature
 import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.GenerateContentResponse
 import com.google.mlkit.genai.prompt.Generation
+import com.google.mlkit.genai.prompt.GenerationConfig
+import com.google.mlkit.genai.prompt.ModelConfig
+import com.google.mlkit.genai.prompt.ModelPreference
+import com.google.mlkit.genai.prompt.ModelReleaseStage
 import com.google.mlkit.genai.prompt.ImagePart
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
@@ -22,21 +27,47 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicBoolean
 
-fun checkStatus(callback: NativeCheckStatusCallback): NativeCancellation {
+internal fun modelConfiguration(modelId: String?): GenerationConfig {
+    val (stage, modelPreference) = when (modelId) {
+        null, "gemini-nano", "gemini-nano-full" -> ModelReleaseStage.STABLE to ModelPreference.FULL
+        "gemini-nano-fast" -> ModelReleaseStage.STABLE to ModelPreference.FAST
+        "gemini-nano-preview-full" -> ModelReleaseStage.PREVIEW to ModelPreference.FULL
+        "gemini-nano-preview-fast" -> ModelReleaseStage.PREVIEW to ModelPreference.FAST
+        else -> throw IllegalArgumentException(
+            "Unsupported Gemini Nano model ID '$modelId'. Use gemini-nano, gemini-nano-fast, " +
+                "gemini-nano-full, gemini-nano-preview-fast, or gemini-nano-preview-full."
+        )
+    }
+    return GenerationConfig.Builder().apply {
+        modelConfig = ModelConfig.Builder().apply {
+            releaseStage = stage
+            preference = modelPreference
+        }.build()
+    }.build()
+}
+
+fun checkStatus(
+    modelId: String?,
+    callback: NativeCheckStatusCallback,
+): NativeCancellation {
     val terminated = AtomicBoolean()
     fun fail(cause: Throwable) {
         if (terminated.compareAndSet(false, true)) callback.onError(toNativeError(cause))
     }
     val job = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
         val status = try {
-            val model = Generation.getClient()
+            val model = Generation.getClient(modelConfiguration(modelId))
             try {
                 ensureActive()
                 val featureStatus = model.checkStatus()
+                val features = if (featureStatus == FeatureStatus.AVAILABLE) model.getAvailableFeatures() else emptyList()
                 NativeModelStatus(
                     featureStatus,
-                    featureStatus == FeatureStatus.AVAILABLE && model.isThinkingModeAvailable(),
-                )
+                    Feature.THINKING_MODE in features,
+                    model.getBaseModelName(),
+                ).apply {
+                    toolCallingAvailable = Feature.FUNCTION_CALLING in features
+                }
             } finally {
                 model.close()
             }.also { ensureActive() }
@@ -50,7 +81,10 @@ fun checkStatus(callback: NativeCheckStatusCallback): NativeCancellation {
     return NativeCancellation(job)
 }
 
-fun downloadModel(callback: NativeDownloadCallback): NativeCancellation {
+fun downloadModel(
+    modelId: String?,
+    callback: NativeDownloadCallback,
+): NativeCancellation {
     val terminated = AtomicBoolean()
     fun fail(cause: Throwable) {
         if (terminated.compareAndSet(false, true)) callback.onError(toNativeError(cause))
@@ -58,7 +92,7 @@ fun downloadModel(callback: NativeDownloadCallback): NativeCancellation {
     val job = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
         var completed = false
         try {
-            val model = Generation.getClient()
+            val model = Generation.getClient(modelConfiguration(modelId))
             try {
                 ensureActive()
                 model.download().collect { update ->
@@ -131,7 +165,7 @@ class GeminiNanoNativeClient {
         val job = operationScope.launch {
             var stream: NativeChatStream? = null
             val response = try {
-                val model = Generation.getClient()
+                val model = Generation.getClient(modelConfiguration(request.options.modelId))
                 val generatedResponse = try {
                     ensureActive()
                     val featureStatus = model.checkStatus()
@@ -139,20 +173,32 @@ class GeminiNanoNativeClient {
                         "Gemini Nano is not ready (ML Kit FeatureStatus $featureStatus). Download the model explicitly before retrying."
                     }
                     val nativeRequest = request.toNative()
+                    val features = if (nativeRequest.systemInstruction != null ||
+                        nativeRequest.enableThinking || request.options.toolsJson != null) {
+                        model.getAvailableFeatures()
+                    } else {
+                        emptyList()
+                    }
+                    if (request.options.toolsJson != null) {
+                        check(Feature.FUNCTION_CALLING in features) {
+                            "The selected Gemini Nano model does not support native function calling."
+                        }
+                    }
                     if (nativeRequest.systemInstruction != null) {
-                        check(model.isSystemPromptAvailable()) {
+                        check(Feature.SYSTEM_PROMPT in features) {
                             "The selected Gemini Nano model does not support native system instructions (requires Nano V3 or later)."
                         }
                     }
                     if (nativeRequest.enableThinking) {
-                        check(model.isThinkingModeAvailable()) {
+                        check(Feature.THINKING_MODE in features) {
                             "The selected Gemini Nano model does not support thinking mode (requires Nano V4 or later)."
                         }
                     }
                     val modelName = model.getBaseModelName()
                     val tokenCount = model.countTokens(nativeRequest).totalTokens
                     val generated = if (streaming) {
-                        val nativeStream = NativeChatStream(this, callback, modelName)
+                        val nativeStream = NativeChatStream(this, callback, modelName,
+                            deferToolText = request.options.toolsJson != null)
                         stream = nativeStream
                         model.generateContent(nativeRequest, nativeStream)
                     } else {
@@ -198,18 +244,23 @@ class GeminiNanoNativeClient {
             "Gemini Nano returned no response candidate."
         }
         return NativeChatResponse(
-            candidate.text,
+            if (candidate.functionCalls.isNotEmpty()) candidate.text.orEmpty()
+            else checkNotNull(candidate.text) { "Gemini Nano returned a response candidate without text." },
             thoughtProcess.map { it.text }.toTypedArray(),
             candidate.finishReason ?: FINISH_UNSPECIFIED,
             modelName,
             inputTokens,
-        )
+        ).apply {
+            functionCalls = candidate.functionCalls.map { it.toNativeCall() }.toTypedArray()
+        }
     }
 }
 
 internal fun NativeChatRequest.toNative(): GenerateContentRequest {
     val instructions = mutableListOf<String>()
     val contents = mutableListOf<Content>()
+    val useNativeTools = options.toolsJson != null
+    val callNames = mutableMapOf<String, String>()
     val hasAssistantHistory = messages.any {
         it.role.equals("assistant", ignoreCase = true) || it.role.equals("tool", ignoreCase = true)
     }
@@ -227,7 +278,9 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
             }
             "user", "assistant", "tool" -> {
                 val builder = Content.builder()
-                if (hasAssistantHistory) {
+                if (useNativeTools) {
+                    builder.setRole(if (role == "assistant") Content.Role.MODEL else Content.Role.USER)
+                } else if (hasAssistantHistory) {
                     builder.addPart(TextPart(when (role) {
                         "user" -> "User:\n"
                         "assistant" -> "Assistant:\n"
@@ -241,10 +294,20 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
                         CONTENT_IMAGE -> builder.addPart(
                             ImagePart(requireNotNull(part.image) { "Image part has no data." })
                         )
+                        CONTENT_FUNCTION_CALL -> {
+                            val part = functionCallPart(requireNotNull(part.text))
+                            val id = requireNotNull(part.functionCall.id)
+                            require(callNames.put(id, part.functionCall.name) == null) {
+                                "Duplicate function call ID '$id' in history."
+                            }
+                            builder.addPart(part)
+                        }
+                        CONTENT_FUNCTION_RESULT -> builder.addPart(
+                            functionResultPart(requireNotNull(part.text), callNames))
                         else -> error("Unsupported native content kind '${part.kind}'.")
                     }
                 }
-                if (hasAssistantHistory) builder.addPart(TextPart("\n\n"))
+                if (!useNativeTools && hasAssistantHistory) builder.addPart(TextPart("\n\n"))
                 contents.add(builder.build())
             }
             else -> Unit
@@ -266,5 +329,6 @@ internal fun NativeChatRequest.toNative(): GenerateContentRequest {
     builder.seed = options.seed
     builder.maxOutputTokens = options.maxOutputTokens
     builder.enableThinking = options.enableThinking
+    options.toolsJson?.let { builder.setTools(nativeTools(it)) }
     return builder.build()
 }

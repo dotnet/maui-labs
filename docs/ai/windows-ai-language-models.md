@@ -72,7 +72,7 @@ var status = await WindowsAIChatClient.GetModelStatusAsync();
 if (status.Availability == ChatModelAvailability.NotReady)
     await WindowsAIChatClient.EnsureReadyAsync(cancellationToken);
 else if (status.Availability != ChatModelAvailability.Available)
-    Console.WriteLine(status.UnavailableReason);
+    Console.WriteLine(status.Availability);
 ```
 
 Ordinary generation never prepares or downloads the model. Every request reads

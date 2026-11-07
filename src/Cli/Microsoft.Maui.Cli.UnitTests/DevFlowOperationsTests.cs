@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Microsoft.Maui.Cli.DevFlow;
 using Microsoft.Maui.Cli.UnitTests.Fixtures;
@@ -342,11 +341,46 @@ public sealed class ScreenshotOperationsTests
     }
 
     [Fact]
-    public void Resize_InvalidImageAndNativeScale_PreserveFallback()
+    public async Task SelectorCapture_ForwardsScopingWithoutSimulatorProbe()
     {
-        var invalid = Encoding.UTF8.GetBytes("not a png");
+        await using var server = new MockAgentServer();
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
 
-        Assert.Same(invalid, ScreenshotOperations.ResizeSimctlScreenshot(invalid, 100, null));
-        Assert.Same(invalid, ScreenshotOperations.ResizeSimctlScreenshot(invalid, null, "native"));
+        var result = await new ScreenshotOperations(client).CaptureAsync(2, null, "#target", 300, "full");
+
+        Assert.True(result.Success);
+        Assert.Equal(MockAgentResponses.ScreenshotPng, result.Data);
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/screenshot");
+        Assert.Contains("window=2", request.QueryString);
+        Assert.Contains("selector=%23target", request.QueryString);
+        Assert.Contains("maxWidth=300", request.QueryString);
+        Assert.Contains("scale=full", request.QueryString);
+        Assert.DoesNotContain(server.RecordedRequests, r => r.Path == "/api/v1/agent/status");
+    }
+
+    [Theory]
+    [InlineData("Android")]
+    [InlineData("MacCatalyst")]
+    [InlineData("Windows")]
+    [InlineData("Linux")]
+    public async Task FullCapture_NonIosAgents_KeepAgentSizing(string platform)
+    {
+        await using var server = new MockAgentServer
+        {
+            AgentStatusResponse = MockAgentResponses.AgentStatus.Replace(
+                "\"MacCatalyst\"", JsonSerializer.Serialize(platform), StringComparison.Ordinal)
+        };
+        await server.StartAsync();
+        using var client = new AgentClient("localhost", server.Port);
+
+        var result = await new ScreenshotOperations(client).CaptureAsync(2, null, null, 300, "native");
+
+        Assert.True(result.Success);
+        Assert.Equal(MockAgentResponses.ScreenshotPng, result.Data);
+        var request = Assert.Single(server.RecordedRequests, r => r.Path == "/api/v1/ui/screenshot");
+        Assert.Contains("window=2", request.QueryString);
+        Assert.Contains("maxWidth=300", request.QueryString);
+        Assert.Contains("scale=native", request.QueryString);
     }
 }

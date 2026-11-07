@@ -4,6 +4,8 @@ import kotlinx.coroutines.Job
 
 internal const val CONTENT_TEXT = 0
 internal const val CONTENT_IMAGE = 1
+internal const val CONTENT_FUNCTION_CALL = 2
+internal const val CONTENT_FUNCTION_RESULT = 3
 internal const val FINISH_UNSPECIFIED = Int.MIN_VALUE
 
 class NativeContentPart(
@@ -23,7 +25,10 @@ class NativeChatOptions(
     val seed: Int?,
     val maxOutputTokens: Int?,
     val enableThinking: Boolean,
-)
+    val modelId: String?,
+) {
+    var toolsJson: String? = null
+}
 
 class NativeChatRequest(
     val messages: Array<NativeChatMessage>,
@@ -36,6 +41,14 @@ class NativeChatResponse(
     val finishReason: Int,
     val modelName: String,
     val inputTokens: Int,
+) {
+    var functionCalls: Array<NativeFunctionCall> = emptyArray()
+}
+
+class NativeFunctionCall(
+    val id: String,
+    val name: String,
+    val argumentsJson: String,
 )
 
 class NativeChatError(
@@ -47,7 +60,10 @@ class NativeChatError(
 class NativeModelStatus(
     val status: Int,
     val thinkingAvailable: Boolean,
-)
+    val modelName: String?,
+) {
+    var toolCallingAvailable: Boolean = false
+}
 
 interface NativeCheckStatusCallback {
     fun onComplete(status: NativeModelStatus)

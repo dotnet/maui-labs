@@ -95,7 +95,7 @@ task(
   description="Reviewer 2: pattern matching review",
   agent_type="general-purpose",
   mode="background",
-  model="gemini-3.7-flash",
+  model="gpt-5.6-sol-fast",
   prompt="<same diff + same PR description + same instruction>"
 )
 
