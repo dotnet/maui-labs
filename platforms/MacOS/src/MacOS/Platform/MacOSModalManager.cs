@@ -104,6 +104,14 @@ internal class MacOSModalManager
 
 		return entry.Page;
 	}
+    
+    public void ClearModalStack()
+    {
+        while (HasModals)
+        {
+            PopModal(false);
+        }
+    }
 
 	public void LayoutAllModals()
 	{
