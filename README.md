@@ -149,7 +149,8 @@ systems.
   streaming, and structured JSON.
 - **Embeddings:** Apple NaturalLanguage generates text vectors on supported systems.
 - **Android:** Gemini Nano text/image chat, streaming, and input-token usage on
-  supported AICore devices; model download is explicit and observable.
+  supported AICore devices, plus native tools on capable Nano V4 profiles.
+  Model download is explicit and observable.
 
 See [Essentials.AI](src/AI/README.md) for documentation and samples.
 

@@ -390,6 +390,16 @@ For local debugging that needs full-path project disambiguation, opt in explicit
 
 ## Focus-safe capture and native dialogs
 
+iOS Simulator full-screen screenshots use `simctl`, including system dialogs. CLI and
+Driver share resizing through macOS's built-in `/usr/bin/sips`, preserving logical sizing,
+aspect-ratio rounding and no-upscaling. The CLI supports `--max-width`; `--scale native`
+and `--scale full` bypass resizing. Resize failures warn on stderr and return the original
+PNG. Resampling and compression can differ from earlier SkiaSharp output.
+
+Windows host fallback uses GDI for capture and built-in GDI+ for PNG encoding, preserving
+bounds, top-down BGRA order and opaque alpha. Temporary files and native resources are
+released after capture. Neither host path bundles SkiaSharp; in-app agents are unchanged.
+
 AppKit screenshots prefer ScreenCaptureKit and fall back to CoreGraphics or in-process
 rendering without activating or reordering windows. On macOS 14.0–14.1, an attached sheet
 forces a parent/sheet CoreGraphics composite because ScreenCaptureKit cannot include child

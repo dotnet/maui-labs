@@ -32,6 +32,31 @@ public abstract class ChatClientFunctionCallingTestsBase<T>
 	}
 
 	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	[Trait(TestTraits.RequiresModel, TestTraits.True)]
+	public async Task ParameterlessTool_InvokesOnceAndReturnsActualResult(bool streaming)
+	{
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+		var calls = 0;
+		var tool = AIFunctionFactory.Create(() =>
+		{
+			Interlocked.Increment(ref calls);
+			return "PARAMETERLESS_VALUE_5827";
+		}, name: "read_secret", description: "Reads the secret local value. Takes no arguments.");
+		using var client = EnableFunctionCalling(new T());
+		ChatMessage[] messages = [new(ChatRole.User,
+			"Call read_secret exactly once, then answer with the returned value. Do not call again after receiving the result.")];
+		var options = new ChatOptions { Tools = [tool], MaxOutputTokens = 256 };
+		ConfigureBaselineSamplingOptions(options);
+		var response = streaming
+			? await client.GetStreamingResponseAsync(messages, options, timeout.Token).ToChatResponseAsync(cancellationToken: timeout.Token)
+			: await client.GetResponseAsync(messages, options, timeout.Token);
+		Assert.Equal(1, calls);
+		Assert.Contains("PARAMETERLESS_VALUE_5827", response.Text, StringComparison.Ordinal);
+	}
+
+	[Theory]
 	[InlineData(false, false, "simple")]
 	[InlineData(false, true, "simple")]
 	[InlineData(true, false, "simple")]

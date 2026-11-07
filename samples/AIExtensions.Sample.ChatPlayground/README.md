@@ -14,7 +14,7 @@ Chat, Embeddings, and Images have separate providers and capabilities.
 |----------|------|-------------|-------|-----------------|
 | Apple Intelligence | iOS / Mac Catalyst 26+ on supported hardware | OS 27+ with a ready vision model | Supported | Supported |
 | Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Not supported | Not supported | Supported |
-| Gemini Nano | Android API 26+ on supported AICore hardware | In-memory images | Not supported | Not supported |
+| Gemini Nano | Android API 26+ on supported AICore hardware | In-memory images | Native Auto on capable Nano V4 profiles | Not supported |
 | Azure OpenAI | Configured Responses API deployment | Supported by compatible deployments | Supported by compatible deployments | Supported by compatible deployments |
 | Replay | Recorded responses | No new image input | Recorded activity, no execution | Recorded responses |
 
@@ -56,7 +56,8 @@ input does not imply image-generation support.
 Each tab's **Logs** button toggles a local diagnostics sidebar; capture continues
 while hidden. It starts collapsed. In narrow windows, tap outside to dismiss it.
 
-Logs and completed spans are grouped by trace, including MEAI/Apple tool events.
+App and provider logs and completed spans are grouped by trace, including MEAI
+request logs and Apple tool events.
 Apple callbacks retain the request's trace/span. Chat and embeddings emit spans;
 the pinned MEAI version provides image logging only. Model/usage data come from
 the provider. Payload logging and sensitive telemetry are disabled, but exceptions
@@ -95,16 +96,31 @@ for hardware, capability, packaging, and access requirements.
 ### Android
 
 The Android app requires API 26+ and supported AICore hardware/configuration for
-Gemini Nano. It supports text/image chat, not tools or structured JSON.
-The first request never downloads assets: explicitly enumerate
-`GeminiNanoChatClient.DownloadModelAsync` after a download decision and query
-status again before chatting. There is no download UI or automatic cloud fallback.
+Gemini Nano. It supports text/image chat and native tool calling when the selected
+model advertises that capability. Select **Preview fast** for the verified Nano V4
+tool path; the default stable/full Nano V3 model has no native tool calling.
+Tool controls follow the selected model's status. Auto and None are available;
+Require any and structured JSON are unsupported. Tool-enabled text arrives at
+the end of each model turn so ML Kit's raw function tokens never appear in chat.
+Use **Download** in the readiness banner to prepare the model. Chat requests never
+download assets or fall back to a cloud provider.
 See the [Android guide](../../docs/ai/gemini-nano-android.md).
 
 ```sh
 dotnet run --project samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj \
   -f net10.0-android --device <device-id>
 ```
+
+### Model readiness
+
+Choose a Gemini Nano model in the sidebar for the next send. The selection also
+applies to readiness checks and downloads; it does not clear the conversation.
+
+The banner disables Send until the selected on-device model is ready. Android
+offers **Download**, Windows offers **Prepare**, and system-managed or ongoing
+preparation offers **Check again**. Downloads show byte progress and transfer rate
+when available. **Cancel** stops this app's request, but a shared system download
+may continue. Status changes and operation errors appear in **Logs**.
 
 ## Configure Azure OpenAI
 

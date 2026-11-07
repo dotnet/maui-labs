@@ -1,6 +1,6 @@
 plugins {
     id("com.android.library") version "8.12.0"
-    id("org.jetbrains.kotlin.android") version "2.3.0"
+    id("org.jetbrains.kotlin.android") version "2.4.0"
 }
 
 android {
@@ -36,14 +36,15 @@ val mlKitRuntime by configurations.creating {
 }
 
 dependencies {
-    compileOnly("com.google.mlkit:genai-prompt:1.0.0-beta4")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-    mlKitRuntime("com.google.mlkit:genai-prompt:1.0.0-beta4")
-    mlKitRuntime("com.google.mlkit:genai-common:1.0.0-beta4")
-    mlKitRuntime("com.google.mlkit:genai-schema:1.0.0-alpha1")
+    compileOnly("com.google.mlkit:genai-prompt:1.0.0-beta5")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
+    mlKitRuntime("com.google.mlkit:genai-prompt:1.0.0-beta5")
+    mlKitRuntime("com.google.mlkit:genai-common:1.0.0-beta5")
+    mlKitRuntime("com.google.mlkit:genai-schema:1.0.0-alpha2")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testImplementation("org.json:json:20250517")
 }
 
 // Shared Kotlin, AndroidX and Google dependencies are supplied by NuGet.

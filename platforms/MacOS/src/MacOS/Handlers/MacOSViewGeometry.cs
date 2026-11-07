@@ -23,6 +23,12 @@ internal static class MacOSViewGeometry
             Handlers.Remove(view);
     }
 
+    internal static bool TryGetHandler(NSView view, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IViewHandler? handler)
+    {
+        handler = null;
+        return Handlers.TryGetValue(view, out var reference) && reference.TryGetTarget(out handler);
+    }
+
     // Native layout owners supply logical rectangles, just like MAUI layout does.
     internal static void SetLayoutFrame(this NSView view, CGRect frame)
     {

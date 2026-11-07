@@ -16,7 +16,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SkiaSharp" />
     <PackageReference Include="System.Text.Json" />
     <PackageReference Include="Xamarin.Android.Tools.AndroidSdk" PrivateAssets="all" GeneratePathProperty="true" />
     <PackageReference Include="Interop.UIAutomationClient" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
