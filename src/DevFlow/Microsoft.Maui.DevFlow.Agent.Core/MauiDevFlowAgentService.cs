@@ -155,13 +155,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         if (SupportsScreenshotResolutionHints)
             screenshotFeatures.Add("resolution-hints");
 
-        capabilities["ui.screenshot"] = new Dictionary<string, object?>
-        {
-            ["version"] = SupportsScreenshotResolutionHints ? 3 : 2,
-            ["supported"] = true,
-            ["features"] = screenshotFeatures,
-            ["reason"] = (string?)null
-        };
+        capabilities["ui.screenshot"] = Capability(
+            SupportsScreenshotResolutionHints ? 3 : 2,
+            supported: true,
+            screenshotFeatures.ToArray(),
+            reason: null);
     }
 
     /// <inheritdoc />

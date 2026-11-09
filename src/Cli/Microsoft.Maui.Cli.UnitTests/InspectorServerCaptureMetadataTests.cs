@@ -427,6 +427,43 @@ public class InspectorServerCaptureMetadataTests
     }
 
     [Fact]
+    public async Task InspectorFeatures_ShareOneCapabilitiesDocument()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+
+            using var request = new StringContent(
+                """{"elementId":"element-42","captureEpoch":42,"registryGeneration":7}""",
+                Encoding.UTF8,
+                "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                request);
+            response.EnsureSuccessStatusCode();
+
+            Assert.Equal(
+                1,
+                agent.RecordedRequests.Count(
+                    recorded => recorded.Path == "/api/v1/agent/capabilities"));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task CoordinateTap_WhenFirstCandidateRejects_RehitTestsBeforeParentFallback()
     {
         await using var agent = new MockAgentServer(

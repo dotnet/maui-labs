@@ -67,18 +67,11 @@ public class NativeDevFlowAgentService : DevFlowAgentService
         capabilities["ui.actions"] = Capability(1, supported: true,
             ["tap", "fill", "clear", "focus", "scroll", "back", "key", "gesture", "properties"],
             reason: null);
-        capabilities["ui.screenshot"] = new Dictionary<string, object?>
-        {
-            ["version"] = 2,
-            ["supported"] = true,
-            ["features"] = new[]
-            {
-                "element",
-                "fullscreen",
-                "resolution-hints"
-            },
-            ["reason"] = (string?)null
-        };
+        capabilities["ui.screenshot"] = Capability(
+            2,
+            supported: true,
+            ["element", "fullscreen", "resolution-hints"],
+            reason: null);
     }
 
     /// <inheritdoc />
