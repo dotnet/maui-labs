@@ -887,6 +887,7 @@ public class AgentClient : IDisposable
     /// is how content drawn on a canvas — SkiaSharp, Microsoft.Maui.Graphics, Syncfusion charts —
     /// is tapped, since what is drawn has no element id of its own. On iOS and Mac Catalyst the app
     /// must enable synthetic touch (<c>capabilities.syntheticTouch</c> in the agent status).
+    /// On macOS AppKit this sends a left-mouse click, not a touch.
     /// </summary>
     public Task<ActionResult> TapResultAsync(
         string elementId,
@@ -1138,6 +1139,7 @@ public class AgentClient : IDisposable
     /// or drops an item onto a target the way a finger does; unlike <see cref="PanAsync"/> it is
     /// never serviced by invoking a gesture recognizer directly. On iOS and Mac Catalyst the app
     /// must enable synthetic touch (<c>capabilities.syntheticTouch</c> in the agent status).
+    /// On macOS AppKit this sends left-mouse events to the hit-tested view, not touches.
     /// </summary>
     public async Task<GestureResult> DragAsync(
         string elementId,

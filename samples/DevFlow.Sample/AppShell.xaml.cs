@@ -18,6 +18,12 @@ public partial class AppShell : Shell
 #if MACOS
         FlyoutBehavior = FlyoutBehavior.Locked;
         MacOSShell.SetUseNativeSidebar(this, true);
+        Items.Add(new ShellContent
+        {
+            Title = "Mouse probe",
+            Route = "mouseprobe",
+            ContentTemplate = new DataTemplate(typeof(MacMouseProbePage)),
+        });
 #endif
     }
 }

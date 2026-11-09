@@ -465,6 +465,44 @@ public class UiActionTests : IntegrationTestBase
         || Platform.Equals("ios", StringComparison.OrdinalIgnoreCase)
         || Platform.Equals("maccatalyst", StringComparison.OrdinalIgnoreCase);
 
+    [Fact]
+    [Trait(TestFramework.Trait, TestFramework.Maui)]
+    public async Task MacOS_PointInput_DeliversNativeMouseSequences()
+    {
+        if (Platform != "macos")
+            return;
+
+        await NavigateToPageAsync("//mouseprobe", "MacMouseTarget");
+        var target = await FindElementAsync("MacMouseTarget");
+        var result = await Client.DragAsync(target.Id, x: 40, y: 40,
+            toX: 120, toY: 80, steps: 4,
+            captureEpoch: target.CaptureEpoch, registryGeneration: target.RegistryGeneration);
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("native", result.HandledBy);
+        Assert.Contains("AppKit mouse drag", result.Detail);
+
+        await WaitForAsync(async () =>
+            (await FindElementAsync("MacMouseStatus")).Text is { } text
+            && text.Contains("down=1 dragged=4 up=1 dx=80 dy=40", StringComparison.Ordinal));
+
+        target = await FindElementAsync("MacMouseTarget");
+        var tap = await Client.TapResultAsync(target.Id, 35, 45,
+            target.CaptureEpoch, target.RegistryGeneration);
+        Assert.True(tap.Success, tap.Error);
+
+        await WaitForAsync(async () =>
+            (await FindElementAsync("MacMouseStatus")).Text is { } text
+            && text.Contains("down=2 dragged=4 up=2 dx=0 dy=0", StringComparison.Ordinal));
+
+        target = await FindElementAsync("MacMouseTarget");
+        var offscreen = await Client.DragAsync(target.Id, x: 40, y: 40,
+            toX: 10000, toY: 40,
+            captureEpoch: target.CaptureEpoch, registryGeneration: target.RegistryGeneration);
+        Assert.False(offscreen.Success);
+        Assert.Contains("outside the window", offscreen.Error);
+        Assert.Contains("down=2 dragged=4 up=2", (await FindElementAsync("MacMouseStatus")).Text);
+    }
+
     private async Task<ElementInfo> FindRawTouchTargetAsync()
     {
         await NavigateToGesturePageAsync();
