@@ -18,6 +18,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 import {
   SCREENSHOT_SCALE_BUCKETS,
   isDefaultScreenshotScale,
+  selectNativeAwareScreenshotScaleBucket,
   selectScreenshotScaleBucket,
 } from './inspector-resolution.js';
 
@@ -3612,24 +3613,17 @@ import {
     stage.style.height = (dh * s) + 'px';
     scheduleScreenshotResolution(dw, dh, s);
   }
-  function boundedScreenshotScale(scale) {
-    const maximum = Math.min(scale, learnedMaximumScreenshotScale);
-    let bounded = SCREENSHOT_SCALE_BUCKETS[0];
-    for (const bucket of SCREENSHOT_SCALE_BUCKETS) {
-      if (bucket > maximum) break;
-      bounded = bucket;
-    }
-    return bounded;
-  }
   function scheduleScreenshotResolution(logicalWidth, logicalHeight, renderedScale) {
     if (!screenshotResolutionSupported) return;
-    const next = boundedScreenshotScale(selectScreenshotScaleBucket({
-      logicalWidth,
-      logicalHeight,
-      renderedWidth: logicalWidth * renderedScale,
-      renderedHeight: logicalHeight * renderedScale,
-      devicePixelRatio: window.devicePixelRatio || 1,
-    }));
+    const next = selectNativeAwareScreenshotScaleBucket(
+      selectScreenshotScaleBucket({
+        logicalWidth,
+        logicalHeight,
+        renderedWidth: logicalWidth * renderedScale,
+        renderedHeight: logicalHeight * renderedScale,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      }),
+      learnedMaximumScreenshotScale);
     const previousDesiredScale = desiredScreenshotScale;
     desiredScreenshotScale = next;
     if (next === requestedScreenshotScale) {

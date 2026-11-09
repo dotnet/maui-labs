@@ -32,6 +32,17 @@ export function selectScreenshotScaleBucket({
   return selected;
 }
 
+export function selectNativeAwareScreenshotScaleBucket(desiredScale, nativeMaximumScale) {
+  if (![desiredScale, nativeMaximumScale]
+    .every(value => Number.isFinite(value) && value > 0)) {
+    return DEFAULT_SCALE;
+  }
+
+  const maximumScale = Math.min(desiredScale, nativeMaximumScale);
+  return SCREENSHOT_SCALE_BUCKETS.find(bucket => bucket >= maximumScale)
+    ?? SCREENSHOT_SCALE_BUCKETS.at(-1);
+}
+
 export function isDefaultScreenshotScale(scale) {
   return scale === DEFAULT_SCALE;
 }

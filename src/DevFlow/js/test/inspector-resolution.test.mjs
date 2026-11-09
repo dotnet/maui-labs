@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   SCREENSHOT_PIXEL_BUDGET,
   isDefaultScreenshotScale,
+  selectNativeAwareScreenshotScaleBucket,
   selectScreenshotScaleBucket,
 } from '../../../Cli/Microsoft.Maui.Cli/DevFlow/Inspector/Web/inspector-resolution.js';
 
@@ -52,4 +53,10 @@ test('resolution buckets use the legacy 1x default for invalid geometry', () => 
   assert.equal(selectScreenshotScaleBucket(request({ renderedWidth: 0 })), 1);
   assert.equal(isDefaultScreenshotScale(1), true);
   assert.equal(isDefaultScreenshotScale(2), false);
+});
+
+test('native-aware buckets preserve fractional device density', () => {
+  assert.equal(selectNativeAwareScreenshotScaleBucket(1.5, 1.25), 1.5);
+  assert.equal(selectNativeAwareScreenshotScaleBucket(3, 1.25), 1.5);
+  assert.equal(selectNativeAwareScreenshotScaleBucket(1, 1.25), 1);
 });
