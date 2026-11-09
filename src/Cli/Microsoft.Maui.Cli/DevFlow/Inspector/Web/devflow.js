@@ -318,6 +318,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
               clearTimeout(refreshTimer);
               refreshTimer = null;
               refreshTimerDelay = null;
+              refreshTimerRequiresFreshCapture = false;
             }
             renderPreviewPending();
           } else {
@@ -502,24 +503,30 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   // Debounced refresh — coalesce rapid calls
   let refreshTimer = null;
   let refreshTimerDelay = null;
+  let refreshTimerRequiresFreshCapture = false;
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
     previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
   }
-  function scheduleRefresh(delayMs = 300) {
+  function scheduleRefresh(delayMs = 300, requiresFreshCapture = false) {
     if (refreshTimer) {
+      refreshTimerRequiresFreshCapture ||= requiresFreshCapture;
       if (refreshTimerDelay === 0 && delayMs > 0) return;
       clearTimeout(refreshTimer);
+    } else {
+      refreshTimerRequiresFreshCapture = requiresFreshCapture;
     }
     refreshTimerDelay = delayMs;
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
       refreshTimerDelay = null;
+      const requiresFresh = refreshTimerRequiresFreshCapture;
+      refreshTimerRequiresFreshCapture = false;
       const tap = latestTap;
-      const state = tap !== null && activeRefresh?.tap === tap
+      const state = !requiresFresh && tap !== null && activeRefresh?.tap === tap
         ? await activeRefresh.promise
-        : await refreshState(tap !== null);
+        : await refreshState(requiresFresh || tap !== null);
       if (!state && latestTap !== null && !activeRefresh) scheduleRefresh(STATE_REFRESH_RETRY_MS);
     }, delayMs);
   }
@@ -671,7 +678,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           recordStepById('fill', editor.dataset.elementId, { value: editor.value });
         }
         removeEditor(editor);
-        scheduleRefresh(300);
+        scheduleRefresh(300, true);
         return;
       }
 
@@ -904,7 +911,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           body: JSON.stringify({ x, y, deltaX: dx, deltaY: dy })
         });
         if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
-        scheduleRefresh(300);
+        scheduleRefresh(300, true);
       } catch (err) {
         console.error('Scroll failed:', err);
       }
@@ -952,7 +959,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ points: gesturePoints.map((p) => ({ x: p.x, y: p.y, t: p.t })) })
           });
-          scheduleRefresh(300);
+          scheduleRefresh(300, true);
           if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
         } catch (err) {
           console.error('Gesture failed:', err);
@@ -1099,7 +1106,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     onRuntimeChange: ({ elementId, name, value }) => {
       if (recordingId) recordStep('setProperty', elById(elementId), { name, value });
       layoutPanel?.invalidate('An app property changed; the previous Layout snapshot is stale.');
-      scheduleRefresh(200);
+      scheduleRefresh(200, true);
     },
   });
 
@@ -2015,7 +2022,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       setStatus(r.ok
         ? `Returned to ${checkpointLabel || 'start'} (${checkpointRoute}). Navigation only — app data is not reset.`
         : 'Could not navigate to the checkpoint route.');
-      scheduleRefresh(500);
+      scheduleRefresh(500, true);
     } catch (err) { setStatus('Navigate failed.'); }
   }
 
@@ -2042,7 +2049,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           : `Replay failed (HTTP ${r.status}).`));
       }
     } catch (err) { setStatus('Replay failed.'); }
-    finally { setReplayUi(false); scheduleRefresh(400); }
+    finally { setReplayUi(false); scheduleRefresh(400, true); }
   }
 
   function showReplayReport(rep) {

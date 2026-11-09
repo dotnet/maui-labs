@@ -408,6 +408,65 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task Tap_PropertyEditDuringImageDecodeRequiresFreshFrame()
+    {
+        await Page.Clock.InstallAsync();
+        await Page.Clock.PauseAtAsync(DateTime.UtcNow.AddSeconds(1));
+        var stateRequests = 0;
+        var mutationRefreshStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        Page.Request += (_, request) =>
+        {
+            if (!request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                return;
+            if (Interlocked.Increment(ref stateRequests) >= 2)
+                mutationRefreshStarted.TrySetResult();
+        };
+        await Page.EvaluateAsync("""
+            () => {
+              const originalDecode = HTMLImageElement.prototype.decode;
+              let heldDecode = false;
+              window.fixtureRestoreMutationDecode = () => {
+                HTMLImageElement.prototype.decode = originalDecode;
+              };
+              HTMLImageElement.prototype.decode = function () {
+                if (!this.id && !heldDecode) {
+                  heldDecode = true;
+                  document.body.dataset.fixtureMutationDecodeStarted = 'true';
+                  return new Promise(() => {});
+                }
+                return originalDecode.call(this);
+              };
+            }
+            """);
+        try
+        {
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Page.Locator("#df-status")).ToContainTextAsync("Tap sent to");
+            await Page.Clock.RunForAsync(50);
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-mutation-decode-started", "true");
+            Assert.Equal(1, Volatile.Read(ref stateRequests));
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+
+            await Editor.FillAsync("Edited after tap");
+            await Editor.PressAsync("Tab");
+            await Expect(SourceButton).ToHaveAttributeAsync("data-state", "dirty");
+            await Page.Clock.RunForAsync(250);
+
+            await mutationRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(2, Volatile.Read(ref stateRequests));
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Edited after tap");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            await Page.EvaluateAsync("() => window.fixtureRestoreMutationDecode?.()");
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task Tap_NewerAcceptedTapKeepsPendingFeedbackUntilItsFrameCommits()
     {
         var hint = Page.Locator("#df-preview-pending");
