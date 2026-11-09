@@ -1,6 +1,4 @@
 import {
-  appLogicalToInspectorCss,
-  inspectorCssToAppLogical,
   inspectorCssToTransformedViewport,
   transformedViewportToInspectorCss,
 } from './inspector-frame.js';
@@ -46,7 +44,6 @@ export function createViewportController(options) {
     isEditing = () => false,
     isCommandEnabled = () => true,
     canNavigate = () => true,
-    onTransformWillChange = () => {},
     onTransformChanged = () => {},
   } = options;
 
@@ -78,12 +75,14 @@ export function createViewportController(options) {
 
   function renderedTransform() {
     const origin = stage.getBoundingClientRect();
+    const left = snapToDevicePixel(origin.left + view.transform.translateX);
+    const top = snapToDevicePixel(origin.top + view.transform.translateY);
     return {
       originX: origin.left,
       originY: origin.top,
       scale: view.transform.scale,
-      translateX: snapToDevicePixel(view.transform.translateX),
-      translateY: snapToDevicePixel(view.transform.translateY),
+      translateX: left - origin.left,
+      translateY: top - origin.top,
     };
   }
 
@@ -194,7 +193,6 @@ export function createViewportController(options) {
   }
 
   function commitTransform(mode, transform, bounds, announce) {
-    onTransformWillChange();
     view.mode = mode;
     view.transform = transform;
     lastBounds = bounds;
@@ -215,10 +213,9 @@ export function createViewportController(options) {
     const nextScale = clampViewportScale(scale);
     const currentTransform = renderedTransform();
     const anchor = { x: clientX, y: clientY };
-    const appPoint = inspectorCssToAppLogical(
-      transformedViewportToInspectorCss(anchor, currentTransform));
+    const appPoint = transformedViewportToInspectorCss(anchor, currentTransform);
     const projected = inspectorCssToTransformedViewport(
-      appLogicalToInspectorCss(appPoint),
+      appPoint,
       {
         originX: currentTransform.originX,
         originY: currentTransform.originY,
@@ -290,7 +287,6 @@ export function createViewportController(options) {
     panSession = null;
     document.body.classList.remove('df-viewport-panning');
     document.body.classList.toggle('df-viewport-pan-armed', spacePanArmed);
-    if (session.cancelTimer) window.clearTimeout(session.cancelTimer);
     if (wrap.hasPointerCapture?.(session.pointerId)) {
       try { wrap.releasePointerCapture(session.pointerId); } catch {}
     }
@@ -307,12 +303,10 @@ export function createViewportController(options) {
     if (!panSession || panSession.cancelled) return;
     panSession.cancelled = true;
     document.body.classList.remove('df-viewport-panning');
-    panSession.cancelTimer = window.setTimeout(() => {
-      if (panSession?.cancelled) finishPan(null);
-    }, 1500);
   }
 
   function onPointerDown(event) {
+    if (panSession?.cancelled) finishPan(null);
     const middleButton = event.pointerType !== 'touch' && event.button === 1;
     const spaceDrag = event.pointerType !== 'touch' && event.button === 0 && spacePanArmed;
     if (!middleButton && !spaceDrag) {
@@ -331,7 +325,6 @@ export function createViewportController(options) {
       lastClientX: event.clientX,
       lastClientY: event.clientY,
       cancelled: false,
-      cancelTimer: 0,
     };
     armClickSuppression(event.pointerId, event.pointerType);
     document.body.classList.remove('df-viewport-pan-armed');
@@ -372,8 +365,8 @@ export function createViewportController(options) {
 
   function onWheel(event) {
     if (!event.ctrlKey && !event.metaKey) return;
-    if (!commandEnabled('df-toggle-fit') || !canNavigate()) return;
     event.preventDefault();
+    if (!commandEnabled('df-toggle-fit') || !canNavigate()) return;
     const unit = event.deltaMode === 1
       ? 16
       : (event.deltaMode === 2 ? Math.max(1, wrap.clientHeight) : 1);
@@ -413,26 +406,25 @@ export function createViewportController(options) {
 
   function onViewportKeyDown(event) {
     if (isEditing() || !canNavigate() || isEditableTarget(event.target, window)
-      || event.altKey || event.ctrlKey || event.metaKey)
+      || event.altKey || event.ctrlKey || event.metaKey
+      || !commandEnabled('df-toggle-fit'))
       return;
     let handled = true;
-    if ((event.key === '+' || event.key === '=' || event.key === 'Add')
-      && commandEnabled('df-toggle-fit')) {
+    if (event.key === '+' || event.key === '=' || event.key === 'Add') {
       stepScale(1);
-    } else if ((event.key === '-' || event.key === '_' || event.key === 'Subtract')
-      && commandEnabled('df-toggle-fit')) {
+    } else if (event.key === '-' || event.key === '_' || event.key === 'Subtract') {
       stepScale(-1);
-    } else if (event.key === '0' && commandEnabled('df-toggle-fit')) {
+    } else if (event.key === '0') {
       setFit();
-    } else if (event.key === '1' && commandEnabled('df-toggle-fit')) {
+    } else if (event.key === '1') {
       setScaleAtCenter(1);
-    } else if (event.key === 'ArrowLeft' && commandEnabled('df-toggle-fit')) {
+    } else if (event.key === 'ArrowLeft') {
       panBy(event.shiftKey ? PAN_STEP_LARGE : PAN_STEP, 0);
-    } else if (event.key === 'ArrowRight' && commandEnabled('df-toggle-fit')) {
+    } else if (event.key === 'ArrowRight') {
       panBy(event.shiftKey ? -PAN_STEP_LARGE : -PAN_STEP, 0);
-    } else if (event.key === 'ArrowUp' && commandEnabled('df-toggle-fit')) {
+    } else if (event.key === 'ArrowUp') {
       panBy(0, event.shiftKey ? PAN_STEP_LARGE : PAN_STEP);
-    } else if (event.key === 'ArrowDown' && commandEnabled('df-toggle-fit')) {
+    } else if (event.key === 'ArrowDown') {
       panBy(0, event.shiftKey ? -PAN_STEP_LARGE : -PAN_STEP);
     } else {
       handled = false;

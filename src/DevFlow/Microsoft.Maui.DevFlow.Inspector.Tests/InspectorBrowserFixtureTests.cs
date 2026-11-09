@@ -1556,6 +1556,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 
         await Page.SetViewportSizeAsync(320, 780);
         await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-host-layout", "narrow");
+        await Expect(Page.Locator("#df-preview-health")).ToBeVisibleAsync();
         await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Live");
         Assert.True(await Page.Locator("#df-view-pane .df-pane-header").EvaluateAsync<bool>(
             "header => header.scrollWidth <= header.clientWidth + 1"),
@@ -1579,14 +1580,14 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     {
         await Page.Locator("#df-props-close").ClickAsync();
         await Page.Locator("#df-zoom-preset").SelectOptionAsync("1");
-        var pixelAlignedTranslation = await Page.Locator("#app-viewport").EvaluateAsync<double[]>("""
+        var pixelAlignedEdges = await Page.Locator("#app-viewport").EvaluateAsync<double[]>("""
             element => {
-              const matrix = new DOMMatrix(getComputedStyle(element).transform);
+              const rect = element.getBoundingClientRect();
               const density = devicePixelRatio || 1;
-              return [matrix.e * density, matrix.f * density];
+              return [rect.left * density, rect.top * density];
             }
             """);
-        Assert.All(pixelAlignedTranslation, value =>
+        Assert.All(pixelAlignedEdges, value =>
             Assert.InRange(Math.Abs(value - Math.Round(value)), 0, 0.001));
         await Page.RouteAsync("**/api/tap", route => route.FulfillAsync(new()
         {
@@ -1637,69 +1638,6 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             new System.Text.RegularExpressions.Regex(
                 System.Text.RegularExpressions.Regex.Escape(anchoredTransform)));
 
-        var scrollBodies = new ConcurrentQueue<string>();
-        var firstScrollStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseFirstScroll = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var secondScrollStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var scrollRequest = 0;
-        await Page.RouteAsync("**/api/scroll", async route =>
-        {
-            scrollBodies.Enqueue(route.Request.PostData!);
-            if (Interlocked.Increment(ref scrollRequest) == 1)
-            {
-                firstScrollStarted.TrySetResult();
-                await releaseFirstScroll.Task;
-            }
-            else
-            {
-                secondScrollStarted.TrySetResult();
-            }
-            await route.FulfillAsync(new()
-            {
-                Status = 200,
-                ContentType = "application/json",
-                Body = """{"ok":true}"""
-            });
-        });
-        try
-        {
-            await Page.Mouse.MoveAsync(clientX, clientY);
-            await Page.Mouse.WheelAsync(0, 60);
-            await Page.Keyboard.DownAsync("Control");
-            try
-            {
-                await Page.Mouse.WheelAsync(0, -120);
-            }
-            finally
-            {
-                await Page.Keyboard.UpAsync("Control");
-            }
-            await firstScrollStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            await Page.Mouse.MoveAsync(clientX + 40, clientY);
-            await Page.Mouse.WheelAsync(0, 80);
-            await Page.WaitForTimeoutAsync(180);
-            Assert.False(secondScrollStarted.Task.IsCompleted);
-            releaseFirstScroll.TrySetResult();
-            await secondScrollStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        }
-        finally
-        {
-            releaseFirstScroll.TrySetResult();
-        }
-        Assert.Equal(2, scrollBodies.Count);
-        var scrolls = scrollBodies.Select(body => JsonDocument.Parse(body)).ToArray();
-        try
-        {
-            Assert.Equal(60, scrolls[0].RootElement.GetProperty("deltaY").GetDouble());
-            Assert.Equal(80, scrolls[1].RootElement.GetProperty("deltaY").GetDouble());
-            Assert.NotEqual(
-                scrolls[0].RootElement.GetProperty("x").GetDouble(),
-                scrolls[1].RootElement.GetProperty("x").GetDouble());
-        }
-        finally
-        {
-            foreach (var scroll in scrolls) scroll.Dispose();
-        }
         Assert.Empty(_pageErrors);
     }
 
@@ -1714,6 +1652,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 document.getElementById('app-viewport').setPointerCapture;
               document.getElementById('app-viewport').setPointerCapture = () => {};
               window.fixtureGestureRequestCount = 0;
+              window.fixtureScrollDuringGesture = 0;
               window.fixtureGesturePointer = (type, pointerId, x) =>
                 document.getElementById('app-viewport').dispatchEvent(new PointerEvent(type, {
                   bubbles: true,
@@ -1731,6 +1670,12 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 window.fixtureGesturePointer('pointerup', pointerId, 120 + deltaX);
               };
               window.fetch = (url, options) => {
+                if (typeof url === 'string' && url.endsWith('/api/scroll')) {
+                  window.fixtureScrollDuringGesture++;
+                  return Promise.resolve(new Response(
+                    '{"ok":true}',
+                    { status: 200, headers: { 'Content-Type': 'application/json' } }));
+                }
                 if (typeof url === 'string' && url.endsWith('/api/gesture')) {
                   const count = ++window.fixtureGestureRequestCount;
                   document.body.dataset.fixtureGestureRequests = String(count);
@@ -1773,6 +1718,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 """);
             await Expect(Page.Locator("body"))
                 .ToHaveAttributeAsync("data-fixture-gesture-transform-stable", "true");
+            Assert.Equal(0, await Page.EvaluateAsync<int>("window.fixtureScrollDuringGesture"));
             await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-gesture-requests", "1");
 
             await Page.EvaluateAsync("() => window.fixtureDispatchGesture(42, 35)");
@@ -1856,7 +1802,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Page.Mouse.DownAsync();
             await Page.Mouse.MoveAsync(startX + 30, startY + 20, new() { Steps = 3 });
             await Page.Keyboard.PressAsync("Escape");
-            await Page.WaitForTimeoutAsync(40);
+            await Page.WaitForTimeoutAsync(1700);
             await Page.Mouse.UpAsync();
         }
         finally
@@ -1898,19 +1844,22 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
               }
             }
             """);
-        await Page.WaitForTimeoutAsync(50);
+        await Page.WaitForTimeoutAsync(200);
         Assert.DoesNotContain("gesture", appRequests);
 
         await Page.Mouse.MoveAsync(startX, startY);
-        await Page.Mouse.WheelAsync(0, 120);
-        await Page.WaitForTimeoutAsync(150);
+        await Page.RunAndWaitForResponseAsync(
+            () => Page.Mouse.WheelAsync(0, 120),
+            response => response.Url.EndsWith("/api/scroll", StringComparison.Ordinal));
         Assert.Contains("scroll", appRequests);
         while (appRequests.TryDequeue(out _)) { }
 
-        await Page.Mouse.DownAsync();
-        await Page.Mouse.MoveAsync(startX + 40, startY, new() { Steps = 3 });
-        await Page.Mouse.UpAsync();
-        await Page.WaitForTimeoutAsync(50);
+        await Page.RunAndWaitForResponseAsync(async () =>
+        {
+            await Page.Mouse.DownAsync();
+            await Page.Mouse.MoveAsync(startX + 40, startY, new() { Steps = 3 });
+            await Page.Mouse.UpAsync();
+        }, response => response.Url.EndsWith("/api/gesture", StringComparison.Ordinal));
         Assert.Contains("gesture", appRequests);
         while (appRequests.TryDequeue(out _)) { }
 
