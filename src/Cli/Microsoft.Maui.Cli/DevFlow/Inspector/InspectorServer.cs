@@ -78,8 +78,7 @@ public sealed class InspectorServer : IDisposable
     // for the coordinates, offsets and epochs a browser tab acted against — it supersedes the
     // standalone screenshot-frame + root-offset fields diagnostics originally hung off.
     private long? _captureEpoch;
-    private Task<bool?>? _requiresCaptureEpochTask;
-    private Task<bool?>? _supportsScreenshotResolutionTask;
+    private Task<JsonElement?>? _capabilitiesTask;
     private readonly TimeSpan _frameReuseDuration;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan DefaultFrameReuseDuration = TimeSpan.FromMilliseconds(200);
@@ -479,15 +478,54 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<bool> RequiresCaptureEpochAsync()
     {
-        Task<bool?> detectionTask;
+        var detected = await DetectCapabilityFeatureAsync(
+            "ui.actions",
+            "stale-capture-rejection");
+        return detected ?? _captureEpoch.HasValue;
+    }
+
+    private async Task<bool> SupportsScreenshotResolutionAsync()
+    {
+        var detected = await DetectCapabilityFeatureAsync(
+            "ui.screenshot",
+            "resolution-hints");
+        return detected ?? false;
+    }
+
+    private async Task<bool?> DetectCapabilityFeatureAsync(
+        string capabilityName,
+        string featureName)
+    {
+        var capabilities = await GetAgentCapabilitiesAsync();
+        if (!capabilities.HasValue)
+            return null;
+
+        if (!capabilities.Value.TryGetProperty(capabilityName, out var capability)
+            || capability.ValueKind != JsonValueKind.Object
+            || !capability.TryGetProperty("features", out var features))
+        {
+            return false;
+        }
+
+        if (features.ValueKind != JsonValueKind.Array)
+            return null;
+
+        return features.EnumerateArray().Any(feature =>
+            feature.ValueKind == JsonValueKind.String
+            && feature.GetString() == featureName);
+    }
+
+    private async Task<JsonElement?> GetAgentCapabilitiesAsync()
+    {
+        Task<JsonElement?> capabilitiesTask;
         lock (_cacheLock)
-            detectionTask = _requiresCaptureEpochTask ??= DetectCaptureEpochRequirementAsync();
+            capabilitiesTask = _capabilitiesTask ??= FetchAgentCapabilitiesAsync();
 
         try
         {
-            var detected = await detectionTask;
-            if (detected.HasValue)
-                return detected.Value;
+            var capabilities = await capabilitiesTask;
+            if (capabilities.HasValue)
+                return capabilities;
         }
         catch
         {
@@ -497,14 +535,13 @@ public sealed class InspectorServer : IDisposable
         // this connection. Share one in-flight request, then let the next interaction retry.
         lock (_cacheLock)
         {
-            if (ReferenceEquals(_requiresCaptureEpochTask, detectionTask))
-                _requiresCaptureEpochTask = null;
-
-            return _captureEpoch.HasValue;
+            if (ReferenceEquals(_capabilitiesTask, capabilitiesTask))
+                _capabilitiesTask = null;
         }
+        return null;
     }
 
-    private async Task<bool?> DetectCaptureEpochRequirementAsync()
+    private async Task<JsonElement?> FetchAgentCapabilitiesAsync()
     {
         var response = await _client.GetCapabilitiesAsync();
         if (response.ValueKind != JsonValueKind.Object
@@ -514,68 +551,7 @@ public sealed class InspectorServer : IDisposable
             return null;
         }
 
-        if (!capabilities.TryGetProperty("ui.actions", out var uiActions)
-            || uiActions.ValueKind != JsonValueKind.Object
-            || !uiActions.TryGetProperty("features", out var features))
-        {
-            return false;
-        }
-
-        if (features.ValueKind != JsonValueKind.Array)
-            return null;
-
-        return features.EnumerateArray().Any(feature =>
-            feature.ValueKind == JsonValueKind.String
-            && feature.GetString() == "stale-capture-rejection");
-    }
-
-    private async Task<bool> SupportsScreenshotResolutionAsync()
-    {
-        Task<bool?> detectionTask;
-        lock (_cacheLock)
-            detectionTask = _supportsScreenshotResolutionTask ??= DetectScreenshotResolutionSupportAsync();
-
-        try
-        {
-            var detected = await detectionTask;
-            if (detected.HasValue)
-                return detected.Value;
-        }
-        catch
-        {
-        }
-
-        lock (_cacheLock)
-        {
-            if (ReferenceEquals(_supportsScreenshotResolutionTask, detectionTask))
-                _supportsScreenshotResolutionTask = null;
-        }
-        return false;
-    }
-
-    private async Task<bool?> DetectScreenshotResolutionSupportAsync()
-    {
-        var response = await _client.GetCapabilitiesAsync();
-        if (response.ValueKind != JsonValueKind.Object
-            || !response.TryGetProperty("capabilities", out var capabilities)
-            || capabilities.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        if (!capabilities.TryGetProperty("ui.screenshot", out var screenshots)
-            || screenshots.ValueKind != JsonValueKind.Object
-            || !screenshots.TryGetProperty("features", out var features))
-        {
-            return false;
-        }
-
-        if (features.ValueKind != JsonValueKind.Array)
-            return null;
-
-        return features.EnumerateArray().Any(feature =>
-            feature.ValueKind == JsonValueKind.String
-            && feature.GetString() == "resolution-hints");
+        return capabilities.Clone();
     }
 
     /// <summary>
