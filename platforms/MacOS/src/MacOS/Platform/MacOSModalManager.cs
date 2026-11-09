@@ -104,6 +104,24 @@ internal class MacOSModalManager
 
 		return entry.Page;
 	}
+    
+    public void ClearModalStack()
+    {
+        if (!HasModals)
+        {
+            return;
+        }
+
+        foreach (var modalEntry in _modalStack.Where(modalEntry => modalEntry.ModalWindow is not null))
+        {
+            modalEntry.ModalWindow?.OrderOut(null);
+        }
+
+        while (HasModals)
+        {
+            PopModal(false);
+        }
+    }
 
 	public void LayoutAllModals()
 	{
