@@ -273,6 +273,11 @@ public class PointerSessionTests
             Assert.False(start.Success);
             Assert.Equal("pointer-start-cancelled", start.Reason);
             Assert.DoesNotContain("start", service.Events);
+
+            var retry = await client.StartPointerSessionAsync(Start("cancel-before-start"));
+            Assert.False(retry.Success);
+            Assert.Equal("pointer-start-cancelled", retry.Reason);
+            Assert.DoesNotContain("start", service.Events);
         });
     }
 
@@ -417,6 +422,30 @@ public class PointerSessionTests
         Assert.Equal("agent-disposed", await service.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(2)));
     }
 
+    [Fact]
+    public async Task PointerSession_StopRejectsStartQueuedBehindMutation()
+    {
+        var options = new AgentOptions { Port = FreePort(), RequireMutationLease = false };
+        using var service = new PointerTestService(options) { BlockBack = true };
+        service.StartServerOnly(new DelegateAgentDispatcher(() => false, action => action()));
+        using var client = new AgentClient("localhost", options.Port) { AutoAcquireMutationLease = false };
+
+        var backTask = client.BackAsync();
+        await service.BackStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var startTask = client.StartPointerSessionAsync(Start("queued-during-stop"));
+        var stopTask = service.StopAsync();
+        for (var attempt = 0; attempt < 500 && !service.PointerSessionsStopping; attempt++)
+            await Task.Delay(10);
+        Assert.True(service.PointerSessionsStopping);
+        service.ReleaseBack.TrySetResult();
+
+        await backTask.WaitAsync(TimeSpan.FromSeconds(5));
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(start.Success);
+        Assert.DoesNotContain("start", service.Events);
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     private static PointerSessionStartRequest Start(string sessionId) => new()
     {
         SessionId = sessionId,
@@ -474,9 +503,14 @@ public class PointerSessionTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StartCancellationObserved { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource BackStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseBack { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool BlockStarts { get; set; }
         public bool BlockAfterStart { get; set; }
         public bool BlockMoves { get; set; }
+        public bool BlockBack { get; set; }
         public bool RejectRepeatedPrepare { get; set; }
         public int PrepareStartCalls { get; private set; }
         public int BackCalls { get; private set; }
@@ -554,10 +588,15 @@ public class PointerSessionTests
             return Task.FromResult(PointerSessionBackendResult.Applied());
         }
 
-        protected override Task<HttpResponse> HandleBack(HttpRequest request)
+        protected override async Task<HttpResponse> HandleBack(HttpRequest request)
         {
             BackCalls++;
-            return Task.FromResult(HttpResponse.Ok("back"));
+            if (BlockBack)
+            {
+                BackStarted.TrySetResult();
+                await ReleaseBack.Task;
+            }
+            return HttpResponse.Ok("back");
         }
     }
 }

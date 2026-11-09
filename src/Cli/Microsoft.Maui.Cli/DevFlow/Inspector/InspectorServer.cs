@@ -557,6 +557,12 @@ public sealed class InspectorServer : IDisposable
         return capabilities.Clone();
     }
 
+    private void CacheAgentCapabilities(JsonElement capabilities)
+    {
+        lock (_cacheLock)
+            _capabilitiesTask = Task.FromResult<JsonElement?>(capabilities.Clone());
+    }
+
     /// <summary>
     /// Handles an HTTP request from the broker, routing it through the inspector logic.
     /// This allows the broker to serve inspector pages without a separate listener.
@@ -1111,6 +1117,11 @@ public sealed class InspectorServer : IDisposable
                     "/api/pointer/move" => await HandleProxyPointerMoveAsync(request.Body),
                     "/api/pointer/end" => await HandleProxyPointerEndAsync(request.Body),
                     "/api/pointer/cancel" => await HandleProxyPointerCancelAsync(request.Body),
+                    "/api/pointer/cancel-and-release" => await HandleProxyPointerCancelAndReleaseAsync(
+                        request.Body,
+                        leaseId,
+                        holderKind,
+                        holderLabel),
                     "/api/back" => await HandleProxyBackAsync(),
                     "/api/fill" => await HandleProxyFillAsync(request.Body),
                     "/api/key" => await HandleProxyKeyAsync(request.Body),
@@ -1185,7 +1196,7 @@ public sealed class InspectorServer : IDisposable
                 ? ScreenshotResolutionKey.SupportedDefault
                 : ScreenshotResolutionKey.Legacy);
         var hasPublishedFrame = frame.FrameRevision > 0 && frame.Png.Length > 0;
-        var pointerStream = await GetPointerStreamCapabilityAsync();
+        var pointerStream = await GetPointerStreamCapabilityAsync(refreshUnsupported: true);
         var html = HtmlRenderer.RenderWithViewport(
             frame.Tree,
             hasPublishedFrame,
@@ -1373,6 +1384,7 @@ public sealed class InspectorServer : IDisposable
             ? agentValue.Clone()
             : null;
         var capabilities = capabilitiesValue.Clone();
+        CacheAgentCapabilities(capabilities);
 
         return Ok(JsonSerializer.Serialize(new
         {
@@ -3106,6 +3118,27 @@ public sealed class InspectorServer : IDisposable
         var fallback = CanFallbackPointerStart(result);
         if (result.Success)
         {
+            if (Volatile.Read(ref _replayInProgress) == 1)
+            {
+                try
+                {
+                    using var replayLease = _client.UseMutationLease(
+                        leaseId,
+                        holderKind,
+                        holderLabel);
+                    await _client.CancelPointerSessionAsync(start.SessionId, "replay-started");
+                }
+                catch { }
+                InvalidateScreenshotCache();
+                return JsonResponse(409, new
+                {
+                    ok = false,
+                    fallback = false,
+                    reason = "replay-in-progress",
+                    error = "A replay started while the pointer session was being admitted."
+                });
+            }
+
             PointerProxySession[] staleSessions;
             lock (_pointerProxyGate)
             {
@@ -3245,9 +3278,72 @@ public sealed class InspectorServer : IDisposable
         return PointerProxyResult(result);
     }
 
-    private async Task<PointerStreamProxyCapability?> GetPointerStreamCapabilityAsync()
+    private async Task<(int, string, byte[])> HandleProxyPointerCancelAndReleaseAsync(
+        string? body,
+        string leaseId,
+        string holderKind,
+        string holderLabel)
+    {
+        if (!TryReadPointerBody(body, out InspectorPointerCancelRequest? cancel, out var error))
+            return JsonResponse(400, new { ok = false, error });
+
+        PointerSessionResult? result = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(cancel?.SessionId))
+            {
+                result = await _client.CancelPointerSessionAsync(cancel.SessionId, cancel.Reason);
+                RemovePointerProxySession(cancel.SessionId);
+                InvalidateScreenshotCache();
+            }
+        }
+        finally
+        {
+            try
+            {
+                await _client.ControlMutationLeaseAsync(
+                    "release",
+                    force: false,
+                    leaseId,
+                    holderKind,
+                    holderLabel);
+            }
+            catch { }
+        }
+
+        return result is null
+            ? JsonResponse(200, new { ok = true, state = "released" })
+            : PointerProxyResult(result);
+    }
+
+    private async Task<PointerStreamProxyCapability?> GetPointerStreamCapabilityAsync(
+        bool refreshUnsupported = false)
     {
         var capabilities = await GetAgentCapabilitiesAsync();
+        var capability = ParsePointerStreamCapability(capabilities);
+        if (capability is { Supported: true } || !refreshUnsupported)
+            return capability;
+
+        JsonElement? refreshed = null;
+        try
+        {
+            refreshed = await FetchAgentCapabilitiesAsync();
+        }
+        catch
+        {
+        }
+        if (refreshed.HasValue)
+        {
+            CacheAgentCapabilities(refreshed.Value);
+            return ParsePointerStreamCapability(refreshed) ?? capability;
+        }
+
+        return capability;
+    }
+
+    private static PointerStreamProxyCapability? ParsePointerStreamCapability(
+        JsonElement? capabilities)
+    {
         if (!capabilities.HasValue)
             return null;
         if (!capabilities.Value.TryGetProperty("ui.pointerStream", out var pointer)
@@ -3257,7 +3353,6 @@ public sealed class InspectorServer : IDisposable
                 false,
                 "The connected agent predates pointer streaming.");
         }
-
         var supported = pointer.TryGetProperty("supported", out var supportedProperty)
             && supportedProperty.ValueKind == JsonValueKind.True;
         var reason = pointer.TryGetProperty("reason", out var reasonProperty)
@@ -4271,6 +4366,7 @@ public sealed class InspectorServer : IDisposable
 
         try
         {
+            await CancelProxyPointerSessionsAsync("replay-started");
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
             var replayer = new Flows.FlowReplayer(_client);
             var report = await replayer.ReplayAsync(parsed.Flow, null, cts.Token);
@@ -4294,7 +4390,7 @@ public sealed class InspectorServer : IDisposable
     internal static bool IsBlockedDuringReplay(string path) => path switch
     {
         "/api/tap" or "/api/scroll" or "/api/gesture" or "/api/back" or "/api/fill" or "/api/key"
-            or "/api/pointer/start" or "/api/pointer/move" or "/api/pointer/end" or "/api/pointer/cancel"
+            or "/api/pointer/start" or "/api/pointer/move" or "/api/pointer/end"
             or "/api/setProperty" or "/api/persistProperty" or "/api/navigate" or "/api/cdp/eval"
             or "/api/alerts/dismiss" or "/api/flows/record/start" or "/api/flows/record/step" => true,
         _ => false,

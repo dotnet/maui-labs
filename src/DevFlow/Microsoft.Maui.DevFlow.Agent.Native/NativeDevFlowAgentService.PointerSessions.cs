@@ -25,7 +25,8 @@ public partial class NativeDevFlowAgentService
                 request.Y,
                 out var state,
                 out var detail,
-                out var error)
+                out var error,
+                out var reason)
                 && state is not null
                     ? PointerSessionBackendStartResult.Started(
                         state,
@@ -33,7 +34,9 @@ public partial class NativeDevFlowAgentService
                     : PointerSessionBackendStartResult.Failed(
                         error ?? "The native backend rejected the pointer start.",
                         NativeUi.PointerSessionsSupported ? 422 : 501,
-                        NativeUi.PointerSessionsSupported ? "pointer-start-rejected" : "not_supported");
+                        reason ?? (NativeUi.PointerSessionsSupported
+                            ? "pointer-start-rejected"
+                            : "not_supported"));
         });
 
     protected override Task<PointerSessionBackendResult> MovePointerSessionBackendAsync(

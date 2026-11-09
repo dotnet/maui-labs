@@ -38,14 +38,16 @@ internal static partial class NativeUi
         double y,
         out object? state,
         out string? detail,
-        out string? error)
+        out string? error,
+        out string? reason)
     {
 #if ANDROID
-        return TryStartAndroidPointerSession(x, y, out state, out detail, out error);
+        return TryStartAndroidPointerSession(x, y, out state, out detail, out error, out reason);
 #else
         state = null;
         detail = null;
         error = PointerSessionUnsupportedReason;
+        reason = "not_supported";
         return false;
 #endif
     }
