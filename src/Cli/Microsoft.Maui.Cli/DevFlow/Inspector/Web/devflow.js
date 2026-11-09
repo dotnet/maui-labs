@@ -247,6 +247,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       requestVersion: refreshRequestVersion,
       tap,
       controller: new AbortController(),
+      followUpPromise: null,
       promise: null,
     };
     const isSuperseded = () => refresh.generation !== refreshGeneration;
@@ -517,6 +518,16 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   function renderPreviewPending() {
     previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
   }
+  function queueRefreshAfter(refresh) {
+    refresh.followUpPromise ??= (async () => {
+      await refresh.promise;
+      const current = activeRefresh;
+      if (current && current !== refresh && current.requestVersion === refreshRequestVersion)
+        return current.promise;
+      return refreshState(true);
+    })();
+    return refresh.followUpPromise;
+  }
   function scheduleRefresh(delayMs = 300, intent = REFRESH_INTENT_EVIDENCE) {
     if (intent === REFRESH_INTENT_EVIDENCE || intent === REFRESH_INTENT_MUTATION)
       refreshRequestVersion++;
@@ -540,16 +551,20 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       if (scheduledIntent === REFRESH_INTENT_MUTATION) {
         state = await refreshState(true);
       } else if (scheduledIntent === REFRESH_INTENT_TAP) {
-        state = tap !== null && activeRefresh?.tap === tap
-          ? await activeRefresh.promise
-          : await refreshState(tap !== null);
+        if (tap !== null && activeRefresh?.tap === tap) {
+          const sharedRefresh = activeRefresh;
+          state = await sharedRefresh.promise;
+          if (sharedRefresh.requestVersion !== refreshRequestVersion)
+            state = await queueRefreshAfter(sharedRefresh);
+        } else {
+          state = await refreshState(tap !== null);
+        }
       } else if (scheduledIntent === REFRESH_INTENT_RETRY) {
         state = activeRefresh
           ? await activeRefresh.promise
           : await refreshState();
       } else if (activeRefresh) {
-        await activeRefresh.promise;
-        state = await refreshState(true);
+        state = await queueRefreshAfter(activeRefresh);
       } else {
         state = await refreshState();
       }

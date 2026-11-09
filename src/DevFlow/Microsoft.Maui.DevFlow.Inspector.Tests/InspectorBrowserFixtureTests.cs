@@ -569,6 +569,18 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             Volatile.Write(ref _text, "Changed after tap event");
             await Page.EvaluateAsync(
                 "() => window.fixtureEventsSocket.emit({ type: 'tree-changed' })");
+            await Page.RouteAsync("**/api/tap", route => route.FulfillAsync(new()
+            {
+                Status = 400,
+                ContentType = "application/json",
+                Body = """{"ok":false,"reason":"Fixture rejected the later tap."}"""
+            }));
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Page.Locator("#df-status"))
+                .ToContainTextAsync("Fixture rejected the later tap.");
+            await Page.Clock.RunForAsync(50);
+            await Page.EvaluateAsync(
+                "() => window.fixtureEventsSocket.emit({ type: 'tree-changed-again' })");
             await Page.Clock.RunForAsync(200);
             await Page.EvaluateAsync("() => window.fixtureReleaseEventDecode()");
 
@@ -592,6 +604,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                   window.fixtureRestoreWebSocket?.();
                 }
                 """);
+            await Page.UnrouteAsync("**/api/tap");
             await Page.UnrouteAsync("**/api/eventSupport");
         }
     }
