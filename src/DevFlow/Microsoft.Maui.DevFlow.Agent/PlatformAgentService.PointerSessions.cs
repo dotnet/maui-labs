@@ -155,6 +155,14 @@ public partial class PlatformAgentService
             0);
         if (!target.Root.DispatchTouchEvent(down))
         {
+            using var cancel = MotionEvent.Obtain(
+                downTime,
+                Math.Max(downTime + 1, SystemClock.UptimeMillis()),
+                MotionEventActions.Cancel,
+                x,
+                y,
+                0);
+            target.Root.DispatchTouchEvent(cancel);
             return PointerSessionBackendStartResult.Failed(
                 $"Nothing at ({request.X:0.#}, {request.Y:0.#}) accepted the Android touch.",
                 422,

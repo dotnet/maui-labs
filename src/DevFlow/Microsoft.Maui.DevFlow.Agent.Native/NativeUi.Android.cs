@@ -254,15 +254,24 @@ internal static partial class NativeUi
             double y,
             out object? state,
             out string? detail,
-            out string? error)
+            out string? error,
+            out string? reason)
     {
         state = null;
         detail = null;
         error = null;
+        reason = null;
         var root = CurrentActivity?.Window?.DecorView?.RootView;
         if (root is null || root.Width <= 1 || root.Height <= 1)
         {
             error = "The Android window is not laid out.";
+            reason = "pointer-start-rejected";
+            return false;
+        }
+        if (!root.HasWindowFocus)
+        {
+            error = "The activity window does not own input focus; a modal or system surface may be covering it.";
+            reason = "pointer-blocked-by-dialog";
             return false;
         }
 
@@ -272,6 +281,7 @@ internal static partial class NativeUi
         if (px < 0 || py < 0 || px >= root.Width || py >= root.Height)
         {
             error = $"Pointer start ({x:0.#}, {y:0.#}) is outside the Android window.";
+            reason = "pointer-outside-window";
             return false;
         }
 
@@ -285,7 +295,16 @@ internal static partial class NativeUi
             0);
         if (!root.DispatchTouchEvent(down))
         {
+            using var cancel = MotionEvent.Obtain(
+                downTime,
+                Math.Max(downTime + 1, SystemClock.UptimeMillis()),
+                MotionEventActions.Cancel,
+                px,
+                py,
+                0);
+            root.DispatchTouchEvent(cancel);
             error = $"Nothing at ({x:0.#}, {y:0.#}) accepted the Android touch.";
+            reason = "pointer-not-handled";
             return false;
         }
 

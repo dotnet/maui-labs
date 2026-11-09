@@ -24,6 +24,9 @@ public partial class DevFlowAgentService
     private Task? _pointerSessionWatchdogTask;
     private int _pointerSessionsDisposed;
 
+    internal bool PointerSessionsStopping
+        => Volatile.Read(ref _pointerSessionsDisposed) != 0;
+
     protected readonly record struct PointerStreamSupport(
         bool Supported,
         string Fidelity,
@@ -358,7 +361,7 @@ public partial class DevFlowAgentService
             lock (_pointerSessionStateGate)
             {
                 PrunePointerStartCancellationsNoLock();
-                if (TryConsumePointerStartCancellationNoLock(
+                if (TryGetPointerStartCancellationNoLock(
                         body.SessionId!,
                         GetRequestLeaseId(request),
                         out var cancelledReason))
@@ -1108,8 +1111,13 @@ public partial class DevFlowAgentService
 
     private void EnsurePointerSessionWatchdog()
     {
+        if (Volatile.Read(ref _pointerSessionsDisposed) != 0)
+            return;
+
         lock (_pointerSessionStateGate)
         {
+            if (Volatile.Read(ref _pointerSessionsDisposed) != 0)
+                return;
             if (_pointerSessionWatchdogTask is { IsCompleted: false })
                 return;
             _pointerSessionWatchdogCts?.Dispose();
@@ -1157,6 +1165,7 @@ public partial class DevFlowAgentService
 
     private async Task StopPointerSessionsAsync()
     {
+        Interlocked.Exchange(ref _pointerSessionsDisposed, 1);
         CancellationTokenSource? watchdogCts;
         Task? watchdogTask;
         lock (_pointerSessionStateGate)
@@ -1328,7 +1337,7 @@ public partial class DevFlowAgentService
         }
     }
 
-    private bool TryConsumePointerStartCancellationNoLock(
+    private bool TryGetPointerStartCancellationNoLock(
         string sessionId,
         string? leaseId,
         out string reason)
@@ -1340,7 +1349,6 @@ public partial class DevFlowAgentService
             return false;
         }
 
-        _pointerStartCancellations.Remove(sessionId);
         reason = cancellation.Reason;
         return true;
     }
