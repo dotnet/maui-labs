@@ -641,8 +641,7 @@ body:not([data-host-layout="wide"]) .df-tool-btn { padding: 4px 8px; }
   }
 }
 @container preview-pane (max-width: 360px) {
-  .df-preview-title,
-  #df-preview-health { display: none; }
+  .df-preview-title { display: none; }
   #df-preview-pending:not(.df-hidden) {
     flex: 0 0 8px;
     width: 8px;

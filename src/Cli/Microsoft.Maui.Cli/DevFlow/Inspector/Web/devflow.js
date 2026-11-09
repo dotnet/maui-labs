@@ -2209,8 +2209,17 @@ import { createViewportController } from './inspector-viewport-controller.js';
     const viewportControls = document.getElementById('df-viewport-controls');
     if (viewportControls) {
       const hideViewportControls = nextStates['df-toggle-fit']?.visible === false;
-      if (hideViewportControls && viewportControls.contains(focused))
-        restoreFocus(vpWrap, document.getElementById('df-toggle-fit'));
+      if (hideViewportControls && viewportControls.contains(focused)) {
+        const fallback = [
+          retryConnectionBtn,
+          retryCaptureBtn,
+          tb.tree,
+          tb.inspect,
+          tb.more,
+          vpWrap,
+        ].find(isFocusableVisible);
+        restoreFocus(fallback, vpWrap);
+      }
       viewportControls.hidden = hideViewportControls;
     }
     viewportController?.syncControls();
