@@ -99,6 +99,8 @@ public partial class ImageButtonHandler : MacOSViewHandler<IImageButton, NSButto
         else
         {
             handler.PlatformView.Bordered = true;
+            if (handler.PlatformView.Layer is { } layer)
+                layer.BackgroundColor = null;
         }
     }
 

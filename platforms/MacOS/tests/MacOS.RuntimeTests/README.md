@@ -23,6 +23,7 @@ A timeout is a failure, not accepted baseline evidence.
 | `dialogs` | 3 | Missing consumed subscription / native action sheets, prompts and alerts |
 | `window-page-reset` | 1 | Sheets survive root replacement / native button opens nested modal sheets, then resets Window.Page and verifies both sheets and MAUI modal state are cleared |
 | `picker` | 19 | Unselected null-title Picker displays January / selection, title, items and native activation transitions |
+| `background-reset` | 4 | Cleared Grid background keeps its colour / direct clears, DataTrigger exit, ContentView, Picker and ImageButton (10 assertions) |
 | `tap-buttons` | 3 | Left click routed to secondary recognizer / primary, secondary and dynamic `Buttons` changes |
 | `focus-state` | 5 | Entry is first responder but `IsFocused` stays false / Entry, focus moves, Editor, `Unfocus()` with ordered Focused/Unfocused events, focus redirected from an `Unfocused` handler (13 assertions) |
 | `bundle-resources` | 4 | Linked image missing / assets included and loaded from the built app bundle |
