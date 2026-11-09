@@ -109,7 +109,9 @@ The browser decodes a candidate screenshot before synchronously committing scree
 logical viewport size, offsets, element HTML, and descriptor. Expired screenshot lookups return
 `404`. Correlated actions referencing unknown frames return `410 frame-expired`; stream/revision or
 changed-geometry mismatches return `409 frame-mismatch` or `409 frame-superseded`. `actionId` is a
-tracing identifier, not replay protection.
+tracing identifier, not replay protection. A successful mutation invalidates prior coordinate
+frames until a complete post-mutation frame is captured; identity-bound actions still rely on the
+agent's capture-epoch validation.
 
 Coordinate conversions are centralized in `Web/inspector-frame.js`:
 

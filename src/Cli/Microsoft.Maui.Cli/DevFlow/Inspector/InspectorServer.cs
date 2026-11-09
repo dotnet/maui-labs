@@ -1719,6 +1719,11 @@ public sealed class InspectorServer : IDisposable
     {
         if (tree.Count == 0) return null;
         var window = tree[0];
+        if (window.Type.EndsWith("Page", StringComparison.Ordinal) ||
+            string.Equals(window.Type, "Shell", StringComparison.Ordinal))
+        {
+            return window.Id;
+        }
         if (window.Children is not { Count: > 0 }) return null;
         // Last child is the topmost (modal pages are added after the shell). Registered native
         // elements are appended beneath their owner, so a window-owned registration would
@@ -1782,6 +1787,11 @@ public sealed class InspectorServer : IDisposable
     {
         if (rootPageId == null || tree.Count == 0) return (0, 0);
         var window = tree[0];
+        if (string.Equals(window.Id, rootPageId, StringComparison.Ordinal))
+        {
+            var rootBounds = window.WindowBounds ?? window.Bounds;
+            return (rootBounds?.X ?? 0, rootBounds?.Y ?? 0);
+        }
         if (window.Children == null) return (0, 0);
         var rootPage = window.Children.FirstOrDefault(c => c.Id == rootPageId);
         if (rootPage == null) return (0, 0);
@@ -1888,6 +1898,7 @@ public sealed class InspectorServer : IDisposable
                     Guid.NewGuid().ToString("N"),
                     DateTime.UtcNow,
                     0,
+                    generation,
                     frameTree,
                     screenshot,
                     width,
@@ -1957,11 +1968,11 @@ public sealed class InspectorServer : IDisposable
         ElementInfo? root = null;
         if (tree.Count > 0)
         {
-            var window = tree[0];
-            root = fullscreen || !string.Equals(window.Type, "Window", StringComparison.Ordinal)
-                ? window
-                : window.Children?.FirstOrDefault(child =>
-                    string.Equals(child.Id, rootPageId, StringComparison.Ordinal));
+            root = fullscreen
+                ? tree[0]
+                : tree[0].Children?.FirstOrDefault(child =>
+                    string.Equals(child.Id, rootPageId, StringComparison.Ordinal))
+                    ?? tree[0];
         }
 
         var bounds = root?.WindowBounds ?? root?.Bounds;
@@ -2202,7 +2213,11 @@ public sealed class InspectorServer : IDisposable
         {
             PruneFramesLocked();
             if (!_frames.TryGetValue(frameId, out frame))
-                return ActionCorrelationError(410, "frame-expired", "The referenced Inspector frame has expired.");
+            {
+                if (hasCoordinates)
+                    return ActionCorrelationError(410, "frame-expired", "The referenced Inspector frame has expired.");
+                return null;
+            }
             if (hasCoordinates && !IsCoordinateFrameCurrentLocked(frame))
             {
                 return ActionCorrelationError(
@@ -2212,7 +2227,7 @@ public sealed class InspectorServer : IDisposable
             }
         }
 
-        if (frameRevision.HasValue && frame.FrameRevision != frameRevision.Value)
+        if (frame is not null && frameRevision.HasValue && frame.FrameRevision != frameRevision.Value)
             return ActionCorrelationError(409, "frame-mismatch", "The action frame revision does not match the cached frame.");
 
         return null;
@@ -2220,6 +2235,9 @@ public sealed class InspectorServer : IDisposable
 
     private bool IsCoordinateFrameCurrentLocked(InspectorFrame frame)
     {
+        if (frame.CacheGeneration != _cacheGeneration)
+            return false;
+
         if (string.IsNullOrEmpty(_latestCompleteFrameId) ||
             string.Equals(frame.Id, _latestCompleteFrameId, StringComparison.Ordinal) ||
             !_frames.TryGetValue(_latestCompleteFrameId, out var latest))
@@ -2673,6 +2691,7 @@ public sealed class InspectorServer : IDisposable
         string Id,
         DateTime CreatedUtc,
         long FrameRevision,
+        long CacheGeneration,
         List<ElementInfo> Tree,
         byte[] Png,
         int PixelWidth,

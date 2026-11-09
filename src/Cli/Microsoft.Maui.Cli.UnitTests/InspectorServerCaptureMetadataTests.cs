@@ -104,6 +104,33 @@ public class InspectorServerCaptureMetadataTests
           }
         ]
         """;
+    private const string NativeRootVisualTree = """
+        [
+          {
+            "id": "decor-root",
+            "type": "DecorView",
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "windowId": 0,
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": { "x": 0, "y": 0, "width": 400, "height": 800 },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "captureEpoch": 42,
+                "registryGeneration": 7,
+                "windowId": 0,
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": { "x": 10, "y": 20, "width": 200, "height": 300 },
+                "children": []
+              }
+            ]
+          }
+        ]
+        """;
 
     [Theory]
     [InlineData(
@@ -781,10 +808,7 @@ public class InspectorServerCaptureMetadataTests
 
             var firstStreamId = firstFrame.GetProperty("streamId").GetString();
             var firstFrameId = firstFrame.GetProperty("frameId").GetString();
-            using var backResponse = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/back",
-                content: null);
-            backResponse.EnsureSuccessStatusCode();
+            await Task.Delay(250);
             using var secondResponse = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state");
             secondResponse.EnsureSuccessStatusCode();
@@ -874,6 +898,40 @@ public class InspectorServerCaptureMetadataTests
             Assert.Contains(
                 $"y={expectedY.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 hitTest.QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_WithNativeRoot_UsesCapturedChildLogicalDimensions()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = NativeRootVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            response.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+
+            Assert.Equal(200, frame.GetProperty("logicalWidth").GetDouble());
+            Assert.Equal(300, frame.GetProperty("logicalHeight").GetDouble());
+            Assert.Equal(10, frame.GetProperty("rootOffsetX").GetDouble());
+            Assert.Equal(20, frame.GetProperty("rootOffsetY").GetDouble());
         }
         finally
         {
@@ -979,7 +1037,8 @@ public class InspectorServerCaptureMetadataTests
                 $"http://localhost:{inspectorPort}/api/hitTest",
                 request);
 
-            response.EnsureSuccessStatusCode();
+            var responseBody = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, responseBody);
             Assert.Contains(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/hit-test");
@@ -1013,10 +1072,7 @@ public class InspectorServerCaptureMetadataTests
                 await firstResponse.Content.ReadAsStringAsync());
             var firstFrame = firstState.RootElement.GetProperty("frame");
 
-            using var backResponse = await client.PostAsync(
-                $"http://localhost:{inspectorPort}/api/back",
-                content: null);
-            backResponse.EnsureSuccessStatusCode();
+            await Task.Delay(250);
             using var secondResponse = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state");
             secondResponse.EnsureSuccessStatusCode();
@@ -1041,7 +1097,8 @@ public class InspectorServerCaptureMetadataTests
                 $"http://localhost:{inspectorPort}/api/hitTest",
                 request);
 
-            response.EnsureSuccessStatusCode();
+            var responseBody = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, responseBody);
             Assert.Contains(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/hit-test");
@@ -1183,7 +1240,7 @@ public class InspectorServerCaptureMetadataTests
     }
 
     [Fact]
-    public async Task CorrelatedFill_WithExpiredFrame_IsRejectedBeforeMutation()
+    public async Task CorrelatedFill_WithExpiredFrame_TreatsCorrelationAsAdvisory()
     {
         await using var agent = new MockAgentServer();
         await agent.StartAsync();
@@ -1224,8 +1281,8 @@ public class InspectorServerCaptureMetadataTests
                 $"http://localhost:{inspectorPort}/api/fill",
                 request);
 
-            Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
-            Assert.DoesNotContain(
+            response.EnsureSuccessStatusCode();
+            Assert.Contains(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/actions/fill");
         }
@@ -1284,8 +1341,10 @@ public class InspectorServerCaptureMetadataTests
                 $"http://localhost:{inspectorPort}/api/hitTest",
                 request);
 
-            response.EnsureSuccessStatusCode();
-            Assert.Contains(
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("frame-superseded", error.RootElement.GetProperty("error").GetString());
+            Assert.DoesNotContain(
                 agent.RecordedRequests,
                 recorded => recorded.Path == "/api/v1/ui/hit-test");
         }

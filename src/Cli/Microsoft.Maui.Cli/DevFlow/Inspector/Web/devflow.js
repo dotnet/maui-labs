@@ -88,6 +88,20 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     return converted;
   }
 
+  function isFrameCorrelationError(body) {
+    return body && [
+      'frame-expired',
+      'frame-mismatch',
+      'frame-superseded',
+      'frame-target-unavailable',
+    ].includes(body.error);
+  }
+
+  async function responseHasFrameCorrelationError(response) {
+    if (response.status !== 409 && response.status !== 410) return false;
+    return isFrameCorrelationError(await response.clone().json().catch(() => null));
+  }
+
   const inspectorAgent = Object.freeze({
     id: metaContent('devflow-agent-id'),
     appName: metaContent('devflow-app-name'),
@@ -289,7 +303,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   }
 
   function commitFrame(state, frame, image) {
-    if (hasExplicitFrameIdentity(state) && !shouldCommitFrame(committedFrame, frame)) return false;
+    if (hasExplicitFrameIdentity(state) && !shouldCommitFrame(committedFrame, frame)) {
+      const unchanged = frame.streamId === committedFrame.streamId
+        && frame.frameId === committedFrame.frameId
+        && frame.frameRevision === committedFrame.frameRevision;
+      return unchanged ? 'unchanged' : 'rejected';
+    }
 
     // All frame-owned DOM changes are synchronous. The browser cannot paint or dispatch another
     // event between them, so screenshot, geometry, offsets, overlays, and descriptor become visible
@@ -309,7 +328,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     latestRootOffsetX = rootOffsetX;
     latestRootOffsetY = rootOffsetY;
     applyScale();
-    return true;
+    return 'committed';
   }
 
   // Refresh state via AJAX (no full page reload — avoids flash)
@@ -368,7 +387,14 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           if (!navigator.onLine) return null;
         }
         if (!ensureCurrent()) return followReplacement();
-        if (!commitFrame(state, frame, image)) return followReplacement();
+        const commitResult = commitFrame(state, frame, image);
+        if (commitResult === 'rejected') {
+          const replacement = followReplacement();
+          if (replacement) return replacement;
+          markConnected(true);
+          scheduleRefresh(300, REFRESH_INTENT_RETRY);
+          return null;
+        }
         markConnected(true);
 
         const treeRevision = committedFrame.treeRevision;
@@ -734,7 +760,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(correlatedPayload({ x, y })),
       });
-      if (response.status === 409 || response.status === 410)
+      if (await responseHasFrameCorrelationError(response))
         scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
       const result = response.ok ? await response.json().catch(() => null) : null;
       if (token !== inspectHitToken) return;
@@ -915,10 +941,13 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
     pendingTapRequests++;
     renderPreviewPending();
+    let refreshIntent = REFRESH_INTENT_TAP;
     try {
       const response = await inspectorApi.postDetailed('/api/tap', payload);
       const result = response.body;
       if (!response.ok || !result || result.ok !== true) {
+        if (isFrameCorrelationError(result))
+          refreshIntent = REFRESH_INTENT_EVIDENCE;
         const reason = result && typeof result.reason === 'string'
           ? result.reason
           : 'The app did not accept the tap.';
@@ -942,7 +971,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     } finally {
       pendingTapRequests--;
       renderPreviewPending();
-      scheduleRefresh(0, REFRESH_INTENT_TAP);
+      scheduleRefresh(0, refreshIntent);
     }
   }
 
@@ -1003,14 +1032,45 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let lastScrollPoint = null;
   let scrollFrame = null;
 
+  async function flushScroll() {
+    if (!scrollFrame || !lastScrollPoint || (scrollAccumX === 0 && scrollAccumY === 0)) {
+      scrollFlushTimer = null;
+      return;
+    }
+
+    const frame = scrollFrame;
+    const { x, y } = lastScrollPoint;
+    const dx = scrollAccumX, dy = scrollAccumY;
+    scrollAccumX = 0;
+    scrollAccumY = 0;
+    scrollFlushTimer = null;
+    scrollFrame = null;
+    lastScrollPoint = null;
+
+    try {
+      const resp = await fetch(`${basePath}/api/scroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(correlatedPayload(
+          { x, y, deltaX: dx, deltaY: dy },
+          CoordinateSpace.appLogical,
+          frame))
+      });
+      if (await responseHasFrameCorrelationError(resp))
+        scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+      if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
+      scheduleRefresh(300, resp.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
+    } catch (err) {
+      console.error('Scroll failed:', err);
+    }
+  }
+
   viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (!ensureCanDrive()) return;
     if (scrollFrame && scrollFrame !== committedFrame) {
       if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
-      scrollFlushTimer = null;
-      scrollAccumX = 0;
-      scrollAccumY = 0;
+      void flushScroll();
     }
     scrollFrame = committedFrame;
     scrollAccumX += e.deltaX;
@@ -1022,33 +1082,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       viewport.getBoundingClientRect());
 
     if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
-    scrollFlushTimer = setTimeout(async () => {
-      const frame = scrollFrame || committedFrame;
-      const { x, y } = lastScrollPoint || { x: 0, y: 0 };
-      const dx = scrollAccumX, dy = scrollAccumY;
-      scrollAccumX = 0;
-      scrollAccumY = 0;
-      scrollFlushTimer = null;
-      scrollFrame = null;
-      lastScrollPoint = null;
-
-      try {
-        const resp = await fetch(`${basePath}/api/scroll`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(correlatedPayload(
-            { x, y, deltaX: dx, deltaY: dy },
-            CoordinateSpace.appLogical,
-            frame))
-        });
-        if (resp.status === 409 || resp.status === 410)
-          scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
-        if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
-        scheduleRefresh(300, resp.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
-      } catch (err) {
-        console.error('Scroll failed:', err);
-      }
-    }, 100);
+    scrollFlushTimer = setTimeout(() => { void flushScroll(); }, 100);
   }, { passive: false });
 
   // ── Pointer Drag → Gesture ──
@@ -1109,7 +1143,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
               CoordinateSpace.appLogical,
               gestureFrame || committedFrame))
           });
-          if (response.status === 409 || response.status === 410)
+          if (await responseHasFrameCorrelationError(response))
             scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
           scheduleRefresh(300, response.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
           if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
@@ -1242,7 +1276,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       const response = await inspectorApi.postDetailed(
         path,
         path === '/api/setProperty' ? correlatedPayload(body) : body);
-      if (response.status === 409 || response.status === 410)
+      if (isFrameCorrelationError(response.body))
         scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
       return response;
     },
