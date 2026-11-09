@@ -367,7 +367,7 @@ export class DevFlowClient {
       elementId: opts.elementId,
       selector: opts.selector,
       maxWidth: minPositive(opts.maxWidth, opts.maxPixelWidth),
-      scale: opts.scale ?? (hasResolutionHints ? "auto" : undefined),
+      scale: opts.scale ?? (hasResolutionHints && opts.maxWidth === undefined ? "auto" : undefined),
       targetScale: opts.targetScale,
       maxPixelWidth: opts.maxPixelWidth,
       maxPixelHeight: opts.maxPixelHeight,

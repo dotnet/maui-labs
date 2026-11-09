@@ -170,7 +170,6 @@ test("integration: screenshot sends resolution hints with a legacy width fallbac
   try {
     const screenshot = await client.screenshot({
       targetScale: 2,
-      maxWidth: 1000,
       maxPixelWidth: 800,
       maxPixelHeight: 600,
       maxPixels: 480_000,
@@ -179,12 +178,31 @@ test("integration: screenshot sends resolution hints with a legacy width fallbac
     const request = fake.screenshots[0];
     assert.ok(request);
     assert.match(request, /maxWidth=800/);
-    assert.doesNotMatch(request, /maxWidth=1000/);
     assert.match(request, /targetScale=2/);
     assert.match(request, /maxPixelWidth=800/);
     assert.match(request, /maxPixelHeight=600/);
     assert.match(request, /maxPixels=480000/);
     assert.match(request, /scale=auto/);
+  } finally {
+    client.dispose();
+    await fake.close();
+  }
+});
+
+test("integration: explicit legacy screenshot width does not synthesize auto scale", async () => {
+  const fake = await startFakeAgent();
+  const client = new DevFlowClient({ brokerPort: fake.port, agentPort: fake.port, bootstrapBroker: "never" });
+  try {
+    const screenshot = await client.screenshot({
+      maxWidth: 300,
+      maxPixelHeight: 1000,
+    });
+    assert.equal(screenshot.ok, true, screenshot.ok ? "" : screenshot.error.message);
+    const request = fake.screenshots[0];
+    assert.ok(request);
+    assert.match(request, /maxWidth=300/);
+    assert.match(request, /maxPixelHeight=1000/);
+    assert.doesNotMatch(request, /scale=auto/);
   } finally {
     client.dispose();
     await fake.close();
