@@ -1212,16 +1212,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             }
         };
 
-        await Page.EvaluateAsync("""
-            () => {
-              const wrap = document.querySelector('#df-viewport-wrap');
-              wrap.style.flex = '0 0 80px';
-              wrap.style.width = '80px';
-              wrap.style.height = '60px';
-              document.querySelector('#df-toggle-fit').click();
-              document.querySelector('#df-toggle-fit').click();
-            }
-            """);
+        await TriggerResolutionDowngradeAsync();
         Assert.Contains(
             "scale(",
             await Page.Locator("#app-viewport").GetAttributeAsync("style") ?? string.Empty,
@@ -1254,6 +1245,151 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Matches(@"[?&]targetScale=(?:0\.25|0\.5|0\.75|1\.5|2|3|4)(?:&|$)", request);
         await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
         Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Resize_ResolutionEvidenceQueuesNewerAppEvidence()
+    {
+        var targetScaleRequests = 0;
+        var firstResponseHeld = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstResponse = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var followUpStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/api/state*", async route =>
+        {
+            if (!route.Request.Url.Contains("targetScale=", StringComparison.Ordinal))
+            {
+                await route.ContinueAsync();
+                return;
+            }
+
+            if (Interlocked.Increment(ref targetScaleRequests) == 1)
+            {
+                var response = await route.FetchAsync();
+                firstResponseHeld.TrySetResult();
+                await releaseFirstResponse.Task;
+                await route.FulfillAsync(new() { Response = response });
+                return;
+            }
+
+            followUpStarted.TrySetResult();
+            await route.ContinueAsync();
+        });
+
+        try
+        {
+            await TriggerResolutionDowngradeAsync();
+            await firstResponseHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Volatile.Write(ref _text, "Changed after resolution evidence");
+            await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+            await Page.WaitForTimeoutAsync(100);
+            Assert.False(
+                followUpStarted.Task.IsCompleted,
+                "New app evidence should follow the in-flight resolution capture instead of aborting it.");
+
+            releaseFirstResponse.TrySetResult();
+            await followUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(Overlay)
+                .ToHaveAttributeAsync("data-text", "Changed after resolution evidence");
+            Assert.True(Volatile.Read(ref targetScaleRequests) >= 2);
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            releaseFirstResponse.TrySetResult();
+            await Page.UnrouteAsync("**/api/state*");
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Resize_OlderResolutionFrameCannotSettleTapFeedback()
+    {
+        var targetScaleRequests = 0;
+        var tapRefreshStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        Page.Request += (_, request) =>
+        {
+            if (!request.Url.Contains("/api/state?", StringComparison.Ordinal)
+                || !request.Url.Contains("targetScale=", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (Interlocked.Increment(ref targetScaleRequests) >= 2)
+                tapRefreshStarted.TrySetResult();
+        };
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _screenshotGate = gate;
+        await Page.EvaluateAsync("""
+            () => {
+              const originalDecode = HTMLImageElement.prototype.decode;
+              let heldDecode = false;
+              let releaseHeldDecode;
+              const pendingDecode = new Promise(resolve => { releaseHeldDecode = resolve; });
+              window.fixtureReleaseOldResolutionDecode = () => {
+                releaseHeldDecode();
+                return new Promise(done => setTimeout(() => {
+                  document.body.dataset.fixtureOldResolutionDecodeReleased = 'true';
+                  done();
+                }, 0));
+              };
+              window.fixtureRestoreOldResolutionDecode = () => {
+                HTMLImageElement.prototype.decode = originalDecode;
+              };
+              HTMLImageElement.prototype.decode = function () {
+                if (!this.id && !heldDecode) {
+                  heldDecode = true;
+                  document.body.dataset.fixtureOldResolutionDecodeStarted = 'true';
+                  return pendingDecode;
+                }
+                return originalDecode.call(this);
+              };
+            }
+            """);
+
+        try
+        {
+            await TriggerResolutionDowngradeAsync();
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-old-resolution-decode-started", "true");
+            Assert.Equal(1, Volatile.Read(ref targetScaleRequests));
+
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await tapRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await _screenshotHeld.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
+
+            gate.TrySetResult();
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            var committedScreenshot = await Page.EvaluateAsync<string>(
+                "() => document.querySelector('#screenshot').src");
+
+            await Page.EvaluateAsync("() => window.fixtureReleaseOldResolutionDecode()");
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-old-resolution-decode-released", "true");
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Equal(committedScreenshot, await Page.EvaluateAsync<string>(
+                "() => document.querySelector('#screenshot').src"));
+            await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            gate.TrySetResult();
+            await Page.EvaluateAsync("""
+                () => {
+                  window.fixtureReleaseOldResolutionDecode?.();
+                  window.fixtureRestoreOldResolutionDecode?.();
+                }
+                """);
+        }
     }
 
     [InspectorBrowserFixtureFact]
@@ -1308,6 +1444,17 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await WaitForScreenshotFitAsync(propertiesOpen: false);
         Assert.Empty(_pageErrors);
     }
+
+    private Task TriggerResolutionDowngradeAsync() => Page.EvaluateAsync("""
+        () => {
+          const wrap = document.querySelector('#df-viewport-wrap');
+          wrap.style.flex = '0 0 80px';
+          wrap.style.width = '80px';
+          wrap.style.height = '60px';
+          document.querySelector('#df-toggle-fit').click();
+          document.querySelector('#df-toggle-fit').click();
+        }
+        """);
 
     // Fit re-runs from a ResizeObserver and a requestAnimationFrame, so poll until it settles.
     private Task WaitForScreenshotFitAsync(bool propertiesOpen) => Page.WaitForFunctionAsync("""
