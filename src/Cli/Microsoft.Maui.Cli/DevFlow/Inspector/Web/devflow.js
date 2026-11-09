@@ -95,9 +95,14 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let isGesturing = false;
   let isDragging = false;
   let refreshGeneration = 0;
+  let refreshRequestVersion = 0;
   let activeRefresh = null;
   const STATE_FETCH_TIMEOUT_MS = 10000;
   const STATE_REFRESH_RETRY_MS = 3000;
+  const REFRESH_INTENT_RETRY = 0;
+  const REFRESH_INTENT_EVIDENCE = 1;
+  const REFRESH_INTENT_TAP = 2;
+  const REFRESH_INTENT_MUTATION = 3;
 
   // Inspector selection and tree state. Declared early so the event
   // handlers registered below can read them (they only run after init has set them).
@@ -239,6 +244,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
     const refresh = {
       generation: ++refreshGeneration,
+      requestVersion: refreshRequestVersion,
       tap,
       controller: new AbortController(),
       promise: null,
@@ -310,20 +316,22 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
             .map(attribute => element.getAttribute(attribute)));
         layoutPanel?.frameChanged(JSON.stringify([treeRevision, diagnosticInputsRevision, renderedState]));
-        if (tap !== null && tap === latestTap) {
+        if (tap !== null && tap === latestTap && refresh.requestVersion === refreshRequestVersion) {
           const renderedStateSignature = JSON.stringify(renderedState);
           if (renderedStateSignature !== tap.previewStateSignature || tap.unchangedCaptures > 0) {
             latestTap = null;
-            if (refreshTimer && refreshTimerDelay === STATE_REFRESH_RETRY_MS) {
+            if (refreshTimer
+                && refreshTimerDelay === STATE_REFRESH_RETRY_MS
+                && refreshTimerIntent === REFRESH_INTENT_RETRY) {
               clearTimeout(refreshTimer);
               refreshTimer = null;
               refreshTimerDelay = null;
-              refreshTimerRequiresFreshCapture = false;
+              refreshTimerIntent = REFRESH_INTENT_RETRY;
             }
             renderPreviewPending();
           } else {
             tap.unchangedCaptures++;
-            scheduleRefresh(300);
+            scheduleRefresh(300, REFRESH_INTENT_RETRY);
           }
         }
         return state;
@@ -503,34 +511,54 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   // Debounced refresh — coalesce rapid calls
   let refreshTimer = null;
   let refreshTimerDelay = null;
-  let refreshTimerRequiresFreshCapture = false;
+  let refreshTimerIntent = REFRESH_INTENT_RETRY;
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
     previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
   }
-  function scheduleRefresh(delayMs = 300, requiresFreshCapture = false) {
+  function scheduleRefresh(delayMs = 300, intent = REFRESH_INTENT_EVIDENCE) {
+    if (intent === REFRESH_INTENT_EVIDENCE || intent === REFRESH_INTENT_MUTATION)
+      refreshRequestVersion++;
     if (refreshTimer) {
-      refreshTimerRequiresFreshCapture ||= requiresFreshCapture;
+      const pendingIntent = refreshTimerIntent;
+      refreshTimerIntent = Math.max(refreshTimerIntent, intent);
       if (refreshTimerDelay === 0 && delayMs > 0) return;
+      if (pendingIntent > intent && delayMs > 0) return;
       clearTimeout(refreshTimer);
     } else {
-      refreshTimerRequiresFreshCapture = requiresFreshCapture;
+      refreshTimerIntent = intent;
     }
     refreshTimerDelay = delayMs;
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
       refreshTimerDelay = null;
-      const requiresFresh = refreshTimerRequiresFreshCapture;
-      refreshTimerRequiresFreshCapture = false;
+      const scheduledIntent = refreshTimerIntent;
+      refreshTimerIntent = REFRESH_INTENT_RETRY;
       const tap = latestTap;
-      const state = !requiresFresh && tap !== null && activeRefresh?.tap === tap
-        ? await activeRefresh.promise
-        : await refreshState(requiresFresh || tap !== null);
-      if (!state && latestTap !== null && !activeRefresh) scheduleRefresh(STATE_REFRESH_RETRY_MS);
+      let state;
+      if (scheduledIntent === REFRESH_INTENT_MUTATION) {
+        state = await refreshState(true);
+      } else if (scheduledIntent === REFRESH_INTENT_TAP) {
+        state = tap !== null && activeRefresh?.tap === tap
+          ? await activeRefresh.promise
+          : await refreshState(tap !== null);
+      } else if (scheduledIntent === REFRESH_INTENT_RETRY) {
+        state = activeRefresh
+          ? await activeRefresh.promise
+          : await refreshState();
+      } else if (activeRefresh) {
+        await activeRefresh.promise;
+        state = await refreshState(true);
+      } else {
+        state = await refreshState();
+      }
+      if (!state && latestTap !== null && !activeRefresh)
+        scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
     }, delayMs);
   }
-  if (screenshot) screenshot.addEventListener('error', () => scheduleRefresh(STATE_REFRESH_RETRY_MS));
+  if (screenshot) screenshot.addEventListener('error', () =>
+    scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY));
 
   // ── Click → Tap (with text-input awareness) ──
   // Element types that should open a text editor instead of just tapping.
@@ -678,7 +706,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           recordStepById('fill', editor.dataset.elementId, { value: editor.value });
         }
         removeEditor(editor);
-        scheduleRefresh(300, true);
+        scheduleRefresh(300, REFRESH_INTENT_MUTATION);
         return;
       }
 
@@ -828,7 +856,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     } finally {
       pendingTapRequests--;
       renderPreviewPending();
-      scheduleRefresh(0);
+      scheduleRefresh(0, REFRESH_INTENT_TAP);
     }
   }
 
@@ -911,7 +939,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           body: JSON.stringify({ x, y, deltaX: dx, deltaY: dy })
         });
         if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
-        scheduleRefresh(300, true);
+        scheduleRefresh(300, resp.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
       } catch (err) {
         console.error('Scroll failed:', err);
       }
@@ -954,12 +982,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           return;
         }
         try {
-          await fetch(`${basePath}/api/gesture`, {
+          const response = await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ points: gesturePoints.map((p) => ({ x: p.x, y: p.y, t: p.t })) })
           });
-          scheduleRefresh(300, true);
+          scheduleRefresh(300, response.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
           if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
         } catch (err) {
           console.error('Gesture failed:', err);
@@ -1106,7 +1134,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     onRuntimeChange: ({ elementId, name, value }) => {
       if (recordingId) recordStep('setProperty', elById(elementId), { name, value });
       layoutPanel?.invalidate('An app property changed; the previous Layout snapshot is stale.');
-      scheduleRefresh(200, true);
+      scheduleRefresh(200, REFRESH_INTENT_MUTATION);
     },
   });
 
@@ -2022,7 +2050,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       setStatus(r.ok
         ? `Returned to ${checkpointLabel || 'start'} (${checkpointRoute}). Navigation only — app data is not reset.`
         : 'Could not navigate to the checkpoint route.');
-      scheduleRefresh(500, true);
+      scheduleRefresh(500, r.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
     } catch (err) { setStatus('Navigate failed.'); }
   }
 
@@ -2049,7 +2077,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           : `Replay failed (HTTP ${r.status}).`));
       }
     } catch (err) { setStatus('Replay failed.'); }
-    finally { setReplayUi(false); scheduleRefresh(400, true); }
+    finally { setReplayUi(false); scheduleRefresh(400, REFRESH_INTENT_MUTATION); }
   }
 
   function showReplayReport(rep) {

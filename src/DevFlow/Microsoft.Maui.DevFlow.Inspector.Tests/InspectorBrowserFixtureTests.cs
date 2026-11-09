@@ -452,6 +452,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Editor.FillAsync("Edited after tap");
             await Editor.PressAsync("Tab");
             await Expect(SourceButton).ToHaveAttributeAsync("data-state", "dirty");
+            await Page.Locator("#screenshot").DispatchEventAsync("error");
             await Page.Clock.RunForAsync(250);
 
             await mutationRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
@@ -463,6 +464,201 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         finally
         {
             await Page.EvaluateAsync("() => window.fixtureRestoreMutationDecode?.()");
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_AppEventDuringImageDecodeQueuesFollowUpFrame()
+    {
+        await Page.Clock.InstallAsync();
+        await Page.Clock.PauseAtAsync(DateTime.UtcNow.AddSeconds(1));
+        var stateRequests = 0;
+        var eventRefreshStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        Page.Request += (_, request) =>
+        {
+            if (!request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                return;
+            if (Interlocked.Increment(ref stateRequests) >= 2)
+                eventRefreshStarted.TrySetResult();
+        };
+        await Page.RouteAsync("**/api/eventSupport", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = """{"supported":true}"""
+        }));
+        await Page.EvaluateAsync("""
+            () => {
+              const originalWebSocket = window.WebSocket;
+              class FixtureWebSocket {
+                static OPEN = 1;
+                static CLOSING = 2;
+                static CLOSED = 3;
+                constructor() {
+                  this.readyState = 0;
+                  window.fixtureEventsSocket = this;
+                  queueMicrotask(() => {
+                    this.readyState = FixtureWebSocket.OPEN;
+                    document.body.dataset.fixtureEventsSocketOpen = 'true';
+                    this.onopen?.();
+                  });
+                }
+                close() {
+                  this.readyState = FixtureWebSocket.CLOSED;
+                  this.onclose?.();
+                }
+                emit(message) {
+                  this.onmessage?.({ data: JSON.stringify(message) });
+                }
+              }
+              window.fixtureRestoreWebSocket = () => {
+                if (window.fixtureEventsSocket) {
+                  window.fixtureEventsSocket.onclose = null;
+                  window.fixtureEventsSocket.readyState = FixtureWebSocket.CLOSED;
+                }
+                window.WebSocket = originalWebSocket;
+              };
+              window.WebSocket = FixtureWebSocket;
+            }
+            """);
+        try
+        {
+            await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+            await Page.Clock.RunForAsync(50);
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-events-socket-open", "true");
+            await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            Volatile.Write(ref stateRequests, 0);
+
+            await Page.EvaluateAsync("""
+                () => {
+                  const originalDecode = HTMLImageElement.prototype.decode;
+                  let heldDecode = false;
+                  let releaseHeldDecode;
+                  let releaseFollowUpDecode;
+                  const heldDecodePromise = new Promise(resolve => { releaseHeldDecode = resolve; });
+                  const followUpDecodePromise = new Promise(resolve => { releaseFollowUpDecode = resolve; });
+                  window.fixtureReleaseEventDecode = releaseHeldDecode;
+                  window.fixtureReleaseEventFollowUpDecode = releaseFollowUpDecode;
+                  window.fixtureRestoreEventDecode = () => {
+                    HTMLImageElement.prototype.decode = originalDecode;
+                  };
+                  HTMLImageElement.prototype.decode = function () {
+                    if (!this.id && !heldDecode) {
+                      heldDecode = true;
+                      document.body.dataset.fixtureEventDecodeStarted = 'true';
+                      return heldDecodePromise;
+                    }
+                    if (!this.id && !document.body.dataset.fixtureEventFollowUpDecodeStarted) {
+                      document.body.dataset.fixtureEventFollowUpDecodeStarted = 'true';
+                      return followUpDecodePromise;
+                    }
+                    return originalDecode.call(this);
+                  };
+                }
+                """);
+
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Page.Locator("#df-status")).ToContainTextAsync("Tap sent to");
+            await Page.Clock.RunForAsync(50);
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-event-decode-started", "true");
+            Assert.Equal(1, Volatile.Read(ref stateRequests));
+
+            Volatile.Write(ref _text, "Changed after tap event");
+            await Page.EvaluateAsync(
+                "() => window.fixtureEventsSocket.emit({ type: 'tree-changed' })");
+            await Page.Clock.RunForAsync(200);
+            await Page.EvaluateAsync("() => window.fixtureReleaseEventDecode()");
+
+            await eventRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(2, Volatile.Read(ref stateRequests));
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-event-follow-up-decode-started", "true");
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+
+            await Page.EvaluateAsync("() => window.fixtureReleaseEventFollowUpDecode()");
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Changed after tap event");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            await Page.EvaluateAsync("""
+                () => {
+                  window.fixtureRestoreEventDecode?.();
+                  window.fixtureRestoreWebSocket?.();
+                }
+                """);
+            await Page.UnrouteAsync("**/api/eventSupport");
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task Tap_RejectedScrollDuringImageDecodeDoesNotRestartCapture()
+    {
+        await Page.Clock.InstallAsync();
+        await Page.Clock.PauseAtAsync(DateTime.UtcNow.AddSeconds(1));
+        var stateRequests = 0;
+        Page.Request += (_, request) =>
+        {
+            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                Interlocked.Increment(ref stateRequests);
+        };
+        await Page.RouteAsync("**/api/scroll", route => route.FulfillAsync(new()
+        {
+            Status = 409,
+            ContentType = "application/json",
+            Body = """{"ok":false,"reason":"fixture rejection"}"""
+        }));
+        await Page.EvaluateAsync("""
+            () => {
+              const originalDecode = HTMLImageElement.prototype.decode;
+              let releaseDecode;
+              const pendingDecode = new Promise(resolve => { releaseDecode = resolve; });
+              window.fixtureReleaseRejectedScrollDecode = releaseDecode;
+              window.fixtureRestoreRejectedScrollDecode = () => {
+                HTMLImageElement.prototype.decode = originalDecode;
+              };
+              HTMLImageElement.prototype.decode = function () {
+                if (!this.id && !document.body.dataset.fixtureRejectedScrollDecodeStarted) {
+                  document.body.dataset.fixtureRejectedScrollDecodeStarted = 'true';
+                  return pendingDecode;
+                }
+                return originalDecode.call(this);
+              };
+            }
+            """);
+        try
+        {
+            await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+            await Expect(Page.Locator("#df-status")).ToContainTextAsync("Tap sent to");
+            await Page.Clock.RunForAsync(50);
+            await Expect(Page.Locator("body"))
+                .ToHaveAttributeAsync("data-fixture-rejected-scroll-decode-started", "true");
+            Assert.Equal(1, Volatile.Read(ref stateRequests));
+
+            await Page.EvaluateAsync("""
+                () => document.querySelector('#app-viewport').dispatchEvent(
+                  new WheelEvent('wheel', { deltaY: 120, clientX: 40, clientY: 120, bubbles: true, cancelable: true }))
+                """);
+            await Page.Clock.RunForAsync(500);
+            Assert.Equal(1, Volatile.Read(ref stateRequests));
+            await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync();
+
+            await Page.EvaluateAsync("() => window.fixtureReleaseRejectedScrollDecode()");
+            await Page.Clock.RunForAsync(50);
+            await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+            Assert.Equal(1, Volatile.Read(ref stateRequests));
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            await Page.EvaluateAsync("() => window.fixtureRestoreRejectedScrollDecode?.()");
+            await Page.UnrouteAsync("**/api/scroll");
         }
     }
 
