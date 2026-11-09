@@ -870,6 +870,37 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task Tap_FrameRejectionQueuesEvidenceRefresh()
+    {
+        var refreshStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var trackRefresh = 0;
+        Page.Request += (_, request) =>
+        {
+            if (Volatile.Read(ref trackRefresh) == 1 &&
+                request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+            {
+                refreshStarted.TrySetResult();
+            }
+        };
+        await Page.RouteAsync("**/api/tap", route => route.FulfillAsync(new()
+        {
+            Status = 410,
+            ContentType = "application/json",
+            Body = """{"ok":false,"error":"frame-expired","reason":"The referenced Inspector frame has expired.","retryable":true}"""
+        }));
+
+        Volatile.Write(ref trackRefresh, 1);
+        await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync();
+        await refreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await Expect(Page.Locator("#df-status")).ToContainTextAsync(
+            "The referenced Inspector frame has expired.");
+        await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task Tap_FailedRefreshKeepsHintUntilAutomaticRetryRenders()
     {
         var requests = 0;

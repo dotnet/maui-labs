@@ -245,6 +245,21 @@ public class InspectorPageFilterTests
     }
 
     [Fact]
+    public void FindRootPageId_WhenTreeIsAlreadyPageRoot_UsesTheRoot()
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("page", "ContentPage", 0, 0, 400, 900,
+                children: El("label", "Label", 20, 40, 100, 30)),
+        };
+
+        var rootPageId = InspectorServer.FindRootPageId(tree);
+
+        Assert.Equal("page", rootPageId);
+        Assert.Same(tree, InspectorServer.SelectFrameTree(tree, rootPageId));
+    }
+
+    [Fact]
     public void RequiresFullscreenCapture_WhenNativeOverlayWouldBeDroppedFromTheFrame()
     {
         var tree = new List<ElementInfo>
