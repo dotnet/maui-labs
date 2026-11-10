@@ -593,7 +593,7 @@ public partial class InspectorLayoutWorkspaceTests
         {
             ContentType = "application/json", Body = """{"youAreWriter":true,"heldByOther":false}"""
         }));
-        await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new()
         {
             ContentType = "application/json",
             Body = JsonSerializer.Serialize(new

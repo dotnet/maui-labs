@@ -1836,7 +1836,8 @@ public sealed class InspectorServer : IDisposable
                     fullscreen ? null : rootPageId,
                     captureEpoch,
                     registryGeneration,
-                    fullscreen) ?? Array.Empty<byte>();
+                    fullscreen,
+                    force) ?? Array.Empty<byte>();
                 var hasScreenshot = screenshot.Length > 0;
                 var (width, height) = hasScreenshot ? ScreenshotImage.GetPngDimensions(screenshot) : (0, 0);
                 if (width <= 0 || height <= 0)
@@ -1917,7 +1918,8 @@ public sealed class InspectorServer : IDisposable
         string? elementId = null,
         long? captureEpoch = null,
         long? registryGeneration = null,
-        bool fullscreen = false)
+        bool fullscreen = false,
+        bool force = false)
     {
         long generation;
         lock (_cacheLock)
@@ -1926,7 +1928,8 @@ public sealed class InspectorServer : IDisposable
             // is not a valid response for a per-element request and vice versa.
             // Without this check, callers that vary elementId would receive
             // whichever shot happened to be cached first within the 200ms window.
-            if (_cachedScreenshot != null
+            if (!force
+                && _cachedScreenshot != null
                 && string.Equals(_cachedScreenshotElementId, elementId, StringComparison.Ordinal)
                 && _cachedScreenshotCaptureEpoch == captureEpoch
                 && _cachedScreenshotFullscreen == fullscreen

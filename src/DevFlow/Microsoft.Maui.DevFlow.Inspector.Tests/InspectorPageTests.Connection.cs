@@ -11,7 +11,7 @@ public partial class InspectorLayoutWorkspaceTests
         var appReachable = Task.FromResult(false);
         var stateRequests = 0;
         await PrepareLayoutWorkspaceAsync();
-        await _page.RouteAsync("**/api/state", async route =>
+        await _page.RouteAsync("**/api/state*", async route =>
         {
             Interlocked.Increment(ref stateRequests);
             if (await appReachable) await route.FallbackAsync();
@@ -73,7 +73,7 @@ public partial class InspectorLayoutWorkspaceTests
     public async Task RetryNowTimesOutAHungStateRequestAndCanTryAgain()
     {
         await PrepareLayoutWorkspaceAsync();
-        await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new() { Status = 503 }),
+        await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new() { Status = 503 }),
             new() { Times = 1 });
         await AdvanceLayoutPollingAsync();
         var overlay = _page.Locator("#df-disconnected-overlay");
@@ -87,7 +87,7 @@ public partial class InspectorLayoutWorkspaceTests
         {
             if (IsStateUrl(request.Url)) aborted.TrySetResult();
         };
-        await _page.RouteAsync("**/api/state", async route =>
+        await _page.RouteAsync("**/api/state*", async route =>
         {
             started.TrySetResult();
             await release.Task;
@@ -139,7 +139,7 @@ public partial class InspectorLayoutWorkspaceTests
         async Task FailAndRecoverAsync()
         {
             var requestsBefore = stateRequests;
-            await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new() { Status = 503 }),
+            await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new() { Status = 503 }),
                 new() { Times = 1 });
             await _page.RunAndWaitForResponseAsync(
                 () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),

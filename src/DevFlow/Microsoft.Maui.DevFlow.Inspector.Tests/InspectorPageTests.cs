@@ -391,7 +391,7 @@ public partial class InspectorPageTests : IAsyncLifetime
             (await viewport.GetAttributeAsync("data-height"))!,
             CultureInfo.InvariantCulture);
 
-        await _page.RouteAsync("**/api/state", async route =>
+        await _page.RouteAsync("**/api/state*", async route =>
         {
             await route.FulfillAsync(new()
             {
@@ -1704,7 +1704,7 @@ public partial class InspectorPageTests : IAsyncLifetime
                 Body = $"{{\"youAreWriter\":{ownsLease.ToString().ToLowerInvariant()},\"heldByOther\":false}}",
             });
         });
-        await _page.RouteAsync("**/api/state", route => route.FulfillAsync(new()
+        await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",

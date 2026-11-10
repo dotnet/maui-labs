@@ -218,7 +218,9 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
               let heldState = false;
               window.fixtureRestoreFetch = () => { window.fetch = realFetch; };
               window.fetch = (url, options = {}) => {
-                if (!heldState && typeof url === 'string' && url.endsWith('/api/state')) {
+                if (!heldState
+                    && typeof url === 'string'
+                    && new URL(url, location.href).pathname.endsWith('/api/state')) {
                   heldState = true;
                   options.signal?.addEventListener('abort', () => {
                     document.body.dataset.fixtureHeldStateAborted = 'true';
@@ -761,7 +763,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         var requests = 0;
         var retryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await Page.RouteAsync("**/api/state", async route =>
+        await Page.RouteAsync("**/api/state*", async route =>
         {
             if (Interlocked.Increment(ref requests) == 1)
             {
@@ -969,7 +971,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             ContentType = "application/json",
             Body = """{"ok":true,"elementId":"fixture-button"}"""
         }));
-        await Page.RouteAsync("**/api/state", async route =>
+        await Page.RouteAsync("**/api/state*", async route =>
         {
             if (Interlocked.Increment(ref requests) == 1)
             {

@@ -41,6 +41,9 @@ public class InspectorServerCaptureMetadataTests
             var requestsAfterFirstFrame = agent.RecordedRequests.Count(
                 request => request.Path == "/api/v1/ui/tree");
             Assert.True(requestsAfterFirstFrame > 0);
+            var screenshotsAfterFirstFrame = agent.RecordedRequests.Count(
+                request => request.Path == "/api/v1/ui/screenshot");
+            Assert.True(screenshotsAfterFirstFrame > 0);
 
             using (var reused = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state",
@@ -50,6 +53,9 @@ public class InspectorServerCaptureMetadataTests
             Assert.Equal(
                 requestsAfterFirstFrame,
                 agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/tree"));
+            Assert.Equal(
+                screenshotsAfterFirstFrame,
+                agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/screenshot"));
 
             using (var fresh = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state?fresh=1",
@@ -61,6 +67,9 @@ public class InspectorServerCaptureMetadataTests
             Assert.True(
                 agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/tree")
                 > requestsAfterFirstFrame);
+            Assert.True(
+                agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/screenshot")
+                > screenshotsAfterFirstFrame);
         }
         finally
         {
