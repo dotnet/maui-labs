@@ -105,55 +105,67 @@ public sealed class FlowReplayer
             switch (step.Action)
             {
                 case FlowActions.Tap:
-                {
-                    var target = await ResolveDriveTargetAsync(FlowValidator.EffectiveSelector(step), ct);
-                    if (target is null) return (false, "tap target could not be resolved");
-                    var (epoch, generation) = GetCaptureMetadata(target);
-                    return await _agent.TapAsync(target.Id, epoch, generation)
-                        ? (true, null)
-                        : (false, "tap reported failure");
-                }
+                    return await DriveCaptureBoundActionAsync(
+                        FlowValidator.EffectiveSelector(step),
+                        "tap target could not be resolved",
+                        "tap reported failure",
+                        (target, epoch, generation) =>
+                            _agent.TapResultAsync(target.Id, epoch, generation),
+                        ct);
                 case FlowActions.Fill:
-                {
-                    var target = await ResolveDriveTargetAsync(FlowValidator.EffectiveSelector(step), ct);
-                    if (target is null) return (false, "fill target could not be resolved");
-                    var (epoch, generation) = GetCaptureMetadata(target);
-                    return await _agent.FillAsync(
-                        target.Id,
-                        args?.Text ?? step.Value ?? "",
-                        epoch,
-                        generation)
-                        ? (true, null)
-                        : (false, "fill reported failure");
-                }
+                    return await DriveCaptureBoundActionAsync(
+                        FlowValidator.EffectiveSelector(step),
+                        "fill target could not be resolved",
+                        "fill reported failure",
+                        (target, epoch, generation) =>
+                            _agent.FillResultAsync(
+                                target.Id,
+                                args?.Text ?? step.Value ?? "",
+                                epoch,
+                                generation),
+                        ct);
                 case FlowActions.SetProperty:
                 {
-                    var target = await ResolveDriveTargetAsync(FlowValidator.EffectiveSelector(step), ct);
-                    if (target is null) return (false, "setProperty target could not be resolved");
                     var name = string.IsNullOrEmpty(args?.Name) ? "Text" : args!.Name!;
-                    var (epoch, generation) = GetCaptureMetadata(target);
-                    return await _agent.SetPropertyAsync(
-                        target.Id,
-                        name,
-                        args?.Value ?? step.Value ?? "",
-                        epoch,
-                        generation)
-                        ? (true, null) : (false, "setProperty reported failure");
+                    return await DriveCaptureBoundActionAsync(
+                        FlowValidator.EffectiveSelector(step),
+                        "setProperty target could not be resolved",
+                        "setProperty reported failure",
+                        (target, epoch, generation) =>
+                            _agent.SetPropertyResultAsync(
+                                target.Id,
+                                name,
+                                args?.Value ?? step.Value ?? "",
+                                epoch,
+                                generation),
+                        ct);
                 }
                 case FlowActions.Scroll:
                 {
-                    ElementInfo? target = null;
                     var sel = FlowValidator.EffectiveSelector(step);
                     if (sel is not null && !sel.IsEmpty)
                     {
-                        target = await ResolveDriveTargetAsync(sel, ct);
-                        if (target is null) return (false, "scroll target could not be resolved");
+                        return await DriveCaptureBoundActionAsync(
+                            sel,
+                            "scroll target could not be resolved",
+                            "scroll reported failure",
+                            (target, epoch, generation) =>
+                                _agent.ScrollResultAsync(
+                                    elementId: target.Id,
+                                    deltaX: args?.Dx ?? 0,
+                                    deltaY: args?.Dy ?? 0,
+                                    animated: args?.Animated ?? false,
+                                    window: null,
+                                    itemIndex: args?.ItemIndex,
+                                    groupIndex: null,
+                                    scrollToPosition: args?.Position,
+                                    captureEpoch: epoch,
+                                    registryGeneration: generation),
+                            ct);
                     }
-                    var (epoch, generation) = target is null
-                        ? (null, null)
-                        : GetCaptureMetadata(target);
-                    var ok = await _agent.ScrollAsync(
-                        elementId: target?.Id,
+
+                    var result = await _agent.ScrollResultAsync(
+                        elementId: null,
                         deltaX: args?.Dx ?? 0,
                         deltaY: args?.Dy ?? 0,
                         animated: args?.Animated ?? false,
@@ -161,9 +173,11 @@ public sealed class FlowReplayer
                         itemIndex: args?.ItemIndex,
                         groupIndex: null,
                         scrollToPosition: args?.Position,
-                        captureEpoch: epoch,
-                        registryGeneration: generation);
-                    return ok ? (true, null) : (false, "scroll reported failure");
+                        captureEpoch: null,
+                        registryGeneration: null);
+                    return result.Success
+                        ? (true, null)
+                        : (false, "scroll reported failure");
                 }
                 case FlowActions.Navigate:
                 {
@@ -188,6 +202,7 @@ public sealed class FlowReplayer
                     return (false, $"unknown action: {step.Action}");
             }
         }
+
         catch (OperationCanceledException)
         {
             throw;
@@ -196,6 +211,37 @@ public sealed class FlowReplayer
         {
             return (false, $"drive failed: {ex.Message}");
         }
+    }
+
+    private async Task<(bool Ok, string? Error)> DriveCaptureBoundActionAsync(
+        FlowSelector? selector,
+        string unresolvedError,
+        string failureError,
+        Func<ElementInfo, long?, long?, Task<ActionResult>> execute,
+        CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var target = await ResolveDriveTargetAsync(selector, ct);
+            if (target is null)
+                return (false, unresolvedError);
+
+            var (epoch, generation) = GetCaptureMetadata(target);
+            var result = await execute(target, epoch, generation);
+            if (result.Success)
+                return (true, null);
+            if (attempt == 0
+                && result.Retryable
+                && !result.TransportFailure)
+            {
+                if (_pollGapMs > 0)
+                    await Task.Delay(_pollGapMs, ct);
+                continue;
+            }
+            return (false, failureError);
+        }
+
+        return (false, failureError);
     }
 
     private async Task<FlowAssertResult> VerifyAsync(FlowAssert a, CancellationToken ct)

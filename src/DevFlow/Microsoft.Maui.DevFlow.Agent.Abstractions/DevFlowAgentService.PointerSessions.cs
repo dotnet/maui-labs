@@ -770,6 +770,16 @@ public partial class DevFlowAgentService
                     body.Sample,
                     active.Cancellation.Token).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (active.Cancellation.IsCancellationRequested)
+            {
+                return await TerminatePointerSessionAfterFailureAsync(
+                    active,
+                    "Pointer session was cancelled while applying the final sample.",
+                    "pointer-session-cancelled",
+                    "end",
+                    fingerprint,
+                    body.Sequence).ConfigureAwait(false);
+            }
             catch (Exception ex)
             {
                 return await TerminatePointerSessionAfterFailureAsync(
@@ -1132,7 +1142,8 @@ public partial class DevFlowAgentService
         int responseStatusCode = 200,
         string? lifecycleOutcome = null)
     {
-        if (string.Equals(operationKind, "cancel", StringComparison.Ordinal))
+        if (string.Equals(operationKind, "cancel", StringComparison.Ordinal)
+            || !reply.Success)
         {
             try { InvalidatePointerSessionMutationState(); }
             catch { }

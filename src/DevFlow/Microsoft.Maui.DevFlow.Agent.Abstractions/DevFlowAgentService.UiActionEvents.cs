@@ -32,11 +32,30 @@ public partial class DevFlowAgentService
         public string? DiagnosticInputsRevision { get; init; }
     }
 
+    protected readonly record struct UiActionCaptureMetadata(
+        long? CaptureEpoch,
+        long? RegistryGeneration,
+        int? WindowId,
+        string? DiagnosticInputsRevision);
+
     protected virtual string? GetUiActionDiagnosticInputsRevision(
         long? captureEpoch,
         long? registryGeneration,
         int? windowId)
         => null;
+
+    protected virtual UiActionCaptureMetadata GetUiActionCaptureMetadata(
+        long? captureEpoch,
+        long? registryGeneration,
+        int? windowId)
+        => new(
+            captureEpoch,
+            registryGeneration,
+            windowId,
+            GetUiActionDiagnosticInputsRevision(
+                captureEpoch,
+                registryGeneration,
+                windowId));
 
     protected Task<HttpResponse> ExecuteUiActionMutationAsync(
         HttpRequest request,
@@ -122,6 +141,23 @@ public partial class DevFlowAgentService
         BatchRequest body,
         Func<BatchActionRequest, Task<HttpResponse>> executeAction)
     {
+        var windowId = ReadWindowId(request, default);
+        return await ExecuteBatchActionsWithLifecycleAsync(
+            request,
+            body,
+            GetUiActionCaptureMetadata(
+                body.CaptureEpoch,
+                body.RegistryGeneration,
+                windowId),
+            executeAction);
+    }
+
+    protected async Task<HttpResponse> ExecuteBatchActionsWithLifecycleAsync(
+        HttpRequest request,
+        BatchRequest body,
+        UiActionCaptureMetadata capture,
+        Func<BatchActionRequest, Task<HttpResponse>> executeAction)
+    {
         var results = new List<object>(body.Actions.Count);
         var allSucceeded = true;
 
@@ -131,9 +167,7 @@ public partial class DevFlowAgentService
             var descriptor = CreateUiActionDescriptor(
                 actionName,
                 action,
-                body.CaptureEpoch,
-                body.RegistryGeneration,
-                ReadWindowId(request, default));
+                capture);
             var lifecycleRequest = new HttpRequest
             {
                 Method = request.Method,
@@ -334,9 +368,10 @@ public partial class DevFlowAgentService
                     normalizedKind = NormalizeUiActionKind(gestureKind);
             }
 
-            var captureEpoch = ReadPositiveInt64(body, "captureEpoch");
-            var registryGeneration = ReadNonNegativeInt64(body, "registryGeneration");
-            var windowId = ReadWindowId(request, body);
+            var capture = GetUiActionCaptureMetadata(
+                ReadPositiveInt64(body, "captureEpoch"),
+                ReadNonNegativeInt64(body, "registryGeneration"),
+                ReadWindowId(request, body));
             return new UiActionDescriptor
             {
                 Kind = normalizedKind,
@@ -357,14 +392,11 @@ public partial class DevFlowAgentService
                 Direction = ReadSafeDirection(body),
                 DurationMs = ReadBoundedInt(body, "durationMs"),
                 HoldMs = ReadBoundedInt(body, "holdMs"),
-                CaptureEpoch = captureEpoch,
-                RegistryGeneration = registryGeneration,
-                WindowId = windowId,
+                CaptureEpoch = capture.CaptureEpoch,
+                RegistryGeneration = capture.RegistryGeneration,
+                WindowId = capture.WindowId,
                 DiagnosticInputsRevision = ReadSafeToken(
-                    GetUiActionDiagnosticInputsRevision(
-                        captureEpoch,
-                        registryGeneration,
-                        windowId),
+                    capture.DiagnosticInputsRevision,
                     128)
             };
         }
@@ -381,9 +413,7 @@ public partial class DevFlowAgentService
     private UiActionDescriptor CreateUiActionDescriptor(
         string actionName,
         BatchActionRequest action,
-        long? captureEpoch,
-        long? registryGeneration,
-        int? windowId)
+        UiActionCaptureMetadata capture)
     {
         var kind = actionName == "gesture"
             ? NormalizeUiActionKind(action.Type)
@@ -405,14 +435,15 @@ public partial class DevFlowAgentService
             Direction = NormalizeDirection(action.Direction),
             DurationMs = BoundedDuration(action.DurationMs),
             HoldMs = BoundedDuration(action.HoldMs),
-            CaptureEpoch = captureEpoch is > 0 ? captureEpoch : null,
-            RegistryGeneration = registryGeneration is >= 0 ? registryGeneration : null,
-            WindowId = windowId,
+            CaptureEpoch = capture.CaptureEpoch is > 0
+                ? capture.CaptureEpoch
+                : null,
+            RegistryGeneration = capture.RegistryGeneration is >= 0
+                ? capture.RegistryGeneration
+                : null,
+            WindowId = capture.WindowId,
             DiagnosticInputsRevision = ReadSafeToken(
-                GetUiActionDiagnosticInputsRevision(
-                    captureEpoch,
-                    registryGeneration,
-                    windowId),
+                capture.DiagnosticInputsRevision,
                 128)
         };
     }

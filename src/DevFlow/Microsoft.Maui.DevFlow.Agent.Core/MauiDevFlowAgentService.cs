@@ -1188,6 +1188,38 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         }
     }
 
+    protected override UiActionCaptureMetadata GetUiActionCaptureMetadata(
+        long? captureEpoch,
+        long? registryGeneration,
+        int? windowId)
+    {
+        if (captureEpoch is not > 0)
+            return base.GetUiActionCaptureMetadata(
+                captureEpoch,
+                registryGeneration,
+                windowId);
+
+        lock (_captureStateGate)
+        {
+            if (_captureLeases.TryGetValue(captureEpoch.Value, out var capture)
+                && (registryGeneration is null
+                    || capture.RegistryGeneration == registryGeneration)
+                && (windowId is null || capture.WindowId == windowId))
+            {
+                return new UiActionCaptureMetadata(
+                    capture.Epoch,
+                    capture.RegistryGeneration,
+                    capture.WindowId,
+                    FormatDiagnosticInputsRevision(capture));
+            }
+        }
+
+        return base.GetUiActionCaptureMetadata(
+            captureEpoch,
+            registryGeneration,
+            windowId);
+    }
+
     private static string FormatDiagnosticInputsRevision(UiCaptureContext capture)
         => FormattableString.Invariant(
             $"{capture.RegistryGeneration}:{capture.MutationGeneration}:{capture.ExternalMutationGeneration}");
@@ -3833,6 +3865,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return await ExecuteBatchActionsWithLifecycleAsync(
                 request,
                 body,
+                reservation.Capture.Epoch > 0
+                    ? new UiActionCaptureMetadata(
+                        reservation.Capture.Epoch,
+                        reservation.Capture.RegistryGeneration,
+                        reservation.Capture.WindowId,
+                        FormatDiagnosticInputsRevision(reservation.Capture))
+                    : default,
                 async action =>
                 {
                     var identityError = await ValidateCapturedElementIdentityAsync(reservation.Capture, action.ElementId)

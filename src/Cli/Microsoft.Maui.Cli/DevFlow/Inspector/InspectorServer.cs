@@ -844,6 +844,7 @@ public sealed class InspectorServer : IDisposable
         using var assembled = new MemoryStream();
         var assembledMessageType =
             System.Net.WebSockets.WebSocketMessageType.Text;
+        var relayState = new UiEventRelayState();
         using var sendGate = new SemaphoreSlim(1, 1);
         await using var diagnosticsDebouncer = new DiagnosticsDeltaDebouncer(
             CaptureLayoutDiagnosticsDeltaAsync,
@@ -883,7 +884,7 @@ public sealed class InspectorServer : IDisposable
                 if (assembledMessageType
                     == System.Net.WebSockets.WebSocketMessageType.Text)
                 {
-                    payload = ProcessUiEventPayload(payload);
+                    payload = ProcessUiEventPayload(payload, relayState);
                 }
                 await SendWebSocketMessageAsync(
                     destination,
@@ -5139,6 +5140,7 @@ public sealed class InspectorServer : IDisposable
             const int MaxAssembledMessageBytes = 4 * 1024 * 1024; // 4 MB
             var buffer = new byte[8192];
             using var assembled = new MemoryStream();
+            var relayState = new UiEventRelayState();
             using var sendGate = new SemaphoreSlim(1, 1);
             await using var diagnosticsDebouncer = new DiagnosticsDeltaDebouncer(
                 CaptureLayoutDiagnosticsDeltaAsync,
@@ -5172,7 +5174,9 @@ public sealed class InspectorServer : IDisposable
                     }
                     if (result.EndOfMessage)
                     {
-                        var payload = ProcessUiEventPayload(assembled.ToArray());
+                        var payload = ProcessUiEventPayload(
+                            assembled.ToArray(),
+                            relayState);
                         assembled.SetLength(0);
                         await SendWebSocketFrameAsync(
                             clientStream,
@@ -5191,9 +5195,13 @@ public sealed class InspectorServer : IDisposable
         }
     }
 
-    // State-changing events invalidate the current capture before the browser refreshes. Action
+    // State-changing events invalidate the current capture before the browser refreshes. Initial
+    // lifecycle/navigation snapshots and originating Inspector echoes describe state this server
+    // already knows, so they must not supersede a frame another request is still using. Action
     // events also gain the matching cached Inspector frame when the agent only knew its capture.
-    internal byte[] ProcessUiEventPayload(byte[] payload)
+    internal byte[] ProcessUiEventPayload(
+        byte[] payload,
+        UiEventRelayState? relayState = null)
     {
         JsonNode? message;
         try
@@ -5213,17 +5221,12 @@ public sealed class InspectorServer : IDisposable
         }
 
         var eventData = root["data"] as JsonObject;
+        var initialSnapshot = relayState?.IsInitialSnapshot(root, type) == true;
         var completedAction = type == "ui-action-completed";
         var localCompletedAction = completedAction && IsLocalInspectorAction(eventData);
-        var localCompletionAlreadyInvalidated = localCompletedAction
-            && ((eventData?["success"] is JsonValue successValue
-                    && successValue.TryGetValue<bool>(out var success)
-                    && success)
-                || (eventData?["outcome"] is JsonValue outcomeValue
-                    && outcomeValue.TryGetValue<string>(out var outcome)
-                    && string.Equals(outcome, "cancelled", StringComparison.Ordinal)));
-        if (type is "navigation" or "treeChange" or "lifecycle"
-            || (completedAction && !localCompletionAlreadyInvalidated))
+        if (!initialSnapshot
+            && (type is "navigation" or "treeChange" or "lifecycle"
+                || (completedAction && !localCompletedAction)))
         {
             InvalidateScreenshotCache();
         }
@@ -5262,9 +5265,7 @@ public sealed class InspectorServer : IDisposable
                             frame.DiagnosticInputsRevision,
                             diagnosticInputsRevision,
                             StringComparison.Ordinal)
-                        && (windowId is null
-                            || frame.WindowId is null
-                            || frame.WindowId == windowId))
+                        && ActionWindowMatches(frame.WindowId, windowId))
                     .MaxBy(static frame => frame.CreatedUtc);
             }
             else if (captureEpoch is not null)
@@ -5273,7 +5274,7 @@ public sealed class InspectorServer : IDisposable
                     .Where(frame => frame.CaptureEpoch == captureEpoch
                         && (registryGeneration is null
                             || frame.RegistryGeneration == registryGeneration)
-                        && (windowId is null || frame.WindowId == windowId))
+                        && ActionWindowMatches(frame.WindowId, windowId))
                     .MaxBy(static frame => frame.CreatedUtc);
             }
         }
@@ -5297,6 +5298,44 @@ public sealed class InspectorServer : IDisposable
         return Encoding.UTF8.GetBytes(root.ToJsonString());
     }
 
+    internal sealed class UiEventRelayState
+    {
+        private bool _firstMessage = true;
+        private string? _initialSnapshotTimestamp;
+
+        internal bool IsInitialSnapshot(JsonObject root, string type)
+        {
+            var timestamp = root["timestamp"] is JsonValue timestampValue
+                && timestampValue.TryGetValue<string>(out var parsedTimestamp)
+                    ? parsedTimestamp
+                    : null;
+
+            if (_firstMessage)
+            {
+                _firstMessage = false;
+                if (type == "lifecycle")
+                {
+                    _initialSnapshotTimestamp = timestamp;
+                    return true;
+                }
+                return false;
+            }
+
+            if (type != "navigation"
+                || _initialSnapshotTimestamp is null)
+                return false;
+
+            var matches = string.Equals(
+                    timestamp,
+                    _initialSnapshotTimestamp,
+                    StringComparison.Ordinal)
+                && root["data"] is JsonObject data
+                && data["from"] is null;
+            _initialSnapshotTimestamp = null;
+            return matches;
+        }
+    }
+
     private static long? TryGetInt64(JsonNode? node)
         => node is JsonValue value && value.TryGetValue<long>(out var number)
             ? number
@@ -5306,6 +5345,11 @@ public sealed class InspectorServer : IDisposable
         => node is JsonValue value && value.TryGetValue<int>(out var number)
             ? number
             : null;
+
+    private static bool ActionWindowMatches(
+        int? frameWindowId,
+        int? actionWindowId)
+        => (frameWindowId ?? 0) == (actionWindowId ?? 0);
 
     private static string? TryGetBoundedString(JsonNode? node, int maxLength)
     {

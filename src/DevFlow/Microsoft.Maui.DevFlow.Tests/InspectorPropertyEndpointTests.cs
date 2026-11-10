@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -136,6 +137,177 @@ public class InspectorPropertyEndpointTests
                 Assert.False(string.IsNullOrWhiteSpace(correlation.GetProperty("streamId").GetString()));
                 Assert.True(correlation.GetProperty("frameRevision").GetInt64() > 0);
             }
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task UiActionEvents_LocalFailureAndInitialSnapshots_DoNotSupersedeFrame()
+    {
+        await using var agent = new FakeAgent(
+            new ElementInfo
+            {
+                Id = "action-target",
+                Type = "Button",
+                IsVisible = true,
+                IsEnabled = true,
+                Bounds = new BoundsInfo { X = 10, Y = 20, Width = 100, Height = 40 }
+            },
+            tapResponse: _ => false);
+        using var inspector = new InspectorServer(
+            FreePort(),
+            "127.0.0.1",
+            agent.Port);
+        inspector.Start();
+        try
+        {
+            using var http = new HttpClient();
+            var page = await http.GetStringAsync(
+                $"http://127.0.0.1:{inspector.Port}/");
+            var encodedFrame = Regex.Match(
+                page,
+                "<meta\\s+name=\"devflow-frame\"\\s+content=\"([^\"]+)\"")
+                .Groups[1]
+                .Value;
+            using var state = JsonDocument.Parse(
+                WebUtility.HtmlDecode(encodedFrame));
+            var frameId = state.RootElement.GetProperty("frameId").GetString();
+            var generation = InspectorCacheGeneration(inspector);
+            const string actionId = "local-rejected-candidate";
+
+            using var response = await http.PostAsync(
+                $"http://127.0.0.1:{inspector.Port}/api/tap",
+                Json(
+                    $$"""
+                    {
+                      "elementId":"action-target",
+                      "correlation":{
+                        "actionId":"{{actionId}}",
+                        "source":"inspector",
+                        "frameId":"{{frameId}}"
+                      }
+                    }
+                    """));
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(generation, InspectorCacheGeneration(inspector));
+
+            var failed = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                type = "ui-action-completed",
+                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                data = new
+                {
+                    correlation = new { actionId, source = "inspector" },
+                    kind = "tap",
+                    success = false,
+                    outcome = "failed",
+                    reason = "action-rejected"
+                }
+            });
+            inspector.ProcessUiEventPayload(failed);
+            Assert.Equal(generation, InspectorCacheGeneration(inspector));
+
+            var snapshotTimestamp = DateTimeOffset.UtcNow.ToString("O");
+            var relayState = new InspectorServer.UiEventRelayState();
+            inspector.ProcessUiEventPayload(
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "lifecycle",
+                    timestamp = snapshotTimestamp,
+                    data = new { state = "started", timestamp = snapshotTimestamp }
+                }),
+                relayState);
+            inspector.ProcessUiEventPayload(
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "ui-action-started",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    data = new
+                    {
+                        correlation = new { actionId = "interleaved", source = "mcp" },
+                        kind = "tap"
+                    }
+                }),
+                relayState);
+            inspector.ProcessUiEventPayload(
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "navigation",
+                    timestamp = snapshotTimestamp,
+                    data = new
+                    {
+                        from = (string?)null,
+                        to = "//current",
+                        route = "//current",
+                        timestamp = snapshotTimestamp
+                    }
+                }),
+                relayState);
+            Assert.Equal(generation, InspectorCacheGeneration(inspector));
+
+            inspector.ProcessUiEventPayload(
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    type = "treeChange",
+                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    data = new { reason = "changed" }
+                }),
+                relayState);
+            Assert.Equal(generation + 1, InspectorCacheGeneration(inspector));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task UiActionEvents_IdentitylessDefaultWindowDoesNotMatchAnotherWindow()
+    {
+        await using var agent = new FakeAgent(
+            new ElementInfo
+            {
+                Id = "window-two-target",
+                Type = "Button",
+                IsVisible = true,
+                IsEnabled = true,
+                CaptureEpoch = 42,
+                RegistryGeneration = 7,
+                WindowId = 2,
+                Bounds = new BoundsInfo { X = 10, Y = 20, Width = 100, Height = 40 }
+            },
+            diagnosticInputsRevision: "7:3:0");
+        using var inspector = new InspectorServer(
+            FreePort(),
+            "127.0.0.1",
+            agent.Port);
+        inspector.Start();
+        try
+        {
+            using var http = new HttpClient();
+            await http.GetStringAsync($"http://127.0.0.1:{inspector.Port}/");
+            var payload = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                type = "ui-action-started",
+                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                data = new
+                {
+                    correlation = new { actionId = "default-window", source = "mcp" },
+                    kind = "tap",
+                    diagnosticInputsRevision = "7:3:0"
+                }
+            });
+
+            using var processed = JsonDocument.Parse(
+                inspector.ProcessUiEventPayload(payload));
+            var correlation = processed.RootElement
+                .GetProperty("data")
+                .GetProperty("correlation");
+
+            Assert.False(correlation.TryGetProperty("frameId", out _));
         }
         finally
         {
@@ -870,6 +1042,11 @@ public class InspectorPropertyEndpointTests
     }
 
     private static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+    private static long InspectorCacheGeneration(InspectorServer inspector)
+        => Assert.IsType<long>(typeof(InspectorServer)
+            .GetField("_cacheGeneration", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(inspector));
 
     private static int FreePort()
     {

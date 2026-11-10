@@ -277,7 +277,8 @@ public class SetPropertyBindableTests
 
         using var harness = await SetPropertyTestHarness.CreateAsync(button);
         harness.Client.MutationLeaseHolderKind = "mcp";
-        var target = Assert.Single(await harness.Client.QueryAsync(automationId: button.AutomationId));
+        var target = Assert.Single(
+            await harness.Client.QueryAsync(automationId: button.AutomationId));
         using var socket = await ConnectUiEventsAsync(
             harness.Port,
             "ui-action-started",
@@ -412,7 +413,13 @@ public class SetPropertyBindableTests
 
         using var harness = await SetPropertyTestHarness.CreateAsync(button);
         harness.Client.MutationLeaseHolderKind = "mcp";
-        var target = Assert.Single(await harness.Client.QueryAsync(automationId: button.AutomationId));
+        var snapshot = Assert.IsType<ElementTreeSnapshot>(
+            await harness.Client.GetTreeSnapshotAsync());
+        var expectedRevision = Assert.IsType<string>(
+            snapshot.DiagnosticInputsRevision);
+        var target = Assert.Single(
+            FlattenElements(snapshot.Elements),
+            element => element.AutomationId == button.AutomationId);
         using var socket = await ConnectUiEventsAsync(
             harness.Port,
             "ui-action-started",
@@ -441,17 +448,22 @@ public class SetPropertyBindableTests
 
         var startedIds = new HashSet<string>(StringComparer.Ordinal);
         var completedIds = new HashSet<string>(StringComparer.Ordinal);
+        var startedRevisions = new List<string?>();
         while (startedIds.Count < 2 || completedIds.Count < 2)
         {
             using var message = await ReceiveUiEventAsync(socket);
             var type = message.RootElement.GetProperty("type").GetString();
-            var id = message.RootElement
-                .GetProperty("data")
+            var data = message.RootElement.GetProperty("data");
+            var id = data
                 .GetProperty("correlation")
                 .GetProperty("actionId")
                 .GetString()!;
             if (type == "ui-action-started")
+            {
                 startedIds.Add(id);
+                startedRevisions.Add(
+                    data.GetProperty("diagnosticInputsRevision").GetString());
+            }
             else if (type == "ui-action-completed")
                 completedIds.Add(id);
         }
@@ -459,6 +471,9 @@ public class SetPropertyBindableTests
         Assert.Equal(2, startedIds.Count);
         Assert.True(startedIds.SetEquals(completedIds));
         Assert.DoesNotContain("batch-container", startedIds);
+        Assert.All(
+            startedRevisions,
+            revision => Assert.Equal(expectedRevision, revision));
     }
 
     [Fact]
@@ -600,6 +615,17 @@ public class SetPropertyBindableTests
 
         Assert.NotNull(observation);
         Assert.Equal("10", observation.Value);
+    }
+
+    private static IEnumerable<Microsoft.Maui.DevFlow.Driver.ElementInfo> FlattenElements(
+        IEnumerable<Microsoft.Maui.DevFlow.Driver.ElementInfo> roots)
+    {
+        foreach (var root in roots)
+        {
+            yield return root;
+            foreach (var child in FlattenElements(root.Children ?? []))
+                yield return child;
+        }
     }
 
     private sealed class SetPropertyTestHarness : IDisposable

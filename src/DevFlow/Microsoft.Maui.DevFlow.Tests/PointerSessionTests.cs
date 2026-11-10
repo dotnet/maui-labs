@@ -93,6 +93,7 @@ public class PointerSessionTests
             Assert.Single(
                 service.Events,
                 value => value == (operation == "move" ? "move:1" : "end"));
+            Assert.Equal(1, service.InvalidationCount);
         });
     }
 
@@ -405,6 +406,7 @@ public class PointerSessionTests
             Assert.False(move.Success);
             Assert.Equal("cancelled", cancel.State);
             Assert.Single(service.Events, value => value == "cancel:pointer-session-cancelled");
+            Assert.Equal(1, service.InvalidationCount);
             var cancelRetry = await client.CancelPointerSessionAsync("race", "pointercancel");
             Assert.Equal(200, cancelRetry.StatusCode);
             using var completed = await ReceiveUiEventAsync(
@@ -417,6 +419,7 @@ public class PointerSessionTests
             Assert.Equal(
                 "pointer-session-cancelled",
                 completedData.GetProperty("reason").GetString());
+            Assert.Equal(1, service.InvalidationCount);
             await AssertNoUiEventAsync(socket);
         });
     }
@@ -465,6 +468,55 @@ public class PointerSessionTests
             Assert.Equal(
                 "pointer-session-cancelled",
                 completedData.GetProperty("reason").GetString());
+            await AssertNoUiEventAsync(socket);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_CancelPreemptsInFlightEnd_EmitsCancelled()
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            service.BlockEnds = true;
+            using var socket = await ConnectUiEventsAsync(
+                client,
+                "ui-action-started",
+                "ui-action-completed");
+            using (client.UseActionContext(
+                actionId: "pointer-end-race",
+                coordinateSpace: "windowLogical"))
+            {
+                Assert.True((await client.StartPointerSessionAsync(
+                    Start("end-race"))).Success);
+            }
+            using var started = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-started",
+                "pointer-end-race");
+
+            var endTask = client.EndPointerSessionAsync(
+                "end-race",
+                1,
+                Sample(10, 10, 10));
+            await service.EndStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var cancelTask = client.CancelPointerSessionAsync(
+                "end-race",
+                "pointercancel");
+
+            Assert.False((await endTask.WaitAsync(TimeSpan.FromSeconds(5))).Success);
+            Assert.Equal(
+                "cancelled",
+                (await cancelTask.WaitAsync(TimeSpan.FromSeconds(5))).State);
+            using var completed = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-completed",
+                "pointer-end-race");
+            var completedData = completed.RootElement.GetProperty("data");
+            Assert.Equal("cancelled", completedData.GetProperty("outcome").GetString());
+            Assert.Equal(
+                "pointer-session-cancelled",
+                completedData.GetProperty("reason").GetString());
+            Assert.Equal(1, service.InvalidationCount);
             await AssertNoUiEventAsync(socket);
         });
     }
@@ -830,6 +882,8 @@ public class PointerSessionTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource MoveStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource EndStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StartStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseStart { get; } =
@@ -843,6 +897,7 @@ public class PointerSessionTests
         public bool BlockStarts { get; set; }
         public bool BlockAfterStart { get; set; }
         public bool BlockMoves { get; set; }
+        public bool BlockEnds { get; set; }
         public bool BlockBack { get; set; }
         public bool DispatchStarts { get; set; }
         public bool FailMoves { get; set; }
@@ -851,6 +906,7 @@ public class PointerSessionTests
         public bool RejectRepeatedPrepare { get; set; }
         public int PrepareStartCalls { get; private set; }
         public int BackCalls { get; private set; }
+        public int InvalidationCount { get; private set; }
 
         protected override PointerStreamSupport GetPointerStreamSupport()
             => new(
@@ -926,21 +982,26 @@ public class PointerSessionTests
             return PointerSessionBackendResult.Applied();
         }
 
-        protected override Task<PointerSessionBackendResult> EndPointerSessionBackendAsync(
+        protected override async Task<PointerSessionBackendResult> EndPointerSessionBackendAsync(
             object state,
             PointerSessionSample sample,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Events.Enqueue("end");
+            if (BlockEnds)
+            {
+                EndStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
             if (FailEnds)
             {
-                return Task.FromResult(PointerSessionBackendResult.Failed(
+                return PointerSessionBackendResult.Failed(
                     "test pointer end failure",
                     500,
-                    "test-pointer-failure"));
+                    "test-pointer-failure");
             }
-            return Task.FromResult(PointerSessionBackendResult.Applied());
+            return PointerSessionBackendResult.Applied();
         }
 
         protected override Task<PointerSessionBackendResult> CancelPointerSessionBackendAsync(
@@ -956,6 +1017,9 @@ public class PointerSessionTests
                     "test-pointer-cancel-failure")
                 : PointerSessionBackendResult.Applied());
         }
+
+        protected override void InvalidatePointerSessionMutationState()
+            => InvalidationCount++;
 
         protected override async Task<HttpResponse> HandleBack(HttpRequest request)
         {

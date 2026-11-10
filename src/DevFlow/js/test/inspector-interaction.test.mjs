@@ -31,9 +31,11 @@ test("Interact binds the rendered target while both modes share hover feedback",
   assert.match(source, /Scrollable element/);
   assert.match(source, /Visual element/);
   assert.match(source, /createActionOverlayController/);
+  assert.match(source, /pulseActionTarget/);
   assert.match(css, /#df-action-overlay/);
   assert.match(css, /\.df-action-ripple/);
   assert.match(css, /\.df-action-path/);
+  assert.match(css, /\.devflow-element\.df-action-target/);
   assert.match(css, /#df-badge\[data-kind="interactive"\]/);
   assert.match(source, /viewportWidth - b\.offsetWidth/);
   assert.match(source, /Copilot can request mutation control with maui_take_control/);

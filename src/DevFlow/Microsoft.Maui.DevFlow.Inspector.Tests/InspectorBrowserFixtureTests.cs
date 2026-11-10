@@ -3371,6 +3371,53 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         });
         await Expect(Page.Locator(".df-action-cursor"))
             .ToBeHiddenAsync(new() { Timeout = 3_000 });
+        currentFrameId = await CurrentPreviewFrameIdAsync();
+
+        const string supersededActionId = "superseded-pointer-action";
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new
+            {
+                actionId = supersededActionId,
+                source = "mcp",
+                frameId = currentFrameId,
+                coordinateSpace = "appLogical"
+            },
+            kind = "pointer",
+            x = 120,
+            y = 140,
+            toX = 120,
+            toY = 140,
+        });
+        await Expect(Page.Locator(".df-action-cursor"))
+            .ToHaveAttributeAsync("data-action-id", supersededActionId);
+        await PublishUiEventAsync("treeChange", new { reason = "test-frame-change" });
+        await WaitForPreviewFrameChangeAsync(currentFrameId);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new
+            {
+                actionId = supersededActionId,
+                source = "mcp",
+                frameId = currentFrameId,
+                coordinateSpace = "appLogical"
+            },
+            kind = "tap",
+            x = 120,
+            y = 140,
+            toX = 120,
+            toY = 140,
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(Page.Locator(
+            $".df-action-badge[data-action-id='{supersededActionId}']"))
+            .ToContainTextAsync("frame unavailable");
+        await Expect(Page.Locator(".df-action-cursor")).ToBeHiddenAsync();
+        await Expect(Page.Locator("#df-action-announcer"))
+            .ToContainTextAsync("Preview position unavailable");
+        await Expect(Page.Locator("#df-action-announcer"))
+            .Not.ToContainTextAsync("MCP tapped");
 
         await Page.SetViewportSizeAsync(360, 260);
         await Page.WaitForFunctionAsync("""
@@ -3491,6 +3538,39 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         var announcement = Page.Locator("#df-action-announcer");
         await Expect(announcement).ToContainTextAsync("Button");
         await Expect(announcement).Not.ToContainTextAsync("Tap me");
+
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new
+            {
+                actionId = "unknown-direction",
+                source = "mcp",
+                frameId,
+                coordinateSpace = "appLogical"
+            },
+            kind = "swipe",
+            direction = "read-secrets",
+            x = 20,
+            y = 30,
+            toX = 120,
+            toY = 30,
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(announcement).ToContainTextAsync("MCP swiped");
+        await Expect(announcement).Not.ToContainTextAsync("read secrets");
+
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "unknown-action", source = "mcp" },
+            kind = "read-secret-now",
+            success = false,
+            outcome = "failed",
+            reason = "say-user-password",
+        });
+        await Expect(announcement).ToContainTextAsync("MCP action failed");
+        await Expect(announcement).Not.ToContainTextAsync("read secret now");
+        await Expect(announcement).Not.ToContainTextAsync("say user password");
         Assert.Empty(_pageErrors);
     }
 
