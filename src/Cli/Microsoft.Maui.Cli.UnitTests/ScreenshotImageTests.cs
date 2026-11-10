@@ -217,10 +217,14 @@ public sealed class ScreenshotImageTests : IDisposable
         Assert.Equal((0, 0), ScreenshotImage.GetPngDimensions(png));
     }
 
-    [Fact]
-    public void IsCompletePng_ValidImage_ReturnsTrue()
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(31, 17)]
+    [InlineData(400, 300)]
+    public void IsCompletePng_ValidImage_ReturnsTrue(int width, int height)
     {
-        Assert.True(ScreenshotImage.IsCompletePng(CreatePng(2, 2)));
+        Assert.True(ScreenshotImage.IsCompletePng(CreatePng(width, height)));
     }
 
     [Fact]
@@ -236,6 +240,15 @@ public sealed class ScreenshotImageTests : IDisposable
     {
         var png = Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAABklEQVR4nGNgQAfMKBUWAAAAAElFTkSuQmCC");
+
+        Assert.False(ScreenshotImage.IsCompletePng(png));
+    }
+
+    [Fact]
+    public void IsCompletePng_UnfinishedDeflateWithValidAdler_ReturnsFalse()
+    {
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAC0lEQVR4nGJgQAcAABIAAWCK7kMAAAAASUVORK5CYII=");
 
         Assert.False(ScreenshotImage.IsCompletePng(png));
     }

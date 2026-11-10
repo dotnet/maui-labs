@@ -759,7 +759,9 @@ public partial class DevFlowAgentService
         bool autoScale,
         bool scaleModeExplicit,
         ScreenshotResolutionHints? hints,
-        bool includeMetadata = true)
+        bool includeMetadata = true,
+        double? logicalWidth = null,
+        double? logicalHeight = null)
     {
         nativeScale = NormalizeScreenshotScale(nativeScale);
         byte[]? output;
@@ -795,16 +797,22 @@ public partial class DevFlowAgentService
             return new ScreenshotImageResult(output);
         }
 
-        var logicalWidth = sourceWidth / nativeScale;
-        var logicalHeight = sourceHeight / nativeScale;
-        var captureScale = logicalWidth > 0 ? pixelWidth / logicalWidth : nativeScale;
+        var capturedLogicalWidth = logicalWidth is > 0
+            ? logicalWidth.Value
+            : sourceWidth / nativeScale;
+        var capturedLogicalHeight = logicalHeight is > 0
+            ? logicalHeight.Value
+            : sourceHeight / nativeScale;
+        var captureScale = capturedLogicalWidth > 0
+            ? pixelWidth / capturedLogicalWidth
+            : nativeScale;
 
         return new ScreenshotImageResult(
             output,
             pixelWidth,
             pixelHeight,
-            logicalWidth,
-            logicalHeight,
+            capturedLogicalWidth,
+            capturedLogicalHeight,
             captureScale,
             nativeScale,
             hints is null ? false : hints.WasClamped || clamped);
@@ -927,9 +935,6 @@ public partial class DevFlowAgentService
             }
 
             factor = Math.Min(1d, Math.Max(0d, factor));
-            if (factor >= 1d)
-                return (pngData, clamped);
-
             using var original = SkiaSharp.SKBitmap.Decode(pngData);
             if (original == null ||
                 original.Width != sourceWidth ||
@@ -937,6 +942,9 @@ public partial class DevFlowAgentService
             {
                 return (null, true);
             }
+
+            if (factor >= 1d)
+                return (pngData, clamped);
 
             var targetWidth = Math.Max(1, (int)Math.Floor(sourceWidth * factor));
             var targetHeight = Math.Max(1, (int)Math.Floor(sourceHeight * factor));

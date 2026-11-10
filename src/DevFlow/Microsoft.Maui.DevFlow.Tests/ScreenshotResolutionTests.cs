@@ -50,6 +50,48 @@ public class ScreenshotResolutionTests
     }
 
     [Fact]
+    public void ProcessScreenshotPng_CapturedLogicalSize_PreservesFractionalGeometry()
+    {
+        var result = TestAgent.Process(
+            SamplePng,
+            nativeScale: 2,
+            autoScale: true,
+            targetScale: 2,
+            maxPixelWidth: null,
+            maxPixelHeight: null,
+            maxPixels: null,
+            logicalWidth: 200.25,
+            logicalHeight: 150.125);
+
+        Assert.Equal(400, result.PixelWidth);
+        Assert.Equal(300, result.PixelHeight);
+        Assert.Equal(200.25, result.LogicalWidth);
+        Assert.Equal(150.125, result.LogicalHeight);
+        Assert.Equal(400 / 200.25, result.CaptureScale, precision: 12);
+    }
+
+    [Fact]
+    public void ProcessScreenshotPng_CapturedLogicalSize_IsReturnedInPublicMetadata()
+    {
+        var response = TestAgent.ProcessResponse(
+            SamplePng,
+            nativeScale: 2,
+            autoScale: true,
+            targetScale: 2,
+            maxPixelWidth: null,
+            maxPixelHeight: null,
+            maxPixels: null,
+            logicalWidth: 200.25,
+            logicalHeight: 150.125);
+
+        Assert.Equal("200.25", response.Headers["X-DevFlow-Screenshot-Logical-Width"]);
+        Assert.Equal("150.125", response.Headers["X-DevFlow-Screenshot-Logical-Height"]);
+        Assert.Equal(
+            (400 / 200.25).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            response.Headers["X-DevFlow-Screenshot-Capture-Scale"]);
+    }
+
+    [Fact]
     public void ProcessScreenshotPng_PixelBudget_BoundsNegotiatedOutput()
     {
         var result = TestAgent.Process(
@@ -185,6 +227,22 @@ public class ScreenshotResolutionTests
         Assert.Contains("screenshot-resolution-failed", response.Body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProcessScreenshotPng_TruncatedPngWithoutResize_ReturnsStructuredFailure()
+    {
+        var response = TestAgent.ProcessResponse(
+            SamplePng[..24],
+            nativeScale: 2,
+            autoScale: true,
+            targetScale: 2,
+            maxPixelWidth: null,
+            maxPixelHeight: null,
+            maxPixels: null);
+
+        Assert.Equal(500, response.StatusCode);
+        Assert.Contains("screenshot-resolution-failed", response.Body, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("targetScale", "NaN")]
     [InlineData("targetScale", "0")]
@@ -237,7 +295,9 @@ public class ScreenshotResolutionTests
             int? maxPixelHeight,
             long? maxPixels,
             int? maxWidth = null,
-            bool scaleModeExplicit = false)
+            bool scaleModeExplicit = false,
+            double? logicalWidth = null,
+            double? logicalHeight = null)
         {
             var hints = CreateHints(targetScale, maxPixelWidth, maxPixelHeight, maxPixels);
             var result = ProcessScreenshotPng(
@@ -246,7 +306,9 @@ public class ScreenshotResolutionTests
                 nativeScale,
                 autoScale,
                 scaleModeExplicit,
-                hints);
+                hints,
+                logicalWidth: logicalWidth,
+                logicalHeight: logicalHeight);
             return new ProcessResult(
                 result.PixelWidth!.Value,
                 result.PixelHeight!.Value,
@@ -264,14 +326,18 @@ public class ScreenshotResolutionTests
             double? targetScale,
             int? maxPixelWidth,
             int? maxPixelHeight,
-            long? maxPixels)
+            long? maxPixels,
+            double? logicalWidth = null,
+            double? logicalHeight = null)
             => BuildScreenshotResponse(ProcessScreenshotPng(
                 data,
                 maxWidth: null,
                 nativeScale,
                 autoScale,
                 scaleModeExplicit: true,
-                CreateHints(targetScale, maxPixelWidth, maxPixelHeight, maxPixels)));
+                CreateHints(targetScale, maxPixelWidth, maxPixelHeight, maxPixels),
+                logicalWidth: logicalWidth,
+                logicalHeight: logicalHeight));
 
         public static byte[] ProcessImage(
             byte[] data,

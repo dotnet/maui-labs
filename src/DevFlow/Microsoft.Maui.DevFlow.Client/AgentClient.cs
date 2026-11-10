@@ -95,6 +95,12 @@ public class AgentClient : IDisposable
         _http = CreateHttpClient(transportHandler, GetCurrentMutationLease);
     }
 
+    internal TimeSpan HttpTimeout
+    {
+        get => _http.Timeout;
+        set => _http.Timeout = value;
+    }
+
     /// <summary>
     /// Temporarily uses a caller-provided mutation lease identity for all asynchronous calls made
     /// within the returned scope. Used by shared proxy hosts that serve multiple browser sessions.
@@ -1628,21 +1634,25 @@ public class AgentClient : IDisposable
             const int captureRetryCount = 2;
             for (var attempt = 0; ; attempt++)
             {
-                using var response = await SendWithTransientRetriesAsync(
-                    () => _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead));
-                if (response.IsSuccessStatusCode)
+                var received = await SendScreenshotRequestWithRetriesAsync(
+                    url,
+                    resolution?.MaxEncodedBytes);
+                using var response = received.Response;
+                if (received.ExceededLimit)
                 {
-                    var (data, exceededLimit) = await ReadScreenshotDataAsync(
-                        response.Content,
-                        resolution?.MaxEncodedBytes);
-                    if (exceededLimit)
+                    if (!response.IsSuccessStatusCode)
                     {
                         return ScreenshotResult.Failure(
-                            $"Screenshot exceeded the configured {resolution!.MaxEncodedBytes} byte limit.",
+                            "Screenshot request failed with an oversized error response.",
                             "screenshot-too-large");
                     }
-                    if (data is null)
-                        return ScreenshotResult.Failure(null);
+                    return ScreenshotResult.Failure(
+                        $"Screenshot exceeded the configured {resolution!.MaxEncodedBytes} byte limit.",
+                        "screenshot-too-large");
+                }
+                var data = received.Data ?? [];
+                if (response.IsSuccessStatusCode)
+                {
                     var (fallbackPixelWidth, fallbackPixelHeight) = GetPngDimensions(data);
                     var headerPixelWidth = GetHeaderInt32(response, "X-DevFlow-Screenshot-Pixel-Width");
                     var headerPixelHeight = GetHeaderInt32(response, "X-DevFlow-Screenshot-Pixel-Height");
@@ -1690,7 +1700,14 @@ public class AgentClient : IDisposable
                             : null);
                 }
 
-                var body = await response.Content.ReadAsStringAsync();
+                var body = Encoding.UTF8.GetString(data);
+                if (response.StatusCode == HttpStatusCode.NotImplemented &&
+                    TryParseNotSupported(body, out var capability, out var unsupportedReason))
+                {
+                    return ScreenshotResult.Failure(
+                        new NotSupportedByAgentException(capability, unsupportedReason).Message,
+                        "not_supported");
+                }
                 if (response.StatusCode == HttpStatusCode.Conflict
                     && IsCaptureChangedDuringRead(body)
                     && attempt < captureRetryCount)
@@ -1702,9 +1719,7 @@ public class AgentClient : IDisposable
                 return ParseScreenshotError(body);
             }
         }
-        // The shared retry path turns a uniform 501 not_supported envelope into this typed
-        // exception. ScreenshotResultAsync's documented contract is to report failures through
-        // the returned ScreenshotResult rather than throwing, so translate it back into one here.
+        // Keep the result contract defensive if a custom transport surfaces the typed exception.
         catch (NotSupportedByAgentException ex)
         {
             return ScreenshotResult.Failure(ex.Message, "not_supported");
@@ -1712,10 +1727,51 @@ public class AgentClient : IDisposable
         catch (Exception ex) when (IsExpectedClientException(ex)) { return ScreenshotResult.Failure(null); }
     }
 
+    private async Task<(HttpResponseMessage Response, byte[]? Data, bool ExceededLimit)>
+        SendScreenshotRequestWithRetriesAsync(
+            string url,
+            int? maximumBytes)
+    {
+        var retryCount = Math.Max(0, TransientFailureRetryCount);
+        for (var attempt = 0; ; attempt++)
+        {
+            HttpResponseMessage? response = null;
+            try
+            {
+                response = await _http.GetAsync(
+                    url,
+                    HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                const int maximumErrorBodyBytes = 64 * 1024;
+                var responseLimit = response.IsSuccessStatusCode
+                    ? maximumBytes
+                    : Math.Min(maximumBytes ?? maximumErrorBodyBytes, maximumErrorBodyBytes);
+                var (data, exceededLimit) = await ReadScreenshotDataAsync(
+                    response,
+                    responseLimit).ConfigureAwait(false);
+                return (response, data, exceededLimit);
+            }
+            catch (Exception ex) when (
+                IsTransientTransportException(ex) &&
+                attempt < retryCount)
+            {
+                response?.Dispose();
+                var delay = GetTransientFailureRetryDelay(attempt);
+                if (delay > TimeSpan.Zero)
+                    await Task.Delay(delay).ConfigureAwait(false);
+            }
+            catch
+            {
+                response?.Dispose();
+                throw;
+            }
+        }
+    }
+
     private async Task<(byte[]? Data, bool ExceededLimit)> ReadScreenshotDataAsync(
-        HttpContent content,
+        HttpResponseMessage response,
         int? maximumBytes)
     {
+        var content = response.Content;
         if (maximumBytes is <= 0)
             return (null, true);
         if (maximumBytes.HasValue &&
@@ -1733,19 +1789,31 @@ public class AgentClient : IDisposable
             initialCapacity = Math.Min(initialCapacity, maximumBytes.Value);
         using var buffer = new MemoryStream(initialCapacity);
         using var timeout = new CancellationTokenSource(_http.Timeout);
+        using var timeoutRegistration = timeout.Token.Register(response.Dispose);
         var chunk = new byte[81920];
-        while (true)
+        try
         {
-            var read = await stream.ReadAsync(
-                chunk,
-                0,
-                chunk.Length,
-                timeout.Token).ConfigureAwait(false);
-            if (read == 0)
-                return (buffer.ToArray(), false);
-            if (maximumBytes.HasValue && buffer.Length > maximumBytes.Value - read)
-                return (null, true);
-            buffer.Write(chunk, 0, read);
+            while (true)
+            {
+                var read = await stream.ReadAsync(
+                    chunk,
+                    0,
+                    chunk.Length,
+                    timeout.Token).ConfigureAwait(false);
+                if (read == 0)
+                    return (buffer.ToArray(), false);
+                if (maximumBytes.HasValue && buffer.Length > maximumBytes.Value - read)
+                    return (null, true);
+                buffer.Write(chunk, 0, read);
+            }
+        }
+        catch (Exception ex) when (
+            timeout.IsCancellationRequested &&
+            ex is IOException or ObjectDisposedException or OperationCanceledException)
+        {
+            throw new TaskCanceledException(
+                "The screenshot response body timed out.",
+                new TimeoutException("The screenshot response body timed out.", ex));
         }
     }
 
@@ -2757,9 +2825,21 @@ public class AgentClient : IDisposable
             return;
 
         var body = await response.Content.ReadAsStringAsync();
-        string capability;
-        string? reason = null;
+        if (!TryParseNotSupported(body, out var capability, out var reason))
+            return;
 
+        // The caller never receives the message, so release it here.
+        response.Dispose();
+        throw new NotSupportedByAgentException(capability, reason);
+    }
+
+    private static bool TryParseNotSupported(
+        string body,
+        out string capability,
+        out string? reason)
+    {
+        capability = "unknown";
+        reason = null;
         try
         {
             var json = ProtocolJson.ParseElement(body);
@@ -2771,25 +2851,22 @@ public class AgentClient : IDisposable
                 kind.ValueKind != JsonValueKind.String ||
                 kind.GetString() != "not_supported")
             {
-                return;
+                return false;
             }
 
-            capability = json.TryGetProperty("capability", out var c) && c.ValueKind == JsonValueKind.String
-                ? c.GetString() ?? "unknown"
-                : "unknown";
-
+            capability = json.TryGetProperty("capability", out var c) &&
+                c.ValueKind == JsonValueKind.String
+                    ? c.GetString() ?? "unknown"
+                    : "unknown";
             if (json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String)
                 reason = r.GetString();
+            return true;
         }
         catch (JsonException)
         {
             // Non-JSON 501 — leave it to the caller's existing error handling.
-            return;
+            return false;
         }
-
-        // The caller never receives the message, so release it here.
-        response.Dispose();
-        throw new NotSupportedByAgentException(capability, reason);
     }
 
     private TimeSpan GetTransientFailureRetryDelay(int attempt)

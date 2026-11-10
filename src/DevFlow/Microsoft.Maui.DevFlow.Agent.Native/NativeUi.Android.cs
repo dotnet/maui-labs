@@ -61,6 +61,19 @@ internal static partial class NativeUi
     public static double ScreenCaptureDensity
         => GetCaptureDensity(CurrentActivity?.Window?.DecorView);
 
+    public static (double Width, double Height) GetCaptureLogicalSize(object? viewObject)
+    {
+        if (viewObject is not View view)
+            return (0, 0);
+        var density = GetCaptureDensity(view);
+        return density > 0
+            ? (view.Width / density, view.Height / density)
+            : (0, 0);
+    }
+
+    public static (double Width, double Height) ScreenCaptureLogicalSize
+        => GetCaptureLogicalSize(CurrentActivity?.Window?.DecorView);
+
     public static IReadOnlyList<object> GetRoots()
     {
         var activity = CurrentActivity;

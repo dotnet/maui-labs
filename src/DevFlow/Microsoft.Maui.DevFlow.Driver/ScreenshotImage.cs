@@ -286,6 +286,8 @@ internal static class ScreenshotImage
             const long MaxDecodedPngBytes = 512L * 1024 * 1024;
             if (decodedBytes <= 0 || decodedBytes > MaxDecodedPngBytes)
                 return false;
+            if (!HasCompleteDeflateStream(zlibData[2..^4], decodedBytes))
+                return false;
 
             compressedImageData.Position = 0;
             using var zlib = new ZLibStream(
@@ -370,6 +372,392 @@ internal static class ScreenshotImage
         {
             adlerA = (adlerA + value) % Modulus;
             adlerB = (adlerB + adlerA) % Modulus;
+        }
+    }
+
+    private static bool HasCompleteDeflateStream(
+        ReadOnlySpan<byte> compressed,
+        long expectedOutputBytes)
+    {
+        var reader = new DeflateBitReader(compressed);
+        long outputBytes = 0;
+        while (true)
+        {
+            if (!reader.TryReadBits(1, out var finalBlock) ||
+                !reader.TryReadBits(2, out var blockType))
+            {
+                return false;
+            }
+
+            DeflateHuffman? literalLengthCodes;
+            DeflateHuffman? distanceCodes;
+            switch (blockType)
+            {
+                case 0:
+                    if (!reader.AlignToByte() ||
+                        !reader.TryReadBits(16, out var storedLength) ||
+                        !reader.TryReadBits(16, out var storedLengthComplement) ||
+                        (storedLength ^ 0xffff) != storedLengthComplement ||
+                        !reader.TrySkipAlignedBytes(storedLength))
+                    {
+                        return false;
+                    }
+                    outputBytes = checked(outputBytes + storedLength);
+                    break;
+                case 1:
+                    CreateFixedDeflateCodes(out literalLengthCodes, out distanceCodes);
+                    if (!TryDecodeCompressedDeflateBlock(
+                            ref reader,
+                            literalLengthCodes,
+                            distanceCodes,
+                            ref outputBytes,
+                            expectedOutputBytes))
+                    {
+                        return false;
+                    }
+                    break;
+                case 2:
+                    if (!TryReadDynamicDeflateCodes(
+                            ref reader,
+                            out literalLengthCodes,
+                            out distanceCodes) ||
+                        !TryDecodeCompressedDeflateBlock(
+                            ref reader,
+                            literalLengthCodes!,
+                            distanceCodes,
+                            ref outputBytes,
+                            expectedOutputBytes))
+                    {
+                        return false;
+                    }
+                    break;
+                default:
+                    return false;
+            }
+
+            if (outputBytes > expectedOutputBytes)
+                return false;
+            if (finalBlock == 0)
+                continue;
+            return outputBytes == expectedOutputBytes && reader.HasOnlyZeroPadding();
+        }
+    }
+
+    private static void CreateFixedDeflateCodes(
+        out DeflateHuffman literalLengthCodes,
+        out DeflateHuffman distanceCodes)
+    {
+        Span<byte> literalLengths = stackalloc byte[288];
+        literalLengths[..144].Fill(8);
+        literalLengths[144..256].Fill(9);
+        literalLengths[256..280].Fill(7);
+        literalLengths[280..].Fill(8);
+        DeflateHuffman.TryCreate(literalLengths, out literalLengthCodes!);
+
+        Span<byte> distanceLengths = stackalloc byte[32];
+        distanceLengths.Fill(5);
+        DeflateHuffman.TryCreate(distanceLengths, out distanceCodes!);
+    }
+
+    private static bool TryReadDynamicDeflateCodes(
+        ref DeflateBitReader reader,
+        out DeflateHuffman? literalLengthCodes,
+        out DeflateHuffman? distanceCodes)
+    {
+        literalLengthCodes = null;
+        distanceCodes = null;
+        if (!reader.TryReadBits(5, out var literalCountOffset) ||
+            !reader.TryReadBits(5, out var distanceCountOffset) ||
+            !reader.TryReadBits(4, out var codeLengthCountOffset))
+        {
+            return false;
+        }
+
+        var literalCount = literalCountOffset + 257;
+        var distanceCount = distanceCountOffset + 1;
+        var codeLengthCount = codeLengthCountOffset + 4;
+        ReadOnlySpan<int> codeLengthOrder =
+            [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+        Span<byte> codeLengthLengths = stackalloc byte[19];
+        for (var index = 0; index < codeLengthCount; index++)
+        {
+            if (!reader.TryReadBits(3, out var length))
+                return false;
+            codeLengthLengths[codeLengthOrder[index]] = (byte)length;
+        }
+        if (!DeflateHuffman.TryCreate(codeLengthLengths, out var codeLengthCodes))
+            return false;
+
+        var lengths = new byte[literalCount + distanceCount];
+        var position = 0;
+        while (position < lengths.Length)
+        {
+            if (!codeLengthCodes!.TryDecode(ref reader, out var symbol))
+                return false;
+
+            if (symbol <= 15)
+            {
+                lengths[position++] = (byte)symbol;
+                continue;
+            }
+
+            int repeat;
+            byte repeatedLength;
+            switch (symbol)
+            {
+                case 16:
+                    if (position == 0 ||
+                        !reader.TryReadBits(2, out var repeatPreviousOffset))
+                    {
+                        return false;
+                    }
+                    repeat = repeatPreviousOffset + 3;
+                    repeatedLength = lengths[position - 1];
+                    break;
+                case 17:
+                    if (!reader.TryReadBits(3, out var repeatZeroOffset))
+                        return false;
+                    repeat = repeatZeroOffset + 3;
+                    repeatedLength = 0;
+                    break;
+                case 18:
+                    if (!reader.TryReadBits(7, out var repeatLongZeroOffset))
+                        return false;
+                    repeat = repeatLongZeroOffset + 11;
+                    repeatedLength = 0;
+                    break;
+                default:
+                    return false;
+            }
+
+            if (position + repeat > lengths.Length)
+                return false;
+            lengths.AsSpan(position, repeat).Fill(repeatedLength);
+            position += repeat;
+        }
+
+        if (lengths[256] == 0 ||
+            !DeflateHuffman.TryCreate(
+                lengths.AsSpan(0, literalCount),
+                out literalLengthCodes))
+        {
+            return false;
+        }
+
+        var distanceLengths = lengths.AsSpan(literalCount, distanceCount);
+        return IsAllZero(distanceLengths) ||
+            DeflateHuffman.TryCreate(distanceLengths, out distanceCodes);
+    }
+
+    private static bool TryDecodeCompressedDeflateBlock(
+        ref DeflateBitReader reader,
+        DeflateHuffman literalLengthCodes,
+        DeflateHuffman? distanceCodes,
+        ref long outputBytes,
+        long expectedOutputBytes)
+    {
+        ReadOnlySpan<int> lengthBases =
+            [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43,
+                51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+        ReadOnlySpan<byte> lengthExtraBits =
+            [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3,
+                3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+        ReadOnlySpan<int> distanceBases =
+            [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
+                257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145,
+                8193, 12289, 16385, 24577];
+        ReadOnlySpan<byte> distanceExtraBits =
+            [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7,
+                8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+
+        while (true)
+        {
+            if (!literalLengthCodes.TryDecode(ref reader, out var symbol))
+                return false;
+            if (symbol < 256)
+            {
+                outputBytes++;
+                if (outputBytes > expectedOutputBytes)
+                    return false;
+                continue;
+            }
+            if (symbol == 256)
+                return true;
+            if (symbol is < 257 or > 285 || distanceCodes is null)
+                return false;
+
+            var lengthIndex = symbol - 257;
+            if (!reader.TryReadBits(lengthExtraBits[lengthIndex], out var lengthExtra) ||
+                !distanceCodes.TryDecode(ref reader, out var distanceSymbol) ||
+                distanceSymbol >= distanceBases.Length ||
+                !reader.TryReadBits(distanceExtraBits[distanceSymbol], out var distanceExtra))
+            {
+                return false;
+            }
+
+            var length = lengthBases[lengthIndex] + lengthExtra;
+            var distance = distanceBases[distanceSymbol] + distanceExtra;
+            if (distance > outputBytes)
+                return false;
+            outputBytes = checked(outputBytes + length);
+            if (outputBytes > expectedOutputBytes)
+                return false;
+        }
+    }
+
+    private static bool IsAllZero(ReadOnlySpan<byte> values)
+    {
+        foreach (var value in values)
+        {
+            if (value != 0)
+                return false;
+        }
+        return true;
+    }
+
+    private ref struct DeflateBitReader
+    {
+        private readonly ReadOnlySpan<byte> _data;
+        private int _bitPosition;
+
+        public DeflateBitReader(ReadOnlySpan<byte> data) => _data = data;
+
+        public bool TryReadBits(int count, out int value)
+        {
+            value = 0;
+            if (count < 0 || count > 16 || _bitPosition > _data.Length * 8 - count)
+                return false;
+            for (var bit = 0; bit < count; bit++)
+            {
+                value |= ((_data[_bitPosition >> 3] >> (_bitPosition & 7)) & 1) << bit;
+                _bitPosition++;
+            }
+            return true;
+        }
+
+        public bool AlignToByte()
+        {
+            _bitPosition = (_bitPosition + 7) & ~7;
+            return _bitPosition <= _data.Length * 8;
+        }
+
+        public bool TrySkipAlignedBytes(int count)
+        {
+            if ((_bitPosition & 7) != 0 ||
+                count < 0 ||
+                _bitPosition > _data.Length * 8 - count * 8)
+            {
+                return false;
+            }
+            _bitPosition += count * 8;
+            return true;
+        }
+
+        public bool HasOnlyZeroPadding()
+        {
+            var remainingBits = _data.Length * 8 - _bitPosition;
+            if (remainingBits is < 0 or >= 8)
+                return false;
+            while (_bitPosition < _data.Length * 8)
+            {
+                if (((_data[_bitPosition >> 3] >> (_bitPosition & 7)) & 1) != 0)
+                    return false;
+                _bitPosition++;
+            }
+            return true;
+        }
+    }
+
+    private sealed class DeflateHuffman
+    {
+        private readonly Dictionary<int, int> _symbols;
+        private readonly int _maximumBits;
+
+        private DeflateHuffman(Dictionary<int, int> symbols, int maximumBits)
+        {
+            _symbols = symbols;
+            _maximumBits = maximumBits;
+        }
+
+        public static bool TryCreate(
+            ReadOnlySpan<byte> lengths,
+            out DeflateHuffman? huffman)
+        {
+            huffman = null;
+            Span<int> counts = stackalloc int[16];
+            var symbolCount = 0;
+            var maximumBits = 0;
+            foreach (var length in lengths)
+            {
+                if (length > 15)
+                    return false;
+                if (length == 0)
+                    continue;
+                counts[length]++;
+                symbolCount++;
+                maximumBits = Math.Max(maximumBits, length);
+            }
+            if (symbolCount == 0)
+                return false;
+
+            var remaining = 1;
+            for (var bits = 1; bits <= 15; bits++)
+            {
+                remaining = (remaining << 1) - counts[bits];
+                if (remaining < 0)
+                    return false;
+            }
+
+            Span<int> nextCodes = stackalloc int[16];
+            var code = 0;
+            for (var bits = 1; bits <= 15; bits++)
+            {
+                code = (code + counts[bits - 1]) << 1;
+                nextCodes[bits] = code;
+            }
+
+            var symbols = new Dictionary<int, int>(symbolCount);
+            for (var symbol = 0; symbol < lengths.Length; symbol++)
+            {
+                var length = lengths[symbol];
+                if (length == 0)
+                    continue;
+                var reversedCode = ReverseBits(nextCodes[length]++, length);
+                symbols[(length << 16) | reversedCode] = symbol;
+            }
+
+            huffman = new DeflateHuffman(symbols, maximumBits);
+            return true;
+        }
+
+        public bool TryDecode(ref DeflateBitReader reader, out int symbol)
+        {
+            var code = 0;
+            for (var length = 1; length <= _maximumBits; length++)
+            {
+                if (!reader.TryReadBits(1, out var bit))
+                {
+                    symbol = 0;
+                    return false;
+                }
+                code |= bit << (length - 1);
+                if (_symbols.TryGetValue((length << 16) | code, out symbol))
+                    return true;
+            }
+
+            symbol = 0;
+            return false;
+        }
+
+        private static int ReverseBits(int value, int bitCount)
+        {
+            var reversed = 0;
+            for (var bit = 0; bit < bitCount; bit++)
+            {
+                reversed = (reversed << 1) | (value & 1);
+                value >>= 1;
+            }
+            return reversed;
         }
     }
 

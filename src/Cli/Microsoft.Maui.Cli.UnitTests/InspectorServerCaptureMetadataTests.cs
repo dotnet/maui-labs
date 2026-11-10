@@ -2037,6 +2037,7 @@ public class InspectorServerCaptureMetadataTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
+    [InlineData(4)]
     public async Task State_WhenScreenshotIsInvalidOrTruncated_ReturnsServiceUnavailable(
         int invalidPngKind)
     {
@@ -2048,8 +2049,10 @@ public class InspectorServerCaptureMetadataTests
                 1 => MockAgentResponses.ScreenshotPng[..24],
                 2 => Convert.FromBase64String(
                     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBwIAAAASJ8QPAAAABElEQVQAAQIDQN6+CAAAAABJRU5ErkJggg=="),
+                3 => Convert.FromBase64String(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAABklEQVR4nGNgQAfMKBUWAAAAAElFTkSuQmCC"),
                 _ => Convert.FromBase64String(
-                    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAABklEQVR4nGNgQAfMKBUWAAAAAElFTkSuQmCC")
+                    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAC0lEQVR4nGJgQAcAABIAAWCK7kMAAAAASUVORK5CYII=")
             }
         };
         await agent.StartAsync();

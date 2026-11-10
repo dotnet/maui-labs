@@ -470,6 +470,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
             {
                 byte[]? png;
                 double density;
+                (double Width, double Height) logicalSize;
                 if (hasElementId && !string.IsNullOrEmpty(elementId))
                 {
                     var view = ResolveView(elementId);
@@ -477,14 +478,20 @@ public class NativeDevFlowAgentService : DevFlowAgentService
                     density = view == null
                         ? NativeUi.DisplayDensity
                         : NativeUi.GetCaptureDensity(view);
+                    logicalSize = NativeUi.GetCaptureLogicalSize(view);
                 }
                 else
                 {
                     density = NativeUi.ScreenCaptureDensity;
+                    logicalSize = NativeUi.ScreenCaptureLogicalSize;
                     png = await NativeUi.CaptureScreen();
                 }
 
-                return new ScreenshotCaptureResult(png, density);
+                return new ScreenshotCaptureResult(
+                    png,
+                    density,
+                    logicalSize.Width,
+                    logicalSize.Height);
             });
 
             if (result?.Png == null)
@@ -501,7 +508,9 @@ public class NativeDevFlowAgentService : DevFlowAgentService
                     result.Density,
                     autoScale,
                     scaleModeExplicit,
-                    resolutionHints));
+                    resolutionHints,
+                    logicalWidth: result.LogicalWidth,
+                    logicalHeight: result.LogicalHeight));
         }
         catch (Exception ex)
         {
@@ -711,7 +720,11 @@ public class NativeDevFlowAgentService : DevFlowAgentService
     private static List<ElementInfo> Flatten(List<ElementInfo> matches)
         => matches.Select(Detach).ToList();
 
-    private sealed record ScreenshotCaptureResult(byte[]? Png, double Density);
+    private sealed record ScreenshotCaptureResult(
+        byte[]? Png,
+        double Density,
+        double LogicalWidth,
+        double LogicalHeight);
 
     /// <summary>Returns a copy without children so query results stay flat.</summary>
     private static ElementInfo Detach(ElementInfo element)
