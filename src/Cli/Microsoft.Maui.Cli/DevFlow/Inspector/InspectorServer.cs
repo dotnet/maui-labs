@@ -84,10 +84,16 @@ public sealed class InspectorServer : IDisposable
     private readonly object _pointerProxyGate = new();
     private readonly Dictionary<string, PointerProxySession> _pointerProxySessions =
         new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, long> _localInspectorActionIds =
+        new(StringComparer.Ordinal);
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan DefaultFrameReuseDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan FrameCacheDuration = TimeSpan.FromSeconds(10);
     private const int MaxCachedFrames = 32;
+    private const int MaxLocalInspectorActionIds = 256;
+    private const int LocalInspectorActionLifetimeMs = 30_000;
+    private const string RepeatedFrameChangeError =
+        "Inspector state changed repeatedly while capturing a frame.";
     private const int MaxScreenshotBytes = 64 * 1024 * 1024;
     private const long MaxCachedFrameBytes = 64L * 1024 * 1024;
     private const long InspectorScreenshotPixelBudget = 8_388_608;
@@ -838,6 +844,7 @@ public sealed class InspectorServer : IDisposable
         using var assembled = new MemoryStream();
         var assembledMessageType =
             System.Net.WebSockets.WebSocketMessageType.Text;
+        var relayState = new UiEventRelayState();
         using var sendGate = new SemaphoreSlim(1, 1);
         await using var diagnosticsDebouncer = new DiagnosticsDeltaDebouncer(
             CaptureLayoutDiagnosticsDeltaAsync,
@@ -874,6 +881,11 @@ public sealed class InspectorServer : IDisposable
                     continue;
                 var payload = assembled.ToArray();
                 assembled.SetLength(0);
+                if (assembledMessageType
+                    == System.Net.WebSockets.WebSocketMessageType.Text)
+                {
+                    payload = ProcessUiEventPayload(payload, relayState);
+                }
                 await SendWebSocketMessageAsync(
                     destination,
                     sendGate,
@@ -1041,6 +1053,22 @@ public sealed class InspectorServer : IDisposable
                 ? hl
                 : "DevFlow Web Inspector";
             using var leaseScope = _client.UseMutationLease(leaseId, holderKind, holderLabel);
+            var inspectorAction = CreateInspectorActionContext(request);
+            using var actionScope = inspectorAction is null
+                ? null
+                : _client.UseActionContext(
+                    source: "inspector",
+                    actionId: inspectorAction.ActionId,
+                    streamId: inspectorAction.StreamId,
+                    frameId: inspectorAction.FrameId,
+                    frameRevision: inspectorAction.FrameRevision,
+                    coordinateSpace: inspectorAction.CoordinateSpace,
+                    x: inspectorAction.X,
+                    y: inspectorAction.Y,
+                    toX: inspectorAction.ToX,
+                    toY: inspectorAction.ToY,
+                    deltaX: inspectorAction.DeltaX,
+                    deltaY: inspectorAction.DeltaY);
 
             // While a replay is driving the app, reject concurrent user mutations + record steps so
             // the replay isn't interleaved (a replay may be triggered from any embedding host/tab).
@@ -1096,6 +1124,7 @@ public sealed class InspectorServer : IDisposable
                     "/inspector-api.js" => HandleEmbeddedFile("inspector-api.js", "application/javascript"),
                     "/inspector-command-policy.js" => HandleEmbeddedFile("inspector-command-policy.js", "application/javascript"),
                     "/inspector-dialog.js" => HandleEmbeddedFile("inspector-dialog.js", "application/javascript"),
+                    "/inspector-actions.js" => HandleEmbeddedFile("inspector-actions.js", "application/javascript"),
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
                     "/inspector-presentation.js" => HandleEmbeddedFile("inspector-presentation.js", "application/javascript"),
                     "/inspector-properties.js" => HandleEmbeddedFile("inspector-properties.js", "application/javascript"),
@@ -1187,6 +1216,174 @@ public sealed class InspectorServer : IDisposable
     private static bool IsAgentUnavailableException(Exception exception)
         => exception is HttpRequestException or SocketException or IOException or TaskCanceledException
             || (exception.InnerException is not null && IsAgentUnavailableException(exception.InnerException));
+
+    private InspectorActionContext? CreateInspectorActionContext(HttpRequestInfo request)
+    {
+        if (request.Method != "POST" || !IsMutation(request.Path))
+            return null;
+
+        string? actionId = null;
+        string? streamId = null;
+        string? frameId = null;
+        long? frameRevision = null;
+        string? coordinateSpace = null;
+        double? x = null;
+        double? y = null;
+        double? toX = null;
+        double? toY = null;
+        double? deltaX = null;
+        double? deltaY = null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(request.Body))
+            {
+                using var document = JsonDocument.Parse(request.Body);
+                var body = document.RootElement;
+                if (body.ValueKind == JsonValueKind.Object)
+                {
+                    if (body.TryGetProperty("correlation", out var correlation)
+                        && correlation.ValueKind == JsonValueKind.Object)
+                    {
+                        actionId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "actionId"));
+                        streamId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "streamId"));
+                        var requestedFrameId = ReadSafeCorrelationToken(
+                            ReadOptionalString(correlation, "frameId"));
+                        frameId = requestedFrameId;
+                        coordinateSpace = ReadOptionalString(
+                            correlation,
+                            "coordinateSpace") switch
+                        {
+                            "appLogical" => "appLogical",
+                            "windowLogical" => "windowLogical",
+                            "screenshotPixel" => "screenshotPixel",
+                            "inspectorCss" => "inspectorCss",
+                            "transformedViewport" => "transformedViewport",
+                            _ => null
+                        };
+                        if (correlation.TryGetProperty("frameRevision", out var revision)
+                            && revision.ValueKind == JsonValueKind.Number
+                            && revision.TryGetInt64(out var parsedRevision)
+                            && parsedRevision > 0)
+                        {
+                            frameRevision = parsedRevision;
+                        }
+                    }
+
+                    if (request.Path is "/api/tap" or "/api/scroll")
+                    {
+                        x = ReadBoundedInspectorCoordinate(body, "x");
+                        y = ReadBoundedInspectorCoordinate(body, "y");
+                    }
+
+                    if (request.Path == "/api/scroll")
+                    {
+                        deltaX = ReadBoundedInspectorCoordinate(body, "deltaX");
+                        deltaY = ReadBoundedInspectorCoordinate(body, "deltaY");
+                    }
+                    else if (request.Path == "/api/gesture"
+                        && body.TryGetProperty("points", out var points)
+                        && points.ValueKind == JsonValueKind.Array
+                        && points.GetArrayLength() >= 2)
+                    {
+                        var first = points[0];
+                        var last = points[points.GetArrayLength() - 1];
+                        x = ReadBoundedInspectorCoordinate(first, "x");
+                        y = ReadBoundedInspectorCoordinate(first, "y");
+                        toX = ReadBoundedInspectorCoordinate(last, "x");
+                        toY = ReadBoundedInspectorCoordinate(last, "y");
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        if (actionId is null)
+            return null;
+        RememberLocalInspectorAction(actionId);
+
+        return new InspectorActionContext(
+            actionId,
+            streamId,
+            frameId,
+            frameRevision,
+            coordinateSpace,
+            x,
+            y,
+            toX,
+            toY,
+            deltaX,
+            deltaY);
+    }
+
+    private static string? ReadSafeCorrelationToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var trimmed = value.Trim();
+        if (trimmed.Length > 128)
+            return null;
+        foreach (var character in trimmed)
+        {
+            if (!char.IsAsciiLetterOrDigit(character)
+                && character is not '-' and not '_' and not '.' and not ':')
+            {
+                return null;
+            }
+        }
+        return trimmed;
+    }
+
+    private void RememberLocalInspectorAction(string actionId)
+    {
+        var now = Environment.TickCount64;
+        _localInspectorActionIds[actionId] = now + LocalInspectorActionLifetimeMs;
+        foreach (var pair in _localInspectorActionIds)
+        {
+            if (pair.Value <= now)
+                _localInspectorActionIds.TryRemove(pair.Key, out _);
+        }
+        if (_localInspectorActionIds.Count <= MaxLocalInspectorActionIds)
+            return;
+        foreach (var pair in _localInspectorActionIds
+            .OrderBy(static pair => pair.Value)
+            .Take(_localInspectorActionIds.Count - MaxLocalInspectorActionIds))
+        {
+            _localInspectorActionIds.TryRemove(pair.Key, out _);
+        }
+    }
+
+    private bool IsLocalInspectorAction(JsonObject? data)
+    {
+        if (data?["correlation"] is not JsonObject correlation
+            || correlation["actionId"] is not JsonValue actionValue
+            || !actionValue.TryGetValue<string>(out var actionId)
+            || string.IsNullOrWhiteSpace(actionId)
+            || !_localInspectorActionIds.TryGetValue(actionId, out var expiresAt))
+        {
+            return false;
+        }
+
+        if (expiresAt > Environment.TickCount64)
+            return true;
+        _localInspectorActionIds.TryRemove(actionId, out _);
+        return false;
+    }
+
+    private static double? ReadBoundedInspectorCoordinate(
+        JsonElement element,
+        string propertyName)
+        => element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(propertyName, out var property)
+            && property.ValueKind == JsonValueKind.Number
+            && property.TryGetDouble(out var value)
+            && double.IsFinite(value)
+            && Math.Abs(value) <= 100_000
+                ? value
+                : null;
 
     private async Task<(int, string, byte[])> HandleRootAsync()
     {
@@ -1292,7 +1489,28 @@ public sealed class InspectorServer : IDisposable
                 }));
         }
 
-        var frame = await CreateFrameAsync(resolution, requiresFreshFrame);
+        InspectorFrame frame;
+        try
+        {
+            frame = await CreateFrameAsync(resolution, requiresFreshFrame);
+        }
+        catch (InvalidOperationException exception)
+            when (string.Equals(
+                exception.Message,
+                RepeatedFrameChangeError,
+                StringComparison.Ordinal))
+        {
+            return (
+                503,
+                "application/json",
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    ok = false,
+                    reason = "capture-failed",
+                    error = "The app changed repeatedly while the Inspector captured its Preview.",
+                    retryable = true
+                }));
+        }
         if (frame.Tree.Count == 0)
         {
             return (
@@ -2135,7 +2353,7 @@ public sealed class InspectorServer : IDisposable
                     if (generation != _cacheGeneration)
                     {
                         if (attempt == 0) continue;
-                        throw new InvalidOperationException("Inspector state changed repeatedly while capturing a frame.");
+                        throw new InvalidOperationException(RepeatedFrameChangeError);
                     }
 
                     if (frame.Tree.Count == 0 || !hasCompleteScreenshot)
@@ -3169,12 +3387,14 @@ public sealed class InspectorServer : IDisposable
             {
                 PrunePointerProxySessionsNoLock();
                 staleSessions = _pointerProxySessions.Values
-                    .Where(session => !string.Equals(
-                        session.SessionId,
-                        start.SessionId,
-                        StringComparison.Ordinal))
+                    .Where(session => !session.Terminal
+                        && !string.Equals(
+                            session.SessionId,
+                            start.SessionId,
+                            StringComparison.Ordinal))
                     .ToArray();
-                _pointerProxySessions.Clear();
+                foreach (var staleSession in staleSessions)
+                    _pointerProxySessions.Remove(staleSession.SessionId);
                 _pointerProxySessions[start.SessionId] = new PointerProxySession(
                     start.SessionId,
                     frame.Id,
@@ -3188,7 +3408,8 @@ public sealed class InspectorServer : IDisposable
                     holderLabel,
                     DateTime.UtcNow.AddMilliseconds(
                         Math.Clamp(result.MaxDurationMs > 0 ? result.MaxDurationMs : 60_000, 500, 300_000)
-                        + 5_000));
+                        + 5_000),
+                    Terminal: false);
             }
             foreach (var staleSession in staleSessions)
             {
@@ -3259,7 +3480,10 @@ public sealed class InspectorServer : IDisposable
         }).ToArray();
         var result = await _client.MovePointerSessionAsync(move.SessionId, move.Sequence, samples);
         if (!result.Success && !result.TransportFailure && result.State is "cancelled" or "gone")
-            RemovePointerProxySession(move.SessionId);
+        {
+            RetainTerminalPointerProxySession(move.SessionId);
+            InvalidateScreenshotCache();
+        }
         return PointerProxyResult(result);
     }
 
@@ -3283,10 +3507,14 @@ public sealed class InspectorServer : IDisposable
                 Y = end.Sample.Y + proxy.RootOffsetY,
                 ElapsedMs = end.Sample.ElapsedMs
             });
-        if (result.Success || !result.TransportFailure)
-            RemovePointerProxySession(end.SessionId);
-        if (result.Success)
+        var terminal = result.Success
+            || (!result.TransportFailure
+                && result.State is "ended" or "cancelled" or "gone");
+        if (terminal)
+        {
+            RetainTerminalPointerProxySession(end.SessionId);
             InvalidateScreenshotCache();
+        }
         return PointerProxyResult(result);
     }
 
@@ -3398,6 +3626,9 @@ public sealed class InspectorServer : IDisposable
 
     private bool IsPointerProxyFrameCompatible(PointerProxySession session)
     {
+        if (session.Terminal)
+            return true;
+
         lock (_cacheLock)
         {
             var latest = _latestCompleteFrameId is { } newest
@@ -3445,6 +3676,21 @@ public sealed class InspectorServer : IDisposable
             _pointerProxySessions.Remove(sessionId);
     }
 
+    private void RetainTerminalPointerProxySession(string sessionId)
+    {
+        lock (_pointerProxyGate)
+        {
+            if (_pointerProxySessions.TryGetValue(sessionId, out var session))
+            {
+                _pointerProxySessions[sessionId] = session with
+                {
+                    Terminal = true,
+                    ExpiresUtc = DateTime.UtcNow.AddSeconds(30)
+                };
+            }
+        }
+    }
+
     private async Task CancelProxyPointerSessionsAsync(string reason)
     {
         PointerProxySession[] sessions;
@@ -3453,7 +3699,7 @@ public sealed class InspectorServer : IDisposable
             sessions = _pointerProxySessions.Values.ToArray();
             _pointerProxySessions.Clear();
         }
-        foreach (var session in sessions)
+        foreach (var session in sessions.Where(static session => !session.Terminal))
         {
             try
             {
@@ -3526,7 +3772,8 @@ public sealed class InspectorServer : IDisposable
         string LeaseId,
         string HolderKind,
         string HolderLabel,
-        DateTime ExpiresUtc);
+        DateTime ExpiresUtc,
+        bool Terminal);
 
     private sealed class InspectorPointerStartRequest
     {
@@ -3596,6 +3843,19 @@ public sealed class InspectorServer : IDisposable
         public static ScreenshotResolutionKey Legacy { get; } = new(false, 1);
         public static ScreenshotResolutionKey SupportedDefault { get; } = new(true, 1);
     }
+
+    private sealed record InspectorActionContext(
+        string? ActionId,
+        string? StreamId,
+        string? FrameId,
+        long? FrameRevision,
+        string? CoordinateSpace,
+        double? X,
+        double? Y,
+        double? ToX,
+        double? ToY,
+        double? DeltaX,
+        double? DeltaY);
 
     private async Task<(int, string, byte[])> HandleProxyBackAsync()
     {
@@ -4393,6 +4653,7 @@ public sealed class InspectorServer : IDisposable
         {
             await CancelProxyPointerSessionsAsync("replay-started");
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            using var actionContext = _client.UseActionContext(source: "replay");
             var replayer = new Flows.FlowReplayer(_client);
             var report = await replayer.ReplayAsync(parsed.Flow, null, cts.Token);
             return (200, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(report, CamelCase)));
@@ -4879,6 +5140,7 @@ public sealed class InspectorServer : IDisposable
             const int MaxAssembledMessageBytes = 4 * 1024 * 1024; // 4 MB
             var buffer = new byte[8192];
             using var assembled = new MemoryStream();
+            var relayState = new UiEventRelayState();
             using var sendGate = new SemaphoreSlim(1, 1);
             await using var diagnosticsDebouncer = new DiagnosticsDeltaDebouncer(
                 CaptureLayoutDiagnosticsDeltaAsync,
@@ -4912,7 +5174,9 @@ public sealed class InspectorServer : IDisposable
                     }
                     if (result.EndOfMessage)
                     {
-                        var payload = assembled.ToArray();
+                        var payload = ProcessUiEventPayload(
+                            assembled.ToArray(),
+                            relayState);
                         assembled.SetLength(0);
                         await SendWebSocketFrameAsync(
                             clientStream,
@@ -4929,6 +5193,177 @@ public sealed class InspectorServer : IDisposable
         {
             try { browserClosedCts.Cancel(); } catch { }
         }
+    }
+
+    // State-changing events invalidate the current capture before the browser refreshes. Initial
+    // lifecycle/navigation snapshots and originating Inspector echoes describe state this server
+    // already knows, so they must not supersede a frame another request is still using. Action
+    // events also gain the matching cached Inspector frame when the agent only knew its capture.
+    internal byte[] ProcessUiEventPayload(
+        byte[] payload,
+        UiEventRelayState? relayState = null)
+    {
+        JsonNode? message;
+        try
+        {
+            message = JsonNode.Parse(payload);
+        }
+        catch (JsonException)
+        {
+            return payload;
+        }
+
+        if (message is not JsonObject root
+            || root["type"] is not JsonValue typeValue
+            || !typeValue.TryGetValue<string>(out var type))
+        {
+            return payload;
+        }
+
+        var eventData = root["data"] as JsonObject;
+        var initialSnapshot = relayState?.IsInitialSnapshot(root, type) == true;
+        var completedAction = type == "ui-action-completed";
+        var localCompletedAction = completedAction && IsLocalInspectorAction(eventData);
+        if (!initialSnapshot
+            && (type is "navigation" or "treeChange" or "lifecycle"
+                || (completedAction && !localCompletedAction)))
+        {
+            InvalidateScreenshotCache();
+        }
+
+        if (type is not ("ui-action-started" or "ui-action-updated" or "ui-action-completed")
+            || eventData is not JsonObject data)
+        {
+            return payload;
+        }
+
+        var correlation = data["correlation"] as JsonObject;
+        var existingFrameId = correlation?["frameId"] is JsonValue frameValue
+            && frameValue.TryGetValue<string>(out var parsedFrameId)
+            && !string.IsNullOrWhiteSpace(parsedFrameId)
+                ? parsedFrameId
+                : null;
+        var captureEpoch = TryGetInt64(data["captureEpoch"]);
+        var registryGeneration = TryGetInt64(data["registryGeneration"]);
+        var windowId = TryGetInt32(data["windowId"]);
+        var diagnosticInputsRevision = TryGetBoundedString(
+            data["diagnosticInputsRevision"],
+            128);
+
+        InspectorFrame? matchedFrame = null;
+        lock (_cacheLock)
+        {
+            PruneFramesLocked();
+            if (existingFrameId is not null)
+            {
+                _frames.TryGetValue(existingFrameId, out matchedFrame);
+            }
+            else if (diagnosticInputsRevision is not null)
+            {
+                matchedFrame = _frames.Values
+                    .Where(frame => string.Equals(
+                            frame.DiagnosticInputsRevision,
+                            diagnosticInputsRevision,
+                            StringComparison.Ordinal)
+                        && ActionWindowMatches(frame.WindowId, windowId))
+                    .MaxBy(static frame => frame.CreatedUtc);
+            }
+            else if (captureEpoch is not null)
+            {
+                matchedFrame = _frames.Values
+                    .Where(frame => frame.CaptureEpoch == captureEpoch
+                        && (registryGeneration is null
+                            || frame.RegistryGeneration == registryGeneration)
+                        && ActionWindowMatches(frame.WindowId, windowId))
+                    .MaxBy(static frame => frame.CreatedUtc);
+            }
+        }
+
+        if (matchedFrame is null)
+            return payload;
+
+        correlation ??= new JsonObject();
+        correlation["frameId"] = matchedFrame.Id;
+        if (existingFrameId is null)
+        {
+            correlation["streamId"] = _frameStreamId;
+            correlation["frameRevision"] = matchedFrame.FrameRevision;
+        }
+        else
+        {
+            correlation["streamId"] ??= _frameStreamId;
+            correlation["frameRevision"] ??= matchedFrame.FrameRevision;
+        }
+        data["correlation"] = correlation;
+        return Encoding.UTF8.GetBytes(root.ToJsonString());
+    }
+
+    internal sealed class UiEventRelayState
+    {
+        private bool _firstMessage = true;
+        private string? _initialSnapshotTimestamp;
+
+        internal bool IsInitialSnapshot(JsonObject root, string type)
+        {
+            var timestamp = root["timestamp"] is JsonValue timestampValue
+                && timestampValue.TryGetValue<string>(out var parsedTimestamp)
+                    ? parsedTimestamp
+                    : null;
+
+            if (_firstMessage)
+            {
+                _firstMessage = false;
+                if (type == "lifecycle")
+                {
+                    _initialSnapshotTimestamp = timestamp;
+                    return true;
+                }
+                return false;
+            }
+
+            if (type != "navigation"
+                || _initialSnapshotTimestamp is null)
+                return false;
+
+            var matches = string.Equals(
+                    timestamp,
+                    _initialSnapshotTimestamp,
+                    StringComparison.Ordinal)
+                && root["data"] is JsonObject data
+                && data["from"] is null;
+            _initialSnapshotTimestamp = null;
+            return matches;
+        }
+    }
+
+    private static long? TryGetInt64(JsonNode? node)
+        => node is JsonValue value && value.TryGetValue<long>(out var number)
+            ? number
+            : null;
+
+    private static int? TryGetInt32(JsonNode? node)
+        => node is JsonValue value && value.TryGetValue<int>(out var number)
+            ? number
+            : null;
+
+    private static bool ActionWindowMatches(
+        int? frameWindowId,
+        int? actionWindowId)
+        => (frameWindowId ?? 0) == (actionWindowId ?? 0);
+
+    private static string? TryGetBoundedString(JsonNode? node, int maxLength)
+    {
+        if (node is not JsonValue value
+            || !value.TryGetValue<string>(out var text)
+            || string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var trimmed = text.Trim();
+        if (trimmed.Length > maxLength || trimmed.Any(char.IsControl))
+            return null;
+        return trimmed;
     }
 
     internal static string ComputeWebSocketAcceptKey(string webSocketKey)

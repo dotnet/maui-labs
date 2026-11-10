@@ -33,6 +33,11 @@
         "resolution-hints"
       ]
     },
+    "ui.events": {
+      "version": 1,
+      "supported": true,
+      "features": ["stream", "subscribe", "action-lifecycle"]
+    },
     "ui.menus": {
       "version": 1,
       "supported": true,

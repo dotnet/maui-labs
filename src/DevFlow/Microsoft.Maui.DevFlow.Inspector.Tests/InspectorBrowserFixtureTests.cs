@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -40,6 +42,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private readonly ConcurrentQueue<int> _pointerMoveBytes = new();
     private readonly ConcurrentQueue<string> _pageErrors = new();
     private readonly ConcurrentDictionary<IRequest, byte> _pendingRequests = new();
+    private readonly ConcurrentDictionary<WebSocket, byte> _eventSockets = new();
+    private readonly SemaphoreSlim _eventSendGate = new(1, 1);
     private string _text = "Original text";
     private int _flyoutX = ClosedFlyoutX;
     private int _treeRequests;
@@ -51,6 +55,9 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private int _pointerMovesInFlight;
     private int _maxPointerMovesInFlight;
     private int _pointerMaxRequestBytes = 16 * 1024;
+    private volatile bool _emitActionEvents;
+    private volatile bool _supportsUiEvents;
+    private volatile bool _versionedTreeEnabled;
     private readonly TaskCompletionSource _screenshotHeld = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private volatile TaskCompletionSource? _screenshotGate;
     private int _disposed;
@@ -72,6 +79,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
             builder.Logging.ClearProviders();
             _agent = builder.Build();
+            _agent.UseWebSockets();
             _agent.MapGet("/api/v1/agent/status", () => Results.Json(new
             {
                 agent = new { framework = "maui", version = "fixture" },
@@ -97,6 +105,24 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             {
                 var capabilities = new Dictionary<string, object>
                 {
+                    ["ui.actions"] = new
+                    {
+                        version = 1,
+                        supported = true,
+                        features = new[]
+                        {
+                            "tap",
+                            "fill",
+                            "clear",
+                            "focus",
+                            "scroll",
+                            "navigate",
+                            "back",
+                            "key",
+                            "gesture",
+                            "properties"
+                        }
+                    },
                     ["ui.screenshot"] = new
                     {
                         version = 3,
@@ -118,6 +144,15 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                         idleTimeoutMs = 5000
                     };
                 }
+                if (_supportsUiEvents)
+                {
+                    capabilities["ui.events"] = new
+                    {
+                        version = 1,
+                        supported = true,
+                        features = new[] { "stream", "subscribe", "action-lifecycle" }
+                    };
+                }
                 return Results.Json(new
                 {
                     agent = new { framework = "maui" },
@@ -128,7 +163,14 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             _agent.MapGet("/api/v1/ui/tree", () =>
             {
                 Interlocked.Increment(ref _treeRequests);
-                return Results.Json(new[] { Root() });
+                return _versionedTreeEnabled
+                    ? Results.Json(new
+                    {
+                        revision = "fixture-tree",
+                        diagnosticInputsRevision = "3:0:0",
+                        elements = new[] { Root() }
+                    })
+                    : Results.Json(new[] { Root() });
             });
             _agent.MapGet("/api/v1/ui/elements/{id}", () => Results.Json(Label()));
             _agent.MapGet("/api/v1/ui/elements/{id}/properties", () => Results.Json(new
@@ -153,9 +195,22 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 if (name == "Text") Volatile.Write(ref _text, value);
                 return Results.Json(new { success = true });
             });
-            _agent.MapPost("/api/v1/ui/actions/tap", () =>
+            _agent.MapPost("/api/v1/ui/actions/tap", async (HttpContext context) =>
             {
+                using var body = await JsonDocument.ParseAsync(context.Request.Body);
+                var actionData = CreateActionData(context, body.RootElement, "tap");
+                if (_emitActionEvents)
+                    await PublishUiEventAsync("ui-action-started", actionData);
                 Volatile.Write(ref _text, "Tapped");
+                if (_emitActionEvents)
+                {
+                    await PublishUiEventAsync("ui-action-completed", new Dictionary<string, object?>(actionData)
+                    {
+                        ["success"] = true,
+                        ["outcome"] = "completed",
+                        ["elapsedMs"] = 1,
+                    });
+                }
                 return Results.Json(new { success = true });
             });
             _agent.MapPost("/api/v1/ui/actions/gesture", () =>
@@ -220,6 +275,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 _agentControlEvents.Enqueue($"cancel:{reason}");
                 return Results.Json(new { success = true, sessionId = id, state = "cancelled", lastSequence = 0 });
             });
+            _agent.Map("/ws/v1/ui/events", HandleUiEventsAsync);
             _agent.MapGet("/api/v1/ui/screenshot", () => Results.File(
                 Volatile.Read(ref _returnInvalidScreenshot) == 1
                     ? [1, 2, 3, 4]
@@ -1515,6 +1571,78 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task PointerEnd_DuplicateTerminalRetry_ReachesAgentTombstone()
+    {
+        await ReloadWithPointerStreamAsync();
+        var frameId = await CurrentPreviewFrameIdAsync();
+        var responses = await Page.EvaluateAsync<JsonElement>(
+            """
+            async frameId => {
+              const post = async (path, body) => {
+                const response = await fetch(path, {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify(body),
+                });
+                return { status: response.status, body: await response.json() };
+              };
+              const sessionId = 'terminal-retry';
+              const start = await post('/api/pointer/start', {
+                sessionId,
+                pointerId: 1,
+                x: 80,
+                y: 80,
+                elapsedMs: 0,
+                correlation: {
+                  actionId: 'terminal-retry-action',
+                  source: 'inspector',
+                  frameId,
+                  coordinateSpace: 'appLogical',
+                },
+              });
+              const terminal = {
+                sessionId,
+                sequence: 1,
+                sample: { x: 82, y: 84, elapsedMs: 24 },
+              };
+              const first = await post('/api/pointer/end', terminal);
+              const state = await fetch('/api/state').then(response => response.json());
+              const replacement = await post('/api/pointer/start', {
+                sessionId: 'replacement-session',
+                pointerId: 2,
+                x: 120,
+                y: 120,
+                elapsedMs: 0,
+                correlation: {
+                  actionId: 'replacement-action',
+                  source: 'inspector',
+                  frameId: state.frame.frameId,
+                  coordinateSpace: 'appLogical',
+                },
+              });
+              const retry = await post('/api/pointer/end', terminal);
+              await post('/api/pointer/cancel', {
+                sessionId: 'replacement-session',
+                reason: 'test-cleanup',
+              });
+              return { start, first, replacement, retry };
+            }
+            """,
+            frameId);
+
+        Assert.Equal(200, responses.GetProperty("start").GetProperty("status").GetInt32());
+        Assert.True(responses.GetProperty("start").GetProperty("body").GetProperty("ok").GetBoolean());
+        Assert.Equal(200, responses.GetProperty("first").GetProperty("status").GetInt32());
+        Assert.True(responses.GetProperty("first").GetProperty("body").GetProperty("ok").GetBoolean());
+        Assert.Equal(200, responses.GetProperty("replacement").GetProperty("status").GetInt32());
+        Assert.True(responses.GetProperty("replacement").GetProperty("body").GetProperty("ok").GetBoolean());
+        Assert.Equal(200, responses.GetProperty("retry").GetProperty("status").GetInt32());
+        Assert.True(responses.GetProperty("retry").GetProperty("body").GetProperty("ok").GetBoolean());
+        Assert.Equal(2, _pointerEvents.Count(entry => entry == "end:1"));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task PointerStream_UnsupportedAgent_FallsBackToLegacyGesture()
     {
         await Page.RouteAsync("**/api/gesture", async route =>
@@ -2793,6 +2921,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     [InspectorBrowserFixtureFact]
     public async Task OffscreenElement_IsDimmedInTreeAndNotDrawnOnPreview()
     {
+        await WaitForUiEventSocketAsync();
         var flyoutRow = Page.Locator(".devflow-element[data-id='fixture-flyout-row']");
         var flyoutTreeRow = Page.Locator(".df-tree-node[data-tree-id='fixture-flyout-row']");
         var labelTreeRow = Page.Locator(".df-tree-node[data-tree-id='fixture-label']");
@@ -2815,6 +2944,13 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 
         // Opening the flyout brings the row back into the Preview and the tree.
         Volatile.Write(ref _flyoutX, OpenFlyoutX);
+        await PublishUiEventAsync("treeChange", new
+        {
+            changeType = "modified",
+            elementId = "fixture-flyout-row",
+            elementType = "Grid",
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+        });
         await Expect(flyoutRow).Not.ToHaveAttributeAsync("data-offscreen", "true", new() { Timeout = 10_000 });
         await Expect(flyoutRow).ToBeVisibleAsync();
         await Expect(flyoutTreeRow).Not.ToHaveClassAsync(dimmed);
@@ -2824,6 +2960,13 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await flyoutRow.HoverAsync();
         await Expect(badge).ToBeVisibleAsync();
         Volatile.Write(ref _flyoutX, ClosedFlyoutX);
+        await PublishUiEventAsync("treeChange", new
+        {
+            changeType = "modified",
+            elementId = "fixture-flyout-row",
+            elementType = "Grid",
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+        });
         await Expect(flyoutRow).ToHaveAttributeAsync("data-offscreen", "true", new() { Timeout = 10_000 });
         await Expect(badge).ToBeHiddenAsync();
         await Expect(status).ToHaveTextAsync("Grid (off-screen)");
@@ -2831,8 +2974,654 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         // A refresh only updates the selection's own status text, never another message.
         await Page.Locator("#df-mode-inspect").ClickAsync();
         Volatile.Write(ref _flyoutX, OpenFlyoutX);
+        await PublishUiEventAsync("treeChange", new
+        {
+            changeType = "modified",
+            elementId = "fixture-flyout-row",
+            elementType = "Grid",
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+        });
         await Expect(flyoutRow).Not.ToHaveAttributeAsync("data-offscreen", "true", new() { Timeout = 10_000 });
         await Expect(status).ToContainTextAsync("Inspect mode");
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task RemoteTapLifecycle_RendersAtCorrelatedPreviewCoordinates()
+    {
+        _versionedTreeEnabled = true;
+        await Page.ReloadAsync(new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await WaitForUiEventSocketAsync();
+        var frameId = await CurrentPreviewFrameIdAsync();
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new { actionId = "remote-tap", source = "mcp", coordinateSpace = "appLogical" },
+            kind = "tap",
+            x = 120,
+            y = 140,
+            captureEpoch = 111,
+            registryGeneration = 3,
+            windowId = 0,
+            diagnosticInputsRevision = "3:0:0",
+        });
+
+        var cursor = Page.Locator(".df-action-cursor");
+        await Expect(cursor).ToBeVisibleAsync();
+        await Expect(cursor).ToHaveAttributeAsync("data-action-id", "remote-tap");
+        await Expect(cursor).ToHaveAttributeAsync("data-x", "120");
+        await Expect(cursor).ToHaveAttributeAsync("data-y", "140");
+        await Expect(Page.Locator(".df-action-ripple[data-action-id='remote-tap']")).ToHaveCountAsync(1);
+        await Expect(Page.Locator("#df-action-announcer")).Not.ToContainTextAsync("MCP started tap");
+        var treeRequestsBeforeFailure = Volatile.Read(ref _treeRequests);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "remote-tap", source = "mcp", coordinateSpace = "appLogical" },
+            kind = "tap",
+            x = 120,
+            y = 140,
+            captureEpoch = 111,
+            registryGeneration = 3,
+            windowId = 0,
+            diagnosticInputsRevision = "3:0:0",
+            success = false,
+            outcome = "failed",
+            reason = "action-rejected",
+        });
+        await Expect(cursor).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdf-action-failed\b"));
+        await Expect(Page.Locator("#df-action-announcer")).ToContainTextAsync("failed");
+        for (var attempt = 0;
+             attempt < 50 && Volatile.Read(ref _treeRequests) <= treeRequestsBeforeFailure;
+             attempt++)
+        {
+            await Task.Delay(50);
+        }
+        Assert.True(Volatile.Read(ref _treeRequests) > treeRequestsBeforeFailure);
+        await Page.WaitForFunctionAsync(
+            """
+            previous => {
+              const source = document.querySelector('#screenshot')?.src;
+              return source && new URL(source).searchParams.get('frame') !== previous;
+            }
+            """,
+            frameId);
+        frameId = await CurrentPreviewFrameIdAsync();
+
+        var retryCorrelation = new
+        {
+            actionId = "retry-tap",
+            source = "mcp",
+            frameId,
+            coordinateSpace = "appLogical"
+        };
+        var retryAction = new
+        {
+            correlation = retryCorrelation,
+            kind = "tap",
+            x = 160,
+            y = 180,
+            captureEpoch = 11,
+            registryGeneration = 3,
+            windowId = 0,
+        };
+        await PublishUiEventAsync("ui-action-started", retryAction);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = retryCorrelation,
+            kind = "tap",
+            x = 160,
+            y = 180,
+            success = false,
+            outcome = "failed",
+            reason = "action-rejected",
+        });
+        await PublishUiEventAsync("ui-action-started", retryAction);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = retryCorrelation,
+            kind = "tap",
+            x = 160,
+            y = 180,
+            success = true,
+            outcome = "completed",
+        });
+        await Page.WaitForTimeoutAsync(400);
+        await Expect(cursor).ToHaveAttributeAsync("data-action-id", "retry-tap");
+        await Expect(cursor).Not.ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdf-action-failed\b"));
+        await Expect(Page.Locator("#df-action-announcer")).Not.ToContainTextAsync("failed");
+
+        var cancelledCorrelation = new
+        {
+            actionId = "cancelled-tap",
+            source = "mcp",
+        };
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = cancelledCorrelation,
+            kind = "tap",
+            success = false,
+            outcome = "cancelled",
+            reason = "pointer-session-cancelled",
+        });
+        var cancelledBadge = Page.Locator(
+            ".df-action-badge[data-action-id='cancelled-tap']");
+        await Expect(cancelledBadge).ToHaveClassAsync(
+            new System.Text.RegularExpressions.Regex(@"\bdf-action-cancelled\b"));
+        await Expect(cancelledBadge).Not.ToHaveClassAsync(
+            new System.Text.RegularExpressions.Regex(@"\bdf-action-failed\b"));
+        await Expect(cancelledBadge).ToContainTextAsync("cancelled");
+        await Expect(Page.Locator("#df-action-announcer")).ToContainTextAsync("cancelled");
+
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "pending-success", source = "mcp" },
+            kind = "navigate",
+            success = true,
+            outcome = "completed",
+        });
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "priority-failure", source = "mcp" },
+            kind = "navigate",
+            success = false,
+            outcome = "failed",
+            reason = "action-rejected",
+        });
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "lower-priority-cancel", source = "mcp" },
+            kind = "back",
+            success = false,
+            outcome = "cancelled",
+            reason = "client-cancel",
+        });
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "later-success", source = "mcp" },
+            kind = "navigate",
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(Page.Locator("#df-action-announcer")).ToContainTextAsync("navigate failed");
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task LocalTapLifecycleEcho_IsSuppressedWithoutOverlay()
+    {
+        await WaitForUiEventSocketAsync();
+        _emitActionEvents = true;
+        var overlay = Page.Locator("#df-action-overlay");
+        var initialActionNodes = await overlay.Locator("[data-action-id]").CountAsync();
+        var initialCacheGeneration = InspectorCacheGeneration();
+
+        await Page.Locator(".devflow-element[data-id='fixture-button']").ClickAsync(
+            new() { Position = new() { X = 80, Y = 22 } });
+        await Page.WaitForTimeoutAsync(250);
+
+        Assert.Equal(initialActionNodes, await overlay.Locator("[data-action-id]").CountAsync());
+        Assert.Equal(initialCacheGeneration + 1, InspectorCacheGeneration());
+        await Expect(Page.Locator(".df-action-cursor")).ToBeHiddenAsync();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task ReducedMotion_PointerTerminalClassificationRendersFinalGeometry()
+    {
+        await WaitForUiEventSocketAsync();
+        var frameId = await CurrentPreviewFrameIdAsync();
+        await Page.EmulateMediaAsync(new() { ReducedMotion = ReducedMotion.Reduce });
+
+        var tapCorrelation = new
+        {
+            actionId = "reduced-tap",
+            source = "cli",
+            frameId,
+            coordinateSpace = "windowLogical"
+        };
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = tapCorrelation,
+            kind = "pointer",
+            x = 90,
+            y = 110,
+            toX = 90,
+            toY = 110,
+        });
+        await Expect(Page.Locator(
+            ".df-action-ripple[data-action-id='reduced-tap']"))
+            .ToHaveCountAsync(0);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = tapCorrelation,
+            kind = "tap",
+            x = 90,
+            y = 110,
+            toX = 90,
+            toY = 110,
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(Page.Locator(
+            ".df-action-ripple[data-action-id='reduced-tap']"))
+            .ToHaveCountAsync(1);
+        await WaitForPreviewFrameChangeAsync(frameId);
+        frameId = await CurrentPreviewFrameIdAsync();
+
+        var longPressCorrelation = new
+        {
+            actionId = "reduced-longpress",
+            source = "cli",
+            frameId,
+            coordinateSpace = "windowLogical"
+        };
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = longPressCorrelation,
+            kind = "pointer",
+            x = 120,
+            y = 140,
+            toX = 120,
+            toY = 140,
+        });
+        await Page.WaitForTimeoutAsync(1_100);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = longPressCorrelation,
+            kind = "longpress",
+            x = 120,
+            y = 140,
+            toX = 120,
+            toY = 140,
+            success = true,
+            outcome = "completed",
+        });
+        await Page.WaitForTimeoutAsync(100);
+        await Expect(Page.Locator(
+            ".df-action-ripple.df-action-longpress[data-action-id='reduced-longpress']"))
+            .ToHaveCountAsync(1);
+        await WaitForPreviewFrameChangeAsync(frameId);
+        frameId = await CurrentPreviewFrameIdAsync();
+
+        var swipeCorrelation = new
+        {
+            actionId = "reduced-swipe",
+            source = "cli",
+            frameId,
+            coordinateSpace = "windowLogical"
+        };
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = swipeCorrelation,
+            kind = "pointer",
+            x = 70,
+            y = 220,
+            captureEpoch = 11,
+            registryGeneration = 3,
+            windowId = 0,
+        });
+        await Expect(Page.Locator("#df-action-announcer")).Not.ToContainTextAsync("pointer");
+        await PublishUiEventAsync("ui-action-updated", new
+        {
+            correlation = swipeCorrelation,
+            kind = "pointer",
+            x = 70,
+            y = 220,
+            toX = 180,
+            toY = 220,
+            captureEpoch = 11,
+            registryGeneration = 3,
+            windowId = 0,
+        });
+
+        var overlay = Page.Locator("#df-action-overlay");
+        await Expect(overlay).ToHaveAttributeAsync("data-reduced-motion", "true");
+        var path = Page.Locator(".df-action-path[data-action-id='reduced-swipe'] path");
+        await Expect(path).ToHaveCountAsync(1);
+        Assert.Equal("none", await path.EvaluateAsync<string>("element => getComputedStyle(element).animationName"));
+        Assert.NotEqual("none", await path.EvaluateAsync<string>("element => getComputedStyle(element).stroke"));
+        Assert.Equal(
+            180,
+            await path.EvaluateAsync<double>(
+                "element => element.getPointAtLength(element.getTotalLength()).x"),
+            precision: 3);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = swipeCorrelation,
+            kind = "swipe",
+            x = 70,
+            y = 220,
+            toX = 300,
+            toY = 220,
+            captureEpoch = 11,
+            registryGeneration = 3,
+            windowId = 0,
+            success = true,
+            outcome = "completed",
+        });
+        Assert.Equal(
+            300,
+            await path.EvaluateAsync<double>(
+                "element => element.getPointAtLength(element.getTotalLength()).x"),
+            precision: 3);
+        await Expect(Page.Locator("#df-action-announcer")).ToContainTextAsync("CLI swiped");
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task StaleFrameAction_DegradesWithoutMovingCursor()
+    {
+        await WaitForUiEventSocketAsync();
+        var currentFrameId = await CurrentPreviewFrameIdAsync();
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new
+            {
+                actionId = "missing-element-action",
+                source = "mcp",
+                frameId = currentFrameId,
+            },
+            kind = "tap",
+            elementId = "missing-element",
+        });
+        await Expect(Page.Locator(
+            ".df-action-badge[data-action-id='missing-element-action']"))
+            .ToContainTextAsync("frame unavailable");
+
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new
+            {
+                actionId = "element-drag-action",
+                source = "mcp",
+                frameId = currentFrameId,
+            },
+            kind = "drag",
+            elementId = "fixture-label",
+            toElementId = "fixture-button",
+        });
+        var dragEndDelta = await Page.Locator(
+            ".df-action-path[data-action-id='element-drag-action'] path")
+            .EvaluateAsync<JsonElement>(
+                """
+                path => {
+                  const target = document.querySelector(
+                    ".devflow-element[data-id='fixture-button']");
+                  const end = path.getPointAtLength(path.getTotalLength());
+                  return {
+                    x: Math.abs(end.x - (target.offsetLeft + target.offsetWidth / 2)),
+                    y: Math.abs(end.y - (target.offsetTop + target.offsetHeight / 2)),
+                  };
+                }
+                """);
+        Assert.True(dragEndDelta.GetProperty("x").GetDouble() < 0.1);
+        Assert.True(dragEndDelta.GetProperty("y").GetDouble() < 0.1);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new
+            {
+                actionId = "element-drag-action",
+                source = "mcp",
+                frameId = currentFrameId,
+            },
+            kind = "drag",
+            elementId = "fixture-label",
+            toElementId = "fixture-button",
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(Page.Locator(".df-action-cursor"))
+            .ToBeHiddenAsync(new() { Timeout = 3_000 });
+        currentFrameId = await CurrentPreviewFrameIdAsync();
+
+        const string supersededActionId = "superseded-pointer-action";
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new
+            {
+                actionId = supersededActionId,
+                source = "mcp",
+                frameId = currentFrameId,
+                coordinateSpace = "appLogical"
+            },
+            kind = "pointer",
+            x = 120,
+            y = 140,
+            toX = 120,
+            toY = 140,
+        });
+        await Expect(Page.Locator(".df-action-cursor"))
+            .ToHaveAttributeAsync("data-action-id", supersededActionId);
+        await PublishUiEventAsync("treeChange", new { reason = "test-frame-change" });
+        await WaitForPreviewFrameChangeAsync(currentFrameId);
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new
+            {
+                actionId = supersededActionId,
+                source = "mcp",
+                frameId = currentFrameId,
+                coordinateSpace = "appLogical"
+            },
+            kind = "tap",
+            x = 120,
+            y = 140,
+            toX = 120,
+            toY = 140,
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(Page.Locator(
+            $".df-action-badge[data-action-id='{supersededActionId}']"))
+            .ToContainTextAsync("frame unavailable");
+        await Expect(Page.Locator(".df-action-cursor")).ToBeHiddenAsync();
+        await Expect(Page.Locator("#df-action-announcer"))
+            .ToContainTextAsync("Preview position unavailable");
+        await Expect(Page.Locator("#df-action-announcer"))
+            .Not.ToContainTextAsync("MCP tapped");
+
+        await Page.SetViewportSizeAsync(360, 260);
+        await Page.WaitForFunctionAsync("""
+            () => new DOMMatrix(
+              getComputedStyle(document.querySelector('#app-viewport')).transform).a < 0.8
+            """);
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new
+            {
+                actionId = "stale-action",
+                source = "replay",
+                frameId = "expired-frame",
+                coordinateSpace = "appLogical"
+            },
+            kind = "tap",
+            x = 120,
+            y = 140,
+        });
+
+        var badge = Page.Locator(".df-action-badge[data-action-id='stale-action']");
+        await Expect(badge).ToContainTextAsync("frame unavailable");
+        var badgeBounds = await badge.BoundingBoxAsync();
+        var wrapBounds = await Page.Locator("#df-viewport-wrap").BoundingBoxAsync();
+        Assert.NotNull(badgeBounds);
+        Assert.NotNull(wrapBounds);
+        Assert.True(badgeBounds!.Height >= 16, $"Action badge was only {badgeBounds.Height}px high.");
+        Assert.True(
+            badgeBounds.X >= wrapBounds!.X
+                && badgeBounds.X + badgeBounds.Width <= wrapBounds.X + wrapBounds.Width,
+            "The action badge must remain fully visible inside the Preview host.");
+        await Expect(Page.Locator(".df-action-cursor")).ToBeHiddenAsync();
+        await Expect(Page.Locator("#df-action-announcer")).Not.ToContainTextAsync("Replay tapped");
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new
+            {
+                actionId = "stale-action",
+                source = "replay",
+                frameId = "expired-frame",
+                coordinateSpace = "appLogical"
+            },
+            kind = "tap",
+            x = 120,
+            y = 140,
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(Page.Locator("#df-action-announcer")).ToContainTextAsync("Preview position unavailable");
+        await Expect(Page.Locator("#df-action-announcer")).Not.ToContainTextAsync("Replay tapped");
+
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new { actionId = "remote-navigation", source = "cli" },
+            kind = "navigate",
+        });
+        var navigationBadge = Page.Locator(
+            ".df-action-badge[data-action-id='remote-navigation']");
+        await Expect(navigationBadge).ToContainTextAsync("navigate");
+        await Expect(navigationBadge).Not.ToContainTextAsync("frame unavailable");
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "remote-navigation", source = "cli" },
+            kind = "navigate",
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(Page.Locator("#df-action-announcer")).ToContainTextAsync("CLI navigated");
+        await Expect(Page.Locator("#df-action-announcer")).Not.ToContainTextAsync("position unavailable");
+
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new { actionId = "failed-navigation", source = "cli" },
+            kind = "navigate",
+        });
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "failed-navigation", source = "cli" },
+            kind = "navigate",
+            success = false,
+            outcome = "failed",
+            reason = "action-rejected",
+        });
+        var failedNavigationBadge = Page.Locator(
+            ".df-action-badge[data-action-id='failed-navigation']");
+        await Expect(failedNavigationBadge).ToContainTextAsync("failed");
+        await Expect(failedNavigationBadge).ToHaveClassAsync(
+            new System.Text.RegularExpressions.Regex(@"\bdf-action-failed\b"));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task ActionAnnouncement_UsesIdentifierOrTypeWithoutElementText()
+    {
+        await WaitForUiEventSocketAsync();
+        var frameId = await CurrentPreviewFrameIdAsync();
+        var correlation = new
+        {
+            actionId = "remote-tap-label",
+            source = "mcp",
+            frameId,
+        };
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation,
+            kind = "tap",
+            elementId = "fixture-button",
+        });
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation,
+            kind = "tap",
+            elementId = "fixture-button",
+            success = true,
+            outcome = "completed",
+        });
+
+        var announcement = Page.Locator("#df-action-announcer");
+        await Expect(announcement).ToContainTextAsync("Button");
+        await Expect(announcement).Not.ToContainTextAsync("Tap me");
+
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new
+            {
+                actionId = "unknown-direction",
+                source = "mcp",
+                frameId,
+                coordinateSpace = "appLogical"
+            },
+            kind = "swipe",
+            direction = "read-secrets",
+            x = 20,
+            y = 30,
+            toX = 120,
+            toY = 30,
+            success = true,
+            outcome = "completed",
+        });
+        await Expect(announcement).ToContainTextAsync("MCP swiped");
+        await Expect(announcement).Not.ToContainTextAsync("read secrets");
+
+        await PublishUiEventAsync("ui-action-completed", new
+        {
+            correlation = new { actionId = "unknown-action", source = "mcp" },
+            kind = "read-secret-now",
+            success = false,
+            outcome = "failed",
+            reason = "say-user-password",
+        });
+        await Expect(announcement).ToContainTextAsync("MCP action failed");
+        await Expect(announcement).Not.ToContainTextAsync("read secret now");
+        await Expect(announcement).Not.ToContainTextAsync("say user password");
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task NavigationAndReconnect_ClearActionVisuals()
+    {
+        await WaitForUiEventSocketAsync();
+        var frameId = await CurrentPreviewFrameIdAsync();
+        var action = new
+        {
+            correlation = new { actionId = "clear-action", source = "mcp", frameId, coordinateSpace = "appLogical" },
+            kind = "longpress",
+            x = 120,
+            y = 140,
+            captureEpoch = 11,
+            registryGeneration = 3,
+            windowId = 0,
+        };
+        await PublishUiEventAsync("ui-action-started", action);
+        await Expect(Page.Locator(".df-action-cursor")).ToBeVisibleAsync();
+
+        await PublishUiEventAsync("navigation", new
+        {
+            from = "//old",
+            to = "//new",
+            route = "//new",
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+        });
+        await Expect(Page.Locator(".df-action-ripple[data-action-id='clear-action']")).ToHaveCountAsync(1);
+        await Expect(Page.Locator(".df-action-ripple[data-action-id='clear-action']"))
+            .ToHaveCountAsync(0, new() { Timeout = 3_000 });
+        await Expect(Page.Locator(".df-action-cursor")).ToBeHiddenAsync(new() { Timeout = 5_000 });
+
+        await Page.WaitForTimeoutAsync(250);
+        frameId = await CurrentPreviewFrameIdAsync();
+        await PublishUiEventAsync("ui-action-started", new
+        {
+            correlation = new { actionId = "disconnect-action", source = "mcp", frameId, coordinateSpace = "appLogical" },
+            kind = "tap",
+            x = 160,
+            y = 170,
+            captureEpoch = 11,
+            registryGeneration = 3,
+            windowId = 0,
+        });
+        await Expect(Page.Locator(".df-action-cursor")).ToBeVisibleAsync();
+
+        await CloseUiEventSocketsAsync();
+        await WaitForNoUiEventSocketsAsync();
+        await Expect(Page.Locator(".df-action-cursor")).ToBeHiddenAsync(new() { Timeout = 5_000 });
+        await WaitForUiEventSocketAsync();
         Assert.Empty(_pageErrors);
     }
 
@@ -2886,10 +3675,201 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Empty(_pageErrors);
     }
 
+    private async Task HandleUiEventsAsync(HttpContext context)
+    {
+        if (!context.WebSockets.IsWebSocketRequest)
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        using var socket = await context.WebSockets.AcceptWebSocketAsync();
+        _eventSockets.TryAdd(socket, 0);
+        var buffer = new byte[2048];
+        try
+        {
+            while (socket.State == WebSocketState.Open
+                && !context.RequestAborted.IsCancellationRequested)
+            {
+                var result = await socket.ReceiveAsync(buffer, context.RequestAborted);
+                if (result.MessageType == WebSocketMessageType.Close)
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _eventSockets.TryRemove(socket, out _);
+        }
+    }
+
+    private Dictionary<string, object?> CreateActionData(
+        HttpContext context,
+        JsonElement body,
+        string kind)
+    {
+        var correlation = new Dictionary<string, object?>
+        {
+            ["actionId"] = context.Request.Headers["X-DevFlow-Action-Id"].ToString(),
+            ["source"] = context.Request.Headers["X-DevFlow-Action-Source"].ToString(),
+            ["streamId"] = NullIfEmpty(context.Request.Headers["X-DevFlow-Action-Stream-Id"].ToString()),
+            ["frameId"] = NullIfEmpty(context.Request.Headers["X-DevFlow-Action-Frame-Id"].ToString()),
+            ["frameRevision"] = HeaderInt64(context, "X-DevFlow-Action-Frame-Revision"),
+            ["coordinateSpace"] = NullIfEmpty(context.Request.Headers["X-DevFlow-Action-Coordinate-Space"].ToString()),
+        }.Where(pair => pair.Value is not null)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+        return new Dictionary<string, object?>
+        {
+            ["correlation"] = correlation,
+            ["kind"] = kind,
+            ["elementId"] = body.TryGetProperty("elementId", out var elementId)
+                ? elementId.GetString()
+                : null,
+            ["x"] = HeaderDouble(context, "X-DevFlow-Action-X"),
+            ["y"] = HeaderDouble(context, "X-DevFlow-Action-Y"),
+            ["captureEpoch"] = body.TryGetProperty("captureEpoch", out var epoch)
+                ? epoch.GetInt64()
+                : null,
+            ["registryGeneration"] = body.TryGetProperty("registryGeneration", out var generation)
+                ? generation.GetInt64()
+                : null,
+            ["windowId"] = 0,
+        }.Where(pair => pair.Value is not null)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+    }
+
+    private static double? HeaderDouble(HttpContext context, string name)
+        => double.TryParse(
+            context.Request.Headers[name].ToString(),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var value)
+                ? value
+                : null;
+
+    private static long? HeaderInt64(HttpContext context, string name)
+        => long.TryParse(
+            context.Request.Headers[name].ToString(),
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var value)
+                ? value
+                : null;
+
+    private static string? NullIfEmpty(string value)
+        => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private async Task PublishUiEventAsync(string type, object data)
+    {
+        var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            type,
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            data,
+        }));
+        await _eventSendGate.WaitAsync();
+        try
+        {
+            foreach (var socket in _eventSockets.Keys)
+            {
+                if (socket.State != WebSocketState.Open)
+                    continue;
+                try
+                {
+                    await socket.SendAsync(
+                        payload,
+                        WebSocketMessageType.Text,
+                        endOfMessage: true,
+                        CancellationToken.None);
+                }
+                catch
+                {
+                    _eventSockets.TryRemove(socket, out _);
+                }
+            }
+        }
+        finally
+        {
+            _eventSendGate.Release();
+        }
+    }
+
+    private async Task WaitForUiEventSocketAsync()
+    {
+        _supportsUiEvents = true;
+        await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (_eventSockets.Keys.Any(socket => socket.State == WebSocketState.Open))
+                return;
+            await Task.Delay(50);
+        }
+        throw new TimeoutException("Inspector did not connect to the fixture UI event stream.");
+    }
+
+    private async Task WaitForNoUiEventSocketsAsync()
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (!_eventSockets.Keys.Any(socket => socket.State == WebSocketState.Open))
+                return;
+            await Task.Delay(50);
+        }
+        throw new TimeoutException("Fixture UI event stream did not disconnect.");
+    }
+
+    private async Task<string> CurrentPreviewFrameIdAsync()
+    {
+        var frameId = await Page.EvaluateAsync<string?>("""
+            () => {
+              const source = document.querySelector('#screenshot')?.src;
+              return source ? new URL(source).searchParams.get('frame') : null;
+            }
+            """);
+        return Assert.IsType<string>(frameId);
+    }
+
+    private async Task WaitForPreviewFrameChangeAsync(string previousFrameId)
+    {
+        await Page.WaitForFunctionAsync(
+            """
+            previous => {
+              const source = document.querySelector('#screenshot')?.src;
+              return source && new URL(source).searchParams.get('frame') !== previous;
+            }
+            """,
+            previousFrameId);
+    }
+
+    private long InspectorCacheGeneration()
+        => Assert.IsType<long>(typeof(InspectorServer)
+            .GetField("_cacheGeneration", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(_inspector));
+
+    private async Task CloseUiEventSocketsAsync()
+    {
+        foreach (var socket in _eventSockets.Keys)
+        {
+            try
+            {
+                await socket.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure,
+                    "fixture reconnect",
+                    CancellationToken.None);
+            }
+            catch
+            {
+            }
+        }
+    }
+
     private object Label() => new
     {
         id = "fixture-label", type = "Label", automationId = "FixtureLabel",
         text = Volatile.Read(ref _text), isVisible = true, isEnabled = true,
+        captureEpoch = 11, registryGeneration = 3, windowId = 0,
         bounds = new { x = 20, y = 30, width = 250, height = 40 },
         sourceFile = "FixturePage.xaml", sourceLine = 2,
         children = new[] { Button(), FlyoutRow() },
@@ -2946,6 +3926,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private static object Button() => new
     {
         id = "fixture-button", type = "Button", text = "Tap me", isVisible = true, isEnabled = true,
+        captureEpoch = 11, registryGeneration = 3, windowId = 0,
         bounds = new { x = 20, y = 90, width = 160, height = 44 },
         children = Array.Empty<object>(),
     };
@@ -2954,6 +3935,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private object FlyoutRow() => new
     {
         id = "fixture-flyout-row", type = "Grid", isVisible = true, isEnabled = true,
+        captureEpoch = 11, registryGeneration = 3, windowId = 0,
         bounds = new { x = Volatile.Read(ref _flyoutX), y = 100, width = 320, height = 50 },
         children = Array.Empty<object>(),
     };
@@ -2961,6 +3943,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private object Root() => new
     {
         id = "fixture-page", type = "ContentPage", isVisible = true, isEnabled = true,
+        captureEpoch = 11, registryGeneration = 3, windowId = 0,
         bounds = new { x = 0, y = 0, width = 400, height = 300 },
         children = new[] { Label() },
     };

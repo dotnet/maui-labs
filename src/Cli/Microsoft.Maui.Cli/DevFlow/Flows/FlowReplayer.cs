@@ -105,42 +105,79 @@ public sealed class FlowReplayer
             switch (step.Action)
             {
                 case FlowActions.Tap:
-                {
-                    var id = await ResolveDriveTargetAsync(FlowValidator.EffectiveSelector(step), ct);
-                    if (id is null) return (false, "tap target could not be resolved");
-                    return await _agent.TapAsync(id) ? (true, null) : (false, "tap reported failure");
-                }
+                    return await DriveCaptureBoundActionAsync(
+                        FlowValidator.EffectiveSelector(step),
+                        "tap target could not be resolved",
+                        "tap reported failure",
+                        (target, epoch, generation) =>
+                            _agent.TapResultAsync(target.Id, epoch, generation),
+                        ct);
                 case FlowActions.Fill:
-                {
-                    var id = await ResolveDriveTargetAsync(FlowValidator.EffectiveSelector(step), ct);
-                    if (id is null) return (false, "fill target could not be resolved");
-                    return await _agent.FillAsync(id, args?.Text ?? step.Value ?? "") ? (true, null) : (false, "fill reported failure");
-                }
+                    return await DriveCaptureBoundActionAsync(
+                        FlowValidator.EffectiveSelector(step),
+                        "fill target could not be resolved",
+                        "fill reported failure",
+                        (target, epoch, generation) =>
+                            _agent.FillResultAsync(
+                                target.Id,
+                                args?.Text ?? step.Value ?? "",
+                                epoch,
+                                generation),
+                        ct);
                 case FlowActions.SetProperty:
                 {
-                    var id = await ResolveDriveTargetAsync(FlowValidator.EffectiveSelector(step), ct);
-                    if (id is null) return (false, "setProperty target could not be resolved");
                     var name = string.IsNullOrEmpty(args?.Name) ? "Text" : args!.Name!;
-                    return await _agent.SetPropertyAsync(id, name, args?.Value ?? step.Value ?? "")
-                        ? (true, null) : (false, "setProperty reported failure");
+                    return await DriveCaptureBoundActionAsync(
+                        FlowValidator.EffectiveSelector(step),
+                        "setProperty target could not be resolved",
+                        "setProperty reported failure",
+                        (target, epoch, generation) =>
+                            _agent.SetPropertyResultAsync(
+                                target.Id,
+                                name,
+                                args?.Value ?? step.Value ?? "",
+                                epoch,
+                                generation),
+                        ct);
                 }
                 case FlowActions.Scroll:
                 {
-                    string? id = null;
                     var sel = FlowValidator.EffectiveSelector(step);
                     if (sel is not null && !sel.IsEmpty)
                     {
-                        id = await ResolveDriveTargetAsync(sel, ct);
-                        if (id is null) return (false, "scroll target could not be resolved");
+                        return await DriveCaptureBoundActionAsync(
+                            sel,
+                            "scroll target could not be resolved",
+                            "scroll reported failure",
+                            (target, epoch, generation) =>
+                                _agent.ScrollResultAsync(
+                                    elementId: target.Id,
+                                    deltaX: args?.Dx ?? 0,
+                                    deltaY: args?.Dy ?? 0,
+                                    animated: args?.Animated ?? false,
+                                    window: null,
+                                    itemIndex: args?.ItemIndex,
+                                    groupIndex: null,
+                                    scrollToPosition: args?.Position,
+                                    captureEpoch: epoch,
+                                    registryGeneration: generation),
+                            ct);
                     }
-                    var ok = await _agent.ScrollAsync(
-                        elementId: id,
+
+                    var result = await _agent.ScrollResultAsync(
+                        elementId: null,
                         deltaX: args?.Dx ?? 0,
                         deltaY: args?.Dy ?? 0,
                         animated: args?.Animated ?? false,
+                        window: null,
                         itemIndex: args?.ItemIndex,
-                        scrollToPosition: args?.Position);
-                    return ok ? (true, null) : (false, "scroll reported failure");
+                        groupIndex: null,
+                        scrollToPosition: args?.Position,
+                        captureEpoch: null,
+                        registryGeneration: null);
+                    return result.Success
+                        ? (true, null)
+                        : (false, "scroll reported failure");
                 }
                 case FlowActions.Navigate:
                 {
@@ -165,6 +202,7 @@ public sealed class FlowReplayer
                     return (false, $"unknown action: {step.Action}");
             }
         }
+
         catch (OperationCanceledException)
         {
             throw;
@@ -173,6 +211,37 @@ public sealed class FlowReplayer
         {
             return (false, $"drive failed: {ex.Message}");
         }
+    }
+
+    private async Task<(bool Ok, string? Error)> DriveCaptureBoundActionAsync(
+        FlowSelector? selector,
+        string unresolvedError,
+        string failureError,
+        Func<ElementInfo, long?, long?, Task<ActionResult>> execute,
+        CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var target = await ResolveDriveTargetAsync(selector, ct);
+            if (target is null)
+                return (false, unresolvedError);
+
+            var (epoch, generation) = GetCaptureMetadata(target);
+            var result = await execute(target, epoch, generation);
+            if (result.Success)
+                return (true, null);
+            if (attempt == 0
+                && result.Retryable
+                && !result.TransportFailure)
+            {
+                if (_pollGapMs > 0)
+                    await Task.Delay(_pollGapMs, ct);
+                continue;
+            }
+            return (false, failureError);
+        }
+
+        return (false, failureError);
     }
 
     private async Task<FlowAssertResult> VerifyAsync(FlowAssert a, CancellationToken ct)
@@ -282,13 +351,13 @@ public sealed class FlowReplayer
         return true;
     }
 
-    private async Task<string?> ResolveDriveTargetAsync(FlowSelector? selector, CancellationToken ct)
+    private async Task<ElementInfo?> ResolveDriveTargetAsync(FlowSelector? selector, CancellationToken ct)
     {
         for (var attempt = 0; attempt < _pollTries; attempt++)
         {
-            var id = await ResolveToIdAsync(selector, ct);
-            if (id is not null)
-                return id;
+            var element = await ResolveToElementAsync(selector, ct);
+            if (element is not null)
+                return element;
             if (attempt < _pollTries - 1)
                 await Task.Delay(_pollGapMs, ct);
         }
@@ -296,6 +365,9 @@ public sealed class FlowReplayer
     }
 
     private async Task<string?> ResolveToIdAsync(FlowSelector? selector, CancellationToken ct)
+        => (await ResolveToElementAsync(selector, ct))?.Id;
+
+    private async Task<ElementInfo?> ResolveToElementAsync(FlowSelector? selector, CancellationToken ct)
     {
         if (selector is null || selector.IsEmpty) return null;
         ct.ThrowIfCancellationRequested();
@@ -304,12 +376,12 @@ public sealed class FlowReplayer
         if (!string.IsNullOrEmpty(selector.AutomationId))
         {
             var r = await _agent.QueryAsync(automationId: selector.AutomationId);
-            return r.Count > 0 ? r[0].Id : null;
+            return r.Count > 0 ? r[0] : null;
         }
         if (!string.IsNullOrEmpty(selector.Text))
         {
             var r = await _agent.QueryAsync(text: selector.Text);
-            return r.Count > 0 ? r[0].Id : null;
+            return r.Count > 0 ? r[0] : null;
         }
         var typeIndex = selector.TypeIndex
             ?? (selector.SelectorKind == "typeIndex" && !string.IsNullOrEmpty(selector.Type) && selector.Index is not null
@@ -318,15 +390,21 @@ public sealed class FlowReplayer
         if (typeIndex is not null && !string.IsNullOrEmpty(typeIndex.Type))
         {
             var byType = await _agent.QueryAsync(type: typeIndex.Type);
-            return typeIndex.Index >= 0 && typeIndex.Index < byType.Count ? byType[typeIndex.Index].Id : null;
+            return typeIndex.Index >= 0 && typeIndex.Index < byType.Count ? byType[typeIndex.Index] : null;
         }
         if (!string.IsNullOrEmpty(selector.Id))
         {
             var el = await _agent.GetElementAsync(selector.Id);
-            return el is not null ? selector.Id : null;
+            return el;
         }
         return null;
     }
+
+    private static (long? CaptureEpoch, long? RegistryGeneration) GetCaptureMetadata(
+        ElementInfo element)
+        => element.CaptureEpoch > 0
+            ? (element.CaptureEpoch, element.RegistryGeneration)
+            : (null, null);
 
     private static bool TryParseTheme(string? s, out DevFlowTheme theme)
     {

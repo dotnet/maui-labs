@@ -7,6 +7,7 @@ import {
   normalizeAgentCapabilities,
   resolveCommandFocus,
 } from './inspector-command-policy.js';
+import { createActionOverlayController } from './inspector-actions.js';
 import { confirmModal } from './inspector-dialog.js';
 import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from './inspector-data-context.js';
 import {
@@ -72,6 +73,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
     return statusChannel.set(text);
   }
   let viewportController = null;
+  const actionOverlayElement = document.getElementById('df-action-overlay');
+  const actionChromeElement = document.getElementById('df-action-chrome');
+  const actionAnnouncer = document.getElementById('df-action-announcer');
   let rootOffsetX = parseFloat(viewport.dataset.rootOffsetX) || 0;
   let rootOffsetY = parseFloat(viewport.dataset.rootOffsetY) || 0;
 
@@ -100,13 +104,24 @@ import { createViewportController } from './inspector-viewport-controller.js';
       rootOffsetY,
     };
   }
-  let committedFrame = normalizeFrameDescriptor(initialFrameState());
+  const initialFrame = initialFrameState();
+  let committedFrameIdentityExplicit = hasExplicitFrameIdentity(initialFrame);
+  let committedFrame = normalizeFrameDescriptor(initialFrame);
   rootOffsetX = committedFrame.rootOffsetX;
   rootOffsetY = committedFrame.rootOffsetY;
   viewport.style.width = committedFrame.logicalWidth + 'px';
   viewport.style.height = committedFrame.logicalHeight + 'px';
   viewport.dataset.width = String(committedFrame.logicalWidth);
   viewport.dataset.height = String(committedFrame.logicalHeight);
+  const actionOverlay = createActionOverlayController({
+    viewport,
+    overlay: actionOverlayElement,
+    chrome: actionChromeElement,
+    announcer: actionAnnouncer,
+    getCurrentFrame: () => committedFrame,
+    hasCurrentFrameIdentity: () => committedFrameIdentityExplicit,
+    getElementById: id => elById(id),
+  });
 
   function correlatedPayload(
     payload,
@@ -354,6 +369,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
       layoutPanel?.invalidate('Preview evidence changed; the previous Layout snapshot is stale.');
 
     if (previous && !previous.showBlockingOverlay && blocking) {
+      actionOverlay.clear({ clearLocal: true });
       disconnectReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     } else if (previous?.showBlockingOverlay && !blocking && disconnectReturnFocus?.isConnected) {
       const active = document.activeElement;
@@ -664,6 +680,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
     }
     committedFrame = frame;
     pointerFrameRefreshNeeded = false;
+    committedFrameIdentityExplicit = hasExplicitFrameIdentity(state);
     if (state.elements) onElementsUpdated();
     latestRootOffsetX = rootOffsetX;
     latestRootOffsetY = rootOffsetY;
@@ -1269,17 +1286,19 @@ import { createViewportController } from './inspector-viewport-controller.js';
 
   async function commitEditor(editor, retryStaleCapture) {
     try {
+      const requestPayload = correlatedPayload(
+        {
+          elementId: editor.dataset.elementId,
+          text: editor.value,
+          ...getElementCaptureMetadata(editor),
+        },
+        CoordinateSpace.appLogical,
+        editorFrames.get(editor) || committedFrame);
+      actionOverlay.rememberLocalCorrelation(requestPayload.correlation);
       const response = await fetch(`${basePath}/api/fill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(correlatedPayload(
-          {
-            elementId: editor.dataset.elementId,
-            text: editor.value,
-            ...getElementCaptureMetadata(editor),
-          },
-          CoordinateSpace.appLogical,
-          editorFrames.get(editor) || committedFrame)),
+        body: JSON.stringify(requestPayload),
       });
 
       if (response.ok) {
@@ -1413,6 +1432,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
     const payload = correlatedPayload({ x, y, ...getElementCaptureMetadata(targetEl) });
     if (targetId) payload.elementId = targetId;
     const previewSignature = previewStateSignature();
+    actionOverlay.rememberLocalCorrelation(payload.correlation);
 
     pendingTapRequests++;
     renderPreviewPending();
@@ -1542,13 +1562,15 @@ import { createViewportController } from './inspector-viewport-controller.js';
     if (!ensureCanInteract()) return mutated;
     const request = (async () => {
       try {
+        const requestPayload = correlatedPayload(
+          { x, y, deltaX: dx, deltaY: dy },
+          CoordinateSpace.appLogical,
+          frame);
+        actionOverlay.rememberLocalCorrelation(requestPayload.correlation);
         const resp = await fetch(`${basePath}/api/scroll`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(correlatedPayload(
-            { x, y, deltaX: dx, deltaY: dy },
-            CoordinateSpace.appLogical,
-            frame))
+          body: JSON.stringify(requestPayload)
         });
         if (await responseHasFrameCorrelationError(resp))
           scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
@@ -1765,6 +1787,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
         'inspector',
         session.actionId);
       session.startRequested = true;
+      actionOverlay.rememberLocalCorrelation(correlation);
       const response = await fetch(`${basePath}/api/pointer/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2013,21 +2036,30 @@ import { createViewportController } from './inspector-viewport-controller.js';
       finishPointerSessionState(session);
       if (screenDistance > 12 && ensureCanInteract()) {
         try {
+          const requestPayload = correlatedPayload(
+            { points: session.fallbackPoints },
+            CoordinateSpace.appLogical,
+            session.frame);
+          actionOverlay.rememberLocalCorrelation(requestPayload.correlation);
           const response = await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(correlatedPayload(
-              { points: session.fallbackPoints },
-              CoordinateSpace.appLogical,
-              session.frame)),
+            body: JSON.stringify(requestPayload),
           });
+          const failure = response.ok
+            ? null
+            : await response.clone().json().catch(() => null);
+          const reason = failure?.reason || failure?.error || `HTTP ${response.status}`;
           if (await responseHasFrameCorrelationError(response))
             scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
           scheduleRefresh(
             300,
             response.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
-          await response.arrayBuffer().catch(() => {});
-          if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
+          if (response.ok) {
+            if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
+          } else {
+            setStatus(`Gesture did not run — ${reason}`);
+          }
         } catch (error) {
           console.error('Gesture fallback failed:', error);
         }
@@ -2259,6 +2291,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
         if (eventsWs !== socket) return;
         wsLive = true;
         reportEventStatus('live');
+        actionOverlay.clear({ clearLocal: false });
         if (!document.hidden && !replaying) scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
       };
       socket.onmessage = (event) => {
@@ -2266,6 +2299,16 @@ import { createViewportController } from './inspector-viewport-controller.js';
         if (typeof event.data === 'string') {
           try {
             const message = JSON.parse(event.data);
+            const actionEvent = actionOverlay.handleEvent(message);
+            if (actionEvent) {
+              if (actionEvent === 'remote'
+                  && message.type === 'ui-action-completed'
+                  && !document.hidden
+                  && !replaying) {
+                scheduleRefresh(150, REFRESH_INTENT_MUTATION);
+              }
+              return;
+            }
             if (message && message.type === 'layout-diagnostics-delta') {
               applyDiagnosticsDelta(message);
               return;
@@ -2279,6 +2322,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
       socket.onclose = () => {
         if (eventsWs !== socket) return;
         wsLive = false;
+        actionOverlay.clear({ clearLocal: false });
         eventsWs = null;
         scheduleEventConnect(EVENT_RETRY_MS);
       };
@@ -2336,14 +2380,19 @@ import { createViewportController } from './inspector-viewport-controller.js';
   const propsElLabel = document.getElementById('df-props-el');
   const propsCloseBtn = document.getElementById('df-props-close');
   let propsReturnFocus = null;
+  function propertyRequestBody(path, body) {
+    if (path !== '/api/setProperty' && path !== '/api/persistProperty') return body;
+    const payload = correlatedPayload(body);
+    actionOverlay.rememberLocalCorrelation(payload.correlation);
+    return payload;
+  }
+
   const propertyApi = Object.freeze({
-    post: (path, body) => inspectorApi.post(
-      path,
-      path === '/api/setProperty' ? correlatedPayload(body) : body),
+    post: (path, body) => inspectorApi.post(path, propertyRequestBody(path, body)),
     postDetailed: async (path, body) => {
       const response = await inspectorApi.postDetailed(
         path,
-        path === '/api/setProperty' ? correlatedPayload(body) : body);
+        propertyRequestBody(path, body));
       if (isFrameCorrelationError(response.body))
         scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
       return response;
@@ -3563,8 +3612,12 @@ import { createViewportController } from './inspector-viewport-controller.js';
   async function gotoCheckpoint() {
     if (!checkpointRoute || replaying) return;
     try {
+      const requestPayload = correlatedPayload({ route: checkpointRoute });
+      actionOverlay.rememberLocalCorrelation(requestPayload.correlation);
       const r = await fetch(`${basePath}/api/navigate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ route: checkpointRoute }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestPayload),
       });
       setStatus(r.ok
         ? `Returned to ${checkpointLabel || 'start'} (${checkpointRoute}). Navigation only — app data is not reset.`

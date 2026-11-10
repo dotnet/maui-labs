@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Maui.DevFlow.Agent.Core;
 using Microsoft.Maui.DevFlow.Driver;
 
@@ -55,6 +58,159 @@ public class PointerSessionTests
             Assert.Equal(410, late.StatusCode);
             Assert.Equal("session-gone", late.Reason);
             Assert.Equal(["start", "move:2", "end"], service.Events);
+        });
+    }
+
+    [Theory]
+    [InlineData("move")]
+    [InlineData("end")]
+    public async Task PointerSession_FailedOperationRetry_ReplaysOriginalTerminalResponse(
+        string operation)
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            Assert.True((await client.StartPointerSessionAsync(Start("failed-retry"))).Success);
+            service.FailMoves = operation == "move";
+            service.FailEnds = operation == "end";
+
+            var sample = Sample(10, 11, 5);
+            var first = operation == "move"
+                ? await client.MovePointerSessionAsync("failed-retry", 1, [sample])
+                : await client.EndPointerSessionAsync("failed-retry", 1, sample);
+            var retry = operation == "move"
+                ? await client.MovePointerSessionAsync("failed-retry", 1, [sample])
+                : await client.EndPointerSessionAsync("failed-retry", 1, sample);
+
+            Assert.False(first.Success);
+            Assert.Equal(500, first.StatusCode);
+            Assert.Equal("test-pointer-failure", first.Reason);
+            Assert.Equal(first.Success, retry.Success);
+            Assert.Equal(first.StatusCode, retry.StatusCode);
+            Assert.Equal(first.State, retry.State);
+            Assert.Equal(first.LastSequence, retry.LastSequence);
+            Assert.Equal(first.Reason, retry.Reason);
+            Assert.Equal(first.Error, retry.Error);
+            Assert.Single(
+                service.Events,
+                value => value == (operation == "move" ? "move:1" : "end"));
+            Assert.Equal(1, service.InvalidationCount);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_Lifecycle_CoalescesUpdatesAndCompletesOnce()
+    {
+        await WithServiceAsync(async (_, client) =>
+        {
+            client.MutationLeaseHolderKind = "inspector";
+            using var socket = await ConnectUiEventsAsync(
+                client,
+                "ui-action-started",
+                "ui-action-updated",
+                "ui-action-completed");
+            var request = Start("lifecycle");
+            request.CaptureEpoch = 12;
+            request.RegistryGeneration = 34;
+            request.WindowId = 2;
+            using (client.UseActionContext(
+                actionId: "pointer-lifecycle",
+                streamId: "stream-1",
+                frameId: "frame-1",
+                frameRevision: 7,
+                coordinateSpace: "appLogical"))
+            {
+                Assert.True((await client.StartPointerSessionAsync(request)).Success);
+            }
+            using var started = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-started",
+                "pointer-lifecycle");
+            var startedData = started.RootElement.GetProperty("data");
+            Assert.Equal("pointer", startedData.GetProperty("kind").GetString());
+            Assert.Equal(5, startedData.GetProperty("x").GetDouble());
+            Assert.Equal(6, startedData.GetProperty("y").GetDouble());
+            Assert.Equal(12, startedData.GetProperty("captureEpoch").GetInt64());
+            Assert.Equal(34, startedData.GetProperty("registryGeneration").GetInt64());
+            Assert.Equal(2, startedData.GetProperty("windowId").GetInt32());
+            var correlation = startedData.GetProperty("correlation");
+            Assert.Equal("inspector", correlation.GetProperty("source").GetString());
+            Assert.Equal("stream-1", correlation.GetProperty("streamId").GetString());
+            Assert.Equal("frame-1", correlation.GetProperty("frameId").GetString());
+            Assert.Equal(7, correlation.GetProperty("frameRevision").GetInt64());
+            Assert.Equal("windowLogical", correlation.GetProperty("coordinateSpace").GetString());
+
+            Assert.True((await client.MovePointerSessionAsync(
+                "lifecycle",
+                1,
+                [Sample(40, 50, 100), Sample(90, 110, 200)])).Success);
+            using var updated = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-updated",
+                "pointer-lifecycle");
+            var updatedData = updated.RootElement.GetProperty("data");
+            Assert.Equal("pointer", updatedData.GetProperty("kind").GetString());
+            Assert.Equal(90, updatedData.GetProperty("toX").GetDouble());
+            Assert.Equal(110, updatedData.GetProperty("toY").GetDouble());
+            Assert.Equal(200, updatedData.GetProperty("durationMs").GetInt32());
+
+            var endSample = Sample(205, 206, 300);
+            Assert.True((await client.EndPointerSessionAsync("lifecycle", 2, endSample)).Success);
+            Assert.True((await client.EndPointerSessionAsync("lifecycle", 2, endSample)).Success);
+            using var completed = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-completed",
+                "pointer-lifecycle");
+            var completedData = completed.RootElement.GetProperty("data");
+            Assert.Equal("swipe", completedData.GetProperty("kind").GetString());
+            Assert.True(completedData.GetProperty("success").GetBoolean());
+            Assert.Equal("completed", completedData.GetProperty("outcome").GetString());
+            Assert.Equal(205, completedData.GetProperty("toX").GetDouble());
+            Assert.Equal(206, completedData.GetProperty("toY").GetDouble());
+
+            await AssertNoUiEventAsync(socket);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_Cancel_PublishesCancelledTerminalLifecycle()
+    {
+        await WithServiceAsync(async (_, client) =>
+        {
+            client.MutationLeaseHolderKind = "mcp";
+            using var socket = await ConnectUiEventsAsync(
+                client,
+                "ui-action-started",
+                "ui-action-completed");
+            using (client.UseActionContext(
+                actionId: "pointer-cancel",
+                coordinateSpace: "windowLogical"))
+            {
+                Assert.True((await client.StartPointerSessionAsync(
+                    Start("cancel-lifecycle"))).Success);
+            }
+            using var started = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-started",
+                "pointer-cancel");
+            Assert.Equal(
+                "pointer",
+                started.RootElement.GetProperty("data").GetProperty("kind").GetString());
+
+            Assert.True((await client.CancelPointerSessionAsync(
+                "cancel-lifecycle",
+                "pointercancel")).Success);
+            using var completed = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-completed",
+                "pointer-cancel");
+            var completedData = completed.RootElement.GetProperty("data");
+            Assert.False(completedData.GetProperty("success").GetBoolean());
+            Assert.Equal("cancelled", completedData.GetProperty("outcome").GetString());
+            Assert.Equal("pointercancel", completedData.GetProperty("reason").GetString());
+            Assert.Equal("mcp", completedData
+                .GetProperty("correlation")
+                .GetProperty("source")
+                .GetString());
         });
     }
 
@@ -226,7 +382,20 @@ public class PointerSessionTests
         await WithServiceAsync(async (service, client) =>
         {
             service.BlockMoves = true;
-            Assert.True((await client.StartPointerSessionAsync(Start("race"))).Success);
+            using var socket = await ConnectUiEventsAsync(
+                client,
+                "ui-action-started",
+                "ui-action-completed");
+            using (client.UseActionContext(
+                actionId: "pointer-race",
+                coordinateSpace: "windowLogical"))
+            {
+                Assert.True((await client.StartPointerSessionAsync(Start("race"))).Success);
+            }
+            using var started = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-started",
+                "pointer-race");
 
             var moveTask = client.MovePointerSessionAsync("race", 1, [Sample(10, 10, 10)]);
             await service.MoveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -237,6 +406,118 @@ public class PointerSessionTests
             Assert.False(move.Success);
             Assert.Equal("cancelled", cancel.State);
             Assert.Single(service.Events, value => value == "cancel:pointer-session-cancelled");
+            Assert.Equal(1, service.InvalidationCount);
+            var cancelRetry = await client.CancelPointerSessionAsync("race", "pointercancel");
+            Assert.Equal(200, cancelRetry.StatusCode);
+            using var completed = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-completed",
+                "pointer-race");
+            var completedData = completed.RootElement.GetProperty("data");
+            Assert.False(completedData.GetProperty("success").GetBoolean());
+            Assert.Equal("cancelled", completedData.GetProperty("outcome").GetString());
+            Assert.Equal(
+                "pointer-session-cancelled",
+                completedData.GetProperty("reason").GetString());
+            Assert.Equal(1, service.InvalidationCount);
+            await AssertNoUiEventAsync(socket);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_CancelledMoveWithBackendCancelFailure_PublishesFailed()
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            service.BlockMoves = true;
+            service.FailCancels = true;
+            using var socket = await ConnectUiEventsAsync(
+                client,
+                "ui-action-started",
+                "ui-action-completed");
+            using (client.UseActionContext(
+                actionId: "pointer-cancel-failure",
+                coordinateSpace: "appLogical"))
+            {
+                Assert.True((await client.StartPointerSessionAsync(
+                    Start("cancel-failure"))).Success);
+            }
+            using var started = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-started",
+                "pointer-cancel-failure");
+
+            var moveTask = client.MovePointerSessionAsync(
+                "cancel-failure",
+                1,
+                [Sample(10, 10, 10)]);
+            await service.MoveStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var cancelTask = client.CancelPointerSessionAsync(
+                "cancel-failure",
+                "pointercancel");
+
+            Assert.False((await moveTask.WaitAsync(TimeSpan.FromSeconds(5))).Success);
+            Assert.Equal(200, (await cancelTask.WaitAsync(TimeSpan.FromSeconds(5))).StatusCode);
+            using var completed = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-completed",
+                "pointer-cancel-failure");
+            var completedData = completed.RootElement.GetProperty("data");
+            Assert.False(completedData.GetProperty("success").GetBoolean());
+            Assert.Equal("failed", completedData.GetProperty("outcome").GetString());
+            Assert.Equal(
+                "pointer-session-cancelled",
+                completedData.GetProperty("reason").GetString());
+            await AssertNoUiEventAsync(socket);
+        });
+    }
+
+    [Fact]
+    public async Task PointerSession_CancelPreemptsInFlightEnd_EmitsCancelled()
+    {
+        await WithServiceAsync(async (service, client) =>
+        {
+            service.BlockEnds = true;
+            using var socket = await ConnectUiEventsAsync(
+                client,
+                "ui-action-started",
+                "ui-action-completed");
+            using (client.UseActionContext(
+                actionId: "pointer-end-race",
+                coordinateSpace: "windowLogical"))
+            {
+                Assert.True((await client.StartPointerSessionAsync(
+                    Start("end-race"))).Success);
+            }
+            using var started = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-started",
+                "pointer-end-race");
+
+            var endTask = client.EndPointerSessionAsync(
+                "end-race",
+                1,
+                Sample(10, 10, 10));
+            await service.EndStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var cancelTask = client.CancelPointerSessionAsync(
+                "end-race",
+                "pointercancel");
+
+            Assert.False((await endTask.WaitAsync(TimeSpan.FromSeconds(5))).Success);
+            Assert.Equal(
+                "cancelled",
+                (await cancelTask.WaitAsync(TimeSpan.FromSeconds(5))).State);
+            using var completed = await ReceiveUiEventAsync(
+                socket,
+                "ui-action-completed",
+                "pointer-end-race");
+            var completedData = completed.RootElement.GetProperty("data");
+            Assert.Equal("cancelled", completedData.GetProperty("outcome").GetString());
+            Assert.Equal(
+                "pointer-session-cancelled",
+                completedData.GetProperty("reason").GetString());
+            Assert.Equal(1, service.InvalidationCount);
+            await AssertNoUiEventAsync(socket);
         });
     }
 
@@ -515,6 +796,78 @@ public class PointerSessionTests
         }
     }
 
+    private static async Task<ClientWebSocket> ConnectUiEventsAsync(
+        AgentClient client,
+        params string[] events)
+    {
+        var socket = new ClientWebSocket();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await socket.ConnectAsync(
+            new Uri(client.BaseUrl.Replace("http://", "ws://", StringComparison.Ordinal)
+                + "/ws/v1/ui/events"),
+            timeout.Token);
+        var subscription = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            type = "subscribe",
+            data = new { events }
+        }));
+        await socket.SendAsync(
+            subscription,
+            WebSocketMessageType.Text,
+            true,
+            timeout.Token);
+        return socket;
+    }
+
+    private static async Task<JsonDocument> ReceiveUiEventAsync(
+        ClientWebSocket socket,
+        string expectedType,
+        string expectedActionId)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            using var message = await ReceiveMessageAsync(socket, timeout.Token);
+            var document = JsonDocument.Parse(message.ToArray());
+            var root = document.RootElement;
+            var matches = root.TryGetProperty("type", out var type)
+                && type.GetString() == expectedType
+                && root.TryGetProperty("data", out var data)
+                && data.TryGetProperty("correlation", out var correlation)
+                && correlation.TryGetProperty("actionId", out var actionId)
+                && actionId.GetString() == expectedActionId;
+            if (matches)
+                return document;
+            document.Dispose();
+        }
+    }
+
+    private static async Task<MemoryStream> ReceiveMessageAsync(
+        ClientWebSocket socket,
+        CancellationToken cancellationToken)
+    {
+        var message = new MemoryStream();
+        var buffer = new byte[4096];
+        WebSocketReceiveResult result;
+        do
+        {
+            result = await socket.ReceiveAsync(buffer, cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close)
+                throw new InvalidOperationException("UI event stream closed before the expected event.");
+            message.Write(buffer, 0, result.Count);
+        }
+        while (!result.EndOfMessage);
+        return message;
+    }
+
+    private static async Task AssertNoUiEventAsync(ClientWebSocket socket)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        var buffer = new byte[256];
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await socket.ReceiveAsync(buffer, timeout.Token));
+    }
+
     private static int FreePort()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -529,6 +882,8 @@ public class PointerSessionTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource MoveStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource EndStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StartStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseStart { get; } =
@@ -542,11 +897,16 @@ public class PointerSessionTests
         public bool BlockStarts { get; set; }
         public bool BlockAfterStart { get; set; }
         public bool BlockMoves { get; set; }
+        public bool BlockEnds { get; set; }
         public bool BlockBack { get; set; }
         public bool DispatchStarts { get; set; }
+        public bool FailMoves { get; set; }
+        public bool FailEnds { get; set; }
+        public bool FailCancels { get; set; }
         public bool RejectRepeatedPrepare { get; set; }
         public int PrepareStartCalls { get; private set; }
         public int BackCalls { get; private set; }
+        public int InvalidationCount { get; private set; }
 
         protected override PointerStreamSupport GetPointerStreamSupport()
             => new(
@@ -612,17 +972,36 @@ public class PointerSessionTests
                 MoveStarted.TrySetResult();
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             }
+            if (FailMoves)
+            {
+                return PointerSessionBackendResult.Failed(
+                    "test pointer move failure",
+                    500,
+                    "test-pointer-failure");
+            }
             return PointerSessionBackendResult.Applied();
         }
 
-        protected override Task<PointerSessionBackendResult> EndPointerSessionBackendAsync(
+        protected override async Task<PointerSessionBackendResult> EndPointerSessionBackendAsync(
             object state,
             PointerSessionSample sample,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Events.Enqueue("end");
-            return Task.FromResult(PointerSessionBackendResult.Applied());
+            if (BlockEnds)
+            {
+                EndStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            if (FailEnds)
+            {
+                return PointerSessionBackendResult.Failed(
+                    "test pointer end failure",
+                    500,
+                    "test-pointer-failure");
+            }
+            return PointerSessionBackendResult.Applied();
         }
 
         protected override Task<PointerSessionBackendResult> CancelPointerSessionBackendAsync(
@@ -631,8 +1010,16 @@ public class PointerSessionTests
         {
             Events.Enqueue($"cancel:{reason}");
             Cancelled.TrySetResult(reason);
-            return Task.FromResult(PointerSessionBackendResult.Applied());
+            return Task.FromResult(FailCancels
+                ? PointerSessionBackendResult.Failed(
+                    "test pointer cancel failure",
+                    500,
+                    "test-pointer-cancel-failure")
+                : PointerSessionBackendResult.Applied());
         }
+
+        protected override void InvalidatePointerSessionMutationState()
+            => InvalidationCount++;
 
         protected override async Task<HttpResponse> HandleBack(HttpRequest request)
         {

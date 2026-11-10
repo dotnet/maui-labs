@@ -81,4 +81,63 @@ public class AgentClientMutationLeaseTests
         Assert.Equal("GET", request.Method);
         Assert.Equal("/api/v1/ui/elements", request.Path);
     }
+
+    [Fact]
+    public async Task UseActionContext_ScopesLifecycleCorrelationHeaders()
+    {
+        using var agent = FakeAgent.StartJson("""{"success":true}""");
+        using var client = new AgentClient("localhost", agent.Port)
+        {
+            AutoAcquireMutationLease = false
+        };
+
+        using (client.UseActionContext(
+            source: "replay",
+            actionId: "action-1",
+            streamId: "stream-1",
+            frameId: "frame-1",
+            frameRevision: 7,
+            coordinateSpace: "appLogical",
+            x: 12.5,
+            y: 24.25,
+            toX: 40,
+            toY: 60,
+            deltaX: 27.5,
+            deltaY: 35.75))
+        {
+            Assert.True(await client.TapAsync("el-1"));
+        }
+
+        Assert.True(await client.TapAsync("el-2"));
+        using (client.UseActionContext(
+            actionId: "action-3",
+            coordinateSpace: "appLogical\r\nX-Injected: yes"))
+        {
+            Assert.True(await client.TapAsync("el-3"));
+        }
+
+        Assert.Equal(3, agent.Requests.Count);
+        var correlated = agent.Requests[0].Headers;
+        Assert.Equal("replay", correlated["X-DevFlow-Action-Source"]);
+        Assert.Equal("action-1", correlated["X-DevFlow-Action-Id"]);
+        Assert.Equal("stream-1", correlated["X-DevFlow-Action-Stream-Id"]);
+        Assert.Equal("frame-1", correlated["X-DevFlow-Action-Frame-Id"]);
+        Assert.Equal("7", correlated["X-DevFlow-Action-Frame-Revision"]);
+        Assert.Equal("appLogical", correlated["X-DevFlow-Action-Coordinate-Space"]);
+        Assert.Equal("12.5", correlated["X-DevFlow-Action-X"]);
+        Assert.Equal("24.25", correlated["X-DevFlow-Action-Y"]);
+        Assert.Equal("40", correlated["X-DevFlow-Action-To-X"]);
+        Assert.Equal("60", correlated["X-DevFlow-Action-To-Y"]);
+        Assert.Equal("27.5", correlated["X-DevFlow-Action-Delta-X"]);
+        Assert.Equal("35.75", correlated["X-DevFlow-Action-Delta-Y"]);
+
+        var unscoped = agent.Requests[1].Headers;
+        Assert.DoesNotContain("X-DevFlow-Action-Id", unscoped.Keys);
+        Assert.DoesNotContain("X-DevFlow-Action-Source", unscoped.Keys);
+
+        var unsafeContext = agent.Requests[2].Headers;
+        Assert.Equal("action-3", unsafeContext["X-DevFlow-Action-Id"]);
+        Assert.DoesNotContain("X-DevFlow-Action-Coordinate-Space", unsafeContext.Keys);
+        Assert.DoesNotContain("X-Injected", unsafeContext.Keys);
+    }
 }

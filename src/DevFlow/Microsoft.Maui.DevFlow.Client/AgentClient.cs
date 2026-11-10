@@ -33,6 +33,7 @@ public class AgentClient : IDisposable
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private readonly AsyncLocal<MutationLeaseIdentity?> _mutationLeaseOverride = new();
+    private readonly AsyncLocal<ActionContextIdentity?> _actionContextOverride = new();
     private bool _disposed;
 
     public string BaseUrl => _baseUrl;
@@ -92,7 +93,10 @@ public class AgentClient : IDisposable
     internal AgentClient(string host, int port, HttpMessageHandler transportHandler)
     {
         _baseUrl = $"http://{host}:{port}";
-        _http = CreateHttpClient(transportHandler, GetCurrentMutationLease);
+        _http = CreateHttpClient(
+            transportHandler,
+            GetCurrentMutationLease,
+            GetCurrentActionContext);
     }
 
     internal TimeSpan HttpTimeout
@@ -112,6 +116,41 @@ public class AgentClient : IDisposable
         var previous = _mutationLeaseOverride.Value;
         _mutationLeaseOverride.Value = new MutationLeaseIdentity(leaseId, holderKind, label);
         return new MutationLeaseScope(_mutationLeaseOverride, previous);
+    }
+
+    /// <summary>
+    /// Temporarily correlates mutating calls with a DevFlow UI action lifecycle.
+    /// Correlation fields are descriptive metadata only and never participate in authorization.
+    /// </summary>
+    public IDisposable UseActionContext(
+        string? source = null,
+        string? actionId = null,
+        string? streamId = null,
+        string? frameId = null,
+        long? frameRevision = null,
+        string? coordinateSpace = null,
+        double? x = null,
+        double? y = null,
+        double? toX = null,
+        double? toY = null,
+        double? deltaX = null,
+        double? deltaY = null)
+    {
+        var previous = _actionContextOverride.Value;
+        _actionContextOverride.Value = new ActionContextIdentity(
+            source,
+            actionId,
+            streamId,
+            frameId,
+            frameRevision,
+            coordinateSpace,
+            x,
+            y,
+            toX,
+            toY,
+            deltaX,
+            deltaY);
+        return new ActionContextScope(_actionContextOverride, previous);
     }
 
     /// <summary>Claim, query, heartbeat, or release this caller's mutation lease.</summary>
@@ -280,6 +319,9 @@ public class AgentClient : IDisposable
             MutationLeaseLabel);
     }
 
+    private ActionContextIdentity? GetCurrentActionContext()
+        => _actionContextOverride.Value;
+
     private async Task EnsureMutationLeaseAsync()
     {
         if (!AutoAcquireMutationLease)
@@ -305,9 +347,12 @@ public class AgentClient : IDisposable
 
     private static HttpClient CreateHttpClient(
         HttpMessageHandler transportHandler,
-        Func<MutationLeaseIdentity?> mutationLeaseProvider)
+        Func<MutationLeaseIdentity?> mutationLeaseProvider,
+        Func<ActionContextIdentity?> actionContextProvider)
     {
-        var leaseHandler = new MutationLeaseHeaderHandler(mutationLeaseProvider)
+        var leaseHandler = new MutationLeaseHeaderHandler(
+            mutationLeaseProvider,
+            actionContextProvider)
         {
             InnerHandler = transportHandler
         };
@@ -3422,6 +3467,20 @@ public class AgentClient : IDisposable
 
     private sealed record MutationLeaseIdentity(string LeaseId, string HolderKind, string? Label);
 
+    private sealed record ActionContextIdentity(
+        string? Source,
+        string? ActionId,
+        string? StreamId,
+        string? FrameId,
+        long? FrameRevision,
+        string? CoordinateSpace,
+        double? X,
+        double? Y,
+        double? ToX,
+        double? ToY,
+        double? DeltaX,
+        double? DeltaY);
+
     private sealed class MutationLeaseScope : IDisposable
     {
         private readonly AsyncLocal<MutationLeaseIdentity?> _slot;
@@ -3444,13 +3503,39 @@ public class AgentClient : IDisposable
         }
     }
 
+    private sealed class ActionContextScope : IDisposable
+    {
+        private readonly AsyncLocal<ActionContextIdentity?> _slot;
+        private readonly ActionContextIdentity? _previous;
+        private bool _disposed;
+
+        public ActionContextScope(
+            AsyncLocal<ActionContextIdentity?> slot,
+            ActionContextIdentity? previous)
+        {
+            _slot = slot;
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _slot.Value = _previous;
+        }
+    }
+
     private sealed class MutationLeaseHeaderHandler : DelegatingHandler
     {
         private readonly Func<MutationLeaseIdentity?> _leaseProvider;
+        private readonly Func<ActionContextIdentity?> _actionContextProvider;
 
-        public MutationLeaseHeaderHandler(Func<MutationLeaseIdentity?> leaseProvider)
+        public MutationLeaseHeaderHandler(
+            Func<MutationLeaseIdentity?> leaseProvider,
+            Func<ActionContextIdentity?> actionContextProvider)
         {
             _leaseProvider = leaseProvider;
+            _actionContextProvider = actionContextProvider;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(
@@ -3471,8 +3556,54 @@ public class AgentClient : IDisposable
                 }
             }
 
+            var actionContext = _actionContextProvider();
+            if (actionContext is not null)
+            {
+                SetHeader(request, "X-DevFlow-Action-Source", actionContext.Source);
+                SetHeader(request, "X-DevFlow-Action-Id", actionContext.ActionId);
+                SetHeader(request, "X-DevFlow-Action-Stream-Id", actionContext.StreamId);
+                SetHeader(request, "X-DevFlow-Action-Frame-Id", actionContext.FrameId);
+                SetHeader(
+                    request,
+                    "X-DevFlow-Action-Frame-Revision",
+                    actionContext.FrameRevision?.ToString(CultureInfo.InvariantCulture));
+                SetHeader(
+                    request,
+                    "X-DevFlow-Action-Coordinate-Space",
+                    actionContext.CoordinateSpace);
+                SetHeader(request, "X-DevFlow-Action-X", FormatNumber(actionContext.X));
+                SetHeader(request, "X-DevFlow-Action-Y", FormatNumber(actionContext.Y));
+                SetHeader(request, "X-DevFlow-Action-To-X", FormatNumber(actionContext.ToX));
+                SetHeader(request, "X-DevFlow-Action-To-Y", FormatNumber(actionContext.ToY));
+                SetHeader(request, "X-DevFlow-Action-Delta-X", FormatNumber(actionContext.DeltaX));
+                SetHeader(request, "X-DevFlow-Action-Delta-Y", FormatNumber(actionContext.DeltaY));
+            }
+
             return base.SendAsync(request, cancellationToken);
         }
+
+        private static void SetHeader(
+            HttpRequestMessage request,
+            string name,
+            string? value)
+        {
+            request.Headers.Remove(name);
+            if (value is null || string.IsNullOrWhiteSpace(value) || value.Length > 256)
+                return;
+            foreach (var character in value)
+            {
+                if (character < 0x20 || character == 0x7f)
+                    return;
+            }
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        private static string? FormatNumber(double? value)
+            => value is { } number
+                && !double.IsNaN(number)
+                && !double.IsInfinity(number)
+                ? number.ToString("R", CultureInfo.InvariantCulture)
+                : null;
     }
 }
 
