@@ -64,6 +64,75 @@ public class ToolApprovalHandlerTests
     }
 
     [Fact]
+    public async Task Process_SeparateUpdatesEmitEveryApproval()
+    {
+        var pipeline = new BlockMappingPipeline(new UIAgentOptions());
+
+        var first = await ProcessAsync(
+            pipeline,
+            CreateApprovalUpdate("message-1", "call-1", "delete_file"));
+        var second = await ProcessAsync(
+            pipeline,
+            CreateApprovalUpdate("message-1", "call-2", "send_email"));
+
+        var firstApproval = Assert.IsType<ToolApprovalBlock>(Assert.Single(first));
+        var secondApproval = Assert.IsType<ToolApprovalBlock>(Assert.Single(second));
+        Assert.Equal("call-1", firstApproval.Id);
+        Assert.Equal("delete_file", firstApproval.ToolName);
+        Assert.Equal(BlockLifecycleState.Inactive, firstApproval.LifecycleState);
+        Assert.Equal("call-2", secondApproval.Id);
+        Assert.Equal("send_email", secondApproval.ToolName);
+    }
+
+    [Fact]
+    public async Task Process_SeveralApprovalsInOneUpdate_EmitEveryApproval()
+    {
+        var pipeline = new BlockMappingPipeline(new UIAgentOptions());
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "message-1",
+            Contents =
+            [
+                new ToolApprovalRequestContent(
+                    "request-1",
+                    new FunctionCallContent("call-1", "delete_file")),
+                new ToolApprovalRequestContent(
+                    "request-2",
+                    new FunctionCallContent("call-2", "send_email")),
+            ],
+        };
+
+        var blocks = await ProcessAsync(pipeline, update);
+
+        Assert.Equal(
+            ["call-1", "call-2"],
+            blocks.Cast<ToolApprovalBlock>().Select(block => block.Id));
+    }
+
+    [Fact]
+    public void ApprovalWithoutCallId_UsesRequestIdAsBlockId()
+    {
+        var handler = new ToolApprovalHandler();
+        var update = new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents =
+            [
+                new ToolApprovalRequestContent(
+                    "request-1",
+                    new FunctionCallContent(string.Empty, "DeleteFile")),
+            ],
+        };
+
+        var result = handler.Handle(
+            new BlockMappingContext(update),
+            new ToolApprovalHandler.ApprovalHandlerState());
+
+        Assert.Equal("request-1", Assert.IsType<ToolApprovalBlock>(result.Block).Id);
+    }
+
+    [Fact]
     public void NonApprovalContent_PassesThrough()
     {
         var handler = new ToolApprovalHandler();
@@ -106,5 +175,32 @@ public class ToolApprovalHandlerTests
         var block = Assert.IsType<ToolApprovalBlock>(result.Block);
         Assert.NotNull(block.InnerBlock);
         Assert.Equal("DeleteFile", block.InnerBlock.ToolName);
+    }
+
+    private static ChatResponseUpdate CreateApprovalUpdate(
+        string messageId,
+        string callId,
+        string toolName)
+    {
+        var call = new FunctionCallContent(callId, toolName);
+        return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = messageId,
+            Contents = [new ToolApprovalRequestContent($"request-{callId}", call)],
+        };
+    }
+
+    private static async Task<List<ContentBlock>> ProcessAsync(
+        BlockMappingPipeline pipeline,
+        ChatResponseUpdate update)
+    {
+        var blocks = new List<ContentBlock>();
+        await foreach (var block in pipeline.Process(update))
+        {
+            blocks.Add(block);
+        }
+
+        return blocks;
     }
 }

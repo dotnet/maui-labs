@@ -33,7 +33,12 @@ public class FootnoteNode : RichTextNode;
 public class TextNode : RichTextNode
 {
     public TextNode() { }
-    public TextNode(string text) => Text = text;
+    public TextNode(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        Text = text;
+    }
+
     public string Text { get; set; } = string.Empty;
 }
 
@@ -50,6 +55,7 @@ public class CodeBlockNode : RichTextNode
 
     public CodeBlockNode(string code, string? language = null)
     {
+        ArgumentNullException.ThrowIfNull(code);
         Code = code;
         Language = language;
     }
@@ -61,7 +67,12 @@ public class CodeBlockNode : RichTextNode
 public class InlineCodeNode : RichTextNode
 {
     public InlineCodeNode() { }
-    public InlineCodeNode(string code) => Code = code;
+    public InlineCodeNode(string code)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+        Code = code;
+    }
+
     public string Code { get; set; } = string.Empty;
 }
 
@@ -71,6 +82,7 @@ public class LinkNode : RichTextNode
 
     public LinkNode(string url, string? title = null)
     {
+        ArgumentNullException.ThrowIfNull(url);
         Url = url;
         Title = title;
     }
@@ -85,6 +97,7 @@ public class ImageNode : RichTextNode
 
     public ImageNode(string url, string? alt = null, string? title = null)
     {
+        ArgumentNullException.ThrowIfNull(url);
         Url = url;
         Alt = alt;
         Title = title;
@@ -123,7 +136,12 @@ public class TableNode : RichTextNode
 public class HtmlNode : RichTextNode
 {
     public HtmlNode() { }
-    public HtmlNode(string value) => Value = value;
+    public HtmlNode(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        Value = value;
+    }
+
     public string Value { get; set; } = string.Empty;
 }
 

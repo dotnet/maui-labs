@@ -21,8 +21,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// synchronization.
 /// </para>
 /// </remarks>
-public class AgentContext(UIAgent agent) : IDisposable
+public sealed class AgentContext : IDisposable
 {
+    private readonly UIAgent _agent;
     private readonly List<ConversationTurn> _turns = new();
     private readonly List<Action<ConversationTurn>> _turnAddedCallbacks = new();
     private readonly List<Action<ConversationStatus>> _statusChangedCallbacks = new();
@@ -33,6 +34,12 @@ public class AgentContext(UIAgent agent) : IDisposable
     private UIAgent.HistoryCheckpoint _retryHistoryCheckpoint;
     private bool _restoreCompleted;
     private bool _disposed;
+
+    public AgentContext(UIAgent agent)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        _agent = agent;
+    }
 
     public IReadOnlyList<ConversationTurn> Turns => _turns;
 
@@ -48,10 +55,10 @@ public class AgentContext(UIAgent agent) : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         CancelAndDisposeStreaming();
-        agent.RejectPendingPredictiveState();
-        agent.ResetState();
+        _agent.RejectPendingPredictiveState();
+        _agent.ResetState();
         _turns.Clear();
-        agent.ClearHistory();
+        _agent.ClearHistory();
         _retryMessage = null;
         _retryHistoryCheckpoint = default;
         _restoreCompleted = false;
@@ -79,7 +86,7 @@ public class AgentContext(UIAgent agent) : IDisposable
         _turns.Add(turn);
         NotifyTurnAdded(turn);
 
-        var historyCheckpoint = agent.CaptureHistoryCheckpoint();
+        var historyCheckpoint = _agent.CaptureHistoryCheckpoint();
         await RunAttemptAsync(
             requestMessage,
             turn,
@@ -110,7 +117,7 @@ public class AgentContext(UIAgent agent) : IDisposable
                 "RestoreAsync requires an empty context and may not be called twice. Call Clear first.");
         }
 
-        var blocks = await agent.RestoreAsync(cancellationToken);
+        var blocks = await _agent.RestoreAsync(cancellationToken);
         ConversationTurn? currentTurn = null;
 
         foreach (var block in blocks)
@@ -152,7 +159,7 @@ public class AgentContext(UIAgent agent) : IDisposable
         var turn = _turns[^1];
         turn.ClearResponseBlocks();
         NotifyResponseBlocksCleared(turn);
-        agent.RestoreHistory(_retryHistoryCheckpoint);
+        _agent.RestoreHistory(_retryHistoryCheckpoint);
 
         await RunAttemptAsync(
             _retryMessage,
@@ -227,7 +234,7 @@ public class AgentContext(UIAgent agent) : IDisposable
                 var uiActionBlocks = new List<UIActionBlock>();
                 var uninvokedToolBlocks = new List<FunctionInvocationContentBlock>();
 
-                await foreach (var block in agent.SendMessagesAsync(
+                await foreach (var block in _agent.SendMessagesAsync(
                     currentMessages,
                     startsThreadTurn,
                     completesThreadTurn: false,
@@ -340,8 +347,8 @@ public class AgentContext(UIAgent agent) : IDisposable
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            agent.CompleteThreadTurn();
-            agent.RejectPendingPredictiveState();
+            _agent.CompleteThreadTurn();
+            _agent.RejectPendingPredictiveState();
 
             _retryMessage = null;
             _retryHistoryCheckpoint = default;
@@ -351,19 +358,20 @@ public class AgentContext(UIAgent agent) : IDisposable
         }
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
-            agent.RejectPendingPredictiveState();
+            _agent.RejectPendingPredictiveState();
             CleanupCanceledTurn(turn, historyCheckpoint);
             return AttemptOutcome.Canceled;
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            agent.RejectPendingPredictiveState();
-            agent.RestoreHistory(historyCheckpoint);
-            agent.AbortThreadTurn();
+            _agent.RejectPendingPredictiveState();
+            _agent.RestoreHistory(historyCheckpoint);
+            _agent.AbortThreadTurn();
             _retryMessage = message;
             _retryHistoryCheckpoint = historyCheckpoint;
             Error = ex;
             Status = ConversationStatus.Error;
+            _agent.LogProcessingError(ex);
             NotifyStatusChanged();
             return AttemptOutcome.Failed;
         }
@@ -373,10 +381,10 @@ public class AgentContext(UIAgent agent) : IDisposable
         FunctionInvocationContentBlock block,
         CancellationToken cancellationToken)
     {
-        var result = await agent.InvokeToolAsync(block.Call!, cancellationToken);
+        var result = await _agent.InvokeToolAsync(block.Call!, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         block.Result = result;
-        agent.ApplyFunctionResult(block, result);
+        _agent.ApplyFunctionResult(block, result);
         block.InvokeNotifyChanged();
         return result;
     }
@@ -404,7 +412,7 @@ public class AgentContext(UIAgent agent) : IDisposable
 
         _disposed = true;
         CancelAndDisposeStreaming();
-        agent.RejectPendingPredictiveState();
+        _agent.RejectPendingPredictiveState();
         _turnAddedCallbacks.Clear();
         _statusChangedCallbacks.Clear();
         _blockAddedCallbacks.Clear();
@@ -438,8 +446,8 @@ public class AgentContext(UIAgent agent) : IDisposable
     {
         turn.ClearResponseBlocks();
         NotifyResponseBlocksCleared(turn);
-        agent.RestoreHistory(historyCheckpoint);
-        agent.AbortThreadTurn();
+        _agent.RestoreHistory(historyCheckpoint);
+        _agent.AbortThreadTurn();
         _retryMessage = null;
         _retryHistoryCheckpoint = default;
         Error = null;
@@ -463,18 +471,21 @@ public class AgentContext(UIAgent agent) : IDisposable
 
     public IDisposable RegisterOnTurnAdded(Action<ConversationTurn> callback)
     {
+        ArgumentNullException.ThrowIfNull(callback);
         _turnAddedCallbacks.Add(callback);
         return new CallbackRegistration<Action<ConversationTurn>>(_turnAddedCallbacks, callback);
     }
 
     public IDisposable RegisterOnStatusChanged(Action<ConversationStatus> callback)
     {
+        ArgumentNullException.ThrowIfNull(callback);
         _statusChangedCallbacks.Add(callback);
         return new CallbackRegistration<Action<ConversationStatus>>(_statusChangedCallbacks, callback);
     }
 
     public IDisposable RegisterOnBlockAdded(Action<ConversationTurn, ContentBlock> callback)
     {
+        ArgumentNullException.ThrowIfNull(callback);
         _blockAddedCallbacks.Add(callback);
         return new CallbackRegistration<Action<ConversationTurn, ContentBlock>>(_blockAddedCallbacks, callback);
     }

@@ -12,47 +12,67 @@ internal sealed class ToolApprovalHandler : ContentBlockHandler<ToolApprovalHand
     public override BlockMappingResult<ApprovalHandlerState> Handle(
         BlockMappingContext context, ApprovalHandlerState state)
     {
-        ToolApprovalRequestContent? approvalRequest = null;
+        // An emitted approval is complete, so every later request reaches a fresh handler state and
+        // emits its own block, including requests that arrive in separate updates.
+        if (state.Emitted)
+        {
+            return BlockMappingResult<ApprovalHandlerState>.Complete();
+        }
+
         foreach (var content in context.UnhandledContents)
         {
-            if (content is ToolApprovalRequestContent tar)
+            if (content is not ToolApprovalRequestContent approvalRequest)
             {
-                approvalRequest = tar;
-                break;
+                continue;
             }
+
+            context.MarkHandled(approvalRequest);
+
+            // Delegate the inner FunctionCallContent to produce a typed block
+            var innerBlock = context.CreateInnerBlock(approvalRequest.ToolCall)
+                as FunctionInvocationContentBlock
+                ?? CreateFallbackInnerBlock(approvalRequest.ToolCall);
+
+            state.Emitted = true;
+            return BlockMappingResult<ApprovalHandlerState>.Emit(
+                new ToolApprovalBlock(innerBlock, approvalRequest)
+                {
+                    Id = GetBlockId(approvalRequest, innerBlock),
+                },
+                state);
         }
 
-        if (approvalRequest is null)
+        return BlockMappingResult<ApprovalHandlerState>.Pass();
+    }
+
+    private static FunctionInvocationContentBlock CreateFallbackInnerBlock(ToolCallContent toolCall)
+    {
+        var block = new FunctionInvocationContentBlock();
+        if (toolCall is FunctionCallContent functionCall)
         {
-            return BlockMappingResult<ApprovalHandlerState>.Pass();
+            block.Call = functionCall;
         }
 
-        context.MarkHandled(approvalRequest);
+        return block;
+    }
 
-        // Delegate the inner FunctionCallContent to produce a typed block
-        var innerBlock = context.CreateInnerBlock(approvalRequest.ToolCall)
-            as FunctionInvocationContentBlock;
+    private static string GetBlockId(
+        ToolApprovalRequestContent approvalRequest,
+        FunctionInvocationContentBlock innerBlock)
+    {
+        if (approvalRequest.ToolCall is FunctionCallContent { CallId: { Length: > 0 } callId })
+            return callId;
 
-        if (innerBlock is null)
-        {
-            innerBlock = new FunctionInvocationContentBlock();
-            if (approvalRequest.ToolCall is FunctionCallContent fc)
-            {
-                innerBlock.Call = fc;
-            }
-        }
+        if (!string.IsNullOrEmpty(approvalRequest.RequestId))
+            return approvalRequest.RequestId;
 
-        var block = new ToolApprovalBlock(innerBlock, approvalRequest);
-        block.Id = approvalRequest.ToolCall is FunctionCallContent fcc
-            ? string.IsNullOrEmpty(fcc.CallId)
-                ? innerBlock.Id
-                : fcc.CallId
-            : Guid.NewGuid().ToString("N");
-
-        return BlockMappingResult<ApprovalHandlerState>.Emit(block, state);
+        return string.IsNullOrEmpty(innerBlock.Id)
+            ? Guid.NewGuid().ToString("N")
+            : innerBlock.Id;
     }
 
     internal sealed class ApprovalHandlerState
     {
+        internal bool Emitted { get; set; }
     }
 }

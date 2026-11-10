@@ -36,6 +36,9 @@ public class UIAgent : IDisposable
 
     internal UIAgentOptions Options => _options;
 
+    internal void LogProcessingError(Exception exception) =>
+        UIAgentLog.ProcessingError(_logger, exception);
+
     internal virtual object? AgentStateObject => null;
 
     public UIAgent(IChatClient chatClient)
