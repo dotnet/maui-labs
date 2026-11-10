@@ -30,12 +30,13 @@ that opt out receive plain-text requests and their responses display as text.
 
 #### Hybrid chat
 
-On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses an enabled Apple
-Intelligence model to choose between local and Azure chat. Both providers must
-be configured. Greetings, device time lookups and basic calculations usually
-stay local; most other work goes to cloud. Only the last user message is
+**Hybrid (local + cloud)** uses the platform's on-device model (Apple
+Intelligence, Gemini Nano or Windows AI) to choose between local and Azure chat.
+It appears when both providers are available. Greetings, device time lookups
+and basic calculations usually stay local; most other work goes to cloud. Only the last user message is
 classified, so follow-ups that depend on earlier context may route differently.
-Hybrid supports tools, but not images, reasoning summaries or image generation.
+Hybrid offers tools and structured JSON only when the on-device model supports
+them, and never images, reasoning summaries or image generation.
 
 The selected provider receives the full conversation, instructions and settings.
 Cloud handoff is automatic, without redaction or per-turn approval. **Do not send
@@ -50,8 +51,10 @@ answer interaction; the Logs sidebar shows classification and answer attempts.
 ##### Routing regression tests
 
 `HybridRoutingTestsBase<TClient>` tests the sample's classifier with a real
-provider. The Apple subclass requires a ready on-device model, not Azure
-credentials. Cases cover simple tasks, substantive work and mixed requests.
+on-device model; each platform has a subclass. The tests need a ready model, not
+Azure credentials. Cases cover simple tasks, substantive work and mixed requests.
+For Android or Windows, use `-f net10.0-android` or
+`-f net10.0-windows10.0.19041.0` instead of the Mac Catalyst target.
 
 ```sh
 dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/ \

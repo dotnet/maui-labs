@@ -10,17 +10,17 @@ namespace Microsoft.Maui.AI.Chat.Tests;
 public sealed class HybridChatClientTests
 {
     [Theory]
-    [InlineData("local", "apple-model")]
-    [InlineData(" local\n", "apple-model")]
-    [InlineData("cloud", "azure-model")]
-    [InlineData("Local", "azure-model")]
-    [InlineData("local because it is a greeting", "azure-model")]
+    [InlineData("local", "local-model")]
+    [InlineData(" local\n", "local-model")]
+    [InlineData("cloud", "cloud-model")]
+    [InlineData("Local.", "local-model")]
+    [InlineData("local because it is a greeting", "cloud-model")]
     public async Task ClassifierLabel_SelectsProviderAndForwardsOriginalRequest(string label, string expectedModel)
     {
         foreach (var streaming in new[] { false, true })
         {
-            var local = new FakeClient("apple-model") { Label = label };
-            var cloud = new FakeClient("azure-model");
+            var local = new FakeClient("local-model") { Label = label };
+            var cloud = new FakeClient("cloud-model");
             using var hybrid = new HybridChatClient(local, cloud);
             ChatMessage[] messages =
             [
@@ -40,8 +40,8 @@ public sealed class HybridChatClientTests
             Assert.Null(local.ClassifierOptions.Tools);
             Assert.Null(local.ClassifierOptions.ResponseFormat);
 
-            var selected = expectedModel == "apple-model" ? local : cloud;
-            var other = expectedModel == "apple-model" ? cloud : local;
+            var selected = expectedModel == "local-model" ? local : cloud;
+            var other = expectedModel == "local-model" ? cloud : local;
             Assert.Equal(1, selected.Answers);
             Assert.Equal(0, other.Answers);
             Assert.Equal(messages, selected.Received);
@@ -54,12 +54,12 @@ public sealed class HybridChatClientTests
     [Fact]
     public async Task NoUserText_AnswersLocallyWithoutClassifying()
     {
-        var local = new FakeClient("apple-model");
-        var cloud = new FakeClient("azure-model");
+        var local = new FakeClient("local-model");
+        var cloud = new FakeClient("cloud-model");
         using var hybrid = new HybridChatClient(local, cloud);
 
-        Assert.Equal("apple-model", await AnswerModel(hybrid, false, [new(ChatRole.Assistant, "Hello")]));
-        Assert.Equal("apple-model", await AnswerModel(hybrid, true, [new(ChatRole.User, "  ")]));
+        Assert.Equal("local-model", await AnswerModel(hybrid, false, [new(ChatRole.Assistant, "Hello")]));
+        Assert.Equal("local-model", await AnswerModel(hybrid, true, [new(ChatRole.User, "  ")]));
 
         Assert.Empty(local.Classifications);
         Assert.Equal(2, local.Answers);
@@ -71,8 +71,8 @@ public sealed class HybridChatClientTests
     [InlineData(true)]
     public async Task CloudFailureBeforeOutput_AnswersLocallyWithOriginalRequest(bool streaming)
     {
-        var local = new FakeClient("apple-model");
-        var cloud = new FakeClient("azure-model")
+        var local = new FakeClient("local-model");
+        var cloud = new FakeClient("cloud-model")
         {
             Failure = new HttpRequestException("Offline"),
             OnAnswer = options => options!.Instructions = "changed by cloud",
@@ -81,7 +81,7 @@ public sealed class HybridChatClientTests
         ChatMessage[] messages = [new(ChatRole.User, "Explain this.")];
         var options = new ChatOptions { Instructions = "Be brief." };
 
-        Assert.Equal("apple-model", await AnswerModel(hybrid, streaming, messages, options));
+        Assert.Equal("local-model", await AnswerModel(hybrid, streaming, messages, options));
 
         Assert.Equal(1, cloud.Answers);
         Assert.Equal(1, local.Answers);
@@ -94,8 +94,8 @@ public sealed class HybridChatClientTests
     public async Task CloudFailureAfterOutput_PropagatesWithoutLocalAnswer()
     {
         var failure = new IOException("Dropped");
-        var local = new FakeClient("apple-model");
-        var cloud = new FakeClient("azure-model") { FailureAfterOutput = failure };
+        var local = new FakeClient("local-model");
+        var cloud = new FakeClient("cloud-model") { FailureAfterOutput = failure };
         using var hybrid = new HybridChatClient(local, cloud);
 
         Assert.Same(failure, await Record.ExceptionAsync(() => AnswerModel(hybrid, streaming: true)));
@@ -106,8 +106,8 @@ public sealed class HybridChatClientTests
     public async Task ClassifierFailure_PropagatesWithoutAnswering()
     {
         var failure = new IOException("Classifier unavailable");
-        var local = new FakeClient("apple-model") { ClassifierFailure = failure };
-        var cloud = new FakeClient("azure-model");
+        var local = new FakeClient("local-model") { ClassifierFailure = failure };
+        var cloud = new FakeClient("cloud-model");
         using var hybrid = new HybridChatClient(local, cloud);
 
         Assert.Same(failure, await Record.ExceptionAsync(() => AnswerModel(hybrid, streaming: false)));
@@ -130,8 +130,8 @@ public sealed class HybridChatClientTests
             using var factory = LoggerFactory.Create(builder => builder.AddProvider(receiver)
                 .AddFilter<ChatDiagnostics>("Microsoft.Extensions.AI", LogLevel.Debug)
                 .AddFilter<ChatDiagnostics>(ChatDiagnostics.SourceName, LogLevel.Debug));
-            var local = new FakeClient("apple-model") { Label = route == "local" ? "local" : "cloud" };
-            var cloud = new FakeClient("azure-model") { Failure = route == "fallback" ? new IOException("Offline") : null };
+            var local = new FakeClient("local-model") { Label = route == "local" ? "local" : "cloud" };
+            var cloud = new FakeClient("cloud-model") { Failure = route == "fallback" ? new IOException("Offline") : null };
             using var client = new HybridChatClient(Instrument(local, factory), Instrument(cloud, factory),
                     factory.CreateLogger<HybridChatClient>())
                 .AsBuilder().UsePlaygroundTelemetry().UseLogging(factory).Build();
@@ -166,8 +166,8 @@ public sealed class HybridChatClientTests
         {
             var recording = new ChatSessionService(NullLogger<ChatSessionService>.Instance,
                 Path.Combine(directory, "data"), Path.Combine(directory, "cache"));
-            var local = new FakeClient("apple-model");
-            var cloud = new FakeClient("azure-model") { Failure = new IOException("Offline") };
+            var local = new FakeClient("local-model");
+            var cloud = new FakeClient("cloud-model") { Failure = new IOException("Offline") };
             using var client = new RecordingChatClient(new HybridChatClient(local, cloud), recording);
 
             await client.GetResponseAsync([new(ChatRole.User, "Question")]);
@@ -175,7 +175,7 @@ public sealed class HybridChatClientTests
             var saved = ChatRecordingSerializer.Deserialize(File.ReadAllText(recording.AutosavePath));
             var interaction = Assert.Single(saved.Interactions);
             Assert.Equal("Question", Assert.Single(ChatRecordingSerializer.ReadRequestMessages(interaction.Request)).Text);
-            Assert.Equal("apple-model", ChatRecordingSerializer.ReadResponse(interaction.Response!).ModelId);
+            Assert.Equal("local-model", ChatRecordingSerializer.ReadResponse(interaction.Response!).ModelId);
         }
         finally
         {

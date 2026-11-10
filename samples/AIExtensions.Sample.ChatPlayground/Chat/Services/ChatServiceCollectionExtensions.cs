@@ -47,13 +47,12 @@ internal static class ChatServiceCollectionExtensions
 #endif
 
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
+        {
             services.AddRecordedChatClient(AzureClientKey, (provider, _) => CreateAzureChatClient(provider, settings));
 
-#if IOS || MACCATALYST
-        if ((OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26)) &&
-            !string.IsNullOrWhiteSpace(settings.DeploymentName))
-            services.AddRecordedChatClient(HybridClientKey, CreateHybridChatClient);
-#endif
+            if (services.Any(service => Equals(service.ServiceKey, LocalClientKey)))
+                services.AddRecordedChatClient(HybridClientKey, CreateHybridChatClient);
+        }
 
         services.AddSingleton<IChatClient>(CreateReplayChatClient);
 
@@ -190,13 +189,21 @@ internal static class ChatServiceCollectionExtensions
     {
         var local = serviceProvider.GetRequiredKeyedService<IChatClient>(LocalClientKey);
         var cloud = serviceProvider.GetRequiredKeyedService<IChatClient>(AzureClientKey);
+        // Any turn can be answered locally, so Hybrid exposes only what the local model supports.
+        var localDescriptor = local.GetService<ChatClientDescriptor>();
         return new HybridChatClient(local, cloud, serviceProvider.GetRequiredService<ILogger<HybridChatClient>>())
             .AsBuilder()
             .UseDescriptor(new ChatClientDescriptor(
                 "hybrid-chat",
                 "Hybrid (local + cloud)",
-                "Local model chooses local or cloud for each turn. Cloud requests fall back to local if they fail before output.",
-                SupportsToolCalling: true))
+                $"{localDescriptor?.DisplayName ?? "The on-device model"} chooses local or cloud for each turn. " +
+                    "Cloud requests fall back to local if they fail before output.",
+                SupportsToolCalling: localDescriptor?.SupportsToolCalling == true,
+                SupportsStructuredOutput: localDescriptor?.SupportsStructuredOutput == true,
+                SupportsRequiredToolMode: localDescriptor?.SupportsRequiredToolMode == true,
+                GetModelStatusAsync: localDescriptor?.GetModelStatusAsync,
+                PrepareModelAsync: localDescriptor?.PrepareModelAsync,
+                PreparationActionLabel: localDescriptor?.PreparationActionLabel ?? "Prepare"))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();

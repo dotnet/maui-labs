@@ -60,6 +60,7 @@ public sealed class HybridChatClient : RoutingChatClient
         ];
         var classification = await _local.GetResponseAsync(
             request, new ChatOptions(), cancellationToken).ConfigureAwait(false);
-        return classification.Text.Trim() == "local" ? "local" : "cloud";
+        var label = classification.Text.Trim().TrimEnd('.');
+        return string.Equals(label, "local", StringComparison.OrdinalIgnoreCase) ? "local" : "cloud";
     }
 }
