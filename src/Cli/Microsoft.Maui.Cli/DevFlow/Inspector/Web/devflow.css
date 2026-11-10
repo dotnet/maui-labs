@@ -414,6 +414,7 @@ input.df-field[type="checkbox"] { width: auto; flex: 0 0 auto; }
 #df-stage { position: relative; flex: none; }
 #app-viewport { position: absolute; top: 0; left: 0; transform-origin: top left; }
 #screenshot { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
+#screenshot:not([src]) { display: none; }
 body.df-mode-inspect #app-viewport { cursor: crosshair; }
 body.df-viewport-pan-armed #df-viewport-wrap,
 body.df-viewport-pan-armed #app-viewport { cursor: grab; }
