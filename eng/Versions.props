@@ -54,7 +54,6 @@
     <MicrosoftExtensionsAIVersion>10.7.0</MicrosoftExtensionsAIVersion>
     <MicrosoftExtensionsAIOpenAIVersion>10.7.0</MicrosoftExtensionsAIOpenAIVersion>
     <AzureAIOpenAIVersion>2.1.0</AzureAIOpenAIVersion>
-    <AzureIdentityVersion>1.13.2</AzureIdentityVersion>
   </PropertyGroup>
   <PropertyGroup Label="Roslyn">
     <MicrosoftCodeAnalysisAnalyzersVersion>3.11.0</MicrosoftCodeAnalysisAnalyzersVersion>

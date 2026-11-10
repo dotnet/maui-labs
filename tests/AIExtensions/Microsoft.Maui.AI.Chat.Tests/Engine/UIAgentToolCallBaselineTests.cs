@@ -11,7 +11,7 @@ public class UIAgentToolCallBaselineTests
     [Fact]
     public async Task Step02_BackendToolCall_ProducesCorrectBlocks()
     {
-        var client = RecordingLoader.CreateReplayClient(
+        var client = RecordedChatClient.Load(
             "Step02_BackendToolsTest.PostRun_WithBackendToolCall_InvokesToolAndStreamsResult.recording.json");
         var agent = new UIAgent(client);
 

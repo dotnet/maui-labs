@@ -11,7 +11,7 @@ public class UIAgentBaselineTests
     [Fact]
     public async Task Step01_MultiTurnTextStreaming_ProducesCorrectBlocks()
     {
-        var client = RecordingLoader.CreateReplayClient(
+        var client = RecordedChatClient.Load(
             "Step01_GettingStartedTest.PostRun_MultiTurn_SynthesizesAssistantMessages.recording.json");
 
         var agent = new UIAgent(client);

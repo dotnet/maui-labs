@@ -1,127 +1,58 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.ComponentModel;
 using System.ClientModel;
+using System.ComponentModel;
 using Azure.AI.OpenAI;
-using Azure.Identity;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Maui.AI.Chat.Recording;
-using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 using Xunit.Abstractions;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Engine;
 
+/// <summary>
+/// Runs the engine against provider streams recorded from Azure OpenAI. Set <c>MAUI_AI_CHAT_LIVE=1</c> to run
+/// the same scenarios against the live deployment configured in the shared <c>ai-attributes-secrets</c> user
+/// secrets (<c>AI:Endpoint</c>, <c>AI:ApiKey</c>, optional <c>AI:DeploymentName</c>) or the matching
+/// <c>AI_ENDPOINT</c>/<c>AI_API_KEY</c>/<c>AI_DEPLOYMENT_NAME</c> environment variables.
+/// </summary>
 public class UIAgentRecordedTests
 {
-    private readonly ITestOutputHelper _output;
     private readonly ILoggerFactory _loggerFactory;
 
     public UIAgentRecordedTests(ITestOutputHelper output)
     {
-        _output = output;
         _loggerFactory = new XunitLoggerFactory(output);
     }
 
-    private static string GetBaselinePath(string fileName)
+    private static IChatClient CreateClient(string baseline)
     {
-        return Path.Combine(
-            AppContext.BaseDirectory,
-            "Baselines",
-            fileName);
-    }
+        if (!string.Equals(Environment.GetEnvironmentVariable("MAUI_AI_CHAT_LIVE"), "1", StringComparison.Ordinal))
+            return RecordedChatClient.Load(baseline);
 
-    private static string GetSourceBaselinePath(string fileName)
-    {
-        // Navigate from bin output back to source Baselines folder
-        var projectDir = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..", "..", ".."));
-        return Path.Combine(projectDir, "Baselines", fileName);
-    }
-
-    private static IChatClient CreateAzureOpenAIClient()
-    {
         var configuration = new ConfigurationBuilder()
             .AddUserSecrets<UIAgentRecordedTests>(optional: true)
             .Build();
-        var endpoint =
-            Environment.GetEnvironmentVariable("AI_ENDPOINT")
-            ?? configuration["AI:Endpoint"];
-        var apiKey =
-            Environment.GetEnvironmentVariable("AI_API_KEY")
-            ?? configuration["AI:ApiKey"];
-        var deploymentName =
-            Environment.GetEnvironmentVariable("AI_DEPLOYMENT_NAME")
+        var endpoint = Environment.GetEnvironmentVariable("AI_ENDPOINT") ?? configuration["AI:Endpoint"];
+        var apiKey = Environment.GetEnvironmentVariable("AI_API_KEY") ?? configuration["AI:ApiKey"];
+        var deployment = Environment.GetEnvironmentVariable("AI_DEPLOYMENT_NAME")
             ?? configuration["AI:DeploymentName"]
             ?? "gpt-5.4-mini";
-        if (string.IsNullOrWhiteSpace(endpoint))
-        {
-            throw new InvalidOperationException(
-                "Set AI:Endpoint in the shared user secrets or AI_ENDPOINT before recording.");
-        }
+        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("Live mode requires AI:Endpoint and AI:ApiKey (user secrets or environment).");
 
-        var azureClient = string.IsNullOrWhiteSpace(apiKey)
-            ? new AzureOpenAIClient(
-                new Uri(endpoint),
-                new DefaultAzureCredential())
-            : new AzureOpenAIClient(
-                new Uri(endpoint),
-                new ApiKeyCredential(apiKey));
-        return azureClient.GetChatClient(deploymentName).AsIChatClient();
-    }
-
-    private static IChatClient CreateReplayOrRecordClient(string baselineFileName)
-    {
-        var baselinePath = GetBaselinePath(baselineFileName);
-        var record =
-            string.Equals(
-                Environment.GetEnvironmentVariable("MAUI_AI_CHAT_RECORD"),
-                "1",
-                StringComparison.Ordinal);
-        if (!record && File.Exists(baselinePath))
-        {
-            return RecordingLoader.CreateReplayClient(baselineFileName);
-        }
-
-        if (!record)
-        {
-            throw new FileNotFoundException(
-                $"Recording baseline not found: {baselinePath}. Set MAUI_AI_CHAT_RECORD=1 to record it.");
-        }
-
-        var inner = CreateAzureOpenAIClient();
-        return new RecordingChatClient(
-            inner,
-            new ChatRecordingOptions
-            {
-                Mode = ChatRecordingMode.Record,
-                Recording = new ChatRecording(),
-                Adapter = "azure-openai",
-                StrictSanitizer = true,
-            });
-    }
-
-    private static void SaveIfRecording(IChatClient client, string baselineFileName)
-    {
-        if (client is RecordingChatClient recorder)
-        {
-            var sourcePath = GetSourceBaselinePath(baselineFileName);
-            ChatRecordingStore.Save(recorder.Session.Recording, sourcePath);
-
-            // Also save to output dir so subsequent test runs in the same session can find it
-            var outputPath = GetBaselinePath(baselineFileName);
-            ChatRecordingStore.Save(recorder.Session.Recording, outputPath);
-        }
+        return new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(apiKey))
+            .GetChatClient(deployment)
+            .AsIChatClient();
     }
 
     [Fact]
     public async Task TextStreaming_SingleTurn_ProducesTextContentBlock()
     {
         const string baseline = "TextStreaming_SingleTurn.recording.json";
-        var client = CreateReplayOrRecordClient(baseline);
+        var client = CreateClient(baseline);
         var agent = new UIAgent(client, configure: null, _loggerFactory);
 
         var blocks = new List<ContentBlock>();
@@ -130,8 +61,6 @@ public class UIAgentRecordedTests
         {
             blocks.Add(block);
         }
-
-        SaveIfRecording(client, baseline);
 
         var assistantBlocks = blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
         Assert.NotEmpty(assistantBlocks);
@@ -144,7 +73,7 @@ public class UIAgentRecordedTests
     public async Task TextStreaming_MultiTurn_ProducesBlocksPerTurn()
     {
         const string baseline = "TextStreaming_MultiTurn.recording.json";
-        var client = CreateReplayOrRecordClient(baseline);
+        var client = CreateClient(baseline);
         var agent = new UIAgent(client, configure: null, _loggerFactory);
 
         // Turn 1
@@ -172,15 +101,13 @@ public class UIAgentRecordedTests
             .First(b => b.Role == ChatRole.Assistant);
         Assert.False(string.IsNullOrEmpty(text2.RawText));
         Assert.Equal(BlockLifecycleState.Inactive, text2.LifecycleState);
-
-        SaveIfRecording(client, baseline);
     }
 
     [Fact]
     public async Task ToolCall_ProducesFunctionInvocationBlock()
     {
         const string baseline = "ToolCall_BackendTool.recording.json";
-        var client = CreateReplayOrRecordClient(baseline);
+        var client = CreateClient(baseline);
 
         var tool = AIFunctionFactory.Create(GetWeather);
         var chatClient = client.AsBuilder()
@@ -194,8 +121,6 @@ public class UIAgentRecordedTests
         {
             blocks.Add(block);
         }
-
-        SaveIfRecording(client, baseline);
 
         var assistantBlocks = blocks.Where(b => b.Role == ChatRole.Assistant).ToList();
 
@@ -217,7 +142,7 @@ public class UIAgentRecordedTests
     public async Task ToolApproval_ProducesApprovalBlockAndResumes()
     {
         const string baseline = "ToolApproval_HumanInLoop.recording.json";
-        var client = CreateReplayOrRecordClient(baseline);
+        var client = CreateClient(baseline);
 
         var tool = new ApprovalRequiredAIFunction(AIFunctionFactory.Create(DeleteFile));
         var chatClient = client.AsBuilder()
@@ -238,8 +163,6 @@ public class UIAgentRecordedTests
         });
 
         await context.SendMessageAsync("Delete the file named test.txt");
-
-        SaveIfRecording(client, baseline);
 
         Assert.NotNull(approvalBlock);
         Assert.Equal(ApprovalStatus.Approved, approvalBlock!.Status);

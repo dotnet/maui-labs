@@ -143,44 +143,16 @@ Platform.Maui.Linux.Gtk4            MIT         https://github.com/nickreynolds/
 
 
 ========================================================================
-ASP.NET Core - Microsoft.AspNetCore.Components.AI (0.1.0-preview at commit 31b20463068f8d9ad900393bf96c9a182c397216)
+ASP.NET Core - Microsoft.AspNetCore.Components.AI (at commit 25e1cee7f159b7c2c3c0868fe5613518a6add482)
 ========================================================================
 
-https://github.com/dotnet/aspnetcore/tree/31b20463068f8d9ad900393bf96c9a182c397216/src/Components/AI
+https://github.com/dotnet/aspnetcore/tree/25e1cee7f159b7c2c3c0868fe5613518a6add482/src/Components/AI
 
-Portions of Microsoft.Maui.Chat.Controls.Blazor were adapted from
-Microsoft.AspNetCore.Components.AI. Specifically:
-
-- The CSS design tokens, button styles, message list layout, bubble sizing, typing
-  dots animation, error banner, and chat-page shell in
-  src/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor/wwwroot/mchat.css are
-  adapted from src/Components/AI/src/wwwroot/ai-chat.css. Class names were renamed
-  from sc-ai-* to mchat-* and additional tokens were added for provider-neutral
-  participant chrome.
-
-- The MessageContentRenderer<TContent> registration pattern in
-  src/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor/Components/MessageContentRenderer.cs
-  is adapted from src/Components/AI/src/Components/BlockRenderer.cs.
-
-- The ChatViewContext cascade and region-keyed lifetime pattern in
-  src/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor/Components/ChatViewContext.cs
-  are adapted from src/Components/AI/src/Components/MessageListContext.cs and
-  src/Components/AI/src/Components/AgentBoundary.cs.
-
-- The Header/body/footer three-region shell in
-  src/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor/Components/ChatView.razor is
-  adapted from src/Components/AI/src/Components/ChatPage.cs.
-
-- The scroll-container + streaming/error footer layout in
-  src/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor/Components/ChatMessagesView.razor
-  is adapted from src/Components/AI/src/Components/MessageList.cs.
-
-- The textarea Enter-to-submit / Shift+Enter-for-newline pattern in
-  src/AIExtensions/Microsoft.Maui.Chat.Controls.Blazor/Components/Composer.razor is
-  adapted from src/Components/AI/src/Components/MessageInput.cs.
-
-The upstream AI engine (blocks, turns, UIAgent, AgentContext) is NOT copied. This
-package is provider-neutral by design.
+The headless chat engine in src/AIExtensions/Microsoft.Maui.AI.Chat (content blocks,
+block-mapping pipeline, UIAgent, AgentContext, conversation turns and state) and the
+[ToolBlock] source generator in src/AIExtensions/Microsoft.Maui.AI.Chat.Generators are
+adapted from src/Components/AI/src and src/Components/AI/gen. The MAUI differences are
+documented in src/AIExtensions/Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md.
 
 Copyright (c) .NET Foundation and Contributors.
 
