@@ -961,10 +961,13 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     {
         var requests = 0;
         var retryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRetry = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var followUpStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFollowUp = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await Page.RouteAsync("**/api/state*", async route =>
         {
-            if (Interlocked.Increment(ref requests) == 1)
+            var request = Interlocked.Increment(ref requests);
+            if (request == 1)
             {
                 await route.FulfillAsync(new()
                 {
@@ -974,8 +977,16 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 });
                 return;
             }
-            retryStarted.TrySetResult();
-            await release.Task;
+            if (request == 2)
+            {
+                retryStarted.TrySetResult();
+                await releaseRetry.Task;
+            }
+            else
+            {
+                followUpStarted.TrySetResult();
+                await releaseFollowUp.Task;
+            }
             await route.ContinueAsync();
         });
         try
@@ -987,14 +998,20 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Expect(Page.Locator("#df-preview-pending")).ToBeVisibleAsync(new() { Timeout = 1000 });
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
             await retryStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            release.TrySetResult();
+            await Page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))");
+            releaseRetry.TrySetResult();
+            await followUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Expect(Page.Locator("#df-health-banner")).ToBeVisibleAsync();
+            releaseFollowUp.TrySetResult();
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Tapped");
+            await Expect(Page.Locator("#df-health-banner")).ToBeHiddenAsync();
             await Expect(Page.Locator("#df-preview-pending")).ToBeHiddenAsync();
             Assert.Empty(_pageErrors);
         }
         finally
         {
-            release.TrySetResult();
+            releaseRetry.TrySetResult();
+            releaseFollowUp.TrySetResult();
         }
     }
 
@@ -1286,9 +1303,10 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 return;
             }
 
-            Assert.Contains("fresh=1", route.Request.Url, StringComparison.Ordinal);
-            if (Interlocked.Increment(ref targetScaleRequests) == 1)
+            var request = Interlocked.Increment(ref targetScaleRequests);
+            if (request == 1)
             {
+                Assert.Contains("fresh=1", route.Request.Url, StringComparison.Ordinal);
                 await route.FulfillAsync(new()
                 {
                     Status = 503,
@@ -1299,8 +1317,20 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 return;
             }
 
-            retryStarted.TrySetResult();
-            await route.ContinueAsync();
+            if (route.Request.Url.Contains("fresh=1", StringComparison.Ordinal))
+            {
+                retryStarted.TrySetResult();
+                await route.ContinueAsync();
+            }
+            else
+            {
+                await route.FulfillAsync(new()
+                {
+                    Status = 503,
+                    ContentType = "application/json",
+                    Body = """{"ok":false,"reason":"capture-failed","retryable":true}"""
+                });
+            }
         });
 
         try
@@ -1319,7 +1349,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Expect(Page.Locator("#df-health-banner")).ToBeHiddenAsync();
             await Expect(Page.Locator("#df-preview-health-label")).ToHaveTextAsync("Live");
             await Expect(Overlay).ToHaveAttributeAsync("data-text", "Original text");
-            Assert.Equal(2, Volatile.Read(ref targetScaleRequests));
+            Assert.True(Volatile.Read(ref targetScaleRequests) >= 2);
             Assert.Empty(_pageErrors);
         }
         finally

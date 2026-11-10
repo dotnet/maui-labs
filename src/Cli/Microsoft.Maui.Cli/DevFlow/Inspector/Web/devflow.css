@@ -306,12 +306,13 @@ body.df-disconnected #df-viewport-wrap {
   border-bottom: 1px solid var(--df-warn);
   background: color-mix(in srgb, var(--df-warn) 10%, var(--df-bg));
   color: var(--df-fg);
+  pointer-events: none;
 }
 .df-health-icon { width: 18px; height: 18px; flex: 0 0 auto; color: var(--df-warn); fill: none; stroke: currentColor; stroke-width: 2; }
 .df-health-copy { display: flex; flex: 1 1 auto; min-width: 0; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; }
 .df-health-copy strong { color: var(--df-warn); white-space: nowrap; }
 .df-health-copy span { min-width: 0; color: var(--df-muted); white-space: normal; }
-.df-health-banner .df-tool-btn { flex: 0 0 auto; }
+.df-health-banner .df-tool-btn { flex: 0 0 auto; pointer-events: auto; }
 
 /* ── Properties pane (docked, themed; populated by JS) ── */
 #df-props-pane { flex: 0 0 clamp(230px, 27vw, 340px); border-left: 1px solid var(--df-border-subtle); background: var(--df-bg); }
@@ -378,9 +379,8 @@ input.df-field[type="checkbox"] { width: auto; flex: 0 0 auto; }
 #df-stage { position: relative; flex: none; }
 #app-viewport { position: absolute; top: 0; left: 0; transform-origin: top left; }
 #screenshot { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
-#screenshot:not([src]) { display: none; }
 body.df-mode-inspect #app-viewport { cursor: crosshair; }
-.df-hit-candidates { position: absolute; z-index: 34; top: 4px; left: 8px; right: 8px;
+.df-hit-candidates { position: absolute; z-index: 62; top: 4px; left: 8px; right: 8px;
   display: flex; align-items: center; gap: 5px; overflow-x: auto; max-width: calc(100% - 16px);
   padding: 4px 8px; border: 1px solid var(--df-border-subtle); border-radius: var(--df-radius-sm);
   background: var(--df-surface); box-shadow: var(--df-shadow); }
