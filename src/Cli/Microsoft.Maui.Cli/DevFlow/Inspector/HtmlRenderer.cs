@@ -20,8 +20,8 @@ public static class HtmlRenderer
     public static string Render(
         List<ElementInfo> tree,
         bool hasScreenshot,
-        double screenshotWidth = 0,
-        double screenshotHeight = 0,
+        int screenshotWidth = 0,
+        int screenshotHeight = 0,
         double density = 1,
         double elementScale = 1,
         double rootOffsetX = 0,

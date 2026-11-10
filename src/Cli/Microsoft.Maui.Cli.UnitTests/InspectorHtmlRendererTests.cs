@@ -8,6 +8,17 @@ namespace Microsoft.Maui.Cli.UnitTests;
 public class InspectorHtmlRendererTests
 {
     [Fact]
+    public void Render_PreservesLegacyIntegerViewportSignature()
+    {
+        var parameters = typeof(HtmlRenderer)
+            .GetMethod(nameof(HtmlRenderer.Render))!
+            .GetParameters();
+
+        Assert.Equal(typeof(int), parameters[2].ParameterType);
+        Assert.Equal(typeof(int), parameters[3].ParameterType);
+    }
+
+    [Fact]
     public void RenderElements_EscapesHtmlInTextAttribute()
     {
         var tree = new List<ElementInfo>
