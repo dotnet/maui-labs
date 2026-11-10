@@ -41,6 +41,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private ILocator SourceButton => Row.Locator(".df-prop-source");
     private ILocator Overlay => Page.Locator(".devflow-element[data-id='fixture-label']");
     private ILocator ColorRow(string name) => Page.Locator($".df-prop-row[data-property-name='{name.ToLowerInvariant()}']");
+    private static bool IsStateUrl(string url)
+        => new Uri(url).AbsolutePath.EndsWith("/api/state", StringComparison.Ordinal);
 
     public async Task InitializeAsync()
     {
@@ -309,7 +311,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         var stateRequests = 0;
         Page.Request += (_, request) =>
         {
-            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+            if (IsStateUrl(request.Url))
                 Interlocked.Increment(ref stateRequests);
         };
         await Page.EvaluateAsync("""
@@ -370,7 +372,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 TaskCreationOptions.RunContinuationsAsynchronously);
             Page.Request += (_, request) =>
             {
-                if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                if (IsStateUrl(request.Url))
                     explicitRefreshStarted.TrySetResult();
             };
             await Page.Locator("#df-retry-connection").DispatchEventAsync("click");
@@ -417,7 +419,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             TaskCreationOptions.RunContinuationsAsynchronously);
         Page.Request += (_, request) =>
         {
-            if (!request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+            if (!IsStateUrl(request.Url))
                 return;
             if (Interlocked.Increment(ref stateRequests) >= 2)
                 mutationRefreshStarted.TrySetResult();
@@ -524,7 +526,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 TaskCreationOptions.RunContinuationsAsynchronously);
             Page.Request += (_, request) =>
             {
-                if (!request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                if (!IsStateUrl(request.Url))
                     return;
                 if (Interlocked.Increment(ref stateRequests) >= 2)
                     eventRefreshStarted.TrySetResult();
@@ -616,7 +618,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         var stateRequests = 0;
         Page.Request += (_, request) =>
         {
-            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+            if (IsStateUrl(request.Url))
                 Interlocked.Increment(ref stateRequests);
         };
         await Page.RouteAsync("**/api/scroll", route => route.FulfillAsync(new()
@@ -684,7 +686,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         var stateRequests = 0;
         Page.Request += (_, request) =>
         {
-            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+            if (IsStateUrl(request.Url))
                 Interlocked.Increment(ref stateRequests);
         };
         var requestsBeforeTap = Volatile.Read(ref stateRequests);
@@ -700,7 +702,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 TaskCreationOptions.RunContinuationsAsynchronously);
             Page.Request += (_, request) =>
             {
-                if (request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                if (IsStateUrl(request.Url))
                     secondRefreshStarted.TrySetResult();
             };
             await button.ClickAsync();

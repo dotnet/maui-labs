@@ -269,7 +269,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       }, STATE_FETCH_TIMEOUT_MS);
       disconnectedOverlay?.setAttribute('aria-busy', 'true');
       try {
-        const resp = await fetch(`${basePath}/api/state${diagnosticsWanted() ? '?diagnostics=1' : ''}`, { signal: refresh.controller.signal });
+        const query = [];
+        if (diagnosticsWanted()) query.push('diagnostics=1');
+        if (force) query.push('fresh=1');
+        const resp = await fetch(
+          `${basePath}/api/state${query.length ? `?${query.join('&')}` : ''}`,
+          { signal: refresh.controller.signal });
         if (!ensureCurrent()) return followReplacement();
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();

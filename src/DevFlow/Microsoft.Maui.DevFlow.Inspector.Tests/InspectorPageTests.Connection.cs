@@ -85,7 +85,7 @@ public partial class InspectorLayoutWorkspaceTests
         var aborted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _page.RequestFailed += (_, request) =>
         {
-            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal)) aborted.TrySetResult();
+            if (IsStateUrl(request.Url)) aborted.TrySetResult();
         };
         await _page.RouteAsync("**/api/state", async route =>
         {
@@ -129,7 +129,7 @@ public partial class InspectorLayoutWorkspaceTests
         var stateRequests = 0;
         _page.Request += (_, request) =>
         {
-            if (request.Url.EndsWith("/api/state", StringComparison.Ordinal)) Interlocked.Increment(ref stateRequests);
+            if (IsStateUrl(request.Url)) Interlocked.Increment(ref stateRequests);
         };
         var overlay = _page.Locator("#df-disconnected-overlay");
 
@@ -143,7 +143,7 @@ public partial class InspectorLayoutWorkspaceTests
                 new() { Times = 1 });
             await _page.RunAndWaitForResponseAsync(
                 () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
-                response => response.Url.EndsWith("/api/state", StringComparison.Ordinal));
+                response => IsStateUrl(response.Url));
             await Expect(overlay).ToBeVisibleAsync();
             await _page.Clock.RunForAsync(3100);
             await Expect(overlay).ToBeHiddenAsync(new() { Timeout = 1000 });
@@ -172,7 +172,7 @@ public partial class InspectorLayoutWorkspaceTests
               Object.defineProperty(document, 'hidden', { configurable: true, value: false });
               document.dispatchEvent(new Event('visibilitychange'));
             }
-            """), response => response.Url.EndsWith("/api/state", StringComparison.Ordinal));
+            """), response => IsStateUrl(response.Url));
         await FailAndRecoverAsync();
     }
 }

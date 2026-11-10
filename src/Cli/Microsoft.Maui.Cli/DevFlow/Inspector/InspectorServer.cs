@@ -74,8 +74,9 @@ public sealed class InspectorServer : IDisposable
     // standalone screenshot-frame + root-offset fields diagnostics originally hung off.
     private long? _captureEpoch;
     private Task<bool?>? _requiresCaptureEpochTask;
+    private readonly TimeSpan _frameReuseDuration;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
-    private static readonly TimeSpan FrameReuseDuration = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan DefaultFrameReuseDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan FrameCacheDuration = TimeSpan.FromSeconds(10);
     private const int MaxCachedFrames = 32;
     private const int MaxScreenshotBytes = 64 * 1024 * 1024;
@@ -118,7 +119,8 @@ public sealed class InspectorServer : IDisposable
         string? sessionId,
         string? policyStartPath = null,
         int? processId = null,
-        XamlSourceWorkspace? sourceWorkspace = null)
+        XamlSourceWorkspace? sourceWorkspace = null,
+        TimeSpan? frameReuseDuration = null)
     {
         _port = port;
         _agentHost = agentHost;
@@ -129,6 +131,7 @@ public sealed class InspectorServer : IDisposable
         _platform = platform;
         _project = string.IsNullOrWhiteSpace(project) ? null : project;
         _sessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
+        _frameReuseDuration = frameReuseDuration ?? DefaultFrameReuseDuration;
         _sourcePropertyEditor = new XamlSourcePropertyEditor(
             project,
             sessionId,
@@ -1175,7 +1178,8 @@ public sealed class InspectorServer : IDisposable
             lock (_cacheLock)
                 _diagnosticsInterestUtc = DateTime.UtcNow;
         }
-        var frame = await CreateFrameAsync();
+        var requiresFreshFrame = IsTruthy(request.Query.GetValueOrDefault("fresh"));
+        var frame = await CreateFrameAsync(requiresFreshFrame);
         if (frame.Tree.Count == 0)
         {
             return (
@@ -1793,11 +1797,13 @@ public sealed class InspectorServer : IDisposable
         return (200, "image/png", png);
     }
 
-    private async Task<InspectorFrame> CreateFrameAsync()
+    private async Task<InspectorFrame> CreateFrameAsync(bool force = false)
     {
         lock (_cacheLock)
         {
-            if (_latestFrame is not null && DateTime.UtcNow - _latestFrame.CreatedUtc < FrameReuseDuration)
+            if (!force
+                && _latestFrame is not null
+                && DateTime.UtcNow - _latestFrame.CreatedUtc < _frameReuseDuration)
                 return _latestFrame;
         }
 
@@ -1809,7 +1815,9 @@ public sealed class InspectorServer : IDisposable
                 long generation;
                 lock (_cacheLock)
                 {
-                    if (_latestFrame is not null && DateTime.UtcNow - _latestFrame.CreatedUtc < FrameReuseDuration)
+                    if (!force
+                        && _latestFrame is not null
+                        && DateTime.UtcNow - _latestFrame.CreatedUtc < _frameReuseDuration)
                         return _latestFrame;
                     generation = _cacheGeneration;
                 }

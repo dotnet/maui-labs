@@ -10,6 +10,64 @@ namespace Microsoft.Maui.Cli.UnitTests;
 
 public class InspectorServerCaptureMetadataTests
 {
+    [Fact]
+    public async Task State_WithFreshQuery_BypassesRecentFrameReuse()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(
+            inspectorPort,
+            "localhost",
+            agent.Port,
+            embedToken: null,
+            agentId: null,
+            appName: null,
+            platform: null,
+            project: null,
+            sessionId: null,
+            frameReuseDuration: TimeSpan.FromMinutes(1));
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+
+            using (var first = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state",
+                HttpCompletionOption.ResponseHeadersRead))
+                first.EnsureSuccessStatusCode();
+            var requestsAfterFirstFrame = agent.RecordedRequests.Count(
+                request => request.Path == "/api/v1/ui/tree");
+            Assert.True(requestsAfterFirstFrame > 0);
+
+            using (var reused = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state",
+                HttpCompletionOption.ResponseHeadersRead))
+                reused.EnsureSuccessStatusCode();
+
+            Assert.Equal(
+                requestsAfterFirstFrame,
+                agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/tree"));
+
+            using (var fresh = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?fresh=1",
+                HttpCompletionOption.ResponseHeadersRead))
+            {
+                fresh.EnsureSuccessStatusCode();
+            }
+
+            Assert.True(
+                agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/tree")
+                > requestsAfterFirstFrame);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
     [Theory]
     [InlineData(
         "/api/tap",
