@@ -472,16 +472,6 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     {
         await Page.Clock.InstallAsync();
         await Page.Clock.PauseAtAsync(DateTime.UtcNow.AddSeconds(1));
-        var stateRequests = 0;
-        var eventRefreshStarted = new TaskCompletionSource(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        Page.Request += (_, request) =>
-        {
-            if (!request.Url.EndsWith("/api/state", StringComparison.Ordinal))
-                return;
-            if (Interlocked.Increment(ref stateRequests) >= 2)
-                eventRefreshStarted.TrySetResult();
-        };
         await Page.RouteAsync("**/api/eventSupport", route => route.FulfillAsync(new()
         {
             Status = 200,
@@ -529,7 +519,16 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Expect(Page.Locator("body"))
                 .ToHaveAttributeAsync("data-fixture-events-socket-open", "true");
             await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-            Volatile.Write(ref stateRequests, 0);
+            var stateRequests = 0;
+            var eventRefreshStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Page.Request += (_, request) =>
+            {
+                if (!request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                    return;
+                if (Interlocked.Increment(ref stateRequests) >= 2)
+                    eventRefreshStarted.TrySetResult();
+            };
 
             await Page.EvaluateAsync("""
                 () => {
