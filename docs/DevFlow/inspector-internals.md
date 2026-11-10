@@ -94,24 +94,28 @@ canonical descriptor under `frame`; the existing flat fields remain compatibilit
 | `captureScale` | Nominal PNG pixels per logical unit; exact conversion uses the per-axis dimension ratios. |
 | `createdAt` | UTC time when the complete tree and screenshot frame was created. |
 
-`frameId` remains the only cache lookup key. `frameRevision` provides ordering, and
-`_cacheGeneration` remains an internal invalidation guard. The initial HTML carries the same
-descriptor as `/api/state`, so actions before the first poll still reference the displayed frame.
-Identity-less compatibility payloads may refresh in place; explicit frames commit only when their
-stream/revision ordering permits it.
+`frameId` remains the only cache lookup key. `frameRevision` provides ordering, and an internal
+invalidation generation prevents pre-mutation coordinate frames from being reused. The initial
+HTML carries the same descriptor as `/api/state`, so actions before the first poll still reference
+the displayed frame. Identity-less compatibility payloads may refresh geometry in place without
+inheriting correlation or revision metadata; explicit frames commit only when their stream/revision
+ordering permits it.
 
 Browser refreshes use a monotonically increasing generation. A forced refresh aborts older state
 fetch or image-decode work; late completions are ignored, and cancellation never clears the last
 committed frame or pending tap feedback. Forced state requests also bypass the server's short
 frame-reuse window so post-action evidence cannot reuse a frame captured before the action.
 
-The browser decodes a candidate screenshot before synchronously committing screenshot source,
+The server publishes only screenshots with a complete PNG chunk sequence and valid chunk CRCs.
+The browser then decodes a candidate screenshot before synchronously committing screenshot source,
 logical viewport size, offsets, element HTML, and descriptor. Expired screenshot lookups return
-`404`. Correlated actions referencing unknown frames return `410 frame-expired`; stream/revision or
-changed-geometry mismatches return `409 frame-mismatch` or `409 frame-superseded`. `actionId` is a
-tracing identifier, not replay protection. A successful mutation invalidates prior coordinate
-frames until a complete post-mutation frame is captured; identity-bound actions still rely on the
-agent's capture-epoch validation.
+`404`. Correlated coordinate actions referencing unknown frames return `410 frame-expired`;
+identity-bound actions treat missing cached correlation as advisory and still rely on the agent's
+capture epoch. Stream/revision or changed-geometry mismatches return `409 frame-mismatch` or
+`409 frame-superseded`. Coordinate actions are revalidated after live hit-testing and mutation
+dispatch is serialized against frame publication. `actionId` is a tracing identifier, not replay
+protection. A successful mutation invalidates prior coordinate frames until a complete post-mutation
+frame is captured; identity-bound actions still rely on the agent's capture-epoch validation.
 
 Coordinate conversions are centralized in `Web/inspector-frame.js`:
 

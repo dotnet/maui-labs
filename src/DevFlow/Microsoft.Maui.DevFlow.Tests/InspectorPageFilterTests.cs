@@ -260,6 +260,22 @@ public class InspectorPageFilterTests
     }
 
     [Fact]
+    public void FindRootPageId_WhenTreeIsShellSubclass_UsesTheRoot()
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("shell", "AppShell", 0, 0, 400, 900,
+                children: NativeEl("native-child", 20, 40, 100, 30)),
+        };
+
+        var rootPageId = InspectorServer.FindRootPageId(tree);
+
+        Assert.Equal("shell", rootPageId);
+        Assert.Same(tree, InspectorServer.SelectFrameTree(tree, rootPageId));
+        Assert.False(InspectorServer.RequiresFullscreenCapture(tree, rootPageId));
+    }
+
+    [Fact]
     public void RequiresFullscreenCapture_WhenNativeOverlayWouldBeDroppedFromTheFrame()
     {
         var tree = new List<ElementInfo>
@@ -283,6 +299,18 @@ public class InspectorPageFilterTests
         };
 
         // Nested inside the captured subtree — page-scoped capture still renders it.
+        Assert.False(InspectorServer.RequiresFullscreenCapture(tree, "page"));
+    }
+
+    [Fact]
+    public void RequiresFullscreenCapture_WhenTreeIsPageRoot_KeepsNativeDescendantsPageScoped()
+    {
+        var tree = new List<ElementInfo>
+        {
+            El("page", "ContentPage", 0, 0, 400, 900,
+                children: NativeEl("native-child", 20, 40, 100, 30)),
+        };
+
         Assert.False(InspectorServer.RequiresFullscreenCapture(tree, "page"));
     }
 

@@ -99,7 +99,8 @@ and image work, distinguishes event-triggered sharing from explicit retries, and
 frame when a property edit lands during image decode. Later app events queue a follow-up capture
 without aborting the current one, and feedback remains tied to the newest accepted tap. Frame
 coverage also verifies screenshot, dimensions, offsets, overlays, and descriptor commit together
-after image decode, and frame rejection queues fresh evidence instead of reusing stale state.
+after image decode, restores a missing bootstrap screenshot on the first valid refresh, and queues
+an EVIDENCE refresh after frame rejection.
 Playwright's clock verifies that post-acknowledgement capture starts within
 50 ms of browser time rather than waiting the former fixed 400 ms.
 HTML and shipped scripts are not replaced.

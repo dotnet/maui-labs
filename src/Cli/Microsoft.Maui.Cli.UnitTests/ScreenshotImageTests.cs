@@ -217,6 +217,38 @@ public sealed class ScreenshotImageTests : IDisposable
         Assert.Equal((0, 0), ScreenshotImage.GetPngDimensions(png));
     }
 
+    [Fact]
+    public void IsCompletePng_ValidImage_ReturnsTrue()
+    {
+        Assert.True(ScreenshotImage.IsCompletePng(CreatePng(2, 2)));
+    }
+
+    [Fact]
+    public void IsCompletePng_TruncatedAfterHeader_ReturnsFalse()
+    {
+        var png = CreatePng(2, 2);
+
+        Assert.False(ScreenshotImage.IsCompletePng(png[..24]));
+    }
+
+    [Fact]
+    public void IsCompletePng_CorruptChunkCrc_ReturnsFalse()
+    {
+        var png = CreatePng(2, 2);
+        png[29] ^= 0xff;
+
+        Assert.False(ScreenshotImage.IsCompletePng(png));
+    }
+
+    [Fact]
+    public void IsCompletePng_InvalidBitDepth_ReturnsFalse()
+    {
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBwIAAAASJ8QPAAAABElEQVQAAQIDQN6+CAAAAABJRU5ErkJggg==");
+
+        Assert.False(ScreenshotImage.IsCompletePng(png));
+    }
+
     private string WriteImage(byte[] png)
     {
         var file = Path.Combine(_directory, $"{Guid.NewGuid():N}.png");

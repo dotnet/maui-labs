@@ -227,6 +227,20 @@ public class InspectorHtmlRendererTests
     }
 
     [Fact]
+    public void RenderWithViewport_PreservesFractionalLogicalSize()
+    {
+        var html = HtmlRenderer.RenderWithViewport(
+            [],
+            hasScreenshot: true,
+            screenshotWidth: 320.5,
+            screenshotHeight: 640.25);
+
+        Assert.Contains("data-width=\"320.5\"", html);
+        Assert.Contains("data-height=\"640.25\"", html);
+        Assert.Contains("width:320.5px; height:640.25px;", html);
+    }
+
+    [Fact]
     public void Render_WithoutScreenshot_DoesNotJudgeOverlaysAgainstThePlaceholderViewport()
     {
         // With no screenshot the inspector falls back to an 800x600 placeholder; a larger window's
