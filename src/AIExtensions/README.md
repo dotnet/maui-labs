@@ -10,7 +10,7 @@ AI integration packages for .NET MAUI, built on [`Microsoft.Extensions.AI`](http
 | [`Microsoft.Maui.AI.Chat`](Microsoft.Maui.AI.Chat/) | Headless chat engine — streaming blocks, tools/approval/UI actions, typed state, thread restore/retry, reasoning, media, and `[ToolBlock]` generation |
 | [`Microsoft.Maui.AI.Chat.Presentation`](Microsoft.Maui.AI.Chat.Presentation/) | Projection from an AI agent session to the provider-neutral chat conversation model |
 | [`Microsoft.Maui.AI.Chat.Controls`](Microsoft.Maui.AI.Chat.Controls/) | Native MAUI chat UI — zero-config `CopilotChatView`, virtualized `MessageListView`, XAML block templates, multimodal input, suggestions, stop/retry, and theming |
-| [`Microsoft.Maui.Chat`](Microsoft.Maui.Chat/) | Renderer-neutral conversations, messages, multimodal contracts, and the shared `ChatComposerController` |
+| [`Microsoft.Maui.Chat`](Microsoft.Maui.Chat/) | Chat conversations, messages, multimodal contracts, and the shared `ChatComposerController` |
 | [`Microsoft.Maui.Chat.Controls`](Microsoft.Maui.Chat.Controls/) | Provider-neutral `ChatView` for human, group, and agent participants with files, audio capture, live speech, and no AI dependency |
 
 `Microsoft.Maui.AI.Chat` supports caller-provided `IConversationThread` persistence, history

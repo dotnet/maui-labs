@@ -40,7 +40,7 @@ public class ObservableChatConversation : ChatConversation
 
     /// <summary>
     /// Gets or sets the cancellation behavior for work that did not originate from the bound
-    /// chat renderer. A send started by the view is always cancelable through its token.
+    /// chat view. A send started by the view is always cancelable through its token.
     /// </summary>
     public Func<ObservableChatConversation, CancellationToken, Task>? CancelHandler { get; set; }
 

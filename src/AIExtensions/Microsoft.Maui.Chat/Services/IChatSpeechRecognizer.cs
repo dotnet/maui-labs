@@ -68,7 +68,7 @@ public sealed class ChatSpeechRecognitionEventArgs : EventArgs
     public Exception? Exception { get; }
 }
 
-/// <summary>Converts microphone input into partial and final text for a chat renderer.</summary>
+/// <summary>Converts microphone input into partial and final text for the chat composer.</summary>
 /// <remarks>
 /// The built-in implementation uses CommunityToolkit.Maui speech-to-text. Replace this service to
 /// use an offline recognizer, a provider SDK, or deterministic test input.

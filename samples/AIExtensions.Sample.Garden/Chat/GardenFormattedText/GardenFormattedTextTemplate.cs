@@ -1,4 +1,5 @@
 using Microsoft.Maui.AI.Chat.Controls;
+using Microsoft.Maui.Chat;
 
 namespace AIExtensions.Sample.Garden.Chat;
 
@@ -12,7 +13,7 @@ public sealed class GardenFormattedTextTemplate : ContentTemplate
     public GardenFormattedTextTemplate()
     {
         ViewType = typeof(GardenFormattedTextView);
-        Presentation = Microsoft.Maui.Chat.Controls.ChatContentPresentation.Bubble;
+        Presentation = ChatContentPresentation.Bubble;
     }
 
     public override bool When(ContentContext context) => context.Block is GardenFormattedTextBlock;

@@ -5,7 +5,6 @@ namespace Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 
 /// <summary>
 /// Factory for creating ContentContext instances wrapping different block types.
-/// Mirrors the test helpers used in Blazor tests for rendering different block types.
 /// </summary>
 internal static class BlockFactory
 {

@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Microsoft.Maui.Chat;
 
-/// <summary>Base class for renderer-neutral chat models with observable properties.</summary>
+/// <summary>Base class for chat models with observable properties.</summary>
 public abstract class ObservableChatObject : INotifyPropertyChanged
 {
     /// <inheritdoc />

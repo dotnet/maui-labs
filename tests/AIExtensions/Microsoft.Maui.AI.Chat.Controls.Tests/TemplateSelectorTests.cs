@@ -6,9 +6,8 @@ using Microsoft.Maui.Chat.Controls;
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 /// <summary>
-/// Mirrors: Blazor.Tests/Components/MessageListContextTests.cs
-/// Tests the neutral ChatContentTemplateSelector with AI template adapters.
-/// block rendering dispatch. Verifies that the selector picks the correct DataTemplate
+/// Tests the neutral ChatContentTemplateSelector with AI template adapters for block rendering
+/// dispatch. Verifies that the selector picks the correct DataTemplate
 /// for each block type based on registered ContentTemplate instances.
 /// </summary>
 public class TemplateSelectorTests
@@ -202,7 +201,7 @@ public class TemplateSelectorTests
     public void MessageListView_ZeroConfiguration_ProvidesVisibleBuiltInFallbacks()
     {
         var view = new MessageListView();
-        var selector = view.CreateAiTemplateSelector();
+        var selector = Selector(view);
         var session = SessionFactory.Create();
 
         Assert.IsType<Microsoft.Maui.Chat.Controls.ChatTextContentView>(
@@ -231,7 +230,7 @@ public class TemplateSelectorTests
     public void MessageListView_ZeroConfiguration_HidesRawFunctionInvocationsAndUnknownBlocks()
     {
         var view = new MessageListView();
-        var selector = view.CreateAiTemplateSelector();
+        var selector = Selector(view);
         var session = SessionFactory.Create();
 
         AssertRendersNothing(selector.SelectTemplate(BlockFactory.MakeToolCall("get_weather"), null!));
@@ -251,7 +250,7 @@ public class TemplateSelectorTests
         block.Role = ChatRole.Assistant;
         var context = new ContentContext(SessionFactory.Create(), block);
 
-        var selected = view.CreateAiTemplateSelector().SelectTemplate(context, null!);
+        var selected = Selector(view).SelectTemplate(context, null!);
 
         Assert.IsAssignableFrom<ChatBubbleView>(selected.CreateContent());
     }
@@ -262,7 +261,7 @@ public class TemplateSelectorTests
         var view = new MessageListView { UseDefaultContentTemplates = false };
         var context = BlockFactory.MakeText("Assistant", "Hello");
 
-        AssertRendersNothing(view.CreateAiTemplateSelector().SelectTemplate(context, null!));
+        AssertRendersNothing(Selector(view).SelectTemplate(context, null!));
 
         view.ContentTemplates.Add(new TextContentTemplate
         {
@@ -271,9 +270,12 @@ public class TemplateSelectorTests
             UseMessageChrome = false,
         });
 
-        var selected = view.CreateAiTemplateSelector().SelectTemplate(context, null!);
+        var selected = Selector(view).SelectTemplate(context, null!);
         Assert.IsType<Label>(selected.CreateContent());
     }
+
+    private static ChatContentTemplateSelector Selector(MessageListView view) =>
+        Assert.IsType<ChatContentTemplateSelector>(view.ItemTemplateSelector);
 
     /// <summary>
     /// Creates a selector with all standard templates registered (mirrors the default

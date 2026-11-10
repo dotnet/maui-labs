@@ -17,7 +17,7 @@ public class ChatAppearanceTests
             BubbleStrokeColor = Color.FromArgb("#654321"),
             MaxBubbleWidth = 520,
         };
-        var chat = new CopilotChatView
+        var chat = new MessageListHostView
         {
             Appearance = appearance,
             UserDisplayName = "Customer",
@@ -25,7 +25,7 @@ public class ChatAppearanceTests
             UseDefaultContentTemplates = false,
         };
         var list = new MessageListView();
-        chat.AttachMessageListPart(list);
+        chat.ApplyTo(list);
 
         Assert.Same(appearance, list.Appearance);
         Assert.False(list.UseDefaultContentTemplates);
@@ -34,11 +34,11 @@ public class ChatAppearanceTests
     [Fact]
     public void NestedMessageListSharesTheTypedTemplateCollection()
     {
-        var chat = new CopilotChatView();
+        var chat = new MessageListHostView();
         var list = new MessageListView();
         var outerTemplate = new TextContentTemplate();
         chat.ContentTemplates.Add(outerTemplate);
-        chat.AttachMessageListPart(list);
+        chat.ApplyTo(list);
 
         list.ContentTemplates.Add(new ErrorContentTemplate());
 
@@ -69,4 +69,9 @@ public class ChatAppearanceTests
         Assert.Equal(19, chat.InputAreaCornerRadius);
     }
 
+    private sealed class MessageListHostView : CopilotChatView
+    {
+        public void ApplyTo(ChatMessagesView messageList) =>
+            ApplyMessageListProperties(messageList);
+    }
 }

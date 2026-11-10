@@ -1,8 +1,8 @@
 # Microsoft.Maui.Chat.Controls
 
 Provider-neutral native XAML chat controls for .NET MAUI: a flat virtualized message list, a
-content template system, and a drop-in chat surface with a composer. Conversation models and shared
-composer behavior live in the renderer-neutral `Microsoft.Maui.Chat` package.
+content template system, and a drop-in chat surface with a composer. Conversation models and composer
+behavior live in the `Microsoft.Maui.Chat` package.
 
 > [!WARNING]
 > **Experimental.** This package is part of [dotnet/maui-labs](https://github.com/dotnet/maui-labs) and
@@ -13,8 +13,8 @@ model you drive: from a websocket, a local database, an AI client, or a unit tes
 
 ## Features
 
-- **Shared chat core** — `Microsoft.Maui.Chat` supplies participants, messages, drafts, attachments,
-  media content, and `ChatComposerController` for native and Razor Hybrid renderers.
+- **Chat model** — `Microsoft.Maui.Chat` supplies participants, messages, drafts, attachments,
+  media content, and `ChatComposerController`.
 - **Streaming friendly** — content is mutated in place, so a growing response updates the existing row
   instead of replacing it.
 - **Flat virtualized list** — one row per content item, never a nested list inside a cell.
@@ -26,8 +26,6 @@ model you drive: from a websocket, a local database, an AI client, or a unit tes
   reentrancy-guarded sending, stop/cancel, and generic user-safe errors.
 - **Audio message playback** — buffered recordings and local-file URI audio render with an accessible
   play/pause affordance; remote audio stays a safe file card.
-- **Reusable input context** — custom control templates bind to one `ChatInputContext` for text,
-  attachments, status, send/stop, audio, and speech actions.
 - **Accessible defaults** — semantic descriptions on every bubble, automation IDs on every interactive
   part, and light and dark styling out of the box.
 
@@ -179,8 +177,8 @@ Content with no matching template renders as a hidden, zero-height row, so an un
 never break a screen. Set `UseDefaultContentTemplates="False"` to render *only* what you templated.
 
 `StructuredTextMessageContent<TDocument>` carries a readable text fallback plus a provider-owned
-structured document. A specialized package can render `TDocument`; an app that does not register that
-renderer still gets the text through the built-in `ChatTextContentView`.
+structured document. A specialized package can render `TDocument`; an app that does not register a
+view for it still gets the text through the built-in `ChatTextContentView`.
 
 ## Customising the look
 
@@ -203,11 +201,6 @@ Three levels, from cheapest to deepest:
 `PART_TypingIndicator`, `PART_InputArea`, `PART_Attachments`, `PART_AttachButton`, `PART_InputEntry`,
 `PART_AudioButton`, `PART_LiveSpeechButton`, `PART_SendButton`, `PART_StopButton`.
 `ChatMessagesView` part: `PART_Messages`.
-
-A replacement template can bind any custom composer controls to `InputContext`, which exposes
-`SubmitCommand`, `CancelCommand`, `PickAttachmentsCommand`, `ToggleAudioCaptureCommand`, and
-`ToggleLiveSpeechCommand` plus the complete derived state. `SetComposing`, `SetStatusMessage`, and
-`SetErrorMessage` let an application-owned media action participate in the same state machine.
 
 ## Threading contract
 

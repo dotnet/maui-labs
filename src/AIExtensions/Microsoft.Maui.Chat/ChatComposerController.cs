@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Microsoft.Maui.Chat;
 
 /// <summary>
-/// Shared, renderer-neutral state and operation controller for a chat composer.
+/// State and operation controller for a chat composer.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,24 +13,23 @@ namespace Microsoft.Maui.Chat;
 /// conversation or a disposed controller cannot write into the current draft.
 /// </para>
 /// <para>
-/// Renderers may bind directly to this class, or expose a compatibility adapter. Services are
-/// intentionally optional: a host can offer text-only chat without bringing a file picker,
-/// recorder, or speech recognizer into its dependency graph.
+/// Services are intentionally optional: a host can offer text-only chat without bringing a file
+/// picker, recorder, or speech recognizer into its dependency graph.
 /// </para>
 /// </remarks>
 public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
 {
     /// <summary>The generic, user-safe message shown when sending fails.</summary>
-    public const string DefaultSendErrorMessage = "Your message could not be sent. Please try again.";
+    internal const string DefaultSendErrorMessage = "Your message could not be sent. Please try again.";
 
     /// <summary>The generic, user-safe message shown when adding an attachment fails.</summary>
-    public const string DefaultAttachmentErrorMessage = "That attachment could not be added.";
+    internal const string DefaultAttachmentErrorMessage = "That attachment could not be added.";
 
     /// <summary>The generic, user-safe message shown when recording fails.</summary>
-    public const string DefaultAudioCaptureErrorMessage = "The audio recording could not be completed.";
+    internal const string DefaultAudioCaptureErrorMessage = "The audio recording could not be completed.";
 
     /// <summary>The generic, user-safe message shown when speech recognition fails.</summary>
-    public const string DefaultSpeechRecognitionErrorMessage = "Live voice could not continue.";
+    internal const string DefaultSpeechRecognitionErrorMessage = "Live voice could not continue.";
 
     private readonly ObservableCollection<ChatAttachment> _attachments = [];
     private readonly ReadOnlyObservableCollection<ChatAttachment> _readOnlyAttachments;
@@ -106,7 +105,7 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
             if (ReferenceEquals(_conversation, value))
                 return;
 
-            // A renderer may collect a draft before its conversation binding arrives.
+            // A view may collect a draft before its conversation binding arrives.
             // Adopt that unbound draft on the first bind instead of silently discarding it.
             if (_conversation is null && value is not null && !_drafts.ContainsKey(value) &&
                 (!string.IsNullOrEmpty(_text) || _attachments.Count > 0))
@@ -175,7 +174,7 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
         set => SetOption(ref field, value);
     }
 
-    /// <summary>Gets or sets an optional renderer-defined filter passed to <see cref="AttachmentPicker"/>.</summary>
+    /// <summary>Gets or sets an optional file-type filter passed to <see cref="AttachmentPicker"/>.</summary>
     public object? AttachmentFileTypes
     {
         get;
@@ -264,7 +263,7 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
     /// Defaults to <see langword="true"/>.
     /// </summary>
     /// <remarks>
-    /// Renderers that present live speech as a single pass set this to <see langword="false"/>.
+    /// Hosts that present live speech as a single pass set this to <see langword="false"/>.
     /// The controller still owns all microphone release and restart sequencing in either mode.
     /// </remarks>
     public bool ContinuousLiveSpeech { get; set; } = true;
@@ -447,7 +446,7 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
     public async Task PickAttachmentsAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        // AllowAttachments controls whether a renderer offers the picker. Preserve the public
+        // AllowAttachments controls whether a view offers the picker. Preserve the public
         // programmatic operation for callers that deliberately invoke it while the button is hidden.
         if (IsConversationBusy || IsComposing || AttachmentPicker is not { } picker)
             return;
@@ -543,7 +542,7 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
                 _isAudioStarting = false;
                 _statusMessage = "Recording audio.";
                 if (ShowInterimAudioTranscript && SpeechRecognizer is { IsSupported: true })
-                    await StartSpeechAsync(SpeechMode.AudioDictation, source.Token).ConfigureAwait(true);
+                    await StartAudioDictationAsync(source.Token).ConfigureAwait(true);
             }
         }
         catch (OperationCanceledException) when (source.IsCancellationRequested) { }
@@ -885,11 +884,8 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
     /// <summary>Sets a user-safe error message.</summary>
     public void SetErrorMessage(string? value) { _errorMessage = value; NotifyChanged(); }
 
-    /// <summary>Sets whether a renderer-owned asynchronous composition operation is active.</summary>
+    /// <summary>Sets whether a host-owned asynchronous composition operation is active.</summary>
     public void SetComposing(bool value) { _isComposingOverride = value; NotifyChanged(); }
-
-    /// <summary>Forces renderer bindings to refresh after a conversation-owned state change.</summary>
-    public void NotifyChanged() => NotifyChangedCore();
 
     /// <summary>Disposes subscriptions and invalidates all in-flight operations.</summary>
     public void Dispose()
@@ -989,9 +985,8 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
             _ = SubmitAsync();
     }
 
-    /// <summary>Clears only the text and attachments represented by an accepted draft.</summary>
-    /// <param name="draft">The accepted draft.</param>
-    public void ClearAcceptedDraft(ChatDraft draft)
+    // Clears only the text and attachments represented by an accepted draft.
+    private void ClearAcceptedDraft(ChatDraft draft)
     {
         if (string.Equals(_text.Trim(), draft.Text, StringComparison.Ordinal))
             _text = string.Empty;
@@ -1102,17 +1097,6 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
             NotifyChanged();
         }
     }
-
-    private enum SpeechMode
-    {
-        AudioDictation,
-        LiveSpeech,
-    }
-
-    private Task StartSpeechAsync(SpeechMode mode, CancellationToken cancellationToken) =>
-        mode == SpeechMode.AudioDictation
-            ? StartAudioDictationAsync(cancellationToken)
-            : StartLiveSpeechAsync(cancellationToken);
 
     private async Task StartAudioDictationAsync(CancellationToken cancellationToken)
     {
@@ -1471,14 +1455,6 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
         source.Dispose();
     }
 
-    private void ReleaseSpeech(IChatSpeechRecognizer recognizer, CancellationTokenSource source)
-    {
-        if (_speechHandler is not null)
-            recognizer.RecognitionChanged -= _speechHandler;
-        _speechHandler = null;
-        Release(ref _speechCts, source);
-    }
-
     private void CancelOperations()
     {
         // Invalidate every modality before cancellation so a platform callback that races
@@ -1595,7 +1571,7 @@ public sealed class ChatComposerController : INotifyPropertyChanged, IDisposable
         current.Dispose();
     }
 
-    private void NotifyChangedCore()
+    private void NotifyChanged()
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
         Changed?.Invoke();

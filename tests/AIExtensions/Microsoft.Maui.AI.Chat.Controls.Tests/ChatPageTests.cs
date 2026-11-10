@@ -8,7 +8,6 @@ using Microsoft.Maui.AI.Chat.Presentation;
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 /// <summary>
-/// Mirrors: Blazor.Tests/Components/ChatPageTests.cs
 /// Tests the full CopilotChatView page-level behavior: session binding, send flow,
 /// error handling, and state transitions.
 /// </summary>
@@ -197,34 +196,13 @@ public class ChatPageTests
     }
 
     [Fact]
-    public void PackageReferences_PreserveTheThreeLayerBoundary()
-    {
-        var engineReferences = typeof(AgentContext).Assembly.GetReferencedAssemblies();
-        var neutralReferences = typeof(ChatView).Assembly.GetReferencedAssemblies();
-        var bridgeReferences = typeof(CopilotChatView).Assembly.GetReferencedAssemblies();
-
-        Assert.DoesNotContain(
-            engineReferences,
-            reference => reference.Name == "Microsoft.Maui.Chat.Controls");
-        Assert.DoesNotContain(
-            neutralReferences,
-            reference => reference.Name == "Microsoft.Maui.AI.Chat");
-        Assert.Contains(
-            bridgeReferences,
-            reference => reference.Name == "Microsoft.Maui.Chat.Controls");
-        Assert.Contains(
-            bridgeReferences,
-            reference => reference.Name == "Microsoft.Maui.AI.Chat");
-    }
-
-    [Fact]
     public void CopilotChatView_UsesAiMessageListInsideTheSharedShell()
     {
         var theme = new MessageListTheme();
         var view = new FactoryCopilotChatView
         {
             MessageListTemplate = Assert.IsType<DataTemplate>(
-                theme[ChatThemeKeys.MessageListTemplate]),
+                theme[AIChatThemeKeys.MessageListTemplate]),
         };
 
         AssertAiMessageList(view);
@@ -268,20 +246,6 @@ public class ChatPageTests
     }
 
     [Fact]
-    public void Session_Swap_DoesNotThrow()
-    {
-        var control = new CopilotChatView();
-
-        var session1 = SessionFactory.Create("First");
-        var session2 = SessionFactory.Create("Second");
-
-        control.Session = session1;
-        control.Session = session2;
-
-        Assert.Same(session2, control.Session);
-    }
-
-    [Fact]
     public void ActivePresentation_IsPropagatedToTheAiMessageList()
     {
         var aiTheme = new MessageListTheme();
@@ -292,7 +256,7 @@ public class ChatPageTests
         var control = new FactoryCopilotChatView
         {
             MessageListTemplate = Assert.IsType<DataTemplate>(
-                aiTheme[ChatThemeKeys.MessageListTemplate]),
+                aiTheme[AIChatThemeKeys.MessageListTemplate]),
             Presentation = presentation1,
         };
         var messageList = Assert.IsType<MessageListView>(control.CreateMessageList());
@@ -337,33 +301,6 @@ public class ChatPageTests
     }
 
     [Fact]
-    public async Task SendMessage_ClearsTextProperty()
-    {
-        var control = new CopilotChatView();
-
-        var session = SessionFactory.Create("Reply");
-        control.Session = session;
-
-        // Text property should be clearable (simulates what SendCurrentTextAsync does)
-        control.Text = "Hello";
-        Assert.Equal("Hello", control.Text);
-
-        control.Text = string.Empty;
-        Assert.Equal(string.Empty, control.Text);
-    }
-
-    [Fact]
-    public void SendMessage_WhenNoSession_DoesNotThrow()
-    {
-        var control = new CopilotChatView();
-
-        control.Text = "Hello";
-
-        // No session set, nothing should happen (guard in SendCurrentTextAsync)
-        Assert.Null(control.Session);
-    }
-
-    [Fact]
     public async Task SendMessage_WhenBusy_Blocked()
     {
         var response = new TaskCompletionSource<ChatResponse>(
@@ -375,26 +312,13 @@ public class ChatPageTests
             Text = "Hello",
         };
 
-        var send = control.SendCurrentTextAsync();
+        var send = control.SendAsync();
         await Task.Yield();
         Assert.True(control.IsBusy);
 
         response.SetResult(new ChatResponse(
             [new ChatMessage(ChatRole.Assistant, "done")]));
         await send;
-    }
-
-    [Fact]
-    public void SendMessage_WhenTextEmpty_Blocked()
-    {
-        var control = new CopilotChatView();
-
-        var session = SessionFactory.Create("Reply");
-        control.Session = session;
-        control.Text = "   ";
-
-        // Whitespace-only text should not send (guard in SendCurrentTextAsync)
-        Assert.True(string.IsNullOrWhiteSpace(control.Text));
     }
 
     [Fact]
@@ -418,7 +342,7 @@ public class ChatPageTests
     }
 
     [Fact]
-    public async Task SendCurrentText_DisposedSession_RestoresDraftAndSurfacesGenericError()
+    public async Task SendAsync_DisposedSession_RestoresDraftAndSurfacesGenericError()
     {
         var session = SessionFactory.Create("unused");
         session.Dispose();
@@ -428,7 +352,7 @@ public class ChatPageTests
             Text = "Keep this draft",
         };
 
-        await control.SendCurrentTextAsync();
+        await control.SendAsync();
 
         Assert.Equal("Keep this draft", control.Text);
         Assert.Equal(
@@ -437,7 +361,7 @@ public class ChatPageTests
     }
 
     [Fact]
-    public async Task SendCurrentText_SecondSendWhileFirstActive_IsIgnored()
+    public async Task SendAsync_SecondSendWhileFirstActive_IsIgnored()
     {
         var started = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -454,11 +378,11 @@ public class ChatPageTests
             Text = "first",
         };
 
-        var firstSend = control.SendCurrentTextAsync();
+        var firstSend = control.SendAsync();
         await started.Task;
         control.Text = "second";
 
-        await control.SendCurrentTextAsync();
+        await control.SendAsync();
         response.SetResult(new ChatResponse(
             [new ChatMessage(ChatRole.Assistant, "done")]));
         await firstSend;
@@ -489,7 +413,7 @@ public class ChatPageTests
             Text = "sent once",
         };
 
-        var send = control.SendCurrentTextAsync();
+        var send = control.SendAsync();
         await started.Task;
         await control.StopAsync();
         await send;

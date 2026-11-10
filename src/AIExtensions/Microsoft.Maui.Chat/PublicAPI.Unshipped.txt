@@ -50,7 +50,6 @@ Microsoft.Maui.Chat.ChatComposerController.CanToggleLiveSpeech.get -> bool
 Microsoft.Maui.Chat.ChatComposerController.CancelAudioCaptureAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.Chat.ChatComposerController.Changed -> System.Action?
 Microsoft.Maui.Chat.ChatComposerController.ChatComposerController() -> void
-Microsoft.Maui.Chat.ChatComposerController.ClearAcceptedDraft(Microsoft.Maui.Chat.ChatDraft! draft) -> void
 Microsoft.Maui.Chat.ChatComposerController.Conversation.get -> Microsoft.Maui.Chat.ChatConversation?
 Microsoft.Maui.Chat.ChatComposerController.Conversation.set -> void
 Microsoft.Maui.Chat.ChatComposerController.ContinuousLiveSpeech.get -> bool
@@ -80,7 +79,6 @@ Microsoft.Maui.Chat.ChatComposerController.MaximumAudioBytes.get -> long
 Microsoft.Maui.Chat.ChatComposerController.MaximumAudioBytes.set -> void
 Microsoft.Maui.Chat.ChatComposerController.MaximumTotalAttachmentBytes.get -> long
 Microsoft.Maui.Chat.ChatComposerController.MaximumTotalAttachmentBytes.set -> void
-Microsoft.Maui.Chat.ChatComposerController.NotifyChanged() -> void
 Microsoft.Maui.Chat.ChatComposerController.PickAttachmentsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.Chat.ChatComposerController.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
 Microsoft.Maui.Chat.ChatComposerController.RemoveAttachment(Microsoft.Maui.Chat.ChatAttachment! attachment) -> bool
@@ -292,10 +290,6 @@ Microsoft.Maui.Chat.TextMessageContent.Text.set -> void
 Microsoft.Maui.Chat.TextMessageContent.TextMessageContent() -> void
 Microsoft.Maui.Chat.TextMessageContent.TextMessageContent(string? text, string? id = null) -> void
 abstract Microsoft.Maui.Chat.ChatConversation.SendCoreAsync(Microsoft.Maui.Chat.ChatDraft! draft, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
-const Microsoft.Maui.Chat.ChatComposerController.DefaultAttachmentErrorMessage = "That attachment could not be added." -> string!
-const Microsoft.Maui.Chat.ChatComposerController.DefaultAudioCaptureErrorMessage = "The audio recording could not be completed." -> string!
-const Microsoft.Maui.Chat.ChatComposerController.DefaultSendErrorMessage = "Your message could not be sent. Please try again." -> string!
-const Microsoft.Maui.Chat.ChatComposerController.DefaultSpeechRecognitionErrorMessage = "Live voice could not continue." -> string!
 override Microsoft.Maui.Chat.ObservableChatConversation.CanCancel.get -> bool
 override Microsoft.Maui.Chat.ObservableChatConversation.CancelCoreAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 override Microsoft.Maui.Chat.ObservableChatConversation.SendCoreAsync(Microsoft.Maui.Chat.ChatDraft! draft, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!

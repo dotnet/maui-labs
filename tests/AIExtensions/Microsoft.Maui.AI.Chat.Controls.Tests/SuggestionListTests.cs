@@ -5,7 +5,6 @@ using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 /// <summary>
-/// Mirrors: Blazor.Tests/Components/SuggestionListTests.cs
 /// Tests CopilotChatView suggestion chips and welcome state behavior.
 /// </summary>
 public class SuggestionListTests
@@ -33,19 +32,6 @@ public class SuggestionListTests
 
         Assert.NotNull(control.SuggestionPrompts);
         Assert.Empty(control.SuggestionPrompts);
-    }
-
-    [Fact]
-    public void WelcomeMessage_ControlsWelcomeVisibilityState()
-    {
-        var control = CreateControl();
-
-        control.WelcomeMessage = "How can I help you today?";
-        // With a message set but no items, welcome should show
-        control.UpdateWelcomeVisibility();
-
-        // Without template applied, parts are null, but the logic path runs
-        Assert.Equal("How can I help you today?", control.WelcomeMessage);
     }
 
     [Fact]

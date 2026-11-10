@@ -45,7 +45,7 @@ public class GenericChatContentTemplate : ChatContentTemplate
     public static readonly BindableProperty PresentationProperty =
         BindableProperty.Create(
             nameof(Presentation),
-            typeof(Microsoft.Maui.Chat.ChatContentPresentation?),
+            typeof(ChatContentPresentation?),
             typeof(GenericChatContentTemplate),
             propertyChanged: static (bindable, _, _) =>
                 ((GenericChatContentTemplate)bindable).InvalidateTemplate());
@@ -86,9 +86,9 @@ public class GenericChatContentTemplate : ChatContentTemplate
     /// Gets or sets an optional bubble-presentation override. A <see langword="null"/> value uses
     /// <see cref="MessageContent.Presentation"/> from each rendered content instance.
     /// </summary>
-    public Microsoft.Maui.Chat.ChatContentPresentation? Presentation
+    public ChatContentPresentation? Presentation
     {
-        get => (Microsoft.Maui.Chat.ChatContentPresentation?)GetValue(PresentationProperty);
+        get => (ChatContentPresentation?)GetValue(PresentationProperty);
         set => SetValue(PresentationProperty, value);
     }
 

@@ -5,7 +5,6 @@ using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 /// <summary>
-/// Mirrors: Blazor.Tests/Components/MessageListTests.cs
 /// Tests that the CopilotChatView correctly surfaces blocks from the AgentContext
 /// as ContentContext items in its observable collection.
 /// </summary>
@@ -94,7 +93,6 @@ public class MessageListTests
     }
 
     /// <summary>
-    /// Mirrors Blazor: StreamingBlock_ShowsAccumulatedText.
     /// Multiple streamed tokens should accumulate into a single TextContentBlock.
     /// </summary>
     [Fact]
@@ -117,7 +115,6 @@ public class MessageListTests
 
     /// <summary>
     /// Tests that the engine surfaces errors as a status change, not an exception.
-    /// Mirrors Blazor: DefaultFooter_ShowsErrorBannerOnError.
     /// </summary>
     [Fact]
     public async Task ClientError_SetsStatusToError()

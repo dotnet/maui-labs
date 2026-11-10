@@ -1,44 +1,34 @@
 using Microsoft.Maui.AI.Chat.Controls.Themes;
+using Microsoft.Maui.Chat.Controls;
 
 namespace Microsoft.Maui.AI.Chat.Controls;
 
-/// <summary>
-/// Extension methods for registering the AI Chat Controls library.
-/// </summary>
-/// <summary>MAUI app-builder extensions that register the chat control's services and resources (call <c>UseChatControls</c>).</summary>
+/// <summary>Registers the AI chat controls with a MAUI application.</summary>
 public static class AppBuilderExtensions
 {
     /// <summary>
-    /// Registers AI Chat Controls, including default themes and resources.
-    /// Call this in your <c>MauiProgram.CreateMauiApp()</c> builder chain.
+    /// Registers the provider-neutral chat controls (see <c>UseChatControls</c>) and loads the AI chat
+    /// theme into the application's resources at startup. Call it from <c>MauiProgram.CreateMauiApp()</c>.
     /// </summary>
-    public static MauiAppBuilder UseChatControls(this MauiAppBuilder builder)
+    /// <param name="builder">The app builder.</param>
+    /// <returns>The same <paramref name="builder"/> for chaining.</returns>
+    public static MauiAppBuilder UseCopilotChat(this MauiAppBuilder builder)
     {
-        Microsoft.Maui.Chat.Controls.AppBuilderExtensions.UseChatControls(builder);
-        builder.ConfigureMauiHandlers(_ => { });
+        builder.UseChatControls();
 
-        // Merge the default ChatTheme into the app-level resources so that
-        // implicit Styles for CopilotChatView and content templates resolve.
-        var themeRegistered = false;
-        builder.Services.AddSingleton<IMauiInitializeService>(
-            new ChatControlsInitializer(() => themeRegistered, () => themeRegistered = true));
+        // Merge the AI theme into the app-level resources so that implicit styles for the
+        // CopilotChatView content views resolve.
+        builder.Services.AddSingleton<IMauiInitializeService, CopilotChatInitializer>();
 
         return builder;
     }
 
-    private sealed class ChatControlsInitializer(Func<bool> isRegistered, Action markRegistered) : IMauiInitializeService
+    private sealed class CopilotChatInitializer : IMauiInitializeService
     {
         public void Initialize(IServiceProvider services)
         {
-            if (isRegistered())
-                return;
-
-            var app = Application.Current;
-            if (app is null)
-                return;
-
-            ChatThemeLoader.EnsureLoaded(app.Resources);
-            markRegistered();
+            if (Application.Current is { } app)
+                ChatThemeLoader.EnsureLoaded(app.Resources);
         }
     }
 }

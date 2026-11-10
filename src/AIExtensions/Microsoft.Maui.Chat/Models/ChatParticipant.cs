@@ -48,8 +48,7 @@ public class ChatParticipant : ObservableChatObject
     }
 
     /// <summary>
-    /// Gets or sets the optional renderer-native avatar value. For example, native renderers can assign
-    /// their image value, while Blazor renderers can assign a URL or data URI. When
+    /// Gets or sets the optional avatar image, typically an <c>ImageSource</c>. When
     /// <see langword="null"/>, views fall back to <see cref="Initials"/>.
     /// </summary>
     public object? Avatar

@@ -17,8 +17,10 @@ Register the default resources:
 
 ```csharp
 builder.UseMauiApp<App>()
-       .UseChatControls();
+       .UseCopilotChat();
 ```
+
+`UseCopilotChat()` also calls the provider-neutral `UseChatControls()`.
 
 ## Quick start
 

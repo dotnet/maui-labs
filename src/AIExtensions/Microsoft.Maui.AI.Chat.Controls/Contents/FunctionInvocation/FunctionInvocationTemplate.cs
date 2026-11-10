@@ -35,7 +35,7 @@ public class FunctionInvocationTemplate : ContentTemplate
         return CreateMessageTemplate(() =>
         {
             var view = new FunctionInvocationView();
-            view.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.FunctionInvocationTemplate);
+            view.SetDynamicResource(ContentView.ControlTemplateProperty, AIChatThemeKeys.FunctionInvocationTemplate);
             return view;
         });
     }

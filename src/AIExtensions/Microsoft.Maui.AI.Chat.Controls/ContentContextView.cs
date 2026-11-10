@@ -40,18 +40,9 @@ public abstract class ContentContextView : ChatContentView, IContentContextAware
         ChatContentItem? oldItem,
         ChatContentItem? newItem)
     {
-        var oldContext = oldItem as ContentContext;
         var newContext = newItem as ContentContext;
         if (!ReferenceEquals(ContentContext, newContext))
             SetValue(ContentContextProperty, newContext);
-        OnContentContextAssigned(oldContext, newContext);
-    }
-
-    /// <summary>Called when a recycled cell receives a different AI context.</summary>
-    protected virtual void OnContentContextAssigned(
-        ContentContext? oldContext,
-        ContentContext? newContext)
-    {
     }
 
     /// <inheritdoc />

@@ -33,7 +33,7 @@ public class ToolApprovalTemplate : ContentTemplate
             var wrapper = new ToolApprovalView();
             wrapper.InnerContentType = ViewType;
             // Explicit template lookup — implicit styles may not resolve inside CollectionView
-            wrapper.SetDynamicResource(ContentView.ControlTemplateProperty, ChatThemeKeys.ToolApprovalTemplate);
+            wrapper.SetDynamicResource(ContentView.ControlTemplateProperty, AIChatThemeKeys.ToolApprovalTemplate);
             return wrapper;
         });
     }

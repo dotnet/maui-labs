@@ -6,8 +6,8 @@ public class RichSuggestionTests
     public void Suggestions_DefaultButton_UsesIconLabelAndSemanticDescription()
     {
         var layout = new FlexLayout();
-        var control = new CopilotChatView();
-        control.AttachSuggestionsPart(layout);
+        var control = new SuggestionsHostView();
+        control.AttachSuggestions(layout);
         control.Suggestions.Add(new ChatSuggestion("Show products", "List all products")
         {
             Icon = "🌱",
@@ -25,11 +25,11 @@ public class RichSuggestionTests
     {
         var layout = new FlexLayout();
         var suggestion = new ChatSuggestion("Weather", "Show weather");
-        var control = new CopilotChatView
+        var control = new SuggestionsHostView
         {
             SuggestionTemplate = new DataTemplate(() => new Label()),
         };
-        control.AttachSuggestionsPart(layout);
+        control.AttachSuggestions(layout);
         control.Suggestions.Add(suggestion);
 
         var label = Assert.IsType<Label>(Assert.Single(layout.Children));
@@ -40,8 +40,8 @@ public class RichSuggestionTests
     public void LegacySuggestionPrompts_RemainSupported()
     {
         var layout = new FlexLayout();
-        var control = new CopilotChatView();
-        control.AttachSuggestionsPart(layout);
+        var control = new SuggestionsHostView();
+        control.AttachSuggestions(layout);
         control.SuggestionPrompts.Add("Tell me a joke");
 
         Assert.Equal("Tell me a joke", Assert.IsType<Button>(
@@ -52,12 +52,17 @@ public class RichSuggestionTests
     public void LegacySuggestionPrompts_BlankEntries_AreIgnored()
     {
         var layout = new FlexLayout();
-        var control = new CopilotChatView();
-        control.AttachSuggestionsPart(layout);
+        var control = new SuggestionsHostView();
+        control.AttachSuggestions(layout);
         control.SuggestionPrompts.Add(" ");
         control.SuggestionPrompts.Add("Valid");
 
         Assert.Equal("Valid", Assert.IsType<Button>(
             Assert.Single(layout.Children)).Text);
+    }
+
+    private sealed class SuggestionsHostView : CopilotChatView
+    {
+        public void AttachSuggestions(Layout layout) => AttachSuggestionsPart(layout);
     }
 }
