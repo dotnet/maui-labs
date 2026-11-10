@@ -17,8 +17,7 @@
       "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Generators.Tests\\Microsoft.Maui.AI.Chat.Generators.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.AI.Chat.Controls.Tests\\Microsoft.Maui.AI.Chat.Controls.Tests.csproj",
       "tests\\AIExtensions\\Microsoft.Maui.Chat.Tests\\Microsoft.Maui.Chat.Tests.csproj",
-      "tests\\AIExtensions\\Microsoft.Maui.Chat.Controls.Tests\\Microsoft.Maui.Chat.Controls.Tests.csproj",
-      "samples\\ChatControls.Sample\\ChatControls.Sample.csproj"
+      "tests\\AIExtensions\\Microsoft.Maui.Chat.Controls.Tests\\Microsoft.Maui.Chat.Controls.Tests.csproj"
     ]
   }
 }
