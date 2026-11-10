@@ -96,7 +96,7 @@ public class AgentContextErrorHandlingTests
     }
 
     [Fact]
-    public async Task ToolFailure_RollsBackDanglingToolCallHistory()
+    public async Task StreamFailureAfterToolCall_RollsBackDanglingToolCallHistory()
     {
         var sentMessages = new List<IReadOnlyList<ChatMessage>>();
         var callCount = 0;
@@ -106,19 +106,13 @@ public class AgentContextErrorHandlingTests
             sentMessages.Add(messages.ToArray());
             callCount++;
             return callCount == 1
-                ? ResponseEmitters.EmitToolCallResponse(
-                    "call-1",
-                    "explode",
-                    ct: cancellationToken)
+                ? EmitToolCallThenFail(cancellationToken)
                 : ResponseEmitters.EmitTextResponse("recovered", cancellationToken);
         });
-        var explodingTool = AIFunctionFactory.Create(
-            (Func<string>)(() => throw new InvalidOperationException("tool failed")),
-            "explode");
-        var context = new AgentContext(new UIAgent(client, new ChatOptions
-        {
-            Tools = [explodingTool],
-        }));
+        var tool = AIFunctionFactory.Create(() => "unused", "lookup");
+        var context = new AgentContext(new UIAgent(
+            new FunctionInvokingChatClient(client),
+            new ChatOptions { Tools = [tool] }));
 
         await context.SendMessageAsync("first");
         Assert.Equal(ConversationStatus.Error, context.Status);
@@ -460,5 +454,19 @@ public class AgentContextErrorHandlingTests
         {
             throw new InvalidOperationException("client translated cancellation");
         }
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> EmitToolCallThenFail(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "assistant-1",
+            Contents = [new FunctionCallContent("call-1", "lookup")],
+        };
+        await Task.Yield();
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new InvalidOperationException("stream failed");
     }
 }

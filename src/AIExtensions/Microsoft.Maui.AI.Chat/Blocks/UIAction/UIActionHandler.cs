@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Maui.AI.Chat;
 
@@ -10,13 +11,16 @@ internal sealed class UIActionHandler
 {
     private readonly IReadOnlyDictionary<string, UIAgentOptions.UIActionRegistration> _actions;
     private readonly IServiceProvider? _services;
+    private readonly ILogger _logger;
 
     internal UIActionHandler(
         IReadOnlyDictionary<string, UIAgentOptions.UIActionRegistration> actions,
-        IServiceProvider? services)
+        IServiceProvider? services,
+        ILogger logger)
     {
         _actions = actions;
         _services = services;
+        _logger = logger;
     }
 
     public override BlockMappingResult<UIActionHandlerState> Handle(
@@ -56,7 +60,8 @@ internal sealed class UIActionHandler
                 registration.Function,
                 registration.Mode,
                 innerBlock,
-                _services)
+                _services,
+                _logger)
             {
                 Id = innerBlock.Id,
             };

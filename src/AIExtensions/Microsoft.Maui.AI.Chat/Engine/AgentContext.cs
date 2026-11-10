@@ -12,9 +12,11 @@ namespace Microsoft.Maui.AI.Chat;
 /// blocks arrive.
 /// </summary>
 /// <remarks>
-/// Drives the tool/approval loop: after streaming from the <see cref="UIAgent"/> it invokes any pending
-/// backend tools and awaits <see cref="IInteractiveBlock"/>s (e.g. approvals), then feeds the results
-/// back for another round.
+/// Drives the client side of the tool loop: after streaming a round from the <see cref="UIAgent"/> it
+/// invokes automatic UI actions and awaits <see cref="IInteractiveBlock"/>s (approvals, manual UI
+/// actions), then feeds the results back for another round. Server tools are invoked by
+/// <see cref="FunctionInvokingChatClient"/>, which the chat client must include whenever
+/// <see cref="ChatOptions.Tools"/> contains an invocable <see cref="AIFunction"/>.
 /// <para>
 /// This type is single-thread-affine and is not thread-safe. Callers must serialize access and
 /// enter the owning application thread before calling it. Status checks are misuse guards, not
@@ -81,6 +83,7 @@ public sealed class AgentContext : IDisposable
         if (Status is ConversationStatus.Streaming or ConversationStatus.AwaitingInput)
             throw new InvalidOperationException("A message is already being processed.");
 
+        _agent.ThrowIfToolsCannotBeInvoked();
         var requestMessage = EnsureMessageId(message);
         var turn = new ConversationTurn { Id = requestMessage.MessageId! };
         _turns.Add(turn);
@@ -156,6 +159,7 @@ public sealed class AgentContext : IDisposable
                 $"RetryAsync requires Status == Error, but Status is {Status}.");
         }
 
+        _agent.ThrowIfToolsCannotBeInvoked();
         var turn = _turns[^1];
         turn.ClearResponseBlocks();
         NotifyResponseBlocksCleared(turn);
@@ -232,7 +236,7 @@ public sealed class AgentContext : IDisposable
             {
                 var humanInputBlocks = new List<IInteractiveBlock>();
                 var uiActionBlocks = new List<UIActionBlock>();
-                var uninvokedToolBlocks = new List<FunctionInvocationContentBlock>();
+                var toolCallBlocks = new List<FunctionInvocationContentBlock>();
 
                 await foreach (var block in _agent.SendMessagesAsync(
                     currentMessages,
@@ -242,23 +246,19 @@ public sealed class AgentContext : IDisposable
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    if (block is UIActionBlock
-                        {
-                            Mode: UIActionInvocationMode.Automatic,
-                        } uiAction)
+                    switch (block)
                     {
-                        if (!uiAction.IsComplete)
+                        case UIActionBlock { IsComplete: true }:
+                            break;
+                        case UIActionBlock { Mode: UIActionInvocationMode.Automatic } uiAction:
                             uiActionBlocks.Add(uiAction);
-                    }
-                    else if (block is IInteractiveBlock interactive)
-                    {
-                        humanInputBlocks.Add(interactive);
-                    }
-                    else if (block is FunctionInvocationContentBlock ficb
-                             && ficb.Call is { InformationalOnly: false }
-                             && ficb.Result is null)
-                    {
-                        uninvokedToolBlocks.Add(ficb);
+                            break;
+                        case IInteractiveBlock interactive:
+                            humanInputBlocks.Add(interactive);
+                            break;
+                        case FunctionInvocationContentBlock toolCall:
+                            toolCallBlocks.Add(toolCall);
+                            break;
                     }
 
                     if (currentMessages.Any(request =>
@@ -281,23 +281,19 @@ public sealed class AgentContext : IDisposable
                 isInitialRequest = false;
                 currentMessages = [];
 
-                uninvokedToolBlocks.RemoveAll(b => b.Result is not null);
-
-                if (humanInputBlocks.Count == 0
-                    && uiActionBlocks.Count == 0
-                    && uninvokedToolBlocks.Count == 0)
+                if (humanInputBlocks.Count == 0 && uiActionBlocks.Count == 0)
                     break;
 
                 var resultTasks = new List<Task<AIContent>>();
 
                 foreach (var uiAction in uiActionBlocks)
-                    resultTasks.Add(uiAction.InvokeAsync(cancellationToken));
+                {
+                    _ = uiAction.InvokeAsync(cancellationToken);
+                    resultTasks.Add(uiAction.GetResultAsync(cancellationToken));
+                }
 
                 foreach (var interactive in humanInputBlocks)
                     resultTasks.Add(interactive.GetResultAsync(cancellationToken));
-
-                foreach (var toolBlock in uninvokedToolBlocks)
-                    resultTasks.Add(InvokeBackendToolAsync(toolBlock, cancellationToken));
 
                 if (humanInputBlocks.Count > 0)
                 {
@@ -314,8 +310,24 @@ public sealed class AgentContext : IDisposable
                     var toolResults = results
                         .OfType<FunctionResultContent>()
                         .Cast<AIContent>()
-                        .ToArray();
-                    if (toolResults.Length > 0)
+                        .ToList();
+
+                    // Server tools run inside FunctionInvokingChatClient. A call that is still
+                    // unanswered here was handed back uninvoked (for example because it shared a
+                    // batch with a UI action), and the provider rejects a continuation that leaves
+                    // it without a result.
+                    foreach (var toolCall in toolCallBlocks)
+                    {
+                        if (toolCall is { Result: null, Call: { InformationalOnly: false } call })
+                        {
+                            var error = _agent.CreateUnansweredCallResult(call);
+                            toolCall.Result = error;
+                            toolCall.InvokeNotifyChanged();
+                            toolResults.Add(error);
+                        }
+                    }
+
+                    if (toolResults.Count > 0)
                     {
                         messages.Add(new ChatMessage(
                             ChatRole.Tool,
@@ -375,18 +387,6 @@ public sealed class AgentContext : IDisposable
             NotifyStatusChanged();
             return AttemptOutcome.Failed;
         }
-    }
-
-    private async Task<AIContent> InvokeBackendToolAsync(
-        FunctionInvocationContentBlock block,
-        CancellationToken cancellationToken)
-    {
-        var result = await _agent.InvokeToolAsync(block.Call!, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        block.Result = result;
-        _agent.ApplyFunctionResult(block, result);
-        block.InvokeNotifyChanged();
-        return result;
     }
 
     public Task CancelAsync() => CancelAsync(CancellationToken.None);

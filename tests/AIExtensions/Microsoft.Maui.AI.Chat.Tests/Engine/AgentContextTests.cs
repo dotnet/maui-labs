@@ -139,7 +139,7 @@ public class AgentContextTests
     }
 
     [Fact]
-    public async Task SendMessageAsync_AsynchronousStreamingAndToolContinuation_PreserveSynchronizationContext()
+    public async Task SendMessageAsync_AsynchronousStreamingAndUIActionContinuation_PreserveSynchronizationContext()
     {
         var synchronizationContext = new RecordingSynchronizationContext();
         var previousSynchronizationContext = SynchronizationContext.Current;
@@ -165,12 +165,16 @@ public class AgentContextTests
                     observedContexts,
                     cancellationToken));
             var context = new AgentContext(
-                new UIAgent(client, new ChatOptions { Tools = [tool] }));
+                new UIAgent(client, options => options.RegisterUIAction(tool)));
             context.RegisterOnStatusChanged(_ =>
+                observedContexts.Add(SynchronizationContext.Current));
+            context.RegisterOnBlockAdded((_, _) =>
                 observedContexts.Add(SynchronizationContext.Current));
 
             await context.SendMessageAsync("Get a value");
 
+            Assert.Equal(2, callCount);
+            Assert.True(Assert.Single(context.Turns[0].ResponseBlocks.OfType<UIActionBlock>()).HasResult);
             Assert.NotEmpty(observedContexts);
             Assert.All(observedContexts, observed => Assert.Same(synchronizationContext, observed));
         }

@@ -59,6 +59,90 @@ public class UIActionTests
     }
 
     [Fact]
+    public async Task UIAction_Failure_ReturnsErrorResultToModelAndLogs()
+    {
+        var failure = new InvalidOperationException("secret detail");
+        var action = AIFunctionFactory.Create(
+            (Func<string>)(() => throw failure),
+            "GetLocation",
+            "Gets the current location");
+        IReadOnlyList<ChatMessage>? continuation = null;
+        var calls = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, _, cancellationToken) =>
+        {
+            if (++calls == 1)
+                return EmitUIActionCall("location-1", "GetLocation", cancellationToken);
+
+            continuation = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse("Sorry.", cancellationToken);
+        });
+        var loggerFactory = new CapturingLoggerFactory();
+        var context = new AgentContext(new UIAgent(
+            client,
+            options => options.RegisterUIAction(action),
+            loggerFactory));
+
+        await context.SendMessageAsync("Where am I?");
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Null(context.Error);
+        var block = Assert.Single(context.Turns[0].ResponseBlocks.OfType<UIActionBlock>());
+        Assert.True(block.IsComplete);
+        var result = Assert.Single(
+            continuation!.Single(message => message.Role == ChatRole.Tool).Contents
+                .OfType<FunctionResultContent>());
+        Assert.Same(block.Result, result);
+        Assert.Equal("location-1", result.CallId);
+        Assert.Equal("Error: Function failed.", result.Result);
+        Assert.Same(failure, result.Exception);
+        var log = Assert.Single(
+            loggerFactory.Entries,
+            entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+        Assert.Same(failure, log.Exception);
+    }
+
+    [Fact]
+    public async Task UIAction_ManualInvocationFailure_ReturnsErrorResultToModel()
+    {
+        var action = AIFunctionFactory.Create(
+            (Func<string>)(() => throw new InvalidOperationException("failed")),
+            "ChooseCity",
+            "Chooses a city");
+        IReadOnlyList<ChatMessage>? continuation = null;
+        var calls = 0;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, _, cancellationToken) =>
+        {
+            if (++calls == 1)
+                return EmitUIActionCall("city-1", "ChooseCity", cancellationToken);
+
+            continuation = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse("Done", cancellationToken);
+        });
+        var context = new AgentContext(new UIAgent(client, options =>
+            options.RegisterUIAction(action, UIActionInvocationMode.Manual)));
+        Task<AIContent>? uiInvocation = null;
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+            {
+                uiInvocation = context.Turns[^1].ResponseBlocks.OfType<UIActionBlock>().Single()
+                    .InvokeAsync();
+            }
+        });
+
+        await context.SendMessageAsync("Pick a city");
+
+        Assert.Equal(ConversationStatus.Idle, context.Status);
+        var uiResult = Assert.IsType<FunctionResultContent>(await uiInvocation!);
+        Assert.Equal("Error: Function failed.", uiResult.Result);
+        Assert.Same(
+            uiResult,
+            Assert.Single(continuation!.SelectMany(message => message.Contents).OfType<FunctionResultContent>()));
+    }
+
+    [Fact]
     public async Task UIAction_ManualInvocation_AwaitsInputAndResumesAsToolResult()
     {
         var action = AIFunctionFactory.Create(
@@ -154,7 +238,7 @@ public class UIActionTests
             captured = options;
             return ResponseEmitters.EmitTextResponse("Done", cancellationToken);
         });
-        var context = new AgentContext(new UIAgent(client, options =>
+        var context = new AgentContext(new UIAgent(new FunctionInvokingChatClient(client), options =>
         {
             options.ChatOptions = configured;
             options.RegisterUIAction(action);
@@ -375,8 +459,11 @@ public class UIActionTests
     }
 
     [Fact]
-    public async Task MixedBackendAndUIActions_BothResultsResumeInOneToolMessage()
+    public async Task MixedServerToolAndUIAction_UnexecutedServerCallGetsErrorResult()
     {
+        // FunctionInvokingChatClient hands back every call in a batch uninvoked when one of them
+        // targets a declaration-only UI action. The server call must still be answered so the
+        // provider accepts the continuation.
         var backend = AIFunctionFactory.Create(
             (string city) => $"Sunny in {city}",
             "GetWeather",
@@ -405,7 +492,7 @@ public class UIActionTests
             continuationMessages = messages.ToArray();
             return ResponseEmitters.EmitTextResponse("Done", cancellationToken);
         });
-        var context = new AgentContext(new UIAgent(client, options =>
+        var context = new AgentContext(new UIAgent(new FunctionInvokingChatClient(client), options =>
         {
             options.ChatOptions = new ChatOptions { Tools = [backend] };
             options.RegisterUIAction(uiAction);
@@ -413,15 +500,18 @@ public class UIActionTests
 
         await context.SendMessageAsync("Weather here?");
 
+        Assert.Equal(ConversationStatus.Idle, context.Status);
         var turn = Assert.Single(context.Turns);
         Assert.True(Assert.Single(turn.ResponseBlocks.OfType<UIActionBlock>()).HasResult);
-        Assert.True(Assert.Single(
-            turn.ResponseBlocks.OfType<FunctionInvocationContentBlock>()).HasResult);
+        var serverCall = Assert.Single(turn.ResponseBlocks.OfType<FunctionInvocationContentBlock>());
+        Assert.StartsWith("Error: The tool call was not executed", serverCall.Result?.Result as string);
         var toolMessage = continuationMessages!.Last(message => message.Role == ChatRole.Tool);
         var results = toolMessage.Contents.OfType<FunctionResultContent>().ToArray();
         Assert.Equal(2, results.Length);
-        Assert.Contains(results, result => result.CallId == "weather-1");
-        Assert.Contains(results, result => result.CallId == "location-1");
+        Assert.Same(serverCall.Result, Assert.Single(results, result => result.CallId == "weather-1"));
+        Assert.Equal(
+            "Portland",
+            Assert.Single(results, result => result.CallId == "location-1").Result?.ToString());
     }
 
     [Fact]

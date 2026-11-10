@@ -138,6 +138,7 @@ public class UIAgent : IDisposable
             ArgumentNullException.ThrowIfNull(message);
 
         cancellationToken.ThrowIfCancellationRequested();
+        ThrowIfToolsCannotBeInvoked();
 
         var requestMessages = messages
             .Select(EnsureMessageId)
@@ -249,7 +250,7 @@ public class UIAgent : IDisposable
     /// Replays the configured thread's committed raw updates through newly-created block pipelines.
     /// </summary>
     /// <remarks>
-    /// Restore only reconstructs renderable history; it does not invoke backend tools or resume
+    /// Restore only reconstructs renderable history; it does not invoke tools or resume
     /// interactive blocks. Custom projections require the same handlers to be registered, and their
     /// discriminator data must survive the thread implementation's serialization. In particular,
     /// <see cref="AIContent.RawRepresentation"/> and <see cref="ChatResponseUpdate.RawRepresentation"/>
@@ -414,20 +415,41 @@ public class UIAgent : IDisposable
         return context.HasHandledContent ? context.GetFilteredUpdate() : update;
     }
 
-    internal async Task<FunctionResultContent> InvokeToolAsync(
-        FunctionCallContent call, CancellationToken cancellationToken)
+    /// <summary>
+    /// Throws when the configured tools include an invocable <see cref="AIFunction"/> but no
+    /// <see cref="FunctionInvokingChatClient"/> is present to invoke it.
+    /// </summary>
+    internal void ThrowIfToolsCannotBeInvoked()
     {
-        var function = FindBackendFunction(call.Name);
-        if (function is null)
-        {
-            UIAgentLog.BackendFunctionNotFound(_logger, call.Name);
-            return new FunctionResultContent(call.CallId, $"Error: Function '{call.Name}' not found.");
-        }
+        var tools = _options.ChatOptions?.Tools;
+        if (tools is null)
+            return;
 
-        UIAgentLog.InvokingBackendFunction(_logger, call.Name, call.CallId);
-        var args = call.Arguments is not null ? new AIFunctionArguments(call.Arguments) : null;
-        var result = await function.InvokeAsync(args, cancellationToken);
-        return new FunctionResultContent(call.CallId, result);
+        foreach (var tool in tools)
+        {
+            if (tool is AIFunction function && !_options.UIActions.ContainsKey(function.Name))
+            {
+                if (_chatClient.GetService<FunctionInvokingChatClient>() is null)
+                {
+                    throw new InvalidOperationException(
+                        $"ChatOptions.Tools contains the invocable function '{function.Name}', but the chat " +
+                        "client has no function invocation. Build the client with " +
+                        "'.AsBuilder().UseFunctionInvocation().Build()' so tools are invoked, or register " +
+                        "client-side functions with UIAgentOptions.RegisterUIAction.");
+                }
+
+                return;
+            }
+        }
+    }
+
+    /// <summary>Creates the error result returned to the model for a call nobody executed.</summary>
+    internal FunctionResultContent CreateUnansweredCallResult(FunctionCallContent call)
+    {
+        UIAgentLog.UnansweredToolCall(_logger, call.Name, call.CallId);
+        return new FunctionResultContent(
+            call.CallId,
+            "Error: The tool call was not executed. Call the tool again if its result is still needed.");
     }
 
     private void RefreshHistoryFromThread(IConversationThread? thread)
@@ -477,31 +499,6 @@ public class UIAgent : IDisposable
         }
 
         return chatOptions;
-    }
-
-    internal void ApplyFunctionResult(
-        FunctionInvocationContentBlock block,
-        FunctionResultContent result)
-    {
-        foreach (var registration in _options.HandlerRegistrations)
-        {
-            if (registration.TryApplyFunctionResult(block, result))
-                return;
-        }
-    }
-
-    private AIFunction? FindBackendFunction(string name)
-    {
-        if (_options.ChatOptions?.Tools is null)
-            return null;
-
-        foreach (var tool in _options.ChatOptions.Tools)
-        {
-            if (tool is AIFunction function && function.Name == name)
-                return function;
-        }
-
-        return null;
     }
 
     private static ChatMessage EnsureMessageId(ChatMessage message)

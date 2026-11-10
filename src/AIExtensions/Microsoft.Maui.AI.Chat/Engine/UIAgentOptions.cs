@@ -80,10 +80,6 @@ public class UIAgentOptions
     internal interface IHandlerRegistration
     {
         IHandlerEntry CreateEntry();
-
-        bool TryApplyFunctionResult(
-            FunctionInvocationContentBlock block,
-            FunctionResultContent result);
     }
 
     private sealed class HandlerRegistration<TState> : IHandlerRegistration where TState : new()
@@ -96,11 +92,5 @@ public class UIAgentOptions
         }
 
         public IHandlerEntry CreateEntry() => new HandlerEntry<TState>(_handler);
-
-        public bool TryApplyFunctionResult(
-            FunctionInvocationContentBlock block,
-            FunctionResultContent result) =>
-            block is TState state
-            && _handler.TryApplyFunctionResult(state, result);
     }
 }

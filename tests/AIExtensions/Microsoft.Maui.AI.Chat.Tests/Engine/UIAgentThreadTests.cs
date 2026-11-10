@@ -198,18 +198,10 @@ public class UIAgentThreadTests
     }
 
     [Fact]
-    public async Task AgentContext_StatefulToolLoop_PropagatesLatestConversationIdAndCommitsOnce()
+    public async Task AgentContext_StatefulUIActionLoop_PropagatesLatestConversationIdAndCommitsOnce()
     {
         var thread = new InMemoryConversationThread("thread-1");
-        var configuredOptions = new ChatOptions
-        {
-            Tools =
-            [
-                AIFunctionFactory.Create(
-                    (Func<string>)(() => "tool result"),
-                    "GetValue"),
-            ],
-        };
+        var configuredOptions = new ChatOptions();
         ChatOptions? continuationOptions = null;
         IReadOnlyList<ChatMessage>? continuationMessages = null;
         var callCount = 0;
@@ -231,6 +223,9 @@ public class UIAgentThreadTests
         {
             options.Thread = thread;
             options.ChatOptions = configuredOptions;
+            options.RegisterUIAction(AIFunctionFactory.Create(
+                (Func<string>)(() => "tool result"),
+                "GetValue"));
         }));
 
         await context.SendMessageAsync("Run the tool");

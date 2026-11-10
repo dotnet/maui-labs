@@ -2,16 +2,24 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
 /// A registered client-side action requested by the model.
 /// </summary>
+/// <remarks>
+/// If the action throws, the model receives a generic error <see cref="FunctionResultContent"/>
+/// (with <see cref="FunctionResultContent.Exception"/> set) instead of the turn failing, and the
+/// exception is logged.
+/// </remarks>
 public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
 {
     private readonly AIFunction _function;
     private readonly IServiceProvider? _services;
+    private readonly ILogger _logger;
     private readonly TaskCompletionSource<AIContent> _resultSource =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _invocationStarted;
@@ -20,12 +28,14 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
         AIFunction function,
         UIActionInvocationMode mode,
         FunctionInvocationContentBlock innerBlock,
-        IServiceProvider? services)
+        IServiceProvider? services,
+        ILogger? logger = null)
         : base(innerBlock)
     {
         _function = function;
         Mode = mode;
         _services = services;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     public bool IsComplete => Result is not null;
@@ -78,7 +88,11 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
         }
         catch (Exception exception)
         {
-            _resultSource.TrySetException(exception);
+            UIAgentLog.UIActionFailed(_logger, _function.Name, Call!.CallId, exception);
+            SetResult(new FunctionResultContent(Call.CallId, "Error: Function failed.")
+            {
+                Exception = exception,
+            });
         }
     }
 }

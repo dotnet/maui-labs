@@ -165,7 +165,7 @@ public class GeneratedToolBlockIntegrationTests
     }
 
     [Fact]
-    public async Task GeneratedHandler_BackendInvocation_AppliesTypedResultProperties()
+    public async Task GeneratedHandler_FunctionInvocation_AppliesTypedResultProperties()
     {
         var function = AIFunctionFactory.Create(
             (string orderId, bool includeHistory) =>
@@ -192,7 +192,7 @@ public class GeneratedToolBlockIntegrationTests
                     })
                 : ResponseEmitters.EmitTextResponse("Done");
         });
-        var agent = new UIAgent(client, options =>
+        var agent = new UIAgent(new FunctionInvokingChatClient(client), options =>
         {
             options.ChatOptions = new ChatOptions { Tools = [function] };
             options.AddGeneratedToolBlocks();
@@ -201,6 +201,7 @@ public class GeneratedToolBlockIntegrationTests
 
         await context.SendMessageAsync("Find my order");
 
+        Assert.Equal(2, callCount);
         var block = Assert.IsType<GeneratedOrderBlock>(
             Assert.Single(context.Turns[0].ResponseBlocks, block =>
                 block is GeneratedOrderBlock));
