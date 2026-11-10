@@ -1,5 +1,6 @@
 #if IOS || MACCATALYST
 using System.Text.Json;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
 using Microsoft.Maui.Storage;
@@ -9,75 +10,62 @@ namespace Microsoft.Maui.Essentials.AI.DeviceTests;
 
 public class AppleVisionRecognizeDocumentsClientTests
 {
+	private static string Text(ExtractionDocumentSection section) =>
+		string.Join("\n", section.Elements.Select(element => (element.Content as TextContent)?.Text));
+
 	[AppleVisionRecognizeDocumentsFact]
-	public async Task ExtractAsync_ImagePreservesCanonicalAnnotationsAndTruthfulNativeBridgeOutput()
+	public async Task ExtractAsync_ImagePreservesSemanticIntersectionAndDetachedNativeSnapshot()
 	{
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
-		Assert.Same(client, client.GetService(typeof(IDocumentExtractionClient)));
+		using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		Assert.Same(client, client.GetService(typeof(DocumentExtractionClient)));
 		using var image = await FileSystem.OpenAppPackageFileAsync("DocumentReader/headings.png");
-		using var result = await client.ExtractAsync(image, "headings", "image/png");
-		var page = Assert.Single(result.Pages);
-		Assert.Null(page.Markdown);
-		Assert.Contains("DOCUMENT EXTRACTION EVALUATION", result.Document.ToMarkdown(), StringComparison.OrdinalIgnoreCase);
-		Assert.Equal(DocumentCoordinateUnit.Normalized, page.SourcePage!.CoordinateUnit);
-		Assert.Equal(DocumentCoordinateOrigin.BottomLeft, page.SourcePage.CoordinateOrigin);
-		Assert.Equal(new DocumentPageDimensions(1, 1), page.SourcePage.Dimensions);
-		Assert.Contains(page.Observations, item => item is DocumentExtractionText { Kind: DocumentTextKind.Header });
-		Assert.False(result.Document.HasMetadata);
-		Assert.All(result.Document.EnumerateContent(), element => Assert.False(element.HasMetadata));
-		var output = Assert.Single(result.Document.SourceOutputs);
-		Assert.Equal(DocumentRawContentStatus.Retained, output.NativeStatus);
-		Assert.Equal(DocumentRawContentStatus.Unavailable, output.ContentStatus);
-		Assert.Null(output.GetRawContent());
-		var native = Assert.IsType<JsonElement>(output.GetRawRepresentation());
+		var result = await client.ExtractAsync(image, "headings", "image/png");
+		client.Dispose();
+		var section = Assert.Single(result.Sections);
+		var frame = Assert.Single(result.SourcePages);
+		Assert.Contains("DOCUMENT EXTRACTION EVALUATION", Text(section), StringComparison.OrdinalIgnoreCase);
+		Assert.Equal(ExtractionDocumentCoordinateUnit.Normalized, frame.CoordinateUnit);
+		Assert.Equal(ExtractionDocumentCoordinateOrigin.BottomLeft, frame.CoordinateOrigin);
+		Assert.Equal(new ExtractionDocumentPageDimensions(1, 1), frame.Dimensions);
+		Assert.Contains(section.Elements, item => item is ExtractionDocumentTextElement { Role: "heading", HeadingLevel: null });
+		Assert.Empty(result.Metadata);
+		Assert.Null(section.Content);
+		Assert.All(result.EnumerateContent(), element => Assert.Null(element.Content?.AdditionalProperties));
+		var native = Assert.Single(Assert.IsType<JsonElement[]>(result.RawRepresentation));
 		Assert.Equal(JsonValueKind.Array, native.ValueKind);
-		Assert.Contains("native-bridge-snapshot", output.ProviderName);
+		Assert.Equal(JsonValueKind.Array, Assert.IsType<JsonElement>(section.Sources[0].GetRawRepresentation()).ValueKind);
 		Assert.True(image.CanRead);
 	}
 
 	[AppleVisionRecognizeDocumentsFact]
-	public async Task ExtractPagesAsync_PdfFinalizesSourceFramesAndKeepsInputOpen()
+	public async Task ExtractAsync_PdfPreservesPageOrderSourceFramesAndCallerInput()
 	{
 		using var pdf = await FileSystem.OpenAppPackageFileAsync("DocumentReader/two-pages.pdf");
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
-		using var result = await client.ExtractPagesAsync(pdf, "pdf", "application/pdf")
-			.ToDocumentExtractionResultAsync("pdf");
-		Assert.Equal([1, 2], result.Pages.Select(page => page.PageNumber));
-		Assert.All(result.Pages, page => Assert.Null(page.Markdown));
-		Assert.Contains("FIRST PAGE", result.Document.Sections[0].ToMarkdown(), StringComparison.OrdinalIgnoreCase);
-		Assert.Contains("SECOND PAGE", result.Document.Sections[1].ToMarkdown(), StringComparison.OrdinalIgnoreCase);
-		Assert.Equal(["pdf/page/1", "pdf/page/2"], result.Document.SourcePages.Select(page => page.Identifier));
-		Assert.Equal(result.Pages.SelectMany(page => page.Observations).Count(),
-			result.Pages.SelectMany(page => page.Observations).Select(item => item.ProviderId).Distinct().Count());
+		using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		var result = await client.ExtractAsync(pdf, "pdf", "application/pdf");
+		Assert.Equal([1, 2], result.SourcePages.Select(page => page.PageNumber));
+		Assert.Contains("FIRST PAGE", Text(result.Sections[0]), StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("SECOND PAGE", Text(result.Sections[1]), StringComparison.OrdinalIgnoreCase);
+		Assert.Equal(["pdf/page/1", "pdf/page/2"], result.SourcePages.Select(page => page.Identifier));
+		Assert.Same(result.SourcePages[0], result.Sections[0].Sources[0].Page);
+		Assert.Same(result.SourcePages[1], result.Sections[1].Sources[0].Page);
 		Assert.True(pdf.CanRead);
 	}
 
 	[AppleVisionRecognizeDocumentsFact]
-	public async Task ExtractAsync_RawOptOutLeavesSemanticGeometryButNoNativeEscape()
+	public async Task ExtractAsync_TablePreservesGeometrySpansAndNativeDataWithoutFabricatedAssets()
 	{
 		using var image = await FileSystem.OpenAppPackageFileAsync("DocumentReader/merged-table.png");
-		using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
-		using var result = await client.ExtractAsync(image, "table", "image/png", new() { CaptureRawOutput = false });
-		Assert.All(result.Document.SourceOutputs, source =>
-		{
-			Assert.Equal(DocumentRawContentStatus.Disabled, source.NativeStatus);
-			Assert.Equal(DocumentRawContentStatus.Disabled, source.ContentStatus);
-			Assert.Null(source.GetRawRepresentation());
-			Assert.Null(source.GetRawContent());
-		});
-		Assert.Empty(result.Document.Artifacts);
-		foreach (var element in result.Document.EnumerateContent())
-		{
-			Assert.All(element.Annotations, annotation => Assert.Null(annotation.GetRawRepresentation()));
-			if (element is DocumentTableElement table)
-				foreach (var cell in table.Cells)
-					if (cell is not null)
-						Assert.All(cell.Annotations, annotation => Assert.Null(annotation.GetRawRepresentation()));
-		}
-		var canonicalTable = Assert.Single(result.Document.EnumerateContent().OfType<DocumentTableElement>());
-		Assert.Equal(2, canonicalTable.Cells[0, 0]!.ColumnSpan);
-		Assert.True(canonicalTable.Cells.IsCovered(0, 1));
-		Assert.NotEmpty(canonicalTable.Cells[0, 0]!.Annotations[0].Regions);
+		using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+		var result = await client.ExtractAsync(image, "table", "image/png");
+		Assert.Empty(result.EnumerateContent().OfType<ExtractionDocumentImageElement>());
+		var table = Assert.Single(result.EnumerateContent().OfType<ExtractionDocumentTableElement>());
+		Assert.Equal(2, table.Cells[0, 0]!.ColumnSpan);
+		Assert.Null(table.Cells[0, 1]);
+		var source = Assert.Single(table.Cells[0, 0]!.Sources);
+		Assert.NotEmpty(source.Polygon);
+		Assert.Equal("tableCell", Assert.IsType<JsonElement>(source.GetRawRepresentation()).GetProperty("kind").GetString());
+		Assert.All(table.Cells, cell => { if (cell is not null) Assert.Null(cell.Role); });
 		Assert.True(image.CanRead);
 	}
 }

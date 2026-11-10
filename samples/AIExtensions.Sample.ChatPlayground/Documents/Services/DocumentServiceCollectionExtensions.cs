@@ -24,7 +24,7 @@ internal static class DocumentServiceCollectionExtensions
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
         {
             services.AddSingleton<IngestionDocumentReader>(CreateAppleRecognizeDocumentsReader);
-            services.AddSingleton<IDocumentExtractionClient>(CreateAppleRecognizeDocumentsClient);
+            services.AddSingleton<DocumentExtractionClient>(CreateAppleRecognizeDocumentsClient);
         }
 #endif
 
@@ -32,12 +32,12 @@ internal static class DocumentServiceCollectionExtensions
             !string.IsNullOrWhiteSpace(settings.DocumentIntelligenceKey))
         {
             services.AddSingleton<IngestionDocumentReader>(_ => CreateAzureDocumentReader(settings));
-            services.AddSingleton<IDocumentExtractionClient>(provider =>
+            services.AddSingleton<DocumentExtractionClient>(provider =>
                 Describe(new AzureDocumentIntelligenceExtractionClient(
                     settings.DocumentIntelligenceEndpoint!, settings.DocumentIntelligenceKey!),
                     new DocumentExtractionClientDescriptor(
                         "azure-document-intelligence", "Azure Document Intelligence",
-                        "Uploads the document for the selected model (prebuilt-layout by default); charges may apply. Native SDK output is inspectable; original response-body capture is unavailable.", IsCloud: true), provider));
+                        "Uploads the document for the selected analyzer (prebuilt-layout by default); charges may apply. Native SDK output is explicitly inspectable.", IsCloud: true), provider));
         }
 
         if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
@@ -54,12 +54,12 @@ internal static class DocumentServiceCollectionExtensions
             });
             services.AddSingleton<IngestionDocumentReader>(provider => CreateFoundryDocumentReader(
                 provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings));
-            services.AddSingleton<IDocumentExtractionClient>(provider =>
+            services.AddSingleton<DocumentExtractionClient>(provider =>
                 Describe(new FoundryMistralDocumentExtractionClient(
                     provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings.DocumentDeploymentName!),
                     new DocumentExtractionClientDescriptor(
                         "foundry-mistral-document", "Foundry Mistral Document AI",
-                        "Uploads the document to the selected Mistral OCR deployment; charges may apply. Raw capture retains the detached original JSON response body.", IsCloud: true), provider));
+                        "Uploads the document to the selected Mistral OCR deployment; charges may apply. Native inspection retains detached parsed JSON, not an original response body.", IsCloud: true), provider));
         }
 
         return services;
@@ -68,11 +68,11 @@ internal static class DocumentServiceCollectionExtensions
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
-    private static IDocumentExtractionClient CreateAppleRecognizeDocumentsClient(IServiceProvider provider) =>
+    private static DocumentExtractionClient CreateAppleRecognizeDocumentsClient(IServiceProvider provider) =>
         Describe(new AppleVisionRecognizeDocumentsClient(),
             new DocumentExtractionClientDescriptor(
                 "apple-vision-document", "Apple Vision RecognizeDocuments",
-                "RecognizeDocumentsRequest on-device. Preserves native geometry, table spans and semantic annotations. Raw inspection is a bounded native bridge snapshot, not an Apple observation object."), provider);
+                "RecognizeDocumentsRequest on-device. Preserves native geometry and table spans. Native inspection is a bounded bridge snapshot, not an Apple observation object."), provider);
 
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
@@ -85,8 +85,8 @@ internal static class DocumentServiceCollectionExtensions
                 "Reads images and PDFs on-device with Vision RecognizeDocumentsRequest; requires iOS or Mac Catalyst 26+."));
 #endif
 
-    private static IDocumentExtractionClient Describe(
-        IDocumentExtractionClient client, DocumentExtractionClientDescriptor descriptor, IServiceProvider provider) =>
+    private static DocumentExtractionClient Describe(
+        DocumentExtractionClient client, DocumentExtractionClientDescriptor descriptor, IServiceProvider provider) =>
         new DocumentExtractionClientBuilder(client)
             .Use(inner => new DescribedDocumentExtractionClient(inner, descriptor))
             .UseLogging(provider.GetRequiredService<ILoggerFactory>())

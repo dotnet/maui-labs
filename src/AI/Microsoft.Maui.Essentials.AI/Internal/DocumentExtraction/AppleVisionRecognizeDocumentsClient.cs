@@ -1,7 +1,7 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
 using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
 
 namespace Microsoft.Maui.Essentials.AI;
 
@@ -9,7 +9,7 @@ namespace Microsoft.Maui.Essentials.AI;
 [SupportedOSPlatform("ios26.0")]
 [SupportedOSPlatform("maccatalyst26.0")]
 [SupportedOSPlatform("macos26.0")]
-public sealed partial class AppleVisionRecognizeDocumentsClient : IDocumentExtractionClient
+public sealed partial class AppleVisionRecognizeDocumentsClient : DocumentExtractionClient
 {
 	private readonly Func<Stream, string, RecognizeDocumentsRequestOptions?, CancellationToken,
 		IAsyncEnumerable<AppleVisionRecognizeDocumentsPageSnapshot>> _recognize;
@@ -23,7 +23,7 @@ public sealed partial class AppleVisionRecognizeDocumentsClient : IDocumentExtra
 	}
 
 	/// <inheritdoc />
-	public IAsyncEnumerable<DocumentExtractionPage> ExtractPagesAsync(
+	public override Task<ExtractionDocument> ExtractAsync(
 		Stream document, string identifier, string mediaType, DocumentExtractionOptions? options = null,
 		CancellationToken cancellationToken = default)
 	{
@@ -38,26 +38,29 @@ public sealed partial class AppleVisionRecognizeDocumentsClient : IDocumentExtra
 			throw new NotSupportedException($"Apple Vision does not support media type '{mediaType}'.");
 		var request = options?.Clone();
 		var nativeOptions = RecognizeDocumentsRequestOptions.From(request);
-		return ExtractCoreAsync(document, identifier, mediaType, nativeOptions,
-			request?.CaptureRawOutput ?? true, cancellationToken);
+		return ExtractCoreAsync(document, identifier, mediaType, nativeOptions, cancellationToken);
 	}
 
-	private async IAsyncEnumerable<DocumentExtractionPage> ExtractCoreAsync(
+	private async Task<ExtractionDocument> ExtractCoreAsync(
 		Stream document, string identifier, string mediaType, RecognizeDocumentsRequestOptions? options,
-		bool captureRawOutput, [EnumeratorCancellation] CancellationToken cancellationToken)
+		CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
+		var result = new ExtractionDocument(identifier);
+		var snapshots = new List<JsonElement>();
 		await foreach (var source in _recognize(document, mediaType, options, cancellationToken).ConfigureAwait(false))
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			yield return AppleVisionRecognizeDocumentsMapper.ToPage(
-				source.Snapshot, source.PageNumber, identifier, captureRawOutput);
+			AppleVisionRecognizeDocumentsMapper.AddPage(result, source.Snapshot, source.PageNumber);
+			snapshots.Add(source.Snapshot.Clone());
 		}
 		cancellationToken.ThrowIfCancellationRequested();
+		result.RawRepresentation = snapshots.ToArray();
+		return result;
 	}
 
 	/// <inheritdoc />
-	public object? GetService(Type serviceType, object? serviceKey = null)
+	public override object? GetService(Type serviceType, object? serviceKey = null)
 	{
 		ArgumentNullException.ThrowIfNull(serviceType);
 		ObjectDisposedException.ThrowIf(_disposed, this);
@@ -65,7 +68,7 @@ public sealed partial class AppleVisionRecognizeDocumentsClient : IDocumentExtra
 	}
 
 	/// <inheritdoc />
-	public void Dispose() => _disposed = true;
+	protected override void Dispose(bool disposing) => _disposed = true;
 }
 
 internal sealed record AppleVisionRecognizeDocumentsPageSnapshot(int PageNumber, int TotalPages, JsonElement Snapshot);
@@ -86,8 +89,8 @@ internal sealed class RecognizeDocumentsRequestOptions
 
 	internal static RecognizeDocumentsRequestOptions? From(DocumentExtractionOptions? options)
 	{
-		if (options?.ModelId is not null)
-			throw new NotSupportedException("RecognizeDocumentsRequest does not expose model selection.");
+		if (options?.ExtractorName is not null)
+			throw new NotSupportedException("RecognizeDocumentsRequest does not expose extractor selection.");
 		if (options is null || options.AdditionalProperties.Count == 0)
 			return null;
 		var supported = new HashSet<string>(StringComparer.Ordinal)

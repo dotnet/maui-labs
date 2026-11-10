@@ -29,17 +29,11 @@
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
-            <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsExtractionMode}" IsEnabled="{Binding IsIdle}">
-                <CheckBox IsChecked="{Binding StreamPages}" AutomationId="DocumentStreamPagesCheckBox" />
-                <Label Text="Stream completed pages" VerticalOptions="Center" />
-            </HorizontalStackLayout>
-            <HorizontalStackLayout Spacing="8" IsVisible="{Binding IsExtractionMode}" IsEnabled="{Binding IsIdle}">
-                <CheckBox IsChecked="{Binding CaptureRawOutput}" AutomationId="DocumentCaptureRawCheckBox" />
-                <Label Text="Retain raw output for explicit inspection" VerticalOptions="Center" />
-            </HorizontalStackLayout>
+            <Label Text="Extraction returns one completed document. Native results are inspected only on request."
+                   IsVisible="{Binding IsExtractionMode}" Style="{StaticResource MutedLabel}" />
             <VerticalStackLayout IsVisible="{Binding CanSelectModel}" IsEnabled="{Binding IsIdle}">
-                <Label Text="Model / deployment override (optional)" Style="{StaticResource MutedLabel}" />
-                <Entry Text="{Binding ModelId}" AutomationId="DocumentModelIdEntry" />
+                <Label Text="Extractor / analyzer override (optional)" Style="{StaticResource MutedLabel}" />
+                <Entry Text="{Binding ExtractorName}" AutomationId="DocumentExtractorNameEntry" />
             </VerticalStackLayout>
             <VerticalStackLayout IsVisible="{Binding CanSelectAppleOptions}" IsEnabled="{Binding IsIdle}">
                 <Label Text="Apple recognition languages (optional, comma-separated)" Style="{StaticResource MutedLabel}" />

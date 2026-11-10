@@ -16,13 +16,24 @@ public static class DocumentExtractionClientBuilderServiceCollectionExtensions
     /// <summary>
     /// Registers a document extraction client and returns its middleware builder.
     /// </summary>
+    /// <remarks>
+    /// The supplied inner client can only be registered as a singleton. The container owns the
+    /// composed pipeline and disposes the inner client when the container is disposed.
+    /// Use the factory overload to create independent clients for scoped or transient lifetimes.
+    /// </remarks>
     /// <returns>The middleware builder.</returns>
     public static DocumentExtractionClientBuilder AddDocumentExtractionClient(
         this IServiceCollection services,
-        IDocumentExtractionClient innerClient,
+        DocumentExtractionClient innerClient,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
+        _ = Throw.IfNull(services);
         _ = Throw.IfNull(innerClient);
+        if (lifetime != ServiceLifetime.Singleton)
+        {
+            Throw.ArgumentOutOfRangeException(nameof(lifetime), lifetime, "An existing client instance requires a singleton lifetime.");
+        }
+
         return AddDocumentExtractionClient(services, _ => innerClient, lifetime);
     }
 
@@ -32,7 +43,7 @@ public static class DocumentExtractionClientBuilderServiceCollectionExtensions
     /// <returns>The middleware builder.</returns>
     public static DocumentExtractionClientBuilder AddDocumentExtractionClient(
         this IServiceCollection services,
-        Func<IServiceProvider, IDocumentExtractionClient> innerClientFactory,
+        Func<IServiceProvider, DocumentExtractionClient> innerClientFactory,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
         _ = Throw.IfNull(services);
@@ -40,7 +51,7 @@ public static class DocumentExtractionClientBuilderServiceCollectionExtensions
 
         DocumentExtractionClientBuilder builder = new(innerClientFactory);
         services.Add(new ServiceDescriptor(
-            typeof(IDocumentExtractionClient),
+            typeof(DocumentExtractionClient),
             serviceProvider => builder.Build(serviceProvider),
             lifetime));
         return builder;
@@ -53,7 +64,7 @@ public static class DocumentExtractionClientBuilderServiceCollectionExtensions
     public static DocumentExtractionClientBuilder AddKeyedDocumentExtractionClient(
         this IServiceCollection services,
         object? serviceKey,
-        Func<IServiceProvider, IDocumentExtractionClient> innerClientFactory,
+        Func<IServiceProvider, DocumentExtractionClient> innerClientFactory,
         ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
         _ = Throw.IfNull(services);
@@ -61,7 +72,7 @@ public static class DocumentExtractionClientBuilderServiceCollectionExtensions
 
         DocumentExtractionClientBuilder builder = new(innerClientFactory);
         services.Add(new ServiceDescriptor(
-            typeof(IDocumentExtractionClient),
+            typeof(DocumentExtractionClient),
             serviceKey,
             (serviceProvider, _) => builder.Build(serviceProvider),
             lifetime));

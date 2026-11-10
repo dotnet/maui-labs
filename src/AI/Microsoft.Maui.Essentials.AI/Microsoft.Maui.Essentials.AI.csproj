@@ -15,7 +15,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
-    <!-- Prototype only: the proposed public extraction contract is not approved for publication. -->
+    <!-- Prototype only: merged upstream extraction packages are not published yet. -->
     <IsShipping>false</IsShipping>
     <IsPackable>false</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>

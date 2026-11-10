@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Documents;
 using Xunit;
 
@@ -7,23 +7,18 @@ namespace Microsoft.Maui.Essentials.AI.UnitTests;
 public class UpstreamNestedTableMarkdownTests
 {
     [Fact]
-    public void Finalization_PreservesNestedTableButCurrentMergedHtmlProjectionEscapesItsMarkup()
+    public void Exchange_PreservesNestedAndMixedCellContentWithoutStructuralRenderer()
     {
-        var nested = new DocumentExtractionTable("inner", 0, "", 1, 1,
-            [new DocumentExtractionTableCell(0, 0,
-                new DocumentExtractionText("leaf", 0, DocumentTextKind.Paragraph, "Value", "Value"))]);
-        var outer = new DocumentExtractionTable("outer", 0, "", 1, 2,
-            [new DocumentExtractionTableCell(0, 0, nested, columnSpan: 2)]);
-        using var result = new[] { new DocumentExtractionPage(1, [outer]) }
-            .ToDocumentExtractionResult("nested-table");
-        var table = Assert.IsType<DocumentTableElement>(Assert.Single(Assert.Single(result.Document.Sections).Elements));
-        var child = Assert.IsType<DocumentTableElement>(table.Cells[0, 0]!.Content);
-        Assert.Equal("Value", Assert.IsType<DocumentTextElement>(child.Cells[0, 0]!.Content).Text);
-        Assert.True(table.Cells.IsCovered(0, 1));
-
-        // Upstream limitation: HTML encoding the complete child projection flattens its table markup.
-        var markdown = result.Document.ToMarkdown();
-        Assert.Contains("colspan", markdown);
-        Assert.Contains("| Value |", markdown);
+        var nested = new ExtractionDocumentTableElement(null, 1, 1);
+        nested.Cells[0, 0] = new(new ExtractionDocumentTextElement(new TextContent("Value")));
+        var mixed = new ExtractionDocumentSection();
+        mixed.Elements.AddRange([nested, new ExtractionDocumentImageElement(new DataContent(new byte[] { 1 }, "image/png"))]);
+        var outer = new ExtractionDocumentTableElement(null, 1, 2);
+        outer.Cells[0, 0] = new(mixed, columnSpan: 2);
+        Assert.Same(nested, Assert.IsType<ExtractionDocumentSection>(outer.Cells[0, 0]!.Content).Elements[0]);
+        Assert.Equal("Value", Assert.IsType<TextContent>(nested.Cells[0, 0]!.Content!.Content).Text);
+        Assert.Null(outer.Cells[0, 1]);
+        Assert.Null(mixed.Content);
+        Assert.DoesNotContain(typeof(ExtractionDocumentTableElement).GetMethods(), method => method.Name == "ToMarkdown");
     }
 }

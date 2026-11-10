@@ -1,9 +1,9 @@
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using Azure;
 using Azure.AI.DocumentIntelligence;
 using Azure.Core.Pipeline;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
 using NSubstitute;
@@ -28,20 +28,20 @@ public sealed class CloudDocumentExtractionClientTests
         var sdk = new DocumentIntelligenceClient(new Uri("https://example.invalid"), new AzureKeyCredential("test"),
             new DocumentIntelligenceClientOptions { Transport = new HttpClientTransport(http) });
         using var adapter = new AzureDocumentIntelligenceExtractionClient(sdk);
+        using var input = new MemoryStream([1]);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await adapter.ExtractAsync(new MemoryStream([1]), "input", "application/pdf", cancellationToken: cancellation.Token));
-        using var result = AzureDocumentIntelligenceExtractionClient.MapResult(
+            await adapter.ExtractAsync(input, "input", "application/pdf", cancellationToken: cancellation.Token));
+        var result = AzureDocumentIntelligenceExtractionClient.MapResult(
             DocumentIntelligenceModelFactory.AnalyzeResult(content: "A😀é",
                 pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1, spans: [Span(0, 4)])]));
-        Assert.Null(result.Pages[0].Markdown);
-        Assert.Null(result.Document.StoredMarkdown);
-        Assert.Equal("A😀é", result.Document.ToMarkdown());
+        Assert.Null(result.Content);
+        Assert.Equal("A😀é", Assert.IsType<TextContent>(result.Sections[0].Content).Text);
+        Assert.Empty(result.Sections[0].Elements);
+        Assert.True(input.CanRead);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Azure_MapsGeometryRolesSpansEmptyCellAndHonestRawAvailability(bool capture)
+    [Fact]
+    public async Task Azure_MapsGeometryRolesSpansEmptyCellAndNativeResult()
     {
         var native = AzureResult();
         var operation = Substitute.For<Operation<AnalyzeResult>>();
@@ -51,39 +51,43 @@ public sealed class CloudDocumentExtractionClientTests
             .Returns(Task.FromResult(operation));
         using var adapter = new AzureDocumentIntelligenceExtractionClient(sdk);
         using var input = new MemoryStream([1]);
-        using var result = await adapter.ExtractAsync(input, "input", "application/pdf",
-            new() { ModelId = "custom-layout", CaptureRawOutput = capture });
+        var result = await adapter.ExtractAsync(input, "input", "application/pdf",
+            new() { ExtractorName = "custom-layout" });
         Assert.True(input.CanRead);
         Assert.Same(sdk, adapter.GetService(typeof(DocumentIntelligenceClient)));
+        Assert.Same(adapter, adapter.GetService(typeof(DocumentExtractionClient)));
         Assert.Null(adapter.GetService(typeof(DocumentIntelligenceClient), "key"));
-        var frame = Assert.Single(result.Document.SourcePages);
-        Assert.Equal(new DocumentPageDimensions(8, 11), frame.Dimensions);
-        Assert.Equal(DocumentCoordinateUnit.Inch, frame.CoordinateUnit);
-        Assert.Equal(DocumentCoordinateOrigin.TopLeft, frame.CoordinateOrigin);
-        var section = Assert.Single(result.Document.Sections);
-        var title = Assert.IsType<DocumentTextElement>(section.Elements[0]);
-        Assert.Equal(DocumentTextKind.Header, title.Kind);
-        Assert.Null(title.HeaderLevel);
-        Assert.Equal("title", title.Annotations[0].Role);
-        var table = Assert.IsType<DocumentTableElement>(section.Elements[1]);
+        var frame = Assert.Single(result.SourcePages);
+        Assert.Equal(new ExtractionDocumentPageDimensions(8, 11), frame.Dimensions);
+        Assert.Equal(ExtractionDocumentCoordinateUnit.Inch, frame.CoordinateUnit);
+        Assert.Equal(ExtractionDocumentCoordinateOrigin.TopLeft, frame.CoordinateOrigin);
+        var section = Assert.Single(result.Sections);
+        Assert.Null(section.Content);
+        var title = Assert.IsType<ExtractionDocumentTextElement>(section.Elements[0]);
+        Assert.Equal("heading", title.Role);
+        Assert.Null(title.HeadingLevel);
+        var paragraph = Assert.IsType<DocumentParagraph>(title.Content!.RawRepresentation);
+        Assert.Equal(ParagraphRole.Title, paragraph.Role);
+        Assert.Equal(0, paragraph.Spans[0].Offset);
+        var table = Assert.IsType<ExtractionDocumentTableElement>(section.Elements[1]);
+        Assert.Null(table.Content);
         var cell = table.Cells[0, 0]!;
         Assert.Equal(2, cell.ColumnSpan);
-        Assert.True(table.Cells.IsCovered(0, 1));
-        Assert.Equal("content", cell.Kind);
-        Assert.Equal("A", cell.Content!.Text);
-        Assert.Same(frame, cell.Annotations[0].Regions[0].Page);
-        Assert.Equal(new DocumentPoint(1, 2), cell.Annotations[0].Regions[0].Polygon[0]);
-        Assert.Null(cell.Annotations[0].Confidence);
+        Assert.Null(table.Cells[0, 1]);
+        Assert.Equal("content", cell.Role);
+        var cellSection = Assert.IsType<ExtractionDocumentSection>(cell.Content);
+        Assert.Null(cellSection.Content);
+        Assert.Equal("A", Payload(Assert.Single(cellSection.Elements)));
+        Assert.Same(frame, cell.Sources[0].Page);
+        Assert.Equal(new ExtractionDocumentPoint(1, 2), cell.Sources[0].Polygon[0]);
+        Assert.IsType<DocumentTableCell>(cell.Sources[0].GetRawRepresentation());
         var empty = table.Cells[1, 0]!;
         Assert.Null(empty.Content);
-        Assert.Null(empty.Kind);
-        Assert.Single(empty.Annotations[0].Regions);
-        var output = Assert.Single(result.Document.SourceOutputs);
-        Assert.Equal(capture ? DocumentRawContentStatus.Retained : DocumentRawContentStatus.Disabled, output.NativeStatus);
-        Assert.Equal(capture ? DocumentRawContentStatus.Unavailable : DocumentRawContentStatus.Disabled, output.ContentStatus);
-        Assert.Null(output.GetRawContent());
-        if (capture) Assert.Same(native, output.GetRawRepresentation());
-        else AssertNoRaw(result);
+        Assert.Null(empty.Role);
+        Assert.Single(empty.Sources);
+        Assert.Equal(4, empty.Sources[0].Polygon.Count);
+        Assert.Same(native, result.RawRepresentation);
+        Assert.Empty(result.Metadata);
         await sdk.Received().AnalyzeDocumentAsync(WaitUntil.Completed, "custom-layout", Arg.Any<BinaryData>(), Arg.Any<CancellationToken>());
     }
 
@@ -93,18 +97,22 @@ public sealed class CloudDocumentExtractionClientTests
         var figure = DocumentIntelligenceModelFactory.DocumentFigure(
             caption: DocumentIntelligenceModelFactory.DocumentCaption(content: "Native caption"),
             boundingRegions: [Region(1), Region(3)]);
-        using var result = AzureDocumentIntelligenceExtractionClient.MapResult(DocumentIntelligenceModelFactory.AnalyzeResult(
+        var result = AzureDocumentIntelligenceExtractionClient.MapResult(DocumentIntelligenceModelFactory.AnalyzeResult(
             content: "", pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1),
                 DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 3)], figures: [figure]));
-        var image = Assert.IsType<DocumentImageElement>(Assert.Single(result.Document.Sections[0].Elements));
-        Assert.Equal("Native caption", image.Text);
+        var image = Assert.IsType<ExtractionDocumentImageElement>(Assert.Single(result.Sections[0].Elements));
+        Assert.Equal("Native caption", image.AlternativeText);
+        Assert.Null(image.Text);
         Assert.Null(image.Content);
-        Assert.Equal([1, 3], image.Annotations[0].Regions.Select(region => region.Page.PageNumber));
-        Assert.Null(image.Annotations[0].Confidence);
+        Assert.Null(image.Source);
+        Assert.Equal([1, 3], image.Sources.Select(source => source.Page.PageNumber));
+        Assert.All(image.Sources, source => Assert.Same(figure, source.GetRawRepresentation()));
+        Assert.Equal([1, 3], result.SourcePages.Select(page => page.PageNumber));
+        Assert.Empty(result.Sections[1].Elements);
     }
 
     [Fact]
-    public void Azure_ReportedWordSelectionAndBarcodeValuesSurviveRawOptOut()
+    public void Azure_WordsSelectionMarksAndBarcodesRemainExplicitNativeObservations()
     {
         var page = DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1,
             words: [DocumentIntelligenceModelFactory.DocumentWord(content: "Word", confidence: 0.81f, polygon: [0, 0, 1, 0, 1, 1])],
@@ -112,40 +120,43 @@ public sealed class CloudDocumentExtractionClientTests
                 confidence: 0.72f, polygon: [1, 0, 2, 0, 2, 1])],
             barcodes: [DocumentIntelligenceModelFactory.DocumentBarcode(kind: DocumentBarcodeKind.QrCode, value: "Actual code",
                 confidence: 0.91f, polygon: [2, 0, 3, 0, 3, 1])]);
-        using var result = AzureDocumentIntelligenceExtractionClient.MapResult(
-            DocumentIntelligenceModelFactory.AnalyzeResult(content: "", pages: [page]), captureRawOutput: false);
-        var section = result.Document.Sections[0];
-        var word = section.Annotations.Single(item => item.Kind == "azure.documentIntelligence.word");
-        Assert.Equal((double)0.81f, word.Confidence!.Value);
-        Assert.Equal("Word", word.Value);
-        Assert.Equal("selected", section.Annotations.Single(item => item.Kind == "azure.documentIntelligence.selectionMark").Value);
-        var barcode = Assert.IsType<DocumentExtensionElement>(Assert.Single(section.Elements));
-        Assert.Equal("Actual code", barcode.Text);
-        Assert.Equal((double)0.91f, barcode.Annotations[0].Confidence!.Value);
-        AssertNoRaw(result);
+        var result = AzureDocumentIntelligenceExtractionClient.MapResult(
+            DocumentIntelligenceModelFactory.AnalyzeResult(content: "", pages: [page]));
+        var section = Assert.Single(result.Sections);
+        var native = Assert.IsType<Azure.AI.DocumentIntelligence.DocumentPage>(section.Sources[0].GetRawRepresentation());
+        Assert.Same(page, native);
+        Assert.Equal(0.81f, native.Words[0].Confidence);
+        Assert.Equal("Word", native.Words[0].Content);
+        Assert.Equal(DocumentSelectionMarkState.Selected, native.SelectionMarks[0].State);
+        Assert.Equal(0.72f, native.SelectionMarks[0].Confidence);
+        Assert.Equal("Actual code", native.Barcodes[0].Value);
+        Assert.Equal(0.91f, native.Barcodes[0].Confidence);
+        Assert.Empty(section.Elements);
+        Assert.Empty(result.Metadata);
     }
 
     [Theory]
-    [InlineData(null, false)]
-    [InlineData("text", false)]
-    [InlineData("markdown", true)]
-    public void Azure_PageMarkdownIsOnlyTheReportedMarkdownFormat(string? format, bool markdown)
+    [InlineData(null)]
+    [InlineData("text")]
+    [InlineData("markdown")]
+    public void Azure_PageContentIsOneLocalPayloadWithNativeFormat(string? format)
     {
         const string content = "# Content";
         var native = DocumentIntelligenceModelFactory.AnalyzeResult(content: content,
             contentFormat: format is null ? default : new DocumentContentFormat(format),
             pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 2, spans: [Span(0, content.Length)])]);
-        using var result = AzureDocumentIntelligenceExtractionClient.MapResult(native, captureRawOutput: false);
-        Assert.Equal(markdown ? content : null, result.Pages[0].Markdown);
-        Assert.Equal(markdown ? content : null, result.Document.StoredMarkdown);
-        Assert.Equal(content, result.Document.ToMarkdown());
-        Assert.Equal(content, result.Document.Sections[0].Annotations[0].Value);
+        var result = AzureDocumentIntelligenceExtractionClient.MapResult(native);
+        Assert.Equal(content, Assert.IsType<TextContent>(result.Sections[0].Content).Text);
+        Assert.Empty(result.Sections[0].Elements);
+        Assert.Null(result.Content);
+        Assert.Equal(native.ContentFormat, Assert.IsType<AnalyzeResult>(result.RawRepresentation).ContentFormat);
     }
 
     [Fact]
-    public void Foundry_BlockBoxesConfidenceAndReferringContentSurviveWithoutRawOutput()
+    public void Foundry_BlockBoxesAndNativeConfidenceReferringContentSurviveParserDisposal()
     {
-        using var json = JsonDocument.Parse("""
+        ExtractionDocument result;
+        using (var json = JsonDocument.Parse("""
             {"model":"reported","pages":[{"index":2,"dimensions":{"width":600,"height":800},"blocks":[
               {"type":"text","content":"Actual text","top_left_x":1.123456789012345,"top_left_y":2,
                "bottom_right_x":3,"bottom_right_y":4,"confidence_scores":{"min":78.125,"mean":93.5,"max":99.875}},
@@ -156,62 +167,82 @@ public sealed class CloudDocumentExtractionClientTests
                "top_left_x":50,"top_left_y":60,"bottom_right_x":70,"bottom_right_y":80,
                "confidence_scores":{"min":42.25}}],
               "tables":[{"id":"t","content":"<table><tr><td>Actual auxiliary HTML</td></tr></table>"}],
-              "images":[{"id":"i","caption":"Actual auxiliary caption","image_base64":"data:image/png;base64,AQID"}]}]}
-            """);
-        using var result = FoundryMistralDocumentExtractionClient.MapResult(json.RootElement, "source", false);
-        var frame = Assert.Single(result.Document.SourcePages);
+              "images":[{"id":"i","caption":"Actual auxiliary caption","ocr_text":"Actual OCR",
+                "image_base64":"data:image/png;base64,AQID"}]}]}
+            """))
+            result = FoundryMistralDocumentExtractionClient.MapResult(json.RootElement, "source");
+        var frame = Assert.Single(result.SourcePages);
         Assert.Equal("source/page/3", frame.Identifier);
-        Assert.Equal(DocumentCoordinateUnit.Pixel, frame.CoordinateUnit);
-        Assert.Equal(DocumentCoordinateOrigin.TopLeft, frame.CoordinateOrigin);
-        var section = result.Document.Sections[0];
-        var text = Assert.IsType<DocumentTextElement>(section.Elements[0]);
-        Assert.Equal(1.123456789012345, text.Annotations[0].Regions[0].Polygon[0].X);
-        Assert.Same(frame, text.Annotations[0].Regions[0].Page);
-        Assert.Equal(78.125, text.Annotations.Single(item => item.Kind == "mistral.confidence_scores.min").Confidence!.Value);
-        Assert.Equal(93.5, text.Annotations.Single(item => item.Kind == "mistral.confidence_scores.mean").Confidence!.Value);
-        Assert.Equal(99.875, text.Annotations.Single(item => item.Kind == "mistral.confidence_scores.max").Confidence!.Value);
-        Assert.Null(text.Annotations.Single(item => item.Kind == "mistral.confidence_scores.mean").Confidence!.Maximum);
-        var table = Assert.IsType<DocumentTableElement>(section.Elements[1]);
-        Assert.Contains("Actual auxiliary HTML", table.StoredMarkdown);
-        Assert.Contains(table.Annotations, item => Equals(item.Value, "Native block table summary"));
-        Assert.Equal(new DocumentPoint(10, 20), table.Annotations.Single(item => item.Kind == "mistral.ocr" && item.Regions.Count > 0).Regions[0].Polygon[0]);
-        Assert.Equal(0.123456789012345, table.Annotations.Single(item => item.Kind == "mistral.confidence_scores.mean").Confidence!.Value);
-        var image = Assert.IsType<DocumentImageElement>(section.Elements[2]);
-        Assert.Equal(new byte[] { 1, 2, 3 }, image.Content!.Value.ToArray());
-        Assert.Equal("Native block image caption", image.Text);
-        Assert.Contains(image.Annotations, item => item.Kind == "mistral.caption" && Equals(item.Value, "Actual auxiliary caption"));
-        Assert.Equal(new DocumentPoint(50, 60), image.Annotations.Single(item => item.Kind == "mistral.ocr" && item.Regions.Count > 0).Regions[0].Polygon[0]);
-        Assert.Equal(42.25, image.Annotations.Single(item => item.Kind == "mistral.confidence_scores.min").Confidence!.Value);
-        AssertNoRaw(result);
+        Assert.Equal(ExtractionDocumentCoordinateUnit.Pixel, frame.CoordinateUnit);
+        Assert.Equal(ExtractionDocumentCoordinateOrigin.TopLeft, frame.CoordinateOrigin);
+        var section = result.Sections[0];
+        var text = Assert.IsType<ExtractionDocumentTextElement>(section.Elements[0]);
+        Assert.Equal(1.123456789012345, text.Sources[0].Polygon[0].X);
+        Assert.Same(frame, text.Sources[0].Page);
+        var confidence = Native(text.Sources[0]).GetProperty("confidence_scores");
+        Assert.Equal(78.125, confidence.GetProperty("min").GetDouble());
+        Assert.Equal(93.5, confidence.GetProperty("mean").GetDouble());
+        Assert.Equal(99.875, confidence.GetProperty("max").GetDouble());
+        Assert.Equal("Actual text", Assert.IsType<JsonElement>(text.Content!.RawRepresentation).GetProperty("content").GetString());
+        var table = Assert.IsType<ExtractionDocumentTableElement>(section.Elements[1]);
+        Assert.Contains("Actual auxiliary HTML", Payload(table));
+        Assert.Equal(2, table.Sources.Count);
+        Assert.Equal("Native block table summary", Native(table.Sources[1]).GetProperty("content").GetString());
+        Assert.Equal(new ExtractionDocumentPoint(10, 20), table.Sources[1].Polygon[0]);
+        Assert.Equal(0.123456789012345, Native(table.Sources[1]).GetProperty("confidence_scores").GetProperty("mean").GetDouble());
+        var image = Assert.IsType<ExtractionDocumentImageElement>(section.Elements[2]);
+        Assert.Equal(new byte[] { 1, 2, 3 }, Assert.IsType<DataContent>(image.Content).Data.ToArray());
+        Assert.Equal("Actual OCR", image.Text);
+        Assert.Equal("Native block image caption", image.AlternativeText);
+        Assert.Equal("Actual auxiliary caption", Native(image.Sources[0]).GetProperty("caption").GetString());
+        Assert.Equal(new ExtractionDocumentPoint(50, 60), image.Sources[1].Polygon[0]);
+        Assert.Equal(42.25, Native(image.Sources[1]).GetProperty("confidence_scores").GetProperty("min").GetDouble());
+        Assert.Equal("reported", Assert.IsType<JsonElement>(result.RawRepresentation).GetProperty("model").GetString());
+        Assert.Empty(result.Metadata);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("\"blocks\":[],")]
     [InlineData("\"blocks\":[{\"type\":\"text\",\"content\":\"\"}],")]
-    public void Foundry_PageMarkdownFallbackSurvivesMarginsAndAuxiliaryImagesOrTables(string blocks)
+    [InlineData("\"blocks\":[{\"type\":\"table\",\"table_id\":\"t\"},{\"type\":\"image\",\"image_id\":\"i\"}],")]
+    public void Foundry_UnrepresentedPageMarkdownSurvivesMarginsAndAuxiliaryImagesOrTables(string blocks)
     {
         using var json = JsonDocument.Parse($$"""
             {"pages":[{"index":0,{{blocks}}"markdown":"Actual body markdown","header":"Actual header","footer":"Actual footer",
               "images":[{"id":"i","image_base64":"data:image/png;base64,AQID"}],
               "tables":[{"id":"t","content":"<table><tr><td>Actual table</td></tr></table>"}]}]}
             """);
-        using var result = FoundryMistralDocumentExtractionClient.MapResult(json.RootElement, captureRawOutput: false);
-        var rendered = result.Document.ToMarkdown();
-        Assert.Contains("Actual body markdown", rendered);
-        Assert.Contains("Actual header", rendered);
-        Assert.Contains("Actual footer", rendered);
-        Assert.Contains("Actual table", rendered);
-        Assert.Single(result.Document.EnumerateContent().OfType<DocumentImageElement>());
-        Assert.Single(result.Document.EnumerateContent().OfType<DocumentTableElement>());
-        Assert.Equal("Actual body markdown", result.Pages[0].Markdown);
-        Assert.Equal(1, rendered.Split("Actual body markdown", StringSplitOptions.None).Length - 1);
+        var result = FoundryMistralDocumentExtractionClient.MapResult(json.RootElement);
+        var elements = result.EnumerateContent().ToArray();
+        Assert.Single(elements.OfType<ExtractionDocumentTextElement>(), text => Payload(text) == "Actual body markdown");
+        Assert.Contains(elements.OfType<ExtractionDocumentTextElement>(), text => text.Role == "pageHeader" && Payload(text) == "Actual header");
+        Assert.Contains(elements.OfType<ExtractionDocumentTextElement>(), text => text.Role == "pageFooter" && Payload(text) == "Actual footer");
+        Assert.Contains("Actual table", Payload(Assert.Single(elements.OfType<ExtractionDocumentTableElement>())));
+        Assert.Single(elements.OfType<ExtractionDocumentImageElement>());
+        Assert.Null(result.Content);
+        Assert.Null(result.Sections[0].Content);
+    }
+
+    [Fact]
+    public void Foundry_AggregateMarkdownIsNotDuplicatedAlongsideTableOrImage()
+    {
+        using var json = JsonDocument.Parse("""
+            {"pages":[{"index":0,"markdown":"<table><tr><td>A</td></tr></table>\n![i](i)",
+              "tables":[{"id":"t","content":"<table><tr><td>A</td></tr></table>"}],
+              "images":[{"id":"i","image_base64":""}]}]}
+            """);
+        var result = FoundryMistralDocumentExtractionClient.MapResult(json.RootElement);
+        Assert.Empty(result.EnumerateContent().OfType<ExtractionDocumentTextElement>());
+        Assert.Null(result.Sections[0].Content);
+        Assert.Equal(2, result.Sections[0].Elements.Count);
+        Assert.Contains("markdown", Assert.IsType<JsonElement>(result.RawRepresentation).GetRawText());
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("actual-server-model")]
-    public async Task Foundry_SourceModelIdIsOnlyTheActualResponseModel(string? reported)
+    public async Task Foundry_NativeModelIsOnlyTheActualResponseModel(string? reported)
     {
         using var http = Http((request, _) =>
         {
@@ -221,16 +252,15 @@ public sealed class CloudDocumentExtractionClientTests
         });
         using var adapter = new FoundryMistralDocumentExtractionClient(http, "configured-alias");
         using var input = new MemoryStream([1]);
-        using var result = await adapter.ExtractAsync(input, "source", "image/png",
-            new() { ModelId = "request-deployment-alias", CaptureRawOutput = false });
-        Assert.Equal(reported, Assert.Single(result.Document.SourceOutputs).ModelId);
+        var result = await adapter.ExtractAsync(input, "source", "image/png",
+            new() { ExtractorName = "request-deployment-alias" });
+        Assert.Equal(reported, Assert.IsType<JsonElement>(result.RawRepresentation).GetProperty("model").GetString());
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Foundry_PreservesImagesWithoutCaptionMarkdownAndSharesOriginalBodyAcrossPages(bool capture)
+    [Fact]
+    public async Task Foundry_PreservesImagePayloadMimeAndSourcePagesWithoutClaimingWireBody()
     {
+        var responseContent = new TrackingContent(MistralResponse);
         using var http = Http((request, _) =>
         {
             Assert.Equal("/resource/providers/mistral/azure/ocr", request.RequestUri!.AbsolutePath);
@@ -238,48 +268,40 @@ public sealed class CloudDocumentExtractionClientTests
             Assert.Equal("override", payload.RootElement.GetProperty("model").GetString());
             Assert.True(payload.RootElement.GetProperty("include_image_base64").GetBoolean());
             Assert.True(payload.RootElement.GetProperty("include_blocks").GetBoolean());
+            Assert.True(payload.RootElement.GetProperty("extract_header").GetBoolean());
+            Assert.True(payload.RootElement.GetProperty("extract_footer").GetBoolean());
             Assert.Equal("html", payload.RootElement.GetProperty("table_format").GetString());
-            return Ok(MistralResponse);
+            return new(HttpStatusCode.OK) { Content = responseContent };
         });
         using var adapter = new FoundryMistralDocumentExtractionClient(http, "configured");
         using var input = new MemoryStream([1]);
-        var result = await adapter.ExtractAsync(input, "input", "application/pdf", new() { ModelId = "override", CaptureRawOutput = capture });
-        using (result)
-        {
-            Assert.True(input.CanRead);
-            Assert.Equal([1, 3], result.Pages.Select(page => page.PageNumber));
-            var source = Assert.Single(result.Document.SourceOutputs);
-            Assert.Same(result.Pages[0].SourceOutputs[0], result.Pages[1].SourceOutputs[0]);
-            Assert.Equal("reported-model", source.ModelId);
-            var page = result.Document.Sections[0];
-            var table = Assert.IsType<DocumentTableElement>(page.Elements[2]);
-            Assert.Equal(0, table.Cells.RowCount);
-            Assert.Equal("<table><tr><td>Native</td></tr></table>", table.StoredMarkdown);
-            var image = Assert.IsType<DocumentImageElement>(page.Elements[3]);
-            Assert.Equal("", image.StoredMarkdown);
-            Assert.Null(image.Text);
-            Assert.Equal("image/png", image.MediaType);
-            Assert.Equal(new byte[] { 1, 2, 3 }, image.Content!.Value.ToArray());
-            Assert.Equal(1.123456789012345, image.Annotations[0].Regions[0].Polygon[0].X);
-            Assert.Equal(new DocumentPageDimensions(600, 800), result.Pages[0].SourcePage!.Dimensions);
-            if (capture)
-            {
-                Assert.Equal(DocumentRawContentStatus.Retained, source.NativeStatus);
-                Assert.Equal(DocumentRawContentStatus.Retained, source.ContentStatus);
-                var artifact = source.GetRawContent()!;
-                using var copy = new MemoryStream();
-                await artifact.Content.CopyToAsync(copy);
-                Assert.Equal(Encoding.UTF8.GetBytes(MistralResponse), copy.ToArray());
-                Assert.True(artifact.IsDocumentOwned);
-                result.Dispose();
-                Assert.True(artifact.IsDisposed);
-            }
-            else AssertNoRaw(result);
-        }
+        var result = await adapter.ExtractAsync(input, "input", "application/pdf", new() { ExtractorName = "override" });
+        Assert.True(input.CanRead);
+        Assert.True(responseContent.Disposed);
+        Assert.Equal([1, 3], result.SourcePages.Select(page => page.PageNumber));
+        Assert.Equal("reported-model", Assert.IsType<JsonElement>(result.RawRepresentation).GetProperty("model").GetString());
+        var page = result.Sections[0];
+        var table = Assert.IsType<ExtractionDocumentTableElement>(page.Elements[2]);
+        Assert.Equal(0, table.Cells.RowCount);
+        Assert.Equal("<table><tr><td>Native</td></tr></table>", Payload(table));
+        var image = Assert.IsType<ExtractionDocumentImageElement>(page.Elements[3]);
+        Assert.Null(image.Text);
+        Assert.Null(image.AlternativeText);
+        Assert.Null(image.Source);
+        var data = Assert.IsType<DataContent>(image.Content);
+        Assert.Equal("image/png", data.MediaType);
+        Assert.Equal(new byte[] { 1, 2, 3 }, data.Data.ToArray());
+        Assert.Equal(1.123456789012345, image.Sources[0].Polygon[0].X);
+        Assert.Equal(new ExtractionDocumentPageDimensions(600, 800), result.SourcePages[0].Dimensions);
+        Assert.Equal("Third", Payload(Assert.Single(result.Sections[1].Elements)));
+        Assert.Null(result.Content);
+        Assert.Null(page.Content);
+        Assert.Empty(result.Metadata);
+        Assert.False(typeof(IDisposable).IsAssignableFrom(typeof(ExtractionDocument)));
     }
 
     [Fact]
-    public async Task Foundry_ConcurrentModelOverridesAreIsolatedAndNeverMutateClientDefaults()
+    public async Task Foundry_ConcurrentExtractorOverridesAreIsolatedAndNeverMutateClientDefaults()
     {
         var models = new System.Collections.Concurrent.ConcurrentBag<string>();
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -289,51 +311,43 @@ public sealed class CloudDocumentExtractionClientTests
             using var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             models.Add(payload.RootElement.GetProperty("model").GetString()!);
             var arrival = Interlocked.Increment(ref arrivals);
-            if (arrival == 2)
-                ready.TrySetResult();
-            if (arrival <= 2)
-                await ready.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+            if (arrival == 2) ready.TrySetResult();
+            if (arrival <= 2) await ready.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
             return Ok(MistralResponse);
         })) { BaseAddress = new Uri("https://example.invalid/resource/") };
         using var adapter = new FoundryMistralDocumentExtractionClient(http, "configured");
-        var options = new DocumentExtractionOptions { ModelId = "first" };
+        var options = new DocumentExtractionOptions { ExtractorName = "first" };
         using var inputA = new MemoryStream([1]);
         using var inputB = new MemoryStream([2]);
-        var pages = adapter.ExtractPagesAsync(inputA, "a", "image/png", options);
-        options.ModelId = "changed";
-        var calls = await Task.WhenAll(pages.ToDocumentExtractionResultAsync("a"),
-            adapter.ExtractAsync(inputB, "b", "image/png", new() { ModelId = "second", CaptureRawOutput = false }));
-        using var a = calls[0];
-        using var b = calls[1];
+        var first = adapter.ExtractAsync(inputA, "a", "image/png", options);
+        options.ExtractorName = "changed";
+        var calls = await Task.WhenAll(first,
+            adapter.ExtractAsync(inputB, "b", "image/png", new() { ExtractorName = "second" }));
         using var inputC = new MemoryStream([3]);
-        using var c = await adapter.ExtractAsync(inputC, "c", "image/png");
+        var third = await adapter.ExtractAsync(inputC, "c", "image/png");
         Assert.Equal(["configured", "first", "second"], models.Order().ToArray());
-        Assert.Equal("reported-model", a.Document.SourceOutputs[0].ModelId);
-        Assert.Equal("reported-model", b.Document.SourceOutputs[0].ModelId);
-        Assert.Equal(DocumentRawContentStatus.Disabled, b.Document.SourceOutputs[0].ContentStatus);
-        Assert.NotSame(a.Document.SourceOutputs[0], c.Document.SourceOutputs[0]);
+        Assert.Equal("reported-model", Assert.IsType<JsonElement>(calls[0].RawRepresentation).GetProperty("model").GetString());
+        Assert.NotEqual(calls[0].Identifier, third.Identifier);
     }
 
     [Fact]
-    public void Foundry_MappedJsonIsNotClaimedAsOriginalWireBodyAndEmptyImageContentIsRetained()
+    public void Foundry_EmptyImageContentIsRetainedAsDetachedData()
     {
-        using var json = JsonDocument.Parse("""
+        ExtractionDocument result;
+        using (var json = JsonDocument.Parse("""
             {"pages":[{"index":0,"images":[{"id":"empty","image_base64":""}]}]}
-            """);
-        using var result = FoundryMistralDocumentExtractionClient.MapResult(json.RootElement);
-        var output = Assert.Single(result.Document.SourceOutputs);
-        Assert.Equal(DocumentRawContentStatus.Retained, output.NativeStatus);
-        Assert.Equal(DocumentRawContentStatus.Unavailable, output.ContentStatus);
-        Assert.Null(output.GetRawContent());
-        var image = Assert.IsType<DocumentImageElement>(Assert.Single(result.Document.Sections[0].Elements));
-        Assert.True(image.Content.HasValue);
-        Assert.Equal(0, image.Content.Value.Length);
-        Assert.Equal("", image.StoredMarkdown);
+            """))
+            result = FoundryMistralDocumentExtractionClient.MapResult(json.RootElement);
+        var image = Assert.IsType<ExtractionDocumentImageElement>(Assert.Single(result.Sections[0].Elements));
+        var data = Assert.IsType<DataContent>(image.Content);
+        Assert.Empty(data.Data.ToArray());
+        Assert.Equal("application/octet-stream", data.MediaType);
         Assert.Null(image.Text);
+        Assert.Equal("", Native(image.Sources[0]).GetProperty("image_base64").GetString());
     }
 
     [Fact]
-    public async Task Azure_ConcurrentRequestsSnapshotModelsAndRawSettingsWithoutChangingDefault()
+    public async Task Azure_ConcurrentRequestsSnapshotExtractorsWithoutChangingDefault()
     {
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var arrivals = 0;
@@ -353,20 +367,16 @@ public sealed class CloudDocumentExtractionClientTests
         using var adapter = new AzureDocumentIntelligenceExtractionClient(sdk);
         using var inputA = new MemoryStream([1]);
         using var inputB = new MemoryStream([2]);
-        var options = new DocumentExtractionOptions { ModelId = "first" };
-        var pages = adapter.ExtractPagesAsync(inputA, "a", "application/pdf", options);
-        options.ModelId = "changed";
-        var calls = await Task.WhenAll(pages.ToDocumentExtractionResultAsync("a"),
-            adapter.ExtractAsync(inputB, "b", "application/pdf", new() { ModelId = "second", CaptureRawOutput = false }));
-        using var a = calls[0];
-        using var b = calls[1];
-        Assert.Equal("first", a.Document.ToMarkdown());
-        Assert.Equal("second", b.Document.ToMarkdown());
-        Assert.Equal(DocumentRawContentStatus.Retained, a.Document.SourceOutputs[0].NativeStatus);
-        Assert.Equal(DocumentRawContentStatus.Disabled, b.Document.SourceOutputs[0].NativeStatus);
+        var options = new DocumentExtractionOptions { ExtractorName = "first" };
+        var first = adapter.ExtractAsync(inputA, "a", "application/pdf", options);
+        options.ExtractorName = "changed";
+        var calls = await Task.WhenAll(first,
+            adapter.ExtractAsync(inputB, "b", "application/pdf", new() { ExtractorName = "second" }));
+        Assert.Equal("first", Assert.IsType<TextContent>(calls[0].Sections[0].Content).Text);
+        Assert.Equal("second", Assert.IsType<TextContent>(calls[1].Sections[0].Content).Text);
         using var inputC = new MemoryStream([3]);
-        using var c = await adapter.ExtractAsync(inputC, "c", "application/pdf");
-        Assert.Equal("prebuilt-layout", c.Document.ToMarkdown());
+        var third = await adapter.ExtractAsync(inputC, "c", "application/pdf");
+        Assert.Equal("prebuilt-layout", Assert.IsType<TextContent>(third.Sections[0].Content).Text);
     }
 
     [Fact]
@@ -376,7 +386,7 @@ public sealed class CloudDocumentExtractionClientTests
         using var http = Http((_, _) => { requests++; return Ok(MistralResponse); });
         using var foundry = new FoundryMistralDocumentExtractionClient(http, "deployment");
         using var azure = new AzureDocumentIntelligenceExtractionClient(Substitute.For<DocumentIntelligenceClient>());
-        foreach (var adapter in new IDocumentExtractionClient[] { foundry, azure })
+        foreach (var adapter in new DocumentExtractionClient[] { foundry, azure })
         {
             using var input = new MemoryStream([1]);
             var options = new DocumentExtractionOptions();
@@ -402,8 +412,9 @@ public sealed class CloudDocumentExtractionClientTests
         var requests = 0;
         using var retry = Http((_, _) => { requests++; cancelled.Cancel(); return new(HttpStatusCode.ServiceUnavailable); });
         using var adapter = new FoundryMistralDocumentExtractionClient(retry, "deployment");
+        using var input = new MemoryStream([1]);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await adapter.ExtractAsync(new MemoryStream([1]), "input", "image/png", cancellationToken: cancelled.Token));
+            await adapter.ExtractAsync(input, "input", "image/png", cancellationToken: cancelled.Token));
         Assert.Equal(1, requests);
         foreach (var response in new[] { Ok("SECRET-invalid"), new HttpResponseMessage(HttpStatusCode.BadRequest)
             { ReasonPhrase = "SECRET", Content = new StringContent("SECRET") },
@@ -411,32 +422,34 @@ public sealed class CloudDocumentExtractionClientTests
         {
             using var http = Http((_, _) => response);
             using var failing = new FoundryMistralDocumentExtractionClient(http, "deployment");
-            var error = await Record.ExceptionAsync(async () => await failing.ExtractAsync(new MemoryStream([1]), "input", "image/png"));
+            using var document = new MemoryStream([1]);
+            var error = await Record.ExceptionAsync(async () => await failing.ExtractAsync(document, "input", "image/png"));
             Assert.NotNull(error);
             Assert.DoesNotContain("SECRET", error.ToString());
+            Assert.True(document.CanRead);
         }
     }
 
-    [Fact]
-    public async Task Foundry_CancelBetweenPagesFinalizerClosesSharedOriginalBody()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Foundry_FailureOrCancellationDisposesResponseAndKeepsCallerStreamOpen(bool cancel)
     {
-        using var http = Http((_, _) => Ok(MistralResponse));
-        using var adapter = new FoundryMistralDocumentExtractionClient(http, "deployment");
         using var cancellation = new CancellationTokenSource();
-        using var input = new MemoryStream([1]);
-        DocumentArtifact? body = null;
-        async IAsyncEnumerable<DocumentExtractionPage> CancelPages()
+        var content = new TrackingContent("invalid JSON");
+        using var http = Http((_, _) =>
         {
-            await foreach (var page in adapter.ExtractPagesAsync(input, "input", "application/pdf", cancellationToken: cancellation.Token))
-            {
-                body = page.SourceOutputs[0].GetRawContent();
-                yield return page;
-                cancellation.Cancel();
-            }
-        }
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await CancelPages().ToDocumentExtractionResultAsync("input", cancellation.Token));
-        Assert.True(body!.IsDisposed);
+            if (cancel) cancellation.Cancel();
+            return new(HttpStatusCode.OK) { Content = content };
+        });
+        using var adapter = new FoundryMistralDocumentExtractionClient(http, "deployment");
+        using var input = new MemoryStream([1]);
+        var error = await Record.ExceptionAsync(async () =>
+            await adapter.ExtractAsync(input, "input", "application/pdf", cancellationToken: cancellation.Token));
+        Assert.NotNull(error);
+        if (cancel) Assert.IsAssignableFrom<OperationCanceledException>(error);
+        else Assert.IsType<InvalidDataException>(error);
+        Assert.True(content.Disposed);
         Assert.True(input.CanRead);
     }
 
@@ -448,34 +461,20 @@ public sealed class CloudDocumentExtractionClientTests
         adapter.Dispose();
         adapter.Dispose();
         Assert.Throws<ObjectDisposedException>(() => adapter.GetService(typeof(HttpClient)));
-        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await adapter.ExtractAsync(new MemoryStream(), "input", "image/png"));
+        using var input = new MemoryStream();
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await adapter.ExtractAsync(input, "input", "image/png"));
         http.DefaultRequestHeaders.Add("still-alive", "yes");
         var owned = Http((_, _) => Ok(MistralResponse));
         new FoundryMistralDocumentExtractionClient(owned, "deployment", ownsHttpClient: true).Dispose();
         await Assert.ThrowsAsync<ObjectDisposedException>(() => owned.GetAsync("ocr"));
+        using var azure = new AzureDocumentIntelligenceExtractionClient(Substitute.For<DocumentIntelligenceClient>());
+        azure.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => azure.GetService(typeof(DocumentIntelligenceClient)));
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await azure.ExtractAsync(input, "input", "image/png"));
     }
 
-    private static void AssertNoRaw(DocumentExtractionResult result)
-    {
-        Assert.All(result.Document.SourceOutputs, output =>
-        {
-            Assert.Equal(DocumentRawContentStatus.Disabled, output.NativeStatus);
-            Assert.Equal(DocumentRawContentStatus.Disabled, output.ContentStatus);
-            Assert.Null(output.GetRawRepresentation());
-            Assert.Null(output.GetRawContent());
-        });
-        foreach (var element in result.Document.EnumerateContent())
-        {
-            Assert.All(element.Annotations, item => Assert.Null(item.GetRawRepresentation()));
-            if (element is DocumentTableElement table)
-                foreach (var cell in table.Cells)
-                    if (cell is not null)
-                        Assert.All(cell.Annotations, item => Assert.Null(item.GetRawRepresentation()));
-        }
-        Assert.All(result.Document.Sections, section => Assert.All(section.Annotations, item => Assert.Null(item.GetRawRepresentation())));
-        Assert.Empty(result.Document.Artifacts);
-    }
-
+    private static string Payload(ExtractionDocumentElement element) => Assert.IsType<TextContent>(element.Content).Text;
+    private static JsonElement Native(ExtractionDocumentSourceReference source) => Assert.IsType<JsonElement>(source.GetRawRepresentation());
     private static DocumentSpan Span(int offset, int length) => DocumentIntelligenceModelFactory.DocumentSpan(offset: offset, length: length);
     private static BoundingRegion Region(int page) => DocumentIntelligenceModelFactory.BoundingRegion(pageNumber: page, polygon: [1, 2, 3, 2, 3, 4, 1, 4]);
     private static AnalyzeResult AzureResult() => DocumentIntelligenceModelFactory.AnalyzeResult(content: "Title A After",
@@ -510,5 +509,14 @@ public sealed class CloudDocumentExtractionClientTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             respond(request, cancellationToken);
+    }
+    private sealed class TrackingContent(string value) : StringContent(value)
+    {
+        public bool Disposed { get; private set; }
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            base.Dispose(disposing);
+        }
     }
 }

@@ -77,14 +77,16 @@ version check.
 
 ## Documentation
 
-### Corrected Documents prototype
+### Merged Documents prototype
 
 The complete corrected shared Documents and Extraction API sources from
-[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), revision `1fc95b5…`, are preserved verbatim and file-linked.
-`AppleVisionRecognizeDocumentsClient` returns page observations; the core extension creates the owned shared document.
+[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), main tip `f8ee271…`, are preserved verbatim and file-linked
+temporarily until official packages are published. `AppleVisionRecognizeDocumentsClient` derives from `DocumentExtractionClient`
+and returns a completed non-disposable `ExtractionDocument`.
 `AppleVisionRecognizeDocumentsReader` remains the local ingestion projection, not an upstream `OcrDocumentReader` replacement.
-The prototype is non-shipping/non-packable. Geometry, spans, annotations, per-call settings and raw output now use intended API
-mechanisms rather than an internally rewritten contract or arbitrary semantic metadata.
+The prototype is non-shipping/non-packable. Geometry, spans, per-call settings and borrowed native inspection use intended API
+mechanisms rather than arbitrary semantic metadata. Removed page streaming, generalized annotations/confidence,
+raw capture controls and structural rendering are not recreated as local contract types.
 See [corrected adoption](../../docs/ai/document-extraction-corrected-api.md) and
 [capability gaps](../../docs/ai/apple-document-extraction-gaps.md).
 

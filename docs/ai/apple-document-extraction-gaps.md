@@ -1,55 +1,50 @@
-# Apple Vision / corrected Extraction feature coverage
+# Apple Vision / merged Extraction feature coverage
 
-Current contract: [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at
-`1fc95b5b77b48e085b49cf25fd1b3e4797825fa9`, including its corrected shared Documents prerequisite.
-See [the correction report](document-extraction-corrected-api.md) for the adoption and raw-output rules.
+Current contract: [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), merged November 5.
+This checkout pins main `f8ee27151b21e33793164b39de5bcebfdced81a4` while official packages await publication.
+The [adoption report](document-extraction-corrected-api.md) also preserves the earlier experiments as history.
 
-## Policy
+## Policy and supported intersection
 
-Use the explicit supported API surface rather than a rewritten private model or arbitrary `Metadata` keys.
-Preserve actual native information where the corrected contract has a corresponding field or intended structured extension.
-Never fabricate native figure bytes, confidence, cell roles, hierarchy levels or model identities to populate a field.
-Structured provider values are opaque supplied data, not a claim of standardized entity recognition.
+Use the real abstract `DocumentExtractionClient` and `ExtractionDocument` types, not a private substitute or metadata-based compatibility
+layer. The final model retains text/image payloads, local content, source frames/polygons, text roles, merged table spans and empty
+anchors. Cells can contain a section of ordered mixed content. Producers explicitly add source pages, including blank pages.
+Native observations remain borrowed supporting data, not semantic payloads or automatic log/embedding input.
 
-## Restored opportunities
+Apple's normalized `1 x 1` frame with bottom-left origin describes coordinates, not raster size. Preserve double vertex order and
+rotated polygons. Do not invent figure crops/captions, standard table roles, heading levels, confidence or model identity.
 
-The corrected API can preserve exact geometry/source frames, actual confidence, merged spans/empty-cell anchors, native cell roles,
-captionless images, structured extension values, request overrides and operation-scoped raw output.
-These are no longer inherent contract gaps, unlike the reverted `d44c549…` slice.
-The provider and tests must demonstrate that those values survive finalization and disposal boundaries.
+## Genuine mismatches
 
-Apple's source coordinates are normalized with bottom-left origin. A normalized `1 x 1` frame describes that coordinate space;
-it is not a fabricated raster size. The implementation must not reduce rotated polygons to rectangles or infer a score from word candidates.
-Merged cells retain their ranges rather than repeating the anchor content in covered positions. Apple does not provide standardized cell roles.
-
-## Remaining genuine mismatches
-
-| Native feature | Remaining limitation |
+| Native feature / earlier experiment | Final representation or limitation |
 |---|---|
-| Lists/items/nested item content and marker kinds | No first-class normalized list schema; structured extensions/annotations may preserve supplied fields without portable list semantics |
-| Barcode symbologies, text/binary payloads, GS1/composite/supplemental details | No standardized barcode schema; raw/structured provider details remain explicitly provider-specific |
-| Links/email/phones/addresses/calendar/money/flights/tracking/measurements/payment identifiers | No normalized detected-entity schema; no promise consumers can interpret values without provider knowledge |
-| Lines/words/candidates/languages/alignment | No portable OCR text-candidate model; optional actual supporting details/raw output are not first-class text structure |
-| Native request controls | Generic per-call seam is restored, but Apple keys/types and supported flags are adapter behavior, not universal options |
-| Native Swift object | Bridge retains a detached bounded snapshot, not a live `DocumentObservation`; no original network response exists for this local API |
-| Document-wide recognition graph | Apple containers may re-enter ancestor projections; bounded traversal is necessary and not a claim that arbitrary graphs are lossless |
-| PDF facts | Labels/rotation/render DPI are internal input-layer facts; not intrinsic recognition or semantic-document properties |
-| Multi-frame TIFF/HEIC | Only the first raster frame is processed; explicit PDF page iteration is supported |
+| Confidence and OCR candidates | No normalized confidence/annotation fields; inspect the native node/bridge snapshot |
+| Lists/items/nesting/marker kinds | No first-class list or generic extension envelope; supported text is projected once, details remain native |
+| Barcode text/binary payload, GS1/composite details | No normalized barcode schema; native inspection, not opaque metadata on text |
+| Detected addresses/links/email/calendar/money/flights/tracking etc. | No normalized detected-entity schema; retained native details are not universal semantic values |
+| Words/lines/alignment/languages | No general OCR hierarchy or standardized details; inspect native observations |
+| Per-page completion/progress | Only completed document extraction is public; PDF iteration stays private |
+| Capture opt-out/native-body statuses | Removed; raw access is optional and borrowed, with no status or raw-body ownership contract |
+| Original HTTP response body | No standard retention API; parsed cloud results are not mislabeled as original bytes |
+| Raw Apple representation | Detached bounded JSON bridge snapshot, not a live Swift `DocumentObservation`; no HTTP body exists |
+| Arbitrary recursive Apple graph | Native list/table projections can re-enter ancestors; depth/node limits prevent unsafe recursion |
+| PDF label/rotation/render DPI | Internal input-rendering facts, not intrinsic recognition properties |
+| Multi-frame TIFF/HEIC | Only first raster frame; PDF page iteration is explicit |
+| Structural Markdown rendering | Removed upstream; ingestion must perform an explicitly local projection |
 
-`RecognizeDocumentsRequest` does not extract figure/image bytes or captions. No `DocumentExtractionImage` is invented from a screenshot crop.
-Other providers may return actual image bytes without captions, and the corrected empty-Markdown contract must not drop them.
+`RecognizeDocumentsRequest` does not return figure image bytes or captions. Other providers may supply actual captionless bytes,
+which are retained in `DataContent`; image OCR text and `AlternativeText` are separate and neither is invented.
 
-## Ingestion and operational limits
+## Ingestion, lifetime and release
 
-The upstream `OcrDocumentReader` remains removed. Our concrete Apple reader is a local projection over the finalized shared document.
-That ingestion model cannot express all geometry/confidence/spans/structured fields; no opaque metadata is added to disguise the reduction.
-Empty and covered table positions remain distinct in the rich shared model even if the ingestion matrix cannot express the full distinction.
+The concrete Apple reader maps the same exchange document to DataIngestion. That narrower model cannot carry all source geometry,
+spans or native structures, and no opaque metadata is inserted to disguise this reduction. The original source frames and empty
+anchors remain available from the extraction client. Covered positions are derived from actual anchor spans, not duplicated cells.
 
-Upstream usage/progress/client-metadata conveniences, configuration/OpenTelemetry middleware and URI/AI-content overloads remain absent.
-Completed-page UI counts are presentation only. Cloud extraction may finish its remote operation before enumerating pages.
-Caller input stays caller-owned; rich results/documents and owned original-response streams are disposed after use.
+Caller inputs remain caller-owned; exchange documents are non-disposable and native representations are borrowed. Providers must
+detach reusable SDK buffers/JSON before disposing their parsers or responses. There is no client last-response state.
+Builders, delegation, DI and lifecycle logging remain. Usage, telemetry/configuration middleware, client metadata conveniences,
+URI/AI-content input overloads and the upstream OCR reader are not reintroduced.
 
-## Review boundary
-
-This is a non-shipping, non-packable prototype with exact copied source. Public/internal release decisions and official package
-dependencies are deferred until provider acceptance. Missing native facts remain absent; missing standardized schemas remain documented.
+This remains a non-shipping, non-packable source bridge. When packages are published, replace local project references with official
+centrally versioned packages and remove the 21 copied artifacts and temporary adapters without changing provider semantics.

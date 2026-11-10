@@ -5,7 +5,7 @@ namespace AIExtensions.Sample.ChatPlayground;
 public sealed record DocumentExtractionClientDescriptor(string Id, string DisplayName, string Description, bool IsCloud = false);
 
 internal sealed class DescribedDocumentExtractionClient(
-    IDocumentExtractionClient client, DocumentExtractionClientDescriptor descriptor) : DelegatingDocumentExtractionClient(client)
+    DocumentExtractionClient client, DocumentExtractionClientDescriptor descriptor) : DelegatingDocumentExtractionClient(client)
 {
     public override object? GetService(Type serviceType, object? serviceKey = null) =>
         serviceKey is null && serviceType == typeof(DocumentExtractionClientDescriptor)
@@ -13,7 +13,7 @@ internal sealed class DescribedDocumentExtractionClient(
             : base.GetService(serviceType, serviceKey);
 }
 
-public sealed record DocumentExtractionClientOption(IDocumentExtractionClient Client, int Index)
+public sealed record DocumentExtractionClientOption(DocumentExtractionClient Client, int Index)
 {
     public DocumentExtractionClientDescriptor Descriptor { get; } =
         Client.GetService(typeof(DocumentExtractionClientDescriptor)) as DocumentExtractionClientDescriptor

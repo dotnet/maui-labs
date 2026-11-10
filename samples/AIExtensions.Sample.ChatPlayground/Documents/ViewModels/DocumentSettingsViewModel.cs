@@ -11,7 +11,7 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     {
     }
 
-    public DocumentSettingsViewModel(IEnumerable<IngestionDocumentReader> readers, IEnumerable<IDocumentExtractionClient> clients)
+    public DocumentSettingsViewModel(IEnumerable<IngestionDocumentReader> readers, IEnumerable<DocumentExtractionClient> clients)
     {
         ArgumentNullException.ThrowIfNull(readers);
         ArgumentNullException.ThrowIfNull(clients);
@@ -33,9 +33,7 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private DocumentExtractionClientOption? selectedClientOption;
     [ObservableProperty] private DocumentOperationMode mode;
-    [ObservableProperty] private bool streamPages = true;
-    [ObservableProperty] private string modelId = string.Empty;
-    [ObservableProperty] private bool captureRawOutput = true;
+    [ObservableProperty] private string extractorName = string.Empty;
     [ObservableProperty] private string appleRecognitionLanguages = string.Empty;
 
     public IngestionDocumentReader? SelectedReader => SelectedOption?.Reader;
@@ -57,8 +55,7 @@ public sealed partial class DocumentSettingsViewModel : ObservableObject
     {
         var options = new DocumentExtractionOptions
         {
-            CaptureRawOutput = CaptureRawOutput,
-            ModelId = CanSelectModel && !string.IsNullOrWhiteSpace(ModelId) ? ModelId.Trim() : null,
+            ExtractorName = CanSelectModel && !string.IsNullOrWhiteSpace(ExtractorName) ? ExtractorName.Trim() : null,
         };
         if (CanSelectAppleOptions && !string.IsNullOrWhiteSpace(AppleRecognitionLanguages))
             options.AdditionalProperties["apple.vision.recognitionLanguages"] =

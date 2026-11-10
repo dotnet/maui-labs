@@ -1,11 +1,11 @@
-using System.Runtime.CompilerServices;
 using Azure.AI.DocumentIntelligence;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtractionClient
+internal sealed class AzureDocumentIntelligenceExtractionClient : DocumentExtractionClient
 {
     private readonly DocumentIntelligenceClient _client;
     private bool _disposed;
@@ -20,7 +20,7 @@ internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtra
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public IAsyncEnumerable<DocumentExtractionPage> ExtractPagesAsync(
+    public override Task<ExtractionDocument> ExtractAsync(
         Stream document, string identifier, string mediaType, DocumentExtractionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -29,25 +29,20 @@ internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtra
         var request = options?.Clone();
         if (request?.AdditionalProperties.Count > 0)
             throw new NotSupportedException("This Azure Document Intelligence adapter does not support additional request options.");
-        return ExtractCoreAsync(document, identifier, mediaType, request?.ModelId ?? "prebuilt-layout",
-            request?.CaptureRawOutput ?? true, cancellationToken);
+        return ExtractCoreAsync(document, identifier, mediaType, request?.ExtractorName ?? "prebuilt-layout",
+            cancellationToken);
     }
 
-    private async IAsyncEnumerable<DocumentExtractionPage> ExtractCoreAsync(
-        Stream document, string identifier, string mediaType, string modelId, bool capture,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+    private async Task<ExtractionDocument> ExtractCoreAsync(
+        Stream document, string identifier, string mediaType, string modelId, CancellationToken cancellationToken)
     {
         var native = await AzureDocumentIntelligenceReader.AnalyzeAsync(
             _client, document, mediaType, modelId, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        foreach (var page in MapPages(native, identifier, modelId, capture, cancellationToken))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            yield return page;
-        }
+        return MapResult(native, identifier, cancellationToken);
     }
 
-    public object? GetService(Type serviceType, object? serviceKey = null)
+    public override object? GetService(Type serviceType, object? serviceKey = null)
     {
         ArgumentNullException.ThrowIfNull(serviceType);
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -58,27 +53,20 @@ internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtra
         return serviceType.IsInstanceOfType(_client) ? _client : null;
     }
 
-    public void Dispose() => _disposed = true;
+    protected override void Dispose(bool disposing) => _disposed = true;
 
-    internal static DocumentExtractionResult MapResult(
-        AnalyzeResult result, string identifier = "document", bool captureRawOutput = true,
-        CancellationToken token = default) =>
-        MapPages(result, identifier, result.ModelId, captureRawOutput, token)
-            .ToDocumentExtractionResult(identifier, captureRawOutput);
-
-    private static IReadOnlyList<DocumentExtractionPage> MapPages(
-        AnalyzeResult result, string identifier, string? modelId, bool capture, CancellationToken token)
+    internal static ExtractionDocument MapResult(
+        AnalyzeResult result, string identifier = "document", CancellationToken token = default)
     {
-        var output = new DocumentSourceOutput($"{identifier}/azure/analysis",
-            rawRepresentation: capture ? result : null, captureDisabled: !capture,
-            providerName: "Azure.AI.DocumentIntelligence.SDK", modelId: modelId);
-        var frames = result.Pages.ToDictionary(page => page.PageNumber, page => new DocumentSourcePage(
+        var document = new ExtractionDocument(identifier) { RawRepresentation = result };
+        var frames = result.Pages.ToDictionary(page => page.PageNumber, page => new ExtractionDocumentSourcePage(
             $"{identifier}/page/{page.PageNumber}", page.PageNumber,
             page.Width is > 0 && page.Height is > 0 ? new(page.Width.Value, page.Height.Value) : null,
-            page.Unit == LengthUnit.Inch ? DocumentCoordinateUnit.Inch :
-                page.Unit == LengthUnit.Pixel ? DocumentCoordinateUnit.Pixel : null,
-            DocumentCoordinateOrigin.TopLeft, output));
-        var elements = new List<(int Page, int Offset, int Order, DocumentExtractionObservation Element)>();
+            page.Unit == LengthUnit.Inch ? ExtractionDocumentCoordinateUnit.Inch :
+                page.Unit == LengthUnit.Pixel ? ExtractionDocumentCoordinateUnit.Pixel : null,
+            ExtractionDocumentCoordinateOrigin.TopLeft));
+        document.SourcePages.AddRange(frames.Values);
+        var elements = new List<(int Page, int Offset, int Order, ExtractionDocumentElement Element)>();
         var tables = result.Tables ?? [];
         var order = 0;
         foreach (var paragraph in result.Paragraphs ?? [])
@@ -89,16 +77,15 @@ internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtra
                 AzureDocumentIntelligenceReader.GetTablePage(table, result.Pages) == number &&
                 paragraph.Spans.All(span => table.Spans.Any(tableSpan => Contains(tableSpan, span)))))
                 continue;
-            elements.Add((number, AzureDocumentIntelligenceReader.GetOffset(paragraph.Spans), order,
-                Text(paragraph, $"{identifier}/azure/paragraph/{order++}",
-                    AzureDocumentIntelligenceReader.GetOffset(paragraph.Spans))));
+            elements.Add((number, AzureDocumentIntelligenceReader.GetOffset(paragraph.Spans), order++, Text(paragraph)));
         }
         foreach (var table in tables)
         {
             token.ThrowIfCancellationRequested();
             AzureDocumentIntelligenceReader.ValidateTable(table, token);
-            var id = $"{identifier}/azure/table/{order}";
-            var cells = new List<DocumentExtractionTableCell>();
+            var number = AzureDocumentIntelligenceReader.GetTablePage(table, result.Pages);
+            var mapped = new ExtractionDocumentTableElement(null, table.RowCount, table.ColumnCount);
+            mapped.Sources.AddRange(Sources(table.BoundingRegions, number, table));
             foreach (var cell in table.Cells)
             {
                 token.ThrowIfCancellationRequested();
@@ -106,116 +93,87 @@ internal sealed class AzureDocumentIntelligenceExtractionClient : IDocumentExtra
                     paragraph.Spans is { Count: > 0 } &&
                     paragraph.Spans.All(span => cell.Spans.Any(cellSpan => Contains(cellSpan, span))))
                     .OrderBy(paragraph => AzureDocumentIntelligenceReader.GetOffset(paragraph.Spans)).ToArray();
-                var cellAnnotations = new List<DocumentAnnotation>
+                ExtractionDocumentElement? content = null;
+                if (nested.Length > 0)
                 {
-                    Annotation("azure.documentIntelligence.cell", cell.Content, cell.Kind?.ToString(),
-                        cell.BoundingRegions, cell),
-                    Spans(cell.Spans),
-                };
-                foreach (var paragraph in nested)
-                {
-                    cellAnnotations.Add(Annotation("azure.documentIntelligence.paragraph", paragraph.Content,
-                        paragraph.Role?.ToString(), paragraph.BoundingRegions, paragraph));
-                    cellAnnotations.Add(Spans(paragraph.Spans));
+                    var section = new ExtractionDocumentSection();
+                    section.Elements.AddRange(nested.Select(Text));
+                    content = section;
                 }
-                var content = cell.Content is { Length: > 0 } text
-                    ? new DocumentExtractionText($"{id}/cell/{cell.RowIndex},{cell.ColumnIndex}", 0,
-                        DocumentTextKind.Paragraph, text, text) : null;
-                cells.Add(new(cell.RowIndex, cell.ColumnIndex, content, cell.RowSpan ?? 1, cell.ColumnSpan ?? 1,
-                    cell.Kind?.ToString(), cellAnnotations));
+                else if (cell.Content is { Length: > 0 } text)
+                    content = new ExtractionDocumentTextElement(new TextContent(text) { RawRepresentation = cell });
+                var mappedCell = content is null
+                    ? new ExtractionDocumentTableCell(cell.RowSpan ?? 1, cell.ColumnSpan ?? 1, cell.Kind?.ToString())
+                    : new ExtractionDocumentTableCell(content, cell.RowSpan ?? 1, cell.ColumnSpan ?? 1, cell.Kind?.ToString());
+                mappedCell.Sources.AddRange(Sources(cell.BoundingRegions, number, cell));
+                mapped.Cells[cell.RowIndex, cell.ColumnIndex] = mappedCell;
             }
-            elements.Add((AzureDocumentIntelligenceReader.GetTablePage(table, result.Pages),
-                AzureDocumentIntelligenceReader.GetOffset(table.Spans), order,
-                new DocumentExtractionTable(id, AzureDocumentIntelligenceReader.GetOffset(table.Spans), "", table.RowCount, table.ColumnCount, cells,
-                    annotations: [Annotation("azure.documentIntelligence.table", regions: table.BoundingRegions, raw: table), Spans(table.Spans)])));
-            order++;
+            elements.Add((number, AzureDocumentIntelligenceReader.GetOffset(table.Spans), order++, mapped));
         }
         foreach (var figure in result.Figures ?? [])
         {
             token.ThrowIfCancellationRequested();
-            var caption = figure.Caption?.Content;
-            elements.Add((AzureDocumentIntelligenceReader.GetPage(figure.BoundingRegions, figure.Spans, result.Pages),
-                AzureDocumentIntelligenceReader.GetOffset(figure.Spans), order,
-                new DocumentExtractionImage($"{identifier}/azure/figure/{order++}", AzureDocumentIntelligenceReader.GetOffset(figure.Spans), "",
-                    text: caption, annotations:
-                    [Annotation("azure.documentIntelligence.figure", caption, regions: figure.BoundingRegions, raw: figure), Spans(figure.Spans)])));
+            var number = AzureDocumentIntelligenceReader.GetPage(figure.BoundingRegions, figure.Spans, result.Pages);
+            var image = new ExtractionDocumentImageElement { AlternativeText = figure.Caption?.Content };
+            image.Sources.AddRange(Sources(figure.BoundingRegions, number, figure));
+            elements.Add((number, AzureDocumentIntelligenceReader.GetOffset(figure.Spans), order++, image));
         }
-        var pages = new List<DocumentExtractionPage>();
         foreach (var page in result.Pages.OrderBy(page => page.PageNumber))
         {
             token.ThrowIfCancellationRequested();
-            var pageElements = elements.Where(item => item.Page == page.PageNumber)
-                .OrderBy(item => item.Offset).ThenBy(item => item.Order).Select(item => item.Element).ToList();
-            if (pageElements.Count == 0)
-                foreach (var line in page.Lines ?? [])
-                    pageElements.Add(new DocumentExtractionText(
-                        $"{identifier}/page/{page.PageNumber}/line/{pageElements.Count}", pageElements.Count,
-                        DocumentTextKind.Paragraph, line.Content ?? "", line.Content,
-                        annotations: [new("azure.documentIntelligence.line", line.Content,
-                            regions: Polygon(page.PageNumber, line.Polygon) is { } region ? [region] : null,
-                            sourceOutput: output, rawRepresentation: capture ? line : null)]));
-            var text = page.Spans.Count > 0 ? string.Join("", page.Spans.Select(span => Slice(result.Content, span))) :
-                string.Join("\n", page.Lines?.Select(line => line.Content) ?? []);
-            var annotations = new List<DocumentAnnotation>
+            var section = new ExtractionDocumentSection();
+            section.Sources.Add(new(frames[page.PageNumber], rawRepresentation: page));
+            section.Elements.AddRange(elements.Where(item => item.Page == page.PageNumber)
+                .OrderBy(item => item.Offset).ThenBy(item => item.Order).Select(item => item.Element));
+            if (section.Elements.Count == 0)
             {
-                new("azure.documentIntelligence.page", text, sourceOutput: output, rawRepresentation: capture ? page : null),
-                Spans(page.Spans),
-            };
-            if (page.Angle is { } angle)
-                annotations.Add(new("azure.documentIntelligence.angle", angle));
-            foreach (var word in page.Words ?? [])
-                annotations.Add(new("azure.documentIntelligence.word", word.Content,
-                    regions: Polygon(page.PageNumber, word.Polygon) is { } region ? [region] : null,
-                    confidence: new(word.Confidence, "azure.documentIntelligence.confidence", 0, 1),
-                    sourceOutput: output, rawRepresentation: capture ? word : null));
-            foreach (var mark in page.SelectionMarks ?? [])
-                annotations.Add(new("azure.documentIntelligence.selectionMark", mark.State.ToString(),
-                    regions: Polygon(page.PageNumber, mark.Polygon) is { } region ? [region] : null,
-                    confidence: new(mark.Confidence, "azure.documentIntelligence.confidence", 0, 1),
-                    sourceOutput: output, rawRepresentation: capture ? mark : null));
-            var barcodeIndex = 0;
-            foreach (var barcode in page.Barcodes ?? [])
-                pageElements.Add(new DocumentExtractionExtension(
-                    $"{identifier}/page/{page.PageNumber}/barcode/{barcodeIndex++}", barcode.Span.Offset,
-                    "azure.documentIntelligence.barcode", "", text: barcode.Value,
-                    value: new { Kind = barcode.Kind.ToString(), barcode.Value },
-                    annotations: [new("azure.documentIntelligence.barcode", barcode.Value,
-                        regions: Polygon(page.PageNumber, barcode.Polygon) is { } region ? [region] : null,
-                        confidence: new(barcode.Confidence, "azure.documentIntelligence.confidence", 0, 1),
-                        sourceOutput: output, rawRepresentation: capture ? barcode : null)]));
-            if (pageElements.Count == 0 && text.Length > 0)
-                pageElements.Add(new DocumentExtractionText($"{identifier}/page/{page.PageNumber}/content", 0,
-                    DocumentTextKind.Paragraph, text, text));
-            pages.Add(new(page.PageNumber, pageElements,
-                result.ContentFormat == DocumentContentFormat.Markdown ? text : null, sourcePage: frames[page.PageNumber],
-                annotations: annotations, sourceOutputs: [output]));
+                foreach (var line in page.Lines ?? [])
+                {
+                    token.ThrowIfCancellationRequested();
+                    var text = new ExtractionDocumentTextElement(new TextContent(line.Content ?? "") { RawRepresentation = line });
+                    text.Sources.Add(Source(page.PageNumber, line.Polygon, line));
+                    section.Elements.Add(text);
+                }
+                if (section.Elements.Count == 0 && page.Spans.Count > 0)
+                {
+                    var text = string.Join("", page.Spans.Select(span => Slice(result.Content, span)));
+                    if (text.Length > 0)
+                    {
+                        section.Content = new TextContent(text) { RawRepresentation = page };
+                    }
+                }
+            }
+            document.Sections.Add(section);
         }
-        return pages;
+        token.ThrowIfCancellationRequested();
+        return document;
 
-        DocumentExtractionText Text(DocumentParagraph paragraph, string id, int index) =>
-            new(id, index, paragraph.Role is { } role && (role == ParagraphRole.Title || role == ParagraphRole.SectionHeading ||
-                role == ParagraphRole.PageHeader) ? DocumentTextKind.Header :
-                paragraph.Role == ParagraphRole.PageFooter ? DocumentTextKind.Footer : DocumentTextKind.Paragraph,
-                paragraph.Content ?? "", paragraph.Content,
-                annotations: [Annotation("azure.documentIntelligence.paragraph", paragraph.Content,
-                    paragraph.Role?.ToString(), paragraph.BoundingRegions, paragraph), Spans(paragraph.Spans)]);
-        DocumentAnnotation Annotation(string kind, object? value = null, string? role = null,
-            IReadOnlyList<BoundingRegion>? regions = null, object? raw = null) =>
-            new(kind, value, role, regions: regions?.Select(region => Polygon(region.PageNumber, region.Polygon))
-                .Where(region => region is not null).Cast<DocumentRegion>().ToArray(),
-                sourceOutput: output, rawRepresentation: capture ? raw : null);
-        DocumentAnnotation Spans(IReadOnlyList<DocumentSpan> spans) =>
-            new("azure.documentIntelligence.spans",
-                spans.Select(span => new { span.Offset, span.Length }).ToArray());
-        DocumentRegion? Polygon(int number, IReadOnlyList<float>? coordinates)
+        ExtractionDocumentTextElement Text(DocumentParagraph paragraph)
         {
+            var role = paragraph.Role == ParagraphRole.Title || paragraph.Role == ParagraphRole.SectionHeading
+                ? "heading" : paragraph.Role?.ToString();
+            var text = new ExtractionDocumentTextElement(
+                new TextContent(paragraph.Content ?? "") { RawRepresentation = paragraph }, role);
+            text.Sources.AddRange(Sources(paragraph.BoundingRegions,
+                AzureDocumentIntelligenceReader.GetPage(paragraph.BoundingRegions, paragraph.Spans, result.Pages), paragraph));
+            return text;
+        }
+
+        IEnumerable<ExtractionDocumentSourceReference> Sources(IReadOnlyList<BoundingRegion>? regions, int number, object raw) =>
+            regions is { Count: > 0 }
+                ? regions.Select(region => Source(region.PageNumber, region.Polygon, raw))
+                : [Source(number, null, raw)];
+
+        ExtractionDocumentSourceReference Source(int number, IReadOnlyList<float>? coordinates, object raw)
+        {
+            if (!frames.TryGetValue(number, out var frame))
+                throw new InvalidDataException("Cloud returned an unknown source page.");
             if (coordinates is null || coordinates.Count == 0)
-                return null;
-            if (coordinates.Count < 6 || coordinates.Count % 2 != 0 ||
-                coordinates.Any(value => !float.IsFinite(value)) || !frames.TryGetValue(number, out var frame))
+                return new(frame, rawRepresentation: raw);
+            if (coordinates.Count < 6 || coordinates.Count % 2 != 0 || coordinates.Any(value => !float.IsFinite(value)))
                 throw new InvalidDataException("Cloud returned invalid geometry.");
             return new(frame, Enumerable.Range(0, coordinates.Count / 2)
-                .Select(index => new DocumentPoint(coordinates[index * 2], coordinates[index * 2 + 1])).ToArray());
+                .Select(index => new ExtractionDocumentPoint(coordinates[index * 2], coordinates[index * 2 + 1])), raw);
         }
     }
 

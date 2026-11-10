@@ -7,9 +7,9 @@ Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.GetResponseAsync(System
 Microsoft.Maui.Essentials.AI.AppleIntelligenceChatClient.GetStreamingResponseAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Microsoft.Extensions.AI.ChatOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient
 Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.AppleVisionRecognizeDocumentsClient() -> void
-Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.Dispose() -> void
-Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.ExtractPagesAsync(System.IO.Stream! document, string! identifier, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Microsoft.Extensions.DocumentExtraction.DocumentExtractionPage!>!
-Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
+override Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.Dispose(bool disposing) -> void
+override Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.ExtractAsync(System.IO.Stream! document, string! identifier, string! mediaType, Microsoft.Extensions.DocumentExtraction.DocumentExtractionOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Documents.ExtractionDocument!>!
+override Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
 Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsReader
 Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsReader.AppleVisionRecognizeDocumentsReader() -> void
 Microsoft.Maui.Essentials.AI.AppleVisionRecognizeDocumentsReader.ReadAsync(System.IO.Stream! source, string! identifier, string! mediaType, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.DataIngestion.IngestionDocument!>!

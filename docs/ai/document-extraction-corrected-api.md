@@ -1,4 +1,62 @@
-# Corrected document extraction adoption — 2026-10-14
+# Document extraction adoption
+
+## Current main adoption - 2026-11-10
+
+[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) merged on November 5.
+The current source bridge pins main at `f8ee27151b21e33793164b39de5bcebfdced81a4`; all 21 artifacts from the three upstream
+projects remain byte-for-byte copies with original public namespaces. NuGet.org, all approved repository feeds and upstream's daily
+feeds returned no versions for these packages. The user explicitly chose a main-tip source bridge to get ahead of publication.
+Local adapters remain non-shipping/non-packable and no unpublished version is fabricated.
+
+The final contract is not the October correction below:
+
+| Surface | Merged contract |
+|---|---|
+| Client | Abstract `DocumentExtractionClient.ExtractAsync` returns one completed `ExtractionDocument` |
+| Payload | Local `AIContent`: text, bytes, URI; no aggregate descendant copies |
+| Geometry | Exact ordered double vertices on source references, explicit source-page frames |
+| Tables | Spans, roles, empty anchors and mixed-content sections inside cells |
+| Native inspection | Borrowed document/payload raw objects and source-reference `GetRawRepresentation()` |
+| Ownership | Documents are non-disposable data; clients and providers own their own temporary resources; caller inputs stay borrowed |
+| Options | `ExtractorName` and provider-defined `AdditionalProperties`; no `CaptureRawOutput` |
+| Removed | Page streaming/finalizer/result envelope, generalized annotations/confidence/extension values, raw-body artifacts/statuses, structural Markdown rendering |
+
+These are intentional boundaries, not requests for a compatibility layer. The adapters use the actual supported intersection.
+Native details remain accessible explicitly, rather than being moved into document metadata or silently serialized into semantic text.
+The sample's normalized view reports payload types, frames, polygons, spans, roles and hierarchy. Explicit bounded native inspection
+is a separate action. Raw bodies are not promised or reconstructed. Dropping a view result releases application references, not a
+fictional upstream result owner. The October nested-table HTML projection issue is superseded because upstream no longer renders structure.
+
+Apple's local ingestion renderer now renders nested/mixed table cells structurally in HTML, including merged cells, rather than escaping
+the child's complete rendered table. Leaf text is HTML-encoded and ordinary flat tables retain their existing pipe-table projection.
+Duplicate native page numbers fail before a completed result is published; native enumeration cleanup and caller stream ownership remain intact.
+
+Mistral page Markdown that aggregates already projected margins/tables/images stays in native inspection rather than being copied into an
+ancestor's local payload. Standalone otherwise-unrepresented body Markdown can remain ordinary text. No attempt is made to parse a
+provider's aggregate Markdown into a guessed structure or to infer a table grid from auxiliary HTML.
+
+### Current evidence
+
+- Exact source verification: 21 artifacts at the pinned main tip.
+- Portable Essentials.AI suite: 487 passed; playground Chat/Embeddings/Images/settings suite: 158 passed.
+- Actual clean Release Catalyst 27 reader/client execution: 11 passed, including images, PDF page order/frames,
+  native details, merged cells, cancellation and borrowed-input behavior.
+- Complete Catalyst playground and Android playground builds succeeded; native macOS 27 and iOS library builds succeeded.
+  The installed iOS references support 26.0/27.1, not the repo's explicit `ios27.0` preview target, so iOS validation used the normal
+  `net10.0-ios` target with `ValidateXcodeVersion=false` against installed references. No workload, feed or target-framework configuration was changed.
+- The isolated full playground processed the bundled Apple two-page PDF as both extraction and ingestion. Normalized extraction retained
+  two BottomLeft normalized source frames and actual polygons; explicit bounded native inspection completed without errors or truncation.
+  Configured Azure and Mistral each processed the bundled image using their completed-document adapters; Azure retained actual source polygons.
+  Explicit Mistral native inspection also completed without errors or truncation, and was not labeled an original response body.
+- Existing Azure SDK restoration still needs the previously approved temporary NuGet.org additional source when absent from approved feeds.
+  No repository feed configuration was changed. That restore reports the existing AngleSharp 1.4.0 moderate advisory
+  [GHSA-pgww-w46g-26qg](https://github.com/advisories/GHSA-pgww-w46g-26qg); this unrelated dependency is unchanged.
+
+See [current capability gaps](apple-document-extraction-gaps.md) and [implementation](apple-document-recognizer-implementation.md).
+
+## Historical correction adoption - 2026-10-14
+
+The remainder records the earlier experiment, not the current contract or current validation.
 
 Upstream: [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), pinned to
 `1fc95b5b77b48e085b49cf25fd1b3e4797825fa9`.

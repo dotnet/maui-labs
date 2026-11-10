@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Shared.Diagnostics;
@@ -19,24 +18,22 @@ public static class LoggingDocumentExtractionClientBuilderExtensions
     /// <returns>The updated builder.</returns>
     public static DocumentExtractionClientBuilder UseLogging(
         this DocumentExtractionClientBuilder builder,
-        ILoggerFactory? loggerFactory = null,
-        Action<LoggingDocumentExtractionClient>? configure = null)
+        ILoggerFactory? loggerFactory = null)
     {
         _ = Throw.IfNull(builder);
         return builder.Use((inner, services) =>
         {
-            loggerFactory ??= services.GetService(typeof(ILoggerFactory)) as ILoggerFactory
+            ILoggerFactory resolvedFactory = loggerFactory ?? services.GetService(typeof(ILoggerFactory)) as ILoggerFactory
                 ?? NullLoggerFactory.Instance;
 
-            if (loggerFactory == NullLoggerFactory.Instance)
+            if (resolvedFactory == NullLoggerFactory.Instance)
             {
                 return inner;
             }
 
             LoggingDocumentExtractionClient client = new(
                 inner,
-                loggerFactory.CreateLogger(typeof(LoggingDocumentExtractionClient)));
-            configure?.Invoke(client);
+                resolvedFactory.CreateLogger(typeof(LoggingDocumentExtractionClient)));
             return client;
         });
     }

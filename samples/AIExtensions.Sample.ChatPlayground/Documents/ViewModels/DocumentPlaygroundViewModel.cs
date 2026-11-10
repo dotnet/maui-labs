@@ -161,18 +161,9 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
             {
                 var client = Settings.SelectedClientOption?.Client
                     ?? throw new InvalidOperationException("Choose a document extraction client.");
-                var progress = new Progress<DocumentExtractionProgress>(update =>
-                {
-                    if (IsBusy)
-                        StatusMessage = $"Extracted {update.PagesProcessed} completed page(s).";
-                });
                 var result = await _extraction.ExtractAsync(
-                    client, file, Settings.StreamPages, Settings.CreateOptions(), progress, cancellationToken);
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    result.Dispose();
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
+                    client, file, Settings.CreateOptions(), cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 _extractionResult = result;
                 ResultOutput = result.Output;
                 pages = result.PageCount;
@@ -238,7 +229,6 @@ public sealed partial class DocumentPlaygroundViewModel : ObservableObject
 
     private void ClearResult()
     {
-        _extractionResult?.Dispose();
         _extractionResult = null;
         ResultOutput = string.Empty;
         _normalizedOutput = string.Empty;

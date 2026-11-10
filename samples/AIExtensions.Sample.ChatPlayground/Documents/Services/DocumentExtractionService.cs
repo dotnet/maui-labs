@@ -1,207 +1,191 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Finalizes extraction and transfers ownership to an explicit inspection handle.</summary>
+/// <summary>Displays the shared exchange model without implicitly inspecting native objects.</summary>
 public sealed class DocumentExtractionService
 {
-    private const int MaximumInspectionBytes = 128 * 1024;
     private static readonly JsonSerializerOptions s_json = new() { WriteIndented = true };
 
     public async Task<DocumentExtractionRunResult> ExtractAsync(
-        IDocumentExtractionClient client, SelectedDocument input, bool streamPages,
-        DocumentExtractionOptions? options = null, IProgress<DocumentExtractionProgress>? progress = null,
+        DocumentExtractionClient client, SelectedDocument input, DocumentExtractionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(input);
-        cancellationToken.ThrowIfCancellationRequested();
-        var request = options?.Clone();
         using var source = new MemoryStream(input.Bytes, writable: false);
-        DocumentExtractionResult extraction;
-        if (streamPages)
+        var document = await client.ExtractAsync(source, input.FileName, input.MediaType, options?.Clone(), cancellationToken)
+            .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(document, JsonSerializer.Serialize(new
         {
-            using var builder = new DocumentExtractionDocumentBuilder(input.FileName, request?.CaptureRawOutput ?? true);
-            var completed = 0;
-            await foreach (var page in client.ExtractPagesAsync(source, input.FileName, input.MediaType, request, cancellationToken)
-                .ConfigureAwait(false))
-            {
-                builder.AddPage(page);
-                cancellationToken.ThrowIfCancellationRequested();
-                progress?.Report(new(++completed));
-            }
-            cancellationToken.ThrowIfCancellationRequested();
-            extraction = builder.Build();
-        }
-        else
-            extraction = await client.ExtractAsync(source, input.FileName, input.MediaType, request, cancellationToken)
-                .ConfigureAwait(false);
-        try
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var document = extraction.Document;
-            var output = JsonSerializer.Serialize(new
-            {
-                document.Identifier,
-                document.StoredMarkdown,
-                Pages = extraction.Pages.Select(page => new
-                {
-                    page.PageNumber,
-                    Observations = page.Observations.Select(item => new { item.ProviderId, item.Order }).ToArray(),
-                }).ToArray(),
-                SourcePages = document.SourcePages.Select(Frame).ToArray(),
-                SourceOutputs = document.SourceOutputs.Select(Source).ToArray(),
-                Sections = document.Sections.Select(Section).ToArray(),
-            }, s_json);
-            cancellationToken.ThrowIfCancellationRequested();
-            return new(extraction, output, InspectSourcesAsync);
-        }
-        catch
-        {
-            extraction.Dispose();
-            throw;
-        }
+            document.Identifier,
+            Content = Payload(document.Content),
+            SourcePages = document.SourcePages.Select(Frame).ToArray(),
+            Sections = document.Sections.Select(section => Element(section, new(ReferenceEqualityComparer.Instance), 0)).ToArray(),
+        }, s_json));
     }
 
-    private static object Source(DocumentSourceOutput output) => new
+    private static object? Payload(AIContent? content) => content switch
     {
-        output.Identifier, output.ProviderName, output.ModelId,
-        NativeStatus = output.NativeStatus.ToString(), ContentStatus = output.ContentStatus.ToString(),
+        null => null,
+        TextContent text => new { Type = nameof(TextContent), text.Text },
+        DataContent data => new { Type = nameof(DataContent), data.MediaType, ContentLength = data.Data.Length },
+        UriContent uri => new { Type = nameof(UriContent), uri.Uri, uri.MediaType },
+        _ => new { Type = content.GetType().Name },
     };
-    private static object Frame(DocumentSourcePage frame) => new
+
+    private static object Frame(ExtractionDocumentSourcePage frame) => new
     {
         frame.Identifier, frame.PageNumber, frame.Dimensions,
         CoordinateUnit = frame.CoordinateUnit?.ToString(), CoordinateOrigin = frame.CoordinateOrigin?.ToString(),
-        SourceOutput = frame.SourceOutput is { } output ? Source(output) : null,
     };
-    private static object Annotation(DocumentAnnotation annotation) => new
+
+    private static object Sources(IEnumerable<ExtractionDocumentSourceReference> sources) =>
+        sources.Select(source => new { Page = Frame(source.Page), source.Polygon }).ToArray();
+
+    private static object Element(ExtractionDocumentElement element, HashSet<object> active, int depth)
     {
-        annotation.Kind, annotation.Value, annotation.Role, annotation.Confidence,
-        Regions = annotation.Regions.Select(region => new { Page = Frame(region.Page), region.Polygon }).ToArray(),
-        SourceOutput = annotation.SourceOutput is { } output ? Source(output) : null,
-    };
-    private static object Section(DocumentSection section) => new
-    {
-        section.StoredMarkdown, section.Text,
-        Annotations = section.Annotations.Select(Annotation).ToArray(),
-        Elements = section.Elements.Select(Element).ToArray(),
-    };
-    private static object Element(DocumentElement element)
-    {
-        object? content = element switch
+        if (depth > 64 || !active.Add(element))
+            throw new InvalidDataException("The extracted document has a cyclic or excessively deep hierarchy.");
+        try
         {
-            DocumentTextElement text => new { Kind = text.Kind.ToString(), text.HeaderLevel },
-            DocumentImageElement image => new
+            object? structure = element switch
             {
-                image.MediaType, ContentLength = image.Content?.Length,
-                image.Source, image.AlternativeText,
-            },
-            DocumentExtensionElement extension => new { extension.Type, extension.Value },
-            DocumentSection section => Section(section),
-            DocumentTableElement table => new
+                ExtractionDocumentTextElement text => new { text.Role, text.HeadingLevel },
+                ExtractionDocumentImageElement image => new { image.Text, image.AlternativeText, image.Source },
+                ExtractionDocumentSection section => new
+                {
+                    Elements = section.Elements.Select(child => Element(child, active, depth + 1)).ToArray(),
+                },
+                ExtractionDocumentTableElement table => Table(table, active, depth),
+                _ => null,
+            };
+            return new
             {
-                table.Cells.RowCount, table.Cells.ColumnCount,
-                Cells = Enumerable.Range(0, table.Cells.RowCount).SelectMany(row =>
-                    Enumerable.Range(0, table.Cells.ColumnCount).Select(column =>
-                    {
-                        var cell = table.Cells[row, column];
-                        var covered = table.Cells.IsCovered(row, column);
-                        return new
-                        {
-                            Row = row, Column = column, IsCovered = covered, HasCell = cell is not null,
-                            State = covered ? "covered" : cell is null ? "missing" : cell.Content is null ? "empty" : "content",
-                            cell?.RowSpan, cell?.ColumnSpan, cell?.Kind,
-                            Content = cell?.Content is { } child ? Element(child) : null,
-                            Annotations = cell?.Annotations.Select(Annotation).ToArray(),
-                        };
-                    })).ToArray(),
-            },
-            _ => null,
-        };
+                Type = element.GetType().Name, Content = Payload(element.Content),
+                Sources = Sources(element.Sources), Structure = structure,
+            };
+        }
+        finally { active.Remove(element); }
+    }
+
+    private static object Table(ExtractionDocumentTableElement table, HashSet<object> active, int depth)
+    {
+        var covered = new bool[table.Cells.RowCount, table.Cells.ColumnCount];
+        foreach (var cell in table.Cells)
+            if (cell is not null)
+                for (var row = cell.RowIndex; row < cell.RowIndex + cell.RowSpan; row++)
+                    for (var column = cell.ColumnIndex; column < cell.ColumnIndex + cell.ColumnSpan; column++)
+                        covered[row, column] = row != cell.RowIndex || column != cell.ColumnIndex;
         return new
         {
-            Type = element.GetType().Name, element.Address, element.StoredMarkdown, element.Text,
-            Annotations = element.Annotations.Select(Annotation).ToArray(), Content = content,
+            table.Cells.RowCount, table.Cells.ColumnCount,
+            Cells = Enumerable.Range(0, table.Cells.RowCount).SelectMany(row =>
+                Enumerable.Range(0, table.Cells.ColumnCount).Select(column =>
+                {
+                    var cell = table.Cells[row, column];
+                    return new
+                    {
+                        Row = row, Column = column, IsCovered = covered[row, column],
+                        State = covered[row, column] ? "covered" : cell is null ? "missing" : cell.Content is null ? "empty" : "content",
+                        cell?.RowSpan, cell?.ColumnSpan, cell?.Role,
+                        Content = cell?.Content is { } child ? Element(child, active, depth + 1) : null,
+                        Sources = cell is null ? null : Sources(cell.Sources),
+                    };
+                })).ToArray(),
         };
     }
+}
 
-    private static async Task<string> InspectSourcesAsync(DocumentExtractionResult extraction, CancellationToken token)
+/// <summary>Keeps the non-disposable exchange document available for deliberate native inspection.</summary>
+public sealed class DocumentExtractionRunResult(ExtractionDocument document, string output)
+{
+    private const int MaximumInspectionBytes = 128 * 1024;
+    private readonly SemaphoreSlim _inspection = new(1, 1);
+    private string? _raw;
+    public int PageCount => document.SourcePages.Count;
+    public string Output { get; } = output;
+    public bool HasRawOutput => document.RawRepresentation is not null || document.SourcePages.Count > 0;
+
+    public async Task<string> InspectRawAsync(CancellationToken cancellationToken = default)
     {
-        var inspections = new List<DocumentRawInspection>();
-        foreach (var source in extraction.Document.SourceOutputs)
+        await _inspection.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            token.ThrowIfCancellationRequested();
-            inspections.Add(await InspectAsync(source, token).ConfigureAwait(false));
+            if (_raw is not null)
+                return _raw;
+            using var buffer = new InspectionStream(MaximumInspectionBytes);
+            var truncated = false;
+            string? error = null;
+            try
+            {
+                await JsonSerializer.SerializeAsync(buffer, NativeObjects(), cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InspectionLimitException) { truncated = true; }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                error = $"Native inspection failed ({exception.GetType().Name}).";
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            return _raw = JsonSerializer.Serialize(new
+            {
+                Representation = "Borrowed native results; not a guarantee of original response bytes.",
+                Native = Encoding.UTF8.GetString(buffer.ToArray()), Truncated = truncated, Error = error,
+            }, new JsonSerializerOptions { WriteIndented = true });
         }
-        return inspections.Count == 0 ? "" : JsonSerializer.Serialize(inspections, s_json);
+        finally { _inspection.Release(); }
     }
 
-    private static async Task<DocumentRawInspection> InspectAsync(DocumentSourceOutput output, CancellationToken token)
+    private IEnumerable<object> NativeObjects()
     {
-        string? native = null, body = null;
-        var nativeTruncated = false;
-        var bodyTruncated = false;
-        var errors = new List<string>();
+        var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        if (document.RawRepresentation is { } raw && seen.Add(raw))
+            yield return raw;
+        if (document.Content?.RawRepresentation is { } payload && seen.Add(payload))
+            yield return payload;
+        foreach (var section in document.Sections)
+            foreach (var value in Visit(section, new(ReferenceEqualityComparer.Instance), 0))
+                if (seen.Add(value))
+                    yield return value;
+    }
+
+    private static IEnumerable<object> Visit(ExtractionDocumentElement element, HashSet<object> active, int depth)
+    {
+        if (depth > 64 || !active.Add(element))
+            throw new InvalidDataException("The extracted document has a cyclic or excessively deep hierarchy.");
         try
         {
-            if (output.GetRawRepresentation() is { } representation)
-            {
-                using var buffer = new InspectionStream(MaximumInspectionBytes);
-                try
-                {
-                    await JsonSerializer.SerializeAsync(buffer, representation, representation.GetType(), s_json, token)
-                        .ConfigureAwait(false);
-                }
-                catch (InspectionLimitException) { nativeTruncated = true; }
-                native = Encoding.UTF8.GetString(buffer.ToArray());
-            }
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException || !token.IsCancellationRequested)
-        {
-            errors.Add($"Native inspection failed ({exception.GetType().Name}).");
-        }
-        try
-        {
-            if (output.GetRawContent() is { } artifact)
-            {
-                var stream = artifact.Content;
-                var position = stream.CanSeek ? stream.Position : (long?)null;
-                try
-                {
-                    if (stream.CanSeek)
-                        stream.Position = 0;
-                    var bytes = new byte[MaximumInspectionBytes + 1];
-                    var count = 0;
-                    while (count < bytes.Length)
+            if (element.Content?.RawRepresentation is { } raw)
+                yield return raw;
+            foreach (var source in element.Sources)
+                if (source.GetRawRepresentation() is { } native)
+                    yield return native;
+            if (element is ExtractionDocumentSection section)
+                foreach (var child in section.Elements)
+                    foreach (var value in Visit(child, active, depth + 1))
+                        yield return value;
+            if (element is ExtractionDocumentTableElement table)
+                foreach (var cell in table.Cells)
+                    if (cell is not null)
                     {
-                        var read = await stream.ReadAsync(bytes.AsMemory(count), token).ConfigureAwait(false);
-                        if (read == 0)
-                            break;
-                        count += read;
+                        foreach (var source in cell.Sources)
+                            if (source.GetRawRepresentation() is { } native)
+                                yield return native;
+                        if (cell.Content is { } child)
+                            foreach (var value in Visit(child, active, depth + 1))
+                                yield return value;
                     }
-                    bodyTruncated = count > MaximumInspectionBytes;
-                    body = Encoding.UTF8.GetString(bytes, 0, Math.Min(count, MaximumInspectionBytes));
-                }
-                finally
-                {
-                    if (position is { } original)
-                        stream.Position = original;
-                }
-            }
         }
-        catch (Exception exception) when (exception is not OperationCanceledException || !token.IsCancellationRequested)
-        {
-            errors.Add($"Original-content inspection failed ({exception.GetType().Name}).");
-        }
-        return new(output.Identifier, output.ProviderName, output.NativeStatus.ToString(), output.ContentStatus.ToString(),
-            native, body, nativeTruncated, bodyTruncated, errors);
+        finally { active.Remove(element); }
     }
 
     private sealed class InspectionLimitException : IOException;
-
     private sealed class InspectionStream(int limit) : MemoryStream
     {
         public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
@@ -227,72 +211,3 @@ public sealed class DocumentExtractionService
         }
     }
 }
-
-public sealed record DocumentExtractionProgress(int PagesProcessed);
-public sealed class DocumentExtractionRunResult : IDisposable
-{
-    private readonly SemaphoreSlim _inspectionGate = new(1);
-    private readonly CancellationTokenSource _lifetime = new();
-    private readonly object _disposeSync = new();
-    private readonly Func<DocumentExtractionResult, CancellationToken, Task<string>> _inspect;
-    private readonly bool _hasRawOutput;
-    private DocumentExtractionResult? _extraction;
-    private string? _rawOutput;
-
-    internal DocumentExtractionRunResult(DocumentExtractionResult extraction, string output,
-        Func<DocumentExtractionResult, CancellationToken, Task<string>> inspect)
-    {
-        _extraction = extraction;
-        _inspect = inspect;
-        PageCount = extraction.Pages.Count;
-        Output = output;
-        _hasRawOutput = extraction.Document.SourceOutputs.Any(source =>
-            source.NativeStatus != DocumentRawContentStatus.Disabled || source.ContentStatus != DocumentRawContentStatus.Disabled);
-    }
-
-    public int PageCount { get; }
-    public string Output { get; }
-    public bool IsDisposed => Volatile.Read(ref _extraction) is null;
-    public bool HasRawOutput => !IsDisposed && _hasRawOutput;
-
-    public async Task<string> InspectRawAsync(CancellationToken cancellationToken = default)
-    {
-        await _inspectionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            ObjectDisposedException.ThrowIf(_extraction is null, this);
-            if (!_hasRawOutput)
-                return "";
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
-            return _rawOutput ??= await _inspect(_extraction!, linked.Token).ConfigureAwait(false);
-        }
-        finally
-        {
-            _inspectionGate.Release();
-        }
-    }
-
-    public void Dispose()
-    {
-        lock (_disposeSync)
-        {
-            if (IsDisposed)
-                return;
-            _lifetime.Cancel();
-            _inspectionGate.Wait();
-            try
-            {
-                Interlocked.Exchange(ref _extraction, null)?.Dispose();
-                _lifetime.Dispose();
-            }
-            finally
-            {
-                _inspectionGate.Release();
-            }
-        }
-    }
-}
-public sealed record DocumentRawInspection(
-    string Identifier, string? ProviderName, string NativeStatus, string ContentStatus,
-    string? NativeRepresentation, string? OriginalResponseBody, bool NativeTruncated, bool BodyTruncated,
-    IReadOnlyList<string> Errors);

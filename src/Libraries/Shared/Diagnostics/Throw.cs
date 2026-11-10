@@ -38,9 +38,13 @@ internal static class Throw
     [return: NotNull]
     public static string IfNullOrEmpty([NotNull] string? argument, [CallerArgumentExpression(nameof(argument))] string paramName = "")
     {
-        if (string.IsNullOrEmpty(argument))
+        if (argument is null)
         {
             ArgumentNullException(paramName);
+        }
+        if (argument.Length == 0)
+        {
+            ArgumentException(paramName, "Argument is empty");
         }
         return argument;
     }
@@ -81,6 +85,10 @@ internal static class Throw
     [DoesNotReturn]
     public static void ArgumentOutOfRangeException(string paramName, string? message = null) =>
         throw new ArgumentOutOfRangeException(paramName, message);
+
+    [DoesNotReturn]
+    public static void ArgumentOutOfRangeException(string paramName, object? actualValue, string? message) =>
+        throw new ArgumentOutOfRangeException(paramName, actualValue, message);
 
     public static int IfLessThan(int value, int other, [CallerArgumentExpression(nameof(value))] string paramName = "")
     {

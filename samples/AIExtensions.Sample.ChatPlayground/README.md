@@ -46,15 +46,17 @@ works without credentials or a model.
 
 ### Documents API experiment
 
-Documents evaluates the corrected proposal at [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588)
-revision `1fc95b5…`. It retains extraction and native-reader modes, original services/view-model conventions, and explicit cloud choices.
+Documents evaluates the merged API from [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588)
+at main tip `f8ee271…`. It retains completed-document extraction and native-reader modes, original services/view-model conventions,
+and explicit cloud choices.
 The original three source projects are copied verbatim and remain non-shipping; no private substitute API is used.
 
-The experiment distinguishes normalized shared-document content/layout from deliberate native/original-response inspection.
-Raw capture defaults on and can be disabled; normalized output, logging and reader results do not automatically include raw output.
+The experiment distinguishes normalized shared-document content/layout from deliberate borrowed-native inspection.
+The final API has no streaming, raw-capture toggle, original-body ownership contract or generic structural renderer.
+Normalized output, logging and reader results do not automatically inspect native output.
 The old upstream OCR reader, configuration/OpenTelemetry middleware and usage/progress envelope remain removed.
 See [the correction report](../../docs/ai/document-extraction-corrected-api.md) for data ownership and provider limitations.
-Use standard command-line configuration `--page Documents` to select the initial tab.
+Select the Documents tab to compare the same PDF/image across providers.
 
 Debug binaries embed local user secrets and must not be distributed. Selected cloud calls upload immediately with inline disclosure.
 No automatic fallback or new cloud resource is created.

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DocumentExtraction;
 using Microsoft.Extensions.Documents;
 using Xunit;
@@ -6,127 +7,88 @@ namespace Microsoft.Maui.Essentials.AI.UnitTests;
 
 public class DocumentExtractionContractTests
 {
-	[Fact]
-	public void Contract_UsesCorrectedPublicExtractionAndSharedDocuments_NotDeletedTypes()
-	{
-		var extraction = typeof(IDocumentExtractionClient).Assembly;
-		Assert.All(new[]
-		{
-			typeof(DocumentExtractionPage), typeof(DocumentExtractionText), typeof(DocumentExtractionImage),
-			typeof(DocumentExtractionTable), typeof(DocumentExtractionTableCell), typeof(DocumentExtractionExtension),
-			typeof(DocumentExtractionOptions), typeof(DocumentExtractionDocumentBuilder),
-		}, type => { Assert.True(type.IsPublic); Assert.Same(extraction, type.Assembly); });
-		foreach (var name in new[] { "DocumentBlock", "DocumentExtractionPageResult", "DocumentExtractionClientMetadata", "DocumentExtractionUsage" })
-			Assert.Null(extraction.GetType("Microsoft.Extensions.DocumentExtraction." + name));
-		Assert.NotSame(extraction, typeof(Document).Assembly);
-		Assert.Equal(typeof(Document), typeof(DocumentExtractionResult).GetProperty("Document")!.PropertyType);
-		Assert.Equal(["ExtractPagesAsync", "GetService"], typeof(IDocumentExtractionClient).GetMethods().Select(method => method.Name).Order());
-	}
+    [Fact]
+    public void Contract_UsesMergedAbstractClientAndNonDisposableExchangeModel()
+    {
+        var extraction = typeof(DocumentExtractionClient).Assembly;
+        Assert.True(typeof(DocumentExtractionClient).IsAbstract);
+        Assert.True(typeof(IDisposable).IsAssignableFrom(typeof(DocumentExtractionClient)));
+        Assert.False(typeof(IDisposable).IsAssignableFrom(typeof(ExtractionDocument)));
+        Assert.NotSame(extraction, typeof(ExtractionDocument).Assembly);
+        foreach (var name in new[] { "IDocumentExtractionClient", "DocumentExtractionPage",
+            "DocumentExtractionResult", "DocumentExtractionDocumentBuilder", "DocumentExtractionUsage" })
+            Assert.Null(extraction.GetType("Microsoft.Extensions.DocumentExtraction." + name));
+        Assert.Equal(typeof(Task<ExtractionDocument>), typeof(DocumentExtractionClient).GetMethod("ExtractAsync")!.ReturnType);
+        Assert.Null(typeof(DocumentExtractionOptions).GetProperty("CaptureRawOutput"));
+        Assert.Null(typeof(ExtractionDocumentTextElement).GetProperty("Confidence"));
+        Assert.Null(typeof(ExtractionDocumentElement).GetProperty("Metadata"));
+        Assert.DoesNotContain(typeof(ExtractionDocument).GetMethods(), method => method.Name.Contains("Markdown", StringComparison.Ordinal));
+    }
 
-	[Fact]
-	public void Options_CloneSnapshotsScalarsAndDictionary_LeavesOpaqueValuesBorrowed()
-	{
-		var borrowed = new object();
-		var options = new DocumentExtractionOptions { ModelId = "model", CaptureRawOutput = false };
-		options.AdditionalProperties["opaque"] = borrowed;
-		var copy = options.Clone();
-		options.ModelId = "changed";
-		options.CaptureRawOutput = true;
-		options.AdditionalProperties.Clear();
-		Assert.Equal("model", copy.ModelId);
-		Assert.False(copy.CaptureRawOutput);
-		Assert.Same(borrowed, copy.AdditionalProperties["opaque"]);
-		Assert.True(new DocumentExtractionOptions().CaptureRawOutput);
-	}
+    [Fact]
+    public void Options_CloneSnapshotsSelectorAndDictionaryButBorrowsValues()
+    {
+        var borrowed = new object();
+        var options = new DocumentExtractionOptions { ExtractorName = "analyzer" };
+        options.AdditionalProperties["opaque"] = borrowed;
+        var copy = options.Clone();
+        options.ExtractorName = "changed";
+        options.AdditionalProperties.Clear();
+        Assert.Equal("analyzer", copy.ExtractorName);
+        Assert.Same(borrowed, copy.AdditionalProperties["opaque"]);
+        Assert.NotSame(options.AdditionalProperties, copy.AdditionalProperties);
+        Assert.Null(new DocumentExtractionOptions().ExtractorName);
+    }
 
-	[Fact]
-	public void Finalizer_PreservesAnnotationsRegionsIndependentEmptyCellsSpansAndImageWithoutMarkdown()
-	{
-		var source = new DocumentSourceOutput("output", captureDisabled: true);
-		var frame = new DocumentSourcePage("frame", 7, new(1, 1), DocumentCoordinateUnit.Normalized, DocumentCoordinateOrigin.BottomLeft, source);
-		var annotation = new DocumentAnnotation("native-cell", value: new[] { "native" }, role: "actual-role",
-			regions: [new(frame, [new(0.123456789012345, 0), new(1, 0), new(1, 1)])], confidence: new(0.7, "actual", 0, 1));
-		var table = new DocumentExtractionTable("table", 1, "", 2, 3,
-			[new(0, 0, null, 2, 2, "actual-kind", [annotation]), new(0, 2, null, annotations: [annotation])],
-			annotations: [annotation]);
-		var image = new DocumentExtractionImage("image", 0, "", content: new byte[] { 1, 2, 3 }, mediaType: "image/png");
-		using var result = new[] { new DocumentExtractionPage(7, [table, image], sourcePage: frame,
-			annotations: [annotation], sourceOutputs: [source]) }.ToDocumentExtractionResult("document", false);
-		var section = Assert.Single(result.Document.Sections);
-		Assert.Same(annotation, Assert.Single(section.Annotations));
-		var canonicalImage = Assert.IsType<DocumentImageElement>(section.Elements[0]);
-		Assert.Equal(new byte[] { 1, 2, 3 }, canonicalImage.Content!.Value.ToArray());
-		Assert.Equal("", canonicalImage.StoredMarkdown);
-		Assert.Null(canonicalImage.Text);
-		var canonicalTable = Assert.IsType<DocumentTableElement>(section.Elements[1]);
-		Assert.Same(annotation, canonicalTable.Annotations[0]);
-		Assert.Equal(2, canonicalTable.Cells[0, 0]!.RowSpan);
-		Assert.Equal(2, canonicalTable.Cells[0, 0]!.ColumnSpan);
-		Assert.Equal("actual-kind", canonicalTable.Cells[0, 0]!.Kind);
-		Assert.Null(canonicalTable.Cells[0, 0]!.Content);
-		Assert.Same(annotation, canonicalTable.Cells[0, 2]!.Annotations[0]);
-		Assert.True(canonicalTable.Cells.IsCovered(1, 1));
-		Assert.Null(canonicalTable.Cells[1, 2]);
-		Assert.Equal(0.123456789012345, annotation.Regions[0].Polygon[0].X);
-	}
+    [Fact]
+    public void Exchange_PreservesSourceVertexOrderSpansEmptyAnchorsAndCaptionlessBytes()
+    {
+        var frame = new ExtractionDocumentSourcePage("frame", 7, new(1, 1),
+            ExtractionDocumentCoordinateUnit.Normalized, ExtractionDocumentCoordinateOrigin.BottomLeft);
+        var raw = new object();
+        var vertices = new[] { new ExtractionDocumentPoint(0.123456789012345, 0), new(1, 0), new(1, 1) };
+        var reference = new ExtractionDocumentSourceReference(frame, vertices, raw);
+        vertices[0] = new(0, 0);
+        var table = new ExtractionDocumentTableElement(null, 2, 3);
+        var merged = new ExtractionDocumentTableCell(2, 2, "actual-role");
+        merged.Sources.Add(reference);
+        table.Cells[0, 0] = merged;
+        table.Cells[0, 2] = new ExtractionDocumentTableCell();
+        var bytes = new byte[] { 1, 2, 3 };
+        var image = new ExtractionDocumentImageElement(new DataContent(bytes, "image/png"));
+        var document = new ExtractionDocument("document");
+        var section = new ExtractionDocumentSection();
+        section.Elements.AddRange([image, table]);
+        document.Sections.Add(section);
+        document.SourcePages.Add(frame);
+        Assert.Equal(new byte[] { 1, 2, 3 }, Assert.IsType<DataContent>(image.Content).Data.ToArray());
+        Assert.Null(image.AlternativeText);
+        Assert.Null(image.Text);
+        Assert.Null(section.Content);
+        Assert.Equal(2, table.Cells[0, 0]!.RowSpan);
+        Assert.Equal(2, table.Cells[0, 0]!.ColumnSpan);
+        Assert.Equal("actual-role", table.Cells[0, 0]!.Role);
+        Assert.Null(table.Cells[0, 0]!.Content);
+        Assert.Null(table.Cells[1, 1]);
+        Assert.NotNull(table.Cells[0, 2]);
+        Assert.Null(table.Cells[1, 2]);
+        Assert.Equal(0.123456789012345, reference.Polygon[0].X);
+        Assert.Same(raw, reference.GetRawRepresentation());
+        Assert.Equal([image, table], document.EnumerateContent());
+    }
 
-	[Fact]
-	public void Finalizer_SharedOperationBodyTransfersOnceAndFailedBuildClosesIt()
-	{
-		var stream = new CountingStream();
-		var artifact = new DocumentArtifact("application/json", stream);
-		var source = new DocumentSourceOutput("operation", rawContent: artifact);
-		var pages = new[] { new DocumentExtractionPage(1, [], sourceOutputs: [source]),
-			new DocumentExtractionPage(2, [], sourceOutputs: [source]) };
-		using (var result = pages.ToDocumentExtractionResult("document"))
-		{
-			Assert.Single(result.Document.SourceOutputs);
-			Assert.Single(result.Document.Artifacts);
-			Assert.True(artifact.IsDocumentOwned);
-			Assert.True(stream.CanRead);
-		}
-		Assert.Equal(1, stream.DisposeCount);
-		var failed = new CountingStream();
-		var badOutput = new DocumentSourceOutput("bad", rawContent: new("application/json", failed));
-		Assert.Throws<ArgumentException>(() => new[]
-		{
-			new DocumentExtractionPage(1, [new DocumentExtractionText("duplicate", 0, DocumentTextKind.Paragraph, "one")], sourceOutputs: [badOutput]),
-			new DocumentExtractionPage(2, [new DocumentExtractionText("duplicate", 0, DocumentTextKind.Paragraph, "two")]),
-		}.ToDocumentExtractionResult("document"));
-		Assert.Equal(1, failed.DisposeCount);
-	}
-
-	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public void Finalizer_RawOptOutRejectsTransitiveNativeObjectsOrBodies(bool body)
-	{
-		using var artifact = body ? new DocumentArtifact("application/json", new MemoryStream([1])) : null;
-		var source = new DocumentSourceOutput("raw", rawRepresentation: body ? null : new object(), rawContent: artifact);
-		var frame = new DocumentSourcePage("frame", 1, sourceOutput: source);
-		var annotation = new DocumentAnnotation("cell", regions: [new(frame, [new(0, 0), new(1, 0), new(1, 1)])]);
-		var page = new DocumentExtractionPage(1,
-			[new DocumentExtractionTable("table", 0, "", 1, 1, [new(0, 0, null, annotations: [annotation])])]);
-		Assert.Throws<ArgumentException>(() => new[] { page }.ToDocumentExtractionResult("input", false));
-		if (body)
-			Assert.True(artifact!.IsDisposed);
-	}
-
-	[Fact]
-	public void Finalizer_StructuredExtensionValueIsTransferredDirectlyAndNotMetadata()
-	{
-		var value = new { NativeType = "barcode", Payload = "actual" };
-		using var result = new[] { new DocumentExtractionPage(1,
-			[new DocumentExtractionExtension("native", 0, "provider.barcode", "", value: value)]) }
-			.ToDocumentExtractionResult("document");
-		var element = Assert.IsType<DocumentExtensionElement>(Assert.Single(result.Document.Sections[0].Elements));
-		Assert.Same(value, element.Value);
-		Assert.False(element.HasMetadata);
-	}
-
-	private sealed class CountingStream : MemoryStream
-	{
-		public int DisposeCount { get; private set; }
-		protected override void Dispose(bool disposing) { if (disposing) DisposeCount++; base.Dispose(disposing); }
-	}
+    [Fact]
+    public void NativeObjectsRemainBorrowedAndDoNotEnterSemanticPayloads()
+    {
+        using var native = new MemoryStream([1]);
+        var document = new ExtractionDocument("document") { RawRepresentation = native };
+        var section = new ExtractionDocumentSection();
+        section.Sources.Add(new(new("page", 1), rawRepresentation: native));
+        document.Sections.Add(section);
+        Assert.Same(native, document.RawRepresentation);
+        Assert.Same(native, section.Sources[0].GetRawRepresentation());
+        Assert.Null(section.Content);
+        Assert.True(native.CanRead);
+        Assert.DoesNotContain("RawRepresentation", System.Text.Json.JsonSerializer.Serialize(document));
+    }
 }

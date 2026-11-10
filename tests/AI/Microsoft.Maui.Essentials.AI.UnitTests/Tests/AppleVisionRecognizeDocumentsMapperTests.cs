@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Documents;
 using Xunit;
 
@@ -7,172 +7,160 @@ namespace Microsoft.Maui.Essentials.AI.UnitTests;
 
 public class AppleVisionRecognizeDocumentsMapperTests
 {
-	[Theory]
-	[InlineData(true)]
-	[InlineData(false)]
-	public void ToPage_PreservesExactFramePolygonOrderAndNativeConfidence(bool capture)
+	private static ExtractionDocument Map(string snapshot, int pageNumber = 1)
 	{
-		DocumentExtractionPage page;
-		using (var json = JsonDocument.Parse("""
+		using var json = JsonDocument.Parse(snapshot);
+		var document = new ExtractionDocument("input");
+		AppleVisionRecognizeDocumentsMapper.AddPage(document, json.RootElement, pageNumber);
+		return document;
+	}
+
+	private static string Text(ExtractionDocumentElement element) => Assert.IsType<TextContent>(element.Content).Text;
+
+	[Fact]
+	public void AddPage_PreservesExactFramePolygonAndDetachedNativeDetailsWithoutMetadata()
+	{
+		var result = Map("""
 			[{"uuid":"obs","confidence":0.91,"transcript":"Full native transcript","polygon":[0,0,1,0,1,1],"nodes":[
 			{"path":"p","kind":"paragraph","text":"Text","confidence":0.81,
 			 "polygon":[-0.010000000000001,0.123456789012345,1.01,0.2,0.9,0.4,0.1,0.4],
 			 "recognitionLanguages":["en"],"detectedData":[{"type":"emailAddress","value":"x@example.com"}],
 			 "words":[{"polygon":[0,0,1,0,1,1],"candidates":[{"text":"Text","confidence":0.7}]}]}]}]
-			"""))
-			page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 7, "input", capture);
-		using var result = new[] { page }.ToDocumentExtractionResult("input", capture);
-		var frame = Assert.Single(result.Document.SourcePages);
+			""", 7);
+		var frame = Assert.Single(result.SourcePages);
 		Assert.Equal("input/page/7", frame.Identifier);
 		Assert.Equal(7, frame.PageNumber);
-		Assert.Equal(new DocumentPageDimensions(1, 1), frame.Dimensions);
-		Assert.Equal(DocumentCoordinateOrigin.BottomLeft, frame.CoordinateOrigin);
-		Assert.Equal(DocumentCoordinateUnit.Normalized, frame.CoordinateUnit);
-		var paragraph = Assert.IsType<DocumentTextElement>(Assert.Single(Assert.Single(result.Document.Sections).Elements));
-		var annotation = paragraph.Annotations[0];
-		Assert.Equal(0.81, annotation.Confidence!.Value);
-		Assert.Same(frame, Assert.Single(annotation.Regions).Page);
-		Assert.Equal(-0.010000000000001, annotation.Regions[0].Polygon[0].X);
-		Assert.Equal(0.123456789012345, annotation.Regions[0].Polygon[0].Y);
-		Assert.Equal(1.01, annotation.Regions[0].Polygon[1].X);
-		Assert.Null(paragraph.Annotations.Single(item => item.Kind == "apple.vision.word").Confidence);
-		Assert.Equal("Full native transcript", result.Document.Sections[0].Annotations[0].Value);
-		Assert.Equal(0.91, result.Document.Sections[0].Annotations[0].Confidence!.Value);
-		Assert.Same(frame, result.Document.Sections[0].Annotations[0].Regions[0].Page);
-		Assert.False(paragraph.HasMetadata);
-		Assert.False(result.Document.HasMetadata);
-		var output = Assert.Single(result.Document.SourceOutputs);
-		Assert.Equal(capture ? DocumentRawContentStatus.Retained : DocumentRawContentStatus.Disabled, output.NativeStatus);
-		Assert.Equal(capture ? DocumentRawContentStatus.Unavailable : DocumentRawContentStatus.Disabled, output.ContentStatus);
-		Assert.Contains("native-bridge-snapshot", output.ProviderName);
-		if (capture)
-			Assert.Equal("obs", Assert.IsType<JsonElement>(output.GetRawRepresentation())[0].GetProperty("uuid").GetString());
-		else
-		{
-			Assert.Null(output.GetRawRepresentation());
-			Assert.Null(output.GetRawContent());
-			Assert.All(paragraph.Annotations, item => Assert.Null(item.GetRawRepresentation()));
-			Assert.All(page.Annotations, item => Assert.Null(item.GetRawRepresentation()));
-		}
+		Assert.Equal(new ExtractionDocumentPageDimensions(1, 1), frame.Dimensions);
+		Assert.Equal(ExtractionDocumentCoordinateOrigin.BottomLeft, frame.CoordinateOrigin);
+		Assert.Equal(ExtractionDocumentCoordinateUnit.Normalized, frame.CoordinateUnit);
+		var section = Assert.Single(result.Sections);
+		var paragraph = Assert.IsType<ExtractionDocumentTextElement>(Assert.Single(section.Elements));
+		Assert.Null(paragraph.Role);
+		var reference = Assert.Single(paragraph.Sources);
+		Assert.Same(frame, reference.Page);
+		Assert.Equal(-0.010000000000001, reference.Polygon[0].X);
+		Assert.Equal(0.123456789012345, reference.Polygon[0].Y);
+		Assert.Equal(1.01, reference.Polygon[1].X);
+		var native = Assert.IsType<JsonElement>(reference.GetRawRepresentation());
+		Assert.Equal(0.81, native.GetProperty("confidence").GetDouble());
+		Assert.Equal("en", native.GetProperty("recognitionLanguages")[0].GetString());
+		Assert.Equal("emailAddress", native.GetProperty("detectedData")[0].GetProperty("type").GetString());
+		Assert.False(native.GetProperty("words")[0].TryGetProperty("confidence", out _));
+		Assert.Equal(0.7, native.GetProperty("words")[0].GetProperty("candidates")[0].GetProperty("confidence").GetDouble());
+		var observation = Assert.IsType<JsonElement>(section.Sources[0].GetRawRepresentation())[0];
+		Assert.Equal("Full native transcript", observation.GetProperty("transcript").GetString());
+		Assert.Equal(0.91, observation.GetProperty("confidence").GetDouble());
+		Assert.IsType<JsonElement>(paragraph.Content!.RawRepresentation);
+		Assert.Empty(result.Metadata);
+		Assert.Null(paragraph.Content.AdditionalProperties);
+		Assert.Null(section.Content);
 	}
 
 	[Fact]
-	public void ToPage_PreservesTranscriptListsBarcodesAndActualSemanticValuesWithoutParagraphs()
+	public void AddPage_ListsAndBarcodesUseTextOnlyWithNativeSemanticsAvailableExplicitly()
 	{
-		using var json = JsonDocument.Parse("""
+		var result = Map("""
 			[{"uuid":"obs","transcript":"Full transcript still exists","nodes":[
 			{"path":"l","kind":"list"},
 			{"path":"i","parentPath":"l","kind":"listItem","text":"Apples","itemString":"Apples","markerString":"1.","markerType":"decimal"},
 			{"path":"b","kind":"barcode","payloadString":"QR content","symbology":"qr","payloadDataBase64":"AQID","confidence":0.8}]}]
 			""");
-		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 2, "input", false);
-		using var result = new[] { page }.ToDocumentExtractionResult("input", false);
-		Assert.Equal("Full transcript still exists", result.Document.Sections[0].Annotations[0].Value);
-		var list = Assert.IsType<DocumentExtensionElement>(result.Document.Sections[0].Elements[0]);
-		Assert.Equal("apple.vision.list", list.Type);
-		var items = Assert.IsType<Dictionary<string, JsonElement>[]>(list.Value);
-		Assert.Equal("1.", Assert.Single(items)["markerString"].GetString());
-		var barcode = Assert.IsType<DocumentExtensionElement>(result.Document.Sections[0].Elements[1]);
-		Assert.Equal("QR content", barcode.Text);
-		Assert.Equal("qr", Assert.IsType<Dictionary<string, JsonElement>>(barcode.Value)["symbology"].GetString());
-		Assert.Equal(0.8, barcode.Annotations[0].Confidence!.Value);
-		Assert.Empty(result.Document.EnumerateContent().OfType<DocumentImageElement>());
+		var elements = result.Sections[0].Elements;
+		Assert.Equal("1. Apples", Text(elements[0]));
+		var barcode = Assert.IsType<ExtractionDocumentTextElement>(elements[1]);
+		Assert.Equal("QR content", Text(barcode));
+		Assert.Null(barcode.Role);
+		var native = Assert.IsType<JsonElement>(barcode.Content!.RawRepresentation);
+		Assert.Equal("qr", native.GetProperty("symbology").GetString());
+		Assert.Equal("AQID", native.GetProperty("payloadDataBase64").GetString());
+		Assert.Equal(0.8, native.GetProperty("confidence").GetDouble());
+		Assert.Empty(result.EnumerateContent().OfType<ExtractionDocumentImageElement>());
 	}
 
 	[Fact]
-	public void ToPage_IndependentEmptyCellsSpansAndNestedTablesSurviveFinalization()
+	public void AddPage_EmptyCellsSpansNestedTablesAndMixedCellContentSurvive()
 	{
-		using var json = JsonDocument.Parse("""
+		var result = Map("""
 			[{"nodes":[
 			{"path":"t","kind":"table"},
 			{"path":"c","parentPath":"t","kind":"tableCell","text":"Own cell","rowIndex":0,"columnIndex":0,"rowSpan":2,"columnSpan":2},
 			{"path":"nested","parentPath":"c","kind":"table"},
 			{"path":"nc","parentPath":"nested","kind":"tableCell","text":"Nested","rowIndex":0,"columnIndex":0,"rowSpan":1,"columnSpan":1},
+			{"path":"p","parentPath":"c","kind":"paragraph","text":"Second content"},
 			{"path":"empty","parentPath":"t","kind":"tableCell","text":"","rowIndex":0,"columnIndex":2,"rowSpan":1,"columnSpan":1,
 			 "polygon":[0.1,0.2,0.3,0.2,0.3,0.4,0.1,0.4]}]}]
 			""");
-		using var result = new[] { AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 3, "input", false) }
-			.ToDocumentExtractionResult("input", false);
-		var table = Assert.IsType<DocumentTableElement>(Assert.Single(result.Document.Sections[0].Elements));
+		var table = Assert.IsType<ExtractionDocumentTableElement>(Assert.Single(result.Sections[0].Elements));
 		Assert.Equal(2, table.Cells.RowCount);
 		Assert.Equal(3, table.Cells.ColumnCount);
 		Assert.Equal(2, table.Cells[0, 0]!.RowSpan);
 		Assert.Equal(2, table.Cells[0, 0]!.ColumnSpan);
-		Assert.True(table.Cells.IsCovered(0, 1));
 		Assert.Null(table.Cells[0, 1]);
 		Assert.Null(table.Cells[1, 2]);
-		var empty = Assert.IsType<DocumentTableCell>(table.Cells[0, 2]);
+		var empty = Assert.IsType<ExtractionDocumentTableCell>(table.Cells[0, 2]);
 		Assert.Null(empty.Content);
-		Assert.Null(empty.Kind);
-		Assert.Single(empty.Annotations[0].Regions);
-		Assert.Equal("Own cell", table.Cells[0, 0]!.Annotations[0].Value);
-		var nested = Assert.IsType<DocumentTableElement>(table.Cells[0, 0]!.Content);
-		Assert.Equal("Nested", nested.Cells[0, 0]!.Content!.Text);
+		Assert.Null(empty.Role);
+		Assert.Equal(4, Assert.Single(empty.Sources).Polygon.Count);
+		Assert.Equal("Own cell", Assert.IsType<JsonElement>(table.Cells[0, 0]!.Sources[0].GetRawRepresentation()).GetProperty("text").GetString());
+		var mixed = Assert.IsType<ExtractionDocumentSection>(table.Cells[0, 0]!.Content);
+		Assert.Null(mixed.Content);
+		Assert.Equal(2, mixed.Elements.Count);
+		Assert.Contains(mixed.Elements, element => element is ExtractionDocumentTableElement nested && Text(nested.Cells[0, 0]!.Content!) == "Nested");
+		Assert.Contains(mixed.Elements, element => element is ExtractionDocumentTextElement && Text(element) == "Second content");
 	}
 
 	[Fact]
-	public void ToPage_PreservesNativeParagraphOrderAndGlobalObservationIdentity()
+	public void AddPage_PreservesNativeOrderAndIndependentSourceFrames()
 	{
-		using var json = JsonDocument.Parse("""
+		const string snapshot = """
 			[{"uuid":"A","nodes":[{"path":"p","kind":"paragraph","text":"Right first"},{"path":"q","kind":"paragraph","text":"Left second"}]},
 			 {"uuid":"B","nodes":[{"path":"p","kind":"paragraph","text":"Third"}]}]
-			""");
-		var first = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "source");
-		var second = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 3, "source");
-		Assert.Equal(["Right first", "Left second", "Third"], first.Observations.OfType<DocumentExtractionText>().Select(item => item.Text));
-		Assert.Equal(6, first.Observations.Concat(second.Observations).Select(item => item.ProviderId).Distinct().Count());
-		using var result = new[] { second, first }.ToDocumentExtractionResult("source");
-		Assert.Equal([1, 3], result.Document.SourcePages.Select(page => page.PageNumber));
-		Assert.Equal("source/page/3", result.Document.SourcePages[1].Identifier);
+			""";
+		var result = Map(snapshot, 3);
+		using var json = JsonDocument.Parse(snapshot);
+		AppleVisionRecognizeDocumentsMapper.AddPage(result, json.RootElement, 1);
+		Assert.Equal(["Right first", "Left second", "Third"], result.Sections[0].Elements.Select(Text));
+		Assert.Equal([3, 1], result.SourcePages.Select(page => page.PageNumber));
+		Assert.NotSame(result.SourcePages[0], result.SourcePages[1]);
 	}
 
 	[Fact]
-	public void ToPage_StructuredReplacementRetainsActualParagraphDetailsAsAnnotations()
+	public void AddPage_TitleReplacementRetainsParagraphRawDetailsWithoutInventingHeadingLevel()
 	{
-		using var json = JsonDocument.Parse("""
+		var result = Map("""
 			[{"nodes":[
 			{"path":"title","kind":"title","text":"Heading","polygon":[0,0,1,0,1,1,0,1]},
 			{"path":"p","kind":"paragraph","text":"Heading","confidence":0.7,"polygon":[0,0,1,0,1,1,0,1],
 			 "detectedData":[{"type":"native-detection","value":"actual"}]}]}]
 			""");
-		var page = AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "input", false);
-		var title = Assert.IsType<DocumentExtractionText>(Assert.Single(page.Observations));
-		Assert.Null(title.Annotations[0].Confidence);
-		Assert.Equal(0.7, title.Annotations.Single(item => item.Kind == "apple.vision.paragraph").Confidence!.Value);
-		Assert.Contains(title.Annotations, item => item.Kind == "apple.vision.detectedData");
-		Assert.All(title.Annotations, item => Assert.Null(item.GetRawRepresentation()));
+		var title = Assert.IsType<ExtractionDocumentTextElement>(Assert.Single(result.Sections[0].Elements));
+		Assert.Equal("heading", title.Role);
+		Assert.Null(title.HeadingLevel);
+		Assert.False(Assert.IsType<JsonElement>(title.Content!.RawRepresentation).TryGetProperty("confidence", out _));
+		var projection = Assert.IsType<JsonElement>(title.Sources[1].GetRawRepresentation());
+		Assert.Equal(0.7, projection.GetProperty("confidence").GetDouble());
+		Assert.Equal("actual", projection.GetProperty("detectedData")[0].GetProperty("value").GetString());
 	}
 
 	[Fact]
-	public void ToPage_ListReconciliationUsesGeometryAndPreservesNativeMarkerOnceInFinalMarkdown()
+	public void AddPage_ListReconciliationUsesGeometryAndKeepsIndependentParagraph()
 	{
-		using var json = JsonDocument.Parse("""
-			[{"transcript":"1.Apples\n1.Apples","nodes":[
+		var result = Map("""
+			[{"nodes":[
 			{"path":"list","kind":"list","polygon":[0,0,1,0,1,1,0,1]},
 			{"path":"item","parentPath":"list","kind":"listItem","text":"Apples","itemString":"Apples","markerString":"1.",
 			 "polygon":[0,0,1,0,1,1,0,1]},
 			{"path":"p","kind":"paragraph","text":"1.Apples","polygon":[0,0,1,0,1,1,0,1]},
 			{"path":"independent","kind":"paragraph","text":"1.Apples","polygon":[2,0,3,0,3,1,2,1]}]}]
 			""");
-		using var result = new[] { AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "source", false) }
-			.ToDocumentExtractionResult("source", false);
-		Assert.Null(result.Pages[0].Markdown);
-		var section = result.Document.Sections[0];
-		Assert.Equal(2, section.Elements.Count);
-		var list = Assert.IsType<DocumentExtensionElement>(section.Elements[0]);
-		Assert.Equal("apple.vision.list", list.Type);
-		Assert.Equal("1.Apples", list.StoredMarkdown);
-		Assert.Contains(list.Annotations, item => item.Kind == "apple.vision.paragraph" && Equals(item.Value, "1.Apples"));
-		var rendered = result.Document.ToMarkdown();
-		Assert.Equal(2, rendered.Split("1.Apples", StringSplitOptions.None).Length - 1);
-		Assert.DoesNotContain("1. 1.", rendered);
-		Assert.All(list.Annotations, item => Assert.Null(item.GetRawRepresentation()));
+		Assert.Equal(["1.Apples", "1.Apples"], result.Sections[0].Elements.Select(Text));
+		Assert.Equal(2, result.Sections[0].Elements[0].Sources.Count);
 	}
 
 	[Fact]
-	public void ToPage_RecursiveItemProjectionsRenderOnceWithoutRemovingDistinctNestedItems()
+	public void AddPage_RecursiveItemProjectionsRenderOnceWithoutRemovingDistinctNestedItems()
 	{
-		using var json = JsonDocument.Parse("""
+		var result = Map("""
 			[{"nodes":[
 			{"path":"list","kind":"list"},
 			{"path":"item","parentPath":"list","kind":"listItem","text":"Apples","itemString":"Apples","markerString":"1.",
@@ -187,18 +175,15 @@ public class AppleVisionRecognizeDocumentsMapperTests
 			{"path":"d","parentPath":"distinct","kind":"listItem","text":"Apples","itemString":"Apples","markerString":"1.",
 			 "polygon":[2,0,3,0,3,1,2,1]}]}]
 			""");
-		using var result = new[] { AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "source", false) }
-			.ToDocumentExtractionResult("source", false);
-		var list = Assert.IsType<DocumentExtensionElement>(Assert.Single(result.Document.Sections[0].Elements));
-		Assert.Equal("1. Apples\n1. Apples", list.StoredMarkdown);
-		Assert.Equal(4, list.Annotations.Count(annotation => annotation.Kind == "apple.vision.listItem"));
-		Assert.Equal(3, list.Annotations.Count(annotation => annotation.Kind == "apple.vision.list"));
+		Assert.Equal("1. Apples\n1. Apples", Text(Assert.Single(result.Sections[0].Elements)));
+		Assert.Equal(4, Assert.IsType<JsonElement>(result.Sections[0].Sources[0].GetRawRepresentation())[0]
+			.GetProperty("nodes").EnumerateArray().Count(node => node.GetProperty("kind").GetString() == "listItem"));
 	}
 
 	[Fact]
-	public void ToPage_NestedListAssociationAndMarkersSurviveFinalCanonicalRendering()
+	public void AddPage_NestedListAssociationPreservesNativeMarkers()
 	{
-		using var json = JsonDocument.Parse("""
+		var result = Map("""
 			[{"nodes":[
 			{"path":"list","kind":"list","polygon":[0,0,1,0,1,1,0,1]},
 			{"path":"item","parentPath":"list","kind":"listItem","text":"Apples","itemString":"Apples","markerString":"1.",
@@ -209,28 +194,20 @@ public class AppleVisionRecognizeDocumentsMapperTests
 			 "polygon":[0,0,1,0,1,0.5,0,0.5]},
 			{"path":"nestedParagraph","parentPath":"item","kind":"paragraph","text":"•Pears","polygon":[0,0,1,0,1,0.5,0,0.5]}]}]
 			""");
-		using var result = new[] { AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "source", false) }
-			.ToDocumentExtractionResult("source", false);
-		var list = Assert.IsType<DocumentExtensionElement>(Assert.Single(result.Document.Sections[0].Elements));
-		Assert.Equal("1.Apples\n•Pears", result.Document.ToMarkdown());
-		Assert.Equal(2, list.Annotations.Count(item => item.Kind == "apple.vision.list"));
-		Assert.Equal(2, list.Annotations.Count(item => item.Kind == "apple.vision.listItem"));
+		Assert.Equal("1.Apples\n•Pears", Text(Assert.Single(result.Sections[0].Elements)));
 	}
 
 	[Theory]
 	[InlineData("""[{"transcript":"Actual transcript","nodes":[]} ]""", "Actual transcript")]
 	[InlineData("""[]""", "")]
-	public void ToPage_TranscriptAndEmptyPagesNeverClaimProviderMarkdown(string snapshot, string rendered)
+	public void AddPage_TranscriptAndEmptyPagesNeverClaimFormattedPayload(string snapshot, string text)
 	{
-		using var json = JsonDocument.Parse(snapshot);
-		using var result = new[] { AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "source", false) }
-			.ToDocumentExtractionResult("source", false);
-		Assert.Null(result.Pages[0].Markdown);
-		Assert.Null(result.Document.StoredMarkdown);
-		Assert.Equal(rendered, result.Document.ToMarkdown());
-		Assert.Single(result.Document.SourcePages);
-		if (rendered.Length > 0)
-			Assert.Equal(rendered, result.Document.Sections[0].Annotations[0].Value);
+		var result = Map(snapshot);
+		Assert.Single(result.SourcePages);
+		Assert.Null(result.Content);
+		Assert.Null(result.Sections[0].Content);
+		if (text.Length > 0) Assert.Equal(text, Text(Assert.Single(result.Sections[0].Elements)));
+		else Assert.Empty(result.Sections[0].Elements);
 	}
 
 	[Theory]
@@ -244,33 +221,29 @@ public class AppleVisionRecognizeDocumentsMapperTests
 	[InlineData("""[{"nodes":[{"path":"item","kind":"listItem"}]}]""")]
 	[InlineData("""[{"nodes":{}}]""")]
 	[InlineData("""{}""")]
-	public void ToPage_MalformedSnapshot_Throws(string snapshot)
-	{
-		using var json = JsonDocument.Parse(snapshot);
-		Assert.Throws<InvalidDataException>(() => AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "input"));
-	}
+	[InlineData("""[{"uuid":"a","nodes":[]},{"uuid":"a","nodes":[]}]""")]
+	[InlineData("""[{"nodes":[{"path":"t","kind":"table"},{"path":"c","parentPath":"t","kind":"tableCell","rowIndex":0,"columnIndex":0,"rowSpan":1,"columnSpan":2},{"path":"d","parentPath":"t","kind":"tableCell","rowIndex":0,"columnIndex":1,"rowSpan":1,"columnSpan":1}]}]""")]
+	public void AddPage_MalformedSnapshot_Throws(string snapshot) =>
+		Assert.Throws<InvalidDataException>(() => Map(snapshot));
 
 	[Theory]
 	[InlineData(64, false)]
 	[InlineData(65, true)]
-	public void ToPage_EnforcesTraversalDepth(int depth, bool invalid)
+	public void AddPage_EnforcesTraversalDepth(int depth, bool invalid)
 	{
 		var nodes = Enumerable.Range(0, depth + 1).Select(index => new
 		{
 			path = index.ToString(), parentPath = index == 0 ? null : (index - 1).ToString(), kind = "paragraph", text = "Text",
 		});
-		using var json = JsonDocument.Parse(JsonSerializer.Serialize(new[] { new { nodes } }));
-		if (invalid)
-			Assert.Throws<InvalidDataException>(() => AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "input"));
-		else
-			Assert.Single(AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "input").Observations);
+		var snapshot = JsonSerializer.Serialize(new[] { new { nodes } });
+		if (invalid) Assert.Throws<InvalidDataException>(() => Map(snapshot));
+		else Assert.Single(Map(snapshot).Sections[0].Elements);
 	}
 
 	[Fact]
-	public void ToPage_RejectsUnboundedNodeCounts()
+	public void AddPage_RejectsUnboundedNodeCounts()
 	{
 		var nodes = Enumerable.Range(0, 20_001).Select(index => new { path = index.ToString(), kind = "paragraph" });
-		using var json = JsonDocument.Parse(JsonSerializer.Serialize(new[] { new { nodes } }));
-		Assert.Throws<InvalidDataException>(() => AppleVisionRecognizeDocumentsMapper.ToPage(json.RootElement, 1, "input"));
+		Assert.Throws<InvalidDataException>(() => Map(JsonSerializer.Serialize(new[] { new { nodes } })));
 	}
 }

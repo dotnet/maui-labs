@@ -20,7 +20,7 @@
                             <Label Text="INSPECT" Style="{StaticResource SectionHeading}" />
                             <Button Text="Normalized result" Command="{Binding InspectNormalized}"
                                     AutomationId="DocumentInspectNormalizedButton" />
-                            <Button Text="Provider raw result" Command="{Binding InspectRaw}"
+                            <Button Text="Native inspection" Command="{Binding InspectRaw}"
                                     AutomationId="DocumentInspectRawButton" />
                         </VerticalStackLayout>
                     </local:PopupMenu.Content>

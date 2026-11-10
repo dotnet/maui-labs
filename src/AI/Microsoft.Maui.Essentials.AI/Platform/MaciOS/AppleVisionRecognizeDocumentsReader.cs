@@ -1,6 +1,5 @@
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DataIngestion;
-using Microsoft.Extensions.DocumentExtraction;
 
 namespace Microsoft.Maui.Essentials.AI;
 
@@ -16,9 +15,9 @@ public sealed class AppleVisionRecognizeDocumentsReader : IngestionDocumentReade
 	{
 		ArgumentNullException.ThrowIfNull(identifier);
 		using var client = new AppleVisionRecognizeDocumentsClient();
-		using var result = await client.ExtractAsync(source, identifier, mediaType,
-			new DocumentExtractionOptions { CaptureRawOutput = false }, cancellationToken).ConfigureAwait(false);
+		var result = await client.ExtractAsync(source, identifier, mediaType,
+			cancellationToken: cancellationToken).ConfigureAwait(false);
 		cancellationToken.ThrowIfCancellationRequested();
-		return AppleVisionRecognizeDocumentsIngestionMapper.MapDocument(result.Document);
+		return AppleVisionRecognizeDocumentsIngestionMapper.MapDocument(result);
 	}
 }

@@ -15,20 +15,18 @@ namespace Microsoft.Extensions.DocumentExtraction;
 /// </remarks>
 public sealed class DocumentExtractionOptions
 {
-    private string? _modelId;
+    private string? _extractorName;
 
-    /// <summary>Gets or sets a per-call model or analyzer override, when supported.</summary>
-    public string? ModelId
+    /// <summary>Gets or sets an opaque per-call extractor selector within the configured provider, when supported.</summary>
+    /// <remarks>A null value uses the provider default. This does not select a dependency-injection registration.</remarks>
+    public string? ExtractorName
     {
-        get => _modelId;
-        set => _modelId = value is null ? null : Throw.IfNullOrWhitespace(value);
+        get => _extractorName;
+        set => _extractorName = value is null ? null : Throw.IfNullOrWhitespace(value);
     }
 
-    /// <summary>Gets or sets a value indicating whether native output and available original response content are retained.</summary>
-    public bool CaptureRawOutput { get; set; } = true;
-
     /// <summary>Gets adapter-specific overrides, including typed provider settings.</summary>
-    public IDictionary<string, object?> AdditionalProperties { get; } = new Dictionary<string, object?>(StringComparer.Ordinal);
+    public Dictionary<string, object?> AdditionalProperties { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Copies this request's scalars and property entries; opaque values remain borrowed.</summary>
     /// <returns>A separate request-options container.</returns>
@@ -36,8 +34,7 @@ public sealed class DocumentExtractionOptions
     {
         DocumentExtractionOptions copy = new()
         {
-            ModelId = ModelId,
-            CaptureRawOutput = CaptureRawOutput
+            ExtractorName = ExtractorName
         };
         foreach (KeyValuePair<string, object?> property in AdditionalProperties)
         {

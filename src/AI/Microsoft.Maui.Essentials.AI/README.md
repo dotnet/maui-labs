@@ -153,30 +153,33 @@ callbacks preserve the originating .NET execution context, so their logs and
 async tool code inherit any active chat trace/span, including one created by
 `UseOpenTelemetry`. The client does not invent correlation when no span exists.
 
-### Corrected document extraction experiment
+### Merged document extraction experiment
 
 This checkout evaluates [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at
-`1fc95b5b77b48e085b49cf25fd1b3e4797825fa9`. The complete original shared Documents and Extraction sources are file-linked verbatim.
+main commit `f8ee27151b21e33793164b39de5bcebfdced81a4`. The complete original shared Documents and Extraction sources are
+file-linked verbatim while the merged packages await publication.
 The prototype library and copied projects are non-shipping/non-packable until API and provider acceptance.
 
-On iOS/Mac Catalyst/macOS 26+, the native `RecognizeDocumentsRequest` client uses the actual proposed provider operation and core finalizer:
+On iOS/Mac Catalyst/macOS 26+, the native `RecognizeDocumentsRequest` client implements the merged abstract client:
 
 ```csharp
 using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
+using Microsoft.Extensions.AI;
 using Microsoft.Maui.Essentials.AI;
 
-using IDocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
+using DocumentExtractionClient client = new AppleVisionRecognizeDocumentsClient();
 await using var input = File.OpenRead("receipt.pdf");
-using var result = await client.ExtractAsync(input, "receipt", "application/pdf",
-    new DocumentExtractionOptions { CaptureRawOutput = true });
-Console.WriteLine(result.Document.ToMarkdown());
+ExtractionDocument result = await client.ExtractAsync(input, "receipt", "application/pdf");
+foreach (var element in result.EnumerateContent().OfType<ExtractionDocumentTextElement>())
+    Console.WriteLine(((TextContent)element.Content!).Text);
 ```
 
-Dispose the result to release registered response-body artifacts. The input remains caller-owned.
-The corrected model preserves source-frame geometry, confidence, merged cells, supplied structured values and explicit operation-scoped
-raw availability. Unknown native facts remain unknown; no figure crops, model identity or calibrated scores are invented.
-Native objects and original response bodies are different representations, and raw capture can be disabled per operation.
-The concrete `AppleVisionRecognizeDocumentsReader` is a local DataIngestion projection over the same finalized document.
+The result is non-disposable data; the input remains caller-owned. Source references retain exact geometry, table spans and borrowed
+native observations. Confidence, candidates, detections and list details remain native, not invented metadata schemas.
+There is no page-streaming, generalized annotation, capture-toggle, response-body ownership or Markdown-rendering API.
+Apple native inspection uses a detached bounded bridge snapshot, not a live Swift object or original response bytes.
+The concrete `AppleVisionRecognizeDocumentsReader` projects the same exchange document into DataIngestion.
 
 See [adoption details](../../../docs/ai/document-extraction-corrected-api.md) and
 [remaining feature gaps](../../../docs/ai/apple-document-extraction-gaps.md). Existing Chat/Embeddings documentation above remains

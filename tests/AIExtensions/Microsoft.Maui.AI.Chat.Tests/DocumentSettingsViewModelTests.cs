@@ -1,6 +1,7 @@
 using AIExtensions.Sample.ChatPlayground;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DocumentExtraction;
+using Microsoft.Extensions.Documents;
 
 namespace Microsoft.Maui.AI.Chat.Tests;
 
@@ -30,13 +31,13 @@ public class DocumentSettingsViewModelTests
     {
         using var local = Client("apple-client");
         using var cloud = Client("cloud-client", isCloud: true);
-        var settings = new DocumentSettingsViewModel([], [local, cloud]) { ModelId = "deployment" };
-        Assert.Null(settings.CreateOptions().ModelId);
+        var settings = new DocumentSettingsViewModel([], [local, cloud]) { ExtractorName = "deployment" };
+        Assert.Null(settings.CreateOptions().ExtractorName);
         settings.SelectedClientOption = settings.Clients[1];
         Assert.True(settings.CanSelectModel);
-        Assert.Equal("deployment", settings.CreateOptions()!.ModelId);
+        Assert.Equal("deployment", settings.CreateOptions()!.ExtractorName);
         settings.Mode = DocumentOperationMode.Reader;
-        Assert.Null(settings.CreateOptions().ModelId);
+        Assert.Null(settings.CreateOptions().ExtractorName);
     }
 
     [Fact]
@@ -63,27 +64,23 @@ public class DocumentSettingsViewModelTests
     }
 
     [Fact]
-    public void CaptureAndNativeLanguageControlsArePerCallAndNeverForceAppleDefaults()
+    public void NativeLanguageAndExtractorControlsArePerCallAndNeverForceAppleDefaults()
     {
         using var apple = Client("apple-vision-document");
         using var cloud = Client("cloud", isCloud: true);
         var settings = new DocumentSettingsViewModel([], [apple, cloud]);
         Assert.True(settings.CanSelectAppleOptions);
-        Assert.True(settings.CreateOptions().CaptureRawOutput);
         Assert.Empty(settings.CreateOptions().AdditionalProperties);
-        settings.CaptureRawOutput = false;
         settings.AppleRecognitionLanguages = " en, fr ";
-        settings.ModelId = "cloud-deployment";
+        settings.ExtractorName = "cloud-deployment";
         var first = settings.CreateOptions();
-        Assert.False(first.CaptureRawOutput);
-        Assert.Null(first.ModelId);
+        Assert.Null(first.ExtractorName);
         Assert.Equal(["en", "fr"], Assert.IsType<string[]>(first.AdditionalProperties["apple.vision.recognitionLanguages"]));
         settings.SelectedClientOption = settings.Clients[1];
         var second = settings.CreateOptions();
         Assert.False(settings.CanSelectAppleOptions);
-        Assert.Equal("cloud-deployment", second.ModelId);
+        Assert.Equal("cloud-deployment", second.ExtractorName);
         Assert.Empty(second.AdditionalProperties);
-        Assert.False(second.CaptureRawOutput);
         Assert.NotSame(first, second);
         Assert.Single(first.AdditionalProperties);
     }
@@ -91,7 +88,7 @@ public class DocumentSettingsViewModelTests
     private static IngestionDocumentReader Reader(string id) =>
         new DescribedDocumentReader(new TestReader(), new DocumentReaderDescriptor(id, "Reader", "Description"));
 
-    private static IDocumentExtractionClient Client(string id, bool isCloud = false) =>
+    private static DocumentExtractionClient Client(string id, bool isCloud = false) =>
         new DescribedDocumentExtractionClient(
             new TestClient(), new DocumentExtractionClientDescriptor(id, "Client", "Description", isCloud));
 
@@ -102,12 +99,10 @@ public class DocumentSettingsViewModelTests
             Task.FromResult(new IngestionDocument(identifier));
     }
 
-    private sealed class TestClient : IDocumentExtractionClient
+    private sealed class TestClient : DocumentExtractionClient
     {
-        public IAsyncEnumerable<DocumentExtractionPage> ExtractPagesAsync(
+        public override Task<ExtractionDocument> ExtractAsync(
             Stream document, string identifier, string mediaType, DocumentExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-        public void Dispose() { }
     }
 }
