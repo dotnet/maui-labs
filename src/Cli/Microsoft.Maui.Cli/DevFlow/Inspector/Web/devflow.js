@@ -1416,6 +1416,14 @@ import { createViewportController } from './inspector-viewport-controller.js';
     setTimeout(() => { editor.focus({ preventScroll: true }); editor.select(); }, 0);
   }
 
+  function pulseActionTarget(el) {
+    if (!el || !el.classList) return;
+    el.classList.remove('df-action-target');
+    void el.offsetWidth;
+    el.classList.add('df-action-target');
+    setTimeout(() => el.classList.remove('df-action-target'), 700);
+  }
+
   async function sendInspectorTap(x, y, targetEl) {
     const targetId = isTapTargetOverlay(targetEl) ? targetEl.getAttribute('data-id') : null;
     const targetLabel = targetEl ? elementLabel(targetEl) : null;
@@ -1441,6 +1449,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
       }
 
       const actual = result.elementId ? (elById(result.elementId) || targetEl) : targetEl;
+      pulseActionTarget(actual);
       const label = actual ? elementLabel(actual) : targetLabel;
       setStatus(label ? `Tap sent to ${label}.` : 'Tap sent to the app.');
       const tap = {

@@ -216,6 +216,72 @@ public class FlowReplayTests
         Assert.Contains("scroll target could not be resolved", report.Results[0].Error);
     }
 
+    [Fact]
+    public async Task Replay_StaleCapture_ReResolvesAndRetriesOnce()
+    {
+        await using var agentSrv = new RoutingAgent(
+            rejectFirstCaptureBoundTap: true);
+        using var client = new AgentClient("127.0.0.1", agentSrv.Port);
+        var flow = new MauiFlow
+        {
+            Name = "stale-capture",
+            Steps =
+            {
+                new FlowStep
+                {
+                    Seq = 1,
+                    Action = "tap",
+                    Args = new FlowStepArgs
+                    {
+                        Selector = new FlowSelector { AutomationId = "submit" }
+                    },
+                },
+            },
+        };
+
+        var report = await new FlowReplayer(
+            client,
+            pollTries: 2,
+            pollGapMs: 10).ReplayAsync(flow);
+
+        Assert.True(report.Ok, JsonSerializer.Serialize(report));
+        Assert.Equal(2, agentSrv.CaptureBoundTapAttempts);
+        Assert.Equal(["btn"], agentSrv.Taps);
+    }
+
+    [Fact]
+    public async Task Replay_TransportFailure_DoesNotRetryAmbiguousAction()
+    {
+        await using var agentSrv = new RoutingAgent(
+            dropFirstCaptureBoundTapResponse: true);
+        using var client = new AgentClient("127.0.0.1", agentSrv.Port);
+        var flow = new MauiFlow
+        {
+            Name = "ambiguous-transport",
+            Steps =
+            {
+                new FlowStep
+                {
+                    Seq = 1,
+                    Action = "tap",
+                    Args = new FlowStepArgs
+                    {
+                        Selector = new FlowSelector { AutomationId = "submit" }
+                    },
+                },
+            },
+        };
+
+        var report = await new FlowReplayer(
+            client,
+            pollTries: 2,
+            pollGapMs: 10).ReplayAsync(flow);
+
+        Assert.Equal(1, agentSrv.CaptureBoundTapAttempts);
+        Assert.Equal(["btn"], agentSrv.Taps);
+        Assert.False(report.Ok);
+    }
+
     // ── Stateful fake agent ──────────────────────────────────────────────────────
     private sealed class Element
     {
@@ -228,9 +294,14 @@ public class FlowReplayTests
 
     private sealed class RoutingAgent : IAsyncDisposable
     {
+        private readonly record struct AgentResponse(int StatusCode, string Body);
+
         private readonly TcpListener _listener;
         private readonly CancellationTokenSource _cts = new();
         private readonly Task _loop;
+        private readonly bool _rejectFirstCaptureBoundTap;
+        private readonly bool _dropFirstCaptureBoundTapResponse;
+        private long _captureEpoch = 1;
         private readonly List<Element> _els = new()
         {
             new Element { Id = "btn", AutomationId = "submit", Type = "Button", Text = "Go" },
@@ -239,10 +310,15 @@ public class FlowReplayTests
         };
 
         public List<string> Taps { get; } = new();
+        public int CaptureBoundTapAttempts { get; private set; }
         public string? TextOf(string id) => _els.FirstOrDefault(e => e.Id == id)?.Text;
 
-        public RoutingAgent()
+        public RoutingAgent(
+            bool rejectFirstCaptureBoundTap = false,
+            bool dropFirstCaptureBoundTapResponse = false)
         {
+            _rejectFirstCaptureBoundTap = rejectFirstCaptureBoundTap;
+            _dropFirstCaptureBoundTapResponse = dropFirstCaptureBoundTapResponse;
             _listener = new TcpListener(IPAddress.Loopback, 0);
             _listener.Start();
             _loop = AcceptLoop(_cts.Token);
@@ -272,8 +348,16 @@ public class FlowReplayTests
                     var stream = client.GetStream();
                     var (method, path, body) = await ReadRequest(stream, ct);
                     var response = Route(method, path, body);
-                    var payload = Encoding.UTF8.GetBytes(response ?? "{\"error\":\"not found\"}");
-                    var status = response is null ? "404 Not Found" : "200 OK";
+                    if (response?.StatusCode == 0)
+                        return;
+                    var payload = Encoding.UTF8.GetBytes(
+                        response?.Body ?? "{\"error\":\"not found\"}");
+                    var status = response?.StatusCode switch
+                    {
+                        200 => "200 OK",
+                        409 => "409 Conflict",
+                        _ => "404 Not Found"
+                    };
                     var header = $"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {payload.Length}\r\nConnection: close\r\n\r\n";
                     await stream.WriteAsync(Encoding.UTF8.GetBytes(header), ct);
                     await stream.WriteAsync(payload, ct);
@@ -315,14 +399,14 @@ public class FlowReplayTests
             return (method, path, body);
         }
 
-        private string? Route(string method, string rawPath, string body)
+        private AgentResponse? Route(string method, string rawPath, string body)
         {
             var qIdx = rawPath.IndexOf('?');
             var path = qIdx >= 0 ? rawPath[..qIdx] : rawPath;
             var query = ParseQuery(qIdx >= 0 ? rawPath[(qIdx + 1)..] : "");
 
             if (method == "GET" && path == "/api/v1/agent/status")
-                return "{\"running\":true}";
+                return Ok("{\"running\":true}");
 
             if (method == "GET" && path == "/api/v1/ui/elements")
             {
@@ -330,7 +414,7 @@ public class FlowReplayTests
                 if (query.TryGetValue("automationId", out var aid)) matches = matches.Where(e => e.AutomationId == aid);
                 else if (query.TryGetValue("text", out var txt)) matches = matches.Where(e => e.Text == txt);
                 else if (query.TryGetValue("type", out var ty)) matches = matches.Where(e => e.Type == ty);
-                return JsonSerializer.Serialize(matches.Select(ToJson));
+                return Ok(JsonSerializer.Serialize(matches.Select(ToJson)));
             }
 
             if (method == "GET" && path.StartsWith("/api/v1/ui/elements/") && path.Contains("/properties/"))
@@ -338,7 +422,7 @@ public class FlowReplayTests
                 var (id, name) = PropPath(path);
                 var el = _els.FirstOrDefault(e => e.Id == id);
                 var value = el is null ? "" : name == "Text" ? el.Text : "";
-                return JsonSerializer.Serialize(new { value });
+                return Ok(JsonSerializer.Serialize(new { value }));
             }
 
             if (method == "PUT" && path.Contains("/properties/"))
@@ -346,41 +430,76 @@ public class FlowReplayTests
                 var (id, name) = PropPath(path);
                 var el = _els.FirstOrDefault(e => e.Id == id);
                 if (el is not null && name == "Text") el.Text = Field(body, "value") ?? "";
-                return "{\"success\":true}";
+                return Ok("{\"success\":true}");
             }
 
             if (method == "GET" && path.StartsWith("/api/v1/ui/elements/"))
             {
                 var id = Uri.UnescapeDataString(path["/api/v1/ui/elements/".Length..]);
                 var el = _els.FirstOrDefault(e => e.Id == id);
-                return el is null ? "null" : JsonSerializer.Serialize(ToJson(el));
+                return Ok(el is null ? "null" : JsonSerializer.Serialize(ToJson(el)));
             }
 
             if (method == "POST" && path == "/api/v1/ui/actions/tap")
             {
                 var id = Field(body, "elementId") ?? "";
+                if (LongField(body, "captureEpoch") is not null)
+                {
+                    CaptureBoundTapAttempts++;
+                    if (_rejectFirstCaptureBoundTap
+                        && CaptureBoundTapAttempts == 1)
+                    {
+                        _captureEpoch++;
+                        return new AgentResponse(
+                            409,
+                            """
+                            {
+                              "success":false,
+                              "reason":"stale-capture-epoch",
+                              "error":"The UI snapshot is stale.",
+                              "details":{"retryable":true}
+                            }
+                            """);
+                    }
+                }
                 Taps.Add(id);
                 if (id == "btn")
                     _els.First(e => e.Id == "late-btn").VisibleAfter = DateTimeOffset.UtcNow.AddMilliseconds(250);
-                return "{\"success\":true}";
+                if (_dropFirstCaptureBoundTapResponse
+                    && CaptureBoundTapAttempts == 1)
+                {
+                    return new AgentResponse(0, "");
+                }
+                return Ok("{\"success\":true}");
             }
             if (method == "POST" && path == "/api/v1/ui/actions/fill")
             {
                 var id = Field(body, "elementId");
                 var el = _els.FirstOrDefault(e => e.Id == id);
                 if (el is not null) el.Text = Field(body, "text") ?? "";
-                return "{\"success\":true}";
+                return Ok("{\"success\":true}");
             }
             if (method == "POST" && path.StartsWith("/api/v1/ui/actions/"))
-                return "{\"success\":true}";
+                return Ok("{\"success\":true}");
 
             if (method == "PUT" && path == "/api/v1/device/app/theme")
-                return "{\"theme\":\"dark\",\"requestedTheme\":\"dark\",\"effectiveTheme\":\"dark\",\"success\":true}";
+                return Ok("{\"theme\":\"dark\",\"requestedTheme\":\"dark\",\"effectiveTheme\":\"dark\",\"success\":true}");
 
             return null;
         }
 
-        private static object ToJson(Element e) => new { id = e.Id, type = e.Type, fullType = e.Type, automationId = e.AutomationId, text = e.Text };
+        private object ToJson(Element e) => new
+        {
+            id = e.Id,
+            type = e.Type,
+            fullType = e.Type,
+            automationId = e.AutomationId,
+            text = e.Text,
+            captureEpoch = _captureEpoch,
+            registryGeneration = 1
+        };
+
+        private static AgentResponse Ok(string body) => new(200, body);
 
         private static (string Id, string Name) PropPath(string path)
         {
@@ -410,6 +529,23 @@ public class FlowReplayTests
                 return doc.RootElement.TryGetProperty(key, out var v) ? v.GetString() : null;
             }
             catch { return null; }
+        }
+
+        private static long? LongField(string body, string key)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(
+                    string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                return doc.RootElement.TryGetProperty(key, out var value)
+                    && value.TryGetInt64(out var result)
+                        ? result
+                        : null;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public async ValueTask DisposeAsync()

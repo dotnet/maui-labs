@@ -15,6 +15,32 @@ const MAX_TARGET_LABEL_LENGTH = 60;
 const MAX_ACTIVE_ACTIONS = 64;
 const MAX_LOCAL_ACTIONS = 256;
 const NON_SPATIAL_KINDS = new Set(['back', 'key', 'navigate', 'resize']);
+const KNOWN_ACTION_KINDS = new Set([
+  'back',
+  'clear',
+  'doubletap',
+  'drag',
+  'fill',
+  'focus',
+  'invoke-action',
+  'key',
+  'longpress',
+  'menu-invoke',
+  'navigate',
+  'pan',
+  'pinch',
+  'pointer',
+  'resize',
+  'rotate',
+  'scroll',
+  'set-property',
+  'swipe',
+  'tap',
+  'webview-click',
+  'webview-fill',
+  'webview-navigate',
+  'webview-text',
+]);
 const ANNOUNCEMENT_PRIORITY_SUCCESS = 0;
 const ANNOUNCEMENT_PRIORITY_CANCELLED = 1;
 const ANNOUNCEMENT_PRIORITY_FAILED = 2;
@@ -47,16 +73,33 @@ function sourceLabel(data) {
   return Object.hasOwn(SOURCE_LABELS, source) ? SOURCE_LABELS[source] : 'DevFlow';
 }
 
+function normalizedKind(kind) {
+  const normalized = String(kind || '')
+    .trim()
+    .toLowerCase()
+    .replaceAll('_', '-');
+  return KNOWN_ACTION_KINDS.has(normalized) ? normalized : 'action';
+}
+
 function kindLabel(kind) {
-  return String(kind || 'action').replaceAll('-', ' ');
+  return normalizedKind(kind).replaceAll('-', ' ');
+}
+
+function directionLabel(direction) {
+  return ['up', 'down', 'left', 'right'].includes(direction)
+    ? direction
+    : null;
 }
 
 function actionVerb(data) {
-  switch (data.kind) {
+  switch (normalizedKind(data.kind)) {
     case 'tap': return 'tapped';
     case 'doubletap': return 'double tapped';
     case 'longpress': return 'long pressed';
-    case 'swipe': return data.direction ? `swiped ${data.direction}` : 'swiped';
+    case 'swipe': {
+      const direction = directionLabel(data.direction);
+      return direction ? `swiped ${direction}` : 'swiped';
+    }
     case 'drag': return 'dragged';
     case 'pan': return 'panned';
     case 'scroll': return 'scrolled';
@@ -71,8 +114,9 @@ function actionVerb(data) {
 
 function actionDescription(data) {
   const kind = kindLabel(data.kind);
-  return data.kind === 'swipe' && data.direction
-    ? `${kind} ${data.direction}`
+  const direction = directionLabel(data.direction);
+  return normalizedKind(data.kind) === 'swipe' && direction
+    ? `${kind} ${direction}`
     : kind;
 }
 
@@ -437,6 +481,7 @@ export function createActionOverlayController({
     for (const node of entry.nodes) node.remove();
     activeActions.delete(entry.id);
     if (activeActions.size === 0) {
+      if (cursorHideTimer) clearTimeout(cursorHideTimer);
       cursorHideTimer = setTimeout(() => {
         cursor.classList.add('df-hidden');
         cursor.removeAttribute('data-action-id');
@@ -455,6 +500,25 @@ export function createActionOverlayController({
     } else if (['pointer', 'swipe', 'pan', 'drag', 'scroll'].includes(data.kind)) {
       const path = renderPath(resolvePath(data, start), data);
       if (path) entry.nodes.push(path);
+    }
+  }
+
+  function refreshTerminalPlacement(entry, redrawPlaced) {
+    if (!entry.placementRequired)
+      return;
+
+    entry.frameStatus = currentFrameStatus(entry.data);
+    if (entry.frameStatus === 'current') {
+      if (redrawPlaced)
+        renderPlacedGeometry(entry);
+      return;
+    }
+
+    for (const node of entry.nodes) node.remove();
+    entry.nodes = [renderBadge(entry.data, entry.frameStatus)];
+    if (cursor.dataset.actionId === entry.id) {
+      cursor.classList.add('df-hidden');
+      cursor.removeAttribute('data-action-id');
     }
   }
 
@@ -528,11 +592,7 @@ export function createActionOverlayController({
 
     entry.data = { ...entry.data, ...data };
     entry.startedAt = Date.now();
-    if (entry.continuousPointer
-        && entry.placementRequired
-        && entry.frameStatus === 'current') {
-      renderPlacedGeometry(entry);
-    }
+    refreshTerminalPlacement(entry, entry.continuousPointer);
     if (!entry.placementRequired || entry.frameStatus === 'current') {
       announce(`${sourceLabel(entry.data)} ${actionVerb(entry.data)}${targetLabel(entry.data)}.`);
     } else {
@@ -579,6 +639,7 @@ export function createActionOverlayController({
   function markTerminalEntry(entry, data, announceFailure) {
     entry.data = { ...entry.data, ...data };
     entry.startedAt = Date.now();
+    refreshTerminalPlacement(entry, false);
     const outcome = data.outcome === 'cancelled' ? 'cancelled' : 'failed';
     const outcomeClass = outcome === 'cancelled'
       ? 'df-action-cancelled'
@@ -597,12 +658,8 @@ export function createActionOverlayController({
       }
     }
     if (announceFailure) {
-      const reasonText = data.reason
-        ? String(data.reason).replaceAll('-', ' ').slice(0, 80)
-        : '';
-      const reason = reasonText ? ` (${reasonText})` : '';
       announce(
-        `${sourceLabel(entry.data)} ${actionDescription(entry.data)} ${outcome}${reason}.`,
+        `${sourceLabel(entry.data)} ${actionDescription(entry.data)} ${outcome}.`,
         outcome === 'cancelled'
           ? ANNOUNCEMENT_PRIORITY_CANCELLED
           : ANNOUNCEMENT_PRIORITY_FAILED);

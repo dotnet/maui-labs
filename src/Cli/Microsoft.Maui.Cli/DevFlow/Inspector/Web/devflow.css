@@ -528,6 +528,7 @@ body.df-viewport-panning #app-viewport { cursor: grabbing; }
 .devflow-element.df-hover.df-hover-interactive { outline-color: var(--df-success); }
 .devflow-element.df-hover.df-hover-noninteractive { outline-style: dashed; background: transparent; }
 .devflow-element.df-selected { outline: 2px solid var(--df-outline-select); background: var(--df-tint-select); }
+.devflow-element.df-action-target { z-index: 7; box-shadow: 0 0 0 3px var(--df-success); }
 body.df-show-all .devflow-element { outline: 1px solid var(--df-outline-all); }
 
 /* ── Hover badge ── */
