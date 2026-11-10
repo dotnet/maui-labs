@@ -1045,6 +1045,13 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await ReloadWithPointerStreamAsync();
         var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
         Assert.NotNull(box);
+        await Page.Locator("#app-viewport").EvaluateAsync(
+            """
+            element => element.addEventListener(
+              'pointerdown',
+              event => { window.fixtureActivePointerId = event.pointerId; },
+              { capture: true, once: true })
+            """);
         await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
         await Page.Mouse.DownAsync();
         await WaitForPointerEventAsync("start:");
@@ -1114,7 +1121,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 Body = """{"ok":true}"""
             });
         }, new() { Times = 1 });
-        await Page.RouteAsync("**/api/state", async route =>
+        const string freshStateRoute = "**/api/state?*fresh=1*";
+        await Page.RouteAsync(freshStateRoute, async route =>
         {
             stateStarted.TrySetResult();
             await releaseState.Task;
@@ -1147,8 +1155,272 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             releaseScroll.TrySetResult();
             releaseState.TrySetResult();
             await Page.UnrouteAsync("**/api/scroll");
-            await Page.UnrouteAsync("**/api/state");
+            await Page.UnrouteAsync(freshStateRoute);
         }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerCancel_DuringFreshFramePreventsLateStart()
+    {
+        await ReloadWithPointerStreamAsync();
+        var scrollStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseScroll = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stateStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseState = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Page.RouteAsync("**/api/scroll", async route =>
+        {
+            scrollStarted.TrySetResult();
+            await releaseScroll.Task;
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        }, new() { Times = 1 });
+        const string freshStateRoute = "**/api/state?*fresh=1*";
+        await Page.RouteAsync(freshStateRoute, async route =>
+        {
+            stateStarted.TrySetResult();
+            await releaseState.Task;
+            await route.ContinueAsync();
+        }, new() { Times = 1 });
+
+        try
+        {
+            var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+            Assert.NotNull(box);
+            await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+            await Page.Mouse.WheelAsync(0, 100);
+            await Page.Mouse.DownAsync();
+            await scrollStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            releaseScroll.TrySetResult();
+            await stateStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            await Page.EvaluateAsync(
+                "() => document.getElementById('app-viewport').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1, isPrimary: true }))");
+            await WaitForPointerEventAsync("cancel:pointercancel");
+            releaseState.TrySetResult();
+            await WaitForPointerIdleAsync();
+
+            Assert.DoesNotContain(
+                _pointerEvents,
+                value => value.StartsWith("start:", StringComparison.Ordinal));
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            releaseScroll.TrySetResult();
+            releaseState.TrySetResult();
+            await Page.UnrouteAsync("**/api/scroll");
+            await Page.UnrouteAsync(freshStateRoute);
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerMoveFailure_DoesNotReplayCommittedPressAsTap()
+    {
+        await ReloadWithPointerStreamAsync();
+        var taps = 0;
+        await Page.RouteAsync("**/api/pointer/move", route => route.FulfillAsync(new()
+        {
+            Status = 500,
+            ContentType = "application/json",
+            Body = """{"ok":false,"reason":"fixture-move-failure","error":"move failed"}"""
+        }), new() { Times = 1 });
+        await Page.RouteAsync("**/api/tap", route =>
+        {
+            Interlocked.Increment(ref taps);
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = """{"ok":true}"""
+            });
+        });
+
+        try
+        {
+            var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+            Assert.NotNull(box);
+            await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+            await Page.Mouse.DownAsync();
+            await WaitForPointerEventAsync("start:");
+            await Page.Mouse.MoveAsync(box.X + 7, box.Y + 5);
+            await WaitForPointerEventAsync("cancel:move-failed");
+            await Page.Mouse.UpAsync();
+            await WaitForPointerIdleAsync();
+            await Page.WaitForTimeoutAsync(250);
+
+            Assert.Equal(0, Volatile.Read(ref taps));
+            Assert.Empty(_pageErrors);
+        }
+        finally
+        {
+            await Page.UnrouteAsync("**/api/pointer/move");
+            await Page.UnrouteAsync("**/api/tap");
+        }
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerDown_InsideInlineEditorDoesNotReachApp()
+    {
+        await ReloadWithPointerStreamAsync();
+        var viewport = Page.Locator("#app-viewport");
+        await viewport.EvaluateAsync("""
+            element => {
+              const entry = document.createElement('div');
+              entry.className = 'devflow-element';
+              entry.dataset.id = 'pointer-editor-entry';
+              entry.dataset.type = 'Entry';
+              entry.dataset.text = 'draft';
+              entry.dataset.isvisible = 'true';
+              entry.dataset.isenabled = 'true';
+              entry.dataset.capabilities = 'set-value';
+              entry.style.cssText = 'position:absolute;left:100px;top:140px;width:120px;height:32px;';
+              element.appendChild(entry);
+            }
+            """);
+        await Page.Locator("[data-id='pointer-editor-entry']").ClickAsync();
+        var editor = Page.Locator("#app-viewport > input, #app-viewport > textarea").First;
+        await Expect(editor).ToBeVisibleAsync();
+        while (_pointerEvents.TryDequeue(out _)) { }
+
+        var box = await editor.BoundingBoxAsync();
+        Assert.NotNull(box);
+        await Page.Mouse.MoveAsync(box!.X + 10, box.Y + 10);
+        await Page.Mouse.DownAsync();
+        await Page.Mouse.UpAsync();
+        await Page.WaitForTimeoutAsync(250);
+
+        Assert.DoesNotContain(
+            _pointerEvents,
+            value => value.StartsWith("start:", StringComparison.Ordinal));
+        Assert.Empty(_pageErrors);
+        await editor.PressAsync("Escape");
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task PointerSession_IgnoresOverlappingPointerIds()
+    {
+        await ReloadWithPointerStreamAsync();
+        var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+        Assert.NotNull(box);
+        await Page.Locator("#app-viewport").EvaluateAsync(
+            """
+            element => {
+              const rect = document.querySelector("[data-id='fixture-button']")
+                .getBoundingClientRect();
+              const point = { x: rect.left + 5, y: rect.top + 5 };
+              const originalCapture = element.setPointerCapture;
+              element.setPointerCapture = () => {};
+              const dispatch = (type, pointerId, isPrimary, x) =>
+                element.dispatchEvent(new PointerEvent(type, {
+                  bubbles: true,
+                  cancelable: true,
+                  pointerId,
+                  pointerType: 'touch',
+                  isPrimary,
+                  button: 0,
+                  clientX: x,
+                  clientY: point.y,
+                }));
+              dispatch('pointerdown', 41, true, point.x);
+              dispatch('pointerdown', 42, false, point.x + 20);
+              dispatch('pointermove', 42, false, point.x + 22);
+              dispatch('pointerup', 42, false, point.x + 22);
+              dispatch('pointerup', 41, true, point.x);
+              element.setPointerCapture = originalCapture;
+            }
+            """);
+
+        await WaitForPointerEventAsync("end:");
+        await WaitForPointerIdleAsync();
+        Assert.Single(
+            _pointerEvents,
+            value => value.StartsWith("start:", StringComparison.Ordinal));
+        Assert.Single(
+            _pointerEvents,
+            value => value.StartsWith("end:", StringComparison.Ordinal));
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
+    public async Task HostResize_CancelsPointerAndBlocksRestartUntilRelease()
+    {
+        await ReloadWithPointerStreamAsync();
+        var box = await Page.Locator(".devflow-element[data-id='fixture-button']").BoundingBoxAsync();
+        Assert.NotNull(box);
+        await Page.Mouse.MoveAsync(box!.X + 5, box.Y + 5);
+        await Page.Mouse.DownAsync();
+        await WaitForPointerEventAsync("start:");
+
+        await Page.SetViewportSizeAsync(1200, 760);
+        await WaitForPointerEventAsync("cancel:viewport-navigation");
+        await Page.Locator("#app-viewport").EvaluateAsync(
+            """
+            element => {
+              const rect = document.querySelector("[data-id='fixture-button']")
+                .getBoundingClientRect();
+              element.dispatchEvent(new PointerEvent('pointerdown', {
+                bubbles: true,
+                cancelable: true,
+                pointerId: 42,
+                pointerType: 'touch',
+                isPrimary: true,
+                button: 0,
+                clientX: rect.left + 5,
+                clientY: rect.top + 5,
+              }));
+            }
+            """);
+        Assert.Single(
+            _pointerEvents,
+            value => value.StartsWith("start:", StringComparison.Ordinal));
+
+        await Page.Mouse.UpAsync();
+        await Page.Locator("#app-viewport").EvaluateAsync(
+            """
+            element => element.dispatchEvent(new PointerEvent('pointerup', {
+              bubbles: true,
+              cancelable: true,
+              pointerId: window.fixtureActivePointerId,
+              pointerType: 'mouse',
+              isPrimary: true,
+              button: 0,
+            }))
+            """);
+        await WaitForPointerIdleAsync();
+        await Page.Locator("#app-viewport").EvaluateAsync(
+            """
+            element => {
+              const rect = document.querySelector("[data-id='fixture-button']")
+                .getBoundingClientRect();
+              const dispatch = type => element.dispatchEvent(new PointerEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                pointerId: 43,
+                pointerType: 'touch',
+                isPrimary: true,
+                button: 0,
+                clientX: rect.left + 5,
+                clientY: rect.top + 5,
+              }));
+              dispatch('pointerdown');
+              dispatch('pointerup');
+            }
+            """);
+        for (var attempt = 0;
+            attempt < 200
+            && _pointerEvents.Count(value => value.StartsWith("start:", StringComparison.Ordinal)) < 2;
+            attempt++)
+        {
+            await Task.Delay(25);
+        }
+        Assert.Equal(
+            2,
+            _pointerEvents.Count(value => value.StartsWith("start:", StringComparison.Ordinal)));
+        Assert.Empty(_pageErrors);
     }
 
     [InspectorBrowserFixtureFact]

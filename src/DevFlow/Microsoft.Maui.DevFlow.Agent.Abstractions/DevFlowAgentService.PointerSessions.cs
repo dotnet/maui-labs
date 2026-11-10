@@ -202,6 +202,39 @@ public partial class DevFlowAgentService
             501,
             "not_supported"));
 
+    protected async Task<T> DispatchPointerStartAsync<T>(
+        Func<T> start,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var started = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var dispatchTask = DispatchAsync(() =>
+        {
+            started.TrySetResult();
+            cancellationToken.ThrowIfCancellationRequested();
+            return start();
+        });
+        using var registration = cancellationToken.Register(
+            () => cancelled.TrySetResult());
+        var first = await Task.WhenAny(started.Task, dispatchTask, cancelled.Task)
+            .ConfigureAwait(false);
+        if (ReferenceEquals(first, cancelled.Task))
+        {
+            _ = dispatchTask.ContinueWith(
+                task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted
+                    | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            throw new OperationCanceledException(cancellationToken);
+        }
+
+        return await dispatchTask.ConfigureAwait(false);
+    }
+
     protected virtual Task<PointerSessionBackendResult> MovePointerSessionBackendAsync(
         object state,
         IReadOnlyList<PointerSessionSample> samples,
@@ -229,6 +262,10 @@ public partial class DevFlowAgentService
     {
         if (state is IDisposable disposable)
             disposable.Dispose();
+    }
+
+    protected virtual void InvalidatePointerSessionMutationState()
+    {
     }
 
     private object BuildPointerStreamCapability()
@@ -1007,6 +1044,12 @@ public partial class DevFlowAgentService
         string operationKind,
         string? fingerprint)
     {
+        if (string.Equals(operationKind, "cancel", StringComparison.Ordinal))
+        {
+            try { InvalidatePointerSessionMutationState(); }
+            catch { }
+        }
+
         lock (_pointerSessionStateGate)
         {
             if (ReferenceEquals(_activePointerSession, active))

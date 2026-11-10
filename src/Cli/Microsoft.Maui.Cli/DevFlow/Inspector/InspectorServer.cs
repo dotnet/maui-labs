@@ -47,6 +47,7 @@ public sealed class InspectorServer : IDisposable
     // 0 = idle, 1 = a flow replay is driving the app. Guards against interleaving a replay with
     // user mutations / recording (a replay can be triggered from any embedding host or tab).
     private int _replayInProgress;
+    private int _stopping;
     private readonly SemaphoreSlim _flowAdmissionGate = new(1, 1);
     private readonly SemaphoreSlim _frameCreationGate = new(1, 1);
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> PersistTransactionGates =
@@ -926,6 +927,7 @@ public sealed class InspectorServer : IDisposable
 
     public async Task StopAsync()
     {
+        Interlocked.Exchange(ref _stopping, 1);
         await CancelProxyPointerSessionsAsync("inspector-stopped");
         _cts?.Cancel();
         _listener?.Stop();
@@ -943,6 +945,7 @@ public sealed class InspectorServer : IDisposable
         // direct CLI shutdown. A guard is cheaper than try/catching every
         // member.
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        Interlocked.Exchange(ref _stopping, 1);
 
         try { CancelProxyPointerSessionsAsync("inspector-disposed").Wait(TimeSpan.FromSeconds(1)); } catch { }
         try { _lifetimeCts.Cancel(); } catch { }
@@ -1673,7 +1676,9 @@ public sealed class InspectorServer : IDisposable
         if (request.PolicyFilePath is not null && !string.Equals(request.PolicyFilePath,
             LayoutDiagnosticsPolicyLoader.ResolveProjectConfigPath(_policyStartPath),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-            return JsonResponse(409, new
+            return JsonResponse(
+                Volatile.Read(ref _stopping) != 0 ? 503 : 409,
+                new
             {
                 success = false,
                 message = "The Layout policy location changed. Rescan and confirm the current path before saving."
@@ -3064,6 +3069,17 @@ public sealed class InspectorServer : IDisposable
         string holderKind,
         string holderLabel)
     {
+        if (Volatile.Read(ref _stopping) != 0)
+        {
+            return JsonResponse(503, new
+            {
+                ok = false,
+                fallback = false,
+                reason = "inspector-stopping",
+                error = "The Inspector is shutting down."
+            });
+        }
+
         if (!TryReadPointerBody(body, out InspectorPointerStartRequest? start, out var error))
             return JsonResponse(400, new { ok = false, error });
         if (start is null || string.IsNullOrWhiteSpace(start.SessionId))
@@ -3118,7 +3134,8 @@ public sealed class InspectorServer : IDisposable
         var fallback = CanFallbackPointerStart(result);
         if (result.Success)
         {
-            if (Volatile.Read(ref _replayInProgress) == 1)
+            if (Volatile.Read(ref _replayInProgress) == 1
+                || Volatile.Read(ref _stopping) != 0)
             {
                 try
                 {
@@ -3126,7 +3143,11 @@ public sealed class InspectorServer : IDisposable
                         leaseId,
                         holderKind,
                         holderLabel);
-                    await _client.CancelPointerSessionAsync(start.SessionId, "replay-started");
+                    await _client.CancelPointerSessionAsync(
+                        start.SessionId,
+                        Volatile.Read(ref _stopping) != 0
+                            ? "inspector-stopped"
+                            : "replay-started");
                 }
                 catch { }
                 InvalidateScreenshotCache();
@@ -3134,8 +3155,12 @@ public sealed class InspectorServer : IDisposable
                 {
                     ok = false,
                     fallback = false,
-                    reason = "replay-in-progress",
-                    error = "A replay started while the pointer session was being admitted."
+                    reason = Volatile.Read(ref _stopping) != 0
+                        ? "inspector-stopping"
+                        : "replay-in-progress",
+                    error = Volatile.Read(ref _stopping) != 0
+                        ? "The Inspector stopped while the pointer session was being admitted."
+                        : "A replay started while the pointer session was being admitted."
                 });
             }
 

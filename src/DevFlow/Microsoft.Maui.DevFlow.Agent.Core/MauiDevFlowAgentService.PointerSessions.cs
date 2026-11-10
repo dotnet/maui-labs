@@ -2,6 +2,16 @@ namespace Microsoft.Maui.DevFlow.Agent.Core;
 
 public partial class MauiDevFlowAgentService
 {
+    protected override void InvalidatePointerSessionMutationState()
+    {
+        lock (_captureStateGate)
+        {
+            _uiMutationGeneration++;
+            _captureLeases.Clear();
+            _latestCapture = default;
+        }
+    }
+
     protected override Task<HttpResponse?> PreparePointerSessionStartAsync(
         HttpRequest request,
         PointerSessionStartRequest body)
@@ -16,6 +26,7 @@ public partial class MauiDevFlowAgentService
             request.MutationState = reservation.Capture;
 
         var capture = GetReservedCapture(request);
+        body.WindowId ??= capture.WindowId;
         if (body.WindowId.HasValue
             && capture.WindowId.HasValue
             && body.WindowId.Value != capture.WindowId.Value)

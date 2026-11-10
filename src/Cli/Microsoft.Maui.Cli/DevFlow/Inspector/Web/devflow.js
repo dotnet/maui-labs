@@ -473,6 +473,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
   let suppressedPointerClick = null;
   let pointerStreamAvailable = metaContent('devflow-pointer-stream') === 'true';
   let cancelledPointerId = null;
+  let pointerFrameRefreshNeeded = false;
   let isGesturing = false;
   let isDragging = false;
   let dragResetTimer = null;
@@ -662,6 +663,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
       cancelPointerSession(activePointerSession, 'frame-changed').catch(() => {});
     }
     committedFrame = frame;
+    pointerFrameRefreshNeeded = false;
     if (state.elements) onElementsUpdated();
     latestRootOffsetX = rootOffsetX;
     latestRootOffsetY = rootOffsetY;
@@ -1646,9 +1648,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
       .map(sample => ({
         clientX: sample.clientX,
         clientY: sample.clientY,
-        elapsedMs: Math.max(0, sample.timeStamp - session.startedAt),
+        timeStamp: sample.timeStamp,
       }))
-      .sort((a, b) => a.elapsedMs - b.elapsedMs);
+      .sort((a, b) => a.timeStamp - b.timeStamp);
   }
 
   function mapPointerSamples(samples, session) {
@@ -1661,7 +1663,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
       return {
         x: point.x,
         y: point.y,
-        elapsedMs: sample.elapsedMs,
+        elapsedMs: Math.max(0, sample.timeStamp - session.streamStartedAt),
         sx: sample.clientX,
         sy: sample.clientY,
       };
@@ -1705,7 +1707,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
     const scrolled = await flushScroll();
     if (session.cancelled || session.completed) return;
 
-    if (scrolled) {
+    if (scrolled || pointerFrameRefreshNeeded) {
       const state = await refreshState(true);
       if (!state) {
         session.failed = true;
@@ -1713,6 +1715,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
         return;
       }
     }
+    if (session.cancelled || session.completed) return;
     if (!ensureCanInteract()) {
       session.failed = true;
       return;
@@ -1730,18 +1733,26 @@ import { createViewportController } from './inspector-viewport-controller.js';
       || (session.eventTarget?.closest
         ? session.eventTarget.closest('.devflow-element')
         : null);
+    session.streamStartedAt = performance.now();
     session.fallbackPoints = [{ x: session.start.x, y: session.start.y, t: 0 }];
     if (session.preStartSamples.length > 0) {
-      appendPointerMoves(
-        session,
-        mapPointerSamples(session.preStartSamples, session));
+      const samples = mapPointerSamples(session.preStartSamples, session);
+      appendBoundedSamples(
+        session.pending,
+        samples.map(({ x, y, elapsedMs }) => ({ x, y, elapsedMs })),
+        POINTER_PENDING_LIMIT);
+      appendBoundedSamples(
+        session.fallbackPoints,
+        samples.map(({ x, y, elapsedMs }) => ({ x, y, t: elapsedMs })),
+        POINTER_FALLBACK_LIMIT);
       session.preStartSamples.length = 0;
     }
-    await startPointerSession(session);
+    if (session.cancelled || session.completed) return;
     await startPointerSession(session);
   }
 
   async function startPointerSession(session) {
+    if (session.cancelled || session.completed || session.failed) return;
     if (!session.streamEnabled || !session.frame?.frameId) {
       session.fallback = true;
       return;
@@ -1753,6 +1764,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
         CoordinateSpace.appLogical,
         'inspector',
         session.actionId);
+      session.startRequested = true;
       const response = await fetch(`${basePath}/api/pointer/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1826,6 +1838,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
         const moveRequest = buildPointerMoveRequest(session, sequence);
         if (!moveRequest) {
           session.failed = true;
+          suppressPointerClick(session);
           await sendPointerCancelRequest(session, 'move-payload-too-large').catch(() => {});
           break;
         }
@@ -1841,6 +1854,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
           const result = await response.json().catch(() => null);
           if (!response.ok || result?.ok !== true) {
             session.failed = true;
+            suppressPointerClick(session);
             if (isFrameCorrelationError(result))
               scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
             await sendPointerCancelRequest(session, 'move-failed').catch(() => {});
@@ -1848,6 +1862,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
           }
         } catch (error) {
           session.failed = true;
+          suppressPointerClick(session);
           await sendPointerCancelRequest(session, 'move-transport-failure').catch(() => {});
           console.error('Pointer move failed:', error);
         }
@@ -1874,8 +1889,12 @@ import { createViewportController } from './inspector-viewport-controller.js';
     return { samples, body };
   }
 
-  async function sendPointerCancelRequest(session, reason, keepalive = false) {
-    if (!session.started && !session.ambiguousStart) return;
+  async function sendPointerCancelRequest(
+    session,
+    reason,
+    keepalive = false,
+    allowPending = false) {
+    if (!allowPending && !session.started && !session.ambiguousStart) return;
     const request = {
       method: 'POST',
       keepalive,
@@ -1907,7 +1926,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
     suppressClickUntilRelease = false) {
     if (!session || session.cancelled || session.completed) return;
     session.cancelled = true;
-    const mayHaveMutated = session.started || session.ambiguousStart;
+    const mayHaveMutated =
+      session.startRequested || session.started || session.ambiguousStart;
     if (mayHaveMutated) suppressPointerClick(session);
     if (suppressClickUntilRelease) {
       cancelledPointerId = session.pointerId;
@@ -1916,8 +1936,10 @@ import { createViewportController } from './inspector-viewport-controller.js';
     if (session.heartbeatTimer) clearInterval(session.heartbeatTimer);
     session.heartbeatTimer = null;
     session.pending.length = 0;
+    try {
+      await sendPointerCancelRequest(session, reason, keepalive, true);
+    } catch {}
     try { await session.startPromise; } catch {}
-    try { await sendPointerCancelRequest(session, reason, keepalive); } catch {}
     session.completed = true;
     finishPointerSessionState(session);
     if (mayHaveMutated)
@@ -1941,7 +1963,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
     const session = activePointerSession;
     if (!session || session.completed) return;
     session.cancelled = true;
-    if (session.started || session.ambiguousStart) suppressPointerClick(session);
+    if (session.startRequested || session.started || session.ambiguousStart)
+      suppressPointerClick(session);
     sendPointerCancelKeepalive(session, reason);
     session.completed = true;
     finishPointerSessionState(session);
@@ -1970,7 +1993,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
             event.clientY,
             session.frame,
             session.viewportRect),
-          elapsedMs: Math.max(0, event.timeStamp - session.startedAt),
+          elapsedMs: Math.max(0, event.timeStamp - session.streamStartedAt),
           sx: event.clientX,
           sy: event.clientY,
         };
@@ -2013,6 +2036,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
     }
 
     if (!session.started || session.failed || session.cancelled) {
+      if (session.started || session.ambiguousStart)
+        suppressPointerClick(session);
       session.completed = true;
       finishPointerSessionState(session);
       return;
@@ -2020,6 +2045,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
 
     await pumpPointerMoves(session);
     if (session.failed || session.cancelled) {
+      if (session.started || session.ambiguousStart)
+        suppressPointerClick(session);
       session.completed = true;
       finishPointerSessionState(session);
       return;
@@ -2070,6 +2097,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
         || event.isPrimary === false
         || activePointerSession) return;
     if (mode !== 'interact' || event.altKey || event.shiftKey || !ensureCanInteract()) return;
+    if (activeEditor
+        && (event.target === activeEditor || activeEditor.contains(event.target))) return;
+    if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
     if (dragResetTimer) {
       clearTimeout(dragResetTimer);
       dragResetTimer = null;
@@ -2090,6 +2120,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
       startClientX: event.clientX,
       startClientY: event.clientY,
       startedAt: event.timeStamp,
+      streamStartedAt: null,
       eventTarget: event.target,
       target: null,
       pending: [],
@@ -2099,6 +2130,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
       maxBatch: POINTER_BATCH_LIMIT,
       maxRequestBytes: 16 * 1024,
       started: false,
+      startRequested: false,
       fallback: false,
       failed: false,
       cancelled: false,
@@ -4946,15 +4978,18 @@ import { createViewportController } from './inspector-viewport-controller.js';
     isEditing: () => !!activeEditor,
     isCommandEnabled: id => commandStates[id]?.enabled !== false,
     canNavigate: () => !isGesturing,
-    onNavigationBlocked: () =>
+    onNavigationBlocked: () => {
+      pointerFrameRefreshNeeded = true;
       cancelActivePointerSession(
         'viewport-navigation',
         false,
-        true),
+        true);
+    },
     onTransformChanged: ({ bounds, transform }) =>
       scheduleScreenshotResolution(bounds.contentWidth, bounds.contentHeight, transform.scale),
   });
   window.addEventListener('resize', () => {
+    pointerFrameRefreshNeeded = true;
     updateHostLayout();
     viewportController.scheduleLayout();
     scheduleToolbarLayout();

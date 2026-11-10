@@ -306,6 +306,38 @@ public class PointerSessionTests
     }
 
     [Fact]
+    public async Task PointerSession_CancelPreemptsQueuedUiDispatch()
+    {
+        var options = new AgentOptions { Port = FreePort(), RequireMutationLease = false };
+        using var service = new PointerTestService(options) { DispatchStarts = true };
+        var queued = new ConcurrentQueue<Action>();
+        service.StartServerOnly(new DelegateAgentDispatcher(
+            () => true,
+            action => queued.Enqueue(action)));
+        using var client = new AgentClient("localhost", options.Port)
+        {
+            AutoAcquireMutationLease = false
+        };
+
+        var startTask = client.StartPointerSessionAsync(Start("queued-ui-start"));
+        for (var attempt = 0; attempt < 200 && queued.IsEmpty; attempt++)
+            await Task.Delay(10);
+        Assert.False(queued.IsEmpty);
+
+        var cancel = await client.CancelPointerSessionAsync(
+            "queued-ui-start",
+            "pointercancel").WaitAsync(TimeSpan.FromSeconds(5));
+        var start = await startTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(cancel.Success);
+        Assert.False(start.Success);
+        Assert.Equal("pointer-start-cancelled", start.Reason);
+        while (queued.TryDequeue(out var callback))
+            callback();
+        Assert.DoesNotContain("start", service.Events);
+    }
+
+    [Fact]
     public async Task PointerSession_ForcedLeaseTakeover_CancelsOldPointer()
     {
         var options = new AgentOptions
@@ -511,6 +543,7 @@ public class PointerSessionTests
         public bool BlockAfterStart { get; set; }
         public bool BlockMoves { get; set; }
         public bool BlockBack { get; set; }
+        public bool DispatchStarts { get; set; }
         public bool RejectRepeatedPrepare { get; set; }
         public int PrepareStartCalls { get; private set; }
         public int BackCalls { get; private set; }
@@ -537,6 +570,19 @@ public class PointerSessionTests
             PointerSessionStartRequest request,
             CancellationToken cancellationToken)
         {
+            if (DispatchStarts)
+            {
+                return await DispatchPointerStartAsync(
+                    () =>
+                    {
+                        Events.Enqueue("start");
+                        return PointerSessionBackendStartResult.Started(
+                            new object(),
+                            "test start");
+                    },
+                    cancellationToken);
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             Events.Enqueue("start");
             if (BlockStarts)

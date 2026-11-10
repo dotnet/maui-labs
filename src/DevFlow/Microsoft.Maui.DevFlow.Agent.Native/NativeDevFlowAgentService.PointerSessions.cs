@@ -14,9 +14,8 @@ public partial class NativeDevFlowAgentService
     protected override Task<PointerSessionBackendStartResult> StartPointerSessionBackendAsync(
         PointerSessionStartRequest request,
         CancellationToken cancellationToken)
-        => DispatchAsync(() =>
+        => DispatchPointerStartAsync(() =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
             if (!_bound)
                 return PointerSessionBackendStartResult.Failed("Agent not bound to app");
 
@@ -37,7 +36,7 @@ public partial class NativeDevFlowAgentService
                         reason ?? (NativeUi.PointerSessionsSupported
                             ? "pointer-start-rejected"
                             : "not_supported"));
-        });
+        }, cancellationToken);
 
     protected override Task<PointerSessionBackendResult> MovePointerSessionBackendAsync(
         object state,
