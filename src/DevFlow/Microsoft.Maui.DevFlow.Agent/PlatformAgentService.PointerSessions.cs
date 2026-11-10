@@ -40,17 +40,13 @@ public partial class PlatformAgentService
         CancellationToken cancellationToken)
     {
 #if ANDROID
-        return DispatchAsync(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return StartAndroidPointerSession(request);
-        });
+        return DispatchPointerStartAsync(
+            () => StartAndroidPointerSession(request),
+            cancellationToken);
 #elif IOS || MACCATALYST
-        return DispatchAsync(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return StartApplePointerSession(request);
-        });
+        return DispatchPointerStartAsync(
+            () => StartApplePointerSession(request),
+            cancellationToken);
 #else
         return base.StartPointerSessionBackendAsync(request, cancellationToken);
 #endif
@@ -122,8 +118,23 @@ public partial class PlatformAgentService
     {
         var windowIndex = request.WindowId ?? 0;
         var mauiWindow = _app?.Windows.ElementAtOrDefault(windowIndex);
-        var activity = mauiWindow?.Handler?.PlatformView as global::Android.App.Activity
-            ?? global::Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+        if (request.WindowId.HasValue && mauiWindow is null)
+        {
+            return PointerSessionBackendStartResult.Failed(
+                $"Window {request.WindowId.Value} is no longer available.",
+                409,
+                "pointer-window-unavailable");
+        }
+
+        var activity = mauiWindow?.Handler?.PlatformView as global::Android.App.Activity;
+        if (request.WindowId.HasValue && activity is null)
+        {
+            return PointerSessionBackendStartResult.Failed(
+                $"Window {request.WindowId.Value} is not backed by an Android activity.",
+                409,
+                "pointer-window-unavailable");
+        }
+        activity ??= global::Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
         if (ResolveAndroidPointerRoot(activity, request.X, request.Y) is not { } target)
             return PointerSessionBackendStartResult.Failed("The Android window is not laid out.");
 
@@ -311,15 +322,17 @@ public partial class PlatformAgentService
                 continue;
 
             var root = registeredView.RootView;
+            hasVisibleDialog |= isDialog
+                && root is { IsAttachedToWindow: true, IsShown: true };
             if (root is null
                 || ReferenceEquals(root, decor)
                 || !root.IsAttachedToWindow
                 || !root.IsShown
+                || !root.HasWindowFocus
                 || root.Width <= 1
                 || root.Height <= 1)
                 continue;
 
-            hasVisibleDialog |= isDialog;
             var location = new int[2];
             root.GetLocationOnScreen(location);
             if (screenX >= location[0]
@@ -341,7 +354,7 @@ public partial class PlatformAgentService
             density,
             RootOffsetX: 0,
             RootOffsetY: 0,
-            BlockedByDialog: hasVisibleDialog);
+            BlockedByDialog: hasVisibleDialog || !decor.HasWindowFocus);
     }
 #endif
 
