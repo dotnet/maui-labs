@@ -175,13 +175,15 @@ public partial class InspectorLayoutWorkspaceTests
             """);
 
         var recover = false;
+        var failureStatus = 503;
+        var failureBody = """{"ok":false,"reason":"capture-failed","retryable":true}""";
         await _page.RouteAsync("**/api/state*", route => recover
             ? route.FallbackAsync()
             : route.FulfillAsync(new()
         {
-            Status = 503,
+            Status = failureStatus,
             ContentType = "application/json",
-            Body = """{"ok":false,"reason":"capture-failed","retryable":true}"""
+            Body = failureBody
         }));
 
         async Task FailCaptureAsync()
@@ -200,9 +202,23 @@ public partial class InspectorLayoutWorkspaceTests
         }
 
         await FailCaptureAsync();
+        Assert.Equal("layout-target", await _page.EvaluateAsync<string?>("""
+            () => {
+              const target = document.querySelector(".devflow-element[data-id='layout-target']");
+              const bounds = target.getBoundingClientRect();
+              return document.elementFromPoint(
+                bounds.left + bounds.width / 2,
+                bounds.top + bounds.height / 2)?.closest(".devflow-element")?.dataset.id || null;
+            }
+            """));
         var announcementCount = await _page.EvaluateAsync<int>("() => window.healthAnnouncementCount");
         await FailCaptureAsync();
         Assert.Equal(announcementCount, await _page.EvaluateAsync<int>("() => window.healthAnnouncementCount"));
+
+        failureStatus = 500;
+        failureBody = """{"ok":false,"error":"frame capture changed while publishing"}""";
+        await FailCaptureAsync();
+        await Expect(_page.Locator("#df-health-banner-detail")).ToContainTextAsync("latest capture failed");
 
         await _page.Locator(".devflow-element[data-id='layout-target']").ClickAsync();
         await Expect(status).ToContainTextAsync("LayoutTarget");
@@ -329,6 +345,58 @@ public partial class InspectorLayoutWorkspaceTests
     }
 
     [InspectorBrowserFact]
+    public async Task LateLeaseFailureCannotOverrideNewerHeartbeat()
+    {
+        await PrepareLayoutWorkspaceAsync();
+        await _page.UnrouteAsync("**/api/control");
+        var requests = 0;
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await _page.RouteAsync("**/api/control", async route =>
+        {
+            if (Interlocked.Increment(ref requests) == 1)
+            {
+                firstStarted.TrySetResult();
+                await releaseFirst.Task;
+                await route.FulfillAsync(new()
+                {
+                    Status = 503,
+                    ContentType = "application/json",
+                    Body = """{"ok":false,"error":"temporarily unavailable"}"""
+                });
+                return;
+            }
+
+            await route.FulfillAsync(new()
+            {
+                ContentType = "application/json",
+                Body = """{"ok":true,"youAreWriter":true,"heldByOther":false,"authority":"agent"}"""
+            });
+            secondCompleted.TrySetResult();
+        });
+
+        try
+        {
+            await _page.EvaluateAsync("() => document.dispatchEvent(new Event('visibilitychange'))");
+            await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await _page.EvaluateAsync("() => document.dispatchEvent(new Event('visibilitychange'))");
+            await secondCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            releaseFirst.TrySetResult();
+
+            await Expect(_page.Locator("#df-presence")).ToContainTextAsync("Driving");
+            await Expect(_page.Locator("#df-presence")).ToHaveAttributeAsync(
+                "title",
+                new System.Text.RegularExpressions.Regex("can drive"));
+            await Expect(_page.Locator("#df-toggle-record")).ToBeEnabledAsync();
+        }
+        finally
+        {
+            releaseFirst.TrySetResult();
+        }
+    }
+
+    [InspectorBrowserFact]
     public async Task LeaseHandoffIsAnnouncedOncePerTransition()
     {
         await PrepareLayoutWorkspaceAsync();
@@ -375,6 +443,7 @@ public partial class InspectorLayoutWorkspaceTests
         await PrepareLayoutWorkspaceAsync(elements: """
             <div class="devflow-element" data-id="layout-root" data-type="Window" data-automationId="LayoutRoot" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:0px;top:0px;width:320px;height:600px;"></div>
             <div class="devflow-element" data-id="layout-target" data-parentId="layout-root" data-type="Entry" data-text="Original" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:0px;top:20px;width:180px;height:40px;"></div>
+            <div class="devflow-element" data-id="layout-secondary" data-parentId="layout-root" data-type="Entry" data-text="Secondary" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:0px;top:160px;width:180px;height:40px;"></div>
             """);
         await _page.RouteAsync("**/api/flows/record/start", route => route.FulfillAsync(new()
         {
@@ -418,6 +487,34 @@ public partial class InspectorLayoutWorkspaceTests
         Assert.True(await retryCapture.EvaluateAsync<bool>("element => document.activeElement === element"));
         await Expect(editor).ToBeVisibleAsync();
         await Expect(editor).ToHaveValueAsync("Pending text");
+        await _page.Locator(".devflow-element[data-id='layout-secondary']").ClickAsync();
+        await Expect(editor).ToBeVisibleAsync();
+        await Expect(editor).ToHaveValueAsync("Pending text");
+        await Expect(_page.Locator("#app-viewport input[data-element-id='layout-secondary']")).ToHaveCountAsync(0);
+    }
+
+    [InspectorBrowserFact]
+    public async Task RoutineRefreshPreservesMoreMenuAndKeyboardFocus()
+    {
+        await _page.SetViewportSizeAsync(340, 620);
+        await PrepareLayoutWorkspaceAsync();
+        var more = _page.Locator("#df-more");
+        await Expect(more).ToBeVisibleAsync();
+        await more.ClickAsync();
+        var firstAction = _page.Locator("#df-toolbar-overflow button").First;
+        await firstAction.FocusAsync();
+        var focusedId = await firstAction.GetAttributeAsync("id");
+        await Expect(_page.Locator("#df-toolbar-overflow")).ToBeVisibleAsync();
+
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => IsStateUrl(response.Url));
+
+        await Expect(_page.Locator("#df-toolbar-overflow")).ToBeVisibleAsync();
+        await Expect(more).ToHaveAttributeAsync("aria-expanded", "true");
+        Assert.Equal(
+            focusedId,
+            await _page.EvaluateAsync<string?>("() => document.activeElement?.id || null"));
     }
 
     [InspectorBrowserFact]
@@ -475,5 +572,9 @@ public partial class InspectorLayoutWorkspaceTests
             }
             """), response => IsStateUrl(response.Url));
         await FailAndRecoverAsync();
+        await Expect(_page.Locator("#df-preview-badges")).ToBeEmptyAsync();
+        var requestsAfterRecovery = stateRequests;
+        await _page.Clock.RunForAsync(6100);
+        Assert.Equal(requestsAfterRecovery, stateRequests);
     }
 }

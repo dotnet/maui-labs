@@ -164,6 +164,7 @@ import {
   let otherLeaseExpiresInMs = null;
   let leaseAuthority = null;
   let leaseStateInitialized = false;
+  let controlRequestVersion = 0;
   let healthState = createInspectorPresentationState({
     broker: 'reachable',
     agent: 'available',
@@ -190,6 +191,7 @@ import {
     committedFrame);
   let presentationReady = false;
   let driveGateStatusToken = null;
+  let driveGateStatusText = null;
   let disconnectReturnFocus = null;
   // Layout scans are explicit or opt-in live operations, independent of screenshot polling.
   let layoutPanel = null;
@@ -209,7 +211,7 @@ import {
       // A writer 409 means we tried to drive the app while read-only. Flip to read-only AND hint how
       // to recover, so a silently-ignored tap/edit/gesture doesn't look broken (the drive-BUTTONS are
       // disabled in read-only, but interact-mode taps aren't, so this closes that loop).
-      if (resp.status === 409) { resp.clone().json().then((j) => { if (j && j.reason === 'writer') { setWriterUi(false, true, j.label, j.expiresInMs, j.authority); setStatus('Read-only — another session is driving. Take control to interact.'); } }).catch(() => {}); }
+      if (resp.status === 409) { resp.clone().json().then((j) => { if (j && j.reason === 'writer') { controlRequestVersion++; setWriterUi(false, true, j.label, j.expiresInMs, j.authority); setStatus('Read-only — another session is driving. Take control to interact.'); } }).catch(() => {}); }
       return resp;
     }
     return _origFetch(url, opts);
@@ -263,36 +265,71 @@ import {
     previewBadges.replaceChildren(fragment);
   }
 
-  function renderHealthPresentation(previous = presentation, announce = true) {
+  function badgesEqual(left = [], right = []) {
+    return left.length === right.length && left.every((badge, index) => {
+      const other = right[index];
+      return badge.id === other.id
+        && badge.tone === other.tone
+        && badge.label === other.label
+        && badge.title === other.title;
+    });
+  }
+
+  function presenceEqual(left, right) {
+    if (!left || !right) return left === right;
+    return left.icon === right.icon
+      && left.label === right.label
+      && left.tone === right.tone
+      && left.title === right.title;
+  }
+
+  function renderHealthPresentation(previous = null, announce = true) {
     presentation = deriveInspectorPresentation(
       healthState,
       accessSnapshot(),
       committedFrame);
     const blocking = presentation.showBlockingOverlay;
-    const bannerHadFocus = !!(previous.showHealthBanner && healthBanner?.contains(document.activeElement));
-    document.body.classList.toggle('df-disconnected', blocking);
-    document.body.classList.toggle('df-preview-degraded', presentation.showHealthBanner);
-    if (previewHealth) previewHealth.dataset.tone = presentation.tone;
-    if (previewHealthLabel) previewHealthLabel.textContent = presentation.label;
-    renderHealthBadges(presentation.badges);
-    if (connectionHeading) connectionHeading.textContent = presentation.label;
-    if (connectionDetail) connectionDetail.textContent = presentation.detail;
-    if (healthBannerHeading) healthBannerHeading.textContent = presentation.label;
-    if (healthBannerDetail) healthBannerDetail.textContent = presentation.detail;
+    const bannerHadFocus = !!(previous?.showHealthBanner && healthBanner?.contains(document.activeElement));
+    const chromeChanged = !previous
+      || previous.tone !== presentation.tone
+      || previous.label !== presentation.label
+      || previous.detail !== presentation.detail
+      || previous.showBlockingOverlay !== blocking
+      || previous.showHealthBanner !== presentation.showHealthBanner
+      || previous.busy !== presentation.busy
+      || previous.primaryAction?.label !== presentation.primaryAction?.label
+      || !badgesEqual(previous.badges, presentation.badges);
+    const flowChanged = !previous
+      || previous.driveAllowed !== presentation.driveAllowed
+      || previous.controlAllowed !== presentation.controlAllowed
+      || previous.healthy !== presentation.healthy;
+    const presenceChanged = !previous || !presenceEqual(previous.presence, presentation.presence);
 
-    if (disconnectedOverlay) {
-      disconnectedOverlay.classList.toggle('df-hidden', !blocking);
-      disconnectedOverlay.setAttribute('aria-hidden', String(!blocking));
-      setBusyAttribute(disconnectedOverlay, blocking && presentation.busy);
-    }
-    if (healthBanner) {
-      healthBanner.classList.toggle('df-hidden', !presentation.showHealthBanner);
-      setBusyAttribute(healthBanner, presentation.showHealthBanner && presentation.busy);
+    if (chromeChanged) {
+      document.body.classList.toggle('df-disconnected', blocking);
+      if (previewHealth) previewHealth.dataset.tone = presentation.tone;
+      if (previewHealthLabel) previewHealthLabel.textContent = presentation.label;
+      renderHealthBadges(presentation.badges);
+      if (connectionHeading) connectionHeading.textContent = presentation.label;
+      if (connectionDetail) connectionDetail.textContent = presentation.detail;
+      if (healthBannerHeading) healthBannerHeading.textContent = presentation.label;
+      if (healthBannerDetail) healthBannerDetail.textContent = presentation.detail;
+
+      if (disconnectedOverlay) {
+        disconnectedOverlay.classList.toggle('df-hidden', !blocking);
+        disconnectedOverlay.setAttribute('aria-hidden', String(!blocking));
+        setBusyAttribute(disconnectedOverlay, blocking && presentation.busy);
+      }
+      if (healthBanner) {
+        healthBanner.classList.toggle('df-hidden', !presentation.showHealthBanner);
+        setBusyAttribute(healthBanner, presentation.showHealthBanner && presentation.busy);
+      }
+
+      const recoveryLabel = presentation.primaryAction?.label || 'Retry now';
+      renderRetryButton(retryConnectionBtn, recoveryLabel, presentation.busy);
+      renderRetryButton(retryCaptureBtn, recoveryLabel, presentation.busy);
     }
 
-    const recoveryLabel = presentation.primaryAction?.label || 'Retry now';
-    renderRetryButton(retryConnectionBtn, recoveryLabel, presentation.busy);
-    renderRetryButton(retryCaptureBtn, recoveryLabel, presentation.busy);
     const previousStatusText = previous?.statusText || '';
     statusChannel.setHealth(presentation.statusText);
     if (announce) {
@@ -314,10 +351,12 @@ import {
       announcementGate.announce(key, announcement);
     }
 
-    if (!previous.showBlockingOverlay && blocking) {
+    if (previous?.healthy && !presentation.healthy)
+      layoutPanel?.invalidate('Preview evidence changed; the previous Layout snapshot is stale.');
+
+    if (previous && !previous.showBlockingOverlay && blocking) {
       disconnectReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      layoutPanel?.invalidate('App disconnected; the previous Layout snapshot is stale.');
-    } else if (previous.showBlockingOverlay && !blocking && disconnectReturnFocus?.isConnected) {
+    } else if (previous?.showBlockingOverlay && !blocking && disconnectReturnFocus?.isConnected) {
       const active = document.activeElement;
       if (!active || active === document.body || active === document.documentElement
           || disconnectedOverlay?.contains(active)) {
@@ -325,15 +364,24 @@ import {
       }
       disconnectReturnFocus = null;
     }
-    if (previous.showHealthBanner && !presentation.showHealthBanner && bannerHadFocus)
+    if (previous?.showHealthBanner && !presentation.showHealthBanner && bannerHadFocus)
       document.getElementById('df-view-pane')?.focus({ preventScroll: true });
-    if (!presentation.driveMessage && driveGateStatusToken) {
-      statusChannel.clear(driveGateStatusToken);
-      driveGateStatusToken = null;
+    if (driveGateStatusToken) {
+      if (!statusChannel.isCurrent(driveGateStatusToken)) {
+        driveGateStatusToken = null;
+        driveGateStatusText = null;
+      } else if (!presentation.driveMessage) {
+        statusChannel.clear(driveGateStatusToken);
+        driveGateStatusToken = null;
+        driveGateStatusText = null;
+      } else if (driveGateStatusText !== presentation.driveMessage) {
+        statusChannel.replace(driveGateStatusToken, presentation.driveMessage);
+        driveGateStatusText = presentation.driveMessage;
+      }
     }
 
-    renderWriterPresence(presentation.presence);
-    updateFlowButtons();
+    if (presenceChanged) renderWriterPresence(presentation.presence);
+    if (flowChanged) updateFlowButtons();
   }
 
   function updateHealth(patch, announce = true) {
@@ -563,30 +611,37 @@ import {
     });
   }
 
+  function publishDecodedScreenshot(image, replace = false) {
+    if (screenshot && !replace) {
+      screenshot.src = image.src;
+      return;
+    }
+
+    const previous = screenshot;
+    screenshot = image;
+    screenshot.id = 'screenshot';
+    screenshot.alt = 'App screenshot';
+    screenshot.style.width = '100%';
+    screenshot.style.height = '100%';
+    screenshot.addEventListener('error', onScreenshotError);
+    if (previous) previous.replaceWith(screenshot);
+    else viewport.prepend(screenshot);
+  }
+
   function commitFrame(state, frame, image) {
     if (hasExplicitFrameIdentity(state) && !shouldCommitFrame(committedFrame, frame)) {
       const unchanged = frame.streamId === committedFrame.streamId
         && frame.frameId === committedFrame.frameId
         && frame.frameRevision === committedFrame.frameRevision;
+      if (unchanged && image && (!screenshot || screenshot.naturalWidth <= 0))
+        publishDecodedScreenshot(image, true);
       return unchanged ? 'unchanged' : 'rejected';
     }
 
     // All frame-owned DOM changes are synchronous. The browser cannot paint or dispatch another
     // event between them, so screenshot, geometry, offsets, overlays, and descriptor become visible
     // as one complete committed frame.
-    if (image) {
-      if (screenshot) {
-        screenshot.src = image.src;
-      } else {
-        screenshot = image;
-        screenshot.id = 'screenshot';
-        screenshot.alt = 'App screenshot';
-        screenshot.style.width = '100%';
-        screenshot.style.height = '100%';
-        screenshot.addEventListener('error', onScreenshotError);
-        viewport.prepend(screenshot);
-      }
-    }
+    if (image) publishDecodedScreenshot(image);
     viewport.style.width = frame.logicalWidth + 'px';
     viewport.style.height = frame.logicalHeight + 'px';
     viewport.dataset.width = String(frame.logicalWidth);
@@ -626,6 +681,7 @@ import {
     const refresh = {
       generation: ++refreshGeneration,
       requestVersion: refreshRequestVersion,
+      healthEvidenceVersion,
       tap,
       controller: new AbortController(),
       followUpPromise: null,
@@ -635,6 +691,9 @@ import {
       activeRefresh !== refresh || refresh.generation !== refreshGeneration;
     const followReplacement = () =>
       activeRefresh && activeRefresh !== refresh ? activeRefresh.promise : null;
+    const canPublishHealth = () =>
+      refresh.requestVersion === refreshRequestVersion
+      && refresh.healthEvidenceVersion === healthEvidenceVersion;
     const ensureCurrent = () => {
       if (isSuperseded()) return false;
       if (refresh.controller.signal.aborted) {
@@ -659,13 +718,26 @@ import {
         if (!resp.ok) {
           const reason = await responseFailureReason(resp);
           if (!ensureCurrent()) return followReplacement();
-          if (reason === 'capture-failed') reportCaptureFailure(reason);
-          else reportDisconnected(resp.status === 404 ? 'agent-unregistered' : (reason || 'agent-unavailable'));
+          if (canPublishHealth()) {
+            if (!navigator.onLine) {
+              reportDisconnected('browser-offline');
+            } else if (reason === 'capture-failed') {
+              reportCaptureFailure(reason);
+            } else if (resp.status === 404) {
+              reportDisconnected('agent-unregistered');
+            } else if (reason === 'agent-unavailable'
+                || (!reason && [502, 503, 504].includes(resp.status))) {
+              reportDisconnected('agent-unavailable');
+            } else {
+              reportCaptureFailure(reason || 'request-failed');
+            }
+          }
           return null;
         }
-        phase = 'state-response';
+        phase = 'response-body';
         const state = await resp.json();
         if (!ensureCurrent()) return followReplacement();
+        phase = 'state';
         const frame = normalizeFrameDescriptor(state, committedFrame);
         if (state.screenshotResolutionSupported === false) {
           screenshotResolutionSupported = false;
@@ -697,9 +769,9 @@ import {
           scheduleRefresh(300, REFRESH_INTENT_RETRY);
           return null;
         }
-        if (commitResult === 'committed' && image)
+        if (image && (commitResult === 'committed' || !committedScreenshotUrl))
           committedScreenshotUrl = image.src;
-        reportCaptureSuccess();
+        if (canPublishHealth()) reportCaptureSuccess();
 
         committedScreenshotScale = Number(frame.requestedCaptureScale) || requestedScale;
         const actualCaptureScale = Number(frame.captureScale);
@@ -744,16 +816,20 @@ import {
         if (isSuperseded()) {
           return followReplacement();
         }
-        if (!navigator.onLine) {
-          reportDisconnected('browser-offline');
-        } else if (phase === 'decode' || phase === 'state-response' || phase === 'apply') {
-          reportCaptureFailure(timedOut
-            ? 'capture-timeout'
-            : (phase === 'decode' ? 'image-decode' : 'capture-failed'));
-        } else if (timedOut) {
-          reportDisconnected('request-timeout');
-        } else {
-          reportDisconnected('broker-unreachable');
+        if (canPublishHealth()) {
+          if (!navigator.onLine) {
+            reportDisconnected('browser-offline');
+          } else if (phase === 'decode') {
+            reportCaptureFailure(timedOut ? 'capture-timeout' : 'image-decode');
+          } else if (phase === 'state' || phase === 'apply') {
+            reportCaptureFailure('capture-failed');
+          } else if (phase === 'response-body' && !timedOut) {
+            reportCaptureFailure('invalid-response');
+          } else if (timedOut) {
+            reportDisconnected('request-timeout');
+          } else {
+            reportDisconnected('broker-unreachable');
+          }
         }
         console.error('State refresh failed:', err);
         return null;
@@ -775,6 +851,7 @@ import {
     if (driveGateStatusToken) {
       statusChannel.clear(driveGateStatusToken);
       driveGateStatusToken = null;
+      driveGateStatusText = null;
     }
     updateHealth({ retrying: true });
     try {
@@ -1009,8 +1086,13 @@ import {
 
   function ensureCanDrive() {
     if (presentation.driveAllowed) return true;
-    driveGateStatusToken = setStatus(
-      presentation.driveMessage || 'This action is currently unavailable.');
+    const message = presentation.driveMessage || 'This action is currently unavailable.';
+    if (driveGateStatusToken && statusChannel.isCurrent(driveGateStatusToken)) {
+      statusChannel.replace(driveGateStatusToken, message);
+    } else {
+      driveGateStatusToken = setStatus(message);
+    }
+    driveGateStatusText = message;
     const takeControl = document.getElementById('df-take-control');
     if (presentation.healthy && takeControl && !takeControl.classList.contains('df-hidden')) {
       takeControl.classList.add('df-attention');
@@ -1174,6 +1256,10 @@ import {
   function openEditor(targetEl) {
     if (!canEditTextInput(targetEl)) return;
     if (activeEditor?.dataset.commitInProgress === 'true') return;
+    if (activeEditor?.dataset.dirty === 'true') {
+      setStatus('Finish or discard the preserved edit before editing another field.');
+      return;
+    }
     closeEditor(false);
     const elementId = targetEl.getAttribute('data-id');
     if (!elementId) return;
@@ -1563,7 +1649,12 @@ import {
   });
   window.addEventListener('online', () => {
     if (!replaying) scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
-    if (!eventsWs || eventsWs.readyState >= WebSocket.CLOSING) connectEvents();
+    if (eventsWs?.readyState === WebSocket.OPEN) {
+      wsLive = true;
+      reportEventStatus('live');
+    } else if (!eventsWs || eventsWs.readyState >= WebSocket.CLOSING) {
+      connectEvents();
+    }
   });
 
   // ── Periodic safety refresh for app-side changes (AJAX, no flash) ──
@@ -2191,6 +2282,10 @@ import {
 
   function updateRecordButton() {
     if (!recordBtn) return;
+    const wasRecording = recordBtn.classList.contains('df-recording');
+    const previousLabel = recordBtn.querySelector('.df-btn-label')?.textContent
+      || recordBtn.textContent;
+    const cancelWasHidden = cancelRecordingBtn?.classList.contains('df-hidden');
     recordBtn.classList.toggle('df-recording', !!recordingId);
     recordBtn.setAttribute('aria-pressed', String(!!recordingId));
     // Update only the label span so the leading icon and the responsive icon-collapse survive
@@ -2200,7 +2295,11 @@ import {
     if (lbl) lbl.textContent = label;
     else recordBtn.textContent = recordingId ? `\u25CF ${label}` : `\u25CF ${label}`;
     if (cancelRecordingBtn) cancelRecordingBtn.classList.toggle('df-hidden', !recordingId);
-    scheduleToolbarLayout();
+    if (wasRecording !== !!recordingId
+        || previousLabel !== (lbl?.textContent || recordBtn.textContent)
+        || cancelWasHidden !== cancelRecordingBtn?.classList.contains('df-hidden')) {
+      scheduleToolbarLayout();
+    }
   }
 
   // Highest-precedence DURABLE selector for the element (automationId > text > id). We never send a
@@ -2521,7 +2620,7 @@ import {
     if (workflowReplayBtn) workflowReplayBtn.disabled = !lastMarkdown || !!recordingId || replaying || !canDrive;
     propertyGrid.updateWriterState();
     document.querySelectorAll('#df-dock .df-alert-actions button').forEach((button) => {
-      button.disabled = !canDrive;
+      button.disabled = !canDrive || button.dataset.pending === 'true';
     });
   }
 
@@ -3573,12 +3672,14 @@ import {
           : (!presentation.healthy ? 'Retry the Preview before dismissing native alerts.' : `Dismiss with ${label}`);
         button.addEventListener('click', async () => {
           if (!ensureCanDrive()) return;
+          button.dataset.pending = 'true';
           button.disabled = true;
           const response = await apiPost('/api/alerts/dismiss', { buttonLabel: label });
           if (response && response.ok && response.dismissed) {
             setStatus(`Dismissed native alert with ${label}.`);
             await loadTab('alerts');
           } else {
+            delete button.dataset.pending;
             button.disabled = false;
             setStatus((response && response.error) || 'Could not dismiss the native alert.');
           }
@@ -3825,7 +3926,9 @@ import {
     }
   }
   async function control(action, force) {
+    const requestVersion = ++controlRequestVersion;
     const j = await apiPost('/api/control', force ? { action, force: true } : { action });
+    if (requestVersion !== controlRequestVersion) return j;
     if (j && j.ok !== false) {
       const wasWriter = isWriter;
       setWriterUi(j.youAreWriter, j.heldByOther, j.label, j.expiresInMs, j.authority);
@@ -4184,7 +4287,7 @@ import {
     setDiagnosticsPaneVisible(!isDiagnosticsPaneVisible()));
 
   presentationReady = true;
-  renderHealthPresentation(presentation, false);
+  renderHealthPresentation(null, false);
   settleInitialScreenshot();
 
 })();

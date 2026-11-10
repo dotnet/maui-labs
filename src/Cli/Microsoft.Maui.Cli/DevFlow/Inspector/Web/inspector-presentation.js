@@ -126,11 +126,14 @@ function presencePresentation(access, connected, driveAllowed) {
     const seconds = Number.isFinite(Number(access.expiresInMs))
       ? Math.max(0, Math.ceil(Number(access.expiresInMs) / 1000))
       : null;
+    const reliability = access.leaseReliable === false
+      ? ' Control status is temporarily unavailable.'
+      : '';
     return {
       icon: 'i-lock',
       label: `Read-only · ${owner}`,
       tone: 'read-only',
-      title: `${owner} is driving this app.${seconds == null ? '' : ` Lease refreshes in about ${seconds}s.`}`,
+      title: `${owner} is driving this app.${seconds == null ? '' : ` Lease refreshes in about ${seconds}s.`}${reliability}`,
     };
   }
   return null;
@@ -152,9 +155,11 @@ function accessAnnouncement(access, driveAllowed) {
 }
 
 function accessKey(access) {
-  if (access.isWriter) return `writer:${access.authority || ''}`;
-  if (access.heldByOther) return `read-only:${boundedText(access.holderLabel) || ''}`;
-  return 'free';
+  const reliability = access.leaseReliable === false ? 'unreliable' : 'reliable';
+  if (access.isWriter) return `writer:${access.authority || ''}:${reliability}`;
+  if (access.heldByOther)
+    return `read-only:${boundedText(access.holderLabel) || ''}:${access.authority || ''}:${reliability}`;
+  return `free:${reliability}`;
 }
 
 export function deriveInspectorPresentation(state, access = {}, committedFrame = {}) {

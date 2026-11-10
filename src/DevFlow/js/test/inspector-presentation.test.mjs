@@ -127,12 +127,26 @@ test('lease uncertainty preserves the last known writer recovery controls', () =
     authority: 'unknown',
     leaseReliable: false,
   });
+  const readOnlyReliable = deriveInspectorPresentation(liveState(), {
+    heldByOther: true,
+    holderLabel: 'Other inspector',
+    authority: 'agent',
+    leaseReliable: true,
+  });
+  const readOnlyUnknown = deriveInspectorPresentation(liveState(), {
+    heldByOther: true,
+    holderLabel: 'Other inspector',
+    authority: 'unknown',
+    leaseReliable: false,
+  });
 
   assert.equal(reliable.driveAllowed, false);
   assert.equal(reliable.controlAllowed, true);
   assert.equal(unknown.driveAllowed, true);
   assert.equal(unknown.controlAllowed, true);
   assert.match(unknown.accessAnnouncement, /temporarily unavailable/i);
+  assert.notEqual(readOnlyReliable.accessAnnouncementKey, readOnlyUnknown.accessAnnouncementKey);
+  assert.match(readOnlyUnknown.presence.title, /temporarily unavailable/i);
 });
 
 test('status channel preserves feature text and reports hidden health fallback', () => {
