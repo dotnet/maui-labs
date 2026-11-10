@@ -34,10 +34,18 @@ public class InspectorServerCaptureMetadataTests
         {
             using var client = new HttpClient();
 
+            string? firstFrameId;
+            long firstFrameRevision;
             using (var first = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state",
                 HttpCompletionOption.ResponseHeadersRead))
+            {
                 first.EnsureSuccessStatusCode();
+                using var state = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+                var frame = state.RootElement.GetProperty("frame");
+                firstFrameId = frame.GetProperty("frameId").GetString();
+                firstFrameRevision = frame.GetProperty("frameRevision").GetInt64();
+            }
             var requestsAfterFirstFrame = agent.RecordedRequests.Count(
                 request => request.Path == "/api/v1/ui/tree");
             Assert.True(requestsAfterFirstFrame > 0);
@@ -57,11 +65,17 @@ public class InspectorServerCaptureMetadataTests
                 screenshotsAfterFirstFrame,
                 agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/screenshot"));
 
+            string? freshFrameId;
+            long freshFrameRevision;
             using (var fresh = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state?fresh=1",
                 HttpCompletionOption.ResponseHeadersRead))
             {
                 fresh.EnsureSuccessStatusCode();
+                using var state = JsonDocument.Parse(await fresh.Content.ReadAsStringAsync());
+                var frame = state.RootElement.GetProperty("frame");
+                freshFrameId = frame.GetProperty("frameId").GetString();
+                freshFrameRevision = frame.GetProperty("frameRevision").GetInt64();
             }
 
             Assert.True(
@@ -70,12 +84,102 @@ public class InspectorServerCaptureMetadataTests
             Assert.True(
                 agent.RecordedRequests.Count(request => request.Path == "/api/v1/ui/screenshot")
                 > screenshotsAfterFirstFrame);
+            Assert.NotEqual(firstFrameId, freshFrameId);
+            Assert.True(freshFrameRevision > firstFrameRevision);
         }
         finally
         {
             await inspector.StopAsync();
         }
     }
+
+    private const string OffsetVisualTree = """
+        [
+          {
+            "id": "window-root",
+            "type": "Window",
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "windowId": 0,
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": { "x": 0, "y": 0, "width": 100, "height": 100 },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "captureEpoch": 42,
+                "registryGeneration": 7,
+                "windowId": 0,
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": { "x": 10, "y": 20, "width": 100, "height": 100 },
+                "children": [
+                  {
+                    "id": "hit-child",
+                    "type": "Button",
+                    "isVisible": true,
+                    "isEnabled": true,
+                    "windowBounds": { "x": 15, "y": 26, "width": 20, "height": 20 },
+                    "children": []
+                  },
+                  {
+                    "id": "hit-parent",
+                    "type": "Grid",
+                    "isVisible": true,
+                    "isEnabled": true,
+                    "windowBounds": { "x": 10, "y": 20, "width": 100, "height": 100 },
+                    "children": []
+                  },
+                  {
+                    "id": "hit-parent-refreshed",
+                    "type": "Grid",
+                    "isVisible": true,
+                    "isEnabled": true,
+                    "windowBounds": { "x": 10, "y": 20, "width": 100, "height": 100 },
+                    "children": []
+                  },
+                  {
+                    "id": "hit-scroll",
+                    "type": "ScrollView",
+                    "isVisible": true,
+                    "isEnabled": true,
+                    "windowBounds": { "x": 10, "y": 20, "width": 100, "height": 100 },
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+        """;
+    private const string NativeRootVisualTree = """
+        [
+          {
+            "id": "decor-root",
+            "type": "DecorView",
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "windowId": 0,
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": { "x": 0, "y": 0, "width": 400, "height": 800 },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "captureEpoch": 42,
+                "registryGeneration": 7,
+                "windowId": 0,
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": { "x": 10, "y": 20, "width": 200, "height": 300 },
+                "children": []
+              }
+            ]
+          }
+        ]
+        """;
 
     [Theory]
     [InlineData(
@@ -712,6 +816,798 @@ public class InspectorServerCaptureMetadataTests
     }
 
     [Fact]
+    public async Task State_ExposesVersionedFrameDescriptorAndLegacyAliases()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = OffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var firstResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            firstResponse.EnsureSuccessStatusCode();
+            using var firstState = JsonDocument.Parse(
+                await firstResponse.Content.ReadAsStringAsync());
+            var firstFrame = firstState.RootElement.GetProperty("frame");
+
+            Assert.Equal(firstState.RootElement.GetProperty("frameId").GetString(), firstFrame.GetProperty("frameId").GetString());
+            Assert.Equal(firstState.RootElement.GetProperty("viewportWidth").GetDouble(), firstFrame.GetProperty("logicalWidth").GetDouble());
+            Assert.Equal(firstState.RootElement.GetProperty("viewportHeight").GetDouble(), firstFrame.GetProperty("logicalHeight").GetDouble());
+            Assert.Equal(100, firstFrame.GetProperty("logicalWidth").GetDouble());
+            Assert.Equal(100, firstFrame.GetProperty("logicalHeight").GetDouble());
+            Assert.Equal(1, firstFrame.GetProperty("pixelWidth").GetInt32());
+            Assert.Equal(1, firstFrame.GetProperty("pixelHeight").GetInt32());
+            Assert.Equal(10, firstFrame.GetProperty("rootOffsetX").GetDouble());
+            Assert.Equal(20, firstFrame.GetProperty("rootOffsetY").GetDouble());
+            Assert.Equal(0.01, firstFrame.GetProperty("captureScale").GetDouble(), precision: 6);
+            Assert.Equal(42, firstFrame.GetProperty("captureEpoch").GetInt64());
+            Assert.Equal(7, firstFrame.GetProperty("registryGeneration").GetInt64());
+            Assert.Equal(0, firstFrame.GetProperty("windowId").GetInt32());
+            Assert.Equal(1, firstFrame.GetProperty("frameRevision").GetInt64());
+            Assert.False(string.IsNullOrWhiteSpace(firstFrame.GetProperty("streamId").GetString()));
+            Assert.True(firstFrame.GetProperty("createdAt").TryGetDateTime(out _));
+
+            var firstStreamId = firstFrame.GetProperty("streamId").GetString();
+            var firstFrameId = firstFrame.GetProperty("frameId").GetString();
+            await Task.Delay(250);
+            using var secondResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            secondResponse.EnsureSuccessStatusCode();
+            using var secondState = JsonDocument.Parse(
+                await secondResponse.Content.ReadAsStringAsync());
+            var secondFrame = secondState.RootElement.GetProperty("frame");
+            Assert.Equal(firstStreamId, secondFrame.GetProperty("streamId").GetString());
+            Assert.NotEqual(firstFrameId, secondFrame.GetProperty("frameId").GetString());
+            Assert.Equal(2, secondFrame.GetProperty("frameRevision").GetInt64());
+
+            var html = await client.GetStringAsync($"http://localhost:{inspectorPort}/");
+            var meta = System.Text.RegularExpressions.Regex.Match(
+                html,
+                "<meta name=\"devflow-frame\" content=\"([^\"]+)\">");
+            Assert.True(meta.Success);
+            using var initialFrame = JsonDocument.Parse(
+                WebUtility.HtmlDecode(meta.Groups[1].Value));
+            Assert.Equal(firstStreamId, initialFrame.RootElement.GetProperty("streamId").GetString());
+            Assert.True(initialFrame.RootElement.GetProperty("frameRevision").GetInt64() >= 2);
+            var initialFrameId = initialFrame.RootElement.GetProperty("frameId").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(initialFrameId));
+            Assert.Contains($"screenshot.png?frame={initialFrameId}", html);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData("appLogical", 5, 6, 15, 26)]
+    [InlineData("screenshotPixel", 0.5, 0.25, 60, 45)]
+    public async Task CorrelatedHitTest_ConvertsCoordinatesUsingReferencedFrame(
+        string coordinateSpace,
+        double x,
+        double y,
+        double expectedX,
+        double expectedY)
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = OffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x,
+                y,
+                correlation = new
+                {
+                    actionId = "action-1",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+            response.EnsureSuccessStatusCode();
+
+            var hitTest = Assert.Single(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
+            Assert.Contains(
+                $"x={expectedX.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                hitTest.QueryString);
+            Assert.Contains(
+                $"y={expectedY.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                hitTest.QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_WithNativeRoot_UsesCapturedChildLogicalDimensions()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = NativeRootVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            response.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+
+            Assert.Equal(200, frame.GetProperty("logicalWidth").GetDouble());
+            Assert.Equal(300, frame.GetProperty("logicalHeight").GetDouble());
+            Assert.Equal(10, frame.GetProperty("rootOffsetX").GetDouble());
+            Assert.Equal(20, frame.GetProperty("rootOffsetY").GetDouble());
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedHitTest_WithExpiredFrame_IsRejectedWithoutRetargeting()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-expired",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = "00000000000000000000000000000000",
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
+            Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("frame-expired", error.RootElement.GetProperty("error").GetString());
+            Assert.DoesNotContain(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedHitTest_NewestFrameRemainsValidPastAgePruningWindow()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = OffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            await Task.Delay(TimeSpan.FromMilliseconds(10_250));
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-after-idle",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, responseBody);
+            Assert.Contains(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedHitTest_EquivalentNewerFrame_DoesNotInvalidateDisplayedCoordinates()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = OffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var firstResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            firstResponse.EnsureSuccessStatusCode();
+            using var firstState = JsonDocument.Parse(
+                await firstResponse.Content.ReadAsStringAsync());
+            var firstFrame = firstState.RootElement.GetProperty("frame");
+
+            await Task.Delay(250);
+            using var secondResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            secondResponse.EnsureSuccessStatusCode();
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-superseded",
+                    source = "inspector",
+                    streamId = firstFrame.GetProperty("streamId").GetString(),
+                    frameId = firstFrame.GetProperty("frameId").GetString(),
+                    frameRevision = firstFrame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, responseBody);
+            Assert.Contains(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedHitTest_ChangedGeometryFrame_IsRejectedWithoutRetargeting()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = OffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var firstResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            firstResponse.EnsureSuccessStatusCode();
+            using var firstState = JsonDocument.Parse(
+                await firstResponse.Content.ReadAsStringAsync());
+            var firstFrame = firstState.RootElement.GetProperty("frame");
+
+            agent.VisualTreeResponse = OffsetVisualTree.Replace(
+                "\"x\": 10, \"y\": 20",
+                "\"x\": 30, \"y\": 20",
+                StringComparison.Ordinal);
+            using var backResponse = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/back",
+                content: null);
+            backResponse.EnsureSuccessStatusCode();
+            using var secondResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            secondResponse.EnsureSuccessStatusCode();
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-superseded",
+                    source = "inspector",
+                    streamId = firstFrame.GetProperty("streamId").GetString(),
+                    frameId = firstFrame.GetProperty("frameId").GetString(),
+                    frameRevision = firstFrame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("frame-superseded", error.RootElement.GetProperty("error").GetString());
+            Assert.DoesNotContain(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedCoordinateTap_RehitTestsWithFreshCaptureForParentFallback()
+    {
+        await using var agent = new MockAgentServer(
+            failFirstHitTestCandidate: true,
+            changeHitTestCandidates: true)
+        {
+            VisualTreeResponse = OffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-parent-fallback",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                request);
+
+            response.EnsureSuccessStatusCode();
+            var taps = agent.RecordedRequests
+                .Where(recorded => recorded.Path == "/api/v1/ui/actions/tap")
+                .ToArray();
+            Assert.Equal(2, taps.Length);
+            using var firstTap = JsonDocument.Parse(taps[0].Body!);
+            using var secondTap = JsonDocument.Parse(taps[1].Body!);
+            Assert.NotEqual(
+                firstTap.RootElement.GetProperty("captureEpoch").GetInt64(),
+                secondTap.RootElement.GetProperty("captureEpoch").GetInt64());
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedCoordinateTap_DoesNotRetargetToElementMissingFromReferencedFrame()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = NativeRootVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-no-retarget",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                request);
+
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("frame-target-unavailable", error.RootElement.GetProperty("error").GetString());
+            Assert.DoesNotContain(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/actions/tap");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData("/api/tap", "/api/v1/ui/actions/tap", false)]
+    [InlineData("/api/scroll", "/api/v1/ui/actions/scroll", true)]
+    public async Task CorrelatedCoordinateAction_WhenFrameChangesDuringHitTest_RejectsBeforeMutation(
+        string inspectorPath,
+        string agentActionPath,
+        bool scroll)
+    {
+        var hitTestStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseHitTest = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var agent = new MockAgentServer(useScrollableHitTestCandidate: scroll)
+        {
+            VisualTreeResponse = OffsetVisualTree,
+            BeforeHitTestResponseAsync = async () =>
+            {
+                hitTestStarted.TrySetResult();
+                await releaseHitTest.Task;
+            }
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            var payload = new Dictionary<string, object?>
+            {
+                ["x"] = 5,
+                ["y"] = 6,
+                ["correlation"] = new
+                {
+                    actionId = $"action-race-{(scroll ? "scroll" : "tap")}",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            };
+            if (scroll)
+            {
+                payload["deltaX"] = 0;
+                payload["deltaY"] = 12;
+            }
+
+            using var request = new StringContent(
+                JsonSerializer.Serialize(payload),
+                Encoding.UTF8,
+                "application/json");
+            var actionTask = client.PostAsync(
+                $"http://localhost:{inspectorPort}{inspectorPath}",
+                request);
+
+            await hitTestStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            agent.VisualTreeResponse = OffsetVisualTree.Replace(
+                "\"x\": 15",
+                "\"x\": 45",
+                StringComparison.Ordinal);
+            using (var freshState = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?fresh=1"))
+            {
+                freshState.EnsureSuccessStatusCode();
+            }
+
+            releaseHitTest.TrySetResult();
+            using var response = await actionTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("frame-superseded", error.RootElement.GetProperty("error").GetString());
+            Assert.DoesNotContain(
+                agent.RecordedRequests,
+                recorded => recorded.Path == agentActionPath);
+        }
+        finally
+        {
+            releaseHitTest.TrySetResult();
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedCoordinateTap_WhenInFrameCandidatesDecline_ReturnsTapRejection()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = OffsetVisualTree,
+            RejectHitTestCandidateTaps = true
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-declined-targets",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                request);
+
+            response.EnsureSuccessStatusCode();
+            using var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.False(result.RootElement.GetProperty("ok").GetBoolean());
+            Assert.Equal(
+                "tap-rejected",
+                result.RootElement.GetProperty("error").GetProperty("code").GetString());
+            Assert.True(result.RootElement.GetProperty("attemptedCandidates").GetInt32() > 0);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedCoordinateScroll_WhenInFrameCandidatesDecline_UsesUntargetedFallback()
+    {
+        await using var agent = new MockAgentServer(useScrollableHitTestCandidate: true)
+        {
+            VisualTreeResponse = OffsetVisualTree,
+            RejectElementScrolls = true
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                deltaX = 0,
+                deltaY = 12,
+                correlation = new
+                {
+                    actionId = "action-scroll-fallback",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/scroll",
+                request);
+
+            response.EnsureSuccessStatusCode();
+            using var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.True(result.RootElement.GetProperty("ok").GetBoolean());
+            var scrollRequests = agent.RecordedRequests
+                .Where(recorded => recorded.Path == "/api/v1/ui/actions/scroll")
+                .ToArray();
+            Assert.True(scrollRequests.Length > 1);
+            using var fallback = JsonDocument.Parse(scrollRequests[^1].Body!);
+            Assert.True(
+                !fallback.RootElement.TryGetProperty("elementId", out var fallbackElementId) ||
+                fallbackElementId.ValueKind == JsonValueKind.Null);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedFill_WithExpiredFrame_TreatsCorrelationAsAdvisory()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(
+                await stateResponse.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                elementId = "element-42",
+                text = "updated",
+                captureEpoch = 42,
+                registryGeneration = 7,
+                correlation = new
+                {
+                    actionId = "fill-expired",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = "00000000000000000000000000000000",
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/fill",
+                request);
+
+            response.EnsureSuccessStatusCode();
+            Assert.Contains(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/actions/fill");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task State_WhenCurrentScreenshotCaptureFails_ReturnsServiceUnavailable()
     {
         await using var agent = new MockAgentServer(failScreenshotsAfterFirst: true);
@@ -724,9 +1620,12 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
-            using var initialState = await client.GetAsync(
+            using var initialStateResponse = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state");
-            initialState.EnsureSuccessStatusCode();
+            initialStateResponse.EnsureSuccessStatusCode();
+            using var initialState = JsonDocument.Parse(
+                await initialStateResponse.Content.ReadAsStringAsync());
+            var frame = initialState.RootElement.GetProperty("frame");
 
             using var backResponse = await client.PostAsync(
                 $"http://localhost:{inspectorPort}/api/back",
@@ -736,6 +1635,84 @@ public class InspectorServerCaptureMetadataTests
             using var failedState = await client.GetAsync(
                 $"http://localhost:{inspectorPort}/api/state");
             Assert.Equal(HttpStatusCode.ServiceUnavailable, failedState.StatusCode);
+
+            agent.ClearRecordedRequests();
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-after-failed-capture",
+                    source = "inspector",
+                    streamId = frame.GetProperty("streamId").GetString(),
+                    frameId = frame.GetProperty("frameId").GetString(),
+                    frameRevision = frame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("frame-superseded", error.RootElement.GetProperty("error").GetString());
+            Assert.DoesNotContain(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task State_WhenScreenshotIsInvalidOrTruncated_ReturnsServiceUnavailable(
+        int invalidPngKind)
+    {
+        await using var agent = new MockAgentServer
+        {
+            ScreenshotResponse = invalidPngKind switch
+            {
+                0 => [1, 2, 3, 4],
+                1 => MockAgentResponses.ScreenshotPng[..24],
+                _ => Convert.FromBase64String(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBwIAAAASJ8QPAAAABElEQVQAAQIDQN6+CAAAAABJRU5ErkJggg==")
+            }
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?fresh=1");
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal(
+                "Unable to capture the current app state.",
+                error.RootElement.GetProperty("error").GetString());
+
+            using var screenshot = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/screenshot.png");
+            Assert.Equal(HttpStatusCode.NotFound, screenshot.StatusCode);
+
+            using var root = await client.GetAsync($"http://localhost:{inspectorPort}/");
+            root.EnsureSuccessStatusCode();
+            var html = await root.Content.ReadAsStringAsync();
+            Assert.DoesNotContain("id=\"screenshot\"", html);
+            Assert.DoesNotContain("name=\"devflow-frame\"", html);
         }
         finally
         {

@@ -3,6 +3,15 @@
 import { createInspectorApi } from './inspector-api.js';
 import { confirmModal } from './inspector-dialog.js';
 import { createDataSnapshot, isSecretContextKey, supportsDataContextScope } from './inspector-data-context.js';
+import {
+  CoordinateSpace,
+  appLogicalToWindowLogical,
+  buildActionCorrelation,
+  clientToAppLogical,
+  hasExplicitFrameIdentity,
+  normalizeFrameDescriptor,
+  shouldCommitFrame,
+} from './inspector-frame.js';
 import { createPropertyGridController } from './inspector-properties.js';
 import { createElementTreeController } from './inspector-tree.js';
 import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layoutRootElementId } from './inspector-layout.js';
@@ -11,7 +20,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   'use strict';
 
   const viewport = document.getElementById('app-viewport');
-  const screenshot = document.getElementById('screenshot');
+  let screenshot = document.getElementById('screenshot');
   // Fit-to-container scaling (responsive). #app-viewport holds the app at its fixed logical size;
   // #df-stage is sized to the scaled box and #app-viewport carries the CSS scale transform.
   const stage = document.getElementById('df-stage');
@@ -35,6 +44,64 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const meta = document.querySelector(`meta[name="${name}"]`);
     return meta && typeof meta.content === 'string' && meta.content ? meta.content : null;
   }
+  function initialFrameState() {
+    let frame = null;
+    try {
+      frame = JSON.parse(metaContent('devflow-frame') || 'null');
+    } catch {}
+    return {
+      frame,
+      screenshotUrl: screenshot?.getAttribute('src') || null,
+      viewportWidth: parseFloat(viewport.dataset.width) || viewport.offsetWidth || 1,
+      viewportHeight: parseFloat(viewport.dataset.height) || viewport.offsetHeight || 1,
+      rootOffsetX,
+      rootOffsetY,
+    };
+  }
+  let committedFrame = normalizeFrameDescriptor(initialFrameState());
+  rootOffsetX = committedFrame.rootOffsetX;
+  rootOffsetY = committedFrame.rootOffsetY;
+  viewport.style.width = committedFrame.logicalWidth + 'px';
+  viewport.style.height = committedFrame.logicalHeight + 'px';
+  viewport.dataset.width = String(committedFrame.logicalWidth);
+  viewport.dataset.height = String(committedFrame.logicalHeight);
+
+  function correlatedPayload(
+    payload,
+    coordinateSpace = CoordinateSpace.appLogical,
+    frame = committedFrame,
+  ) {
+    const correlation = buildActionCorrelation(frame, coordinateSpace);
+    if (correlation) return { ...payload, correlation };
+    if (coordinateSpace !== CoordinateSpace.appLogical) return payload;
+
+    const converted = { ...payload };
+    if (Number.isFinite(payload.x) && Number.isFinite(payload.y)) {
+      Object.assign(converted, appLogicalToWindowLogical(payload, frame));
+    }
+    if (Array.isArray(payload.points)) {
+      converted.points = payload.points.map(point => ({
+        ...point,
+        ...appLogicalToWindowLogical(point, frame),
+      }));
+    }
+    return converted;
+  }
+
+  function isFrameCorrelationError(body) {
+    return body && [
+      'frame-expired',
+      'frame-mismatch',
+      'frame-superseded',
+      'frame-target-unavailable',
+    ].includes(body.error);
+  }
+
+  async function responseHasFrameCorrelationError(response) {
+    if (response.status !== 409 && response.status !== 410) return false;
+    return isFrameCorrelationError(await response.clone().json().catch(() => null));
+  }
+
   const inspectorAgent = Object.freeze({
     id: metaContent('devflow-agent-id'),
     appName: metaContent('devflow-app-name'),
@@ -92,6 +159,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   });
 
   let gesturePoints = [];
+  let gestureFrame = null;
+  let gestureViewportRect = null;
   let isGesturing = false;
   let isDragging = false;
   let refreshGeneration = 0;
@@ -123,20 +192,19 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let checkpointLabel = null;
   let replaying = false;
 
-  // Convert browser (client) coordinates to app logical coordinates. The viewport may be fit-scaled
-  // by a CSS transform (see applyScale), so getBoundingClientRect() returns the on-screen (scaled)
-  // box. Map back into the app's own pixel space by the ratio of the logical size (data-width/height)
-  // to the rendered size. This is scale-safe and reduces to (clientX - left) when shown 1:1.
-  function toAppCoords(clientX, clientY) {
-    const rect = viewport.getBoundingClientRect();
-    const dw = parseFloat(viewport.dataset.width) || rect.width || 1;
-    const dh = parseFloat(viewport.dataset.height) || rect.height || 1;
-    const sx = rect.width ? dw / rect.width : 1;
-    const sy = rect.height ? dh / rect.height : 1;
-    return {
-      x: (clientX - rect.left) * sx + rootOffsetX,
-      y: (clientY - rect.top) * sy + rootOffsetY,
-    };
+  // Convert browser client coordinates to the captured root's app-logical coordinate space. The
+  // server resolves the correlated frame and adds its root/window offset exactly once.
+  function toAppCoords(
+    clientX,
+    clientY,
+    frame = committedFrame,
+    renderedViewport = viewport.getBoundingClientRect(),
+  ) {
+    return clientToAppLogical(
+      clientX,
+      clientY,
+      renderedViewport,
+      frame);
   }
 
   function getElementCaptureMetadata(el) {
@@ -234,6 +302,47 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     });
   }
 
+  function commitFrame(state, frame, image) {
+    if (hasExplicitFrameIdentity(state) && !shouldCommitFrame(committedFrame, frame)) {
+      const unchanged = frame.streamId === committedFrame.streamId
+        && frame.frameId === committedFrame.frameId
+        && frame.frameRevision === committedFrame.frameRevision;
+      return unchanged ? 'unchanged' : 'rejected';
+    }
+
+    // All frame-owned DOM changes are synchronous. The browser cannot paint or dispatch another
+    // event between them, so screenshot, geometry, offsets, overlays, and descriptor become visible
+    // as one complete committed frame.
+    if (image) {
+      if (screenshot) {
+        screenshot.src = image.src;
+      } else {
+        screenshot = image;
+        screenshot.id = 'screenshot';
+        screenshot.alt = 'App screenshot';
+        screenshot.style.width = '100%';
+        screenshot.style.height = '100%';
+        screenshot.addEventListener('error', onScreenshotError);
+        viewport.prepend(screenshot);
+      }
+    }
+    viewport.style.width = frame.logicalWidth + 'px';
+    viewport.style.height = frame.logicalHeight + 'px';
+    viewport.dataset.width = String(frame.logicalWidth);
+    viewport.dataset.height = String(frame.logicalHeight);
+    rootOffsetX = frame.rootOffsetX;
+    rootOffsetY = frame.rootOffsetY;
+    viewport.dataset.rootOffsetX = String(rootOffsetX);
+    viewport.dataset.rootOffsetY = String(rootOffsetY);
+    if (state.elements) patchElements(state.elements);
+    committedFrame = frame;
+    if (state.elements) onElementsUpdated();
+    latestRootOffsetX = rootOffsetX;
+    latestRootOffsetY = rootOffsetY;
+    applyScale();
+    return 'committed';
+  }
+
   // Refresh state via AJAX (no full page reload — avoids flash)
   async function refreshState(force = false) {
     const tap = latestTap;
@@ -250,7 +359,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       followUpPromise: null,
       promise: null,
     };
-    const isSuperseded = () => refresh.generation !== refreshGeneration;
+    const isSuperseded = () =>
+      activeRefresh !== refresh || refresh.generation !== refreshGeneration;
     const followReplacement = () =>
       activeRefresh && activeRefresh !== refresh ? activeRefresh.promise : null;
     const ensureCurrent = () => {
@@ -279,45 +389,28 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();
         if (!ensureCurrent()) return followReplacement();
+        const frame = normalizeFrameDescriptor(state, committedFrame);
 
         // Keep the previous frame intact until its replacement image is ready.
         let image = null;
-        if (screenshot && state.screenshotUrl) {
+        if (state.screenshotUrl) {
           image = await loadDecodedImage(state.screenshotUrl, refresh.controller.signal);
           if (!ensureCurrent()) return followReplacement();
           if (!navigator.onLine) return null;
         }
-
-        // Commit the complete frame synchronously so tree, screenshot, geometry, and metadata
-        // cannot be mixed with a superseded refresh.
-        if (image) {
-          screenshot.src = image.src;
+        if (!ensureCurrent()) return followReplacement();
+        const commitResult = commitFrame(state, frame, image);
+        if (commitResult === 'rejected') {
+          const replacement = followReplacement();
+          if (replacement) return replacement;
+          markConnected(true);
+          scheduleRefresh(300, REFRESH_INTENT_RETRY);
+          return null;
         }
         markConnected(true);
 
-        // Update viewport size if changed
-        if (state.viewportWidth && state.viewportHeight) {
-          viewport.style.width = state.viewportWidth + 'px';
-          viewport.style.height = state.viewportHeight + 'px';
-          viewport.dataset.width = state.viewportWidth;
-          viewport.dataset.height = state.viewportHeight;
-          applyScale();   // re-fit after an app resize/rotation changed the logical size
-        }
-        rootOffsetX = Number(state.rootOffsetX) || 0;
-        rootOffsetY = Number(state.rootOffsetY) || 0;
-        viewport.dataset.rootOffsetX = String(rootOffsetX);
-        viewport.dataset.rootOffsetY = String(rootOffsetY);
-
-        // Smart DOM diff — only update elements that changed, preserving hover/selection
-        if (state.elements) {
-          patchElements(state.elements);
-          onElementsUpdated();
-        }
-        latestRootOffsetX = rootOffsetX;
-        latestRootOffsetY = rootOffsetY;
-        const treeRevision = typeof state.treeRevision === 'string' ? state.treeRevision : '';
-        const diagnosticInputsRevision = typeof state.diagnosticInputsRevision === 'string'
-          ? state.diagnosticInputsRevision : null;
+        const treeRevision = committedFrame.treeRevision;
+        const diagnosticInputsRevision = committedFrame.diagnosticInputsRevision;
         const renderedState = [...viewport.querySelectorAll('.devflow-element')].map(element =>
           ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
             .map(attribute => element.getAttribute(attribute)));
@@ -577,8 +670,10 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
     }, delayMs);
   }
-  if (screenshot) screenshot.addEventListener('error', () =>
-    scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY));
+  function onScreenshotError() {
+    scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
+  }
+  if (screenshot) screenshot.addEventListener('error', onScreenshotError);
 
   // ── Click → Tap (with text-input awareness) ──
   // Element types that should open a text editor instead of just tapping.
@@ -632,6 +727,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   // Overlay editor that we float on top of the clicked text element.
   let activeEditor = null;
+  const editorFrames = new WeakMap();
   let inspectHitToken = 0;
   const hitCandidates = document.getElementById('df-hit-candidates');
 
@@ -674,8 +770,12 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     const { x, y } = toAppCoords(clientX, clientY);
     try {
       const response = await fetch(`${basePath}/api/hitTest`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(correlatedPayload({ x, y })),
       });
+      if (await responseHasFrameCorrelationError(response))
+        scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
       const result = response.ok ? await response.json().catch(() => null) : null;
       if (token !== inspectHitToken) return;
       if (result && result.ok && result.elementId) {
@@ -693,6 +793,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   function removeEditor(editor) {
     if (activeEditor === editor) activeEditor = null;
+    editorFrames.delete(editor);
     editor.remove();
   }
 
@@ -714,11 +815,14 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       const response = await fetch(`${basePath}/api/fill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          elementId: editor.dataset.elementId,
-          text: editor.value,
-          ...getElementCaptureMetadata(editor),
-        }),
+        body: JSON.stringify(correlatedPayload(
+          {
+            elementId: editor.dataset.elementId,
+            text: editor.value,
+            ...getElementCaptureMetadata(editor),
+          },
+          CoordinateSpace.appLogical,
+          editorFrames.get(editor) || committedFrame)),
       });
 
       if (response.ok) {
@@ -730,13 +834,14 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         return;
       }
 
-      if (retryStaleCapture && response.status === 409) {
+      if (retryStaleCapture && (response.status === 409 || response.status === 410)) {
         await refreshState(true);
         const currentTarget = findElementById(editor.dataset.elementId);
         if (currentTarget
             && isTextInput(currentTarget)
             && matchesEditorTarget(editor, currentTarget)) {
           copyElementCaptureMetadata(currentTarget, editor);
+          editorFrames.set(editor, committedFrame);
           await commitEditor(editor, false);
           return;
         }
@@ -827,6 +932,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     editor.addEventListener('blur', () => closeEditor(true));
 
     viewport.appendChild(editor);
+    editorFrames.set(editor, committedFrame);
     activeEditor = editor;
     // Use a microtask so the click that opened us doesn't immediately blur it.
     setTimeout(() => { editor.focus(); editor.select(); }, 0);
@@ -843,16 +949,19 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   async function sendInspectorTap(x, y, targetEl) {
     const targetId = isTapTargetOverlay(targetEl) ? targetEl.getAttribute('data-id') : null;
     const targetLabel = targetEl ? elementLabel(targetEl) : null;
-    const payload = { x, y, ...getElementCaptureMetadata(targetEl) };
+    const payload = correlatedPayload({ x, y, ...getElementCaptureMetadata(targetEl) });
     if (targetId) payload.elementId = targetId;
     const previewSignature = previewStateSignature();
 
     pendingTapRequests++;
     renderPreviewPending();
+    let refreshIntent = REFRESH_INTENT_TAP;
     try {
       const response = await inspectorApi.postDetailed('/api/tap', payload);
       const result = response.body;
       if (!response.ok || !result || result.ok !== true) {
+        if (isFrameCorrelationError(result))
+          refreshIntent = REFRESH_INTENT_EVIDENCE;
         const reason = result && typeof result.reason === 'string'
           ? result.reason
           : 'The app did not accept the tap.';
@@ -876,7 +985,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     } finally {
       pendingTapRequests--;
       renderPreviewPending();
-      scheduleRefresh(0, REFRESH_INTENT_TAP);
+      scheduleRefresh(0, refreshIntent);
     }
   }
 
@@ -934,42 +1043,72 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   // ── Wheel → Scroll ──
   let scrollAccumX = 0, scrollAccumY = 0;
   let scrollFlushTimer = null;
-  let lastScrollX = 0, lastScrollY = 0;
+  let lastScrollPoint = null;
+  let scrollFrame = null;
+
+  async function flushScroll() {
+    if (!scrollFrame || !lastScrollPoint || (scrollAccumX === 0 && scrollAccumY === 0)) {
+      scrollFlushTimer = null;
+      return;
+    }
+
+    const frame = scrollFrame;
+    const { x, y } = lastScrollPoint;
+    const dx = scrollAccumX, dy = scrollAccumY;
+    scrollAccumX = 0;
+    scrollAccumY = 0;
+    scrollFlushTimer = null;
+    scrollFrame = null;
+    lastScrollPoint = null;
+
+    try {
+      const resp = await fetch(`${basePath}/api/scroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(correlatedPayload(
+          { x, y, deltaX: dx, deltaY: dy },
+          CoordinateSpace.appLogical,
+          frame))
+      });
+      if (await responseHasFrameCorrelationError(resp))
+        scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+      if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
+      scheduleRefresh(300, resp.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
+    } catch (err) {
+      console.error('Scroll failed:', err);
+    }
+  }
 
   viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (!ensureCanDrive()) return;
+    if (scrollFrame && scrollFrame !== committedFrame) {
+      if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
+      void flushScroll();
+    }
+    scrollFrame = committedFrame;
     scrollAccumX += e.deltaX;
     scrollAccumY += e.deltaY;
-    lastScrollX = e.clientX;
-    lastScrollY = e.clientY;
+    lastScrollPoint = toAppCoords(
+      e.clientX,
+      e.clientY,
+      scrollFrame,
+      viewport.getBoundingClientRect());
 
     if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
-    scrollFlushTimer = setTimeout(async () => {
-      const { x, y } = toAppCoords(lastScrollX, lastScrollY);
-      const dx = scrollAccumX, dy = scrollAccumY;
-      scrollAccumX = 0;
-      scrollAccumY = 0;
-      scrollFlushTimer = null;
-
-      try {
-        const resp = await fetch(`${basePath}/api/scroll`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ x, y, deltaX: dx, deltaY: dy })
-        });
-        if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
-        scheduleRefresh(300, resp.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
-      } catch (err) {
-        console.error('Scroll failed:', err);
-      }
-    }, 100);
+    scrollFlushTimer = setTimeout(() => { void flushScroll(); }, 100);
   }, { passive: false });
 
   // ── Pointer Drag → Gesture ──
   viewport.addEventListener('pointerdown', (e) => {
     if (!ensureCanDrive()) return;
-    const { x, y } = toAppCoords(e.clientX, e.clientY);
+    gestureFrame = committedFrame;
+    gestureViewportRect = viewport.getBoundingClientRect();
+    const { x, y } = toAppCoords(
+      e.clientX,
+      e.clientY,
+      gestureFrame,
+      gestureViewportRect);
     gesturePoints = [{ x, y, sx: e.clientX, sy: e.clientY, t: Date.now() }];
     isGesturing = true;
     isDragging = false;
@@ -978,7 +1117,11 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
   viewport.addEventListener('pointermove', (e) => {
     if (!isGesturing) return;
-    const { x, y } = toAppCoords(e.clientX, e.clientY);
+    const { x, y } = toAppCoords(
+      e.clientX,
+      e.clientY,
+      gestureFrame || committedFrame,
+      gestureViewportRect || viewport.getBoundingClientRect());
     gesturePoints.push({ x, y, sx: e.clientX, sy: e.clientY, t: Date.now() });
     // Drag-vs-tap decision uses on-screen (CSS px) distance so it behaves the same at any fit scale.
     const s0 = gesturePoints[0];
@@ -998,6 +1141,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       if (mode === 'interact' && screenDist > 12) {
         if (!ensureCanDrive()) {
           gesturePoints = [];
+          gestureFrame = null;
+          gestureViewportRect = null;
           setTimeout(() => { isDragging = false; }, 50);
           return;
         }
@@ -1005,8 +1150,15 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           const response = await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ points: gesturePoints.map((p) => ({ x: p.x, y: p.y, t: p.t })) })
+            body: JSON.stringify(correlatedPayload(
+              {
+                points: gesturePoints.map((p) => ({ x: p.x, y: p.y, t: p.t })),
+              },
+              CoordinateSpace.appLogical,
+              gestureFrame || committedFrame))
           });
+          if (await responseHasFrameCorrelationError(response))
+            scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
           scheduleRefresh(300, response.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
           if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
         } catch (err) {
@@ -1016,6 +1168,8 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     }
 
     gesturePoints = [];
+    gestureFrame = null;
+    gestureViewportRect = null;
     setTimeout(() => { isDragging = false; }, 50);
   });
 
@@ -1128,12 +1282,25 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   const propsElLabel = document.getElementById('df-props-el');
   const propsCloseBtn = document.getElementById('df-props-close');
   let propsReturnFocus = null;
+  const propertyApi = Object.freeze({
+    post: (path, body) => inspectorApi.post(
+      path,
+      path === '/api/setProperty' ? correlatedPayload(body) : body),
+    postDetailed: async (path, body) => {
+      const response = await inspectorApi.postDetailed(
+        path,
+        path === '/api/setProperty' ? correlatedPayload(body) : body);
+      if (isFrameCorrelationError(response.body))
+        scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+      return response;
+    },
+  });
   const propertyGrid = createPropertyGridController({
     pane: propsPaneEl,
     body: propsBodyEl,
     labelElement: propsElLabel,
     closeButton: propsCloseBtn,
-    api: inspectorApi,
+    api: propertyApi,
     getIsWriter: () => isWriter && connected,
     prepareOpen: () => {
       const active = document.activeElement;

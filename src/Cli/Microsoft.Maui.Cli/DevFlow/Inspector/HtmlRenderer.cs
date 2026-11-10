@@ -27,6 +27,48 @@ public static class HtmlRenderer
         double rootOffsetX = 0,
         double rootOffsetY = 0,
         string? screenshotUrl = null)
+        => RenderCore(
+            tree,
+            hasScreenshot,
+            screenshotWidth,
+            screenshotHeight,
+            density,
+            elementScale,
+            rootOffsetX,
+            rootOffsetY,
+            screenshotUrl);
+
+    internal static string RenderWithViewport(
+        List<ElementInfo> tree,
+        bool hasScreenshot,
+        double screenshotWidth,
+        double screenshotHeight,
+        double density = 1,
+        double elementScale = 1,
+        double rootOffsetX = 0,
+        double rootOffsetY = 0,
+        string? screenshotUrl = null)
+        => RenderCore(
+            tree,
+            hasScreenshot,
+            screenshotWidth,
+            screenshotHeight,
+            density,
+            elementScale,
+            rootOffsetX,
+            rootOffsetY,
+            screenshotUrl);
+
+    private static string RenderCore(
+        List<ElementInfo> tree,
+        bool hasScreenshot,
+        double screenshotWidth,
+        double screenshotHeight,
+        double density,
+        double elementScale,
+        double rootOffsetX,
+        double rootOffsetY,
+        string? screenshotUrl)
     {
         var template = _templateCache.Value;
         var (viewportWidth, viewportHeight) = ComputeViewportSize(tree, screenshotWidth, screenshotHeight);
@@ -40,7 +82,7 @@ public static class HtmlRenderer
 
         // Build screenshot tag
         var screenshotHtml = hasScreenshot
-            ? $"<img id=\"screenshot\" src=\"{Escape(screenshotUrl ?? "screenshot.png")}\" alt=\"App screenshot\">"
+            ? $"<img id=\"screenshot\" src=\"{Escape(screenshotUrl ?? "screenshot.png")}\" alt=\"App screenshot\" style=\"width:100%;height:100%;\">"
             : "";
 
         // Replace scalar placeholders first (all produce known-safe, non-user
@@ -52,8 +94,8 @@ public static class HtmlRenderer
         // invariant explicit and resistant to a future refactor that
         // reorders these replacements.
         var scalarsReplaced = template
-            .Replace("{{VIEWPORT_WIDTH}}", viewportWidth.ToString("F0", CultureInfo.InvariantCulture))
-            .Replace("{{VIEWPORT_HEIGHT}}", viewportHeight.ToString("F0", CultureInfo.InvariantCulture))
+            .Replace("{{VIEWPORT_WIDTH}}", viewportWidth.ToString("0.####", CultureInfo.InvariantCulture))
+            .Replace("{{VIEWPORT_HEIGHT}}", viewportHeight.ToString("0.####", CultureInfo.InvariantCulture))
             .Replace("{{DENSITY}}", density.ToString("F1", CultureInfo.InvariantCulture))
             .Replace("{{ELEMENT_SCALE}}", elementScale.ToString("F4", CultureInfo.InvariantCulture))
             .Replace("{{ROOT_OFFSET_X}}", rootOffsetX.ToString("F4", CultureInfo.InvariantCulture))
@@ -104,7 +146,10 @@ public static class HtmlRenderer
         return sb.ToString();
     }
 
-    private static (double width, double height) ComputeViewportSize(List<ElementInfo> tree, int screenshotWidth, int screenshotHeight)
+    private static (double width, double height) ComputeViewportSize(
+        List<ElementInfo> tree,
+        double screenshotWidth,
+        double screenshotHeight)
     {
         if (screenshotWidth > 0 && screenshotHeight > 0)
             return (screenshotWidth, screenshotHeight);

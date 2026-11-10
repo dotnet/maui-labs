@@ -67,6 +67,9 @@ public sealed class InspectorServer : IDisposable
     private DateTime _screenshotCacheTime;
     private InspectorFrame? _latestFrame;
     private long _cacheGeneration;
+    private long _frameRevision;
+    private readonly string _frameStreamId = Guid.NewGuid().ToString("N");
+    private string? _latestCompleteFrameId;
     private readonly Dictionary<string, InspectorFrame> _frames = new(StringComparer.Ordinal);
     // Last observed capture epoch, used only to decide whether this agent enforces capture-bound
     // mutations. Per-frame capture metadata lives on InspectorFrame, which is the source of truth
@@ -260,6 +263,22 @@ public sealed class InspectorServer : IDisposable
             doc = null;
             return false;
         }
+    }
+
+    private static bool FrameContainsElementId(
+        IReadOnlyList<ElementInfo> elements,
+        string elementId)
+    {
+        foreach (var element in elements)
+        {
+            if (string.Equals(element.Id, elementId, StringComparison.Ordinal) ||
+                FrameContainsElementId(element.Children ?? [], elementId))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryGetNextHitTestCandidate(
@@ -1027,6 +1046,7 @@ public sealed class InspectorServer : IDisposable
                     "/api/eventSupport" => await HandleEventSupportAsync(),
                     "/screenshot.png" => await HandleScreenshotAsync(request.Query.GetValueOrDefault("frame")),
                     "/devflow.js" => HandleEmbeddedFile("devflow.js", "application/javascript"),
+                    "/inspector-frame.js" => HandleEmbeddedFile("inspector-frame.js", "application/javascript"),
                     "/inspector-api.js" => HandleEmbeddedFile("inspector-api.js", "application/javascript"),
                     "/inspector-dialog.js" => HandleEmbeddedFile("inspector-dialog.js", "application/javascript"),
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
@@ -1110,11 +1130,12 @@ public sealed class InspectorServer : IDisposable
         // "disconnected" overlay and keeps polling /api/state, which is the endpoint that reports
         // an unavailable agent.
         var frame = await CreateFrameAsync();
-        var html = HtmlRenderer.Render(
+        var hasPublishedFrame = frame.FrameRevision > 0 && frame.Png.Length > 0;
+        var html = HtmlRenderer.RenderWithViewport(
             frame.Tree,
-            frame.Png.Length > 0,
-            frame.Width,
-            frame.Height,
+            hasPublishedFrame,
+            frame.LogicalWidth,
+            frame.LogicalHeight,
             density: 1,
             elementScale: 1,
             frame.RootOffsetX,
@@ -1127,6 +1148,9 @@ public sealed class InspectorServer : IDisposable
             .Append(BuildMeta("devflow-app-name", _appName))
             .Append(BuildMeta("devflow-platform", _platform))
             .Append(BuildMeta("devflow-agent-port", _agentPort.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            .Append(hasPublishedFrame
+                ? BuildMeta("devflow-frame", JsonSerializer.Serialize(CreateFrameDescriptor(frame)))
+                : string.Empty)
             .ToString();
         var title = string.IsNullOrWhiteSpace(_appName)
             ? "MAUI DevFlow Inspector"
@@ -1193,7 +1217,7 @@ public sealed class InspectorServer : IDisposable
                 }));
         }
 
-        if (frame.Png.Length == 0)
+        if (frame.Png.Length == 0 || frame.FrameRevision <= 0)
         {
             return (
                 503,
@@ -1208,13 +1232,14 @@ public sealed class InspectorServer : IDisposable
 
         var json = JsonSerializer.Serialize(new
         {
+            frame = CreateFrameDescriptor(frame),
             frameId = frame.Id,
             treeRevision = frame.TreeRevision,
             diagnosticInputsRevision = frame.DiagnosticInputsRevision,
             screenshotUrl = $"screenshot.png?frame={Uri.EscapeDataString(frame.Id)}",
             elements = frame.ElementsHtml,
-            viewportWidth = frame.Width,
-            viewportHeight = frame.Height,
+            viewportWidth = frame.LogicalWidth,
+            viewportHeight = frame.LogicalHeight,
             rootOffsetX = frame.RootOffsetX,
             rootOffsetY = frame.RootOffsetY,
             diagnostics = wantsDiagnostics
@@ -1227,6 +1252,26 @@ public sealed class InspectorServer : IDisposable
 
         return (200, "application/json", Encoding.UTF8.GetBytes(json));
     }
+
+    private object CreateFrameDescriptor(InspectorFrame frame) => new
+    {
+        streamId = _frameStreamId,
+        frameId = frame.Id,
+        frameRevision = frame.FrameRevision,
+        captureEpoch = frame.CaptureEpoch,
+        registryGeneration = frame.RegistryGeneration,
+        windowId = frame.WindowId,
+        treeRevision = frame.TreeRevision,
+        diagnosticInputsRevision = frame.DiagnosticInputsRevision,
+        logicalWidth = frame.LogicalWidth,
+        logicalHeight = frame.LogicalHeight,
+        pixelWidth = frame.PixelWidth,
+        pixelHeight = frame.PixelHeight,
+        rootOffsetX = frame.RootOffsetX,
+        rootOffsetY = frame.RootOffsetY,
+        captureScale = frame.CaptureScale,
+        createdAt = frame.CreatedUtc
+    };
 
     private async Task<(int, string, byte[])> HandleEventSupportAsync()
     {
@@ -1693,6 +1738,11 @@ public sealed class InspectorServer : IDisposable
     {
         if (tree.Count == 0) return null;
         var window = tree[0];
+        if (window.Type.EndsWith("Page", StringComparison.Ordinal) ||
+            window.Type.EndsWith("Shell", StringComparison.Ordinal))
+        {
+            return window.Id;
+        }
         if (window.Children is not { Count: > 0 }) return null;
         // Last child is the topmost (modal pages are added after the shell). Registered native
         // elements are appended beneath their owner, so a window-owned registration would
@@ -1726,6 +1776,8 @@ public sealed class InspectorServer : IDisposable
 
         if (tree.Count == 0) return false;
         var window = tree[0];
+        if (string.Equals(window.Id, rootPageId, StringComparison.Ordinal))
+            return false;
         if (window.Children is not { Count: > 0 }) return false;
 
         return window.Children.Any(child =>
@@ -1756,6 +1808,11 @@ public sealed class InspectorServer : IDisposable
     {
         if (rootPageId == null || tree.Count == 0) return (0, 0);
         var window = tree[0];
+        if (string.Equals(window.Id, rootPageId, StringComparison.Ordinal))
+        {
+            var rootBounds = window.WindowBounds ?? window.Bounds;
+            return (rootBounds?.X ?? 0, rootBounds?.Y ?? 0);
+        }
         if (window.Children == null) return (0, 0);
         var rootPage = window.Children.FirstOrDefault(c => c.Id == rootPageId);
         if (rootPage == null) return (0, 0);
@@ -1838,24 +1895,48 @@ public sealed class InspectorServer : IDisposable
                     registryGeneration,
                     fullscreen,
                     force) ?? Array.Empty<byte>();
-                var hasScreenshot = screenshot.Length > 0;
-                var (width, height) = hasScreenshot ? ScreenshotImage.GetPngDimensions(screenshot) : (0, 0);
+                var hasCompleteScreenshot = screenshot.Length > 0;
+                var (width, height) = hasCompleteScreenshot
+                    ? ScreenshotImage.GetPngDimensions(screenshot)
+                    : (0, 0);
                 if (width <= 0 || height <= 0)
                 {
                     width = 800;
                     height = 600;
                 }
+                var (logicalWidth, logicalHeight) = GetFrameLogicalSize(
+                    tree,
+                    rootPageId,
+                    fullscreen,
+                    width,
+                    height);
+                var captureScale = GetCaptureScale(
+                    logicalWidth,
+                    logicalHeight,
+                    width,
+                    height);
 
                 var frame = new InspectorFrame(
                     Guid.NewGuid().ToString("N"),
                     DateTime.UtcNow,
+                    0,
+                    generation,
                     frameTree,
                     screenshot,
                     width,
                     height,
+                    logicalWidth,
+                    logicalHeight,
+                    captureScale,
                     rootOffsetX,
                     rootOffsetY,
-                    HtmlRenderer.RenderElements(frameTree, 1, rootOffsetX, rootOffsetY, hasScreenshot ? width : 0, hasScreenshot ? height : 0),
+                    HtmlRenderer.RenderElements(
+                        frameTree,
+                        1,
+                        rootOffsetX,
+                        rootOffsetY,
+                        hasCompleteScreenshot ? logicalWidth : 0,
+                        hasCompleteScreenshot ? logicalHeight : 0),
                     captureEpoch,
                     registryGeneration,
                     windowId,
@@ -1869,19 +1950,27 @@ public sealed class InspectorServer : IDisposable
                         throw new InvalidOperationException("Inspector state changed repeatedly while capturing a frame.");
                     }
 
-                    _captureEpoch = captureEpoch;
+                    if (frame.Tree.Count == 0 || !hasCompleteScreenshot)
+                        return frame;
 
-                    PruneFramesLocked();
+                    _captureEpoch = captureEpoch;
+                    frame = frame with { FrameRevision = ++_frameRevision };
+
                     _frames[frame.Id] = frame;
                     _latestFrame = frame;
+                    _latestCompleteFrameId = frame.Id;
+                    PruneFramesLocked();
                     while (_frames.Count > MaxCachedFrames ||
                         (_frames.Count > 1 && GetCachedFrameBytesLocked() > MaxCachedFrameBytes))
                     {
-                        var oldest = _frames.MinBy(static pair => pair.Value.CreatedUtc);
+                        var oldest = _frames
+                            .Where(pair => !string.Equals(pair.Key, _latestCompleteFrameId, StringComparison.Ordinal))
+                            .MinBy(static pair => pair.Value.CreatedUtc);
                         if (oldest.Key is null) break;
                         _frames.Remove(oldest.Key);
                     }
                 }
+
                 return frame;
             }
         }
@@ -1891,11 +1980,56 @@ public sealed class InspectorServer : IDisposable
         }
     }
 
+    private static (double width, double height) GetFrameLogicalSize(
+        List<ElementInfo> tree,
+        string? rootPageId,
+        bool fullscreen,
+        int pixelWidth,
+        int pixelHeight)
+    {
+        ElementInfo? root = null;
+        if (tree.Count > 0)
+        {
+            root = fullscreen
+                ? tree[0]
+                : tree[0].Children?.FirstOrDefault(child =>
+                    string.Equals(child.Id, rootPageId, StringComparison.Ordinal))
+                    ?? tree[0];
+        }
+
+        var bounds = root?.WindowBounds ?? root?.Bounds;
+        return bounds is { Width: > 0, Height: > 0 }
+            ? (bounds.Width, bounds.Height)
+            : (pixelWidth, pixelHeight);
+    }
+
+    private static double GetCaptureScale(
+        double logicalWidth,
+        double logicalHeight,
+        int pixelWidth,
+        int pixelHeight)
+    {
+        if (logicalWidth <= 0 || logicalHeight <= 0 || pixelWidth <= 0 || pixelHeight <= 0)
+            return 1;
+
+        var scaleX = pixelWidth / logicalWidth;
+        var scaleY = pixelHeight / logicalHeight;
+        var tolerance = Math.Max(scaleX, scaleY) * 0.005;
+        return Math.Abs(scaleX - scaleY) <= tolerance ? scaleX : 1;
+    }
+
     private void PruneFramesLocked()
     {
         var cutoff = DateTime.UtcNow - FrameCacheDuration;
-        foreach (var id in _frames.Where(pair => pair.Value.CreatedUtc < cutoff).Select(static pair => pair.Key).ToArray())
+        foreach (var id in _frames
+            .Where(pair =>
+                pair.Value.CreatedUtc < cutoff &&
+                !string.Equals(pair.Key, _latestCompleteFrameId, StringComparison.Ordinal))
+            .Select(static pair => pair.Key)
+            .ToArray())
+        {
             _frames.Remove(id);
+        }
     }
 
     private long GetCachedFrameBytesLocked()
@@ -1958,6 +2092,13 @@ public sealed class InspectorServer : IDisposable
             Console.Error.WriteLine($"[inspector] screenshot exceeded {MaxScreenshotBytes} bytes");
             return null;
         }
+        if (fresh is not { Length: > 0 })
+            return null;
+        if (!ScreenshotImage.IsCompletePng(fresh))
+        {
+            Console.Error.WriteLine("[inspector] screenshot was not a complete PNG");
+            return null;
+        }
         lock (_cacheLock)
         {
             if (generation == _cacheGeneration)
@@ -1989,7 +2130,23 @@ public sealed class InspectorServer : IDisposable
             return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"x/y required\"}"));
         }
 
-        var hitResult = await _client.HitTestAsync(xProperty.GetDouble(), yProperty.GetDouble());
+        var correlationError = ValidateActionCorrelation(
+            root,
+            hasCoordinates: true,
+            out var correlatedFrame,
+            out var coordinateSpace);
+        if (correlationError.HasValue)
+            return correlationError.Value;
+
+        var (x, y) = ToWindowLogicalCoordinates(
+            xProperty.GetDouble(),
+            yProperty.GetDouble(),
+            coordinateSpace,
+            correlatedFrame);
+        var hitResult = await _client.HitTestAsync(x, y);
+        correlationError = ValidateCoordinateFrameStillCurrent(correlatedFrame);
+        if (correlationError.HasValue)
+            return correlationError.Value;
         if (!TryParseHitTestElements(hitResult, out var hitDocument, out var elements, out _, out _))
             return Ok("{\"ok\":true,\"elementId\":null,\"candidates\":[]}");
 
@@ -2003,6 +2160,11 @@ public sealed class InspectorServer : IDisposable
                     continue;
                 var id = idProperty.GetString();
                 if (string.IsNullOrEmpty(id)) continue;
+                if (correlatedFrame is not null &&
+                    !FrameContainsElementId(correlatedFrame.Tree, id))
+                {
+                    continue;
+                }
 
                 candidates.Add(new Dictionary<string, string?>
                 {
@@ -2028,6 +2190,239 @@ public sealed class InspectorServer : IDisposable
             ? value.GetString()
             : null;
 
+    private (int, string, byte[])? ValidateActionCorrelation(
+        JsonElement request,
+        bool hasCoordinates,
+        out InspectorFrame? frame,
+        out string coordinateSpace)
+    {
+        frame = null;
+        coordinateSpace = "windowLogical";
+        if (!request.TryGetProperty("correlation", out var correlation) ||
+            correlation.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        if (correlation.ValueKind != JsonValueKind.Object)
+            return ActionCorrelationError(400, "invalid-correlation", "correlation must be an object.");
+
+        var actionId = ReadOptionalString(correlation, "actionId");
+        if (string.IsNullOrWhiteSpace(actionId) || actionId.Length > 128)
+            return ActionCorrelationError(400, "invalid-correlation", "correlation.actionId is required.");
+        var source = ReadOptionalString(correlation, "source");
+        if (source is not ("inspector" or "cli" or "mcp" or "replay"))
+            return ActionCorrelationError(400, "invalid-correlation", "correlation.source is invalid.");
+
+        var frameId = ReadOptionalString(correlation, "frameId");
+        if (string.IsNullOrWhiteSpace(frameId) || frameId.Length > 128)
+            return ActionCorrelationError(400, "invalid-correlation", "correlation.frameId is required.");
+
+        var streamId = ReadOptionalString(correlation, "streamId");
+        if (streamId is { Length: > 128 })
+            return ActionCorrelationError(400, "invalid-correlation", "correlation.streamId is invalid.");
+        if (streamId is not null && !string.Equals(streamId, _frameStreamId, StringComparison.Ordinal))
+            return ActionCorrelationError(409, "frame-mismatch", "The action references a different Inspector frame stream.");
+
+        long? frameRevision = null;
+        if (correlation.TryGetProperty("frameRevision", out var revision))
+        {
+            if (revision.ValueKind != JsonValueKind.Number || !revision.TryGetInt64(out var parsedRevision) || parsedRevision <= 0)
+                return ActionCorrelationError(400, "invalid-correlation", "correlation.frameRevision must be a positive integer.");
+            frameRevision = parsedRevision;
+        }
+
+        coordinateSpace = ReadOptionalString(correlation, "coordinateSpace") ?? "windowLogical";
+        if (coordinateSpace is not ("appLogical" or "windowLogical" or "screenshotPixel" or "inspectorCss" or "transformedViewport"))
+            return ActionCorrelationError(
+                400,
+                "invalid-correlation",
+                $"Coordinate space '{coordinateSpace}' is invalid.");
+        if (hasCoordinates && coordinateSpace == "transformedViewport")
+        {
+            return ActionCorrelationError(
+                400,
+                "unsupported-coordinate-space",
+                $"Coordinate space '{coordinateSpace}' cannot be resolved by the Inspector server.");
+        }
+
+        lock (_cacheLock)
+        {
+            PruneFramesLocked();
+            if (!_frames.TryGetValue(frameId, out frame))
+            {
+                if (hasCoordinates)
+                    return ActionCorrelationError(410, "frame-expired", "The referenced Inspector frame has expired.");
+                return null;
+            }
+            if (hasCoordinates && !IsCoordinateFrameCurrentLocked(frame))
+            {
+                return ActionCorrelationError(
+                    409,
+                    "frame-superseded",
+                    "The referenced coordinate frame has been superseded.");
+            }
+        }
+
+        if (frame is not null && frameRevision.HasValue && frame.FrameRevision != frameRevision.Value)
+            return ActionCorrelationError(409, "frame-mismatch", "The action frame revision does not match the cached frame.");
+
+        return null;
+    }
+
+    private bool IsCoordinateFrameCurrentLocked(InspectorFrame frame)
+    {
+        if (frame.CacheGeneration != _cacheGeneration)
+            return false;
+
+        if (string.IsNullOrEmpty(_latestCompleteFrameId) ||
+            string.Equals(frame.Id, _latestCompleteFrameId, StringComparison.Ordinal) ||
+            !_frames.TryGetValue(_latestCompleteFrameId, out var latest))
+        {
+            return true;
+        }
+
+        if (frame.WindowId != latest.WindowId ||
+            !NearlyEqual(frame.LogicalWidth, latest.LogicalWidth) ||
+            !NearlyEqual(frame.LogicalHeight, latest.LogicalHeight) ||
+            frame.PixelWidth != latest.PixelWidth ||
+            frame.PixelHeight != latest.PixelHeight ||
+            !NearlyEqual(frame.RootOffsetX, latest.RootOffsetX) ||
+            !NearlyEqual(frame.RootOffsetY, latest.RootOffsetY))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(frame.TreeRevision) ||
+            !string.IsNullOrEmpty(latest.TreeRevision))
+        {
+            return string.Equals(frame.TreeRevision, latest.TreeRevision, StringComparison.Ordinal);
+        }
+
+        return HaveEquivalentElementGeometry(frame.Tree, latest.Tree);
+    }
+
+    private (int, string, byte[])? ValidateCoordinateFrameStillCurrent(InspectorFrame? frame)
+    {
+        if (frame is null)
+            return null;
+
+        lock (_cacheLock)
+        {
+            PruneFramesLocked();
+            if (!_frames.TryGetValue(frame.Id, out var cachedFrame))
+                return ActionCorrelationError(410, "frame-expired", "The referenced Inspector frame has expired.");
+            if (!IsCoordinateFrameCurrentLocked(cachedFrame))
+            {
+                return ActionCorrelationError(
+                    409,
+                    "frame-superseded",
+                    "The referenced coordinate frame has been superseded.");
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<(T Outcome, (int, string, byte[])? Error)> ExecuteCoordinateMutationAsync<T>(
+        InspectorFrame? frame,
+        Func<Task<T>> action)
+    {
+        if (frame is null)
+            return (await action(), null);
+
+        await _frameCreationGate.WaitAsync(_lifetimeCts.Token);
+        try
+        {
+            var error = ValidateCoordinateFrameStillCurrent(frame);
+            return error.HasValue
+                ? (default!, error)
+                : (await action(), null);
+        }
+        finally
+        {
+            _frameCreationGate.Release();
+        }
+    }
+
+    private static bool HaveEquivalentElementGeometry(
+        IReadOnlyList<ElementInfo> left,
+        IReadOnlyList<ElementInfo> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (var index = 0; index < left.Count; index++)
+        {
+            var leftElement = left[index];
+            var rightElement = right[index];
+            if (!string.Equals(leftElement.Id, rightElement.Id, StringComparison.Ordinal) ||
+                !string.Equals(leftElement.ParentId, rightElement.ParentId, StringComparison.Ordinal) ||
+                !string.Equals(leftElement.Type, rightElement.Type, StringComparison.Ordinal) ||
+                !string.Equals(leftElement.Framework, rightElement.Framework, StringComparison.Ordinal) ||
+                leftElement.IsVisible != rightElement.IsVisible ||
+                !HaveEquivalentBounds(
+                    leftElement.WindowBounds ?? leftElement.Bounds,
+                    rightElement.WindowBounds ?? rightElement.Bounds) ||
+                !HaveEquivalentElementGeometry(
+                    leftElement.Children ?? [],
+                    rightElement.Children ?? []))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HaveEquivalentBounds(BoundsInfo? left, BoundsInfo? right)
+    {
+        if (left is null || right is null)
+            return left is null && right is null;
+
+        return NearlyEqual(left.X, right.X) &&
+            NearlyEqual(left.Y, right.Y) &&
+            NearlyEqual(left.Width, right.Width) &&
+            NearlyEqual(left.Height, right.Height);
+    }
+
+    private static bool NearlyEqual(double left, double right)
+        => Math.Abs(left - right) <= 0.0001;
+
+    private static (int, string, byte[]) ActionCorrelationError(
+        int statusCode,
+        string error,
+        string reason)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            ok = false,
+            error,
+            reason,
+            retryable = statusCode is 409 or 410
+        });
+        return (statusCode, "application/json", Encoding.UTF8.GetBytes(payload));
+    }
+
+    private static (double x, double y) ToWindowLogicalCoordinates(
+        double x,
+        double y,
+        string coordinateSpace,
+        InspectorFrame? frame)
+    {
+        if (frame is null || coordinateSpace == "windowLogical")
+            return (x, y);
+
+        if (coordinateSpace is "appLogical" or "inspectorCss")
+            return (x + frame.RootOffsetX, y + frame.RootOffsetY);
+
+        var pixelWidth = frame.PixelWidth > 0 ? frame.PixelWidth : 1;
+        var pixelHeight = frame.PixelHeight > 0 ? frame.PixelHeight : 1;
+        return (
+            x * frame.LogicalWidth / pixelWidth + frame.RootOffsetX,
+            y * frame.LogicalHeight / pixelHeight + frame.RootOffsetY);
+    }
+
     private async Task<(int, string, byte[])> HandleProxyTapAsync(string? body)
     {
         if (string.IsNullOrEmpty(body))
@@ -2045,6 +2440,14 @@ public sealed class InspectorServer : IDisposable
         // geometric candidate when that exact target rejects the tap.
         if (!string.IsNullOrEmpty(requestedElementId))
         {
+            var correlationError = ValidateActionCorrelation(
+                root,
+                hasCoordinates: false,
+                out _,
+                out _);
+            if (correlationError.HasValue)
+                return correlationError.Value;
+
             if (!TryGetActionCaptureMetadata(
                 root,
                 required: await RequiresCaptureEpochAsync(),
@@ -2075,12 +2478,23 @@ public sealed class InspectorServer : IDisposable
                 attemptedCandidates: 1);
         }
 
-        // Coordinates are already translated into window space by devflow.js using the frame's
-        // root offsets, so every browser tab acts against the exact frame it rendered.
+        // Correlated browser coordinates are app-logical and resolve through their cached frame.
+        // Legacy uncorrelated coordinates remain window-logical.
         if (root.TryGetProperty("x", out var xProp) && root.TryGetProperty("y", out var yProp))
         {
-            var x = xProp.GetDouble();
-            var y = yProp.GetDouble();
+            var correlationError = ValidateActionCorrelation(
+                root,
+                hasCoordinates: true,
+                out var correlatedFrame,
+                out var coordinateSpace);
+            if (correlationError.HasValue)
+                return correlationError.Value;
+
+            var (x, y) = ToWindowLogicalCoordinates(
+                xProp.GetDouble(),
+                yProp.GetDouble(),
+                coordinateSpace,
+                correlatedFrame);
 
             var attemptedIds = new HashSet<string>(StringComparer.Ordinal);
             var retryCounts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -2089,6 +2503,9 @@ public sealed class InspectorServer : IDisposable
             var hitOutcome = await _client.HitTestResultAsync(x, y);
             if (!hitOutcome.Success)
                 return UiReadOutcomeResponse(hitOutcome);
+            correlationError = ValidateCoordinateFrameStillCurrent(correlatedFrame);
+            if (correlationError.HasValue)
+                return correlationError.Value;
             var hitResult = hitOutcome.Body;
             for (var attempt = 0; attempt < 32; attempt++)
             {
@@ -2100,15 +2517,29 @@ public sealed class InspectorServer : IDisposable
                     out var captureEpoch,
                     out var registryGeneration))
                     break;
+                if (correlatedFrame is not null &&
+                    !FrameContainsElementId(correlatedFrame.Tree, elementId!))
+                {
+                    continue;
+                }
 
                 attemptedCandidates++;
-                var outcome = await _client.TapResultAsync(
-                    elementId!,
-                    captureEpoch,
-                    registryGeneration);
+                var (outcome, currentFrameError) = await ExecuteCoordinateMutationAsync(
+                    correlatedFrame,
+                    async () =>
+                    {
+                        var result = await _client.TapResultAsync(
+                            elementId!,
+                            captureEpoch,
+                            registryGeneration);
+                        if (result.Success)
+                            InvalidateScreenshotCache();
+                        return result;
+                    });
+                if (currentFrameError.HasValue)
+                    return currentFrameError.Value;
                 if (outcome.Success)
                 {
-                    InvalidateScreenshotCache();
                     return TapOutcomeResponse(
                         true,
                         elementId,
@@ -2145,10 +2576,21 @@ public sealed class InspectorServer : IDisposable
                 hitOutcome = await _client.HitTestResultAsync(x, y);
                 if (!hitOutcome.Success)
                     return UiReadOutcomeResponse(hitOutcome);
+                correlationError = ValidateCoordinateFrameStillCurrent(correlatedFrame);
+                if (correlationError.HasValue)
+                    return correlationError.Value;
                 hitResult = hitOutcome.Body;
             }
             if (terminalOutcome.HasValue)
                 return ActionOutcomeResponse(terminalOutcome.Value);
+            if (correlatedFrame is not null && attemptedCandidates == 0)
+            {
+                InvalidateScreenshotCache();
+                return ActionCorrelationError(
+                    409,
+                    "frame-target-unavailable",
+                    "No current hit-test target could be resolved against the referenced frame.");
+            }
             return TapOutcomeResponse(
                 false,
                 elementId: null,
@@ -2171,19 +2613,38 @@ public sealed class InspectorServer : IDisposable
 
         var deltaX = root.TryGetProperty("deltaX", out var dxProp) ? dxProp.GetDouble() : 0;
         var deltaY = root.TryGetProperty("deltaY", out var dyProp) ? dyProp.GetDouble() : 0;
+        JsonElement xProp = default;
+        JsonElement yProp = default;
+        var hasCoordinates =
+            root.TryGetProperty("x", out xProp) &&
+            root.TryGetProperty("y", out yProp);
+        var correlationError = ValidateActionCorrelation(
+            root,
+            hasCoordinates,
+            out var correlatedFrame,
+            out var coordinateSpace);
+        if (correlationError.HasValue)
+            return correlationError.Value;
 
-        // Coordinates are already translated into window space by devflow.js using the frame's
-        // root offsets, so every browser tab acts against the exact frame it rendered.
-        if (root.TryGetProperty("x", out var xProp) && root.TryGetProperty("y", out var yProp))
+        // Correlated browser coordinates are app-logical and resolve through their cached frame.
+        // Legacy uncorrelated coordinates remain window-logical.
+        if (hasCoordinates)
         {
-            var x = xProp.GetDouble();
-            var y = yProp.GetDouble();
+            var (x, y) = ToWindowLogicalCoordinates(
+                xProp.GetDouble(),
+                yProp.GetDouble(),
+                coordinateSpace,
+                correlatedFrame);
             var attemptedIds = new HashSet<string>(StringComparer.Ordinal);
             var retryCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            var attemptedCandidates = 0;
             ActionResult? terminalOutcome = null;
             var hitOutcome = await _client.HitTestResultAsync(x, y);
             if (!hitOutcome.Success)
                 return UiReadOutcomeResponse(hitOutcome);
+            correlationError = ValidateCoordinateFrameStillCurrent(correlatedFrame);
+            if (correlationError.HasValue)
+                return correlationError.Value;
             var hitResult = hitOutcome.Body;
             for (var attempt = 0; attempt < 32; attempt++)
             {
@@ -2195,23 +2656,36 @@ public sealed class InspectorServer : IDisposable
                     out var captureEpoch,
                     out var registryGeneration))
                     break;
-
-                var outcome = await _client.ScrollResultAsync(
-                    elementId: elementId,
-                    deltaX: deltaX,
-                    deltaY: deltaY,
-                    animated: true,
-                    window: null,
-                    itemIndex: null,
-                    groupIndex: null,
-                    scrollToPosition: null,
-                    captureEpoch: captureEpoch,
-                    registryGeneration: registryGeneration);
-                if (outcome.Success)
+                if (correlatedFrame is not null &&
+                    !FrameContainsElementId(correlatedFrame.Tree, elementId!))
                 {
-                    InvalidateScreenshotCache();
-                    return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
+                    continue;
                 }
+
+                attemptedCandidates++;
+                var (outcome, currentFrameError) = await ExecuteCoordinateMutationAsync(
+                    correlatedFrame,
+                    async () =>
+                    {
+                        var result = await _client.ScrollResultAsync(
+                            elementId: elementId,
+                            deltaX: deltaX,
+                            deltaY: deltaY,
+                            animated: true,
+                            window: null,
+                            itemIndex: null,
+                            groupIndex: null,
+                            scrollToPosition: null,
+                            captureEpoch: captureEpoch,
+                            registryGeneration: registryGeneration);
+                        if (result.Success)
+                            InvalidateScreenshotCache();
+                        return result;
+                    });
+                if (currentFrameError.HasValue)
+                    return currentFrameError.Value;
+                if (outcome.Success)
+                    return (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"));
 
                 if (outcome.TransportFailure)
                 {
@@ -2242,26 +2716,45 @@ public sealed class InspectorServer : IDisposable
                 hitOutcome = await _client.HitTestResultAsync(x, y);
                 if (!hitOutcome.Success)
                     return UiReadOutcomeResponse(hitOutcome);
+                correlationError = ValidateCoordinateFrameStillCurrent(correlatedFrame);
+                if (correlationError.HasValue)
+                    return correlationError.Value;
                 hitResult = hitOutcome.Body;
             }
             if (terminalOutcome.HasValue)
                 return ActionOutcomeResponse(terminalOutcome.Value);
+            if (correlatedFrame is not null && attemptedCandidates == 0)
+            {
+                InvalidateScreenshotCache();
+                return ActionCorrelationError(
+                    409,
+                    "frame-target-unavailable",
+                    "No current scroll target could be resolved against the referenced frame.");
+            }
         }
 
         // Fallback: scroll without element target
         {
-            var outcome = await _client.ScrollResultAsync(
-                elementId: null,
-                deltaX: deltaX,
-                deltaY: deltaY,
-                animated: true,
-                window: null,
-                itemIndex: null,
-                groupIndex: null,
-                scrollToPosition: null,
-                captureEpoch: null,
-                registryGeneration: null);
-            InvalidateScreenshotCache();
+            var (outcome, currentFrameError) = await ExecuteCoordinateMutationAsync(
+                correlatedFrame,
+                async () =>
+                {
+                    var result = await _client.ScrollResultAsync(
+                        elementId: null,
+                        deltaX: deltaX,
+                        deltaY: deltaY,
+                        animated: true,
+                        window: null,
+                        itemIndex: null,
+                        groupIndex: null,
+                        scrollToPosition: null,
+                        captureEpoch: null,
+                        registryGeneration: null);
+                    InvalidateScreenshotCache();
+                    return result;
+                });
+            if (currentFrameError.HasValue)
+                return currentFrameError.Value;
             return ActionOutcomeResponse(outcome);
         }
     }
@@ -2277,6 +2770,14 @@ public sealed class InspectorServer : IDisposable
         // Determine swipe direction from gesture points
         if (root.TryGetProperty("points", out var pointsArr) && pointsArr.GetArrayLength() >= 2)
         {
+            var correlationError = ValidateActionCorrelation(
+                root,
+                hasCoordinates: true,
+                out var correlatedFrame,
+                out var coordinateSpace);
+            if (correlationError.HasValue)
+                return correlationError.Value;
+
             var first = pointsArr[0];
             var last = pointsArr[pointsArr.GetArrayLength() - 1];
             // Guard against malformed input (e.g., {points: [{}, {}]}) so a
@@ -2287,8 +2788,18 @@ public sealed class InspectorServer : IDisposable
                 return (400, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"missing x/y in gesture points\"}"));
             }
 
-            var dx = lx.GetDouble() - fx.GetDouble();
-            var dy = ly.GetDouble() - fy.GetDouble();
+            var firstPoint = ToWindowLogicalCoordinates(
+                fx.GetDouble(),
+                fy.GetDouble(),
+                coordinateSpace,
+                correlatedFrame);
+            var lastPoint = ToWindowLogicalCoordinates(
+                lx.GetDouble(),
+                ly.GetDouble(),
+                coordinateSpace,
+                correlatedFrame);
+            var dx = lastPoint.x - firstPoint.x;
+            var dy = lastPoint.y - firstPoint.y;
 
             var direction = Math.Abs(dx) > Math.Abs(dy)
                 ? (dx > 0 ? "right" : "left")
@@ -2296,8 +2807,19 @@ public sealed class InspectorServer : IDisposable
 
             var distance = Math.Sqrt(dx * dx + dy * dy);
 
-            var success = await _client.GestureAsync("swipe", direction: direction, distance: distance);
-            InvalidateScreenshotCache();
+            var (success, currentFrameError) = await ExecuteCoordinateMutationAsync(
+                correlatedFrame,
+                async () =>
+                {
+                    var result = await _client.GestureAsync(
+                        "swipe",
+                        direction: direction,
+                        distance: distance);
+                    InvalidateScreenshotCache();
+                    return result;
+                });
+            if (currentFrameError.HasValue)
+                return currentFrameError.Value;
             return success
                 ? (200, "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}"))
                 : (500, "application/json", Encoding.UTF8.GetBytes("{\"ok\":false}"));
@@ -2309,10 +2831,15 @@ public sealed class InspectorServer : IDisposable
     private sealed record InspectorFrame(
         string Id,
         DateTime CreatedUtc,
+        long FrameRevision,
+        long CacheGeneration,
         List<ElementInfo> Tree,
         byte[] Png,
-        int Width,
-        int Height,
+        int PixelWidth,
+        int PixelHeight,
+        double LogicalWidth,
+        double LogicalHeight,
+        double CaptureScale,
         double RootOffsetX,
         double RootOffsetY,
         string ElementsHtml,
@@ -2338,6 +2865,13 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
+        var correlationError = ValidateActionCorrelation(
+            root,
+            hasCoordinates: false,
+            out _,
+            out _);
+        if (correlationError.HasValue)
+            return correlationError.Value;
 
         var elementId = root.TryGetProperty("elementId", out var idProp) ? idProp.GetString() : null;
         var text = root.TryGetProperty("text", out var textProp) ? textProp.GetString() : null;
@@ -2371,6 +2905,13 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
+        var correlationError = ValidateActionCorrelation(
+            root,
+            hasCoordinates: false,
+            out _,
+            out _);
+        if (correlationError.HasValue)
+            return correlationError.Value;
 
         var key = root.TryGetProperty("key", out var keyProp) ? keyProp.GetString() : null;
         var elementId = root.TryGetProperty("elementId", out var idProp) ? idProp.GetString() : null;
@@ -2407,6 +2948,14 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
+        var correlationError = ValidateActionCorrelation(
+            root,
+            hasCoordinates: false,
+            out _,
+            out _);
+        if (correlationError.HasValue)
+            return correlationError.Value;
+
         var elementId = root.TryGetProperty("elementId", out var idProp) ? idProp.GetString() : null;
         var name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
 
@@ -2452,6 +3001,14 @@ public sealed class InspectorServer : IDisposable
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
+        var correlationError = ValidateActionCorrelation(
+            root,
+            hasCoordinates: false,
+            out _,
+            out _);
+        if (correlationError.HasValue)
+            return correlationError.Value;
+
         var elementId = root.TryGetProperty("elementId", out var idProp) ? idProp.GetString() : null;
         var name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
 

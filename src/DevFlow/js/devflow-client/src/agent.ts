@@ -3,7 +3,7 @@
 // ONE place. Keeping these pure (no dependency on resolve.ts) keeps the module graph
 // one-way and makes parsing/query-building unit-testable.
 
-import type { AgentStatus, ElementInfo, ThemeResult } from "./types.js";
+import type { ActionCorrelation, AgentStatus, ElementInfo, ThemeResult } from "./types.js";
 
 const API = "/api/v1";
 const UI = `${API}/ui`;
@@ -124,6 +124,7 @@ export interface ScrollArgs {
   // Coordinate form (inspector-style): scroll at a point by a wheel delta.
   x?: number;
   y?: number;
+  correlation?: ActionCorrelation;
 }
 
 export interface GestureArgs {
@@ -133,6 +134,7 @@ export interface GestureArgs {
   distance?: number;
   durationMs?: number;
   points?: Array<{ x: number; y: number; t?: number }>;
+  correlation?: ActionCorrelation;
 }
 
 export const requests = {
@@ -206,11 +208,11 @@ export const requests = {
     };
   },
 
-  setProperty(id: string, name: string, value: string): AgentRequest<void> {
+  setProperty(id: string, name: string, value: string, correlation?: ActionCorrelation): AgentRequest<void> {
     return {
       method: "PUT",
       path: `${UI}/elements/${encodeURIComponent(id)}/properties/${encodeURIComponent(name)}`,
-      body: { value: String(value) },
+      body: { value: String(value), correlation },
       idempotent: false,
       operation: "setProperty",
       appError: agentErrorMessage,
@@ -218,26 +220,26 @@ export const requests = {
     };
   },
 
-  tapElement(elementId: string): AgentRequest<void> {
-    return action("tap", `${UI}/actions/tap`, { elementId });
+  tapElement(elementId: string, correlation?: ActionCorrelation): AgentRequest<void> {
+    return action("tap", `${UI}/actions/tap`, { elementId, correlation });
   },
-  fill(elementId: string, text: string): AgentRequest<void> {
-    return action("fill", `${UI}/actions/fill`, { elementId, text: String(text) });
+  fill(elementId: string, text: string, correlation?: ActionCorrelation): AgentRequest<void> {
+    return action("fill", `${UI}/actions/fill`, { elementId, text: String(text), correlation });
   },
-  clear(elementId: string): AgentRequest<void> {
-    return action("clear", `${UI}/actions/clear`, { elementId });
+  clear(elementId: string, correlation?: ActionCorrelation): AgentRequest<void> {
+    return action("clear", `${UI}/actions/clear`, { elementId, correlation });
   },
-  focus(elementId: string): AgentRequest<void> {
-    return action("focus", `${UI}/actions/focus`, { elementId });
+  focus(elementId: string, correlation?: ActionCorrelation): AgentRequest<void> {
+    return action("focus", `${UI}/actions/focus`, { elementId, correlation });
   },
-  back(): AgentRequest<void> {
-    return action("back", `${UI}/actions/back`, {});
+  back(correlation?: ActionCorrelation): AgentRequest<void> {
+    return action("back", `${UI}/actions/back`, { correlation });
   },
-  navigate(route: string): AgentRequest<void> {
-    return action("navigate", `${UI}/actions/navigate`, { route: String(route) });
+  navigate(route: string, correlation?: ActionCorrelation): AgentRequest<void> {
+    return action("navigate", `${UI}/actions/navigate`, { route: String(route), correlation });
   },
-  key(key: string, elementId?: string, text?: string): AgentRequest<void> {
-    return action("key", `${UI}/actions/key`, { key, elementId, text });
+  key(key: string, elementId?: string, text?: string, correlation?: ActionCorrelation): AgentRequest<void> {
+    return action("key", `${UI}/actions/key`, { key, elementId, text, correlation });
   },
   resize(width: number, height: number, window?: number): AgentRequest<void> {
     return action("resize", `${UI}/actions/resize${buildQuery({ window })}`, { width, height });
@@ -254,6 +256,7 @@ export const requests = {
     if (args.itemIndex !== undefined) body.itemIndex = args.itemIndex;
     if (args.groupIndex !== undefined) body.groupIndex = args.groupIndex;
     if (args.scrollToPosition) body.scrollToPosition = args.scrollToPosition;
+    if (args.correlation) body.correlation = args.correlation;
     return action("scroll", `${UI}/actions/scroll${buildQuery({ window: args.window })}`, body);
   },
 
@@ -276,6 +279,7 @@ export const requests = {
       if (args.elementId) body.elementId = args.elementId;
     }
     if (args.durationMs !== undefined) body.durationMs = args.durationMs;
+    if (args.correlation) body.correlation = args.correlation;
     return action("gesture", `${UI}/actions/gesture`, body);
   },
 

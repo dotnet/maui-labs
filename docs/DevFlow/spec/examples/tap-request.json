@@ -1,4 +1,12 @@
 {
   "elementId": "btn_signin",
+  "correlation": {
+    "actionId": "tap-01JBN6TQ5V8J0YH6S3GJ4K9M2A",
+    "source": "inspector",
+    "streamId": "b15bbf6ee3f04ae7a879cf421a285ce5",
+    "frameId": "8c2c389bde4f4ad8b91093a36a876f64",
+    "frameRevision": 42,
+    "coordinateSpace": "appLogical"
+  },
   "include": ["screenshot", "tree"]
 }
