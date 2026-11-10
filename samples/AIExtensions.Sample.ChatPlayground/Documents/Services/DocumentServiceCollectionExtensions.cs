@@ -1,3 +1,6 @@
+using Azure;
+using Azure.AI.DocumentIntelligence;
+using Azure.Core.Pipeline;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DocumentExtraction;
@@ -31,13 +34,18 @@ internal static class DocumentServiceCollectionExtensions
         if (settings.DocumentIntelligenceEndpoint is not null &&
             !string.IsNullOrWhiteSpace(settings.DocumentIntelligenceKey))
         {
-            services.AddSingleton<IngestionDocumentReader>(_ => CreateAzureDocumentReader(settings));
+            services.AddKeyedSingleton<HttpClient>("azure-document", (_, _) =>
+                new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan });
+            services.AddSingleton(provider => CreateAzureClient(provider, settings));
+            services.AddKeyedSingleton<DocumentExtractionClient>("azure-document", (provider, _) =>
+                new AzureDocumentIntelligenceExtractionClient(provider.GetRequiredService<DocumentIntelligenceClient>()));
+            services.AddSingleton<IngestionDocumentReader>(provider => CreateAzureDocumentReader(
+                provider.GetRequiredKeyedService<DocumentExtractionClient>("azure-document")));
             services.AddSingleton<DocumentExtractionClient>(provider =>
-                Describe(new AzureDocumentIntelligenceExtractionClient(
-                    settings.DocumentIntelligenceEndpoint!, settings.DocumentIntelligenceKey!),
+                Describe(provider.GetRequiredKeyedService<DocumentExtractionClient>("azure-document"),
                     new DocumentExtractionClientDescriptor(
                         "azure-document-intelligence", "Azure Document Intelligence",
-                        "Uploads the document for the selected analyzer (prebuilt-layout by default); charges may apply. Native SDK output is explicitly inspectable.", IsCloud: true), provider));
+                        "Uploads the document using the Toolkit Azure adapter (prebuilt-layout by default); charges may apply. Native SDK output is explicitly inspectable.", IsCloud: true), provider));
         }
 
         if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
@@ -49,17 +57,20 @@ internal static class DocumentServiceCollectionExtensions
                     BaseAddress = settings.GetFoundryDocumentEndpoint(),
                     Timeout = Timeout.InfiniteTimeSpan,
                 };
-                client.DefaultRequestHeaders.Add("api-key", settings.ApiKey);
                 return client;
             });
+            services.AddKeyedSingleton<DocumentExtractionClient>("foundry-document", (provider, _) =>
+                new FoundryMistralDocumentExtractionClient(
+                    provider.GetRequiredKeyedService<HttpClient>("foundry-document"),
+                    new Uri(settings.GetFoundryDocumentEndpoint(), "providers/mistral/azure/ocr"),
+                    settings.ApiKey!, settings.DocumentDeploymentName!));
             services.AddSingleton<IngestionDocumentReader>(provider => CreateFoundryDocumentReader(
-                provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings));
+                provider.GetRequiredKeyedService<DocumentExtractionClient>("foundry-document")));
             services.AddSingleton<DocumentExtractionClient>(provider =>
-                Describe(new FoundryMistralDocumentExtractionClient(
-                    provider.GetRequiredKeyedService<HttpClient>("foundry-document"), settings.DocumentDeploymentName!),
+                Describe(provider.GetRequiredKeyedService<DocumentExtractionClient>("foundry-document"),
                     new DocumentExtractionClientDescriptor(
                         "foundry-mistral-document", "Foundry Mistral Document AI",
-                        "Uploads the document to the selected Mistral OCR deployment; charges may apply. Native inspection retains detached parsed JSON, not an original response body.", IsCloud: true), provider));
+                        "Uploads the document using the Toolkit Mistral adapter; charges may apply. Tables retain native Markdown/HTML without an addressed cell grid. Native inspection retains detached parsed JSON.", IsCloud: true), provider));
         }
 
         return services;
@@ -92,18 +103,32 @@ internal static class DocumentServiceCollectionExtensions
             .UseLogging(provider.GetRequiredService<ILoggerFactory>())
             .Build();
 
-    private static IngestionDocumentReader CreateAzureDocumentReader(AISettings settings) =>
+    private static DocumentIntelligenceClient CreateAzureClient(IServiceProvider provider, AISettings settings)
+    {
+        var endpoint = settings.DocumentIntelligenceEndpoint!;
+        if (!endpoint.IsAbsoluteUri || endpoint.Scheme != Uri.UriSchemeHttps ||
+            endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0 ||
+            endpoint.AbsolutePath != "/")
+            throw new InvalidOperationException("Document Intelligence endpoint must be an HTTPS resource root URL.");
+        return new DocumentIntelligenceClient(endpoint, new AzureKeyCredential(settings.DocumentIntelligenceKey!),
+            new DocumentIntelligenceClientOptions
+            {
+                Transport = new HttpClientTransport(provider.GetRequiredKeyedService<HttpClient>("azure-document")),
+            });
+    }
+
+    private static IngestionDocumentReader CreateAzureDocumentReader(DocumentExtractionClient client) =>
         new DescribedDocumentReader(
-            new AzureDocumentIntelligenceReader(settings.DocumentIntelligenceEndpoint!, settings.DocumentIntelligenceKey!),
+            new AzureDocumentIntelligenceReader(client),
             new DocumentReaderDescriptor(
                 "azure-document-intelligence",
                 "Azure Document Intelligence",
                 "Uploads the entire document to Azure for prebuilt-layout analysis; may incur charges.",
                 IsCloud: true));
 
-    private static IngestionDocumentReader CreateFoundryDocumentReader(HttpClient client, AISettings settings) =>
+    private static IngestionDocumentReader CreateFoundryDocumentReader(DocumentExtractionClient client) =>
         new DescribedDocumentReader(
-            new FoundryMistralDocumentReader(client, settings.DocumentDeploymentName!),
+            new FoundryMistralDocumentReader(client),
             new DocumentReaderDescriptor(
                 "foundry-mistral-document",
                 "Foundry Mistral Document AI",

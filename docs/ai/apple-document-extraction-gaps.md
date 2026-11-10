@@ -1,7 +1,8 @@
 # Apple Vision / merged Extraction feature coverage
 
 Current contract: [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), merged November 5.
-This checkout pins main `f8ee27151b21e33793164b39de5bcebfdced81a4` while official packages await publication.
+This checkout uses official daily packages `11.0.0-preview.1.26560.1` from `dotnet-libraries`,
+whose repository commit is `f8ee27151b21e33793164b39de5bcebfdced81a4`.
 The [adoption report](document-extraction-corrected-api.md) also preserves the earlier experiments as history.
 
 ## Policy and supported intersection
@@ -46,5 +47,6 @@ detach reusable SDK buffers/JSON before disposing their parsers or responses. Th
 Builders, delegation, DI and lifecycle logging remain. Usage, telemetry/configuration middleware, client metadata conveniences,
 URI/AI-content input overloads and the upstream OCR reader are not reintroduced.
 
-This remains a non-shipping, non-packable source bridge. When packages are published, replace local project references with official
-centrally versioned packages and remove the 21 copied artifacts and temporary adapters without changing provider semantics.
+The Microsoft copied source and temporary adapters are removed. This remains a non-shipping, non-packable Apple prototype against
+official experimental packages. Only the unpublished Toolkit cloud providers use a temporary verbatim source bridge; those are not
+part of the Apple implementation or a replacement for the official contracts.

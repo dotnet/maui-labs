@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Version>1.0.0-preview</Version>
+    <AssemblyName>CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence</AssemblyName>
+    <RootNamespace>$(AssemblyName)</RootNamespace>
+    <Title>Azure Document Intelligence document extraction provider</Title>
+    <Description>Azure Document Intelligence extraction for Microsoft.Extensions.DocumentExtraction.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="skills\ctk-document-extraction-azure-document-intelligence\SKILL.md" />
+    <None Include="skills\ctk-document-extraction-azure-document-intelligence\SKILL.md" Pack="true" PackagePath="skills\ctk-document-extraction-azure-document-intelligence\" />
+    <PackageReference Include="Azure.AI.DocumentIntelligence" />
+    <Compile Include="..\Shared\FigureTextMapping.cs" LinkBase="Shared" />
+    <Compile Include="..\Shared\SectionHierarchy.cs" LinkBase="Shared" />
+    <InternalsVisibleTo Include="$(AssemblyName).UnitTests" />
+  </ItemGroup>
+</Project>

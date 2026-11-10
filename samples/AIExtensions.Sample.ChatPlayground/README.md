@@ -47,9 +47,14 @@ works without credentials or a model.
 ### Documents API experiment
 
 Documents evaluates the merged API from [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588)
-at main tip `f8ee271…`. It retains completed-document extraction and native-reader modes, original services/view-model conventions,
+using official daily packages `11.0.0-preview.1.26560.1` from `dotnet-libraries`. It retains completed-document extraction and native-reader modes, original services/view-model conventions,
 and explicit cloud choices.
-The original three source projects are copied verbatim and remain non-shipping; no private substitute API is used.
+The Microsoft source bridge is removed. Azure and Foundry Mistral extraction reuse CommunityToolkit providers; only those still-unpublished
+provider packages use a temporary [verbatim source bridge](../../src/Libraries/CommunityToolkit.DocumentExtraction/README.md).
+Apple Vision remains our on-device provider of the same official contract. No private substitute API is used.
+The cloud reader modes project those same Toolkit results rather than maintaining independent service protocols or HTML parsing.
+Mistral table content remains literal Markdown/HTML without an addressed cell grid; native-only blocks/captions/confidence remain
+explicitly inspectable instead of being repackaged into metadata.
 
 The experiment distinguishes normalized shared-document content/layout from deliberate borrowed-native inspection.
 The final API has no streaming, raw-capture toggle, original-body ownership contract or generic structural renderer.

@@ -1,0 +1,25 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <DocumentExtractionBuild>true</DocumentExtractionBuild>
+    <TargetFrameworks>net10.0;netstandard2.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Experimental Documents and Extraction dependency contracts. -->
+    <NoWarn>$(NoWarn);EXTEXP0019;MEDE0001;CTDE0001</NoWarn>
+    <InjectCallerAttributesOnLegacy>true</InjectCallerAttributesOnLegacy>
+    <InjectDiagnosticAttributesOnLegacy>true</InjectDiagnosticAttributesOnLegacy>
+    <InjectIsExternalInitOnLegacy>true</InjectIsExternalInitOnLegacy>
+    <InjectExperimentalAttributeOnLegacy>true</InjectExperimentalAttributeOnLegacy>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DocumentExtraction.Abstractions" />
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/ProviderAdapterHelpers.cs" LinkBase="Shared" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Shared/Throw/Throw.cs" LinkBase="Shared" />
+    <Using Include="Microsoft.Shared.Diagnostics" />
+    <AssemblyAttribute Include="System.Diagnostics.CodeAnalysis.ExperimentalAttribute">
+      <_Parameter1>CTDE0001</_Parameter1>
+      <UrlFormat>https://github.com/CommunityToolkit/AI/blob/main/DocumentExtraction/README.md#experimental-api-diagnostics</UrlFormat>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

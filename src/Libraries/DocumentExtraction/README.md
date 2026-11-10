@@ -1,37 +1,18 @@
-# Merged document extraction snapshot
+# Official document extraction dependencies
 
-This is non-shipping prototype scaffolding for [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588).
-The proposal merged on November 5, 2026. The pinned **main** commit is
-`f8ee27151b21e33793164b39de5bcebfdced81a4` (November 10).
+The Microsoft source bridge has been removed. Documents, Extraction and middleware are consumed as signed official packages,
+version `11.0.0-preview.1.26560.1`, from the public `dotnet-libraries` feed in the repository's `NuGet.config`.
+Their package repository commit is `f8ee27151b21e33793164b39de5bcebfdced81a4`, the same source previously evaluated here.
+Central versions live in `Directory.Packages.props`; the matching MEAI abstractions and middleware dependencies are scoped to
+document-consuming projects rather than changing the whole repository's dependency graph.
 
-`Upstream/` preserves every file from both `Microsoft.Extensions.DocumentExtraction.Abstractions` and
-`Microsoft.Extensions.DocumentExtraction`, plus the corrected `Microsoft.Extensions.Documents.Abstractions` prerequisite, including
-original project files, namespaces, accessibility, API baselines, documentation, and license headers. All 21 artifacts are immutable.
-The obsolete upstream `OcrDocumentReader` is no longer part of the proposal and is not compiled.
-Do not edit these copies to make the Apple provider work.
+The contracts are still experimental (`EXTEXP0019`, `MEDE0001`). `Microsoft.Maui.Essentials.AI` stays non-shipping/non-packable
+pending provider acceptance; consuming an official package does not make the prototype a supported release.
 
-The local projects beside this folder file-link those sources. Their only purpose is adapting repository build infrastructure
-and supplying the upstream internal guard/diagnostic helpers. They are not package replacements and cannot be packed or shipped.
-The prototype Essentials.AI library is also non-packable while its public surface depends on these unpublished assemblies.
+Sample cloud providers now come from [CommunityToolkit/AI](https://github.com/CommunityToolkit/AI/tree/main/DocumentExtraction),
+not local Azure/Mistral extraction implementations. Their packages are not published yet, so the exact provider sources and temporary
+non-shipping build adapters are documented [separately](../CommunityToolkit.DocumentExtraction/README.md).
+The Apple Vision provider remains our implementation of the official abstract client.
 
-Verify the exact copied file set and contents:
-
-```sh
-python3 src/Libraries/DocumentExtraction/verify-upstream.py
-dotnet build src/Libraries/Microsoft.Extensions.DocumentExtraction/Microsoft.Extensions.DocumentExtraction.csproj
-```
-
-The final abstract `DocumentExtractionClient` returns one non-disposable `ExtractionDocument`.
-Local payloads use `AIContent`; source frames and exact ordered polygons, table spans/roles/empty anchors, mixed-content cell sections,
-and per-call `ExtractorName`/provider options remain. Borrowed native objects are available through document/payload raw properties
-and explicit source-reference inspection. No response-content artifacts, capture opt-out, generalized annotations/confidence,
-page streaming/finalizer or structural Markdown renderer remain.
-
-On November 10 the three packages were not present on NuGet.org, any repository-approved feed, or upstream's daily feeds.
-The user explicitly chose this main-tip source bridge until publication. Do not invent a package version or change feeds.
-Once packages exist, replace the three local ProjectReferences with centrally versioned PackageReferences and remove these copies/adapters.
-Builders, DI and lifecycle-only logging remain; no local replacement APIs compensate for removed upstream features.
-
-Local project adapters reproduce upstream's distinct assembly-level diagnostics: `EXTEXP0019` for Documents and `MEDE0001` for Extraction.
-They supply only the shared argument guards needed by the original code; source is not patched to accommodate providers.
-See [the correction report](../../../docs/ai/document-extraction-corrected-api.md) for actual provider fidelity and remaining gaps.
+See [adoption history and current evidence](../../../docs/ai/document-extraction-corrected-api.md) and
+[Apple capability gaps](../../../docs/ai/apple-document-extraction-gaps.md).

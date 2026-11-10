@@ -80,8 +80,9 @@ version check.
 ### Merged Documents prototype
 
 The complete corrected shared Documents and Extraction API sources from
-[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588), main tip `f8ee271…`, are preserved verbatim and file-linked
-temporarily until official packages are published. `AppleVisionRecognizeDocumentsClient` derives from `DocumentExtractionClient`
+[dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) are consumed as official daily packages
+`11.0.0-preview.1.26560.1` from `dotnet-libraries`; the Microsoft source bridge is removed.
+`AppleVisionRecognizeDocumentsClient` derives from `DocumentExtractionClient`
 and returns a completed non-disposable `ExtractionDocument`.
 `AppleVisionRecognizeDocumentsReader` remains the local ingestion projection, not an upstream `OcrDocumentReader` replacement.
 The prototype is non-shipping/non-packable. Geometry, spans, per-call settings and borrowed native inspection use intended API

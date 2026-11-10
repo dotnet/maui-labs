@@ -15,7 +15,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <!-- NuGet package information -->
-    <!-- Prototype only: merged upstream extraction packages are not published yet. -->
+    <!-- Prototype only: daily extraction contracts are still experimental. -->
     <IsShipping>false</IsShipping>
     <IsPackable>false</IsPackable>
     <PackageId>Microsoft.Maui.Essentials.AI</PackageId>
@@ -40,7 +40,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <ProjectReference Include="..\..\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DocumentExtraction.Abstractions" />
   </ItemGroup>
   <!-- Exclude Apple-only files from non-Apple TFMs (including net10.0 base) -->
   <ItemGroup Condition="!$(TargetFramework.Contains('-ios')) AND !$(TargetFramework.Contains('-maccatalyst')) AND !$(TargetFramework.Contains('-macos'))">

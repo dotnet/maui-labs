@@ -1,6 +1,62 @@
 # Document extraction adoption
 
-## Current main adoption - 2026-11-10
+## Official packages and Toolkit provider reuse - 2026-11-10
+
+The Microsoft source bridge is removed: all three document packages are available from the public **`dotnet-libraries` feed**.
+Earlier package checks omitted that feed; their conclusions about non-publication were incomplete.
+The pinned `11.0.0-preview.1.26560.1` packages identify repository commit `f8ee27151b21e33793164b39de5bcebfdced81a4`,
+the same final contract already evaluated here. The matching MEAI abstractions and middleware dependencies are centrally pinned
+only for document-consuming projects.
+
+Azure/Mistral extraction now reuses the Toolkit providers rather than our own transport/mapping implementations.
+Toolkit packages are not published on NuGet.org or `dotnet-libraries`, so those two providers temporarily file-link exact upstream
+sources at `CommunityToolkit/AI` commit `e8bcbf47ffdcfcd89f9624d60797322b4e73417e`.
+Their source/provenance/license and non-shipping adapters are [documented here](../../src/Libraries/CommunityToolkit.DocumentExtraction/README.md).
+No unrelated provider, cloud fallback or new resource is added. Our Apple Vision provider remains in Essentials.AI.
+
+### Provider integration and deliberate differences
+
+The sample's cloud extraction classes are now thin application-policy decorators over the real Toolkit clients, not replacement
+provider implementations. The Azure client borrows the configured SDK transport; the Mistral client borrows the configured HTTP
+transport, uses the exact existing Foundry operation URI and Toolkit bearer-key authentication, and requests image bytes.
+Both paths retain the 20 MB upload bound; Azure retains its 100-second deadline, Mistral its five-minute deadline and 32 MB
+response bound. Mistral 503 retries come from the Toolkit, not an additional retry layer. Redirects remain disabled.
+Caller streams and supplied SDK/HTTP clients remain borrowed. The same provider instances feed extraction and the thin local
+DataIngestion projection, eliminating the old independent reader HTTP/HTML/JSON interpretation.
+
+The Toolkit mappings are not patched to imitate the old sample:
+
+- Mistral tables retain their literal Markdown/HTML with a 0-by-0 addressed grid rather than parsing HTML into guessed cells.
+  Blocks, headers/footers, confidence and auxiliary caption/OCR details remain in detached native JSON when not projected upstream.
+- Mistral untyped images follow the Toolkit's PNG assumption, including empty bytes; the sample does not invent a separate MIME policy.
+- Azure spans-only fallback content remains native when the Toolkit does not map it to semantic elements.
+- Native heading roles do not become fabricated heading levels. Original aggregate content and native-only details are not copied
+  into application metadata to conceal differences. Provider grid validation is upstream-owned; old sample HTML parsing and its
+  parser-specific dimension limits are not reproduced.
+
+Sample-only `AngleSharp` is removed with the old Mistral HTML parser. The existing test dependency remains for local Apple
+nested-table rendering assertions.
+
+### Package/Toolkit adoption evidence
+
+- Both temporary Toolkit assemblies compile against signed official daily packages; all 15 copied provider/configuration/license
+  artifacts match the pinned Toolkit commit. No Microsoft source implementation or shim remains.
+- Portable integration suite: 479 passed; Chat/Embeddings/Images/settings suite: 158 passed.
+- Actual Apple client/reader execution against signed daily assemblies: 11 clean Release Catalyst cases passed.
+  iOS and macOS library builds and the benchmark consumer also succeeded.
+- The complete Android playground builds with the Toolkit providers and real packages.
+- A session-only console smoke test compiled the exact sample policy/decorator sources against the real providers and used the
+  existing configured resources with the bundled synthetic image. Azure returned one page, five content elements and native
+  `AnalyzeResult`; Mistral returned one page and detached native `JsonElement`. Both retained caller input ownership.
+  This verifies the actual Foundry route/bearer-key combination, not merely mocked transport.
+- Final Catalyst playground/UI rerun was blocked by a shared-machine Xcode replacement: Xcode 27.0 disappeared after the successful
+  native tests; the new 27.2 bundle lacked its Info.plist/frameworks and could not run `xcodebuild`. The global selection pointed at
+  CommandLineTools. No global selection, installer or another session's app was changed. Earlier native results remain valid for
+  the unchanged Apple provider; they are not claimed as a final Toolkit-equipped Catalyst app run.
+
+The following sections preserve historical source-bridge evidence, not the current dependency mechanism.
+
+## Main-tip source bridge adoption - 2026-11-10 (superseded)
 
 [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) merged on November 5.
 The current source bridge pins main at `f8ee27151b21e33793164b39de5bcebfdced81a4`; all 21 artifacts from the three upstream

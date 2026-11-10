@@ -2,7 +2,7 @@
 
 **Status:** Non-shipping prototype in #450.
 **Contract:** [dotnet/extensions#7588](https://github.com/dotnet/extensions/pull/7588) at
-main `f8ee27151b21e33793164b39de5bcebfdced81a4` (merged November 5, copied November 10 while packages await publication).
+official daily `11.0.0-preview.1.26560.1`, repository commit `f8ee27151b21e33793164b39de5bcebfdced81a4`.
 **Native API:** Swift Vision `RecognizeDocumentsRequest`, iOS/Mac Catalyst/macOS 26+.
 
 ## Pipeline
@@ -18,7 +18,8 @@ caller-owned image/PDF stream
 
 The final shared model is a non-disposable exchange document, not a page-operation/finalization framework.
 One canonical Apple mapping is used; the reader does not interpret raw snapshots independently.
-All three upstream projects are copied exactly and file-linked through separate local adapters. There is no private substitute contract.
+All three Microsoft projects are official package dependencies; their copied source and local adapters are removed.
+There is no private substitute contract.
 
 ## Fidelity and extensibility
 
@@ -46,7 +47,7 @@ The playground exercises completed-document extraction, the concrete ingestion r
 native inspection. It displays payload/frame/polygon/span/role data; raw objects are not implicitly serialized into normalized output.
 Page streaming and capture controls are removed rather than emulated.
 
-Azure Document Intelligence and Foundry Mistral remain explicit sample-only providers using existing configured resources/transports.
+Azure Document Intelligence and Foundry Mistral reuse the Toolkit providers, retaining explicit sample-only selection and configured resources/transports.
 No client fallback, extra cloud resource, credentials in source or distribution of secret-embedded Debug binaries is introduced.
 
 See [corrected adoption details](document-extraction-corrected-api.md) and [feature gaps](apple-document-extraction-gaps.md).

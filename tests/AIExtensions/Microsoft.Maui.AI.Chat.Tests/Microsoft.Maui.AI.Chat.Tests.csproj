@@ -104,8 +104,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction.Abstractions\Microsoft.Extensions.DocumentExtraction.Abstractions.csproj" />
-    <ProjectReference Include="..\..\..\src\Libraries\Microsoft.Extensions.DocumentExtraction\Microsoft.Extensions.DocumentExtraction.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DocumentExtraction" />
   </ItemGroup>
 
   <ItemGroup>

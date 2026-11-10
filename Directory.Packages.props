@@ -3,6 +3,16 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <DocumentExtractionPreviewVersion>11.0.0-preview.1.26560.1</DocumentExtractionPreviewVersion>
+    <UseDocumentExtractionPreview Condition="'$(MSBuildProjectName)' == 'Microsoft.Maui.Essentials.AI' or
+        '$(MSBuildProjectName)' == 'AIExtensions.Sample.ChatPlayground' or
+        '$(MSBuildProjectName)' == 'EssentialsAISample' or
+        '$(MSBuildProjectName)' == 'Microsoft.Maui.Essentials.AI.UnitTests' or
+        '$(MSBuildProjectName)' == 'Microsoft.Maui.Essentials.AI.DeviceTests' or
+        '$(MSBuildProjectName)' == 'Microsoft.Maui.Essentials.AI.Benchmarks' or
+        '$(MSBuildProjectName)' == 'Microsoft.Maui.AI.Chat.Tests' or
+        '$(MSBuildProjectName)' == 'CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence' or
+        '$(MSBuildProjectName)' == 'CommunityToolkit.DocumentExtraction.Mistral'">true</UseDocumentExtractionPreview>
   </PropertyGroup>
 
   <!-- .NET MAUI (versions from eng/Versions.props, flowing via maestro) -->
@@ -79,6 +89,10 @@
     <PackageVersion Include="Microsoft.Extensions.DataIngestion.Abstractions" Version="10.10.0-preview.1.26459.2" />
     <PackageVersion Include="AngleSharp" Version="1.4.0" />
     <PackageVersion Include="Azure.AI.DocumentIntelligence" Version="1.0.0" />
+    <PackageVersion Include="Azure.Core" Version="1.53.0" />
+    <PackageVersion Include="Microsoft.Extensions.Documents.Abstractions" Version="$(DocumentExtractionPreviewVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DocumentExtraction.Abstractions" Version="$(DocumentExtractionPreviewVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DocumentExtraction" Version="$(DocumentExtractionPreviewVersion)" />
     <!-- Sample app: Microsoft Agents AI -->
     <PackageVersion Include="Microsoft.Agents.AI" Version="$(MicrosoftAgentsAIVersion)" />
     <PackageVersion Include="Microsoft.Agents.AI.Hosting" Version="$(MicrosoftAgentsAIHostingVersion)" />
@@ -97,6 +111,14 @@
     <PackageVersion Include="DeviceRunners.VisualRunners.Xunit" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.VisualRunners.Maui" Version="$(DeviceRunnersVersion)" />
     <PackageVersion Include="DeviceRunners.Testing.Targets" Version="$(DeviceRunnersVersion)" />
+  </ItemGroup>
+
+  <!-- The document preview requires the matching MEAI contract and net10 middleware dependencies.
+       Keep the experimental graph scoped to document consumers rather than updating other products. -->
+  <ItemGroup Condition="'$(UseDocumentExtractionPreview)' == 'true'">
+    <PackageVersion Update="Microsoft.Extensions.AI.Abstractions" Version="$(DocumentExtractionPreviewVersion)" />
+    <PackageVersion Update="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+    <PackageVersion Update="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
   </ItemGroup>
 
   <!-- Testing (Microsoft.NET.Test.Sdk and xunit.runner.visualstudio are
