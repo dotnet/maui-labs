@@ -487,7 +487,14 @@ export function createViewportController(options) {
   });
 
   if (window.ResizeObserver) {
-    try { new window.ResizeObserver(() => scheduleLayout()).observe(wrap); } catch {}
+    try {
+      new window.ResizeObserver(() => {
+        const bounds = readBounds();
+        if (!canNavigate() && lastBounds && !sameBounds(bounds, lastBounds))
+          onNavigationBlocked();
+        scheduleLayout();
+      }).observe(wrap);
+    } catch {}
   }
   applyLayout({ preserveCenter: false });
 

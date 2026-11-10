@@ -1754,14 +1754,28 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 async () => {
                   const wrap = document.getElementById('df-viewport-wrap');
                   const previousFlex = wrap.style.flex;
+                  const previousWidthStyle = wrap.style.width;
+                  const previousWidth = wrap.getBoundingClientRect().width;
+                  const nextWidth = previousWidth > 240 ? previousWidth - 73 : previousWidth + 73;
+                  const resized = new Promise(resolve => {
+                    const observer = new ResizeObserver(() => {
+                      if (Math.abs(wrap.getBoundingClientRect().width - previousWidth) <= 1) return;
+                      observer.disconnect();
+                      resolve();
+                    });
+                    observer.observe(wrap);
+                  });
                   window.fixtureGesturePointer('pointerdown', 44, 120);
                   window.fixtureGesturePointer('pointermove', 44, 150);
-                  wrap.style.flex = '0 0 360px';
+                  wrap.style.flex = `0 0 ${nextWidth}px`;
+                  wrap.style.width = `${nextWidth}px`;
+                  await resized;
                   await new Promise(resolve =>
                     requestAnimationFrame(() => requestAnimationFrame(resolve)));
                   window.fixtureGesturePointer('pointermove', 44, 180);
                   window.fixtureGesturePointer('pointerup', 44, 180);
                   wrap.style.flex = previousFlex;
+                  wrap.style.width = previousWidthStyle;
                 }
                 """);
             await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-gesture-requests", "3");
@@ -1916,7 +1930,9 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
               }
             }
             """);
-        await Page.WaitForTimeoutAsync(200);
+        await Page.EvaluateAsync("""
+            () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+            """);
         Assert.DoesNotContain("gesture", appRequests);
 
         await Page.Mouse.MoveAsync(startX, startY);
@@ -1926,12 +1942,15 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Assert.Contains("scroll", appRequests);
         while (appRequests.TryDequeue(out _)) { }
 
+        var gestureRefresh = Page.WaitForResponseAsync(response =>
+            response.Url.Contains("/api/state", StringComparison.Ordinal));
         await Page.RunAndWaitForResponseAsync(async () =>
         {
             await Page.Mouse.DownAsync();
             await Page.Mouse.MoveAsync(startX + 40, startY, new() { Steps = 3 });
             await Page.Mouse.UpAsync();
         }, response => response.Url.EndsWith("/api/gesture", StringComparison.Ordinal));
+        await gestureRefresh;
         Assert.Contains("gesture", appRequests);
         while (appRequests.TryDequeue(out _)) { }
 
