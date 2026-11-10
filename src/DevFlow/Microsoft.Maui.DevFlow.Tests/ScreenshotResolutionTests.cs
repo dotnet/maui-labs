@@ -81,6 +81,21 @@ public class ScreenshotResolutionTests
         Assert.True(ScreenshotImage.IsCompletePng(result));
     }
 
+    [Fact]
+    public void ProcessScreenshotPng_ClampedHeader_IsLowercase()
+    {
+        var response = TestAgent.ProcessResponse(
+            SamplePng,
+            nativeScale: 2,
+            autoScale: true,
+            targetScale: 3,
+            maxPixelWidth: null,
+            maxPixelHeight: null,
+            maxPixels: null);
+
+        Assert.Equal("true", response.Headers["X-DevFlow-Screenshot-Clamped"]);
+    }
+
     [Theory]
     [InlineData(1000, 1)]
     [InlineData(1, 1000)]

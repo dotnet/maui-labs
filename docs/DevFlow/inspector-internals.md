@@ -135,8 +135,7 @@ Inspector actions send `appLogical` coordinates plus optional correlation contai
 correlation and retain window-logical behavior. The Inspector proxy validates and converts
 correlated coordinates; direct `/api/v1` agent coordinate calls must already use `windowLogical`.
 
-Fit and 1:1 are transform values, not separate coordinate contracts. Future zoom/pan can supply
-its scale and translation to the same helpers without changing frame identity or action payloads.
+Fit and 1:1 are transform values, not separate coordinate contracts.
 
 Resolution-only replacement frames remain coordinate-equivalent when the recursive element
 geometry, logical viewport, root offset, and window identity are unchanged; PNG pixel dimensions

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Maui.DevFlow.Driver;
+using SkiaSharp;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
@@ -252,6 +253,49 @@ public class ScreenshotAgentClientTests
     }
 
     [Fact]
+    public async Task ScreenshotResultAsync_FlooredTallImage_PreservesValidScaleMetadata()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var png = CreatePng(294, 639);
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            await ReadRequestAsync(stream);
+            await WriteResponseAsync(
+                stream,
+                200,
+                "OK",
+                "image/png",
+                png,
+                new Dictionary<string, string>
+                {
+                    ["X-DevFlow-Screenshot-Pixel-Width"] = "294",
+                    ["X-DevFlow-Screenshot-Pixel-Height"] = "639",
+                    ["X-DevFlow-Screenshot-Logical-Width"] = "393",
+                    ["X-DevFlow-Screenshot-Logical-Height"] = "852",
+                    ["X-DevFlow-Screenshot-Capture-Scale"] = "0.7480916030534351",
+                    ["X-DevFlow-Screenshot-Native-Scale"] = "3",
+                    ["X-DevFlow-Screenshot-Clamped"] = "true"
+                });
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(393d, result.LogicalWidth);
+        Assert.Equal(852d, result.LogicalHeight);
+        Assert.Equal(0.7480916030534351, result.CaptureScale);
+        Assert.Equal(3, result.NativeScale);
+        Assert.True(result.ResolutionClamped == true);
+        await serverTask;
+    }
+
+    [Fact]
     public async Task ScreenshotResultAsync_WindowNotVisible_ReturnsRetryableFailureWithSuggestions()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -423,6 +467,15 @@ public class ScreenshotAgentClientTests
         }
 
         return Encoding.UTF8.GetString(request.ToArray());
+    }
+
+    private static byte[] CreatePng(int width, int height)
+    {
+        using var bitmap = new SKBitmap(width, height);
+        bitmap.Erase(SKColors.Transparent);
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
     }
 
     private static readonly byte[] HeaderTerminator = Encoding.ASCII.GetBytes("\r\n\r\n");
