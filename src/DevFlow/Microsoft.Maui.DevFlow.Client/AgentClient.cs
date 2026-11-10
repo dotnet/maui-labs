@@ -1177,6 +1177,144 @@ public class AgentClient : IDisposable
         return await PostGestureAsync(payload, "drag");
     }
 
+    /// <summary>
+    /// Starts a capability-negotiated continuous pointer session. The caller must send moves in
+    /// exact sequence order and end or cancel the session. A successful response means the native
+    /// pointer-down was delivered; do not replay the interaction through a legacy gesture after
+    /// that point.
+    /// </summary>
+    public Task<PointerSessionResult> StartPointerSessionAsync(PointerSessionStartRequest request)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(request.SessionId))
+            throw new ArgumentException("A pointer session id is required.", nameof(request));
+
+        return SendPointerSessionAsync(
+            $"{UiApi}/actions/pointer-sessions",
+            ProtocolJson.SerializeToNode(request),
+            request.SessionId);
+    }
+
+    /// <summary>Sends one bounded batch of coalesced pointer samples.</summary>
+    public Task<PointerSessionResult> MovePointerSessionAsync(
+        string sessionId,
+        int sequence,
+        IReadOnlyList<PointerSessionSample> samples)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("A pointer session id is required.", nameof(sessionId));
+        if (samples is null)
+            throw new ArgumentNullException(nameof(samples));
+
+        return SendPointerSessionAsync(
+            $"{UiApi}/actions/pointer-sessions/{Uri.EscapeDataString(sessionId)}/move",
+            new JsonObject
+            {
+                ["sequence"] = sequence,
+                ["samples"] = new JsonArray(samples.Select(
+                    static sample => ProtocolJson.SerializeToNode(sample)).ToArray())
+            },
+            sessionId);
+    }
+
+    /// <summary>Ends a pointer session with its final coordinate sample.</summary>
+    public Task<PointerSessionResult> EndPointerSessionAsync(
+        string sessionId,
+        int sequence,
+        PointerSessionSample sample)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("A pointer session id is required.", nameof(sessionId));
+        if (sample is null)
+            throw new ArgumentNullException(nameof(sample));
+
+        return SendPointerSessionAsync(
+            $"{UiApi}/actions/pointer-sessions/{Uri.EscapeDataString(sessionId)}/end",
+            new JsonObject
+            {
+                ["sequence"] = sequence,
+                ["sample"] = ProtocolJson.SerializeToNode(sample)
+            },
+            sessionId);
+    }
+
+    /// <summary>
+    /// Cancels a pointer session. Cancellation is idempotent and safe to send when the caller is
+    /// unsure whether the session still exists.
+    /// </summary>
+    public Task<PointerSessionResult> CancelPointerSessionAsync(
+        string sessionId,
+        string? reason = null)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("A pointer session id is required.", nameof(sessionId));
+
+        return SendPointerSessionAsync(
+            $"{UiApi}/actions/pointer-sessions/{Uri.EscapeDataString(sessionId)}/cancel",
+            new JsonObject { ["reason"] = reason },
+            sessionId);
+    }
+
+    private async Task<PointerSessionResult> SendPointerSessionAsync(
+        string path,
+        JsonNode payload,
+        string sessionId)
+    {
+        try
+        {
+            using var response = await SendWithTransientRetriesAsync(HttpMethod.Post, async () =>
+            {
+                using var content = ProtocolJson.CreateJsonContent(payload);
+                return await _http.PostAsync($"{_baseUrl}{path}", content);
+            });
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var result = ProtocolJson.Deserialize<PointerSessionResult>(responseBody)
+                ?? new PointerSessionResult
+                {
+                    Success = false,
+                    SessionId = sessionId,
+                    State = "rejected",
+                    Error = "Agent returned an unreadable pointer session response."
+                };
+            result.StatusCode = (int)response.StatusCode;
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Success = false;
+                if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.NotImplemented
+                    && string.IsNullOrWhiteSpace(result.Reason))
+                {
+                    result.Reason = "not_supported";
+                }
+            }
+            return result;
+        }
+        catch (NotSupportedByAgentException ex)
+        {
+            return new PointerSessionResult
+            {
+                Success = false,
+                SessionId = sessionId,
+                State = "rejected",
+                Reason = "not_supported",
+                Error = ex.Message,
+                StatusCode = 501
+            };
+        }
+        catch (Exception ex) when (IsExpectedClientException(ex))
+        {
+            return new PointerSessionResult
+            {
+                Success = false,
+                SessionId = sessionId,
+                State = "unknown",
+                Reason = "transport-failure",
+                Error = ex.Message,
+                TransportFailure = true
+            };
+        }
+    }
+
     private async Task<GestureResult> PostGestureAsync(JsonObject payload, string type)
     {
         try
@@ -3527,6 +3665,10 @@ public class AgentCapabilities
     /// </summary>
     [System.Text.Json.Serialization.JsonPropertyName("syntheticTouch")]
     public bool SyntheticTouch { get; set; }
+
+    /// <summary>Whether this backend can maintain a continuous pointer session.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("pointerStream")]
+    public bool PointerStream { get; set; }
 }
 
 public class NetworkRequest

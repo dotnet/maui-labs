@@ -229,20 +229,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
     return _origFetch(url, opts);
   };
   window.addEventListener('pagehide', () => {
-    try {
-      _origFetch(`${basePath}/api/control`, {
-        method: 'POST',
-        keepalive: true,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-DevFlow-Lease': writerToken,
-          'X-DevFlow-Writer': writerToken,
-          'X-DevFlow-Holder': leaseHolderKind,
-          'X-DevFlow-Label': leaseHolderLabel,
-        },
-        body: JSON.stringify({ action: 'release' }),
-      }).catch(() => {});
-    } catch {}
+    try { cancelPointerAndReleaseKeepalive('pagehide'); } catch {}
   });
 
   let healthEvidenceVersion = 0;
@@ -482,11 +469,11 @@ import { createViewportController } from './inspector-viewport-controller.js';
     screenshot.decode().then(() => settle(true), () => settle(false));
   }
 
-  let gesturePoints = [];
-  let gestureFrame = null;
-  let gestureViewportRect = null;
-  let gesturePointerId = null;
-  let cancelledGesturePointerId = null;
+  let activePointerSession = null;
+  let suppressedPointerClick = null;
+  let pointerStreamAvailable = metaContent('devflow-pointer-stream') === 'true';
+  let cancelledPointerId = null;
+  let pointerFrameRefreshNeeded = false;
   let isGesturing = false;
   let isDragging = false;
   let dragResetTimer = null;
@@ -499,6 +486,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
   const REFRESH_INTENT_EVIDENCE = 1;
   const REFRESH_INTENT_TAP = 2;
   const REFRESH_INTENT_MUTATION = 3;
+  const POINTER_PENDING_LIMIT = 256;
+  const POINTER_FALLBACK_LIMIT = 512;
+  const POINTER_BATCH_LIMIT = 64;
 
   // Inspector selection and tree state. Declared early so the event
   // handlers registered below can read them (they only run after init has set them).
@@ -669,7 +659,11 @@ import { createViewportController } from './inspector-viewport-controller.js';
     viewport.dataset.rootOffsetX = String(rootOffsetX);
     viewport.dataset.rootOffsetY = String(rootOffsetY);
     if (state.elements) patchElements(state.elements);
+    if (activePointerSession?.frame && !samePointerFrame(activePointerSession.frame, frame)) {
+      cancelPointerSession(activePointerSession, 'frame-changed').catch(() => {});
+    }
     committedFrame = frame;
+    pointerFrameRefreshNeeded = false;
     if (state.elements) onElementsUpdated();
     latestRootOffsetX = rootOffsetX;
     latestRootOffsetY = rootOffsetY;
@@ -686,6 +680,17 @@ import { createViewportController } from './inspector-viewport-controller.js';
     }
     const suffix = query.toString();
     return `${basePath}/api/state${suffix ? `?${suffix}` : ''}`;
+  }
+
+  function samePointerFrame(a, b) {
+    if (!a || !b) return false;
+    if (a.frameId === b.frameId) return true;
+    if (a.streamId && b.streamId && a.streamId !== b.streamId) return false;
+    return a.windowId === b.windowId
+      && Math.abs(a.rootOffsetX - b.rootOffsetX) < 0.001
+      && Math.abs(a.rootOffsetY - b.rootOffsetY) < 0.001
+      && Math.abs(a.logicalWidth - b.logicalWidth) < 0.001
+      && Math.abs(a.logicalHeight - b.logicalHeight) < 0.001;
   }
 
   // Refresh state via AJAX (no full page reload — avoids flash)
@@ -808,6 +813,9 @@ import { createViewportController } from './inspector-viewport-controller.js';
           viewportController?.scheduleLayout();
         const treeRevision = committedFrame.treeRevision;
         const diagnosticInputsRevision = committedFrame.diagnosticInputsRevision;
+        if (state.pointerStream && typeof state.pointerStream.supported === 'boolean') {
+          pointerStreamAvailable = state.pointerStream.supported;
+        }
         const renderedState = [...viewport.querySelectorAll('.devflow-element')].map(element =>
           ['data-id', 'style', 'data-isVisible', 'data-isEnabled', 'data-opacity', 'data-text', 'data-value']
             .map(attribute => element.getAttribute(attribute)));
@@ -1443,6 +1451,17 @@ import { createViewportController } from './inspector-viewport-controller.js';
   }
 
   viewport.addEventListener('click', async (e) => {
+    if (activePointerSession?.completionPromise) {
+      try { await activePointerSession.completionPromise; } catch {}
+    }
+    if (suppressedPointerClick
+        && performance.now() <= suppressedPointerClick.until
+        && e.pointerId === suppressedPointerClick.pointerId) {
+      suppressedPointerClick = null;
+      return;
+    }
+    if (suppressedPointerClick && performance.now() > suppressedPointerClick.until)
+      suppressedPointerClick = null;
     if (isDragging) return;
     // If the user clicks back into the active editor, ignore.
     if (activeEditor && (e.target === activeEditor || activeEditor.contains(e.target))) return;
@@ -1499,11 +1518,17 @@ import { createViewportController } from './inspector-viewport-controller.js';
   let scrollFlushTimer = null;
   let lastScrollPoint = null;
   let scrollFrame = null;
+  let activeScrollRequest = null;
 
   async function flushScroll() {
+    if (scrollFlushTimer) clearTimeout(scrollFlushTimer);
+    scrollFlushTimer = null;
+    let mutated = false;
+    while (activeScrollRequest)
+      mutated = (await activeScrollRequest) || mutated;
+
     if (!scrollFrame || !lastScrollPoint || (scrollAccumX === 0 && scrollAccumY === 0)) {
-      scrollFlushTimer = null;
-      return;
+      return mutated;
     }
 
     const frame = scrollFrame;
@@ -1511,27 +1536,36 @@ import { createViewportController } from './inspector-viewport-controller.js';
     const dx = scrollAccumX, dy = scrollAccumY;
     scrollAccumX = 0;
     scrollAccumY = 0;
-    scrollFlushTimer = null;
     scrollFrame = null;
     lastScrollPoint = null;
 
-    if (!ensureCanInteract()) return;
-
+    if (!ensureCanInteract()) return mutated;
+    const request = (async () => {
+      try {
+        const resp = await fetch(`${basePath}/api/scroll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(correlatedPayload(
+            { x, y, deltaX: dx, deltaY: dy },
+            CoordinateSpace.appLogical,
+            frame))
+        });
+        if (await responseHasFrameCorrelationError(resp))
+          scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+        if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
+        scheduleRefresh(300, resp.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
+        return resp.ok;
+      } catch (err) {
+        console.error('Scroll failed:', err);
+        return false;
+      }
+    })();
+    activeScrollRequest = request;
     try {
-      const resp = await fetch(`${basePath}/api/scroll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(correlatedPayload(
-          { x, y, deltaX: dx, deltaY: dy },
-          CoordinateSpace.appLogical,
-          frame))
-      });
-      if (await responseHasFrameCorrelationError(resp))
-        scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
-      if (recordingId && resp.ok) recordStep('scroll', null, { dx, dy });
-      scheduleRefresh(300, resp.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
-    } catch (err) {
-      console.error('Scroll failed:', err);
+      return (await request) || mutated;
+    } finally {
+      if (activeScrollRequest === request)
+        activeScrollRequest = null;
     }
   }
 
@@ -1556,126 +1590,617 @@ import { createViewportController } from './inspector-viewport-controller.js';
     scrollFlushTimer = setTimeout(() => { void flushScroll(); }, 100);
   }, { passive: false });
 
-  // ── Pointer Drag → Gesture ──
-  viewport.addEventListener('pointerdown', (e) => {
-    if (e.defaultPrevented) return;
-    if (cancelledGesturePointerId !== null) return;
-    if (e.button !== 0 || !e.isPrimary || isGesturing) return;
-    if (!ensureCanInteract()) return;
-    if (dragResetTimer) {
-      clearTimeout(dragResetTimer);
-      dragResetTimer = null;
-    }
-    gesturePointerId = e.pointerId;
-    gestureFrame = committedFrame;
-    gestureViewportRect = viewport.getBoundingClientRect();
-    const { x, y } = toAppCoords(
-      e.clientX,
-      e.clientY,
-      gestureFrame,
-      gestureViewportRect);
-    gesturePoints = [{ x, y, sx: e.clientX, sy: e.clientY, t: Date.now() }];
-    isGesturing = true;
-    isDragging = false;
-    viewport.setPointerCapture(e.pointerId);
-  });
+  // ── Pointer stream → native press / coalesced moves / release ──
+  function newPointerId() {
+    if (crypto.randomUUID) return crypto.randomUUID().replaceAll('-', '');
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  }
 
-  viewport.addEventListener('pointermove', (e) => {
-    if (!isGesturing || e.pointerId !== gesturePointerId) return;
-    const { x, y } = toAppCoords(
-      e.clientX,
-      e.clientY,
-      gestureFrame || committedFrame,
-      gestureViewportRect || viewport.getBoundingClientRect());
-    gesturePoints.push({ x, y, sx: e.clientX, sy: e.clientY, t: Date.now() });
-    // Drag-vs-tap decision uses on-screen (CSS px) distance so it behaves the same at any fit scale.
-    const s0 = gesturePoints[0];
-    if (Math.hypot(e.clientX - s0.sx, e.clientY - s0.sy) > 8) isDragging = true;
-  });
+  function pointerKeepaliveHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      'X-DevFlow-Lease': writerToken,
+      'X-DevFlow-Writer': writerToken,
+      'X-DevFlow-Holder': leaseHolderKind,
+      'X-DevFlow-Label': leaseHolderLabel,
+    };
+  }
+
+  function sendPointerCancelKeepalive(session, reason) {
+    _origFetch(`${basePath}/api/pointer/cancel`, {
+      method: 'POST',
+      keepalive: true,
+      headers: pointerKeepaliveHeaders(),
+      body: JSON.stringify({ sessionId: session.id, reason }),
+    }).then(response => response.arrayBuffer()).catch(() => {});
+  }
+
+  function cancelPointerAndReleaseKeepalive(reason) {
+    const session = activePointerSession;
+    if (session && !session.completed) {
+      session.cancelled = true;
+      if (session.started || session.ambiguousStart) suppressPointerClick(session);
+      session.completed = true;
+      finishPointerSessionState(session);
+    }
+    _origFetch(`${basePath}/api/pointer/cancel-and-release`, {
+      method: 'POST',
+      keepalive: true,
+      headers: pointerKeepaliveHeaders(),
+      body: JSON.stringify({ sessionId: session?.id || null, reason }),
+    }).then(response => response.arrayBuffer()).catch(() => {});
+  }
+
+  function suppressPointerClick(session) {
+    suppressedPointerClick = {
+      pointerId: session.pointerId,
+      until: performance.now() + 1000,
+    };
+  }
+
+  function browserPointerSamplesFromEvent(event, session) {
+    const events = typeof event.getCoalescedEvents === 'function'
+      ? event.getCoalescedEvents()
+      : [];
+    const source = events.length ? events : [event];
+    return source
+      .filter(sample => sample.pointerId === session.pointerId)
+      .map(sample => ({
+        clientX: sample.clientX,
+        clientY: sample.clientY,
+        timeStamp: sample.timeStamp,
+      }))
+      .sort((a, b) => a.timeStamp - b.timeStamp);
+  }
+
+  function mapPointerSamples(samples, session) {
+    return samples.map(sample => {
+      const point = toAppCoords(
+        sample.clientX,
+        sample.clientY,
+        session.frame,
+        session.viewportRect);
+      return {
+        x: point.x,
+        y: point.y,
+        elapsedMs: Math.max(0, sample.timeStamp - session.streamStartedAt),
+        sx: sample.clientX,
+        sy: sample.clientY,
+      };
+    });
+  }
+
+  function appendBoundedSamples(target, samples, limit) {
+    target.push(...samples);
+    while (target.length > limit) {
+      const reduced = [target[0]];
+      for (let i = 2; i < target.length - 1; i += 2) reduced.push(target[i]);
+      reduced.push(target[target.length - 1]);
+      target.splice(0, target.length, ...reduced);
+    }
+  }
+
+  function appendPointerMoves(session, samples) {
+    if (!samples.length || session.cancelled || session.ending) return;
+    appendBoundedSamples(session.pending, samples.map(({ x, y, elapsedMs }) => ({ x, y, elapsedMs })), POINTER_PENDING_LIMIT);
+    appendBoundedSamples(session.fallbackPoints, samples.map(({ x, y, elapsedMs }) => ({ x, y, t: elapsedMs })), POINTER_FALLBACK_LIMIT);
+    pumpPointerMoves(session).catch(error => console.error('Pointer move pump failed:', error));
+  }
 
   function scheduleDragReset() {
     if (dragResetTimer) clearTimeout(dragResetTimer);
     dragResetTimer = setTimeout(() => {
       dragResetTimer = null;
-      if (!isGesturing && cancelledGesturePointerId === null) isDragging = false;
+      if (!isGesturing && cancelledPointerId === null) isDragging = false;
     }, 50);
   }
 
-  function clearAppGestureState() {
-    isGesturing = false;
-    gesturePoints = [];
-    gestureFrame = null;
-    gestureViewportRect = null;
-    gesturePointerId = null;
-    viewportController?.scheduleLayout();
-  }
-
-  function finishCancelledAppGesture(event) {
-    if (cancelledGesturePointerId === null || event.pointerId !== cancelledGesturePointerId)
+  function finishCancelledPointer(event) {
+    if (cancelledPointerId === null || event.pointerId !== cancelledPointerId)
       return false;
-    cancelledGesturePointerId = null;
+    cancelledPointerId = null;
     scheduleDragReset();
     return true;
   }
 
-  viewport.addEventListener('pointerup', async (e) => {
-    if (finishCancelledAppGesture(e)) {
-      e.preventDefault();
+  async function preparePointerSession(session) {
+    const scrolled = await flushScroll();
+    if (session.cancelled || session.completed) return;
+
+    if (scrolled || pointerFrameRefreshNeeded) {
+      const state = await refreshState(true);
+      if (!state) {
+        session.failed = true;
+        setStatus('Pointer interaction did not start — the post-scroll frame could not be refreshed.');
+        return;
+      }
+    }
+    if (session.cancelled || session.completed) return;
+    if (!ensureCanInteract()) {
+      session.failed = true;
       return;
     }
-    if (!isGesturing || e.pointerId !== gesturePointerId) return;
-    const points = gesturePoints;
-    const frame = gestureFrame || committedFrame;
-    clearAppGestureState();
+
+    session.frame = committedFrame;
+    session.viewportRect = viewport.getBoundingClientRect();
+    session.start = toAppCoords(
+      session.startClientX,
+      session.startClientY,
+      session.frame,
+      session.viewportRect);
+    session.streamEnabled = pointerStreamAvailable;
+    session.target = hoverHitTest(session.startClientX, session.startClientY)
+      || (session.eventTarget?.closest
+        ? session.eventTarget.closest('.devflow-element')
+        : null);
+    session.streamStartedAt = performance.now();
+    session.fallbackPoints = [{ x: session.start.x, y: session.start.y, t: 0 }];
+    if (session.preStartSamples.length > 0) {
+      const samples = mapPointerSamples(session.preStartSamples, session);
+      appendBoundedSamples(
+        session.pending,
+        samples.map(({ x, y, elapsedMs }) => ({ x, y, elapsedMs })),
+        POINTER_PENDING_LIMIT);
+      appendBoundedSamples(
+        session.fallbackPoints,
+        samples.map(({ x, y, elapsedMs }) => ({ x, y, t: elapsedMs })),
+        POINTER_FALLBACK_LIMIT);
+      session.preStartSamples.length = 0;
+    }
+    if (session.cancelled || session.completed) return;
+    await startPointerSession(session);
+  }
+
+  async function startPointerSession(session) {
+    if (session.cancelled || session.completed || session.failed) return;
+    if (!session.streamEnabled || !session.frame?.frameId) {
+      session.fallback = true;
+      return;
+    }
+
+    try {
+      const correlation = buildActionCorrelation(
+        session.frame,
+        CoordinateSpace.appLogical,
+        'inspector',
+        session.actionId);
+      session.startRequested = true;
+      const response = await fetch(`${basePath}/api/pointer/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          pointerId: session.pointerId,
+          x: session.start.x,
+          y: session.start.y,
+          elapsedMs: 0,
+          correlation,
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      if (response.ok && result?.ok === true) {
+        session.started = true;
+        session.sequence = result.lastSequence || 0;
+        session.maxBatch = Math.max(1, Math.min(
+          POINTER_BATCH_LIMIT,
+          Number(result.maxSamplesPerMove) || POINTER_BATCH_LIMIT));
+        session.maxRequestBytes = Math.min(
+          16 * 1024,
+          Math.max(1024, Number(result.maxRequestBytes) || 16 * 1024));
+        if (session.cancelled) {
+          sendPointerCancelKeepalive(session, 'cancelled-before-start-reply');
+          return;
+        }
+        const idleTimeout = Number(result.idleTimeoutMs) || 5000;
+        session.heartbeatTimer = setInterval(() => {
+          if (!session.cancelled && !session.ending && session.started && session.pending.length === 0) {
+            session.heartbeatPending = true;
+            pumpPointerMoves(session).catch(() => {});
+          }
+        }, Math.max(500, Math.floor(idleTimeout / 3)));
+        return;
+      }
+      if (result?.fallback === true) {
+        session.fallback = true;
+        return;
+      }
+
+      session.failed = true;
+      suppressPointerClick(session);
+      if (result?.transportFailure === true) {
+        session.ambiguousStart = true;
+        await sendPointerCancelRequest(session, 'start-transport-failure').catch(() => {});
+      }
+      if (response.status === 409 || response.status === 410)
+        scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+      setStatus(`Pointer interaction did not start — ${result?.error || result?.reason || `HTTP ${response.status}`}.`);
+    } catch (error) {
+      // The response may have been lost after the native down was delivered. Never replay that
+      // path as a swipe; send a best-effort cancel and suppress the synthetic click.
+      session.failed = true;
+      session.ambiguousStart = true;
+      suppressPointerClick(session);
+      await sendPointerCancelRequest(session, 'start-transport-failure').catch(() => {});
+      console.error('Pointer start failed:', error);
+    }
+  }
+
+  async function pumpPointerMoves(session) {
+    if (session.movePromise) return session.movePromise;
+    session.movePromise = (async () => {
+      await session.startPromise;
+      if (!session.started || session.cancelled || session.failed) return;
+
+      while (!session.cancelled
+          && !session.failed
+          && (session.pending.length > 0 || session.heartbeatPending)) {
+        const sequence = session.sequence + 1;
+        const moveRequest = buildPointerMoveRequest(session, sequence);
+        if (!moveRequest) {
+          session.failed = true;
+          suppressPointerClick(session);
+          await sendPointerCancelRequest(session, 'move-payload-too-large').catch(() => {});
+          break;
+        }
+        const { samples, body } = moveRequest;
+        session.heartbeatPending = false;
+        session.sequence = sequence;
+        try {
+          const response = await fetch(`${basePath}/api/pointer/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+          });
+          const result = await response.json().catch(() => null);
+          if (!response.ok || result?.ok !== true) {
+            session.failed = true;
+            suppressPointerClick(session);
+            if (isFrameCorrelationError(result))
+              scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+            await sendPointerCancelRequest(session, 'move-failed').catch(() => {});
+            setStatus(`Pointer interaction cancelled — ${result?.error || result?.reason || `HTTP ${response.status}`}.`);
+          }
+        } catch (error) {
+          session.failed = true;
+          suppressPointerClick(session);
+          await sendPointerCancelRequest(session, 'move-transport-failure').catch(() => {});
+          console.error('Pointer move failed:', error);
+        }
+      }
+    })().finally(() => {
+      session.movePromise = null;
+    });
+    return session.movePromise;
+  }
+
+  function buildPointerMoveRequest(session, sequence) {
+    const samples = [];
+    let body = JSON.stringify({ sessionId: session.id, sequence, samples });
+    while (session.pending.length > 0 && samples.length < session.maxBatch) {
+      const candidate = [...samples, session.pending[0]];
+      const candidateBody = JSON.stringify({ sessionId: session.id, sequence, samples: candidate });
+      if (new TextEncoder().encode(candidateBody).length > session.maxRequestBytes) {
+        if (samples.length === 0) return null;
+        break;
+      }
+      samples.push(session.pending.shift());
+      body = candidateBody;
+    }
+    return { samples, body };
+  }
+
+  async function sendPointerCancelRequest(
+    session,
+    reason,
+    keepalive = false,
+    allowPending = false) {
+    if (!allowPending && !session.started && !session.ambiguousStart) return;
+    const request = {
+      method: 'POST',
+      keepalive,
+      headers: keepalive ? pointerKeepaliveHeaders() : { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: session.id, reason }),
+    };
+    const response = keepalive
+      ? await _origFetch(`${basePath}/api/pointer/cancel`, request)
+      : await fetch(`${basePath}/api/pointer/cancel`, request);
+    await response.arrayBuffer().catch(() => {});
+    return response;
+  }
+
+  function finishPointerSessionState(session) {
+    if (session.heartbeatTimer) clearInterval(session.heartbeatTimer);
+    session.heartbeatTimer = null;
+    session.pending.length = 0;
+    if (activePointerSession === session) activePointerSession = null;
+    delete viewport.dataset.pointerSession;
+    isGesturing = false;
+    viewportController?.scheduleLayout();
     scheduleDragReset();
+  }
 
-    if (points.length >= 2) {
-      const first = points[0];
-      const last = points[points.length - 1];
-      // Threshold on screen distance (scale-independent); send app-coordinate points to the app.
-      const screenDist = Math.hypot(last.sx - first.sx, last.sy - first.sy);
+  async function cancelPointerSession(
+    session,
+    reason,
+    keepalive = false,
+    suppressClickUntilRelease = false) {
+    if (!session || session.cancelled || session.completed) return;
+    session.cancelled = true;
+    const mayHaveMutated =
+      session.startRequested || session.started || session.ambiguousStart;
+    if (mayHaveMutated) suppressPointerClick(session);
+    if (suppressClickUntilRelease) {
+      cancelledPointerId = session.pointerId;
+      isDragging = true;
+    }
+    if (session.heartbeatTimer) clearInterval(session.heartbeatTimer);
+    session.heartbeatTimer = null;
+    session.pending.length = 0;
+    try {
+      await sendPointerCancelRequest(session, reason, keepalive, true);
+    } catch {}
+    try { await session.startPromise; } catch {}
+    session.completed = true;
+    finishPointerSessionState(session);
+    if (mayHaveMutated)
+      scheduleRefresh(300, REFRESH_INTENT_MUTATION);
+  }
 
-      if (mode === 'interact' && screenDist > 12) {
-        if (!ensureCanInteract()) return;
+  function cancelActivePointerSession(
+    reason,
+    keepalive = false,
+    suppressClickUntilRelease = false) {
+    return activePointerSession
+      ? cancelPointerSession(
+        activePointerSession,
+        reason,
+        keepalive,
+        suppressClickUntilRelease)
+      : Promise.resolve();
+  }
+
+  function cancelActivePointerSessionKeepalive(reason) {
+    const session = activePointerSession;
+    if (!session || session.completed) return;
+    session.cancelled = true;
+    if (session.startRequested || session.started || session.ambiguousStart)
+      suppressPointerClick(session);
+    sendPointerCancelKeepalive(session, reason);
+    session.completed = true;
+    finishPointerSessionState(session);
+  }
+
+  async function finishPointerSession(session, event) {
+    if (session.cancelled || session.completed) return;
+    session.ending = true;
+    if (session.heartbeatTimer) clearInterval(session.heartbeatTimer);
+    session.heartbeatTimer = null;
+
+    const browserSamples = browserPointerSamplesFromEvent(event, session);
+    try { await session.startPromise; } catch {}
+    if (!session.frame) {
+      session.completed = true;
+      finishPointerSessionState(session);
+      return;
+    }
+
+    const samples = mapPointerSamples(browserSamples, session);
+    const final = samples.length
+      ? samples[samples.length - 1]
+      : {
+          ...toAppCoords(
+            event.clientX,
+            event.clientY,
+            session.frame,
+            session.viewportRect),
+          elapsedMs: Math.max(0, event.timeStamp - session.streamStartedAt),
+          sx: event.clientX,
+          sy: event.clientY,
+        };
+    if (samples.length > 1) {
+      const moves = samples.slice(0, -1);
+      appendBoundedSamples(session.pending, moves.map(({ x, y, elapsedMs }) => ({ x, y, elapsedMs })), POINTER_PENDING_LIMIT);
+      appendBoundedSamples(session.fallbackPoints, moves.map(({ x, y, elapsedMs }) => ({ x, y, t: elapsedMs })), POINTER_FALLBACK_LIMIT);
+    }
+    appendBoundedSamples(session.fallbackPoints, [{ x: final.x, y: final.y, t: final.elapsedMs }], POINTER_FALLBACK_LIMIT);
+
+    const screenDistance = Math.hypot(
+      final.sx - session.startClientX,
+      final.sy - session.startClientY);
+
+    if (session.fallback) {
+      session.completed = true;
+      finishPointerSessionState(session);
+      if (screenDistance > 12 && ensureCanInteract()) {
         try {
           const response = await fetch(`${basePath}/api/gesture`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(correlatedPayload(
-              {
-                points: points.map((p) => ({ x: p.x, y: p.y, t: p.t })),
-              },
+              { points: session.fallbackPoints },
               CoordinateSpace.appLogical,
-              frame))
+              session.frame)),
           });
           if (await responseHasFrameCorrelationError(response))
             scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
-          scheduleRefresh(300, response.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
+          scheduleRefresh(
+            300,
+            response.ok ? REFRESH_INTENT_MUTATION : REFRESH_INTENT_RETRY);
+          await response.arrayBuffer().catch(() => {});
           if (recordingId) setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
-        } catch (err) {
-          console.error('Gesture failed:', err);
+        } catch (error) {
+          console.error('Gesture fallback failed:', error);
         }
       }
-    }
-
-  });
-  function cancelAppGesture(event, { suppressClickUntilRelease = false } = {}) {
-    if (!isGesturing) {
-      if (event && finishCancelledAppGesture(event)) event.preventDefault();
       return;
     }
-    if (event && event.pointerId !== gesturePointerId) return;
-    const pointerId = gesturePointerId;
-    clearAppGestureState();
-    if (suppressClickUntilRelease) {
-      cancelledGesturePointerId = pointerId;
-      isDragging = true;
-    } else {
-      isDragging = false;
+
+    if (!session.started || session.failed || session.cancelled) {
+      if (session.started || session.ambiguousStart)
+        suppressPointerClick(session);
+      session.completed = true;
+      finishPointerSessionState(session);
+      return;
     }
+
+    await pumpPointerMoves(session);
+    if (session.failed || session.cancelled) {
+      if (session.started || session.ambiguousStart)
+        suppressPointerClick(session);
+      session.completed = true;
+      finishPointerSessionState(session);
+      return;
+    }
+
+    const sequence = ++session.sequence;
+    try {
+      const response = await fetch(`${basePath}/api/pointer/end`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          sequence,
+          sample: { x: final.x, y: final.y, elapsedMs: final.elapsedMs },
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.ok !== true) {
+        if (isFrameCorrelationError(result))
+          scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+        else
+          scheduleRefresh(300, REFRESH_INTENT_RETRY);
+        await sendPointerCancelRequest(session, 'end-failed').catch(() => {});
+        setStatus(`Pointer interaction did not finish cleanly — ${result?.error || result?.reason || `HTTP ${response.status}`}.`);
+      } else {
+        scheduleRefresh(300, REFRESH_INTENT_MUTATION);
+        if (recordingId) {
+          if (screenDistance <= 12 && session.target)
+            await recordStep('tap', session.target);
+          else
+            setStatus('Gesture performed but not recorded (flow tests support tap/fill/scroll).');
+        }
+      }
+    } catch (error) {
+      await sendPointerCancelRequest(session, 'end-transport-failure').catch(() => {});
+      console.error('Pointer end failed:', error);
+    }
+
+    suppressPointerClick(session);
+    session.completed = true;
+    finishPointerSessionState(session);
   }
-  viewport.addEventListener('pointercancel', cancelAppGesture);
-  viewport.addEventListener('lostpointercapture', cancelAppGesture);
+
+  viewport.addEventListener('pointerdown', (event) => {
+    if (event.defaultPrevented
+        || cancelledPointerId !== null
+        || event.button !== 0
+        || event.isPrimary === false
+        || activePointerSession) return;
+    if (mode !== 'interact' || event.altKey || event.shiftKey || !ensureCanInteract()) return;
+    if (activeEditor
+        && (event.target === activeEditor || activeEditor.contains(event.target))) return;
+    if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if (dragResetTimer) {
+      clearTimeout(dragResetTimer);
+      dragResetTimer = null;
+    }
+
+    let target = document.elementFromPoint(event.clientX, event.clientY);
+    while (target && target !== viewport && !isTextInput(target)) target = target.parentElement;
+    if (target && target !== viewport && canEditTextInput(target)) return;
+
+    const session = {
+      id: newPointerId(),
+      actionId: newPointerId(),
+      pointerId: event.pointerId,
+      frame: null,
+      viewportRect: null,
+      streamEnabled: false,
+      start: null,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startedAt: event.timeStamp,
+      streamStartedAt: null,
+      eventTarget: event.target,
+      target: null,
+      pending: [],
+      preStartSamples: [],
+      fallbackPoints: [],
+      sequence: 0,
+      maxBatch: POINTER_BATCH_LIMIT,
+      maxRequestBytes: 16 * 1024,
+      started: false,
+      startRequested: false,
+      fallback: false,
+      failed: false,
+      cancelled: false,
+      completed: false,
+      ending: false,
+      heartbeatPending: false,
+      heartbeatTimer: null,
+      movePromise: null,
+      completionPromise: null,
+      startPromise: null,
+    };
+    activePointerSession = session;
+    viewport.dataset.pointerSession = session.id;
+    isGesturing = true;
+    isDragging = false;
+    session.startPromise = preparePointerSession(session);
+    try {
+      viewport.setPointerCapture(event.pointerId);
+    } catch {
+      // Some embedded hosts do not expose pointer capture for a bubbled event. The lifecycle
+      // guards still cancel on pointercancel, visibility changes, pagehide and timeout.
+    }
+  });
+
+  viewport.addEventListener('pointermove', (event) => {
+    const session = activePointerSession;
+    if (!session || session.pointerId !== event.pointerId || session.ending || session.cancelled) return;
+    const samples = browserPointerSamplesFromEvent(event, session);
+    if (session.frame)
+      appendPointerMoves(session, mapPointerSamples(samples, session));
+    else
+      appendBoundedSamples(session.preStartSamples, samples, POINTER_PENDING_LIMIT);
+    if (Math.hypot(event.clientX - session.startClientX, event.clientY - session.startClientY) > 8)
+      isDragging = true;
+  });
+
+  viewport.addEventListener('pointerup', (event) => {
+    if (finishCancelledPointer(event)) {
+      event.preventDefault();
+      return;
+    }
+    const session = activePointerSession;
+    if (!session || session.pointerId !== event.pointerId || session.ending) return;
+    isGesturing = false;
+    session.completionPromise = finishPointerSession(session, event);
+  });
+
+  viewport.addEventListener('pointercancel', (event) => {
+    if (finishCancelledPointer(event)) {
+      event.preventDefault();
+      return;
+    }
+    const session = activePointerSession;
+    if (session?.pointerId === event.pointerId)
+      cancelPointerSession(session, 'pointercancel').catch(() => {});
+  });
+
+  viewport.addEventListener('lostpointercapture', (event) => {
+    if (finishCancelledPointer(event))
+      return;
+    const session = activePointerSession;
+    if (session?.pointerId === event.pointerId && !session.ending)
+      cancelPointerSession(session, 'lost-pointer-capture').catch(() => {});
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      cancelActivePointerSessionKeepalive('visibility-hidden');
+    }
+  });
 
   // ── Live updates: a WebSocket to the broker-proxied /ws/events makes the mirror react instantly
   // to app-side changes. The 3s poll below stays as a zero-regression fallback and only refreshes
@@ -4453,12 +4978,18 @@ import { createViewportController } from './inspector-viewport-controller.js';
     isEditing: () => !!activeEditor,
     isCommandEnabled: id => commandStates[id]?.enabled !== false,
     canNavigate: () => !isGesturing,
-    onNavigationBlocked: () =>
-      cancelAppGesture(null, { suppressClickUntilRelease: true }),
+    onNavigationBlocked: () => {
+      pointerFrameRefreshNeeded = true;
+      cancelActivePointerSession(
+        'viewport-navigation',
+        false,
+        true);
+    },
     onTransformChanged: ({ bounds, transform }) =>
       scheduleScreenshotResolution(bounds.contentWidth, bounds.contentHeight, transform.scale),
   });
   window.addEventListener('resize', () => {
+    pointerFrameRefreshNeeded = true;
     updateHostLayout();
     viewportController.scheduleLayout();
     scheduleToolbarLayout();

@@ -7,7 +7,13 @@
 // writes). Every result carries the target identity so the host can show what is controlled.
 
 import { err } from "./types.js";
-import type { ActionCorrelation, AgentTarget, DevFlowError, DevFlowResult, ElementInfo } from "./types.js";
+import type {
+  ActionCorrelation,
+  AgentTarget,
+  DevFlowError,
+  DevFlowResult,
+  ElementInfo,
+} from "./types.js";
 import type { DevFlowEvent, EventStreamHandle } from "./events.js";
 import type { ScrollArgs, GestureArgs } from "./agent.js";
 

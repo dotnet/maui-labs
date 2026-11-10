@@ -22,7 +22,10 @@ public partial class DevFlowAgentService
         request.Headers.TryGetValue("X-DevFlow-Lease", out var leaseId);
         if (string.IsNullOrWhiteSpace(leaseId))
             request.Headers.TryGetValue("X-DevFlow-Writer", out leaseId);
-        return await _mutationLease.ValidateAsync(leaseId).ConfigureAwait(false);
+        var status = await _mutationLease.ValidateAsync(leaseId).ConfigureAwait(false);
+        if (!status.Allowed && ActivePointerSessionUsesLease(leaseId))
+            _ = CancelActivePointerSessionAsync("lease-lost");
+        return status;
     }
 
     private async Task<HttpResponse> HandleMutationLeaseControl(HttpRequest request)
@@ -39,7 +42,17 @@ public partial class DevFlowAgentService
         body.Action = string.IsNullOrWhiteSpace(body.Action)
             ? "status"
             : body.Action.Trim().ToLowerInvariant();
+        var releasingActivePointer = body.Action == "release"
+            && ActivePointerSessionUsesLease(body.LeaseId);
         var result = await _mutationLease.ControlAsync(body).ConfigureAwait(false);
+        if (releasingActivePointer
+            || body.Action == "claim"
+                && body.Force
+                && result.YouHold
+                && ActivePointerSessionUsesDifferentLease(body.LeaseId))
+        {
+            _ = CancelActivePointerSessionAsync("lease-lost");
+        }
         return HttpResponse.Json(result);
     }
 

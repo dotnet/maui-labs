@@ -3,7 +3,12 @@
 // ONE place. Keeping these pure (no dependency on resolve.ts) keeps the module graph
 // one-way and makes parsing/query-building unit-testable.
 
-import type { ActionCorrelation, AgentStatus, ElementInfo, ThemeResult } from "./types.js";
+import type {
+  ActionCorrelation,
+  AgentStatus,
+  ElementInfo,
+  ThemeResult,
+} from "./types.js";
 
 const API = "/api/v1";
 const UI = `${API}/ui`;

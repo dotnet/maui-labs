@@ -83,6 +83,11 @@ Supported everywhere: visual tree, query and CSS selectors, hit-testing, tap, fi
 key, gesture, scroll, batch, property get/set, screenshots (page, element, full screen), logs,
 network capture, profiling, DevFlow actions, and extensions.
 
+Continuous pointer sessions are supported on Android with real window-dispatched `MotionEvent`
+down/move/up/cancel input. The plain .NET UIKit and AppKit backends report `ui.pointerStream` as
+unsupported because they do not have a safe persistent native-touch injection path; clients keep
+the existing named-gesture fallback.
+
 AppKit full-window screenshots include native chrome and attached sheets without activating
 the app. ScreenCaptureKit is awaited rather than blocking the UI thread; macOS 14.0–14.1 uses
 the shared parent/sheet CoreGraphics composite when a sheet is attached. Capture does not
