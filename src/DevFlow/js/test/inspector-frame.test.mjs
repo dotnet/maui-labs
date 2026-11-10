@@ -114,6 +114,31 @@ test("identity-less refreshes drop stale correlation identity but keep current g
   assert.equal(buildActionCorrelation(legacy), null);
 });
 
+test("identity-less refreshes prefer current viewport dimensions over fallback geometry", () => {
+  const identified = normalizeFrameDescriptor({
+    frame: {
+      ...frame,
+      windowId: 7,
+      treeRevision: "tree-a",
+      diagnosticInputsRevision: "layout-a",
+      captureScale: 3,
+    },
+  });
+  const legacy = normalizeFrameDescriptor({
+    viewportWidth: 800,
+    viewportHeight: 600,
+  }, identified);
+
+  assert.equal(legacy.logicalWidth, 800);
+  assert.equal(legacy.logicalHeight, 600);
+  assert.equal(legacy.pixelWidth, 800);
+  assert.equal(legacy.pixelHeight, 600);
+  assert.equal(legacy.captureScale, 1);
+  assert.equal(legacy.windowId, null);
+  assert.equal(legacy.treeRevision, "");
+  assert.equal(legacy.diagnosticInputsRevision, null);
+});
+
 test("coordinate conversions round-trip root offsets and capture scale", () => {
   const app = { x: 25, y: 40 };
   const window = appLogicalToWindowLogical(app, frame);

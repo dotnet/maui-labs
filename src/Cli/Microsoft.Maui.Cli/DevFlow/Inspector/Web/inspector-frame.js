@@ -30,6 +30,7 @@ function positiveNumber(...values) {
 }
 
 function safeInteger(value, minimum) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   return Number.isSafeInteger(number) && number >= minimum ? number : null;
 }
@@ -81,31 +82,41 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
   const canInheritGeometry = !hasIdentity || sameFrame;
   const currentOrFallback = (key, inherit = canInheritGeometry) =>
     pick(key) ?? (inherit ? pickFallback(key) : null);
+  const currentLogicalWidth = positiveNumber(pick('logicalWidth'), pick('viewportWidth'));
+  const currentLogicalHeight = positiveNumber(pick('logicalHeight'), pick('viewportHeight'));
+  const fallbackLogicalWidth = canInheritGeometry
+    ? positiveNumber(pickFallback('logicalWidth'), pickFallback('viewportWidth'))
+    : 0;
+  const fallbackLogicalHeight = canInheritGeometry
+    ? positiveNumber(pickFallback('logicalHeight'), pickFallback('viewportHeight'))
+    : 0;
 
   const pixelWidth = positiveNumber(
-    currentOrFallback('pixelWidth'),
-    currentOrFallback('logicalWidth'),
-    currentOrFallback('viewportWidth'),
+    pick('pixelWidth'),
+    currentLogicalWidth,
+    canInheritGeometry ? pickFallback('pixelWidth') : null,
+    fallbackLogicalWidth,
   ) || 1;
   const pixelHeight = positiveNumber(
-    currentOrFallback('pixelHeight'),
-    currentOrFallback('logicalHeight'),
-    currentOrFallback('viewportHeight'),
+    pick('pixelHeight'),
+    currentLogicalHeight,
+    canInheritGeometry ? pickFallback('pixelHeight') : null,
+    fallbackLogicalHeight,
   ) || 1;
   const logicalWidth = positiveNumber(
-    currentOrFallback('logicalWidth'),
-    currentOrFallback('viewportWidth'),
+    currentLogicalWidth,
+    fallbackLogicalWidth,
     pixelWidth,
   ) || 1;
   const logicalHeight = positiveNumber(
-    currentOrFallback('logicalHeight'),
-    currentOrFallback('viewportHeight'),
+    currentLogicalHeight,
+    fallbackLogicalHeight,
     pixelHeight,
   ) || 1;
   const scaleX = pixelWidth / logicalWidth;
   const scaleY = pixelHeight / logicalHeight;
   const captureScale = positiveNumber(
-    currentOrFallback('captureScale'),
+    pick('captureScale'),
     Math.abs(scaleX - scaleY) <= Math.max(scaleX, scaleY) * 0.005 ? scaleX : 1,
   ) || 1;
 
@@ -127,14 +138,15 @@ export function normalizeFrameDescriptor(state, fallback = {}) {
       0,
     ),
     windowId: safeInteger(
-      currentOrFallback('windowId'),
+      pick('windowId') ?? (sameFrame ? pickFallback('windowId') : null),
       0,
     ),
     treeRevision: optionalString(
-      currentOrFallback('treeRevision'),
+      pick('treeRevision') ?? (sameFrame ? pickFallback('treeRevision') : null),
     ) ?? '',
     diagnosticInputsRevision: optionalString(
-      currentOrFallback('diagnosticInputsRevision'),
+      pick('diagnosticInputsRevision')
+        ?? (sameFrame ? pickFallback('diagnosticInputsRevision') : null),
     ),
     logicalWidth,
     logicalHeight,

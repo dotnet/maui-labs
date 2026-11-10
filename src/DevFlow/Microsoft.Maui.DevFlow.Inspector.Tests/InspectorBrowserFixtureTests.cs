@@ -19,6 +19,13 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 {
     private const int ClosedFlyoutX = -320;
     private const int OpenFlyoutX = 20;
+    private static readonly byte[] FixtureScreenshotPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAABdElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAA" +
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+Bn+3AAHo8fTrAAAAAElFTkSuQmCC");
 
     private WebApplication? _agent;
     private InspectorServer? _inspector;
@@ -32,6 +39,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     private int _flyoutX = ClosedFlyoutX;
     private int _treeRequests;
     private volatile bool _rejectWrites;
+    private int _returnInvalidScreenshot;
     private readonly TaskCompletionSource _screenshotHeld = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private volatile TaskCompletionSource? _screenshotGate;
     private int _disposed;
@@ -100,7 +108,9 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
                 return Results.Json(new { success = true });
             });
             _agent.MapGet("/api/v1/ui/screenshot", () => Results.File(
-                Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAABdElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+Bn+3AAHo8fTrAAAAAElFTkSuQmCC"),
+                Volatile.Read(ref _returnInvalidScreenshot) == 1
+                    ? [1, 2, 3, 4]
+                    : FixtureScreenshotPng,
                 "image/png"))
                 .AddEndpointFilter(async (context, next) =>
                 {
@@ -726,6 +736,35 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     }
 
     [InspectorBrowserFixtureFact]
+    public async Task Preview_RecoversWhenBootstrapScreenshotBecomesAvailable()
+    {
+        Volatile.Write(ref _returnInvalidScreenshot, 1);
+        await Task.Delay(250);
+
+        await Page.ReloadAsync(new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+        // Request callbacks from the replaced document are not guaranteed after navigation.
+        _pendingRequests.Clear();
+        await Expect(Page.Locator("#screenshot")).ToHaveCountAsync(0);
+        await Expect(Page.Locator("#df-retry-connection")).ToBeVisibleAsync();
+
+        Volatile.Write(ref _returnInvalidScreenshot, 0);
+        await Page.Locator("#df-retry-connection").ClickAsync();
+        await Page.WaitForFunctionAsync("""
+            () => {
+              const image = document.querySelector('#screenshot');
+              return image?.complete && image.naturalWidth === 400 && image.naturalHeight === 300;
+            }
+            """);
+
+        await Expect(Page.Locator("#df-disconnected-overlay")).ToHaveClassAsync(
+            "df-connection-overlay df-hidden");
+        // The forced retry aborts the failed fetch; Playwright may not emit a terminal request
+        // callback for that aborted fetch even though the replacement refresh completed.
+        _pendingRequests.Clear();
+        Assert.Empty(_pageErrors);
+    }
+
+    [InspectorBrowserFixtureFact]
     public async Task Tap_FrameMetadataCommitsAtomicallyWithDecodedScreenshot()
     {
         string? committedFrameId = null;
@@ -878,7 +917,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         Page.Request += (_, request) =>
         {
             if (Volatile.Read(ref trackRefresh) == 1 &&
-                request.Url.EndsWith("/api/state", StringComparison.Ordinal))
+                IsStateUrl(request.Url))
             {
                 refreshStarted.TrySetResult();
             }

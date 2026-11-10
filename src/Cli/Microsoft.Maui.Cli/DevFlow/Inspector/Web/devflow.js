@@ -20,7 +20,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   'use strict';
 
   const viewport = document.getElementById('app-viewport');
-  const screenshot = document.getElementById('screenshot');
+  let screenshot = document.getElementById('screenshot');
   // Fit-to-container scaling (responsive). #app-viewport holds the app at its fixed logical size;
   // #df-stage is sized to the scaled box and #app-viewport carries the CSS scale transform.
   const stage = document.getElementById('df-stage');
@@ -313,7 +313,19 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     // All frame-owned DOM changes are synchronous. The browser cannot paint or dispatch another
     // event between them, so screenshot, geometry, offsets, overlays, and descriptor become visible
     // as one complete committed frame.
-    if (screenshot && image) screenshot.src = image.src;
+    if (image) {
+      if (screenshot) {
+        screenshot.src = image.src;
+      } else {
+        screenshot = image;
+        screenshot.id = 'screenshot';
+        screenshot.alt = 'App screenshot';
+        screenshot.style.width = '100%';
+        screenshot.style.height = '100%';
+        screenshot.addEventListener('error', onScreenshotError);
+        viewport.prepend(screenshot);
+      }
+    }
     viewport.style.width = frame.logicalWidth + 'px';
     viewport.style.height = frame.logicalHeight + 'px';
     viewport.dataset.width = String(frame.logicalWidth);
@@ -381,7 +393,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
 
         // Keep the previous frame intact until its replacement image is ready.
         let image = null;
-        if (screenshot && state.screenshotUrl) {
+        if (state.screenshotUrl) {
           image = await loadDecodedImage(state.screenshotUrl, refresh.controller.signal);
           if (!ensureCurrent()) return followReplacement();
           if (!navigator.onLine) return null;
@@ -658,8 +670,10 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
     }, delayMs);
   }
-  if (screenshot) screenshot.addEventListener('error', () =>
-    scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY));
+  function onScreenshotError() {
+    scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
+  }
+  if (screenshot) screenshot.addEventListener('error', onScreenshotError);
 
   // ── Click → Tap (with text-input awareness) ──
   // Element types that should open a text editor instead of just tapping.
