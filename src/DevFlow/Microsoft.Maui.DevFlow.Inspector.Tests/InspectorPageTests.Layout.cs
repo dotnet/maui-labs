@@ -593,11 +593,14 @@ public partial class InspectorLayoutWorkspaceTests
         {
             ContentType = "application/json", Body = """{"youAreWriter":true,"heldByOther":false}"""
         }));
+        var browserFrameRevision = 0;
         await _page.RouteAsync("**/api/state*", route => route.FulfillAsync(new()
         {
             ContentType = "application/json",
             Body = JsonSerializer.Serialize(new
             {
+                frameId = $"layout-{Interlocked.Increment(ref browserFrameRevision)}",
+                frameRevision = browserFrameRevision,
                 viewportWidth = 320, viewportHeight = 600,
                 treeRevision = treeRevision?.Invoke(),
                 diagnosticInputsRevision = diagnosticInputsRevision?.Invoke(),

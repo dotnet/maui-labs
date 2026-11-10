@@ -21,19 +21,49 @@ import {
   selectNativeAwareScreenshotScaleBucket,
   selectScreenshotScaleBucket,
 } from './inspector-resolution.js';
+import {
+  createAnnouncementGate,
+  createInspectorPresentationState,
+  createStatusChannel,
+  deriveInspectorPresentation,
+  updateInspectorPresentationState,
+} from './inspector-presentation.js';
 
 (function () {
   'use strict';
 
   const viewport = document.getElementById('app-viewport');
   let screenshot = document.getElementById('screenshot');
+  const hasInitialScreenshot = !!screenshot?.getAttribute('src');
   // Fit-to-container scaling (responsive). #app-viewport holds the app at its fixed logical size;
   // #df-stage is sized to the scaled box and #app-viewport carries the CSS scale transform.
   const stage = document.getElementById('df-stage');
   const vpWrap = document.getElementById('df-viewport-wrap');
   const disconnectedOverlay = document.getElementById('df-disconnected-overlay');
   const retryConnectionBtn = document.getElementById('df-retry-connection');
+  const retryCaptureBtn = document.getElementById('df-retry-capture');
   const previewPending = document.getElementById('df-preview-pending');
+  const previewHealth = document.getElementById('df-preview-health');
+  const previewHealthLabel = document.getElementById('df-preview-health-label');
+  const previewBadges = document.getElementById('df-preview-badges');
+  const healthBanner = document.getElementById('df-health-banner');
+  const healthBannerHeading = document.getElementById('df-health-banner-heading');
+  const healthBannerDetail = document.getElementById('df-health-banner-detail');
+  const connectionHeading = document.getElementById('df-connection-heading');
+  const connectionDetail = document.getElementById('df-connection-detail');
+  const healthLive = document.getElementById('df-health-live');
+  const statusLine = document.getElementById('df-status');
+  let healthStatusRendered = false;
+  const statusChannel = createStatusChannel((text, state, textChanged) => {
+    if (textChanged && statusLine) statusLine.textContent = text || '';
+    healthStatusRendered = state.healthRendered;
+  });
+  const announcementGate = createAnnouncementGate(text => {
+    if (healthLive) healthLive.textContent = text;
+  });
+  function setStatus(text) {
+    return statusChannel.set(text);
+  }
   let fitMode = true;   // default: scale down to fit (never upscale past 1:1)
   let scaleRaf = 0;
   let rootOffsetX = parseFloat(viewport.dataset.rootOffsetX) || 0;
@@ -132,7 +162,37 @@ import {
   let leaseHeldByOther = false;
   let otherLeaseLabel = null;
   let otherLeaseExpiresInMs = null;
-  let connected = true;   // a live app is reachable (derived from /api/state); gates the drive-actions
+  let leaseAuthority = null;
+  let leaseStateInitialized = false;
+  let controlRequestVersion = 0;
+  let healthState = createInspectorPresentationState({
+    broker: 'reachable',
+    agent: 'available',
+    capture: {
+      status: hasInitialScreenshot ? 'never' : 'failed',
+      reason: hasInitialScreenshot ? null : 'capture-failed',
+      hasFrame: false,
+    },
+    stream: 'connecting',
+  });
+  function accessSnapshot() {
+    return {
+      isWriter,
+      heldByOther: leaseHeldByOther,
+      holderLabel: otherLeaseLabel,
+      expiresInMs: otherLeaseExpiresInMs,
+      authority: leaseAuthority,
+      leaseReliable: leaseAuthority !== 'unknown',
+    };
+  }
+  let presentation = deriveInspectorPresentation(
+    healthState,
+    accessSnapshot(),
+    committedFrame);
+  let presentationReady = false;
+  let driveGateStatusToken = null;
+  let driveGateStatusText = null;
+  let disconnectReturnFocus = null;
   // Layout scans are explicit or opt-in live operations, independent of screenshot polling.
   let layoutPanel = null;
   const layoutEventTracker = createLayoutEventTracker();
@@ -151,7 +211,7 @@ import {
       // A writer 409 means we tried to drive the app while read-only. Flip to read-only AND hint how
       // to recover, so a silently-ignored tap/edit/gesture doesn't look broken (the drive-BUTTONS are
       // disabled in read-only, but interact-mode taps aren't, so this closes that loop).
-      if (resp.status === 409) { resp.clone().json().then((j) => { if (j && j.reason === 'writer') { setWriterUi(false, true, j.label, j.expiresInMs); setStatus('Read-only — another session is driving. Take control to interact.'); } }).catch(() => {}); }
+      if (resp.status === 409) { resp.clone().json().then((j) => { if (j && j.reason === 'writer') { controlRequestVersion++; setWriterUi(false, true, j.label, j.expiresInMs, j.authority); setStatus('Read-only — another session is driving. Take control to interact.'); } }).catch(() => {}); }
       return resp;
     }
     return _origFetch(url, opts);
@@ -172,6 +232,240 @@ import {
       }).catch(() => {});
     } catch {}
   });
+
+  let healthEvidenceVersion = 0;
+  let committedScreenshotUrl = screenshot?.currentSrc || screenshot?.src || null;
+
+  function setBusyAttribute(element, busy) {
+    if (!element) return;
+    if (busy) element.setAttribute('aria-busy', 'true');
+    else element.removeAttribute('aria-busy');
+  }
+
+  function renderRetryButton(button, label, busy) {
+    if (!button) return;
+    const text = button.querySelector('span');
+    if (text) text.textContent = busy ? 'Checking…' : label;
+    button.setAttribute('aria-disabled', String(busy));
+    setBusyAttribute(button, busy);
+  }
+
+  function renderHealthBadges(badges) {
+    if (!previewBadges) return;
+    const fragment = document.createDocumentFragment();
+    for (const badge of badges) {
+      const element = document.createElement('span');
+      element.className = 'df-preview-badge';
+      element.dataset.badge = badge.id;
+      element.dataset.tone = badge.tone;
+      element.textContent = badge.label;
+      element.title = badge.title || badge.label;
+      fragment.append(element);
+    }
+    previewBadges.replaceChildren(fragment);
+  }
+
+  function badgesEqual(left = [], right = []) {
+    return left.length === right.length && left.every((badge, index) => {
+      const other = right[index];
+      return badge.id === other.id
+        && badge.tone === other.tone
+        && badge.label === other.label
+        && badge.title === other.title;
+    });
+  }
+
+  function presenceEqual(left, right) {
+    if (!left || !right) return left === right;
+    return left.icon === right.icon
+      && left.label === right.label
+      && left.tone === right.tone
+      && left.title === right.title;
+  }
+
+  function renderHealthPresentation(previous = null, announce = true) {
+    presentation = deriveInspectorPresentation(
+      healthState,
+      accessSnapshot(),
+      committedFrame);
+    const blocking = presentation.showBlockingOverlay;
+    const bannerHadFocus = !!(previous?.showHealthBanner && healthBanner?.contains(document.activeElement));
+    const chromeChanged = !previous
+      || previous.tone !== presentation.tone
+      || previous.label !== presentation.label
+      || previous.detail !== presentation.detail
+      || previous.showBlockingOverlay !== blocking
+      || previous.showHealthBanner !== presentation.showHealthBanner
+      || previous.busy !== presentation.busy
+      || previous.primaryAction?.label !== presentation.primaryAction?.label
+      || !badgesEqual(previous.badges, presentation.badges);
+    const flowChanged = !previous
+      || previous.driveAllowed !== presentation.driveAllowed
+      || previous.controlAllowed !== presentation.controlAllowed
+      || previous.healthy !== presentation.healthy;
+    const presenceChanged = !previous || !presenceEqual(previous.presence, presentation.presence);
+
+    if (chromeChanged) {
+      document.body.classList.toggle('df-disconnected', blocking);
+      if (previewHealth) previewHealth.dataset.tone = presentation.tone;
+      if (previewHealthLabel) previewHealthLabel.textContent = presentation.label;
+      renderHealthBadges(presentation.badges);
+      if (connectionHeading) connectionHeading.textContent = presentation.label;
+      if (connectionDetail) connectionDetail.textContent = presentation.detail;
+      if (healthBannerHeading) healthBannerHeading.textContent = presentation.label;
+      if (healthBannerDetail) healthBannerDetail.textContent = presentation.detail;
+
+      if (disconnectedOverlay) {
+        disconnectedOverlay.classList.toggle('df-hidden', !blocking);
+        disconnectedOverlay.setAttribute('aria-hidden', String(!blocking));
+        setBusyAttribute(disconnectedOverlay, blocking && presentation.busy);
+      }
+      if (healthBanner) {
+        healthBanner.classList.toggle('df-hidden', !presentation.showHealthBanner);
+        setBusyAttribute(healthBanner, presentation.showHealthBanner && presentation.busy);
+      }
+
+      const recoveryLabel = presentation.primaryAction?.label || 'Retry now';
+      renderRetryButton(retryConnectionBtn, recoveryLabel, presentation.busy);
+      renderRetryButton(retryCaptureBtn, recoveryLabel, presentation.busy);
+    }
+
+    const previousStatusText = previous?.statusText || '';
+    statusChannel.setHealth(presentation.statusText);
+    if (announce) {
+      const healthChanged = !previous
+        || presentation.healthAnnouncementKey !== previous.healthAnnouncementKey;
+      const accessChanged = !previous
+        || presentation.accessAnnouncementKey !== previous.accessAnnouncementKey;
+      const announcement = [
+        healthChanged
+          && (!healthStatusRendered || presentation.statusText === previousStatusText)
+          ? presentation.healthAnnouncement
+          : '',
+        accessChanged ? presentation.accessAnnouncement : '',
+      ].filter(Boolean).join(' ');
+      const key = [
+        healthChanged ? `health:${presentation.healthAnnouncementKey}` : '',
+        accessChanged ? `access:${presentation.accessAnnouncementKey}` : '',
+      ].filter(Boolean).join('|');
+      announcementGate.announce(key, announcement);
+    }
+
+    if (previous?.healthy && !presentation.healthy)
+      layoutPanel?.invalidate('Preview evidence changed; the previous Layout snapshot is stale.');
+
+    if (previous && !previous.showBlockingOverlay && blocking) {
+      disconnectReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    } else if (previous?.showBlockingOverlay && !blocking && disconnectReturnFocus?.isConnected) {
+      const active = document.activeElement;
+      if (!active || active === document.body || active === document.documentElement
+          || disconnectedOverlay?.contains(active)) {
+        disconnectReturnFocus.focus({ preventScroll: true });
+      }
+      disconnectReturnFocus = null;
+    }
+    if (previous?.showHealthBanner && !presentation.showHealthBanner && bannerHadFocus)
+      document.getElementById('df-view-pane')?.focus({ preventScroll: true });
+    if (driveGateStatusToken) {
+      if (!statusChannel.isCurrent(driveGateStatusToken)) {
+        driveGateStatusToken = null;
+        driveGateStatusText = null;
+      } else if (!presentation.driveMessage) {
+        statusChannel.clear(driveGateStatusToken);
+        driveGateStatusToken = null;
+        driveGateStatusText = null;
+      } else if (driveGateStatusText !== presentation.driveMessage) {
+        statusChannel.replace(driveGateStatusToken, presentation.driveMessage);
+        driveGateStatusText = presentation.driveMessage;
+      }
+    }
+
+    if (presenceChanged) renderWriterPresence(presentation.presence);
+    if (flowChanged) updateFlowButtons();
+  }
+
+  function updateHealth(patch, announce = true) {
+    const previous = presentation;
+    healthState = updateInspectorPresentationState(healthState, patch);
+    if (presentationReady) renderHealthPresentation(previous, announce);
+  }
+
+  function reportCaptureSuccess(announce = true) {
+    healthEvidenceVersion++;
+    updateHealth({
+      broker: 'reachable',
+      agent: 'available',
+      capture: {
+        status: 'ok',
+        reason: null,
+        hasFrame: true,
+      },
+    }, announce);
+  }
+
+  function reportCaptureFailure(reason) {
+    healthEvidenceVersion++;
+    updateHealth({
+      broker: 'reachable',
+      agent: 'available',
+      capture: {
+        status: 'failed',
+        reason,
+        hasFrame: healthState.capture.hasFrame,
+      },
+    });
+  }
+
+  function reportDisconnected(reason) {
+    healthEvidenceVersion++;
+    if (reason === 'browser-offline') {
+      updateHealth({ broker: 'browser-offline', agent: 'unknown' });
+      return;
+    }
+    if (reason === 'broker-unreachable') {
+      updateHealth({ broker: 'unreachable', agent: 'unknown' });
+      return;
+    }
+    if (reason === 'request-timeout') {
+      updateHealth({ broker: 'timed-out', agent: 'unknown' });
+      return;
+    }
+    updateHealth({
+      broker: 'reachable',
+      agent: reason === 'agent-unregistered' ? 'unregistered' : 'unavailable',
+    });
+  }
+
+  async function responseFailureReason(response) {
+    try {
+      const body = await response.clone().json();
+      return typeof body?.reason === 'string' ? body.reason : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function settleInitialScreenshot() {
+    if (!hasInitialScreenshot || !screenshot) return;
+    const expectedSource = screenshot.currentSrc || screenshot.src;
+    const startingEvidenceVersion = healthEvidenceVersion;
+    const settle = (ok) => {
+      if ((screenshot.currentSrc || screenshot.src) !== expectedSource) return;
+      if (ok) {
+        if (healthEvidenceVersion === startingEvidenceVersion && healthState.capture.status === 'never')
+          reportCaptureSuccess(false);
+        else if (!healthState.capture.hasFrame)
+          updateHealth({ capture: { hasFrame: true } }, false);
+      } else if (healthEvidenceVersion === startingEvidenceVersion && healthState.capture.status === 'never') {
+        reportCaptureFailure('image-load');
+      }
+    };
+    if (screenshot.complete) {
+      settle(screenshot.naturalWidth > 0);
+      return;
+    }
+    screenshot.decode().then(() => settle(true), () => settle(false));
+  }
 
   let gesturePoints = [];
   let gestureFrame = null;
@@ -317,30 +611,37 @@ import {
     });
   }
 
+  function publishDecodedScreenshot(image, replace = false) {
+    if (screenshot && !replace) {
+      screenshot.src = image.src;
+      return;
+    }
+
+    const previous = screenshot;
+    screenshot = image;
+    screenshot.id = 'screenshot';
+    screenshot.alt = 'App screenshot';
+    screenshot.style.width = '100%';
+    screenshot.style.height = '100%';
+    screenshot.addEventListener('error', onScreenshotError);
+    if (previous) previous.replaceWith(screenshot);
+    else viewport.prepend(screenshot);
+  }
+
   function commitFrame(state, frame, image) {
     if (hasExplicitFrameIdentity(state) && !shouldCommitFrame(committedFrame, frame)) {
       const unchanged = frame.streamId === committedFrame.streamId
         && frame.frameId === committedFrame.frameId
         && frame.frameRevision === committedFrame.frameRevision;
+      if (unchanged && image && (!screenshot || screenshot.naturalWidth <= 0))
+        publishDecodedScreenshot(image, true);
       return unchanged ? 'unchanged' : 'rejected';
     }
 
     // All frame-owned DOM changes are synchronous. The browser cannot paint or dispatch another
     // event between them, so screenshot, geometry, offsets, overlays, and descriptor become visible
     // as one complete committed frame.
-    if (image) {
-      if (screenshot) {
-        screenshot.src = image.src;
-      } else {
-        screenshot = image;
-        screenshot.id = 'screenshot';
-        screenshot.alt = 'App screenshot';
-        screenshot.style.width = '100%';
-        screenshot.style.height = '100%';
-        screenshot.addEventListener('error', onScreenshotError);
-        viewport.prepend(screenshot);
-      }
-    }
+    if (image) publishDecodedScreenshot(image);
     viewport.style.width = frame.logicalWidth + 'px';
     viewport.style.height = frame.logicalHeight + 'px';
     viewport.dataset.width = String(frame.logicalWidth);
@@ -380,6 +681,7 @@ import {
     const refresh = {
       generation: ++refreshGeneration,
       requestVersion: refreshRequestVersion,
+      healthEvidenceVersion,
       tap,
       controller: new AbortController(),
       followUpPromise: null,
@@ -389,6 +691,9 @@ import {
       activeRefresh !== refresh || refresh.generation !== refreshGeneration;
     const followReplacement = () =>
       activeRefresh && activeRefresh !== refresh ? activeRefresh.promise : null;
+    const canPublishHealth = () =>
+      refresh.requestVersion === refreshRequestVersion
+      && refresh.healthEvidenceVersion === healthEvidenceVersion;
     const ensureCurrent = () => {
       if (isSuperseded()) return false;
       if (refresh.controller.signal.aborted) {
@@ -399,18 +704,40 @@ import {
     };
     activeRefresh = refresh;
     refresh.promise = (async () => {
+      let phase = 'request';
+      let timedOut = false;
       const timeout = setTimeout(() => {
         if (isSuperseded()) return;
+        timedOut = true;
         refresh.controller.abort();
       }, STATE_FETCH_TIMEOUT_MS);
-      disconnectedOverlay?.setAttribute('aria-busy', 'true');
       try {
         const requestedScale = requestedScreenshotScale;
         const resp = await fetch(stateRequestUrl(force), { signal: refresh.controller.signal });
         if (!ensureCurrent()) return followReplacement();
-        if (!resp.ok) { markConnected(false); return null; }
+        if (!resp.ok) {
+          const reason = await responseFailureReason(resp);
+          if (!ensureCurrent()) return followReplacement();
+          if (canPublishHealth()) {
+            if (!navigator.onLine) {
+              reportDisconnected('browser-offline');
+            } else if (reason === 'capture-failed') {
+              reportCaptureFailure(reason);
+            } else if (resp.status === 404) {
+              reportDisconnected('agent-unregistered');
+            } else if (reason === 'agent-unavailable'
+                || (!reason && [502, 503, 504].includes(resp.status))) {
+              reportDisconnected('agent-unavailable');
+            } else {
+              reportCaptureFailure(reason || 'request-failed');
+            }
+          }
+          return null;
+        }
+        phase = 'response-body';
         const state = await resp.json();
         if (!ensureCurrent()) return followReplacement();
+        phase = 'state';
         const frame = normalizeFrameDescriptor(state, committedFrame);
         if (state.screenshotResolutionSupported === false) {
           screenshotResolutionSupported = false;
@@ -425,20 +752,26 @@ import {
         // Keep the previous frame intact until its replacement image is ready.
         let image = null;
         if (state.screenshotUrl) {
+          phase = 'decode';
           image = await loadDecodedImage(state.screenshotUrl, refresh.controller.signal);
           if (!ensureCurrent()) return followReplacement();
-          if (!navigator.onLine) return null;
+          if (!navigator.onLine) {
+            reportDisconnected('browser-offline');
+            return null;
+          }
         }
         if (!ensureCurrent()) return followReplacement();
+        phase = 'apply';
         const commitResult = commitFrame(state, frame, image);
         if (commitResult === 'rejected') {
           const replacement = followReplacement();
           if (replacement) return replacement;
-          markConnected(true);
           scheduleRefresh(300, REFRESH_INTENT_RETRY);
           return null;
         }
-        markConnected(true);
+        if (image && (commitResult === 'committed' || !committedScreenshotUrl))
+          committedScreenshotUrl = image.src;
+        if (canPublishHealth()) reportCaptureSuccess();
 
         committedScreenshotScale = Number(frame.requestedCaptureScale) || requestedScale;
         const actualCaptureScale = Number(frame.captureScale);
@@ -483,7 +816,21 @@ import {
         if (isSuperseded()) {
           return followReplacement();
         }
-        markConnected(false);
+        if (canPublishHealth()) {
+          if (!navigator.onLine) {
+            reportDisconnected('browser-offline');
+          } else if (phase === 'decode') {
+            reportCaptureFailure(timedOut ? 'capture-timeout' : 'image-decode');
+          } else if (phase === 'state' || phase === 'apply') {
+            reportCaptureFailure('capture-failed');
+          } else if (phase === 'response-body' && !timedOut) {
+            reportCaptureFailure('invalid-response');
+          } else if (timedOut) {
+            reportDisconnected('request-timeout');
+          } else {
+            reportDisconnected('broker-unreachable');
+          }
+        }
         console.error('State refresh failed:', err);
         return null;
       } finally {
@@ -495,56 +842,31 @@ import {
     } finally {
       if (activeRefresh === refresh) {
         activeRefresh = null;
-        disconnectedOverlay?.removeAttribute('aria-busy');
       }
     }
   }
 
-  // Reachability of the live app, derived from /api/state. Toggling it re-evaluates the drive-action
-  // buttons so they disable when the agent goes away (and re-enable when it returns).
-  const disconnectedStatus = 'App disconnected — waiting for DevFlow to reconnect.';
-  const checkingStatus = 'Checking for the running app…';
-  let disconnectReturnFocus = null;
-  function markConnected(value) {
-    if (connected === value) return;
-    connected = value;
-    document.body.classList.toggle('df-disconnected', !value);
-    if (disconnectedOverlay) {
-      disconnectedOverlay.classList.toggle('df-hidden', value);
-      disconnectedOverlay.setAttribute('aria-hidden', String(value));
+  async function retryPreview() {
+    if (healthState.retrying) return;
+    if (driveGateStatusToken) {
+      statusChannel.clear(driveGateStatusToken);
+      driveGateStatusToken = null;
+      driveGateStatusText = null;
     }
-    if (!value) {
-      disconnectReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      layoutPanel?.invalidate('App disconnected; the previous Layout snapshot is stale.');
-    } else if (disconnectReturnFocus && disconnectReturnFocus.isConnected) {
-      const active = document.activeElement;
-      if (!active || active === document.body || active === document.documentElement ||
-          disconnectedOverlay?.contains(active)) {
-        disconnectReturnFocus.focus({ preventScroll: true });
-      }
-      disconnectReturnFocus = null;
-    }
-    renderWriterPresence();
-    const status = document.getElementById('df-status');
-    if (!value) setStatus(disconnectedStatus);
-    else if (status && status.textContent === disconnectedStatus) setStatus('');
-    updateFlowButtons();
-  }
-  if (retryConnectionBtn) retryConnectionBtn.addEventListener('click', async () => {
-    const label = retryConnectionBtn.querySelector('span');
-    retryConnectionBtn.disabled = true;
-    if (label) label.textContent = 'Checking…';
-    setStatus(checkingStatus);
+    updateHealth({ retrying: true });
     try {
-      // Forced: replace any in-flight refresh rather than reusing its result.
       await refreshState(true);
     } finally {
-      retryConnectionBtn.disabled = false;
-      if (label) label.textContent = 'Retry now';
-      // markConnected() ignores an unchanged state, so settle our own status here unless something newer replaced it.
-      if (tb.status?.textContent === checkingStatus) setStatus(connected ? '' : disconnectedStatus);
+      updateHealth({ retrying: false });
     }
-  });
+  }
+  for (const button of [retryConnectionBtn, retryCaptureBtn]) {
+    if (!button) continue;
+    button.addEventListener('click', () => {
+      if (button.getAttribute('aria-disabled') === 'true') return;
+      retryPreview();
+    });
+  }
 
   // Keyed DOM diff: match elements by data-id, update in-place if changed
   function patchElements(newHtml) {
@@ -724,7 +1046,10 @@ import {
 
     }, delayMs);
   }
-  function onScreenshotError() {
+  function onScreenshotError(event) {
+    const currentSource = event.currentTarget.currentSrc || event.currentTarget.src;
+    if (!activeRefresh && presentation.connected && currentSource === committedScreenshotUrl)
+      reportCaptureFailure('image-load');
     scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
   }
   if (screenshot) screenshot.addEventListener('error', onScreenshotError);
@@ -760,18 +1085,16 @@ import {
   }
 
   function ensureCanDrive() {
-    if (!connected) {
-      setStatus(disconnectedStatus);
-      return false;
+    if (presentation.driveAllowed) return true;
+    const message = presentation.driveMessage || 'This action is currently unavailable.';
+    if (driveGateStatusToken && statusChannel.isCurrent(driveGateStatusToken)) {
+      statusChannel.replace(driveGateStatusToken, message);
+    } else {
+      driveGateStatusToken = setStatus(message);
     }
-    if (isWriter) return true;
-
-    const owner = otherLeaseLabel || 'another session';
-    setStatus(leaseHeldByOther
-      ? `Read-only — ${owner} is driving. Take control to interact.`
-      : 'Read-only — take control to interact.');
+    driveGateStatusText = message;
     const takeControl = document.getElementById('df-take-control');
-    if (takeControl && !takeControl.classList.contains('df-hidden')) {
+    if (presentation.healthy && takeControl && !takeControl.classList.contains('df-hidden')) {
       takeControl.classList.add('df-attention');
       takeControl.focus({ preventScroll: true });
       setTimeout(() => takeControl.classList.remove('df-attention'), 1200);
@@ -851,7 +1174,7 @@ import {
     editor.remove();
   }
 
-  function preserveEditorAfterFailure(editor, status) {
+  function preserveEditorAfterFailure(editor, status, refocus = true) {
     delete editor.dataset.commitInProgress;
     editor.readOnly = false;
     editor.setAttribute('aria-invalid', 'true');
@@ -859,7 +1182,7 @@ import {
     editor.title = status
       ? `Unable to update the app (${status}). Your text has been preserved.`
       : 'Unable to update the app. Your text has been preserved.';
-    if (activeEditor === editor) {
+    if (refocus && activeEditor === editor) {
       setTimeout(() => editor.focus(), 0);
     }
   }
@@ -916,9 +1239,9 @@ import {
         removeEditor(editor);
         return;
       }
-      // Read-only sessions never reach the agent; drop the edit rather than 409-looping.
+      // Keep unsent text visible until the Preview and writer lease recover.
       if (!ensureCanDrive()) {
-        removeEditor(editor);
+        preserveEditorAfterFailure(editor, null, false);
         return;
       }
       if (editor.dataset.commitInProgress === 'true') return;
@@ -933,6 +1256,10 @@ import {
   function openEditor(targetEl) {
     if (!canEditTextInput(targetEl)) return;
     if (activeEditor?.dataset.commitInProgress === 'true') return;
+    if (activeEditor?.dataset.dirty === 'true') {
+      setStatus('Finish or discard the preserved edit before editing another field.');
+      return;
+    }
     closeEditor(false);
     const elementId = targetEl.getAttribute('data-id');
     if (!elementId) return;
@@ -1229,7 +1556,7 @@ import {
 
   // ── Live updates: a WebSocket to the broker-proxied /ws/events makes the mirror react instantly
   // to app-side changes. The 3s poll below stays as a zero-regression fallback and only refreshes
-  // when the socket is NOT live (wsLive), the app is disconnected, or Layout is visible: an open
+  // when the socket is NOT live (wsLive), health is degraded, or Layout is visible: an open
   // event stream does not guarantee app reachability or every native layout change emits an event.
   // This poll never analyzes layout.
   let wsLive = false;
@@ -1239,8 +1566,13 @@ import {
   const EVENT_RETRY_MS = 3000;
   const EVENT_UNSUPPORTED_RECHECK_MS = 60000;
 
-  function scheduleEventConnect(delay) {
+  function reportEventStatus(status) {
+    updateHealth({ stream: status }, false);
+  }
+
+  function scheduleEventConnect(delay, status = 'reconnecting') {
     wsLive = false;
+    reportEventStatus(status);
     if (eventConnectTimer) return;
     eventConnectTimer = setTimeout(() => {
       eventConnectTimer = null;
@@ -1266,18 +1598,23 @@ import {
         return;
       }
       if (capability.supported !== true) {
-        scheduleEventConnect(EVENT_UNSUPPORTED_RECHECK_MS);
+        scheduleEventConnect(EVENT_UNSUPPORTED_RECHECK_MS, 'unsupported');
         return;
       }
 
       const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + basePath + '/ws/events';
       const layoutEventChanged = layoutEventTracker.beginConnection();
-      eventsWs = new WebSocket(wsUrl);
-      eventsWs.onopen = () => {
+      reportEventStatus('connecting');
+      const socket = new WebSocket(wsUrl);
+      eventsWs = socket;
+      socket.onopen = () => {
+        if (eventsWs !== socket) return;
         wsLive = true;
-        if (!document.hidden && !replaying) scheduleRefresh(0);
+        reportEventStatus('live');
+        if (!document.hidden && !replaying) scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
       };
-      eventsWs.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (eventsWs !== socket) return;
         if (typeof event.data === 'string') {
           try {
             const message = JSON.parse(event.data);
@@ -1289,26 +1626,40 @@ import {
               layoutPanel?.invalidate('App evidence changed; rescan to review the current layout.');
           } catch (e) { /* not JSON we understand — fall through to a refresh */ }
         }
-        if (!document.hidden && !replaying) scheduleRefresh(150);
+        if (!document.hidden && !replaying) scheduleRefresh(150, REFRESH_INTENT_EVIDENCE);
       };
-      eventsWs.onclose = () => { wsLive = false; eventsWs = null; scheduleEventConnect(EVENT_RETRY_MS); };
-      eventsWs.onerror = () => { try { eventsWs && eventsWs.close(); } catch (e) { /* onclose reconnects */ } };
+      socket.onclose = () => {
+        if (eventsWs !== socket) return;
+        wsLive = false;
+        eventsWs = null;
+        scheduleEventConnect(EVENT_RETRY_MS);
+      };
+      socket.onerror = () => { try { socket.close(); } catch (e) { /* onclose reconnects */ } };
     } catch (e) {
-      scheduleEventConnect(EVENT_RETRY_MS);
+      scheduleEventConnect(EVENT_RETRY_MS, 'unavailable');
     } finally {
       eventSupportCheckInFlight = false;
     }
   }
   connectEvents();
-  window.addEventListener('offline', () => markConnected(false));
+  window.addEventListener('offline', () => {
+    wsLive = false;
+    reportEventStatus('reconnecting');
+    reportDisconnected('browser-offline');
+  });
   window.addEventListener('online', () => {
-    if (!replaying) scheduleRefresh(0);
-    if (!eventsWs || eventsWs.readyState >= WebSocket.CLOSING) connectEvents();
+    if (!replaying) scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+    if (eventsWs?.readyState === WebSocket.OPEN) {
+      wsLive = true;
+      reportEventStatus('live');
+    } else if (!eventsWs || eventsWs.readyState >= WebSocket.CLOSING) {
+      connectEvents();
+    }
   });
 
   // ── Periodic safety refresh for app-side changes (AJAX, no flash) ──
   function pollState() {
-    if (!document.hidden && !replaying && !refreshTimer && (!wsLive || !connected || isDiagnosticsPaneVisible())) {
+    if (!document.hidden && !replaying && !refreshTimer && (!wsLive || !presentation.healthy || isDiagnosticsPaneVisible())) {
       refreshState();
     }
   }
@@ -1319,7 +1670,7 @@ import {
       clearInterval(pollInterval);
       pollInterval = null;
     } else if (!pollInterval) {
-      if (!replaying) scheduleRefresh(0);
+      if (!replaying) scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
       pollInterval = setInterval(pollState, 3000);
     }
   });
@@ -1355,7 +1706,7 @@ import {
     labelElement: propsElLabel,
     closeButton: propsCloseBtn,
     api: propertyApi,
-    getIsWriter: () => isWriter && connected,
+    getIsWriter: () => presentation.driveAllowed,
     prepareOpen: () => {
       const active = document.activeElement;
       if (active instanceof HTMLElement && active !== document.body && !propsPaneEl.contains(active))
@@ -1679,7 +2030,6 @@ import {
         .find((element) => element.getAttribute('data-id') === id)
       : null;
   }
-  function setStatus(text) { if (tb.status) tb.status.textContent = text || ''; }
   function repeatedElementContext(el, automationId) {
     if (!automationId) return '';
     const matching = [...viewport.querySelectorAll('.devflow-element')]
@@ -1790,6 +2140,7 @@ import {
   // Status last written for the selection. A refresh rewrites the line only while it still shows
   // this, so messages from other actions (tap, recording, mode) are never overwritten.
   let selectionStatus = '';
+  let selectionStatusToken = null;
   function selectionStatusFor(el) {
     return elementLabel(el) + (el.dataset.offscreen === 'true' ? ' (off-screen)' : '');
   }
@@ -1798,12 +2149,26 @@ import {
     const previousId = selectedId;
     selectedId = id || null;
     if (previousId !== selectedId) layoutPanel?.selectionChanged();
-    if (!id) { propertyGrid.close(); elementTree.updateSelection(); setStatus(''); updateHostButtons(); updateFlowButtons(); postSelectionToHost(null); return; }
+    if (!id) {
+      propertyGrid.close();
+      elementTree.updateSelection();
+      if (selectionStatusToken) statusChannel.clear(selectionStatusToken);
+      selectionStatus = '';
+      selectionStatusToken = null;
+      updateHostButtons();
+      updateFlowButtons();
+      postSelectionToHost(null);
+      return;
+    }
     const el = elById(id);
     if (el) el.classList.add('df-selected');
     elementTree.updateSelection();
     elementTree.reveal(id);
-    if (el) { propertyGrid.open(el); setStatus(selectionStatus = selectionStatusFor(el)); }
+    if (el) {
+      propertyGrid.open(el);
+      selectionStatus = selectionStatusFor(el);
+      selectionStatusToken = setStatus(selectionStatus);
+    }
     updateHostButtons();
     updateFlowButtons();
     postSelectionToHost(el);
@@ -1818,7 +2183,10 @@ import {
       if (el) {
         el.classList.add('df-selected');
         const status = selectionStatusFor(el);
-        if (status !== selectionStatus && tb.status?.textContent === selectionStatus) setStatus(selectionStatus = status);
+        if (status !== selectionStatus && selectionStatusToken && statusChannel.isCurrent(selectionStatusToken)) {
+          selectionStatus = status;
+          statusChannel.replace(selectionStatusToken, status);
+        }
       } else selectElement(null);
     }
     if (hoveredEl && (!hoveredEl.isConnected || hoveredEl.dataset.offscreen === 'true')) setHover(null);
@@ -1914,6 +2282,10 @@ import {
 
   function updateRecordButton() {
     if (!recordBtn) return;
+    const wasRecording = recordBtn.classList.contains('df-recording');
+    const previousLabel = recordBtn.querySelector('.df-btn-label')?.textContent
+      || recordBtn.textContent;
+    const cancelWasHidden = cancelRecordingBtn?.classList.contains('df-hidden');
     recordBtn.classList.toggle('df-recording', !!recordingId);
     recordBtn.setAttribute('aria-pressed', String(!!recordingId));
     // Update only the label span so the leading icon and the responsive icon-collapse survive
@@ -1923,7 +2295,11 @@ import {
     if (lbl) lbl.textContent = label;
     else recordBtn.textContent = recordingId ? `\u25CF ${label}` : `\u25CF ${label}`;
     if (cancelRecordingBtn) cancelRecordingBtn.classList.toggle('df-hidden', !recordingId);
-    scheduleToolbarLayout();
+    if (wasRecording !== !!recordingId
+        || previousLabel !== (lbl?.textContent || recordBtn.textContent)
+        || cancelWasHidden !== cancelRecordingBtn?.classList.contains('df-hidden')) {
+      scheduleToolbarLayout();
+    }
   }
 
   // Highest-precedence DURABLE selector for the element (automationId > text > id). We never send a
@@ -2225,13 +2601,16 @@ import {
   const checkpointBtn = document.getElementById('df-goto-checkpoint');
 
   function updateFlowButtons() {
-    // canDrive: this session holds the writer lease AND a live app is connected. The drive-actions
-    // (record / replay / assert / return-to-start-route) 409 or fail otherwise, so disable them
-    // rather than let a click error out. Record stays clickable WHILE recording so you can stop.
-    const canDrive = isWriter && connected;
+    const canDrive = presentation.driveAllowed;
+    const canControlRecording = presentation.controlAllowed;
     updateRecordButton();
-    if (recordBtn) recordBtn.disabled = recordingStopping || replaying || !canDrive;
-    if (cancelRecordingBtn) cancelRecordingBtn.disabled = !recordingId || recordingStopping || replaying || !canDrive;
+    if (recordBtn) {
+      recordBtn.disabled = recordingStopping || replaying
+        || (recordingId ? !canControlRecording : !canDrive);
+    }
+    if (cancelRecordingBtn) {
+      cancelRecordingBtn.disabled = !recordingId || recordingStopping || replaying || !canControlRecording;
+    }
     setExplainedDisabled(assertBtn, !recordingId || !selectedId || replaying || !canDrive);
     setExplainedDisabled(replayBtn, !lastMarkdown || !!recordingId || replaying || !canDrive);
     setExplainedDisabled(checkpointBtn, !checkpointRoute || replaying || !canDrive);
@@ -2241,7 +2620,7 @@ import {
     if (workflowReplayBtn) workflowReplayBtn.disabled = !lastMarkdown || !!recordingId || replaying || !canDrive;
     propertyGrid.updateWriterState();
     document.querySelectorAll('#df-dock .df-alert-actions button').forEach((button) => {
-      button.disabled = !canDrive;
+      button.disabled = !canDrive || button.dataset.pending === 'true';
     });
   }
 
@@ -3287,16 +3666,20 @@ import {
       for (const alertButton of buttons) {
         const label = String(alertButton.label || 'Dismiss');
         const button = elh('button', { class: 'df-dock-btn', text: label, 'data-alert-action': 'dismiss' });
-        button.disabled = !isWriter || !connected;
-        button.title = button.disabled ? 'Take control before dismissing native alerts.' : `Dismiss with ${label}`;
+        button.disabled = !presentation.driveAllowed;
+        button.title = !isWriter
+          ? 'Take control before dismissing native alerts.'
+          : (!presentation.healthy ? 'Retry the Preview before dismissing native alerts.' : `Dismiss with ${label}`);
         button.addEventListener('click', async () => {
           if (!ensureCanDrive()) return;
+          button.dataset.pending = 'true';
           button.disabled = true;
           const response = await apiPost('/api/alerts/dismiss', { buttonLabel: label });
           if (response && response.ok && response.dismissed) {
             setStatus(`Dismissed native alert with ${label}.`);
             await loadTab('alerts');
           } else {
+            delete button.dataset.pending;
             button.disabled = false;
             setStatus((response && response.error) || 'Could not dismiss the native alert.');
           }
@@ -3482,7 +3865,7 @@ import {
   }, NETWORK_AUTO_REFRESH_MS);
 
   // ── Presence / single-writer coordination ──
-  function renderWriterPresence() {
+  function renderWriterPresence(presenceState = presentation.presence) {
     const presence = document.getElementById('df-presence');
     if (!presence) return;
     const previousText = presence.textContent;
@@ -3498,32 +3881,26 @@ import {
       text.textContent = label;
       presence.append(text);
     };
-    if (!connected) {
-      setPresence('i-refresh', 'Disconnected');
-      presence.className = 'df-presence df-disconnected';
-      presence.title = 'The running app is disconnected.';
+    if (!presenceState) {
+      presence.replaceChildren();
+      presence.className = 'df-presence';
+      presence.title = 'No session currently controls the app.';
       scheduleIfChanged();
       return;
     }
-    if (isWriter) {
-      setPresence('i-edit', 'Driving');
-      presence.title = 'This Inspector can drive the app.';
-    } else if (leaseHeldByOther) {
-      const owner = otherLeaseLabel || 'Another session';
-      setPresence('i-lock', `Read-only · ${owner}`);
-      const seconds = Number.isFinite(otherLeaseExpiresInMs)
-        ? Math.max(0, Math.ceil(otherLeaseExpiresInMs / 1000))
-        : null;
-      presence.title = `${owner} is driving this app.${seconds == null ? '' : ` Lease refreshes in about ${seconds}s.`}`;
-    } else {
-      presence.replaceChildren();
-      presence.title = 'No session currently controls the app.';
-    }
-    presence.className = 'df-presence' + (isWriter ? ' df-writer' : (leaseHeldByOther ? ' df-readonly' : ''));
+    setPresence(presenceState.icon, presenceState.label);
+    presence.title = presenceState.title;
+    presence.className = 'df-presence'
+      + (presenceState.tone === 'writer' ? ' df-writer'
+        : presenceState.tone === 'read-only' ? ' df-readonly'
+          : presenceState.tone === 'disconnected' ? ' df-disconnected' : '');
     scheduleIfChanged();
   }
 
-  function setWriterUi(writer, heldByOther, holderLabel, expiresInMs) {
+  function setWriterUi(writer, heldByOther, holderLabel, expiresInMs, authority) {
+    const previousPresentation = presentation;
+    const announceTransition = leaseStateInitialized;
+    leaseStateInitialized = true;
     const lostLease = isWriter && !writer;   // we were driving; another session just took over
     isWriter = !!writer;
     leaseHeldByOther = !!heldByOther;
@@ -3533,7 +3910,8 @@ import {
     otherLeaseExpiresInMs = leaseHeldByOther && expiresInMs != null && Number.isFinite(Number(expiresInMs))
       ? Number(expiresInMs)
       : null;
-    renderWriterPresence();
+    leaseAuthority = typeof authority === 'string' ? authority : null;
+    if (presentationReady) renderHealthPresentation(previousPresentation, announceTransition);
     const t = document.getElementById('df-take-control');
     if (t) {
       t.classList.toggle('df-hidden', writer);
@@ -3546,16 +3924,22 @@ import {
     if (lostLease && recordingId) {
       setStatus('Read-only — recording continues under the session that took control.');
     }
-    updateFlowButtons();   // read-only / disconnected re-evaluates the drive-actions
-    propertyGrid.updateWriterState();
   }
   async function control(action, force) {
+    const requestVersion = ++controlRequestVersion;
     const j = await apiPost('/api/control', force ? { action, force: true } : { action });
-    if (j) {
+    if (requestVersion !== controlRequestVersion) return j;
+    if (j && j.ok !== false) {
       const wasWriter = isWriter;
-      setWriterUi(j.youAreWriter, j.heldByOther, j.label, j.expiresInMs);
+      setWriterUi(j.youAreWriter, j.heldByOther, j.label, j.expiresInMs, j.authority);
       if ((j.youAreWriter && (!wasWriter || recordingId)) || (!j.youAreWriter && recordingId))
         await syncRecordingStatus();
+    } else {
+      const previousPresentation = presentation;
+      const announceTransition = leaseStateInitialized;
+      leaseStateInitialized = true;
+      leaseAuthority = 'unknown';
+      if (presentationReady) renderHealthPresentation(previousPresentation, announceTransition);
     }
     return j;
   }
@@ -3901,5 +4285,9 @@ import {
   }
   diagnosticsToggle?.addEventListener('click', () =>
     setDiagnosticsPaneVisible(!isDiagnosticsPaneVisible()));
+
+  presentationReady = true;
+  renderHealthPresentation(null, false);
+  settleInitialScreenshot();
 
 })();

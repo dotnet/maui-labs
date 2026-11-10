@@ -279,7 +279,10 @@ public partial class InspectorPageTests : IAsyncLifetime
             ("inspector-api.js", "export function createInspectorApi"),
             ("inspector-dialog.js", "export function confirmModal"),
             ("inspector-data-context.js", "export function createDataSnapshot"),
+            ("inspector-frame.js", "export function normalizeFrameDescriptor"),
+            ("inspector-presentation.js", "export function deriveInspectorPresentation"),
             ("inspector-properties.js", "export function createPropertyGridController"),
+            ("inspector-resolution.js", "export function selectScreenshotScaleBucket"),
             ("inspector-tree.js", "export function createElementTreeController"),
         })
         {
