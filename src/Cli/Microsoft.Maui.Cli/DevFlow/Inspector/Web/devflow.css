@@ -499,6 +499,14 @@ body.df-viewport-panning #app-viewport { cursor: grabbing; }
   color: var(--df-error);
   border-color: var(--df-error);
 }
+.df-action-cancelled,
+.df-action-cancelled path { border-color: var(--df-warn); color: var(--df-warn); stroke: var(--df-warn); }
+.df-action-cursor.df-action-cancelled::before,
+.df-action-badge.df-action-cancelled {
+  background: var(--df-surface);
+  color: var(--df-warn);
+  border-color: var(--df-warn);
+}
 #df-action-overlay[data-reduced-motion="true"] .df-action-cursor { transition: none; }
 #df-action-overlay[data-reduced-motion="true"] .df-action-ripple {
   animation: none; opacity: .9; transform: scale(.72); background: transparent;
@@ -861,6 +869,10 @@ html[data-reduced-motion="true"] *, html[data-reduced-motion="true"] *::before, 
   .df-action-ripple.df-action-failed { border-color: CanvasText; border-style: double; }
   .df-action-path.df-action-failed path { stroke: CanvasText; stroke-dasharray: 2 3; }
   .df-action-badge.df-action-failed { background: Canvas; color: CanvasText; border: 2px double CanvasText; }
+  .df-action-cursor.df-action-cancelled::before { background: Canvas; border-color: GrayText; }
+  .df-action-ripple.df-action-cancelled { border-color: GrayText; border-style: dashed; }
+  .df-action-path.df-action-cancelled path { stroke: GrayText; stroke-dasharray: 2 3; }
+  .df-action-badge.df-action-cancelled { background: Canvas; color: CanvasText; border: 2px dashed GrayText; }
   .df-mode-btn.df-active {
     border-color: Highlight;
     background: Highlight;

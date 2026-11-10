@@ -15,6 +15,9 @@ const MAX_TARGET_LABEL_LENGTH = 60;
 const MAX_ACTIVE_ACTIONS = 64;
 const MAX_LOCAL_ACTIONS = 256;
 const NON_SPATIAL_KINDS = new Set(['back', 'key', 'navigate', 'resize']);
+const ANNOUNCEMENT_PRIORITY_SUCCESS = 0;
+const ANNOUNCEMENT_PRIORITY_CANCELLED = 1;
+const ANNOUNCEMENT_PRIORITY_FAILED = 2;
 
 const SOURCE_LABELS = {
   cli: 'CLI',
@@ -88,8 +91,8 @@ export function createActionOverlayController({
   let cursorHideTimer = null;
   let announceToken = 0;
   let announcementTimer = null;
+  let pendingAnnouncementPriority = ANNOUNCEMENT_PRIORITY_SUCCESS;
   let lastAnnouncementAt = 0;
-  let renderCount = 0;
 
   const cursor = document.createElement('div');
   cursor.className = 'df-action-cursor df-hidden';
@@ -144,6 +147,8 @@ export function createActionOverlayController({
     const correlation = correlationOf(data);
     if (hasCoordinates(data) && !supportsCoordinateSpace(correlation.coordinateSpace))
       return 'unmapped';
+    if (missingElementTarget(data, false) || missingElementTarget(data, true))
+      return 'unmapped';
     if (correlation.frameId) {
       if (!hasCurrentFrameIdentity()) return 'unmapped';
       if (correlation.frameId !== frame.frameId) return 'stale';
@@ -189,8 +194,27 @@ export function createActionOverlayController({
     return finite(data.x) !== null
       || finite(data.y) !== null
       || finite(data.toX) !== null
-      || finite(data.toY) !== null
-      || Array.isArray(data.points);
+      || finite(data.toY) !== null;
+  }
+
+  function requiresPlacement(data) {
+    if (NON_SPATIAL_KINDS.has(data.kind)) return false;
+    return hasCoordinates(data)
+      || !!data.elementId
+      || !!data.toElementId
+      || finite(data.deltaX) !== null
+      || finite(data.deltaY) !== null
+      || typeof data.direction === 'string';
+  }
+
+  function missingElementTarget(data, target) {
+    const id = target ? data.toElementId : data.elementId;
+    if (!id || elementFor(data, target)) return false;
+    const correlation = correlationOf(data);
+    if (correlation.coordinateSpace == null) return true;
+    const x = finite(target ? data.toX : data.x);
+    const y = finite(target ? data.toY : data.y);
+    return x === null || y === null;
   }
 
   function supportsCoordinateSpace(space) {
@@ -242,11 +266,6 @@ export function createActionOverlayController({
   function resolveStart(data) {
     const correlation = correlationOf(data);
     const frame = frameSnapshot();
-    if (Array.isArray(data.points) && data.points.length) {
-      const point = pointToAppLogical(data.points[0], correlation, frame);
-      if (point) return point;
-    }
-
     const x = finite(data.x);
     const y = finite(data.y);
     if (correlation.coordinateSpace != null) {
@@ -281,12 +300,6 @@ export function createActionOverlayController({
   function resolvePath(data, start) {
     const correlation = correlationOf(data);
     const frame = frameSnapshot();
-    if (Array.isArray(data.points) && data.points.length >= 2) {
-      return data.points
-        .map(point => pointToAppLogical(point, correlation, frame))
-        .filter(Boolean);
-    }
-
     const toX = finite(data.toX);
     const toY = finite(data.toY);
     if (toX !== null && toY !== null) {
@@ -301,6 +314,8 @@ export function createActionOverlayController({
       const end = elementPoint(target, toX, toY);
       if (end) return [start, end];
     }
+    const target = elementFor(data, true);
+    if (target) return [start, elementPoint(target, null, null)];
 
     const deltaX = finite(data.deltaX);
     const deltaY = finite(data.deltaY);
@@ -320,10 +335,7 @@ export function createActionOverlayController({
   function targetLabel(data) {
     const element = elementFor(data);
     if (!element) return '';
-    const sensitive = element.dataset.sensitive === 'true';
     const label = element.dataset.automationid
-      || element.dataset.automationId
-      || (!sensitive ? element.dataset.text : null)
       || element.dataset.type
       || '';
     const normalized = String(label).replace(/\s+/g, ' ').trim();
@@ -333,12 +345,15 @@ export function createActionOverlayController({
     return bounded ? ` ${bounded}` : '';
   }
 
-  function announce(message) {
+  function announce(message, priority = ANNOUNCEMENT_PRIORITY_SUCCESS) {
     if (!announcer || !message) return;
+    if (announcementTimer && pendingAnnouncementPriority > priority) return;
     const token = ++announceToken;
     if (announcementTimer) clearTimeout(announcementTimer);
+    pendingAnnouncementPriority = priority;
     const publish = () => {
       announcementTimer = null;
+      pendingAnnouncementPriority = ANNOUNCEMENT_PRIORITY_SUCCESS;
       if (token === announceToken) announcer.textContent = message;
       lastAnnouncementAt = Date.now();
     };
@@ -354,7 +369,7 @@ export function createActionOverlayController({
       clearTimeout(cursorHideTimer);
       cursorHideTimer = null;
     }
-    cursor.classList.remove('df-hidden', 'df-action-failed');
+    cursor.classList.remove('df-hidden', 'df-action-failed', 'df-action-cancelled');
     cursor.dataset.actionId = correlationOf(data).actionId || '';
     cursor.dataset.x = String(Math.round(point.x * 100) / 100);
     cursor.dataset.y = String(Math.round(point.y * 100) / 100);
@@ -375,6 +390,10 @@ export function createActionOverlayController({
 
   function renderPath(points, data) {
     if (!points || points.length < 2) return null;
+    if (points.every(point =>
+      point.x === points[0].x && point.y === points[0].y)) {
+      return null;
+    }
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.classList.add('df-action-path');
     svg.dataset.actionId = correlationOf(data).actionId || '';
@@ -391,13 +410,18 @@ export function createActionOverlayController({
     const badge = document.createElement('span');
     badge.className = `df-action-badge df-action-${state}`;
     badge.dataset.actionId = correlationOf(data).actionId || '';
-    badge.textContent = `${sourceLabel(data, false)} · ${kindLabel(data.kind)}${
-      state === 'stale' || state === 'unmapped'
-        ? ' · frame unavailable'
-        : state === 'failed' ? ' · failed' : ''
-    }`;
+    badge.dataset.state = state;
+    badge.textContent = badgeText(data, state);
     chrome.appendChild(badge);
     return badge;
+  }
+
+  function badgeText(data, state, outcome = null) {
+    const parts = [sourceLabel(data), kindLabel(data.kind)];
+    if (state === 'stale' || state === 'unmapped') parts.push('frame unavailable');
+    if (outcome || state === 'failed' || state === 'cancelled')
+      parts.push(outcome || state);
+    return parts.join(' · ');
   }
 
   function scheduleCleanup(entry, delay = MIN_VISIBLE_MS) {
@@ -420,6 +444,20 @@ export function createActionOverlayController({
     }
   }
 
+  function renderPlacedGeometry(entry) {
+    for (const node of entry.nodes) node.remove();
+    entry.nodes = [];
+    const data = entry.data;
+    const start = resolveStart(data);
+    moveCursor(start, data);
+    if (['tap', 'doubletap', 'longpress'].includes(data.kind)) {
+      entry.nodes.push(renderRipple(start, data));
+    } else if (['pointer', 'swipe', 'pan', 'drag', 'scroll'].includes(data.kind)) {
+      const path = renderPath(resolvePath(data, start), data);
+      if (path) entry.nodes.push(path);
+    }
+  }
+
   function renderStarted(data) {
     const correlation = correlationOf(data);
     const id = correlation.actionId || actionId();
@@ -430,58 +468,40 @@ export function createActionOverlayController({
       pendingFailures.delete(id);
     }
     const existing = activeActions.get(id);
-    const retrying = !!existing;
     if (existing) cleanupEntry(existing);
     while (activeActions.size >= MAX_ACTIVE_ACTIONS) {
       cleanupEntry(activeActions.values().next().value);
     }
 
-    const frameStatus = currentFrameStatus(normalized);
+    const placementRequired = requiresPlacement(normalized);
+    const frameStatus = placementRequired ? currentFrameStatus(normalized) : 'not-applicable';
     const entry = {
       id,
       data: normalized,
-      pointerSession: existing?.pointerSession || normalized.kind === 'pointer',
+      continuousPointer: existing?.continuousPointer || normalized.kind === 'pointer',
+      placementRequired,
+      frameStatus,
       startedAt: Date.now(),
       nodes: [],
       cleanupTimer: null,
     };
     activeActions.set(id, entry);
-    if (!retrying) overlay.dataset.renderCount = String(++renderCount);
-    overlay.dataset.lastActionId = id;
     reducedMotion();
 
-    if (NON_SPATIAL_KINDS.has(normalized.kind)) {
+    if (!placementRequired) {
       entry.nodes.push(renderBadge(normalized, 'info'));
-      if (!retrying) {
-        announce(`${sourceLabel(normalized)} ${actionVerb(normalized)}.`);
-      }
       scheduleCleanup(entry, 1_500);
       return entry;
     }
 
     if (frameStatus !== 'current') {
       entry.nodes.push(renderBadge(normalized, frameStatus));
-      if (!retrying && normalized.kind !== 'pointer') {
-        announce(
-          `${sourceLabel(normalized)} ${actionDescription(normalized)} could not be placed on this Preview.`);
-      }
       scheduleCleanup(entry, 1_500);
       return entry;
     }
 
-    const start = resolveStart(normalized);
-    moveCursor(start, normalized);
-    if (['tap', 'doubletap', 'longpress'].includes(normalized.kind)) {
-      entry.nodes.push(renderRipple(start, normalized));
-    } else if (['swipe', 'pan', 'drag', 'scroll'].includes(normalized.kind)) {
-      const path = renderPath(resolvePath(normalized, start), normalized);
-      if (path) entry.nodes.push(path);
-    }
+    renderPlacedGeometry(entry);
 
-    if (!retrying && normalized.kind !== 'pointer') {
-      announce(
-        `${sourceLabel(normalized)} started ${actionDescription(normalized)}${targetLabel(normalized)}.`);
-    }
     // A wedged action or lost terminal event must not leave the Preview permanently pressed.
     scheduleCleanup(entry, 10_000);
     return entry;
@@ -494,7 +514,7 @@ export function createActionOverlayController({
       clearTimeout(pendingFailure);
       pendingFailures.delete(id);
     }
-    const entry = id ? activeActions.get(id) : null;
+    let entry = id ? activeActions.get(id) : null;
     if (data.success === false) {
       const timer = setTimeout(() => {
         pendingFailures.delete(id);
@@ -504,13 +524,20 @@ export function createActionOverlayController({
       return;
     }
 
-    if (!entry) {
-      return;
-    }
+    entry ??= renderStarted(data);
 
     entry.data = { ...entry.data, ...data };
-    if (entry.pointerSession) {
+    entry.startedAt = Date.now();
+    if (entry.continuousPointer
+        && entry.placementRequired
+        && entry.frameStatus === 'current') {
+      renderPlacedGeometry(entry);
+    }
+    if (!entry.placementRequired || entry.frameStatus === 'current') {
       announce(`${sourceLabel(entry.data)} ${actionVerb(entry.data)}${targetLabel(entry.data)}.`);
+    } else {
+      announce(
+        `${sourceLabel(entry.data)} ${actionDescription(entry.data)} completed; Preview position unavailable.`);
     }
     scheduleCleanup(entry);
   }
@@ -529,7 +556,7 @@ export function createActionOverlayController({
         id,
         data: failure,
         startedAt: Date.now(),
-        nodes: [renderBadge(failure, 'failed')],
+        nodes: [renderBadge(failure, failure.outcome === 'cancelled' ? 'cancelled' : 'failed')],
         cleanupTimer: null,
       };
       while (activeActions.size >= MAX_ACTIVE_ACTIONS) {
@@ -537,29 +564,48 @@ export function createActionOverlayController({
       }
       activeActions.set(id, fallback);
       const outcome = failure.outcome === 'cancelled' ? 'cancelled' : 'failed';
-      announce(`${sourceLabel(failure)} ${actionDescription(failure)} ${outcome}.`);
+      announce(
+        `${sourceLabel(failure)} ${actionDescription(failure)} ${outcome}.`,
+        outcome === 'cancelled'
+          ? ANNOUNCEMENT_PRIORITY_CANCELLED
+          : ANNOUNCEMENT_PRIORITY_FAILED);
       scheduleCleanup(fallback, 1_500);
       return;
     }
 
-    markFailedEntry(entry, data, true);
+    markTerminalEntry(entry, data, true);
   }
 
-  function markFailedEntry(entry, data, announceFailure) {
+  function markTerminalEntry(entry, data, announceFailure) {
     entry.data = { ...entry.data, ...data };
+    entry.startedAt = Date.now();
+    const outcome = data.outcome === 'cancelled' ? 'cancelled' : 'failed';
+    const outcomeClass = outcome === 'cancelled'
+      ? 'df-action-cancelled'
+      : 'df-action-failed';
     if (cursor.dataset.actionId === entry.id) {
-      cursor.classList.add('df-action-failed');
-      cursorLabel.textContent = `${sourceLabel(entry.data)} · failed`;
+      cursor.classList.add(outcomeClass);
+      cursorLabel.textContent = `${sourceLabel(entry.data)} · ${outcome}`;
     }
-    for (const node of entry.nodes) node.classList.add('df-action-failed');
+    for (const node of entry.nodes) {
+      node.classList.add(outcomeClass);
+      if (node.classList.contains('df-action-badge')) {
+        node.textContent = badgeText(
+          entry.data,
+          node.dataset.state,
+          outcome);
+      }
+    }
     if (announceFailure) {
       const reasonText = data.reason
         ? String(data.reason).replaceAll('-', ' ').slice(0, 80)
         : '';
       const reason = reasonText ? ` (${reasonText})` : '';
-      const outcome = data.outcome === 'cancelled' ? 'cancelled' : 'failed';
       announce(
-        `${sourceLabel(entry.data)} ${actionDescription(entry.data)} ${outcome}${reason}.`);
+        `${sourceLabel(entry.data)} ${actionDescription(entry.data)} ${outcome}${reason}.`,
+        outcome === 'cancelled'
+          ? ANNOUNCEMENT_PRIORITY_CANCELLED
+          : ANNOUNCEMENT_PRIORITY_FAILED);
     }
     scheduleCleanup(entry, 1_500);
   }
@@ -582,7 +628,7 @@ export function createActionOverlayController({
       return false;
 
     const data = message.data;
-    if (!data || typeof data !== 'object') return true;
+    if (!data || typeof data !== 'object') return 'remote';
     const id = correlationOf(data).actionId;
     if (id && hasLocalAction(id)) {
       rememberLocal(
@@ -590,24 +636,25 @@ export function createActionOverlayController({
         message.type === 'ui-action-completed'
           ? LOCAL_ACTION_TERMINAL_TTL_MS
           : LOCAL_ACTION_ACTIVE_TTL_MS);
-      return true;
+      return 'local';
     }
 
     if (message.type === 'ui-action-started' || message.type === 'ui-action-updated')
       renderStarted(data);
     else
       renderCompleted(data);
-    return true;
+    return 'remote';
   }
 
   function clear({ clearLocal = false } = {}) {
     if (announcementTimer) clearTimeout(announcementTimer);
     announcementTimer = null;
+    pendingAnnouncementPriority = ANNOUNCEMENT_PRIORITY_SUCCESS;
     for (const timer of pendingFailures.values()) clearTimeout(timer);
     pendingFailures.clear();
     for (const entry of [...activeActions.values()]) cleanupEntry(entry);
     cursor.classList.add('df-hidden');
-    cursor.classList.remove('df-action-failed');
+    cursor.classList.remove('df-action-failed', 'df-action-cancelled');
     cursor.removeAttribute('data-action-id');
     if (cursorHideTimer) clearTimeout(cursorHideTimer);
     cursorHideTimer = null;

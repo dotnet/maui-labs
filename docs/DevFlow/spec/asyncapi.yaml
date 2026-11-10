@@ -103,7 +103,7 @@ channels:
               $ref: './schemas/common.json#/$defs/Timestamp'
               description: UTC timestamp when this message was produced.
             entry:
-              anyOf:
+              oneOf:
                 - $ref: './schemas/network.json#/$defs/NetworkRequestDetail'
                 - type: 'null'
               description: Full details of the network request, or null if no entry matches.

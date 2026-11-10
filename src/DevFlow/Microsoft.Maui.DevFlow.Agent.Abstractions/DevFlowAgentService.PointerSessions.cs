@@ -503,7 +503,7 @@ public partial class DevFlowAgentService
                 PointerType = pointerType,
                 BackendState = backend.State,
                 Cancellation = sessionCancellation,
-                ActionCorrelation = CreateUiActionCorrelation(request),
+                ActionCorrelation = CreatePointerActionCorrelation(request),
                 StartX = body.X,
                 StartY = body.Y,
                 LastX = body.X,
@@ -695,13 +695,13 @@ public partial class DevFlowAgentService
                 active.LastX = body.Samples[^1].X;
                 active.LastY = body.Samples[^1].Y;
                 var nowTicks = Environment.TickCount64;
-                if (nowTicks - active.LastLifecycleUpdateTicks >= 33)
+                if (nowTicks - active.LastLifecycleUpdateTicks >= 100)
                 {
                     active.LastLifecycleUpdateTicks = nowTicks;
                     PublishUiEvent(
                         "ui-action-updated",
                         CreateUiActionEventData(
-                            CreatePointerActionDescriptor(active, ClassifyPointerAction(active)),
+                            CreatePointerActionDescriptor(active, "pointer"),
                             active.ActionCorrelation));
                 }
             }
@@ -867,7 +867,7 @@ public partial class DevFlowAgentService
                 {
                     PrunePointerTombstonesNoLock();
                     if (_pointerSessionTombstones.TryGetValue(sessionId, out var tombstone))
-                        return PointerResponse(tombstone.Reply, tombstone.ResponseStatusCode);
+                        return PointerResponse(tombstone.Reply);
                     RecordPointerStartCancellationNoLock(
                         sessionId,
                         GetRequestLeaseId(request),
@@ -1074,6 +1074,10 @@ public partial class DevFlowAgentService
         var combined = cancellation.Success || string.IsNullOrWhiteSpace(cancellation.Error)
             ? error
             : $"{error} {cancellation.Error}";
+        var cancelled = string.Equals(
+            reason,
+            "pointer-session-cancelled",
+            StringComparison.Ordinal);
         var reply = new PointerSessionReply
         {
             Success = false,
@@ -1090,7 +1094,8 @@ public partial class DevFlowAgentService
             operationKind,
             fingerprint,
             replaySequence,
-            statusCode);
+            responseStatusCode: statusCode,
+            lifecycleOutcome: cancelled && cancellation.Success ? "cancelled" : "failed");
         return PointerResponse(reply, statusCode);
     }
 
@@ -1137,7 +1142,8 @@ public partial class DevFlowAgentService
         string operationKind,
         string? fingerprint,
         int? replaySequence = null,
-        int responseStatusCode = 200)
+        int responseStatusCode = 200,
+        string? lifecycleOutcome = null)
     {
         if (string.Equals(operationKind, "cancel", StringComparison.Ordinal))
         {
@@ -1146,9 +1152,9 @@ public partial class DevFlowAgentService
         }
 
         var success = reply.Success && string.Equals(reply.State, "ended", StringComparison.Ordinal);
-        var outcome = success
+        var outcome = lifecycleOutcome ?? (success
             ? "completed"
-            : string.IsNullOrWhiteSpace(reply.Error) ? "cancelled" : "failed";
+            : string.IsNullOrWhiteSpace(reply.Error) ? "cancelled" : "failed");
         PublishUiEvent(
             "ui-action-completed",
             CreateUiActionEventData(
@@ -1185,6 +1191,13 @@ public partial class DevFlowAgentService
 
         active.Cancellation.Cancel();
         DisposePointerSessionState(active);
+    }
+
+    private static Dictionary<string, object?> CreatePointerActionCorrelation(HttpRequest request)
+    {
+        var correlation = CreateUiActionCorrelation(request);
+        correlation["coordinateSpace"] = "windowLogical";
+        return correlation;
     }
 
     private static UiActionDescriptor CreatePointerActionDescriptor(

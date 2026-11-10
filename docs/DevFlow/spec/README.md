@@ -83,6 +83,8 @@ envelopes and profiler capability keys use lower camel case.
 
 UI action lifecycle messages use `ui-action-started`, coalesced `ui-action-updated`
 messages for continuous pointer movement, and `ui-action-completed`.
+Pointer updates keep `kind: "pointer"` while the gesture is in progress; only the
+terminal event classifies the completed gesture as a tap, swipe, drag, or long press.
 Their `data.correlation` object reserves `actionId`, `source`, `streamId`,
 `frameId`, `frameRevision`, and `coordinateSpace`; target geometry remains beside
 `correlation`. Inspector-proxied events use the canonical
