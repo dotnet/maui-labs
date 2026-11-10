@@ -28,6 +28,7 @@ internal static class ImageServiceCollectionExtensions
                 new OpenAIClientOptions { Endpoint = settings.Endpoint! })
                 .GetImageClient(settings.ImageDeploymentName!)
                 .AsIImageGenerator().AsBuilder()
+                .UsePlaygroundTelemetry()
                 .UseLogging(provider.GetRequiredService<ILoggerFactory>())
                 .Build(),
             new ImageGeneratorDescriptor(

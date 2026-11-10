@@ -13,6 +13,10 @@ namespace AIExtensions.Sample.ChatPlayground;
 
 internal static class ChatServiceCollectionExtensions
 {
+    private const string LocalClientKey = "local-chat";
+    private const string AzureClientKey = "azure-openai-chat";
+    private const string HybridClientKey = "hybrid-chat";
+
     public static IServiceCollection AddChatFeature(this IServiceCollection services, AISettings settings)
     {
         services.AddSingleton<ConnectionStatusService>();
@@ -31,19 +35,25 @@ internal static class ChatServiceCollectionExtensions
 
 #if WINDOWS
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100))
-            services.AddSingleton<IChatClient>(CreateWindowsChatClient);
+            services.AddRecordedChatClient(LocalClientKey, CreateWindowsChatClient);
 #endif
 
 #if IOS || MACCATALYST
         if (OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26))
-            services.AddSingleton<IChatClient>(CreateAppleChatClient);
+            services.AddRecordedChatClient(LocalClientKey, CreateAppleChatClient);
 #endif
 #if ANDROID
-        services.AddSingleton<IChatClient>(CreateGeminiChatClient);
+        services.AddRecordedChatClient(LocalClientKey, CreateGeminiChatClient);
 #endif
 
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
-            services.AddSingleton<IChatClient>(serviceProvider => CreateAzureChatClient(serviceProvider, settings));
+            services.AddRecordedChatClient(AzureClientKey, (provider, _) => CreateAzureChatClient(provider, settings));
+
+#if IOS || MACCATALYST
+        if ((OperatingSystem.IsIOSVersionAtLeast(26) || OperatingSystem.IsMacCatalystVersionAtLeast(26)) &&
+            !string.IsNullOrWhiteSpace(settings.DeploymentName))
+            services.AddRecordedChatClient(HybridClientKey, CreateHybridChatClient);
+#endif
 
         services.AddSingleton<IChatClient>(CreateReplayChatClient);
 
@@ -52,10 +62,9 @@ internal static class ChatServiceCollectionExtensions
 
 #if WINDOWS
     [SupportedOSPlatform("windows10.0.26100.0")]
-    private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider) =>
+    private static IChatClient CreateWindowsChatClient(IServiceProvider serviceProvider, object? key) =>
         new WindowsAIChatClient()
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "windows-ai-chat",
                 "Windows AI",
@@ -70,10 +79,9 @@ internal static class ChatServiceCollectionExtensions
 #if IOS || MACCATALYST
     [SupportedOSPlatform("ios26.0")]
     [SupportedOSPlatform("maccatalyst26.0")]
-    private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider) =>
+    private static IChatClient CreateAppleChatClient(IServiceProvider serviceProvider, object? key) =>
         new AppleIntelligenceChatClient(serviceProvider.GetRequiredService<ILoggerFactory>())
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "apple-intelligence-chat",
                 "Apple Intelligence",
@@ -89,10 +97,9 @@ internal static class ChatServiceCollectionExtensions
 
 #if ANDROID
     [SupportedOSPlatform("android26.0")]
-    private static IChatClient CreateGeminiChatClient(IServiceProvider serviceProvider) =>
+    private static IChatClient CreateGeminiChatClient(IServiceProvider serviceProvider, object? key) =>
         new GeminiNanoChatClient()
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "gemini-nano-chat",
                 "Gemini Nano",
@@ -150,11 +157,9 @@ internal static class ChatServiceCollectionExtensions
             ? null
             : serviceProvider.GetRequiredService<IImageGenerator>();
 
-        // Recording wraps the tool and image middleware so the saved response is the one shown in chat.
         var builder = openAIClient.GetResponsesClient()
             .AsIChatClient(deploymentName)
             .AsBuilder()
-            .UseRecording(serviceProvider.GetRequiredService<IChatRecordingSession>())
             .UseDescriptor(new ChatClientDescriptor(
                 "azure-openai-chat",
                 "Azure OpenAI",
@@ -181,8 +186,32 @@ internal static class ChatServiceCollectionExtensions
                 IsReplay: true))
             .Build();
 
-    private static ChatClientBuilder UseRecording(this ChatClientBuilder builder, IChatRecordingSession recording) =>
-        builder.Use(inner => new RecordingChatClient(inner, recording));
+    private static IChatClient CreateHybridChatClient(IServiceProvider serviceProvider, object? key)
+    {
+        var local = serviceProvider.GetRequiredKeyedService<IChatClient>(LocalClientKey);
+        var cloud = serviceProvider.GetRequiredKeyedService<IChatClient>(AzureClientKey);
+        return new HybridChatClient(local, cloud, serviceProvider.GetRequiredService<ILogger<HybridChatClient>>())
+            .AsBuilder()
+            .UseDescriptor(new ChatClientDescriptor(
+                "hybrid-chat",
+                "Hybrid (local + cloud)",
+                "Local model chooses local or cloud for each turn. Cloud requests fall back to local if they fail before output.",
+                SupportsToolCalling: true))
+            .UsePlaygroundTelemetry()
+            .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+            .Build();
+    }
+
+    // Hybrid reuses the keyed clients, so only the selected chat client records an interaction.
+    private static void AddRecordedChatClient(
+        this IServiceCollection services, string key, Func<IServiceProvider, object?, IChatClient> factory)
+    {
+        services.AddKeyedSingleton<IChatClient>(key, factory);
+        services.AddSingleton<IChatClient>(provider => new RecordingChatClient(
+            provider.GetRequiredKeyedService<IChatClient>(key),
+            provider.GetRequiredService<IChatRecordingSession>(),
+            leaveOpen: true));
+    }
 
     private static ChatClientBuilder UseDescriptor(this ChatClientBuilder builder, ChatClientDescriptor descriptor) =>
         builder.Use(inner => new DescribedChatClient(inner, descriptor));

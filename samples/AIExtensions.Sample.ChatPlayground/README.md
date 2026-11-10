@@ -28,6 +28,41 @@ Controls reflect provider capabilities. Uncheck tools or choose **None** to disa
 Switching providers preserves your Structured JSON preference, but providers
 that opt out receive plain-text requests and their responses display as text.
 
+#### Hybrid chat
+
+On iOS or Mac Catalyst 26+, **Hybrid (local + cloud)** uses an enabled Apple
+Intelligence model to choose between local and Azure chat. Both providers must
+be configured. Greetings, device time lookups and basic calculations usually
+stay local; most other work goes to cloud. Only the last user message is
+classified, so follow-ups that depend on earlier context may route differently.
+Hybrid supports tools, but not images, reasoning summaries or image generation.
+
+The selected provider receives the full conversation, instructions and settings.
+Cloud handoff is automatic, without redaction or per-turn approval. **Do not send
+secrets or data that must stay on-device.** Routing is best-effort, not a privacy
+boundary. Classifier errors propagate rather than sending the request to cloud.
+
+If cloud fails before any streaming update, Hybrid can fall back to local.
+Cancellation and failures after output propagate. A failed non-streaming attempt
+may already have called tools; use idempotent tools. Recordings contain one
+answer interaction; the Logs sidebar shows classification and answer attempts.
+
+##### Routing regression tests
+
+`HybridRoutingTestsBase<TClient>` tests the sample's classifier with a real
+provider. The Apple subclass requires a ready on-device model, not Azure
+credentials. Cases cover simple tasks, substantive work and mixed requests.
+
+```sh
+dotnet test tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/ \
+  -f net10.0-maccatalyst27.0 -p:UseXcode27Preview=true \
+  --filter 'FullyQualifiedName~HybridRoutingTests' --logger trx
+```
+
+Add `--no-build --no-restore` to repeat a run without rebuilding. Rebuild after
+changing the prompt. These tests are marked `RequiresModel=true` and excluded
+from model-free CI.
+
 ### Embeddings
 
 Generate text vectors, index imported documents, and search their content.
@@ -57,11 +92,11 @@ Each tab's **Logs** button toggles a local diagnostics sidebar; capture continue
 while hidden. It starts collapsed. In narrow windows, tap outside to dismiss it.
 
 App and provider logs and completed spans are grouped by trace, including MEAI
-request logs and Apple tool events.
-Apple callbacks retain the request's trace/span. Chat and embeddings emit spans;
-the pinned MEAI version provides image logging only. Model/usage data come from
-the provider. Payload logging and sensitive telemetry are disabled, but exceptions
-may contain sensitive data. Diagnostics are not exported automatically.
+request logs and Apple tool events. Hybrid logs only the selected route.
+Apple callbacks retain the request's trace/span. Chat, embeddings and images emit
+spans. Model/usage data come from the provider. Payload logging and sensitive
+telemetry are disabled, but exceptions may contain sensitive data.
+Diagnostics are not exported automatically.
 
 ## Run the sample
 

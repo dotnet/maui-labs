@@ -14,7 +14,7 @@
                          ToolTipProperties.Text="Clear local AI diagnostics"
                          SemanticProperties.Description="Clear local AI diagnostics" />
         </Grid>
-        <Label Grid.Row="1" Text="Local logs and completed spans, grouped by trace. No prompt capture."
+        <Label Grid.Row="1" Text="Local logs and completed spans, grouped by trace. Payload capture is disabled; log messages may include request details."
                Style="{StaticResource MutedLabel}" FontSize="12" />
         <CollectionView Grid.Row="2" ItemsSource="{Binding Groups}"
                         IsGrouped="True" SelectionMode="None"
