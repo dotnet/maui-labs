@@ -2,10 +2,8 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Chat;
 using Microsoft.Maui.Chat.Controls;
-using Microsoft.Maui.Chat.Controls.Blazor;
 #if DEBUG
 using Microsoft.Maui.DevFlow.Agent;
-using Microsoft.Maui.DevFlow.Blazor;
 #endif
 
 namespace ChatControls.Sample;
@@ -18,7 +16,6 @@ public static class MauiProgram
         builder
             .UseMauiApp<App>()
             .UseChatControls()
-            .AddChatControlsBlazor()
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -27,10 +24,8 @@ public static class MauiProgram
 
 #if DEBUG
         builder.AddMauiDevFlowAgent();
-        builder.AddMauiBlazorDevFlowTools();
         builder.Logging.AddDebug();
 #endif
-        builder.Services.AddMauiBlazorWebView();
         builder.Services.AddSingleton<IChatAudioRecorder, SimulatedChatAudioRecorder>();
         builder.Services.AddSingleton<IChatSpeechRecognizer, SimulatedChatSpeechRecognizer>();
         builder.Services.AddSingleton<TeamChatViewModel>();

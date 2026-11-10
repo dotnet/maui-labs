@@ -4,7 +4,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:chat="clr-namespace:Microsoft.Maui.Chat.Controls;assembly=Microsoft.Maui.Chat.Controls"
     xmlns:chatCore="clr-namespace:Microsoft.Maui.Chat;assembly=Microsoft.Maui.Chat"
-    xmlns:blazor="clr-namespace:ChatControls.Sample.Components"
     xmlns:local="clr-namespace:ChatControls.Sample"
     x:Class="ChatControls.Sample.MainPage"
     x:DataType="local:TeamChatViewModel"
@@ -19,7 +18,6 @@
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="{OnIdiom Phone=0, Default=*}" />
             <ColumnDefinition Width="{OnIdiom Phone=0, Default=330}" />
         </Grid.ColumnDefinitions>
 
@@ -148,19 +146,10 @@
             </chat:ChatView.ContentTemplates>
         </chat:ChatView>
 
-        <!-- Both renderers receive the same singleton TeamChatViewModel and conversation. -->
-        <BlazorWebView Grid.Row="0"
-                       Grid.Column="1"
-                       AutomationId="BlazorTeamChat"
-                       HostPage="wwwroot/index.html">
-            <BlazorWebView.RootComponents>
-                <RootComponent Selector="#app" ComponentType="{x:Type blazor:Routes}" />
-            </BlazorWebView.RootComponents>
-        </BlazorWebView>
 
         <Border x:Name="ParticipantPanel"
                 Grid.Row="{OnIdiom Phone=1, Default=0}"
-                Grid.Column="{OnIdiom Phone=0, Default=2}"
+                Grid.Column="{OnIdiom Phone=0, Default=1}"
                 Padding="0"
                 StrokeThickness="1"
                 Stroke="{AppThemeBinding Light=#D6E3E0, Dark=#2B4540}"

@@ -22,7 +22,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.Chat.Tests" />
     <InternalsVisibleTo Include="Microsoft.Maui.Chat.Controls.Tests" />
-    <InternalsVisibleTo Include="Microsoft.Maui.Chat.Controls.Blazor.Tests" />
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 
