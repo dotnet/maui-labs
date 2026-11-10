@@ -2420,9 +2420,17 @@ public class AgentClient : IDisposable
         if (metadataCount != 3 || !pixelWidth.HasValue || !pixelHeight.HasValue)
             return false;
 
-        const double tolerance = 1.5;
-        return Math.Abs(logicalWidth!.Value * captureScale!.Value - pixelWidth.Value) <= tolerance
-            && Math.Abs(logicalHeight!.Value * captureScale.Value - pixelHeight.Value) <= tolerance;
+        static bool AxisMatches(
+            double logicalSize,
+            int pixelSize,
+            double scale)
+        {
+            var tolerance = Math.Max(1.5, pixelSize * 0.005);
+            return Math.Abs(logicalSize * scale - pixelSize) <= tolerance;
+        }
+
+        return AxisMatches(logicalWidth!.Value, pixelWidth.Value, captureScale!.Value)
+            && AxisMatches(logicalHeight!.Value, pixelHeight.Value, captureScale.Value);
     }
 
     private static (int? Width, int? Height) GetPngDimensions(byte[] png)

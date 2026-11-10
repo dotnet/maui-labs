@@ -842,7 +842,7 @@ public partial class DevFlowAgentService
                 image.NativeScale.Value.ToString("R", CultureInfo.InvariantCulture);
             response.Headers["X-DevFlow-Screenshot-Format"] = "png";
             response.Headers["X-DevFlow-Screenshot-Clamped"] =
-                (image.ResolutionClamped ?? false).ToString();
+                image.ResolutionClamped == true ? "true" : "false";
         }
 
         return response;
@@ -892,8 +892,7 @@ public partial class DevFlowAgentService
     {
         try
         {
-            using var original = SkiaSharp.SKBitmap.Decode(pngData);
-            if (original == null || original.Width <= 0 || original.Height <= 0)
+            if (!TryGetPngDimensions(pngData, out var sourceWidth, out var sourceHeight))
                 return (null, hints.WasClamped);
 
             var requestedFactor = hints.TargetScale.HasValue
@@ -916,14 +915,14 @@ public partial class DevFlowAgentService
             }
 
             if (maxWidth is > 0)
-                ApplyCap((double)maxWidth.Value / original.Width);
+                ApplyCap((double)maxWidth.Value / sourceWidth);
             if (hints.MaxPixelWidth is > 0)
-                ApplyCap((double)hints.MaxPixelWidth.Value / original.Width);
+                ApplyCap((double)hints.MaxPixelWidth.Value / sourceWidth);
             if (hints.MaxPixelHeight is > 0)
-                ApplyCap((double)hints.MaxPixelHeight.Value / original.Height);
+                ApplyCap((double)hints.MaxPixelHeight.Value / sourceHeight);
             if (hints.MaxPixels is > 0)
             {
-                var sourcePixels = (double)original.Width * original.Height;
+                var sourcePixels = (double)sourceWidth * sourceHeight;
                 ApplyCap(Math.Sqrt(hints.MaxPixels.Value / sourcePixels));
             }
 
@@ -931,8 +930,16 @@ public partial class DevFlowAgentService
             if (factor >= 1d)
                 return (pngData, clamped);
 
-            var targetWidth = Math.Max(1, (int)Math.Floor(original.Width * factor));
-            var targetHeight = Math.Max(1, (int)Math.Floor(original.Height * factor));
+            using var original = SkiaSharp.SKBitmap.Decode(pngData);
+            if (original == null ||
+                original.Width != sourceWidth ||
+                original.Height != sourceHeight)
+            {
+                return (null, true);
+            }
+
+            var targetWidth = Math.Max(1, (int)Math.Floor(sourceWidth * factor));
+            var targetHeight = Math.Max(1, (int)Math.Floor(sourceHeight * factor));
             if (hints.MaxPixels is > 0
                 && (long)targetWidth * targetHeight > hints.MaxPixels.Value)
             {

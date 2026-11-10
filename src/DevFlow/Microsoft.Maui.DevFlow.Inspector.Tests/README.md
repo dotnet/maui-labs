@@ -105,7 +105,7 @@ device-pixel-ratio changes settle into one bounded evidence request without bein
 continuous app refreshes, that newer app evidence follows an in-flight resolution capture, and
 that an older-resolution frame cannot settle pending tap feedback. Playwright's clock verifies
 that post-acknowledgement capture starts within 50 ms of browser time rather than waiting the former
-fixed 400 ms.HTML and shipped scripts are not replaced.
+fixed 400 ms. HTML and shipped scripts are not replaced.
 Teardown stops browser timers and prevents a late pagehide keepalive request, then
 drains HTTP traffic before disposing the
 Inspector and awaiting the agent server's shutdown.
