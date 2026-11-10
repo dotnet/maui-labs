@@ -113,10 +113,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
   viewport.style.height = committedFrame.logicalHeight + 'px';
   viewport.dataset.width = String(committedFrame.logicalWidth);
   viewport.dataset.height = String(committedFrame.logicalHeight);
-  if (screenshot) {
-    screenshot.style.width = '100%';
-    screenshot.style.height = '100%';
-  }
   const actionOverlay = createActionOverlayController({
     viewport,
     overlay: actionOverlayElement,
@@ -793,21 +789,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
           screenshotResolutionSupported = true;
         }
 
-        const sameExplicitFrame = tap !== null
-          && tap === latestTap
-          && hasExplicitFrameIdentity(state)
-          && frame.frameId
-          && frame.frameId === committedFrame.frameId
-          && frame.streamId === committedFrame.streamId
-          && frame.frameRevision === committedFrame.frameRevision;
-        if (sameExplicitFrame) {
-          tap.unchangedCaptures++;
-          renderPreviewPending();
-          scheduleRefresh(300);
-          reportCaptureSuccess(false);
-          return state;
-        }
-
         // Keep the previous frame intact until its replacement image is ready.
         let image = null;
         if (state.screenshotUrl) {
@@ -871,7 +852,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
             renderPreviewPending();
           } else {
             tap.unchangedCaptures++;
-            renderPreviewPending();
             scheduleRefresh(300, REFRESH_INTENT_RETRY);
           }
         }
@@ -1082,9 +1062,6 @@ import { createViewportController } from './inspector-viewport-controller.js';
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
-    previewPending.dataset.state = pendingTapRequests > 0
-      ? 'request'
-      : latestTap?.unchangedCaptures > 0 ? 'retry' : latestTap ? 'waiting' : 'idle';
     previewPending.classList.toggle('df-hidden', pendingTapRequests === 0 && latestTap === null);
   }
   function queueRefreshAfter(refresh) {
@@ -2395,7 +2372,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
   const propsCloseBtn = document.getElementById('df-props-close');
   let propsReturnFocus = null;
   function propertyRequestBody(path, body) {
-    if (path !== '/api/setProperty') return body;
+    if (path !== '/api/setProperty' && path !== '/api/persistProperty') return body;
     const payload = correlatedPayload(body);
     actionOverlay.rememberLocalCorrelation(payload.correlation);
     return payload;

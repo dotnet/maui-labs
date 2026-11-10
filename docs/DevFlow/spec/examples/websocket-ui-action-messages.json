@@ -7,7 +7,7 @@
         "actionId": "f83da3aa98764d91a1057309448fa64b",
         "source": "inspector",
         "frameId": "be11cfce3abf48f982ad7f1730054fb0",
-        "coordinateSpace": "appLogical"
+        "coordinateSpace": "windowLogical"
       },
       "kind": "pointer",
       "x": 120,
@@ -20,20 +20,20 @@
   },
   {
     "type": "ui-action-updated",
-    "timestamp": "2026-11-04T17:20:00.0600000+00:00",
+    "timestamp": "2026-11-04T17:20:00.1200000+00:00",
     "data": {
       "correlation": {
         "actionId": "f83da3aa98764d91a1057309448fa64b",
         "source": "inspector",
         "frameId": "be11cfce3abf48f982ad7f1730054fb0",
-        "coordinateSpace": "appLogical"
+        "coordinateSpace": "windowLogical"
       },
-      "kind": "swipe",
+      "kind": "pointer",
       "x": 120,
       "y": 340,
       "toX": 260,
       "toY": 340,
-      "durationMs": 60,
+      "durationMs": 120,
       "captureEpoch": 42,
       "registryGeneration": 7,
       "windowId": 0,
@@ -42,20 +42,20 @@
   },
   {
     "type": "ui-action-completed",
-    "timestamp": "2026-11-04T17:20:00.0930000+00:00",
+    "timestamp": "2026-11-04T17:20:00.1530000+00:00",
     "data": {
       "correlation": {
         "actionId": "f83da3aa98764d91a1057309448fa64b",
         "source": "inspector",
         "frameId": "be11cfce3abf48f982ad7f1730054fb0",
-        "coordinateSpace": "appLogical"
+        "coordinateSpace": "windowLogical"
       },
       "kind": "swipe",
       "x": 120,
       "y": 340,
       "toX": 300,
       "toY": 340,
-      "durationMs": 93,
+      "durationMs": 153,
       "captureEpoch": 42,
       "registryGeneration": 7,
       "windowId": 0,
@@ -63,7 +63,7 @@
       "success": true,
       "outcome": "completed",
       "statusCode": 200,
-      "elapsedMs": 93
+      "elapsedMs": 153
     }
   }
 ]

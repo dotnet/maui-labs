@@ -32,8 +32,9 @@ Inspector sessions. Taps and long presses show an automation cursor and press ma
 pans, point drags, and Inspector wheel gestures show their path. The source is labelled when it
 helps distinguish another driver. A dedicated polite live region announces remote actions and
 bounded failure/cancellation states without reusing the Inspector's general status line. Rapid
-updates are coalesced, target text is bounded, and continuous pointer actions are announced only
-after their final tap, swipe, long-press, or drag classification is known.
+updates are coalesced, and target announcements use only the automation ID or control type rather
+than the element's current text. Continuous pointer actions are announced only after their final
+tap, swipe, long-press, or drag classification is known.
 
 The marker remains visible briefly while the screenshot and tree refresh, and reduced-motion
 clients receive a static marker and path instead of animation. Local Inspector actions retain their

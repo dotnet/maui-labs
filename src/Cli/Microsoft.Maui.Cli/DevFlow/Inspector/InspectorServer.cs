@@ -84,10 +84,16 @@ public sealed class InspectorServer : IDisposable
     private readonly object _pointerProxyGate = new();
     private readonly Dictionary<string, PointerProxySession> _pointerProxySessions =
         new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, long> _localInspectorActionIds =
+        new(StringComparer.Ordinal);
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan DefaultFrameReuseDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan FrameCacheDuration = TimeSpan.FromSeconds(10);
     private const int MaxCachedFrames = 32;
+    private const int MaxLocalInspectorActionIds = 256;
+    private const int LocalInspectorActionLifetimeMs = 30_000;
+    private const string RepeatedFrameChangeError =
+        "Inspector state changed repeatedly while capturing a frame.";
     private const int MaxScreenshotBytes = 64 * 1024 * 1024;
     private const long MaxCachedFrameBytes = 64L * 1024 * 1024;
     private const long InspectorScreenshotPixelBudget = 8_388_608;
@@ -1296,6 +1302,7 @@ public sealed class InspectorServer : IDisposable
 
         if (actionId is null)
             return null;
+        RememberLocalInspectorAction(actionId);
 
         return new InspectorActionContext(
             actionId,
@@ -1327,6 +1334,42 @@ public sealed class InspectorServer : IDisposable
             }
         }
         return trimmed;
+    }
+
+    private void RememberLocalInspectorAction(string actionId)
+    {
+        var now = Environment.TickCount64;
+        _localInspectorActionIds[actionId] = now + LocalInspectorActionLifetimeMs;
+        foreach (var pair in _localInspectorActionIds)
+        {
+            if (pair.Value <= now)
+                _localInspectorActionIds.TryRemove(pair.Key, out _);
+        }
+        if (_localInspectorActionIds.Count <= MaxLocalInspectorActionIds)
+            return;
+        foreach (var pair in _localInspectorActionIds
+            .OrderBy(static pair => pair.Value)
+            .Take(_localInspectorActionIds.Count - MaxLocalInspectorActionIds))
+        {
+            _localInspectorActionIds.TryRemove(pair.Key, out _);
+        }
+    }
+
+    private bool IsLocalInspectorAction(JsonObject? data)
+    {
+        if (data?["correlation"] is not JsonObject correlation
+            || correlation["actionId"] is not JsonValue actionValue
+            || !actionValue.TryGetValue<string>(out var actionId)
+            || string.IsNullOrWhiteSpace(actionId)
+            || !_localInspectorActionIds.TryGetValue(actionId, out var expiresAt))
+        {
+            return false;
+        }
+
+        if (expiresAt > Environment.TickCount64)
+            return true;
+        _localInspectorActionIds.TryRemove(actionId, out _);
+        return false;
     }
 
     private static double? ReadBoundedInspectorCoordinate(
@@ -1445,7 +1488,28 @@ public sealed class InspectorServer : IDisposable
                 }));
         }
 
-        var frame = await CreateFrameAsync(resolution, requiresFreshFrame);
+        InspectorFrame frame;
+        try
+        {
+            frame = await CreateFrameAsync(resolution, requiresFreshFrame);
+        }
+        catch (InvalidOperationException exception)
+            when (string.Equals(
+                exception.Message,
+                RepeatedFrameChangeError,
+                StringComparison.Ordinal))
+        {
+            return (
+                503,
+                "application/json",
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    ok = false,
+                    reason = "capture-failed",
+                    error = "The app changed repeatedly while the Inspector captured its Preview.",
+                    retryable = true
+                }));
+        }
         if (frame.Tree.Count == 0)
         {
             return (
@@ -2288,7 +2352,7 @@ public sealed class InspectorServer : IDisposable
                     if (generation != _cacheGeneration)
                     {
                         if (attempt == 0) continue;
-                        throw new InvalidOperationException("Inspector state changed repeatedly while capturing a frame.");
+                        throw new InvalidOperationException(RepeatedFrameChangeError);
                     }
 
                     if (frame.Tree.Count == 0 || !hasCompleteScreenshot)
@@ -3322,12 +3386,14 @@ public sealed class InspectorServer : IDisposable
             {
                 PrunePointerProxySessionsNoLock();
                 staleSessions = _pointerProxySessions.Values
-                    .Where(session => !string.Equals(
-                        session.SessionId,
-                        start.SessionId,
-                        StringComparison.Ordinal))
+                    .Where(session => !session.Terminal
+                        && !string.Equals(
+                            session.SessionId,
+                            start.SessionId,
+                            StringComparison.Ordinal))
                     .ToArray();
-                _pointerProxySessions.Clear();
+                foreach (var staleSession in staleSessions)
+                    _pointerProxySessions.Remove(staleSession.SessionId);
                 _pointerProxySessions[start.SessionId] = new PointerProxySession(
                     start.SessionId,
                     frame.Id,
@@ -3341,7 +3407,8 @@ public sealed class InspectorServer : IDisposable
                     holderLabel,
                     DateTime.UtcNow.AddMilliseconds(
                         Math.Clamp(result.MaxDurationMs > 0 ? result.MaxDurationMs : 60_000, 500, 300_000)
-                        + 5_000));
+                        + 5_000),
+                    Terminal: false);
             }
             foreach (var staleSession in staleSessions)
             {
@@ -3412,7 +3479,10 @@ public sealed class InspectorServer : IDisposable
         }).ToArray();
         var result = await _client.MovePointerSessionAsync(move.SessionId, move.Sequence, samples);
         if (!result.Success && !result.TransportFailure && result.State is "cancelled" or "gone")
-            RemovePointerProxySession(move.SessionId);
+        {
+            RetainTerminalPointerProxySession(move.SessionId);
+            InvalidateScreenshotCache();
+        }
         return PointerProxyResult(result);
     }
 
@@ -3436,10 +3506,14 @@ public sealed class InspectorServer : IDisposable
                 Y = end.Sample.Y + proxy.RootOffsetY,
                 ElapsedMs = end.Sample.ElapsedMs
             });
-        if (result.Success || !result.TransportFailure)
-            RemovePointerProxySession(end.SessionId);
-        if (result.Success)
+        var terminal = result.Success
+            || (!result.TransportFailure
+                && result.State is "ended" or "cancelled" or "gone");
+        if (terminal)
+        {
+            RetainTerminalPointerProxySession(end.SessionId);
             InvalidateScreenshotCache();
+        }
         return PointerProxyResult(result);
     }
 
@@ -3551,6 +3625,9 @@ public sealed class InspectorServer : IDisposable
 
     private bool IsPointerProxyFrameCompatible(PointerProxySession session)
     {
+        if (session.Terminal)
+            return true;
+
         lock (_cacheLock)
         {
             var latest = _latestCompleteFrameId is { } newest
@@ -3598,6 +3675,21 @@ public sealed class InspectorServer : IDisposable
             _pointerProxySessions.Remove(sessionId);
     }
 
+    private void RetainTerminalPointerProxySession(string sessionId)
+    {
+        lock (_pointerProxyGate)
+        {
+            if (_pointerProxySessions.TryGetValue(sessionId, out var session))
+            {
+                _pointerProxySessions[sessionId] = session with
+                {
+                    Terminal = true,
+                    ExpiresUtc = DateTime.UtcNow.AddSeconds(30)
+                };
+            }
+        }
+    }
+
     private async Task CancelProxyPointerSessionsAsync(string reason)
     {
         PointerProxySession[] sessions;
@@ -3606,7 +3698,7 @@ public sealed class InspectorServer : IDisposable
             sessions = _pointerProxySessions.Values.ToArray();
             _pointerProxySessions.Clear();
         }
-        foreach (var session in sessions)
+        foreach (var session in sessions.Where(static session => !session.Terminal))
         {
             try
             {
@@ -3679,7 +3771,8 @@ public sealed class InspectorServer : IDisposable
         string LeaseId,
         string HolderKind,
         string HolderLabel,
-        DateTime ExpiresUtc);
+        DateTime ExpiresUtc,
+        bool Terminal);
 
     private sealed class InspectorPointerStartRequest
     {
@@ -5120,12 +5213,17 @@ public sealed class InspectorServer : IDisposable
         }
 
         var eventData = root["data"] as JsonObject;
-        var completedSuccessfully = type == "ui-action-completed"
-            && eventData?["success"] is JsonValue successValue
-            && successValue.TryGetValue<bool>(out var success)
-            && success;
+        var completedAction = type == "ui-action-completed";
+        var localCompletedAction = completedAction && IsLocalInspectorAction(eventData);
+        var localCompletionAlreadyInvalidated = localCompletedAction
+            && ((eventData?["success"] is JsonValue successValue
+                    && successValue.TryGetValue<bool>(out var success)
+                    && success)
+                || (eventData?["outcome"] is JsonValue outcomeValue
+                    && outcomeValue.TryGetValue<string>(out var outcome)
+                    && string.Equals(outcome, "cancelled", StringComparison.Ordinal)));
         if (type is "navigation" or "treeChange" or "lifecycle"
-            || completedSuccessfully)
+            || (completedAction && !localCompletionAlreadyInvalidated))
         {
             InvalidateScreenshotCache();
         }
