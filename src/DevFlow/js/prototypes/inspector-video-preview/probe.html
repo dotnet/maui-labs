@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DevFlow Preview media capability probe</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 24px; }
+    main { max-width: 960px; margin: 0 auto; }
+    button { font: inherit; padding: 6px 12px; }
+    pre { overflow: auto; padding: 16px; border: 1px solid CanvasText; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>DevFlow Preview media capability probe</h1>
+    <p>
+      This local-only spike reports runtime codec and transport capabilities. It does not capture,
+      transmit, decode, record, or persist app pixels.
+    </p>
+    <button id="rerun" type="button">Run again</button>
+    <pre id="result" aria-live="polite">Running…</pre>
+  </main>
+  <script type="module" src="./probe-page.mjs"></script>
+</body>
+</html>
