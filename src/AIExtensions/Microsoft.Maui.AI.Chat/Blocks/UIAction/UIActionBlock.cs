@@ -50,7 +50,7 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     /// </summary>
     public Task<AIContent> InvokeAsync(CancellationToken cancellationToken = default)
     {
-        if (!_invocationStarted && !IsComplete)
+        if (!_invocationStarted && !IsComplete && !_resultSource.Task.IsCompleted)
         {
             _invocationStarted = true;
             _ = InvokeCoreAsync(cancellationToken);
@@ -61,6 +61,9 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
 
     public Task<AIContent> GetResultAsync(CancellationToken cancellationToken = default)
         => _resultSource.Task.WaitAsync(cancellationToken);
+
+    /// <summary>Stops waiting for a result because the turn ended; a later invocation does nothing.</summary>
+    internal void Abandon() => _resultSource.TrySetCanceled();
 
     internal void SetResult(FunctionResultContent result)
     {

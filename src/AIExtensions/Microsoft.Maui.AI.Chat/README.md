@@ -50,7 +50,9 @@ foreach (var block in turn.ResponseBlocks)
 - `[ToolBlock]`, `[ToolParameter]`, and `[ToolResult]` source generation for simple 1:1 tool blocks.
 - `UIAgent<TState>` and `StateMapperContext` for typed inbound state.
 - `IConversationThread` restore/retry/stateful-provider support.
-- Graceful `CancelAsync`, observable caller cancellation, retry, and explicit `Clear`.
+- Turn transactions: `CancelAsync` stops a response and keeps its partial output
+  (`ConversationTurn.IsStopped`), failed turns commit nothing and can be retried, and `ClearAsync`
+  discards the active response before clearing.
 
 ## Custom tool blocks
 
@@ -85,9 +87,10 @@ registered handlers and state mapper.
 
 No storage provider ships. Implementations own serialization and storage. Custom block
 discriminators must survive serialization; `RawRepresentation` is not durable unless explicitly
-persisted. A thread keeps one pending turn until `CompleteTurn`; `AbortTurn` must discard that pending
-turn after cancellation or failure without touching committed history. Restored approvals and UI
-actions are display history, not resumable pending work.
+persisted. The engine writes a thread only when a turn commits (`AppendUserMessage`, then
+`AppendUpdate` for each update, then `CompleteTurn`), so failed or discarded turns never reach it.
+Call `RestoreAsync` to load a thread's turns and message history. Restored approvals and UI actions
+are display history, not resumable pending work.
 
 ## State and provider metadata
 

@@ -395,7 +395,7 @@ public class AgentContextTests
         Assert.NotNull(context.Error);
         Assert.Single(context.Turns);
 
-        context.Clear();
+        await context.ClearAsync();
 
         Assert.Empty(context.Turns);
         Assert.Null(context.Error);

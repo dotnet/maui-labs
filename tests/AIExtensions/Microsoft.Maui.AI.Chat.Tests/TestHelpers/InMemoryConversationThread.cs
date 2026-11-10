@@ -38,8 +38,6 @@ internal sealed class InMemoryConversationThread : IConversationThread
 
     internal int CompleteTurnCallCount { get; private set; }
 
-    internal int AbortTurnCallCount { get; private set; }
-
     internal int CommittedTurnCount { get; private set; }
 
     internal int ClearCallCount { get; private set; }
@@ -108,20 +106,11 @@ internal sealed class InMemoryConversationThread : IConversationThread
         CommittedTurnCount++;
     }
 
-    public void AbortTurn()
-    {
-        if (_pendingUpdates is null)
-            return;
-
-        AbortTurnCallCount++;
-        _pendingUpdates = null;
-        _pendingConversationId = null;
-    }
-
     public IReadOnlyList<ChatResponseUpdate> GetUpdates()
         => _committedUpdates.Select(update => update.Clone()).ToArray();
 
-    public IReadOnlyList<ChatMessage> GetMessageHistory()
+    /// <summary>Reconstructs the committed messages so tests can inspect what was persisted.</summary>
+    internal IReadOnlyList<ChatMessage> GetMessageHistory()
     {
         var messages = new List<ChatMessage>();
         messages.AddMessages(_committedUpdates);

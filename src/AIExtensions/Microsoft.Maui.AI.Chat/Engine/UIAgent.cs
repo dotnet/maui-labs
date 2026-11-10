@@ -26,20 +26,21 @@ public class UIAgent : IDisposable
 {
     private const string ContinuationPropertyName =
         "Microsoft.Maui.AI.Chat.Persistence.IsContinuation.v1";
-    private const string ContinuationPropertyValue = "true";
+    private const string StoppedPropertyName =
+        "Microsoft.Maui.AI.Chat.Persistence.IsStopped.v1";
+    private const string MarkerValue = "true";
 
     private readonly IChatClient _chatClient;
     private readonly UIAgentOptions _options;
     private readonly ILogger _logger;
     private readonly List<ChatMessage> _history = new();
+    private int _historyVersion;
     private bool _disposed;
 
     internal UIAgentOptions Options => _options;
 
     internal void LogProcessingError(Exception exception) =>
         UIAgentLog.ProcessingError(_logger, exception);
-
-    internal virtual object? AgentStateObject => null;
 
     public UIAgent(IChatClient chatClient)
         : this(chatClient, configure: null)
@@ -71,63 +72,55 @@ public class UIAgent : IDisposable
     }
 
     /// <summary>
-    /// Clears local message history and the configured persistent conversation thread.
+    /// Clears the committed message history and the configured persistent conversation thread.
     /// </summary>
     /// <remarks>
-    /// The agent is single-thread-affine. Cancel and await an active send before starting another.
+    /// A send that is still running when the history is cleared is never committed. The agent is
+    /// single-thread-affine; <see cref="AgentContext.ClearAsync"/> stops and awaits its active
+    /// response before it clears.
     /// </remarks>
     public void ClearHistory()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        _historyVersion++;
         _history.Clear();
         _options.Thread?.Clear();
     }
 
-    internal readonly record struct HistoryCheckpoint(int Count);
-
-    internal HistoryCheckpoint CaptureHistoryCheckpoint() => new(_history.Count);
-
-    internal void RestoreHistory(HistoryCheckpoint checkpoint)
+    /// <summary>
+    /// Sends one message and streams renderable blocks. A fully enumerated call commits one turn
+    /// to the history and the configured thread; a failed, canceled, or abandoned enumeration
+    /// commits nothing.
+    /// </summary>
+    public async IAsyncEnumerable<ContentBlock> SendMessageAsync(
+        ChatMessage message,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (checkpoint.Count < 0)
-            throw new ArgumentOutOfRangeException(nameof(checkpoint));
+        ArgumentNullException.ThrowIfNull(message);
 
-        if (checkpoint.Count > _history.Count)
-            return;
+        var turn = BeginTurn();
+        await foreach (var block in SendRoundAsync(turn, [message], cancellationToken))
+        {
+            yield return block;
+        }
 
-        _history.RemoveRange(checkpoint.Count, _history.Count - checkpoint.Count);
+        cancellationToken.ThrowIfCancellationRequested();
+        CommitTurn(turn, stopped: false);
     }
 
-    internal void AbortThreadTurn() => _options.Thread?.AbortTurn();
+    internal PendingTurn BeginTurn()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return new PendingTurn(_historyVersion);
+    }
 
     /// <summary>
-    /// Sends one message and streams renderable blocks. When used directly, one successful call
-    /// commits one persistent conversation turn.
+    /// Sends one request round of a pending turn and streams its blocks. Nothing is committed until
+    /// <see cref="CommitTurn"/>.
     /// </summary>
-    public IAsyncEnumerable<ContentBlock> SendMessageAsync(
-        ChatMessage message,
-        CancellationToken cancellationToken = default)
-        => SendMessagesAsync(
-            [message],
-            startsThreadTurn: true,
-            completesThreadTurn: true,
-            cancellationToken);
-
-    internal IAsyncEnumerable<ContentBlock> SendMessageAsync(
-        ChatMessage message,
-        bool startsThreadTurn,
-        bool completesThreadTurn,
-        CancellationToken cancellationToken = default) =>
-        SendMessagesAsync(
-            [message],
-            startsThreadTurn,
-            completesThreadTurn,
-            cancellationToken);
-
-    internal async IAsyncEnumerable<ContentBlock> SendMessagesAsync(
+    internal async IAsyncEnumerable<ContentBlock> SendRoundAsync(
+        PendingTurn turn,
         IReadOnlyList<ChatMessage> messages,
-        bool startsThreadTurn,
-        bool completesThreadTurn,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -143,35 +136,17 @@ public class UIAgent : IDisposable
         var requestMessages = messages
             .Select(EnsureMessageId)
             .ToArray();
-        var thread = _options.Thread;
-        var historySnapshotBeforeAttempt = _history.ToArray();
-        var completed = false;
+        foreach (var requestMessage in requestMessages)
+            turn.AddRequest(requestMessage);
 
+        var conversationId = GetConversationId(_options.Thread, turn);
+        ChatMessage[] request = conversationId is not null
+            ? requestMessages
+            : [.. _history, .. turn.Messages];
+
+        var pipeline = new BlockMappingPipeline(_options, _logger);
         try
         {
-            for (var index = 0; index < requestMessages.Length; index++)
-            {
-                var requestMessage = requestMessages[index];
-                if (startsThreadTurn && index == 0)
-                {
-                    thread?.AppendUserMessage(requestMessage);
-                    RefreshHistoryFromThread(thread);
-                }
-                else
-                {
-                    thread?.AppendUpdate(CreateMessageUpdate(
-                        requestMessage,
-                        isContinuation: true));
-                }
-
-                _history.Add(requestMessage);
-            }
-
-            ChatMessage[] historySnapshot = thread is { IsStateful: true }
-                ? requestMessages
-                : [.. _history];
-
-            var pipeline = new BlockMappingPipeline(_options, _logger);
             foreach (var requestMessage in requestMessages)
             {
                 var userUpdate = CreateMessageUpdate(
@@ -184,18 +159,13 @@ public class UIAgent : IDisposable
                     yield return block;
                 }
             }
-            foreach (var block in pipeline.Finalize())
-            {
-                yield return block;
-            }
+            pipeline.Finalize();
 
             UIAgentLog.StreamingAssistantResponse(_logger);
-            var assistantUpdates = new List<ChatResponseUpdate>();
-            var chatOptions = BuildChatOptions(thread);
-
+            var chatOptions = BuildChatOptions(conversationId);
             var updateIndex = 0;
             await foreach (var update in _chatClient.GetStreamingResponseAsync(
-                historySnapshot,
+                request,
                 chatOptions,
                 cancellationToken))
             {
@@ -205,8 +175,7 @@ public class UIAgent : IDisposable
                 UIAgentLog.ReceivedUpdate(_logger, updateIndex++, update.Role?.Value, contentTypes);
 
                 var processUpdate = ApplyStateMapper(update);
-                assistantUpdates.Add(processUpdate);
-                thread?.AppendUpdate(update);
+                turn.AddResponse(update, processUpdate);
                 if (processUpdate.Contents.Count == 0 && update.Contents.Count > 0)
                     continue;
 
@@ -216,34 +185,73 @@ public class UIAgent : IDisposable
                 }
             }
 
-            UIAgentLog.StreamComplete(_logger, assistantUpdates.Count);
-
-            foreach (var block in pipeline.Finalize())
-            {
-                yield return block;
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var response = assistantUpdates.ToChatResponse();
-            if (completesThreadTurn)
-                thread?.CompleteTurn();
-
-            foreach (var responseMessage in response.Messages)
-                _history.Add(responseMessage);
-
-            completed = true;
-            UIAgentLog.AddedToHistory(_logger, response.Messages.Count);
+            UIAgentLog.StreamComplete(_logger, updateIndex);
         }
         finally
         {
-            if (!completed)
-            {
-                _history.Clear();
-                _history.AddRange(historySnapshotBeforeAttempt);
-                thread?.AbortTurn();
-            }
+            // A stopped round keeps its blocks, so they must not stay active.
+            pipeline.Finalize();
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        turn.CompleteRound();
+    }
+
+    /// <summary>
+    /// Writes a pending turn to the configured thread and then commits it to the history.
+    /// </summary>
+    /// <param name="turn">The turn to commit.</param>
+    /// <param name="stopped">
+    /// Whether the turn was stopped before it completed. A stopped turn keeps its partial output,
+    /// is marked as stopped in the thread, and does not advance a stateful provider conversation.
+    /// </param>
+    /// <remarks>
+    /// Function calls without a result are never committed. For a stopped turn the same applies to
+    /// approval requests and responses whose call has no result. A turn that became stale because
+    /// the history was cleared or restored after it started is discarded.
+    /// </remarks>
+    internal void CommitTurn(PendingTurn turn, bool stopped)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (turn.HistoryVersion != _historyVersion || turn.InitialMessage is not { } initialMessage)
+            return;
+
+        turn.CompleteRound();
+        var answeredCallIds = UnansweredCalls.CollectAnsweredCallIds(turn);
+
+        var thread = _options.Thread;
+        if (thread is not null)
+        {
+            thread.AppendUserMessage(stopped
+                ? MarkStopped(initialMessage)
+                : initialMessage);
+            foreach (var update in turn.ThreadUpdates)
+            {
+                var committed = UnansweredCalls.Remove(
+                    update,
+                    answeredCallIds,
+                    includeApprovals: stopped);
+                if (committed is null)
+                    continue;
+
+                if (stopped && committed.ConversationId is not null)
+                {
+                    committed = committed.Clone();
+                    committed.ConversationId = null;
+                }
+
+                thread.AppendUpdate(committed);
+            }
+
+            thread.CompleteTurn();
+        }
+
+        var messages = UnansweredCalls.Remove(
+            turn.Messages,
+            answeredCallIds,
+            includeApprovals: stopped);
+        _history.AddRange(messages);
+        UIAgentLog.AddedToHistory(_logger, messages.Count);
     }
 
     /// <summary>
@@ -251,57 +259,68 @@ public class UIAgent : IDisposable
     /// </summary>
     /// <remarks>
     /// Restore only reconstructs renderable history; it does not invoke tools or resume
-    /// interactive blocks. Custom projections require the same handlers to be registered, and their
+    /// interactive blocks. It also rebuilds the message history sent with the next request.
+    /// Custom projections require the same handlers to be registered, and their
     /// discriminator data must survive the thread implementation's serialization. In particular,
     /// <see cref="AIContent.RawRepresentation"/> and <see cref="ChatResponseUpdate.RawRepresentation"/>
     /// are not durable discriminators unless the implementation explicitly persists them. Thread
     /// implementations must also round-trip <see cref="ChatResponseUpdate.AdditionalProperties"/>,
-    /// which carries engine metadata for continuation rounds.
+    /// which carries engine metadata for continuation rounds and stopped turns.
     /// </remarks>
     public async Task<IReadOnlyList<ContentBlock>> RestoreAsync(
         CancellationToken cancellationToken = default)
+    {
+        var turns = await RestoreTurnsAsync(cancellationToken);
+        var blocks = new List<ContentBlock>();
+        foreach (var turn in turns)
+        {
+            blocks.AddRange(turn.RequestBlocks);
+            blocks.AddRange(turn.ResponseBlocks);
+        }
+
+        return blocks;
+    }
+
+    internal Task<IReadOnlyList<RestoredTurn>> RestoreTurnsAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
 
         var thread = _options.Thread;
-        if (thread is null)
-            return Array.Empty<ContentBlock>();
+        return thread is null
+            ? Task.FromResult<IReadOnlyList<RestoredTurn>>(Array.Empty<RestoredTurn>())
+            : ReplayAsync(thread.GetUpdates(), cancellationToken);
+    }
 
+    private async Task<IReadOnlyList<RestoredTurn>> ReplayAsync(
+        IReadOnlyList<ChatResponseUpdate> updates,
+        CancellationToken cancellationToken)
+    {
         var previousHistory = _history.ToArray();
         var stateCheckpoint = CaptureStateCheckpoint();
+        var turns = new List<RestoredTurn>();
+        var history = new List<ChatMessage>();
+        var responseUpdates = new List<ChatResponseUpdate>();
+        RestoredTurn? currentTurn = null;
+        BlockMappingPipeline? responsePipeline = null;
         try
         {
             BeginStateRestore();
-            var updates = thread.GetUpdates();
-            if (updates.Count == 0)
-            {
-                _history.Clear();
-                CompleteStateRestore();
-                return Array.Empty<ContentBlock>();
-            }
-
-            var restoredHistory = thread.IsStateful
-                ? Array.Empty<ChatMessage>()
-                : thread.GetMessageHistory();
-            var blocks = new List<ContentBlock>();
-            BlockMappingPipeline? responsePipeline = null;
-            string? currentTurnId = null;
-            var nextBlockStartsTurn = false;
-
             foreach (var update in updates)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var startsTurn = update.Role == ChatRole.User
-                    && !IsContinuation(update);
-                if (startsTurn)
+                var isContinuation = IsContinuation(update);
+                if (update.Role == ChatRole.User && !isContinuation)
                 {
-                    responsePipeline?.Finalize();
-                    currentTurnId = update.MessageId
-                        ?? update.ResponseId
-                        ?? Guid.NewGuid().ToString("N");
-                    nextBlockStartsTurn = true;
+                    CompleteRestoredTurn();
+                    currentTurn = new RestoredTurn(
+                        update.MessageId
+                            ?? update.ResponseId
+                            ?? Guid.NewGuid().ToString("N"),
+                        IsStopped(update));
+                    turns.Add(currentTurn);
+                    history.Add(CreateHistoryMessage(update));
 
                     var requestPipeline = new BlockMappingPipeline(
                         _options,
@@ -310,12 +329,7 @@ public class UIAgent : IDisposable
                         update,
                         cancellationToken))
                     {
-                        AddRestoredBlock(
-                            blocks,
-                            block,
-                            currentTurnId,
-                            isRequest: true,
-                            ref nextBlockStartsTurn);
+                        currentTurn.RequestBlocks.Add(block);
                     }
                     requestPipeline.Finalize();
                     responsePipeline = new BlockMappingPipeline(
@@ -324,18 +338,24 @@ public class UIAgent : IDisposable
                     continue;
                 }
 
-                if (responsePipeline is null)
+                if (currentTurn is null || responsePipeline is null)
                 {
-                    currentTurnId = update.MessageId
-                        ?? update.ResponseId
-                        ?? Guid.NewGuid().ToString("N");
-                    nextBlockStartsTurn = true;
+                    currentTurn = new RestoredTurn(
+                        update.MessageId
+                            ?? update.ResponseId
+                            ?? Guid.NewGuid().ToString("N"),
+                        isStopped: false);
+                    turns.Add(currentTurn);
                     responsePipeline = new BlockMappingPipeline(
                         _options,
                         _logger);
                 }
 
-                var processUpdate = ApplyStateMapper(update);
+                // Continuation inputs were requests, so like live requests they bypass the state mapper.
+                var processUpdate = isContinuation
+                    ? update
+                    : ApplyStateMapper(update);
+                responseUpdates.Add(processUpdate);
                 if (processUpdate.Contents.Count > 0
                     || update.Contents.Count == 0)
                 {
@@ -343,23 +363,19 @@ public class UIAgent : IDisposable
                         processUpdate,
                         cancellationToken))
                     {
-                        AddRestoredBlock(
-                            blocks,
-                            block,
-                            currentTurnId!,
-                            isRequest: false,
-                            ref nextBlockStartsTurn);
+                        currentTurn.ResponseBlocks.Add(block);
                     }
                 }
 
-                RestoreApprovalResponses(update, blocks, currentTurnId!);
+                RestoreApprovalResponses(update, currentTurn);
             }
 
-            responsePipeline?.Finalize();
+            CompleteRestoredTurn();
             _history.Clear();
-            _history.AddRange(restoredHistory);
+            _history.AddRange(history);
+            _historyVersion++;
             CompleteStateRestore();
-            return blocks;
+            return turns;
         }
         catch
         {
@@ -368,12 +384,17 @@ public class UIAgent : IDisposable
             RestoreStateCheckpoint(stateCheckpoint);
             throw;
         }
-    }
 
-    internal void CompleteThreadTurn()
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _options.Thread?.CompleteTurn();
+        void CompleteRestoredTurn()
+        {
+            responsePipeline?.Finalize();
+            responsePipeline = null;
+            if (responseUpdates.Count == 0)
+                return;
+
+            history.AddRange(responseUpdates.ToChatResponse().Messages);
+            responseUpdates.Clear();
+        }
     }
 
     internal virtual ChatResponseUpdate ApplyStateMapper(ChatResponseUpdate update)
@@ -452,21 +473,21 @@ public class UIAgent : IDisposable
             "Error: The tool call was not executed. Call the tool again if its result is still needed.");
     }
 
-    private void RefreshHistoryFromThread(IConversationThread? thread)
+    /// <summary>
+    /// Gets the provider conversation to continue. Only a configured thread makes a conversation
+    /// stateful; within a turn the latest identifier returned by the provider wins.
+    /// </summary>
+    private static string? GetConversationId(IConversationThread? thread, PendingTurn turn)
     {
         if (thread is null)
-            return;
+            return null;
 
-        _history.Clear();
-        if (!thread.IsStateful)
-            _history.AddRange(thread.GetMessageHistory());
+        return turn.ConversationId
+            ?? (thread.IsStateful ? thread.ConversationId : null);
     }
 
-    private ChatOptions? BuildChatOptions(IConversationThread? thread)
+    private ChatOptions? BuildChatOptions(string? conversationId)
     {
-        var conversationId = thread is { IsStateful: true }
-            ? thread.ConversationId
-            : null;
         if (conversationId is null && _options.UIActions.Count == 0)
             return _options.ChatOptions;
 
@@ -511,7 +532,7 @@ public class UIAgent : IDisposable
         return clone;
     }
 
-    private static ChatResponseUpdate CreateMessageUpdate(
+    internal static ChatResponseUpdate CreateMessageUpdate(
         ChatMessage message,
         bool isContinuation)
     {
@@ -523,7 +544,7 @@ public class UIAgent : IDisposable
                 : new AdditionalPropertiesDictionary(message.AdditionalProperties);
 
             if (isContinuation)
-                additionalProperties[ContinuationPropertyName] = ContinuationPropertyValue;
+                additionalProperties[ContinuationPropertyName] = MarkerValue;
         }
 
         return new ChatResponseUpdate
@@ -539,48 +560,66 @@ public class UIAgent : IDisposable
     }
 
     private static bool IsContinuation(ChatResponseUpdate update)
-        => (update.AdditionalProperties is not null
-                && update.AdditionalProperties.TryGetValue(
-                    ContinuationPropertyName,
-                    out var value)
-                && value is string text
-                && string.Equals(
-                    text,
-                    ContinuationPropertyValue,
-                    StringComparison.Ordinal))
+        => HasMarker(update.AdditionalProperties, ContinuationPropertyName)
             || (update.Contents.Count > 0
                 && update.Contents.All(
                     content => content is ToolApprovalResponseContent));
 
-    private static void AddRestoredBlock(
-        List<ContentBlock> blocks,
-        ContentBlock block,
-        string turnId,
-        bool isRequest,
-        ref bool nextBlockStartsTurn)
+    private static bool IsStopped(ChatResponseUpdate update)
+        => HasMarker(update.AdditionalProperties, StoppedPropertyName);
+
+    private static bool HasMarker(
+        AdditionalPropertiesDictionary? properties,
+        string name)
+        => properties is not null
+            && properties.TryGetValue(name, out var value)
+            && value is string text
+            && string.Equals(text, MarkerValue, StringComparison.Ordinal);
+
+    private static ChatMessage MarkStopped(ChatMessage message)
     {
-        block.RestoredTurnId = turnId;
-        block.StartsRestoredTurn = nextBlockStartsTurn;
-        block.IsRestoredRequest = isRequest;
-        nextBlockStartsTurn = false;
-        blocks.Add(block);
+        var marked = message.Clone();
+        marked.AdditionalProperties = message.AdditionalProperties is null
+            ? new AdditionalPropertiesDictionary()
+            : new AdditionalPropertiesDictionary(message.AdditionalProperties);
+        marked.AdditionalProperties[StoppedPropertyName] = MarkerValue;
+        return marked;
+    }
+
+    private static ChatMessage CreateHistoryMessage(ChatResponseUpdate update)
+    {
+        AdditionalPropertiesDictionary? additionalProperties = null;
+        if (update.AdditionalProperties is { Count: > 0 } properties)
+        {
+            additionalProperties = new AdditionalPropertiesDictionary(properties);
+            additionalProperties.Remove(StoppedPropertyName);
+            additionalProperties.Remove(ContinuationPropertyName);
+            if (additionalProperties.Count == 0)
+                additionalProperties = null;
+        }
+
+        return new ChatMessage(update.Role ?? ChatRole.User, [.. update.Contents])
+        {
+            AuthorName = update.AuthorName,
+            CreatedAt = update.CreatedAt,
+            MessageId = update.MessageId,
+            RawRepresentation = update.RawRepresentation,
+            AdditionalProperties = additionalProperties,
+        };
     }
 
     private static void RestoreApprovalResponses(
         ChatResponseUpdate update,
-        List<ContentBlock> blocks,
-        string turnId)
+        RestoredTurn turn)
     {
         foreach (var content in update.Contents)
         {
             if (content is not ToolApprovalResponseContent response)
                 continue;
 
+            var blocks = turn.ResponseBlocks;
             for (var i = blocks.Count - 1; i >= 0; i--)
             {
-                if (blocks[i].RestoredTurnId != turnId)
-                    break;
-
                 if (blocks[i] is ToolApprovalBlock approval
                     && approval.ApprovalRequest.RequestId == response.RequestId)
                 {

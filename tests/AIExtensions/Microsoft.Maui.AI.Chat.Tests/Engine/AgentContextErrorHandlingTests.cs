@@ -186,7 +186,7 @@ public class AgentContextErrorHandlingTests
     }
 
     [Fact]
-    public async Task CancelAsync_DiscardsResponseBlocks()
+    public async Task CancelAsync_KeepsPartialResponseAndMarksTurnStopped()
     {
         var streamStarted = new TaskCompletionSource();
         var client = new DelegatingStreamingChatClient();
@@ -204,8 +204,11 @@ public class AgentContextErrorHandlingTests
         await sendTask;
 
         var turn = context.Turns[0];
-        Assert.Empty(turn.ResponseBlocks);
-        Assert.Same(turn, clearedTurn);
+        Assert.True(turn.IsStopped);
+        var partial = Assert.IsType<TextContentBlock>(Assert.Single(turn.ResponseBlocks));
+        Assert.Equal("partial", partial.RawText);
+        Assert.Equal(BlockLifecycleState.Inactive, partial.LifecycleState);
+        Assert.Null(clearedTurn);
 
         static async IAsyncEnumerable<ChatResponseUpdate> SlowStream(
             TaskCompletionSource streamStarted,
@@ -224,7 +227,7 @@ public class AgentContextErrorHandlingTests
     }
 
     [Fact]
-    public async Task CallerCancellation_CancelsTask_DiscardsResponseBlocks_AndReturnsIdle()
+    public async Task CallerCancellation_CancelsTask_StopsTurn_AndReturnsIdle()
     {
         var streamStarted = new TaskCompletionSource();
         var client = new DelegatingStreamingChatClient();
@@ -241,7 +244,9 @@ public class AgentContextErrorHandlingTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await sendTask);
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Null(context.Error);
-        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
+        var turn = Assert.Single(context.Turns);
+        Assert.True(turn.IsStopped);
+        Assert.Single(turn.ResponseBlocks);
     }
 
     [Fact]
@@ -261,11 +266,11 @@ public class AgentContextErrorHandlingTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await sendTask);
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Null(context.Error);
-        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
+        Assert.True(Assert.Single(context.Turns).IsStopped);
     }
 
     [Fact]
-    public async Task CallerCancellation_AfterErrorTransition_ResetsIdleAndRethrowsCancellation()
+    public async Task CallerCancellation_AfterErrorTransition_KeepsErrorAndRethrowsCancellation()
     {
         var expectedError = new InvalidOperationException("diagnostic");
         var client = new DelegatingStreamingChatClient();
@@ -282,9 +287,9 @@ public class AgentContextErrorHandlingTests
         var sendTask = context.SendMessageAsync("Hello", callerCts.Token);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await sendTask);
-        Assert.Equal(ConversationStatus.Idle, context.Status);
-        Assert.Null(context.Error);
-        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.Same(expectedError, context.Error);
+        Assert.False(Assert.Single(context.Turns).IsStopped);
     }
 
     [Fact]
@@ -310,13 +315,15 @@ public class AgentContextErrorHandlingTests
         await context.SendMessageAsync("second");
 
         Assert.Equal(2, context.Turns.Count);
-        Assert.Empty(context.Turns[0].ResponseBlocks);
+        Assert.True(context.Turns[0].IsStopped);
+        Assert.NotEmpty(context.Turns[0].ResponseBlocks);
+        Assert.False(context.Turns[1].IsStopped);
         Assert.NotEmpty(context.Turns[1].ResponseBlocks);
         Assert.Equal(ConversationStatus.Idle, context.Status);
     }
 
     [Fact]
-    public async Task GracefulCancellation_DoesNotCommitPartialAssistantHistory()
+    public async Task GracefulCancellation_CommitsRequestAndPartialAssistantHistory()
     {
         var streamStarted = new TaskCompletionSource();
         var sentMessages = new List<IReadOnlyList<ChatMessage>>();
@@ -340,17 +347,13 @@ public class AgentContextErrorHandlingTests
         await context.SendMessageAsync("second");
 
         Assert.Equal(2, sentMessages.Count);
-        var secondRequest = sentMessages[1];
-        var message = Assert.Single(secondRequest);
-        Assert.Equal(ChatRole.User, message.Role);
-        Assert.Equal("second", message.Text);
-        Assert.DoesNotContain(
-            secondRequest.SelectMany(message => message.Contents).OfType<TextContent>(),
-            content => content.Text == "partial");
+        Assert.Equal(
+            [(ChatRole.User, "first"), (ChatRole.Assistant, "partial"), (ChatRole.User, "second")],
+            sentMessages[1].Select(message => (message.Role, message.Text)));
     }
 
     [Fact]
-    public async Task CancelWhileAwaitingApproval_RollsBackDanglingApprovalHistory()
+    public async Task CancelWhileAwaitingApproval_CommitsRequestWithoutDanglingApproval()
     {
         var awaitingInput = new TaskCompletionSource();
         var sentMessages = new List<IReadOnlyList<ChatMessage>>();
@@ -383,12 +386,17 @@ public class AgentContextErrorHandlingTests
 
         Assert.Equal(2, sentMessages.Count);
         var secondRequest = sentMessages[1];
-        var secondMessage = Assert.Single(secondRequest);
-        Assert.Equal(ChatRole.User, secondMessage.Role);
-        Assert.Equal("second", secondMessage.Text);
+        Assert.Equal(
+            [(ChatRole.User, "first"), (ChatRole.User, "second")],
+            secondRequest.Select(message => (message.Role, message.Text)));
         Assert.DoesNotContain(
             secondRequest.SelectMany(message => message.Contents),
             content => content is ToolApprovalRequestContent);
+        var stoppedTurn = context.Turns[0];
+        Assert.True(stoppedTurn.IsStopped);
+        var approval = Assert.IsType<ToolApprovalBlock>(Assert.Single(stoppedTurn.ResponseBlocks));
+        approval.Approve();
+        Assert.Equal(ApprovalStatus.Pending, approval.Status);
     }
 
     [Fact]
@@ -409,7 +417,7 @@ public class AgentContextErrorHandlingTests
         var firstSend = context.SendMessageAsync("first");
         await streamStarted.Task;
 
-        context.Clear();
+        await context.ClearAsync();
         await firstSend;
         await context.SendMessageAsync("fresh");
 

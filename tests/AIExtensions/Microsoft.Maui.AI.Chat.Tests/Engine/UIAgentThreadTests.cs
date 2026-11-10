@@ -69,7 +69,7 @@ public class UIAgentThreadTests
         Assert.Empty(thread.GetMessageHistory());
         Assert.Equal(0, thread.PendingUpdateCount);
         Assert.Equal(0, thread.CompleteTurnCallCount);
-        Assert.Equal(1, thread.AbortTurnCallCount);
+        Assert.Equal(0, thread.AppendUserMessageCount);
 
         await EnumerateAsync(agent.SendMessageAsync(
             new ChatMessage(ChatRole.User, "Fresh")));
@@ -123,12 +123,40 @@ public class UIAgentThreadTests
 
         Assert.Equal("conversation-1", secondOptions?.ConversationId);
         Assert.Equal("fresh", Assert.Single(secondRequest!).Text);
-        Assert.Equal(1, thread.AbortTurnCallCount);
+        Assert.Equal(2, thread.AppendUserMessageCount);
         Assert.Equal(2, thread.CommittedTurnCount);
     }
 
     [Fact]
-    public async Task SendMessageAsync_StatelessThread_UsesCommittedMessageHistory()
+    public async Task RestoreAsync_ThenSendMessage_IncludesRestoredHistory()
+    {
+        var thread = new InMemoryConversationThread("thread-1");
+        CommitTextTurn(thread, "first", "first response");
+
+        IReadOnlyList<ChatMessage>? capturedMessages = null;
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+        {
+            capturedMessages = messages.ToArray();
+            return ResponseEmitters.EmitTextResponse(
+                "second response",
+                cancellationToken);
+        });
+        var agent = CreateAgent(client, thread);
+        await agent.RestoreAsync();
+
+        await EnumerateAsync(agent.SendMessageAsync(
+            new ChatMessage(ChatRole.User, "second")));
+
+        Assert.NotNull(capturedMessages);
+        Assert.Equal(3, capturedMessages.Count);
+        Assert.Equal(
+            ["first", "first response", "second"],
+            capturedMessages.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WithoutRestore_DoesNotReadThreadHistory()
     {
         var thread = new InMemoryConversationThread("thread-1");
         CommitTextTurn(thread, "first", "first response");
@@ -147,11 +175,8 @@ public class UIAgentThreadTests
         await EnumerateAsync(agent.SendMessageAsync(
             new ChatMessage(ChatRole.User, "second")));
 
-        Assert.NotNull(capturedMessages);
-        Assert.Equal(3, capturedMessages.Count);
-        Assert.Equal(
-            ["first", "first response", "second"],
-            capturedMessages.Select(message => message.Text));
+        Assert.Equal("second", Assert.Single(capturedMessages!).Text);
+        Assert.Equal(4, thread.GetUpdates().Count);
     }
 
     [Fact]
@@ -298,20 +323,21 @@ public class UIAgentThreadTests
             CreateClient(ResponseEmitters.EmitEmptyResponse()),
             thread);
 
-        var blocks = await agent.RestoreAsync();
+        var turns = await agent.RestoreTurnsAsync(CancellationToken.None);
 
-        Assert.Equal(2, blocks.Count(block => block.StartsRestoredTurn));
-        Assert.Equal(3, blocks.Count(block => block.IsRestoredRequest));
-        Assert.Contains(blocks, block => block is MediaContentBlock);
+        Assert.Equal(["turn-1", "turn-2"], turns.Select(turn => turn.Id));
+        Assert.Equal(3, turns.Sum(turn => turn.RequestBlocks.Count));
+        Assert.Contains(turns[0].RequestBlocks, block => block is MediaContentBlock);
         var functionBlock = Assert.Single(
-            blocks.OfType<FunctionInvocationContentBlock>());
+            turns[1].ResponseBlocks.OfType<FunctionInvocationContentBlock>());
         Assert.True(functionBlock.HasResult);
         Assert.Equal("value", functionBlock.Result?.Result);
+        var blocks = await CreateAgent(
+            CreateClient(ResponseEmitters.EmitEmptyResponse()),
+            thread).RestoreAsync();
         Assert.Equal(
-            ["turn-1", "turn-2"],
-            blocks
-                .Where(block => block.StartsRestoredTurn)
-                .Select(block => block.RestoredTurnId));
+            turns.Sum(turn => turn.RequestBlocks.Count + turn.ResponseBlocks.Count),
+            blocks.Count);
     }
 
     [Fact]

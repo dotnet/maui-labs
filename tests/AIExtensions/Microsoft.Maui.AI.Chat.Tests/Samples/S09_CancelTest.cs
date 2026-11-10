@@ -9,11 +9,10 @@ namespace Microsoft.Maui.AI.Chat.Tests.Samples;
 
 public class S09_CancelTest
 {
-    // AG-UI cancellation maps to AgentContext.CancelAsync in components-ai.
-    // Cancelling discards partial response blocks and returns to Idle.
+    // Stopping keeps the partial response, marks the turn stopped, and returns to Idle.
 
     [Fact]
-    public async Task CancelAsync_DiscardsPartialBlocks_ReturnsIdle()
+    public async Task CancelAsync_KeepsPartialBlocks_ReturnsIdle()
     {
         var streamStarted = new TaskCompletionSource();
         var client = new DelegatingStreamingChatClient();
@@ -34,7 +33,9 @@ public class S09_CancelTest
         Assert.Null(context.Error);
 
         var turn = context.Turns[0];
-        Assert.Empty(turn.ResponseBlocks);
+        Assert.True(turn.IsStopped);
+        var partial = Assert.IsType<TextContentBlock>(Assert.Single(turn.ResponseBlocks));
+        Assert.Equal("Once upon a time", partial.RawText);
     }
 
     [Fact]
