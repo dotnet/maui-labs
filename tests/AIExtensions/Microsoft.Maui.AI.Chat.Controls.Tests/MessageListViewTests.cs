@@ -178,7 +178,7 @@ public class MessageListViewTests
 
         context.Dispose();
         block.AppendText(" again");
-        context.NotifyBlockChanged();
+        context.AgentContent.NotifyChanged();
 
         Assert.Equal("Hello again", content.Text);
     }

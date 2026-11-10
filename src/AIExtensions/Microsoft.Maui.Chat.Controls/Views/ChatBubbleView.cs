@@ -118,7 +118,7 @@ public abstract class ChatBubbleView : ChatContentView
 
     internal bool UsesStandardBubble => _usesStandardBubble;
 
-    internal Microsoft.Maui.Chat.ChatContentPresentation? PresentationOverride { get; set; }
+    internal ChatContentPresentation? PresentationOverride { get; set; }
 
     /// <summary>
     /// Gets a short description of the content for accessibility, for example the message text or the
@@ -188,8 +188,7 @@ public abstract class ChatBubbleView : ChatContentView
     /// <param name="item">The row being rendered.</param>
     /// <returns><see langword="true"/> to use the standard bubble.</returns>
     protected virtual bool ResolveUsesStandardBubble(ChatContentItem item) =>
-        (PresentationOverride ?? item.Content.Presentation) ==
-            Microsoft.Maui.Chat.ChatContentPresentation.Bubble;
+        (PresentationOverride ?? item.Content.Presentation) == ChatContentPresentation.Bubble;
 
     private void ApplyAvatar(ChatContentItem item, ChatAppearance appearance, bool outgoing)
     {

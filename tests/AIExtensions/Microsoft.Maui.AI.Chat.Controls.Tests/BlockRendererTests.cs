@@ -5,7 +5,6 @@ using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 /// <summary>
-/// Mirrors: Blazor.Tests/Components/BlockRendererTests.cs
 /// Tests that the neutral ChatContentTemplateSelector resolves AI templates for each block type,
 /// and that the CopilotChatView's ContentContext properly exposes block properties.
 /// </summary>
@@ -141,7 +140,7 @@ public class BlockRendererTests
         Assert.True(userSpecific.GetPriority(context) > generic.GetPriority(context));
     }
 
-    // ── Inline template via ComponentBlockRenderer equivalent ──
+    // ── Block details exposed through ContentContext ──
 
     [Fact]
     public async Task ToolCallBlock_ExposesCallDetails_ViaContentContext()

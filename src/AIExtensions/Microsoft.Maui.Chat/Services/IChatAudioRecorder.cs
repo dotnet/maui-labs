@@ -1,6 +1,6 @@
 namespace Microsoft.Maui.Chat;
 
-/// <summary>Records an audio attachment for a chat renderer composer.</summary>
+/// <summary>Records an audio attachment for the chat composer.</summary>
 /// <remarks>
 /// The built-in implementation records WAV audio on Android, iOS, Mac Catalyst, and Windows.
 /// Replace this service to use another recorder or to make capture deterministic in tests.

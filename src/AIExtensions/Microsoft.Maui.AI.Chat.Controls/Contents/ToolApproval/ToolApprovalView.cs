@@ -197,26 +197,26 @@ public class ToolApprovalView : ContentContextView
         {
             return ApplyStyleResource(
                 new Label { Text = "(no arguments)" },
-                ChatThemeKeys.ToolApprovalEmptyArgsLabelStyle);
+                AIChatThemeKeys.ToolApprovalEmptyArgsLabelStyle);
         }
 
         var stack = ApplyStyleResource(
             new VerticalStackLayout(),
-            ChatThemeKeys.ToolApprovalArgsStackStyle);
+            AIChatThemeKeys.ToolApprovalArgsStackStyle);
 
         foreach (var kvp in fab.Arguments)
         {
             var row = ApplyStyleResource(
                 new HorizontalStackLayout(),
-                ChatThemeKeys.ToolApprovalArgsRowStyle);
+                AIChatThemeKeys.ToolApprovalArgsRowStyle);
 
             row.Add(ApplyStyleResource(
                 new Label { Text = $"{kvp.Key}:" },
-                ChatThemeKeys.ToolApprovalArgNameLabelStyle));
+                AIChatThemeKeys.ToolApprovalArgNameLabelStyle));
 
             row.Add(ApplyStyleResource(
                 new Label { Text = kvp.Value?.ToString() ?? "(null)" },
-                ChatThemeKeys.ToolApprovalArgValueLabelStyle));
+                AIChatThemeKeys.ToolApprovalArgValueLabelStyle));
 
             stack.Add(row);
         }

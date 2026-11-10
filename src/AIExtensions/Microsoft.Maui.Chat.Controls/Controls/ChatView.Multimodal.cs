@@ -13,18 +13,6 @@ public partial class ChatView
     /// <summary>The name of the live-speech button part.</summary>
     public const string LiveSpeechButtonPartName = "PART_LiveSpeechButton";
 
-    /// <summary>The generic message shown when audio capture fails.</summary>
-    public const string DefaultAudioCaptureErrorMessage = ChatComposerController.DefaultAudioCaptureErrorMessage;
-
-    /// <summary>The generic message shown when speech recognition fails.</summary>
-    public const string DefaultSpeechRecognitionErrorMessage = ChatComposerController.DefaultSpeechRecognitionErrorMessage;
-
-    private static readonly BindablePropertyKey InputContextPropertyKey =
-        BindableProperty.CreateReadOnly(nameof(InputContext), typeof(ChatInputContext), typeof(ChatView), null);
-
-    /// <summary>Backing property for <see cref="InputContext"/>.</summary>
-    public static readonly BindableProperty InputContextProperty = InputContextPropertyKey.BindableProperty;
-
     /// <summary>Backing property for <see cref="AllowAudioCapture"/>.</summary>
     public static readonly BindableProperty AllowAudioCaptureProperty =
         BindableProperty.Create(nameof(AllowAudioCapture), typeof(bool), typeof(ChatView), false,
@@ -228,9 +216,6 @@ public partial class ChatView
     /// <summary>Raised for live-speech partials, final results, and failures.</summary>
     public event EventHandler<ChatSpeechRecognitionEventArgs>? SpeechRecognized;
 
-    /// <summary>Gets the reusable state and action surface for the composer.</summary>
-    public ChatInputContext InputContext => (ChatInputContext)GetValue(InputContextProperty);
-
     /// <summary>Gets or sets whether the built-in audio-capture button is shown.</summary>
     public bool AllowAudioCapture { get => (bool)GetValue(AllowAudioCaptureProperty); set => SetValue(AllowAudioCaptureProperty, value); }
 
@@ -383,18 +368,6 @@ public partial class ChatView
         return ValueTask.CompletedTask;
     }
 
-    internal void SetInputComposing(bool value) => EffectiveComposerController.SetComposing(value);
-
-    internal void SetInputStatusMessage(string? value) => EffectiveComposerController.SetStatusMessage(value);
-
-    internal void SetInputErrorMessage(string? value) => EffectiveComposerController.SetErrorMessage(value);
-
-    private void RefreshInputContextIfAvailable()
-    {
-        if (GetValue(InputContextProperty) is ChatInputContext context)
-            context.Refresh();
-    }
-
     private async Task ConfigureAndInvoke(Func<ChatComposerController, Task> operation)
     {
         ConfigureComposerController();
@@ -403,7 +376,6 @@ public partial class ChatView
 
     private void InitializeMultimodalInput()
     {
-        SetValue(InputContextPropertyKey, new ChatInputContext(EffectiveComposerController, FocusInputAsync));
         SetDynamicResource(StopButtonStyleProperty, Themes.ChatThemeKeys.StopButtonStyle);
         SetDynamicResource(AudioButtonStyleProperty, Themes.ChatThemeKeys.AudioButtonStyle);
         SetDynamicResource(LiveSpeechButtonStyleProperty, Themes.ChatThemeKeys.LiveSpeechButtonStyle);

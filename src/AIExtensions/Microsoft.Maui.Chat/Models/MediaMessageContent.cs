@@ -7,8 +7,8 @@ namespace Microsoft.Maui.Chat;
 /// <remarks>
 /// <para>
 /// Exactly one source is required. Buffers are stored instead of streams so a view can build a fresh
-/// view-native image source every time a cell is recycled. Converting media to a
-/// renderer-specific image source is a view concern and deliberately not done here.
+/// image source every time a cell is recycled. Converting media to an image source is a view concern
+/// and deliberately not done here.
 /// </para>
 /// <para>Instances are single-thread affine and are not thread-safe.</para>
 /// </remarks>

@@ -8,7 +8,7 @@ namespace Microsoft.Maui.Chat.Controls;
 public class ChatTextContentView : ChatBubbleView
 {
     private readonly Label _label;
-    private Microsoft.Maui.Chat.ChatContentPresentation _presentation;
+    private ChatContentPresentation _presentation;
 
     /// <summary>Creates the view.</summary>
     public ChatTextContentView()
@@ -22,8 +22,7 @@ public class ChatTextContentView : ChatBubbleView
     {
         base.RefreshContent();
 
-        _presentation = Item?.Content.Presentation ??
-            Microsoft.Maui.Chat.ChatContentPresentation.Bubble;
+        _presentation = Item?.Content.Presentation ?? ChatContentPresentation.Bubble;
         ApplyBubbleTextStyle(_label);
         _label.Text = GetText();
     }
@@ -31,8 +30,7 @@ public class ChatTextContentView : ChatBubbleView
     /// <summary>Updates streamed text cheaply, refreshing chrome only when presentation changed.</summary>
     protected override void OnContentUpdated()
     {
-        var presentation = Item?.Content.Presentation ??
-            Microsoft.Maui.Chat.ChatContentPresentation.Bubble;
+        var presentation = Item?.Content.Presentation ?? ChatContentPresentation.Bubble;
         if (presentation != _presentation)
         {
             RefreshContent();

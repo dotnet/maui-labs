@@ -4,8 +4,7 @@ using Microsoft.Maui.Chat;
 namespace Microsoft.Maui.AI.Chat.Presentation;
 
 /// <summary>
-/// Projects an <see cref="AgentContext"/> into the provider-neutral conversation model used by
-/// renderer-neutral chat conversation model.
+/// Projects an <see cref="AgentContext"/> into the provider-neutral chat conversation model.
 /// </summary>
 public sealed class AgentChatPresentation : ChatConversation, IDisposable
 {
@@ -604,8 +603,8 @@ public sealed class AgentBlockContent : MessageContent, IAgentBlockContent
     {
         ArgumentNullException.ThrowIfNull(block);
         Presentation = block is MediaContentBlock
-            ? Microsoft.Maui.Chat.ChatContentPresentation.Bubble
-            : Microsoft.Maui.Chat.ChatContentPresentation.Bare;
+            ? ChatContentPresentation.Bubble
+            : ChatContentPresentation.Bare;
         _binding = new AgentBlockBinding(
             block,
             turn,

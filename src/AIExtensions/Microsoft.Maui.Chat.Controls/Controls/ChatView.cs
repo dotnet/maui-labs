@@ -95,12 +95,6 @@ public partial class ChatView : TemplatedView, IDisposable
     /// <summary>The name of the send button part.</summary>
     public const string SendButtonPartName = "PART_SendButton";
 
-    /// <summary>The generic message shown when sending fails.</summary>
-    public const string DefaultSendErrorMessage = "Your message could not be sent. Please try again.";
-
-    /// <summary>The generic message shown when adding an attachment fails.</summary>
-    public const string DefaultAttachmentErrorMessage = "That attachment could not be added.";
-
     // ── Bindable properties ──
 
     /// <summary>Backing property for <see cref="Conversation"/>.</summary>
@@ -357,11 +351,7 @@ public partial class ChatView : TemplatedView, IDisposable
             typeof(ChatView),
             null,
             propertyChanged: static (bindable, _, newValue) =>
-            {
-                var view = (ChatView)bindable;
-                view.SetValue(HasSendErrorPropertyKey, newValue is string { Length: > 0 });
-                view.RefreshInputContextIfAvailable();
-            });
+                ((ChatView)bindable).SetValue(HasSendErrorPropertyKey, newValue is string { Length: > 0 }));
 
     /// <summary>Backing property for <see cref="SendError"/>.</summary>
     public static readonly BindableProperty SendErrorProperty = SendErrorPropertyKey.BindableProperty;
@@ -379,11 +369,7 @@ public partial class ChatView : TemplatedView, IDisposable
             typeof(ChatView),
             null,
             propertyChanged: static (bindable, _, newValue) =>
-            {
-                var view = (ChatView)bindable;
-                view.SetValue(HasAttachmentErrorPropertyKey, newValue is string { Length: > 0 });
-                view.RefreshInputContextIfAvailable();
-            });
+                ((ChatView)bindable).SetValue(HasAttachmentErrorPropertyKey, newValue is string { Length: > 0 }));
 
     /// <summary>Backing property for <see cref="AttachmentError"/>.</summary>
     public static readonly BindableProperty AttachmentErrorProperty = AttachmentErrorPropertyKey.BindableProperty;
@@ -515,7 +501,7 @@ public partial class ChatView : TemplatedView, IDisposable
     }
 
     /// <summary>
-    /// Gets or sets the renderer-neutral composer state machine. When <see langword="null"/>,
+    /// Gets or sets the composer state machine. When <see langword="null"/>,
     /// this view owns a private controller. A supplied controller is never disposed by the view.
     /// </summary>
     public ChatComposerController? ComposerController
@@ -1186,7 +1172,6 @@ public partial class ChatView : TemplatedView, IDisposable
         SetValue(HasAttachmentsPropertyKey, EffectiveComposerController.Attachments.Count > 0);
         ApplyAttachmentTemplate();
         UpdateCanSend();
-        RefreshInputContextIfAvailable();
     }
 
     private void OnControllerAudioRecorded(object? sender, ChatAudioRecordedEventArgs e) =>
@@ -1217,7 +1202,6 @@ public partial class ChatView : TemplatedView, IDisposable
         SetValue(CanToggleLiveSpeechPropertyKey, controller.CanToggleLiveSpeech);
         SetValue(HasAttachmentsPropertyKey, controller.Attachments.Count > 0);
         SetValue(CanSendPropertyKey, controller.CanSubmit);
-        RefreshInputContextIfAvailable();
     }
 
     private void UpdateTypingState()

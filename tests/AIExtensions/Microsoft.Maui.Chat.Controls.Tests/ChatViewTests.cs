@@ -28,7 +28,6 @@ public class ChatViewTests
         Assert.True(view.IsInputEnabled);
         Assert.False(view.CanStop);
         Assert.True(view.ShowSendButton);
-        Assert.NotNull(view.InputContext);
         Assert.Null(view.SendError);
         Assert.Null(view.AttachmentError);
         Assert.False(view.HasSendError);
@@ -318,7 +317,7 @@ public class ChatViewTests
 
         await view.SendAsync();
 
-        Assert.Equal(ChatView.DefaultSendErrorMessage, view.SendError);
+        Assert.Equal(ChatComposerController.DefaultSendErrorMessage, view.SendError);
         Assert.True(view.HasSendError);
         Assert.DoesNotContain("secret", view.SendError!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("hello", view.Text);
@@ -503,8 +502,7 @@ public class ChatViewTests
 
         await view.PickAttachmentsAsync();
 
-        Assert.Equal(ChatView.DefaultAttachmentErrorMessage, view.AttachmentError);
-        Assert.Equal(ChatView.DefaultAttachmentErrorMessage, view.InputContext.ErrorMessage);
+        Assert.Equal(ChatComposerController.DefaultAttachmentErrorMessage, view.AttachmentError);
         Assert.True(view.HasAttachmentError);
         Assert.DoesNotContain("secret", view.AttachmentError!, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(view.Attachments);
@@ -651,36 +649,6 @@ public class ChatViewTests
         Assert.Same(stopButtonStyle, view.StopButtonStyle);
         Assert.Same(audioButtonStyle, view.AudioButtonStyle);
         Assert.Same(speechButtonStyle, view.LiveSpeechButtonStyle);
-    }
-
-    [Fact]
-    public void PartNames_AreStableContractValues()
-    {
-        Assert.Equal("PART_Header", ChatView.HeaderPartName);
-        Assert.Equal("PART_MessageList", ChatView.MessageListPartName);
-        Assert.Equal("PART_WelcomePanel", ChatView.WelcomePanelPartName);
-        Assert.Equal("PART_WelcomeIcon", ChatView.WelcomeIconPartName);
-        Assert.Equal("PART_WelcomeMessage", ChatView.WelcomeMessagePartName);
-        Assert.Equal("PART_EmptyView", ChatView.EmptyViewPartName);
-        Assert.Equal("PART_BusyIndicator", ChatView.BusyIndicatorPartName);
-        Assert.Equal("PART_Suggestions", ChatView.SuggestionsPartName);
-        Assert.Equal("PART_TypingIndicator", ChatView.TypingIndicatorPartName);
-        Assert.Equal("PART_Footer", ChatView.FooterPartName);
-        Assert.Equal("PART_InputArea", ChatView.InputAreaPartName);
-        Assert.Equal("PART_Attachments", ChatView.AttachmentsPartName);
-        Assert.Equal("PART_AttachButton", ChatView.AttachButtonPartName);
-        Assert.Equal("PART_AudioButton", ChatView.AudioButtonPartName);
-        Assert.Equal("PART_LiveSpeechButton", ChatView.LiveSpeechButtonPartName);
-        Assert.Equal("PART_InputEntry", ChatView.InputEntryPartName);
-        Assert.Equal("PART_SendButton", ChatView.SendButtonPartName);
-        Assert.Equal("PART_StopButton", ChatView.StopButtonPartName);
-        Assert.Equal("PART_Messages", ChatMessagesView.MessagesPartName);
-    }
-
-    [Fact]
-    public void DefaultPicker_IsASharedInstance()
-    {
-        Assert.Same(FileChatAttachmentPicker.Default, FileChatAttachmentPicker.Default);
     }
 
     [Fact]

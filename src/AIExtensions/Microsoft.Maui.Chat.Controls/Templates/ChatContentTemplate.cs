@@ -155,7 +155,7 @@ public abstract class ChatContentTemplate : BindableObject
     /// <returns>The prepared message view.</returns>
     protected static View WrapInMessageChrome(
         View body,
-        Microsoft.Maui.Chat.ChatContentPresentation? presentationOverride = null)
+        ChatContentPresentation? presentationOverride = null)
     {
         ArgumentNullException.ThrowIfNull(body);
 

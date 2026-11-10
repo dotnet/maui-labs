@@ -1,6 +1,6 @@
 namespace Microsoft.Maui.Chat;
 
-/// <summary>Picks files for the chat renderer composer.</summary>
+/// <summary>Picks files for the chat composer.</summary>
 /// <remarks>
 /// The default implementation wraps the platform file picker. Replace it to source attachments from
 /// anywhere else, or to make picking deterministic in tests.
@@ -9,8 +9,7 @@ public interface IChatAttachmentPicker
 {
     /// <summary>Prompts the user to pick one or more files.</summary>
     /// <param name="fileTypes">
-    /// An optional renderer-defined file type filter, or <see langword="null"/> for any. Native MAUI
-    /// hosts typically provide their platform's picker filter; other renderers may provide a different value.
+    /// An optional file type filter, typically a <c>FilePickerFileType</c>, or <see langword="null"/> for any.
     /// </param>
     /// <param name="maxBytesPerFile">The largest accepted file size in bytes.</param>
     /// <param name="cancellationToken">Cancels the pick.</param>

@@ -91,7 +91,10 @@ public sealed class TeamChatViewModel : INotifyPropertyChanged
 
     public ObservableChatConversation Conversation { get; }
 
-    /// <summary>Gets the singleton composer shared by the native and Blazor chat surfaces.</summary>
+    /// <summary>
+    /// Gets the composer bound to the page's chat view, so the simulator panel can stage attachments
+    /// and switch microphones.
+    /// </summary>
     public ChatComposerController ComposerController { get; }
 
     public IReadOnlyList<ChatParticipant> Participants { get; }

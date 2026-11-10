@@ -37,17 +37,16 @@ public static class AppBuilderExtensions
     }
 
     /// <summary>
-    /// Registers the neutral <see cref="IChatAttachmentPicker"/>, <see cref="IChatAudioRecorder"/>,
-    /// and <see cref="IChatSpeechRecognizer"/> defaults via <c>TryAddSingleton</c> so a downstream
-    /// package (for example the Blazor Hybrid chat controls) can chain to a single source of truth.
+    /// Registers the default <see cref="IChatAttachmentPicker"/>, <see cref="IChatAudioRecorder"/>,
+    /// and <see cref="IChatSpeechRecognizer"/> services via <c>TryAddSingleton</c>.
     /// </summary>
     /// <param name="services">The service collection to extend.</param>
     /// <returns>The same <paramref name="services"/> for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
     /// <remarks>
-    /// This is the seam layer-2 packages (and other consumers) call to guarantee the neutral
-    /// defaults are present regardless of whether the app also called <see cref="UseChatControls"/>.
-    /// The registrations use <c>TryAddSingleton</c>, so an app-supplied registration always wins.
+    /// Call this to guarantee the defaults are present regardless of whether the app also called
+    /// <see cref="UseChatControls"/>. The registrations use <c>TryAddSingleton</c>, so an app-supplied
+    /// registration always wins.
     /// </remarks>
     public static IServiceCollection AddChatControlsDefaults(this IServiceCollection services)
     {

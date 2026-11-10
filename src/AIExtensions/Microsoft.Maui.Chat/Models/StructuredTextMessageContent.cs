@@ -1,12 +1,12 @@
 namespace Microsoft.Maui.Chat;
 
 /// <summary>
-/// Text content with a structured document projection for a specialized renderer.
+/// Text content with a structured document projection for a specialized view.
 /// </summary>
 /// <typeparam name="TDocument">The provider-owned structured document type.</typeparam>
 /// <remarks>
 /// The text remains the universal fallback, so a host with no template for <typeparamref name="TDocument"/>
-/// still renders a readable message through default text renderer. The neutral chat package
+/// still renders a readable message through the default text view. The chat model
 /// does not interpret or depend on the document type.
 /// </remarks>
 public class StructuredTextMessageContent<TDocument> : TextMessageContent

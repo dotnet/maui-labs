@@ -6,49 +6,6 @@ namespace Microsoft.Maui.Chat.Controls.Tests;
 public class ChatInputTests
 {
     [Fact]
-    public void InputContext_ReflectsComposerState()
-    {
-        var view = new ChatView
-        {
-            Conversation = ChatFactory.Conversation(),
-            Text = "hello",
-        };
-
-        Assert.Same(view.InputContext, view.InputContext);
-        Assert.Equal("hello", view.InputContext.Text);
-        Assert.True(view.InputContext.CanSubmit);
-        Assert.False(view.InputContext.CanCancel);
-        Assert.False(view.InputContext.IsComposing);
-
-        view.InputContext.SetComposing(true);
-
-        Assert.True(view.IsComposing);
-        Assert.False(view.CanSend);
-        Assert.False(view.InputContext.CanSubmit);
-    }
-
-    [Fact]
-    public void InputContext_CallbackCanDisposeDuringNotification()
-    {
-        var view = new ChatView();
-        var firstCalls = 0;
-        var secondCalls = 0;
-        IDisposable? first = null;
-        first = view.InputContext.RegisterOnChanged(() =>
-        {
-            firstCalls++;
-            first!.Dispose();
-        });
-        view.InputContext.RegisterOnChanged(() => secondCalls++);
-
-        view.Text = "one";
-        view.Text = "two";
-
-        Assert.Equal(1, firstCalls);
-        Assert.Equal(2, secondCalls);
-    }
-
-    [Fact]
     public void DefaultSpeechRecognizer_OnlyRetriesKnownTransientFailures()
     {
         Assert.Equal(
@@ -540,7 +497,7 @@ public class ChatInputTests
         Assert.Equal(4, recognizer.StartCount);
         Assert.False(view.IsLiveSpeechEnabled);
         Assert.Equal(
-            ChatView.DefaultSpeechRecognitionErrorMessage,
+            ChatComposerController.DefaultSpeechRecognitionErrorMessage,
             view.InputErrorMessage);
     }
 
@@ -561,7 +518,7 @@ public class ChatInputTests
 
         Assert.Equal(4, recognizer.StartCount);
         Assert.Equal(
-            ChatView.DefaultSpeechRecognitionErrorMessage,
+            ChatComposerController.DefaultSpeechRecognitionErrorMessage,
             view.InputErrorMessage);
     }
 

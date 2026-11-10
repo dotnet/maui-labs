@@ -152,9 +152,6 @@ public class MessageListView : ChatMessagesView
         return selector;
     }
 
-    internal ChatContentTemplateSelector CreateAiTemplateSelector() =>
-        CreateTemplateSelector();
-
     private void OnSessionChanged(
         AgentContext? oldSession,
         AgentContext? newSession)

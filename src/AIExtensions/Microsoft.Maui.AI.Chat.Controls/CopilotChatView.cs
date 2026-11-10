@@ -1,4 +1,3 @@
-using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls.Themes;
 using Microsoft.Maui.Chat.Controls;
@@ -64,7 +63,7 @@ public class CopilotChatView : ChatView
     /// <summary>Initializes a new AI chat view.</summary>
     public CopilotChatView()
     {
-        SetDynamicResource(MessageListTemplateProperty, ChatThemeKeys.MessageListTemplate);
+        SetDynamicResource(MessageListTemplateProperty, AIChatThemeKeys.MessageListTemplate);
         InputAreaCornerRadius = 14;
         ShowBusyIndicator = false;
     }
@@ -127,16 +126,10 @@ public class CopilotChatView : ChatView
             ChatThemeLoader.EnsureLoaded(application.Resources);
             SetDynamicResource(
                 MessageListTemplateProperty,
-                ChatThemeKeys.MessageListTemplate);
+                AIChatThemeKeys.MessageListTemplate);
         }
 
         base.OnApplyTemplate();
-    }
-
-    internal void AttachMessageListPart(MessageListView? messageList)
-    {
-        if (messageList is not null)
-            ApplyMessageListProperties(messageList);
     }
 
     /// <inheritdoc />
@@ -145,56 +138,6 @@ public class CopilotChatView : ChatView
         base.ApplyMessageListProperties(messageList);
         if (messageList is MessageListView agentMessageList)
             agentMessageList.Presentation = _agentConversation;
-    }
-
-    internal new void AttachSuggestionsPart(Layout? suggestionsPart) =>
-        base.AttachSuggestionsPart(suggestionsPart);
-
-    internal void UpdateWelcomeVisibility()
-    {
-        // State is maintained by ChatView's conversation and suggestion subscriptions.
-    }
-
-    internal Task SendCurrentTextAsync() =>
-        SendAsync();
-
-    internal Task PickAttachmentsFromButtonAsync() =>
-        PickAttachmentsAsync();
-
-    internal ChatMessage? TakePendingMessage()
-    {
-        var draft = CreateDraft();
-        if (draft.IsEmpty)
-            return null;
-
-        var contents = new List<AIContent>();
-        if (draft.HasText)
-            contents.Add(new TextContent(draft.Text));
-
-        foreach (var attachment in draft.Attachments)
-        {
-            if (attachment is ChatAttachment agentAttachment)
-            {
-                contents.Add(agentAttachment.Content);
-            }
-            else if (attachment.Uri is { } uri)
-            {
-                contents.Add(new UriContent(uri, attachment.MediaType));
-            }
-            else
-            {
-                contents.Add(new DataContent(
-                    attachment.Data,
-                    attachment.MediaType)
-                {
-                    Name = attachment.FileName
-                });
-            }
-        }
-
-        Text = string.Empty;
-        ClearAttachments();
-        return new ChatMessage(ChatRole.User, contents);
     }
 
     private void OnSessionChanged(

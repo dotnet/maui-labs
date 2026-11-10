@@ -5,7 +5,6 @@ using Microsoft.Maui.AI.Chat.Controls.Tests.TestHelpers;
 namespace Microsoft.Maui.AI.Chat.Controls.Tests;
 
 /// <summary>
-/// Mirrors: Blazor.Tests/Components/ConversationTurnRendererTests.cs
 /// Tests ContentContext — the MAUI bridge between Core ContentBlocks and the view layer.
 /// Verifies all derived properties correctly expose the underlying block state.
 /// </summary>
@@ -205,7 +204,7 @@ public class ContentContextTests
         context.PropertyChanged += (_, _) => rowChanges++;
 
         Assert.IsType<TextContentBlock>(context.Block).AppendText(" more");
-        context.NotifyBlockChanged();
+        context.AgentContent.NotifyChanged();
 
         Assert.Equal(1, contentChanges);
         Assert.Equal(0, rowChanges);
@@ -219,7 +218,7 @@ public class ContentContextTests
 
         view.ApplyContentContext(context);
         Assert.IsType<TextContentBlock>(context.Block).AppendText(" more");
-        context.NotifyBlockChanged();
+        context.AgentContent.NotifyChanged();
 
         Assert.Same(context, view.ContentContext);
         Assert.Equal(2, view.RefreshCount);
