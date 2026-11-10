@@ -27,7 +27,7 @@ All **34** fixtures must execute and pass: the shared Layout, Preview health, sy
 connection-recovery, command-policy, and viewport-navigation checks,
 cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticInputsRevision`
 invalidation/Live rescanning with unchanged geometry, two queued Live cancellation checks,
-command-policy/capability presentation, responsive viewport zoom controls,
+responsive viewport zoom controls,
 three property/Network synchronization checks, and three connection recovery checks covering
 Retry feedback/reduced motion, hung state-request cancellation, and recovery with a live event
 socket (including after a webview visibility change), plus three capability-policy checks covering

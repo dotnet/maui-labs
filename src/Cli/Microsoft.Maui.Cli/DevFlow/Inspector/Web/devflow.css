@@ -228,6 +228,7 @@ body.df-replaying #df-viewport-wrap::after {
 .df-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .df-pane-grow { flex: 1 1 auto; }
 #df-view-pane { --df-preview-header-height: 33px; position: relative; min-width: 180px; min-height: 180px; container: preview-pane / inline-size; }
+#df-view-pane > .df-pane-header { min-height: var(--df-preview-header-height); box-sizing: border-box; }
 .df-pane-header { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 4px 10px;
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--df-muted);
   background: var(--df-surface); border-bottom: 1px solid var(--df-border-subtle); user-select: none; white-space: nowrap; }

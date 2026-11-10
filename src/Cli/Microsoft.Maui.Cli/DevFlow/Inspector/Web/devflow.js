@@ -486,6 +486,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
   let gestureFrame = null;
   let gestureViewportRect = null;
   let gesturePointerId = null;
+  let cancelledGesturePointerId = null;
   let isGesturing = false;
   let isDragging = false;
   let dragResetTimer = null;
@@ -1535,7 +1536,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
   }
 
   viewport.addEventListener('wheel', (e) => {
-    if (e.defaultPrevented) return;
+    if (e.ctrlKey || e.metaKey || e.defaultPrevented) return;
     e.preventDefault();
     if (!ensureCanInteract()) return;
     if (scrollFrame && scrollFrame !== committedFrame) {
@@ -1558,6 +1559,7 @@ import { createViewportController } from './inspector-viewport-controller.js';
   // ── Pointer Drag → Gesture ──
   viewport.addEventListener('pointerdown', (e) => {
     if (e.defaultPrevented) return;
+    if (cancelledGesturePointerId !== null) return;
     if (e.button !== 0 || !e.isPrimary || isGesturing) return;
     if (!ensureCanInteract()) return;
     if (dragResetTimer) {
@@ -1591,20 +1593,41 @@ import { createViewportController } from './inspector-viewport-controller.js';
     if (Math.hypot(e.clientX - s0.sx, e.clientY - s0.sy) > 8) isDragging = true;
   });
 
-  viewport.addEventListener('pointerup', async (e) => {
-    if (!isGesturing || e.pointerId !== gesturePointerId) return;
-    const points = gesturePoints;
-    const frame = gestureFrame || committedFrame;
+  function scheduleDragReset() {
+    if (dragResetTimer) clearTimeout(dragResetTimer);
+    dragResetTimer = setTimeout(() => {
+      dragResetTimer = null;
+      if (!isGesturing && cancelledGesturePointerId === null) isDragging = false;
+    }, 50);
+  }
+
+  function clearAppGestureState() {
     isGesturing = false;
     gesturePoints = [];
     gestureFrame = null;
     gestureViewportRect = null;
     gesturePointerId = null;
     viewportController?.scheduleLayout();
-    dragResetTimer = setTimeout(() => {
-      dragResetTimer = null;
-      if (!isGesturing) isDragging = false;
-    }, 50);
+  }
+
+  function finishCancelledAppGesture(event) {
+    if (cancelledGesturePointerId === null || event.pointerId !== cancelledGesturePointerId)
+      return false;
+    cancelledGesturePointerId = null;
+    scheduleDragReset();
+    return true;
+  }
+
+  viewport.addEventListener('pointerup', async (e) => {
+    if (finishCancelledAppGesture(e)) {
+      e.preventDefault();
+      return;
+    }
+    if (!isGesturing || e.pointerId !== gesturePointerId) return;
+    const points = gesturePoints;
+    const frame = gestureFrame || committedFrame;
+    clearAppGestureState();
+    scheduleDragReset();
 
     if (points.length >= 2) {
       const first = points[0];
@@ -1636,20 +1659,20 @@ import { createViewportController } from './inspector-viewport-controller.js';
     }
 
   });
-  function cancelAppGesture(event) {
-    if (!isGesturing || event.pointerId !== gesturePointerId) return;
-    isGesturing = false;
-    isDragging = false;
-    gesturePoints = [];
-    gestureFrame = null;
-    gestureViewportRect = null;
-    gesturePointerId = null;
-    viewportController?.scheduleLayout();
-    if (dragResetTimer) clearTimeout(dragResetTimer);
-    dragResetTimer = setTimeout(() => {
-      dragResetTimer = null;
-      if (!isGesturing) isDragging = false;
-    }, 50);
+  function cancelAppGesture(event, { suppressClickUntilRelease = false } = {}) {
+    if (!isGesturing) {
+      if (event && finishCancelledAppGesture(event)) event.preventDefault();
+      return;
+    }
+    if (event && event.pointerId !== gesturePointerId) return;
+    const pointerId = gesturePointerId;
+    clearAppGestureState();
+    if (suppressClickUntilRelease) {
+      cancelledGesturePointerId = pointerId;
+      isDragging = true;
+    } else {
+      isDragging = false;
+    }
   }
   viewport.addEventListener('pointercancel', cancelAppGesture);
   viewport.addEventListener('lostpointercapture', cancelAppGesture);
@@ -4430,6 +4453,8 @@ import { createViewportController } from './inspector-viewport-controller.js';
     isEditing: () => !!activeEditor,
     isCommandEnabled: id => commandStates[id]?.enabled !== false,
     canNavigate: () => !isGesturing,
+    onNavigationBlocked: () =>
+      cancelAppGesture(null, { suppressClickUntilRelease: true }),
     onTransformChanged: ({ bounds, transform }) =>
       scheduleScreenshotResolution(bounds.contentWidth, bounds.contentHeight, transform.scale),
   });

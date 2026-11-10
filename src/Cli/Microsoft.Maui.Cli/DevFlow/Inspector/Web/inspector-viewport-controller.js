@@ -23,6 +23,13 @@ function sameTransform(left, right) {
     && Math.abs(left.translateY - right.translateY) < ZOOM_EPSILON;
 }
 
+function sameBounds(left, right) {
+  return left.contentWidth === right.contentWidth
+    && left.contentHeight === right.contentHeight
+    && left.viewportWidth === right.viewportWidth
+    && left.viewportHeight === right.viewportHeight;
+}
+
 function isEditableTarget(target, windowObject) {
   if (!(target instanceof windowObject.HTMLElement)) return false;
   return !!target.closest('input, textarea, select, button, [contenteditable="true"], [role="button"]');
@@ -44,6 +51,7 @@ export function createViewportController(options) {
     isEditing = () => false,
     isCommandEnabled = () => true,
     canNavigate = () => true,
+    onNavigationBlocked = () => {},
     onTransformChanged = () => {},
   } = options;
 
@@ -148,9 +156,9 @@ export function createViewportController(options) {
 
   function render(announce = false) {
     const bounds = readBounds();
-    const rendered = renderedTransform();
     stage.style.width = `${bounds.viewportWidth}px`;
     stage.style.height = `${bounds.viewportHeight}px`;
+    const rendered = renderedTransform();
     viewport.style.transform =
       `translate(${rendered.translateX}px, ${rendered.translateY}px) scale(${rendered.scale})`;
     syncControls();
@@ -163,8 +171,11 @@ export function createViewportController(options) {
   }
 
   function applyLayout({ preserveCenter = true, announce = false } = {}) {
-    if (!canNavigate() && lastBounds) return false;
     const bounds = readBounds();
+    if (!canNavigate() && lastBounds) {
+      if (!sameBounds(bounds, lastBounds)) onNavigationBlocked();
+      if (!canNavigate()) return false;
+    }
     if (view.mode === 'fit') {
       view.transform = centerViewportTransform(fitViewportScale(bounds), bounds);
     } else if (preserveCenter && lastBounds) {
@@ -306,7 +317,13 @@ export function createViewportController(options) {
   }
 
   function onPointerDown(event) {
-    if (panSession?.cancelled) finishPan(null);
+    if (panSession?.cancelled) {
+      if (event.pointerType !== panSession.pointerType) {
+        event.preventDefault();
+        return;
+      }
+      finishPan(null);
+    }
     const middleButton = event.pointerType !== 'touch' && event.button === 1;
     const spaceDrag = event.pointerType !== 'touch' && event.button === 0 && spacePanArmed;
     if (!middleButton && !spaceDrag) {
@@ -322,6 +339,7 @@ export function createViewportController(options) {
     wrap.focus({ preventScroll: true, focusVisible: false });
     panSession = {
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
       lastClientX: event.clientX,
       lastClientY: event.clientY,
       cancelled: false,
