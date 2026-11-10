@@ -1574,7 +1574,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
             return new ScreenshotCaptureOutcome
             {
                 Data = bytes,
-                Density = GetNativeElementDisplayDensity(elementInfo) ?? 1.0
+                Density = GetNativeElementDisplayDensity(elementInfo) ?? 1.0,
+                LogicalWidth = GetElementLogicalWidth(elementInfo),
+                LogicalHeight = GetElementLogicalHeight(elementInfo)
             };
         }
 
@@ -1593,7 +1595,13 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 Data = bytes,
                 Failure = bytes == null ? DescribeScreenshotFailure() : null,
                 Density = GetNativeElementDisplayDensity(nativeElementInfo)
-                    ?? GetWindowDisplayDensity(GetWindow(nativeElementInfo?.WindowId ?? windowIndex))
+                    ?? GetWindowDisplayDensity(GetWindow(nativeElementInfo?.WindowId ?? windowIndex)),
+                LogicalWidth = resolvedElement is VisualElement capturedVisualElement
+                    ? PositiveOrNull(capturedVisualElement.Width)
+                    : GetElementLogicalWidth(nativeElementInfo),
+                LogicalHeight = resolvedElement is VisualElement capturedVisualElementHeight
+                    ? PositiveOrNull(capturedVisualElementHeight.Height)
+                    : GetElementLogicalHeight(nativeElementInfo)
             };
         }) ?? new ScreenshotCaptureOutcome();
     }
@@ -1616,6 +1624,15 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
 
         return null;
     }
+
+    private static double? GetElementLogicalWidth(ElementInfo? elementInfo)
+        => PositiveOrNull((elementInfo?.Bounds ?? elementInfo?.WindowBounds)?.Width ?? 0);
+
+    private static double? GetElementLogicalHeight(ElementInfo? elementInfo)
+        => PositiveOrNull((elementInfo?.Bounds ?? elementInfo?.WindowBounds)?.Height ?? 0);
+
+    private static double? PositiveOrNull(double value)
+        => double.IsFinite(value) && value > 0 ? value : null;
 
     private static UiCaptureContext GetReservedCapture(HttpRequest request)
         => request.MutationState is UiCaptureContext capture ? capture : default;
@@ -2078,7 +2095,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                      && !string.Equals(scaleParam, "full", StringComparison.OrdinalIgnoreCase);
         }
 
-        ScreenshotImageResult ProcessScreenshot(byte[] data, double density)
+        ScreenshotImageResult ProcessScreenshot(
+            byte[] data,
+            double density,
+            double? logicalWidth = null,
+            double? logicalHeight = null)
             => ProcessScreenshotPng(
                 data,
                 maxWidth,
@@ -2086,7 +2107,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 autoScale,
                 scaleModeExplicit,
                 resolutionHints,
-                includeMetadata: SupportsScreenshotResolutionHints);
+                includeMetadata: SupportsScreenshotResolutionHints,
+                logicalWidth: logicalWidth,
+                logicalHeight: logicalHeight);
 
         HttpResponse CompleteScreenshot(ScreenshotImageResult image)
         {
@@ -2129,9 +2152,19 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 var pngData = await CaptureFullScreenAsync(windowIndex);
                 if (pngData != null)
                 {
-                    var density = await DispatchAsync(
-                        () => GetWindowDisplayDensity(GetWindow(windowIndex)));
-                    return CompleteScreenshot(ProcessScreenshot(pngData, density));
+                    var metrics = await DispatchAsync(() =>
+                    {
+                        var window = GetWindow(windowIndex);
+                        return (
+                            Density: GetWindowDisplayDensity(window),
+                            Width: PositiveOrNull(window?.Width ?? 0),
+                            Height: PositiveOrNull(window?.Height ?? 0));
+                    });
+                    return CompleteScreenshot(ProcessScreenshot(
+                        pngData,
+                        metrics.Density,
+                        metrics.Width,
+                        metrics.Height));
                 }
                 return CompleteScreenshotFailure(
                     HttpResponse.Error("Full-screen capture not supported on this platform"));
@@ -2185,7 +2218,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             outcome?.Failure,
                             $"Capture returned null for element '{elementId}'"));
 
-                return CompleteScreenshot(ProcessScreenshot(outcome.Data, outcome.Density));
+                return CompleteScreenshot(ProcessScreenshot(
+                    outcome.Data,
+                    outcome.Density,
+                    outcome.LogicalWidth,
+                    outcome.LogicalHeight));
             }
             catch (Exception ex)
             {
@@ -2243,7 +2280,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                             outcome?.Failure,
                             $"Capture returned null for element '{matchId}'"));
 
-                return CompleteScreenshot(ProcessScreenshot(outcome.Data, outcome.Density));
+                return CompleteScreenshot(ProcessScreenshot(
+                    outcome.Data,
+                    outcome.Density,
+                    outcome.LogicalWidth,
+                    outcome.LogicalHeight));
             }
             catch (FormatException ex)
             {
@@ -2289,13 +2330,23 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                     }
                 }
 
+                VisualElement? capturedElement;
                 byte[]? bytes;
                 if (topModal != null)
+                {
+                    capturedElement = topModal;
                     bytes = await CaptureScreenshotAsync(topModal);
+                }
                 else if (window.Page is VisualElement rootElement)
+                {
+                    capturedElement = rootElement;
                     bytes = await CaptureScreenshotAsync(rootElement);
+                }
                 else
+                {
+                    capturedElement = null;
                     bytes = null;
+                }
 
                 // Diagnose in the same UI-thread turn as the failed capture so the
                 // reported window/app state matches the state at capture time.
@@ -2303,7 +2354,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 {
                     Data = bytes,
                     Failure = bytes == null ? DescribeScreenshotFailure() : null,
-                    Density = GetWindowDisplayDensity(window)
+                    Density = GetWindowDisplayDensity(window),
+                    LogicalWidth = PositiveOrNull(capturedElement?.Width ?? 0),
+                    LogicalHeight = PositiveOrNull(capturedElement?.Height ?? 0)
                 };
             });
 
@@ -2313,7 +2366,11 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                         outcome?.Failure,
                         "Failed to capture screenshot"));
 
-            return CompleteScreenshot(ProcessScreenshot(outcome.Data, outcome.Density));
+            return CompleteScreenshot(ProcessScreenshot(
+                outcome.Data,
+                outcome.Density,
+                outcome.LogicalWidth,
+                outcome.LogicalHeight));
         }
         catch (Exception ex)
         {
@@ -2386,6 +2443,8 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
         public byte[]? Data { get; init; }
         public ScreenshotCaptureFailure? Failure { get; init; }
         public double Density { get; init; } = 1.0;
+        public double? LogicalWidth { get; init; }
+        public double? LogicalHeight { get; init; }
     }
 
     protected override async Task<HttpResponse> HandleProperty(HttpRequest request)

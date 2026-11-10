@@ -40,6 +40,17 @@ internal static partial class NativeUi
     public static double ScreenCaptureDensity
         => ResolveScreenCaptureWindow()?.BackingScaleFactor ?? DisplayDensity;
 
+    public static (double Width, double Height) GetCaptureLogicalSize(object? viewObject)
+        => viewObject switch
+        {
+            NSWindow window => (window.Frame.Width, window.Frame.Height),
+            NSView view => (view.Bounds.Width, view.Bounds.Height),
+            _ => (0, 0)
+        };
+
+    public static (double Width, double Height) ScreenCaptureLogicalSize
+        => GetCaptureLogicalSize(ResolveScreenCaptureWindow());
+
     public static IReadOnlyList<object> GetRoots()
     {
         var roots = new List<object>();

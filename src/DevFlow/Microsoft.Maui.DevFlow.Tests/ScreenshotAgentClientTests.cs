@@ -211,6 +211,74 @@ public class ScreenshotAgentClientTests
     }
 
     [Fact]
+    public async Task ScreenshotResultAsync_MaxEncodedBytes_RejectsOversizedChunkedError()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            await ReadRequestAsync(stream);
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(
+                "HTTP/1.1 500 Internal Server Error\r\n" +
+                "Content-Type: application/json\r\n" +
+                "Transfer-Encoding: chunked\r\n" +
+                "Connection: close\r\n\r\n" +
+                "3\r\nabc\r\n" +
+                "3\r\ndef\r\n" +
+                "0\r\n\r\n"));
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync(
+            window: null,
+            elementId: null,
+            selector: null,
+            maxWidth: null,
+            scale: null,
+            captureEpoch: null,
+            registryGeneration: null,
+            resolution: new ScreenshotResolutionOptions
+            {
+                MaxEncodedBytes = 5
+            });
+
+        Assert.False(result.Success);
+            Assert.Equal("screenshot-too-large", result.Reason);
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_DefaultLimit_RejectsOversizedNotSupportedError()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            await ReadRequestAsync(stream);
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(
+                "HTTP/1.1 501 Not Implemented\r\n" +
+                "Content-Type: application/json\r\n" +
+                "Content-Length: 70000\r\n" +
+                "Connection: close\r\n\r\n"));
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal("screenshot-too-large", result.Reason);
+        await serverTask;
+    }
+
+    [Fact]
     public async Task ScreenshotResultAsync_MetadataDisagreesWithPng_IgnoresLogicalMetadata()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
