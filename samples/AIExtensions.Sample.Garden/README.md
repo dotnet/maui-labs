@@ -24,11 +24,6 @@ past purchases using source-generated tools.
   animated modal overlays.
 - **Approval flow** — checkout and destructive actions pause the chat and show an
   inline approve/reject banner.
-- **Provider-neutral crew chat** — the compose button in the header opens a three-person
-  `Microsoft.Maui.Chat.Controls.ChatView` with text, local media, delivery states, typing,
-  attachments, and a custom task-card content template. The page and view model use no AI types.
-- **Azure OpenAI backend** — chat and image generation use the shared `AI:*`
-  user-secret configuration.
 
 ## Tool sources and lifetimes
 
@@ -75,11 +70,6 @@ participate in a shared tool context while still writing through to singleton st
 | Transient tool host | `ViewModels/Catalog/CatalogViewModel.cs` → `recommend_bundle` |
 | Shell modal navigation tools | `ViewModels/MainViewModel.cs` + `AppShell.xaml.cs` |
 | Responsive welcome cards and centered chat layout | `Views/ChatView.xaml` + `Pages/MainPage.xaml` |
-| Custom/default block handlers and raw block preview | `Views/ChatView.xaml` + `ViewModels/ChatViewModel.cs` |
-
-The provider-neutral group-chat showcase now lives in
-[`samples/ChatControls.Sample`](../ChatControls.Sample/README.md), where it can exercise the base
-`Microsoft.Maui.Chat.Controls` package without the Azure AI application around it.
 
 ## Approval flow
 
@@ -94,11 +84,10 @@ or reject it.
 dotnet build samples/AIExtensions.Sample.Garden -f net10.0-maccatalyst
 ```
 
-Configure the shared Azure OpenAI user secrets:
+Configure user secrets (shared across AI Extensions samples):
 
 ```bash
 dotnet user-secrets --id ai-attributes-secrets set "AI:Endpoint" "<your-endpoint>"
 dotnet user-secrets --id ai-attributes-secrets set "AI:ApiKey" "<your-key>"
 dotnet user-secrets --id ai-attributes-secrets set "AI:DeploymentName" "<your-deployment>"
-dotnet user-secrets --id ai-attributes-secrets set "AI:ImageDeploymentName" "<your-image-deployment>"
 ```

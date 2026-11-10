@@ -1,3 +1,5 @@
+using AIExtensions.Sample.Garden.ViewModels;
+
 namespace AIExtensions.Sample.Garden.Messages;
 
 /// <summary>
@@ -11,22 +13,14 @@ public sealed class CartChangedMessage;
 public sealed class ChatTurnCompletedMessage;
 
 /// <summary>
-/// Broadcast when the rendering axis is toggled between the designed views and the raw block-preview
-/// inspector. The chat view swaps to the preview template set (which visualizes every block's type and
-/// values) in response.
+/// Broadcast when a new chat message is appended so views can scroll.
 /// </summary>
-public sealed class ChatBlockPreviewModeChangedMessage(bool isPreview)
+public sealed class ChatMessageAddedMessage(ChatMessageViewModel message)
 {
-    public bool IsPreview { get; } = isPreview;
+    public ChatMessageViewModel Message { get; } = message;
 }
 
 /// <summary>
-/// Request that the chat starts a fresh conversation, carrying the desired handler mode. The chat view
-/// clears the session when the mode is unchanged, or recreates it with the new handler set when the mode
-/// differs — so "new chat" and "switch handlers" flow through one path. (Handlers are baked into a
-/// session's pipeline, so changing them requires a new session.)
+/// Request that the chat VM starts a fresh session (clears history + messages).
 /// </summary>
-public sealed class StartNewChatSessionMessage(bool useCustomHandlers)
-{
-    public bool UseCustomHandlers { get; } = useCustomHandlers;
-}
+public sealed class StartNewChatSessionMessage;

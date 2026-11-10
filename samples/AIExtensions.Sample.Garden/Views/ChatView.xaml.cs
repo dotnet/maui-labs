@@ -1,14 +1,22 @@
+using AIExtensions.Sample.Garden.Messages;
+using CommunityToolkit.Mvvm.Messaging;
+
 namespace AIExtensions.Sample.Garden.Views;
 
-/// <summary>
-/// Hosts the single <c>CopilotChatView</c> declared in <c>ChatView.xaml</c>. The handler axis is driven
-/// by the view model (it recreates its <c>Session</c>), and the rendering axis is driven declaratively by
-/// the <c>ChatTemplateStyle</c> data trigger on <c>IsPreview</c> — so there is nothing to wire up here.
-/// </summary>
-public partial class ChatView : ContentView
+public partial class ChatView : ContentView, IRecipient<ChatMessageAddedMessage>
 {
     public ChatView()
     {
         InitializeComponent();
+        WeakReferenceMessenger.Default.Register(this);
+    }
+
+    void IRecipient<ChatMessageAddedMessage>.Receive(ChatMessageAddedMessage message)
+    {
+        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(50), () =>
+        {
+            try { MessagesView.ScrollTo(message.Message, position: ScrollToPosition.End, animate: true); }
+            catch { /* item may have been removed */ }
+        });
     }
 }
