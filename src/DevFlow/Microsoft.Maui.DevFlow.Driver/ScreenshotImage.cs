@@ -258,10 +258,6 @@ internal static class ScreenshotImage
             {
                 return false;
             }
-            var expectedAdler32 = BinaryPrimitives.ReadUInt32BigEndian(zlibData[^4..]);
-            uint adlerA = 1;
-            uint adlerB = 0;
-
             var bitsPerPixel = checked(channels * bitDepth);
             long decodedBytes;
             if (interlaceMethod == 0)
@@ -304,9 +300,7 @@ internal static class ScreenshotImage
                         zlib,
                         width,
                         height,
-                        bitsPerPixel,
-                        ref adlerA,
-                        ref adlerB))
+                        bitsPerPixel))
                     return false;
             }
             else
@@ -324,17 +318,14 @@ internal static class ScreenshotImage
                             zlib,
                             passWidth,
                             passHeight,
-                            bitsPerPixel,
-                            ref adlerA,
-                            ref adlerB))
+                            bitsPerPixel))
                     {
                         return false;
                     }
                 }
             }
 
-            var actualAdler32 = (adlerB << 16) | adlerA;
-            return zlib.ReadByte() == -1 && actualAdler32 == expectedAdler32;
+            return zlib.ReadByte() == -1;
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException or OverflowException)
         {
@@ -346,9 +337,7 @@ internal static class ScreenshotImage
         Stream decompressed,
         int width,
         int height,
-        int bitsPerPixel,
-        ref uint adlerA,
-        ref uint adlerB)
+        int bitsPerPixel)
     {
         var rowBytes = checked((width * (long)bitsPerPixel + 7) / 8);
         if (rowBytes > int.MaxValue - 1)
@@ -360,31 +349,9 @@ internal static class ScreenshotImage
             decompressed.ReadExactly(row);
             if (row[0] > 4)
                 return false;
-            UpdateAdler32(row, ref adlerA, ref adlerB);
         }
 
         return true;
-    }
-
-    private static void UpdateAdler32(
-        ReadOnlySpan<byte> data,
-        ref uint adlerA,
-        ref uint adlerB)
-    {
-        const uint Modulus = 65521;
-        const int MaximumDeferredModuloBytes = 5552;
-        while (!data.IsEmpty)
-        {
-            var chunk = data[..Math.Min(data.Length, MaximumDeferredModuloBytes)];
-            foreach (var value in chunk)
-            {
-                adlerA += value;
-                adlerB += adlerA;
-            }
-            adlerA %= Modulus;
-            adlerB %= Modulus;
-            data = data[chunk.Length..];
-        }
     }
 
     private static bool HasCompleteDeflateStream(
@@ -634,16 +601,39 @@ internal static class ScreenshotImage
 
         public DeflateBitReader(ReadOnlySpan<byte> data) => _data = data;
 
+        public int RemainingBits => _data.Length * 8 - _bitPosition;
+
         public bool TryReadBits(int count, out int value)
         {
-            value = 0;
-            if (count < 0 || count > 16 || _bitPosition > _data.Length * 8 - count)
+            if (!TryPeekBits(count, out value))
                 return false;
-            for (var bit = 0; bit < count; bit++)
-            {
-                value |= ((_data[_bitPosition >> 3] >> (_bitPosition & 7)) & 1) << bit;
-                _bitPosition++;
-            }
+            _bitPosition += count;
+            return true;
+        }
+
+        public bool TryPeekBits(int count, out int value)
+        {
+            value = 0;
+            if (count < 0 || count > 16 || RemainingBits < count)
+                return false;
+            if (count == 0)
+                return true;
+
+            var byteIndex = _bitPosition >> 3;
+            var bitOffset = _bitPosition & 7;
+            var byteCount = (bitOffset + count + 7) >> 3;
+            uint bits = 0;
+            for (var index = 0; index < byteCount; index++)
+                bits |= (uint)_data[byteIndex + index] << (index * 8);
+            value = (int)((bits >> bitOffset) & ((1u << count) - 1));
+            return true;
+        }
+
+        public bool TrySkipBits(int count)
+        {
+            if (count < 0 || RemainingBits < count)
+                return false;
+            _bitPosition += count;
             return true;
         }
 
@@ -674,12 +664,12 @@ internal static class ScreenshotImage
 
     private sealed class DeflateHuffman
     {
-        private readonly Dictionary<int, int> _symbols;
+        private readonly int[] _lookup;
         private readonly int _maximumBits;
 
-        private DeflateHuffman(Dictionary<int, int> symbols, int maximumBits)
+        private DeflateHuffman(int[] lookup, int maximumBits)
         {
-            _symbols = symbols;
+            _lookup = lookup;
             _maximumBits = maximumBits;
         }
 
@@ -720,37 +710,44 @@ internal static class ScreenshotImage
                 nextCodes[bits] = code;
             }
 
-            var symbols = new Dictionary<int, int>(symbolCount);
+            var lookup = new int[1 << maximumBits];
             for (var symbol = 0; symbol < lengths.Length; symbol++)
             {
                 var length = lengths[symbol];
                 if (length == 0)
                     continue;
                 var reversedCode = ReverseBits(nextCodes[length]++, length);
-                symbols[(length << 16) | reversedCode] = symbol;
+                var entry = (length << 16) | (symbol + 1);
+                var suffixCount = 1 << (maximumBits - length);
+                for (var suffix = 0; suffix < suffixCount; suffix++)
+                    lookup[reversedCode | (suffix << length)] = entry;
             }
 
-            huffman = new DeflateHuffman(symbols, maximumBits);
+            huffman = new DeflateHuffman(lookup, maximumBits);
             return true;
         }
 
         public bool TryDecode(ref DeflateBitReader reader, out int symbol)
         {
-            var code = 0;
-            for (var length = 1; length <= _maximumBits; length++)
+            symbol = 0;
+            var availableBits = Math.Min(_maximumBits, reader.RemainingBits);
+            if (availableBits <= 0 ||
+                !reader.TryPeekBits(availableBits, out var code))
             {
-                if (!reader.TryReadBits(1, out var bit))
-                {
-                    symbol = 0;
-                    return false;
-                }
-                code |= bit << (length - 1);
-                if (_symbols.TryGetValue((length << 16) | code, out symbol))
-                    return true;
+                return false;
             }
 
-            symbol = 0;
-            return false;
+            var entry = _lookup[code];
+            var length = entry >> 16;
+            if (entry == 0 ||
+                length > availableBits ||
+                !reader.TrySkipBits(length))
+            {
+                return false;
+            }
+
+            symbol = (entry & 0xffff) - 1;
+            return true;
         }
 
         private static int ReverseBits(int value, int bitCount)
