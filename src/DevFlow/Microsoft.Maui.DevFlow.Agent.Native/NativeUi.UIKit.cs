@@ -62,9 +62,6 @@ internal static partial class NativeUi
             ? (view.Bounds.Width, view.Bounds.Height)
             : (0, 0);
 
-    public static (double Width, double Height) ScreenCaptureLogicalSize
-        => GetCaptureLogicalSize(GetRoots().FirstOrDefault());
-
     public static IReadOnlyList<object> GetRoots()
     {
         var roots = new List<object>();

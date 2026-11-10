@@ -254,6 +254,15 @@ public sealed class ScreenshotImageTests : IDisposable
     }
 
     [Fact]
+    public void IsCompletePng_NonZeroTerminalDeflatePadding_ReturnsTrue()
+    {
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4z8DwHxAFAAH/Nie4jwAAAABJRU5ErkJggg==");
+
+        Assert.True(ScreenshotImage.IsCompletePng(png));
+    }
+
+    [Fact]
     public void IsCompletePng_CorruptChunkCrc_ReturnsFalse()
     {
         var png = CreatePng(2, 2);

@@ -283,8 +283,12 @@ internal static class ScreenshotImage
                         decodedBytes + GetPngPassByteCount(passWidth, passHeight, bitsPerPixel));
                 }
             }
-            const long MaxDecodedPngBytes = 512L * 1024 * 1024;
-            if (decodedBytes <= 0 || decodedBytes > MaxDecodedPngBytes)
+            const long MaxDecodedPngPixels = 16_777_216;
+            const long MaxDecodedPngBytes =
+                MaxDecodedPngPixels * 8 + 7L * 32_768;
+            if ((long)width * height > MaxDecodedPngPixels ||
+                decodedBytes <= 0 ||
+                decodedBytes > MaxDecodedPngBytes)
                 return false;
             if (!HasCompleteDeflateStream(zlibData[2..^4], decodedBytes))
                 return false;
@@ -368,10 +372,18 @@ internal static class ScreenshotImage
         ref uint adlerB)
     {
         const uint Modulus = 65521;
-        foreach (var value in data)
+        const int MaximumDeferredModuloBytes = 5552;
+        while (!data.IsEmpty)
         {
-            adlerA = (adlerA + value) % Modulus;
-            adlerB = (adlerB + adlerA) % Modulus;
+            var chunk = data[..Math.Min(data.Length, MaximumDeferredModuloBytes)];
+            foreach (var value in chunk)
+            {
+                adlerA += value;
+                adlerB += adlerA;
+            }
+            adlerA %= Modulus;
+            adlerB %= Modulus;
+            data = data[chunk.Length..];
         }
     }
 
@@ -439,7 +451,7 @@ internal static class ScreenshotImage
                 return false;
             if (finalBlock == 0)
                 continue;
-            return outputBytes == expectedOutputBytes && reader.HasOnlyZeroPadding();
+            return outputBytes == expectedOutputBytes && reader.HasOnlyBytePadding();
         }
     }
 
@@ -653,18 +665,10 @@ internal static class ScreenshotImage
             return true;
         }
 
-        public bool HasOnlyZeroPadding()
+        public bool HasOnlyBytePadding()
         {
             var remainingBits = _data.Length * 8 - _bitPosition;
-            if (remainingBits is < 0 or >= 8)
-                return false;
-            while (_bitPosition < _data.Length * 8)
-            {
-                if (((_data[_bitPosition >> 3] >> (_bitPosition & 7)) & 1) != 0)
-                    return false;
-                _bitPosition++;
-            }
-            return true;
+            return remainingBits is >= 0 and < 8;
         }
     }
 
