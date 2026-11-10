@@ -9,8 +9,8 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// Produced by <see cref="FunctionInvocationHandler"/> from M.E.AI <see cref="FunctionCallContent"/> and
 /// <see cref="FunctionResultContent"/>. Subclass it (with a custom <see cref="ContentBlockHandler{TState}"/>)
-/// to project a specific tool into a strongly-typed block. If the tool was not auto-invoked by the
-/// chat client, <see cref="AgentContext"/> runs it and feeds the result back to the model.
+/// to project a specific tool into a strongly-typed block. Server tools are invoked by
+/// <see cref="FunctionInvokingChatClient"/>; the engine only renders the call and its result.
 /// </remarks>
 public class FunctionInvocationContentBlock : ContentBlock
 {

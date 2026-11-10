@@ -245,9 +245,9 @@ public class AgentContextApprovalTests
     }
 
     [Fact]
-    public async Task MixedApprovalAndBackendTool_ContinuationPreservesPerMessageRoles()
+    public async Task MixedApprovalAndUIAction_ContinuationPreservesPerMessageRoles()
     {
-        var backendTool = AIFunctionFactory.Create(
+        var uiAction = AIFunctionFactory.Create(
             () => "sunny",
             "GetWeather",
             "Gets the weather");
@@ -268,7 +268,7 @@ public class AgentContextApprovalTests
         });
         var agent = new UIAgent(
             client,
-            new ChatOptions { Tools = [backendTool] });
+            options => options.RegisterUIAction(uiAction));
         var context = new AgentContext(agent);
         context.RegisterOnStatusChanged(status =>
         {
@@ -290,6 +290,9 @@ public class AgentContextApprovalTests
             message => message.Contents.Any(
                 content => content is FunctionResultContent));
         Assert.Equal(ChatRole.Tool, toolMessage.Role);
+        Assert.Equal(
+            "sunny",
+            Assert.IsType<FunctionResultContent>(Assert.Single(toolMessage.Contents)).Result?.ToString());
         var approvalMessage = Assert.Single(
             continuation,
             message => message.Contents.Any(
@@ -315,7 +318,7 @@ public class AgentContextApprovalTests
                     "approval-request",
                     approvalCall),
                 new FunctionCallContent(
-                    "backend-call",
+                    "ui-action-call",
                     "GetWeather"),
             ],
         };

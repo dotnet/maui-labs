@@ -279,7 +279,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("                        && result.CallId == call.CallId)");
         builder.AppendLine("                    {");
         builder.AppendLine("                        context.MarkHandled(result);");
-        builder.AppendLine("                        ApplyFunctionResult(state, result);");
+        builder.AppendLine("                        ApplyResult(state, result);");
         builder.AppendLine("                        break;");
         builder.AppendLine("                    }");
         builder.AppendLine("                }");
@@ -297,7 +297,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("                    && result.CallId == state.Call.CallId)");
         builder.AppendLine("                {");
         builder.AppendLine("                    context.MarkHandled(result);");
-        builder.AppendLine("                    ApplyFunctionResult(state, result);");
+        builder.AppendLine("                    ApplyResult(state, result);");
         builder.Append("                    return global::Microsoft.Maui.AI.Chat.BlockMappingResult<")
             .Append(model.FullyQualifiedType).AppendLine(">.Complete();");
         builder.AppendLine("                }");
@@ -308,18 +308,13 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
             .Append(model.FullyQualifiedType).AppendLine(">.Pass();");
         builder.AppendLine("    }");
         builder.AppendLine();
-        builder.Append("    protected override bool ApplyFunctionResult(")
+        builder.Append("    private static void ApplyResult(")
             .Append(model.FullyQualifiedType).AppendLine(" state,");
         builder.AppendLine(
             "        global::Microsoft.Extensions.AI.FunctionResultContent result)");
         builder.AppendLine("    {");
-        builder.AppendLine(
-            "        if (state.Call is null || result.CallId != state.Call.CallId)");
-        builder.AppendLine("            return false;");
-        builder.AppendLine();
         builder.AppendLine("        state.Result = result;");
         EmitResultProperties(builder, model.Results);
-        builder.AppendLine("        return true;");
         builder.AppendLine("    }");
         EmitConversionHelper(builder);
         builder.AppendLine("}");

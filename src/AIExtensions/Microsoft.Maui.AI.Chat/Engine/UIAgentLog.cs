@@ -22,9 +22,9 @@ internal static partial class UIAgentLog
     [LoggerMessage(104, LogLevel.Error, "SendMessageAsync: An error occurred while processing the response")]
     internal static partial void ProcessingError(ILogger logger, Exception exception);
 
-    [LoggerMessage(105, LogLevel.Warning, "InvokeToolAsync: Backend function '{FunctionName}' not found in ChatOptions.Tools")]
-    internal static partial void BackendFunctionNotFound(ILogger logger, string functionName);
+    [LoggerMessage(105, LogLevel.Error, "UI action '{FunctionName}' (CallId={CallId}) failed; returning an error result to the model")]
+    internal static partial void UIActionFailed(ILogger logger, string functionName, string callId, Exception exception);
 
-    [LoggerMessage(106, LogLevel.Debug, "InvokeToolAsync: Invoking backend function '{FunctionName}' (CallId={CallId})")]
-    internal static partial void InvokingBackendFunction(ILogger logger, string functionName, string callId);
+    [LoggerMessage(106, LogLevel.Warning, "Tool call '{FunctionName}' (CallId={CallId}) was not executed; returning an error result to the model")]
+    internal static partial void UnansweredToolCall(ILogger logger, string functionName, string callId);
 }

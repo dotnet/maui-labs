@@ -333,5 +333,4 @@ static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Complete() -> Microsoft
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Emit(Microsoft.Maui.AI.Chat.ContentBlock! block, TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Pass() -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
 static Microsoft.Maui.AI.Chat.BlockMappingResult<TState>.Update(TState state) -> Microsoft.Maui.AI.Chat.BlockMappingResult<TState>
-virtual Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>.ApplyFunctionResult(TState state, Microsoft.Extensions.AI.FunctionResultContent! result) -> bool
 virtual Microsoft.Maui.AI.Chat.RichContentBlock.AppendText(string! text) -> void
