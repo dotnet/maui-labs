@@ -142,6 +142,23 @@ test('active recording controls remain available when start capability or Previe
   }));
   assert.equal(readOnly['df-toggle-record'].availability, 'readOnly');
   assert.match(readOnly['df-toggle-record'].reason.text, /VS Code Inspector is driving/);
+
+  const disconnectedWithoutControl = evaluateCommandStates(inputs({
+    access: {
+      known: true,
+      connected: false,
+      healthy: false,
+      driveAllowed: false,
+      controlAllowed: false,
+      driveMessage: 'App disconnected - waiting for DevFlow to reconnect.',
+      isWriter: true,
+      heldByOther: false,
+      owner: null,
+    },
+    workflow,
+  }));
+  assert.equal(disconnectedWithoutControl['df-toggle-record'].availability, 'disconnected');
+  assert.equal(disconnectedWithoutControl['df-toggle-record'].reason.code, 'app-disconnected');
 });
 
 test('disconnected, delayed Preview, read-only, and missing-selection reasons stay distinct', () => {

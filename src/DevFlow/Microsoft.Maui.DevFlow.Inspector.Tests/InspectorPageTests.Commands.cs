@@ -122,12 +122,22 @@ public partial class InspectorLayoutWorkspaceTests
         await data.ClickAsync();
         var layoutTab = _page.Locator("#df-tab-layout");
         await layoutTab.ClickAsync();
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync(
+            new System.Text.RegularExpressions.Regex("Partial coverage|Unstable snapshot"));
         await layoutTab.FocusAsync();
         Volatile.Write(ref capabilities, NoLayoutCapabilityPayload);
         await _page.RunAndWaitForResponseAsync(
             () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
             response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
+        await Expect(layoutTab).ToBeHiddenAsync();
         Assert.Equal("df-tab-logs", await _page.EvaluateAsync<string>("document.activeElement.id"));
+
+        Volatile.Write(ref capabilities, FullCapabilityPayload);
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
+        await _page.Locator("#df-tab-layout").ClickAsync();
+        await Expect(_page.Locator("#layout-coverage")).ToHaveTextAsync("Stale snapshot");
 
         await _page.Locator("#df-toggle-tree").ClickAsync();
         await Expect(_page.Locator("#df-tree-pane")).ToBeVisibleAsync();
@@ -176,15 +186,69 @@ public partial class InspectorLayoutWorkspaceTests
     }
 
     [InspectorBrowserFact]
+    public async Task CommandPolicy_RevokedActionsDiscardQueuedInputAndPreserveDraft()
+    {
+        var capabilities = FullCapabilityPayload;
+        var scrollRequests = 0;
+        var fillRequests = 0;
+        _page.Request += (_, request) =>
+        {
+            if (request.Url.EndsWith("/api/scroll", StringComparison.Ordinal))
+                Interlocked.Increment(ref scrollRequests);
+            if (request.Url.EndsWith("/api/fill", StringComparison.Ordinal))
+                Interlocked.Increment(ref fillRequests);
+        };
+        await PrepareLayoutWorkspaceAsync(
+            capabilityResponse: () => Volatile.Read(ref capabilities),
+            elements: """
+                <div class="devflow-element" data-id="layout-root" data-type="Window" data-automationId="InputRoot" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:0px;top:0px;width:320px;height:600px;"></div>
+                <div class="devflow-element" data-id="layout-target" data-parentId="layout-root" data-type="Entry" data-automationId="Input" data-text="before" data-capabilities="set-value" data-isVisible="true" data-isEnabled="true" style="position:absolute;left:20px;top:40px;width:180px;height:40px;"></div>
+                """);
+
+        await _page.Locator(".devflow-element[data-id='layout-target']").ClickAsync();
+        var editor = _page.Locator("#app-viewport > input[data-element-id='layout-target']");
+        await Expect(editor).ToBeVisibleAsync();
+        await editor.FillAsync("preserved draft");
+        await _page.EvaluateAsync("""
+            () => document.getElementById('app-viewport').dispatchEvent(
+              new WheelEvent('wheel', {
+                bubbles: true,
+                cancelable: true,
+                clientX: 120,
+                clientY: 120,
+                deltaY: 100,
+              }))
+            """);
+
+        Volatile.Write(ref capabilities, ActionsUnsupportedCapabilityPayload);
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
+        await _page.Clock.RunForAsync(150);
+        await editor.PressAsync("Enter");
+
+        Assert.Equal(0, scrollRequests);
+        Assert.Equal(0, fillRequests);
+        await Expect(editor).ToHaveValueAsync("preserved draft");
+        await Expect(editor).ToHaveAttributeAsync("aria-invalid", "true");
+    }
+
+    [InspectorBrowserFact]
     public async Task CommandPolicy_ExplainsSelectionReadOnlyAndDisconnectedStates()
     {
         var writer = 1;
+        var holderLabel = "VS Code Inspector";
         var capabilities = FullCapabilityPayload;
         await PrepareLayoutWorkspaceAsync(
             capabilityResponse: () => Volatile.Read(ref capabilities),
             controlResponse: () => Volatile.Read(ref writer) == 1
                 ? """{"youAreWriter":true,"heldByOther":false,"authority":"agent"}"""
-                : """{"youAreWriter":false,"heldByOther":true,"label":"VS Code Inspector"}""");
+                : System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    youAreWriter = false,
+                    heldByOther = true,
+                    label = Volatile.Read(ref holderLabel)
+                }));
 
         var source = _page.Locator("#df-open-source");
         await Expect(source).ToHaveAttributeAsync("aria-disabled", "true");
@@ -224,7 +288,7 @@ public partial class InspectorLayoutWorkspaceTests
         var record = _page.Locator("#df-toggle-record");
         await record.ClickAsync();
         await Expect(record).ToHaveAttributeAsync("aria-pressed", "true");
-        await Expect(record).ToHaveAttributeAsync("aria-label", "Stop recording (0 steps)");
+        await Expect(record).ToHaveAttributeAsync("aria-label", "Record workflow");
         Volatile.Write(ref capabilities, ActionsUnsupportedCapabilityPayload);
         await _page.RunAndWaitForResponseAsync(
             () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
@@ -237,14 +301,16 @@ public partial class InspectorLayoutWorkspaceTests
         await Expect(_page.Locator("#df-record-cancel")).ToBeEnabledAsync();
         await _page.RunAndWaitForResponseAsync(
             () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
-            response => response.Url.EndsWith("/api/state", StringComparison.Ordinal));
+            response => IsStateUrl(response.Url));
 
         Volatile.Write(ref capabilities, FullCapabilityPayload);
         await _page.RunAndWaitForResponseAsync(
             () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
             response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
         await record.ClickAsync();
-        await Expect(_page.Locator("#df-workflow-replay")).ToBeEnabledAsync();
+        var workflowReplay = _page.Locator("#df-workflow-replay");
+        await Expect(workflowReplay).ToBeEnabledAsync();
+        await workflowReplay.FocusAsync();
         Assert.Equal(1, recordRequests);
 
         Volatile.Write(ref capabilities, ActionsUnsupportedCapabilityPayload);
@@ -253,6 +319,7 @@ public partial class InspectorLayoutWorkspaceTests
             response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
         await Expect(_page.Locator("#df-toggle-replay")).ToBeHiddenAsync();
         await Expect(_page.Locator("#df-workflow-replay")).ToBeHiddenAsync();
+        Assert.NotEqual("BODY", await _page.EvaluateAsync<string>("document.activeElement.tagName"));
         await _page.Locator("#df-workflow-replay").EvaluateAsync("button => button.click()");
         Assert.Equal(0, replayRequests);
 
@@ -272,12 +339,18 @@ public partial class InspectorLayoutWorkspaceTests
         await Expect(_page.Locator("#df-take-control")).ToHaveAttributeAsync(
             "title", new System.Text.RegularExpressions.Regex("VS Code Inspector is driving"));
         await Expect(_page.Locator("#df-take-control")).ToBeVisibleAsync();
-        var workflowReplay = _page.Locator("#df-workflow-replay");
         await Expect(workflowReplay).ToHaveAttributeAsync("aria-disabled", "true");
         Assert.False(await workflowReplay.EvaluateAsync<bool>("button => button.disabled"));
         await Expect(workflowReplay).ToHaveAttributeAsync("aria-describedby", "df-toggle-replay-availability");
         await record.EvaluateAsync("button => button.click()");
         Assert.Equal(1, recordRequests);
+
+        Volatile.Write(ref holderLabel, "Canvas Inspector");
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.Clock.RunForAsync(4100),
+            response => response.Url.EndsWith("/api/control", StringComparison.Ordinal));
+        await Expect(record).ToHaveAttributeAsync(
+            "title", new System.Text.RegularExpressions.Regex("Canvas Inspector is driving"));
 
         await _page.EvaluateAsync("() => window.dispatchEvent(new Event('offline'))");
         await Expect(record).ToHaveAttributeAsync("data-df-availability", "disconnected");
@@ -286,7 +359,7 @@ public partial class InspectorLayoutWorkspaceTests
 
         await _page.RunAndWaitForResponseAsync(
             () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
-            response => response.Url.EndsWith("/api/state", StringComparison.Ordinal));
+            response => IsStateUrl(response.Url));
         await Expect(record).ToHaveAttributeAsync("data-df-availability", "readOnly");
     }
 }

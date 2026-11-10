@@ -1127,21 +1127,19 @@ import {
     return capabilities.length === 0 || capabilities.includes('set-value');
   }
 
-  function ensureCanDrive() {
-    if (presentation.driveAllowed) return true;
-    const message = presentation.driveMessage || 'This action is currently unavailable.';
+  function showDriveGateStatus(message) {
     if (driveGateStatusToken && statusChannel.isCurrent(driveGateStatusToken)) {
       statusChannel.replace(driveGateStatusToken, message);
     } else {
       driveGateStatusToken = setStatus(message);
     }
     driveGateStatusText = message;
-    const takeControl = document.getElementById('df-take-control');
-    if (presentation.healthy && takeControl && !takeControl.classList.contains('df-hidden')) {
-      takeControl.classList.add('df-attention');
-      takeControl.focus({ preventScroll: true });
-      setTimeout(() => takeControl.classList.remove('df-attention'), 1200);
-    }
+  }
+
+  function ensureCanDrive() {
+    if (presentation.driveAllowed) return true;
+    showDriveGateStatus(presentation.driveMessage || 'This action is currently unavailable.');
+    if (presentation.healthy) drawAttentionToTakeControl(true);
     return false;
   }
 
@@ -1152,6 +1150,13 @@ import {
       return false;
     }
     return ensureCanDrive();
+  }
+
+  function ensureCanInspect() {
+    const state = commandStates['df-mode-inspect'];
+    if (state?.visible !== false) return true;
+    setStatus(state.reason?.text || 'App inspection is not supported by this agent.');
+    return false;
   }
 
   // Overlay editor that we float on top of the clicked text element.
@@ -1292,7 +1297,7 @@ import {
         return;
       }
       // Keep unsent text visible until the Preview and writer lease recover.
-      if (!ensureCanDrive()) {
+      if (!ensureCanInteract()) {
         preserveEditorAfterFailure(editor, null, false);
         return;
       }
@@ -1439,6 +1444,7 @@ import {
     // Inspect mode (or Alt/Shift+Click while in Interact) SELECTS the element under the
     // cursor instead of tapping the app — the entry point for the tree/bounds features (A + B).
     if (mode === 'inspect' || e.altKey || e.shiftKey) {
+      if (!ensureCanInspect()) return;
       const picked = underCursor && underCursor.closest ? underCursor.closest('.devflow-element') : null;
       await selectAtPoint(e.clientX, e.clientY, picked);
       return;
@@ -1493,6 +1499,8 @@ import {
     scrollFlushTimer = null;
     scrollFrame = null;
     lastScrollPoint = null;
+
+    if (!ensureCanInteract()) return;
 
     try {
       const resp = await fetch(`${basePath}/api/scroll`, {
@@ -2015,7 +2023,6 @@ import {
         known: leaseStateInitialized,
         connected: presentation.connected,
         healthy: presentation.healthy,
-        healthy: presentation.healthy,
         driveAllowed: presentation.driveAllowed,
         controlAllowed: presentation.controlAllowed,
         driveMessage: presentation.driveMessage,
@@ -2044,7 +2051,7 @@ import {
     return dockTabButtons.filter(button => !button.hidden);
   }
 
-  function syncCapabilitySurfaces() {
+  function syncCapabilitySurfaces(previousStates) {
     const active = document.activeElement;
     const treeVisible = commandStates['df-toggle-tree']?.visible !== false;
     const treeHadFocus = !!treePanel?.contains(active);
@@ -2062,22 +2069,28 @@ import {
     }
 
     const layoutVisible = commandStates['df-toggle-diagnostics']?.visible !== false;
+    const layoutWasVisible = previousStates?.['df-toggle-diagnostics']?.visible === true;
     const layoutTab = document.getElementById('df-tab-layout');
     const layoutHadFocus = active === layoutTab ||
       document.getElementById('df-dock-body')?.contains(active);
+    const layoutNeedsFocusRecovery = layoutHadFocus || !active ||
+      active === document.body || active === document.documentElement;
     if (layoutTab) layoutTab.hidden = !layoutVisible;
+    if (layoutWasVisible && !layoutVisible)
+      layoutPanel?.invalidate('Layout diagnostics are no longer supported; the previous scan is stale.');
     if (!layoutVisible && dockActiveTab === 'layout') {
       layoutPanel?.deactivate();
       const fallback = visibleDockTabs()[0];
       if (fallback) {
         loadTab(fallback.getAttribute('data-tab'));
-        if (layoutHadFocus) fallback.focus({ preventScroll: true });
+        if (layoutNeedsFocusRecovery) fallback.focus({ preventScroll: true });
       }
     }
   }
 
   function applyCommandStates(nextStates) {
     const focused = document.activeElement;
+    const previousStates = commandStates;
     commandStates = nextStates;
 
     for (const command of COMMAND_DEFINITIONS) {
@@ -2127,15 +2140,21 @@ import {
         setMode(fallbackMode === 'df-mode-interact' ? 'interact' : 'inspect', false);
     }
 
-    syncCapabilitySurfaces();
+    syncCapabilitySurfaces(previousStates);
 
-    if (focused instanceof HTMLButtonElement && toolbarCommands.includes(focused) && focused.hidden) {
-      const fallbackId = resolveCommandFocus(toolbarCommandOrder, nextStates, focused.id);
-      const fallback = fallbackId ? document.getElementById(fallbackId) : null;
-      if (tb.overflow?.contains(focused) && !document.body.classList.contains('df-more-open'))
-        restoreFocus(tb.more, fallback);
-      else
-        restoreFocus(fallback, tb.more);
+    if (focused instanceof HTMLButtonElement && focused.hidden) {
+      const focusedCommand = COMMAND_DEFINITIONS.find(command =>
+        command.id === focused.id || command.mirrors?.includes(focused.id));
+      if (focusedCommand) {
+        const fallbackId = resolveCommandFocus(toolbarCommandOrder, nextStates, focusedCommand.id);
+        const fallback = fallbackId ? document.getElementById(fallbackId) : null;
+        if (toolbarCommands.includes(focused) && tb.overflow?.contains(focused)
+            && !document.body.classList.contains('df-more-open')) {
+          restoreFocus(tb.more, fallback);
+        } else {
+          restoreFocus(fallback, tb.more);
+        }
+      }
     }
 
     const signature = JSON.stringify(toolbarCommands.map(button => [
@@ -2170,7 +2189,7 @@ import {
     const message = state.reason?.text || 'This action is currently unavailable.';
     if (state.availability === 'readOnly' || state.availability === 'disconnected' ||
         state.reason?.code === 'preview-not-current') {
-      driveGateStatusToken = setStatus(message);
+      showDriveGateStatus(message);
     } else {
       setStatus(message);
     }
@@ -2566,15 +2585,9 @@ import {
     // (setting textContent here would wipe the .df-btn-label wrapper the toolbar relies on).
     const lbl = recordBtn.querySelector('.df-btn-label');
     const label = recordingStopping ? 'Stopping…' : (recordingId ? `Rec (${recStepCount})` : 'Record');
-    const changed = lbl ? lbl.textContent !== label : recordBtn.textContent !== `\u25CF ${label}`;
     if (lbl) lbl.textContent = label;
     else recordBtn.textContent = `\u25CF ${label}`;
-    const accessibleLabel = recordingStopping
-      ? 'Stopping recording'
-      : (recordingId
-        ? `Stop recording (${recStepCount} step${recStepCount === 1 ? '' : 's'})`
-        : 'Record');
-    recordBtn.setAttribute('aria-label', accessibleLabel);
+    recordBtn.setAttribute('aria-label', 'Record workflow');
     recordBtn.dataset.dfStartTitle ||= recordBtn.dataset.dfBaseTitle || recordBtn.title;
     recordBtn.dataset.dfBaseTitle = recordingId
       ? 'Stop the active recording and save its replayable workflow'
@@ -2616,10 +2629,6 @@ import {
   }
 
   async function startRecording() {
-    if (pendingHostRecordings.length > 0) {
-      setStatus('Save the completed recording before starting another one.');
-      return;
-    }
     const name = 'recording-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     try {
       const r = await fetch(`${basePath}/api/flows/record/start`, {
@@ -2677,11 +2686,9 @@ import {
         const completedRecording = { name: j.name, steps: j.steps, markdown: j.markdown, prefix: pre };
         if (hostHas('saveRecording') && postToHost('devflow:recordingComplete', completedRecording)) {
           setStatus(`${pre}Recorded ${j.steps} step(s) — handed to the host to save. Replay is now available.`);
-        } else if (framed) {
+        } else if (framed && hostCaps === null && !hostHandshakeExpired) {
           pendingHostRecordings.push(completedRecording);
-          setStatus(hostCaps === null
-            ? `${pre}Recorded ${j.steps} step(s) — waiting for the host to save it. Replay is now available.`
-            : `${pre}Recorded ${j.steps} step(s). This host cannot save it yet; Replay is still available.`);
+          setStatus(`${pre}Recorded ${j.steps} step(s) — waiting briefly for the host to save it. Replay is now available.`);
         } else {
           downloadText(fname, j.markdown);
           setStatus(`${pre}Recorded ${j.steps} step(s) → ${fname}. Replay is now available.`);
@@ -3056,6 +3063,7 @@ import {
   const sourceBtn = document.getElementById('df-open-source');
   const attachDataBtn = document.getElementById('df-attach-data');
   const pendingHostRecordings = [];
+  let hostHandshakeExpired = false;
   let dockSnapshot = null;
   let dockActiveTab = null;
   const pendingHostRequests = new Map();
@@ -3065,6 +3073,15 @@ import {
     if (!framed || !bridgeId) return false;
     window.parent.postMessage(Object.assign({ v: 1, bridgeId, type }, data || {}), '*');
     return true;
+  }
+
+  function downloadPendingHostRecordings() {
+    while (pendingHostRecordings.length > 0) {
+      const recording = pendingHostRecordings.shift();
+      const name = `${recording.name || 'recording'}.md`;
+      downloadText(name, recording.markdown);
+      setStatus(`${recording.prefix || ''}Recorded ${recording.steps} step(s) → ${name}. Replay is now available.`);
+    }
   }
   function requestHost(type, data, timeoutMs) {
     if (!framed || !bridgeId) return Promise.resolve({ ok: false, error: 'No compatible host is available.' });
@@ -3108,7 +3125,12 @@ import {
   function announceReady() {
     if (hostCaps || !framed || !bridgeId) return;
     postToHost('devflow:ready', { version: 1 });
-    if (++hsTries < 12) hsTimer = setTimeout(announceReady, 300);
+    if (++hsTries < 12) {
+      hsTimer = setTimeout(announceReady, 300);
+    } else {
+      hostHandshakeExpired = true;
+      downloadPendingHostRecordings();
+    }
   }
   window.addEventListener('message', (e) => {
     if (e.source !== window.parent) return;              // only our embedding host
@@ -3144,6 +3166,8 @@ import {
           pendingHostRecordings.shift();
           setStatus(`${recording.prefix || ''}Recorded ${recording.steps} step(s) — handed to the host to save. Replay is now available.`);
         }
+      } else if (pendingHostRecordings.length > 0) {
+        downloadPendingHostRecordings();
       }
       if (d.theme) applyTheme(d.theme);                  // host may bundle its theme with the capability ack
     } else if (d.type === 'devflow:theme') {
