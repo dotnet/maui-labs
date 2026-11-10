@@ -483,7 +483,7 @@ public class NativeDevFlowAgentService : DevFlowAgentService
                 else
                 {
                     density = NativeUi.ScreenCaptureDensity;
-                    logicalSize = NativeUi.ScreenCaptureLogicalSize;
+                    logicalSize = default;
                     png = await NativeUi.CaptureScreen();
                 }
 

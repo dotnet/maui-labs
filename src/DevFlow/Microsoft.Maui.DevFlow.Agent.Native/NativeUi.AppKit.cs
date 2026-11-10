@@ -48,9 +48,6 @@ internal static partial class NativeUi
             _ => (0, 0)
         };
 
-    public static (double Width, double Height) ScreenCaptureLogicalSize
-        => GetCaptureLogicalSize(ResolveScreenCaptureWindow());
-
     public static IReadOnlyList<object> GetRoots()
     {
         var roots = new List<object>();

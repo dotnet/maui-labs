@@ -71,9 +71,6 @@ internal static partial class NativeUi
             : (0, 0);
     }
 
-    public static (double Width, double Height) ScreenCaptureLogicalSize
-        => GetCaptureLogicalSize(CurrentActivity?.Window?.DecorView);
-
     public static IReadOnlyList<object> GetRoots()
     {
         var activity = CurrentActivity;

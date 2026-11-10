@@ -2152,19 +2152,9 @@ public partial class MauiDevFlowAgentService : DevFlowAgentService
                 var pngData = await CaptureFullScreenAsync(windowIndex);
                 if (pngData != null)
                 {
-                    var metrics = await DispatchAsync(() =>
-                    {
-                        var window = GetWindow(windowIndex);
-                        return (
-                            Density: GetWindowDisplayDensity(window),
-                            Width: PositiveOrNull(window?.Width ?? 0),
-                            Height: PositiveOrNull(window?.Height ?? 0));
-                    });
-                    return CompleteScreenshot(ProcessScreenshot(
-                        pngData,
-                        metrics.Density,
-                        metrics.Width,
-                        metrics.Height));
+                    var density = await DispatchAsync(
+                        () => GetWindowDisplayDensity(GetWindow(windowIndex)));
+                    return CompleteScreenshot(ProcessScreenshot(pngData, density));
                 }
                 return CompleteScreenshotFailure(
                     HttpResponse.Error("Full-screen capture not supported on this platform"));
