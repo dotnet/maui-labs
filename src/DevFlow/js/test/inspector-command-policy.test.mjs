@@ -59,7 +59,10 @@ test('every rendered Inspector toolbar command is owned by the shared policy', (
   const rendered = [...toolbar.matchAll(/<button\b[^>]*\bid="([^"]+)"/g)]
     .map(match => match[1])
     .filter(id => id !== 'df-more');
-  assert.deepEqual(rendered, COMMAND_DEFINITIONS.map(command => command.id));
+  assert.deepEqual(
+    rendered,
+    COMMAND_DEFINITIONS.map(command => command.id),
+  );
 });
 
 test('legacy metadata stays usable and explicit unsupported domains hide commands', () => {

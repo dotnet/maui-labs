@@ -60,6 +60,18 @@ public partial class InspectorLayoutWorkspaceTests
         }
         """;
 
+    private const string ScreenshotUnsupportedCapabilityPayload = """
+        {
+          "agent":{"framework":"maui"},
+          "capabilities":{
+            "ui.tree":{"supported":true,"features":["css-selector"]},
+            "ui.actions":{"supported":true,"features":["tap","navigate","properties"]},
+            "ui.screenshot":{"supported":false,"features":[],"reason":"Screenshots are unavailable."},
+            "ui.layoutDiagnostics":{"features":["clipping","coverage"]}
+          }
+        }
+        """;
+
     [InspectorBrowserFact]
     public async Task CommandPolicy_LegacyCapabilitiesKeepExistingToolbarDiscoverable()
     {
@@ -179,10 +191,45 @@ public partial class InspectorLayoutWorkspaceTests
 
         await more.FocusAsync();
         await _page.SetViewportSizeAsync(1440, 820);
-        await _page.WaitForTimeoutAsync(100);
         await Expect(more).ToBeHiddenAsync();
         await Expect(_page.Locator("#df-tree-pane")).ToBeHiddenAsync();
         Assert.NotEqual("BODY", await _page.EvaluateAsync<string>("document.activeElement.tagName"));
+
+        Volatile.Write(ref capabilities, FullCapabilityPayload);
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
+        await _page.Locator("#df-zoom-preset").SelectOptionAsync("2");
+        var viewportTransform = await _page.Locator("#app-viewport")
+            .EvaluateAsync<string>("element => element.style.transform");
+        await _page.Locator("#df-zoom-in").FocusAsync();
+
+        Volatile.Write(ref capabilities, ScreenshotUnsupportedCapabilityPayload);
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
+
+        await Expect(_page.Locator("#df-viewport-controls")).ToBeHiddenAsync();
+        Assert.True(await _page.EvaluateAsync<bool>("""
+            () => {
+              const active = document.activeElement;
+              return active instanceof HTMLElement
+                && active !== document.body
+                && !document.getElementById('df-viewport-controls').contains(active)
+                && active.getClientRects().length > 0;
+            }
+            """));
+        var wrap = _page.Locator("#df-viewport-wrap");
+        await wrap.FocusAsync();
+        await wrap.PressAsync("1");
+        Assert.Equal(
+            viewportTransform,
+            await _page.Locator("#app-viewport").EvaluateAsync<string>("element => element.style.transform"));
+
+        Volatile.Write(ref capabilities, FullCapabilityPayload);
+        await _page.RunAndWaitForResponseAsync(
+            () => _page.EvaluateAsync("() => window.dispatchEvent(new Event('online'))"),
+            response => response.Url.EndsWith("/api/capabilities", StringComparison.Ordinal));
     }
 
     [InspectorBrowserFact]

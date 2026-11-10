@@ -23,10 +23,11 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests\Microsoft.Maui.De
   --results-directory artifacts\TestResults\InspectorBrowser
 ```
 
-All **33** fixtures must execute and pass: the shared Layout, Preview health, synchronization,
-connection-recovery, and command-policy checks,
+All **34** fixtures must execute and pass: the shared Layout, Preview health, synchronization,
+connection-recovery, command-policy, and viewport-navigation checks,
 cached Layout → Logs → Layout Data attachment, and sizing-only `diagnosticInputsRevision`
 invalidation/Live rescanning with unchanged geometry, two queued Live cancellation checks,
+responsive viewport zoom controls,
 three property/Network synchronization checks, and three connection recovery checks covering
 Retry feedback/reduced motion, hung state-request cancellation, and recovery with a live event
 socket (including after a webview visibility change), plus three capability-policy checks covering
@@ -41,7 +42,7 @@ while detail stays open. Response gates hold each loading state until asserted; 
 clock drives the real polling intervals instead of wall-clock sleeps.
 
 `ci-devflow.yml` provisions Chromium in its dedicated `inspector-layout-browser` Windows job and
-sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 33 passed results and fails
+sets `MAUI_INSPECTOR_BROWSER_TESTS=1`. That job requires exactly 34 passed results and fails
 if any filtered test is skipped; adding another fixture requires updating the explicit count.
 It also repeats all three synchronization cases five times, failing immediately on any failure
 or skip. The Windows live integration job enables these browser fixtures alongside the native
@@ -125,6 +126,7 @@ dotnet test src\DevFlow\Microsoft.Maui.DevFlow.Inspector.Tests -c Release --no-b
 
 The `inspector-browser` job in `ci-devflow.yml` installs Chromium with its Linux
 dependencies, explicitly enables these fixtures, and runs only this category.
+The job requires exactly **34** passed fixtures with zero skips.
 Without `DEVFLOW_INSPECTOR_BROWSER_FIXTURES=1`, ordinary library builds skip this
 category with a provisioning explanation. When enabled, a missing browser is a
 test failure, not a skip.

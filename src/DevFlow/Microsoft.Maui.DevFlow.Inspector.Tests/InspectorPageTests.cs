@@ -285,6 +285,8 @@ public partial class InspectorPageTests : IAsyncLifetime
             ("inspector-properties.js", "export function createPropertyGridController"),
             ("inspector-resolution.js", "export function selectScreenshotScaleBucket"),
             ("inspector-tree.js", "export function createElementTreeController"),
+            ("inspector-viewport.js", "export function fitViewportScale"),
+            ("inspector-viewport-controller.js", "export function createViewportController"),
         })
         {
             var response = await _page.APIRequest.GetAsync(ResolveUrl(file));
@@ -1411,7 +1413,7 @@ public partial class InspectorPageTests : IAsyncLifetime
             await _page.Locator("#df-hit-candidates")
                 .EvaluateAsync<string>("element => getComputedStyle(element).position"));
         Assert.Equal(
-            "hidden",
+            "clip",
             await _page.Locator("#df-viewport-wrap")
                 .EvaluateAsync<string>("element => getComputedStyle(element).overflowX"));
 
