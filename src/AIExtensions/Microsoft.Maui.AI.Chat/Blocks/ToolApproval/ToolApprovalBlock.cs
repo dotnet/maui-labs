@@ -17,7 +17,8 @@ namespace Microsoft.Maui.AI.Chat;
 /// </remarks>
 public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
 {
-    private readonly TaskCompletionSource<AIContent> _tcs = new();
+    private readonly TaskCompletionSource<AIContent> _tcs =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     internal ToolApprovalBlock(
         FunctionInvocationContentBlock innerBlock,
@@ -56,9 +57,12 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
         _tcs.TrySetResult(response);
     }
 
+    /// <summary>Stops waiting for a decision because the turn ended; later decisions are ignored.</summary>
+    internal void Abandon() => _tcs.TrySetCanceled();
+
     private void Resolve(ApprovalStatus status, bool approved, string? reason)
     {
-        if (Status != ApprovalStatus.Pending)
+        if (Status != ApprovalStatus.Pending || _tcs.Task.IsCompleted)
             return;
 
         Status = status;

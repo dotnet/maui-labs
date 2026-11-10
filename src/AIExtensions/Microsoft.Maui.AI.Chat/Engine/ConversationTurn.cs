@@ -19,6 +19,16 @@ public class ConversationTurn
 
     public IReadOnlyList<ContentBlock> ResponseBlocks => _responseBlocks;
 
+    /// <summary>
+    /// Gets whether the response was stopped before it completed, by
+    /// <see cref="AgentContext.CancelAsync()"/> or the caller's cancellation token.
+    /// </summary>
+    /// <remarks>
+    /// A stopped turn keeps its request and partial response. Approvals and UI actions that were
+    /// still waiting for input when the turn stopped no longer respond.
+    /// </remarks>
+    public bool IsStopped { get; internal set; }
+
     internal void AddRequestBlock(ContentBlock block)
     {
         _requestBlocks.Add(block);
@@ -27,11 +37,6 @@ public class ConversationTurn
     internal void AddResponseBlock(ContentBlock block)
     {
         _responseBlocks.Add(block);
-    }
-
-    internal void RemoveResponseBlock(ContentBlock block)
-    {
-        _responseBlocks.Remove(block);
     }
 
     internal void ClearResponseBlocks()

@@ -77,7 +77,7 @@ public class AgentContextThreadTests
         Assert.Null(context.Error);
         Assert.Equal(3, callCount);
         Assert.Single(context.Turns);
-        Assert.Equal(3, thread.AppendUserMessageCount);
+        Assert.Equal(1, thread.AppendUserMessageCount);
         Assert.Equal(1, thread.CompleteTurnCallCount);
         Assert.Equal(1, thread.CommittedTurnCount);
     }
@@ -99,7 +99,7 @@ public class AgentContextThreadTests
     }
 
     [Fact]
-    public async Task RetryAsync_CallerCancellation_DiscardsPartialAttemptAndAllowsFreshSend()
+    public async Task RetryAsync_CallerCancellation_StopsTurnAndAllowsFreshSend()
     {
         var retryStarted = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -128,16 +128,18 @@ public class AgentContextThreadTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await retry);
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Null(context.Error);
-        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
-        Assert.Empty(thread.GetUpdates());
-        Assert.Equal(0, thread.CompleteTurnCallCount);
+        var stoppedTurn = Assert.Single(context.Turns);
+        Assert.True(stoppedTurn.IsStopped);
+        Assert.Single(stoppedTurn.ResponseBlocks);
+        Assert.Equal(1, thread.CompleteTurnCallCount);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => context.RetryAsync());
 
         await context.SendMessageAsync("fresh question");
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Equal(3, callCount);
-        Assert.Equal(1, thread.CompleteTurnCallCount);
-        Assert.Equal(1, thread.CommittedTurnCount);
+        Assert.Equal(2, thread.CompleteTurnCallCount);
+        Assert.Equal(2, thread.CommittedTurnCount);
     }
 
     [Fact]
@@ -346,7 +348,7 @@ public class AgentContextThreadTests
         });
         await context.SendMessageAsync("first");
 
-        context.Clear();
+        await context.ClearAsync();
 
         Assert.Empty(context.Turns);
         Assert.Equal(ConversationStatus.Idle, context.Status);
@@ -377,9 +379,9 @@ public class AgentContextThreadTests
         await context.SendMessageAsync("question");
         Assert.Equal(ConversationStatus.Error, context.Status);
         Assert.Equal(0, thread.PendingUpdateCount);
-        Assert.Equal(1, thread.AbortTurnCallCount);
+        Assert.Equal(0, thread.AppendUserMessageCount);
 
-        context.Clear();
+        await context.ClearAsync();
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Null(context.Error);
@@ -402,7 +404,7 @@ public class AgentContextThreadTests
         await context.RestoreAsync();
         Assert.Single(context.Turns);
 
-        context.Clear();
+        await context.ClearAsync();
         await context.RestoreAsync();
 
         Assert.Empty(context.Turns);
@@ -423,7 +425,7 @@ public class AgentContextThreadTests
         var send = context.SendMessageAsync("question");
         await streamStarted.Task;
 
-        context.Clear();
+        await context.ClearAsync();
         await send;
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
@@ -434,7 +436,7 @@ public class AgentContextThreadTests
     }
 
     [Fact]
-    public async Task CancelAsync_DiscardsPartialPersistentTurn()
+    public async Task CancelAsync_CommitsStoppedTurnWithPartialOutput()
     {
         var streamStarted = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -450,15 +452,27 @@ public class AgentContextThreadTests
         await send;
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
-        Assert.Empty(thread.GetUpdates());
-        Assert.Empty(thread.GetMessageHistory());
-        Assert.Equal(0, thread.CompleteTurnCallCount);
-        Assert.Equal(1, thread.AbortTurnCallCount);
-        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
+        Assert.True(Assert.Single(context.Turns).IsStopped);
+        Assert.Equal(1, thread.CompleteTurnCallCount);
+        Assert.Equal(
+            [(ChatRole.User, "question"), (ChatRole.Assistant, "partial")],
+            thread.GetMessageHistory().Select(message => (message.Role, message.Text)));
+
+        var restored = CreateContext(
+            thread,
+            (messages, options, cancellationToken) =>
+                ResponseEmitters.EmitEmptyResponse(cancellationToken));
+        await restored.RestoreAsync();
+
+        var restoredTurn = Assert.Single(restored.Turns);
+        Assert.True(restoredTurn.IsStopped);
+        Assert.Equal(
+            "partial",
+            Assert.IsType<TextContentBlock>(Assert.Single(restoredTurn.ResponseBlocks)).RawText);
     }
 
     [Fact]
-    public async Task CallerCancellation_DiscardsPartialPersistentTurnAndCancelsTask()
+    public async Task CallerCancellation_CommitsStoppedTurnAndCancelsTask()
     {
         var streamStarted = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -475,11 +489,11 @@ public class AgentContextThreadTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await send);
         Assert.Equal(ConversationStatus.Idle, context.Status);
-        Assert.Empty(thread.GetUpdates());
-        Assert.Empty(thread.GetMessageHistory());
-        Assert.Equal(0, thread.CompleteTurnCallCount);
-        Assert.Equal(1, thread.AbortTurnCallCount);
-        Assert.Empty(Assert.Single(context.Turns).ResponseBlocks);
+        Assert.Equal(1, thread.CompleteTurnCallCount);
+        Assert.Equal(2, thread.GetMessageHistory().Count);
+        var turn = Assert.Single(context.Turns);
+        Assert.True(turn.IsStopped);
+        Assert.Single(turn.ResponseBlocks);
     }
 
     [Fact]

@@ -57,8 +57,6 @@ public class UIAgent<TState> : UIAgent where TState : class, new()
     /// <summary>Gets the current typed application state.</summary>
     public AgentState<TState> State { get; }
 
-    internal override object AgentStateObject => State;
-
     internal override ChatResponseUpdate ApplyStateMapper(ChatResponseUpdate update)
     {
         var mapped = base.ApplyStateMapper(update, out var stateContext);

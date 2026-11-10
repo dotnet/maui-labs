@@ -357,7 +357,7 @@ public class StateMapperTests
     }
 
     [Fact]
-    public void PredictiveState_ClearAndDispose_RollBack()
+    public async Task PredictiveState_ClearAndDispose_RollBack()
     {
         var initial = new RecipeState { Title = "Initial" };
         var agent = new UIAgent<RecipeState>(
@@ -366,11 +366,11 @@ public class StateMapperTests
         var context = new AgentContext(agent);
 
         agent.State.SetPredictiveValue(new RecipeState { Title = "Clear" });
-        context.Clear();
+        await context.ClearAsync();
         Assert.Same(initial, agent.State.Value);
 
         agent.State.Value = new RecipeState { Title = "Committed" };
-        context.Clear();
+        await context.ClearAsync();
         Assert.Same(initial, agent.State.Value);
 
         agent.State.SetPredictiveValue(new RecipeState { Title = "Dispose" });

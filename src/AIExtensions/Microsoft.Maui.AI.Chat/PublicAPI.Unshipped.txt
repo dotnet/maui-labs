@@ -4,7 +4,7 @@ Microsoft.Maui.AI.Chat.AgentContext
 Microsoft.Maui.AI.Chat.AgentContext.AgentContext(Microsoft.Maui.AI.Chat.UIAgent! agent) -> void
 Microsoft.Maui.AI.Chat.AgentContext.CancelAsync() -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.CancelAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
-Microsoft.Maui.AI.Chat.AgentContext.Clear() -> void
+Microsoft.Maui.AI.Chat.AgentContext.ClearAsync() -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.Dispose() -> void
 Microsoft.Maui.AI.Chat.AgentContext.Error.get -> System.Exception?
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnBlockAdded(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!, Microsoft.Maui.AI.Chat.ContentBlock!>! callback) -> System.IDisposable!
@@ -80,6 +80,7 @@ Microsoft.Maui.AI.Chat.ConversationStatus.Streaming = 1 -> Microsoft.Maui.AI.Cha
 Microsoft.Maui.AI.Chat.ConversationTurn
 Microsoft.Maui.AI.Chat.ConversationTurn.ConversationTurn() -> void
 Microsoft.Maui.AI.Chat.ConversationTurn.Id.get -> string!
+Microsoft.Maui.AI.Chat.ConversationTurn.IsStopped.get -> bool
 Microsoft.Maui.AI.Chat.ConversationTurn.RequestBlocks.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!
 Microsoft.Maui.AI.Chat.ConversationTurn.ResponseBlocks.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!
 Microsoft.Maui.AI.Chat.DefinitionNode
@@ -122,13 +123,11 @@ Microsoft.Maui.AI.Chat.HtmlNode.HtmlNode(string! value) -> void
 Microsoft.Maui.AI.Chat.HtmlNode.Value.get -> string!
 Microsoft.Maui.AI.Chat.HtmlNode.Value.set -> void
 Microsoft.Maui.AI.Chat.IConversationThread
-Microsoft.Maui.AI.Chat.IConversationThread.AbortTurn() -> void
 Microsoft.Maui.AI.Chat.IConversationThread.AppendUpdate(Microsoft.Extensions.AI.ChatResponseUpdate! update) -> void
 Microsoft.Maui.AI.Chat.IConversationThread.AppendUserMessage(Microsoft.Extensions.AI.ChatMessage! message) -> void
 Microsoft.Maui.AI.Chat.IConversationThread.Clear() -> void
 Microsoft.Maui.AI.Chat.IConversationThread.CompleteTurn() -> void
 Microsoft.Maui.AI.Chat.IConversationThread.ConversationId.get -> string?
-Microsoft.Maui.AI.Chat.IConversationThread.GetMessageHistory() -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
 Microsoft.Maui.AI.Chat.IConversationThread.GetUpdates() -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatResponseUpdate!>!
 Microsoft.Maui.AI.Chat.IConversationThread.IsStateful.get -> bool
 Microsoft.Maui.AI.Chat.IConversationThread.ThreadId.get -> string!

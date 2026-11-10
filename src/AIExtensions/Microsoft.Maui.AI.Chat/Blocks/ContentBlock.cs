@@ -30,12 +30,6 @@ public abstract class ContentBlock
     /// <summary>Gets when the source message/update was created, when supplied by the provider.</summary>
     public DateTimeOffset? CreatedAt { get; internal set; }
 
-    internal string? RestoredTurnId { get; set; }
-
-    internal bool StartsRestoredTurn { get; set; }
-
-    internal bool IsRestoredRequest { get; set; }
-
     private readonly List<Action> _callbacks = new();
 
     public ContentBlockChangedSubscription OnChanged(Action callback)
