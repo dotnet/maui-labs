@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -60,10 +61,11 @@ public sealed class InspectorServer : IDisposable
     // Lifetime cancellation source; cancelled in Dispose() so broker-mode WS proxies
     // (which never call Start() to create _cts) still see shutdown.
     private readonly CancellationTokenSource _lifetimeCts = new();
-    private byte[]? _cachedScreenshot;
+    private InspectorScreenshot? _cachedScreenshot;
     private string? _cachedScreenshotElementId;
     private long? _cachedScreenshotCaptureEpoch;
     private bool _cachedScreenshotFullscreen;
+    private ScreenshotResolutionKey _cachedScreenshotResolution;
     private DateTime _screenshotCacheTime;
     private InspectorFrame? _latestFrame;
     private long _cacheGeneration;
@@ -76,7 +78,7 @@ public sealed class InspectorServer : IDisposable
     // for the coordinates, offsets and epochs a browser tab acted against — it supersedes the
     // standalone screenshot-frame + root-offset fields diagnostics originally hung off.
     private long? _captureEpoch;
-    private Task<bool?>? _requiresCaptureEpochTask;
+    private Task<JsonElement?>? _capabilitiesTask;
     private readonly TimeSpan _frameReuseDuration;
     private static readonly TimeSpan ScreenshotCacheDuration = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan DefaultFrameReuseDuration = TimeSpan.FromMilliseconds(200);
@@ -84,6 +86,9 @@ public sealed class InspectorServer : IDisposable
     private const int MaxCachedFrames = 32;
     private const int MaxScreenshotBytes = 64 * 1024 * 1024;
     private const long MaxCachedFrameBytes = 64L * 1024 * 1024;
+    private const long InspectorScreenshotPixelBudget = 8_388_608;
+    private const int InspectorScreenshotMaxDimension = 16_384;
+    private static readonly double[] ScreenshotScaleBuckets = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
     private static readonly TimeSpan LayoutDiagnosticsCacheDuration =
         TimeSpan.FromMilliseconds(250);
     // How long a diagnostics-bearing state request keeps pushed deltas alive. Comfortably longer
@@ -473,44 +478,31 @@ public sealed class InspectorServer : IDisposable
 
     private async Task<bool> RequiresCaptureEpochAsync()
     {
-        Task<bool?> detectionTask;
-        lock (_cacheLock)
-            detectionTask = _requiresCaptureEpochTask ??= DetectCaptureEpochRequirementAsync();
-
-        try
-        {
-            var detected = await detectionTask;
-            if (detected.HasValue)
-                return detected.Value;
-        }
-        catch
-        {
-        }
-
-        // A transport failure or non-capabilities JSON response must not permanently downgrade
-        // this connection. Share one in-flight request, then let the next interaction retry.
-        lock (_cacheLock)
-        {
-            if (ReferenceEquals(_requiresCaptureEpochTask, detectionTask))
-                _requiresCaptureEpochTask = null;
-
-            return _captureEpoch.HasValue;
-        }
+        var detected = await DetectCapabilityFeatureAsync(
+            "ui.actions",
+            "stale-capture-rejection");
+        return detected ?? _captureEpoch.HasValue;
     }
 
-    private async Task<bool?> DetectCaptureEpochRequirementAsync()
+    private async Task<bool> SupportsScreenshotResolutionAsync()
     {
-        var response = await _client.GetCapabilitiesAsync();
-        if (response.ValueKind != JsonValueKind.Object
-            || !response.TryGetProperty("capabilities", out var capabilities)
-            || capabilities.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
+        var detected = await DetectCapabilityFeatureAsync(
+            "ui.screenshot",
+            "resolution-hints");
+        return detected ?? false;
+    }
 
-        if (!capabilities.TryGetProperty("ui.actions", out var uiActions)
-            || uiActions.ValueKind != JsonValueKind.Object
-            || !uiActions.TryGetProperty("features", out var features))
+    private async Task<bool?> DetectCapabilityFeatureAsync(
+        string capabilityName,
+        string featureName)
+    {
+        var capabilities = await GetAgentCapabilitiesAsync();
+        if (!capabilities.HasValue)
+            return null;
+
+        if (!capabilities.Value.TryGetProperty(capabilityName, out var capability)
+            || capability.ValueKind != JsonValueKind.Object
+            || !capability.TryGetProperty("features", out var features))
         {
             return false;
         }
@@ -520,7 +512,46 @@ public sealed class InspectorServer : IDisposable
 
         return features.EnumerateArray().Any(feature =>
             feature.ValueKind == JsonValueKind.String
-            && feature.GetString() == "stale-capture-rejection");
+            && feature.GetString() == featureName);
+    }
+
+    private async Task<JsonElement?> GetAgentCapabilitiesAsync()
+    {
+        Task<JsonElement?> capabilitiesTask;
+        lock (_cacheLock)
+            capabilitiesTask = _capabilitiesTask ??= FetchAgentCapabilitiesAsync();
+
+        try
+        {
+            var capabilities = await capabilitiesTask;
+            if (capabilities.HasValue)
+                return capabilities;
+        }
+        catch
+        {
+        }
+
+        // A transport failure or non-capabilities JSON response must not permanently downgrade
+        // this connection. Share one in-flight request, then let the next interaction retry.
+        lock (_cacheLock)
+        {
+            if (ReferenceEquals(_capabilitiesTask, capabilitiesTask))
+                _capabilitiesTask = null;
+        }
+        return null;
+    }
+
+    private async Task<JsonElement?> FetchAgentCapabilitiesAsync()
+    {
+        var response = await _client.GetCapabilitiesAsync();
+        if (response.ValueKind != JsonValueKind.Object
+            || !response.TryGetProperty("capabilities", out var capabilities)
+            || capabilities.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return capabilities.Clone();
     }
 
     /// <summary>
@@ -1052,6 +1083,7 @@ public sealed class InspectorServer : IDisposable
                     "/inspector-data-context.js" => HandleEmbeddedFile("inspector-data-context.js", "application/javascript"),
                     "/inspector-properties.js" => HandleEmbeddedFile("inspector-properties.js", "application/javascript"),
                     "/inspector-layout.js" => HandleEmbeddedFile("inspector-layout.js", "application/javascript"),
+                    "/inspector-resolution.js" => HandleEmbeddedFile("inspector-resolution.js", "application/javascript"),
                     "/inspector-tree.js" => HandleEmbeddedFile("inspector-tree.js", "application/javascript"),
                     "/devflow.css" => HandleEmbeddedFile("devflow.css", "text/css"),
                     _ => (404, "text/plain", Encoding.UTF8.GetBytes("Not Found"))
@@ -1129,7 +1161,11 @@ public sealed class InspectorServer : IDisposable
         // The shell is served even when the agent is unreachable: devflow.js renders the
         // "disconnected" overlay and keeps polling /api/state, which is the endpoint that reports
         // an unavailable agent.
-        var frame = await CreateFrameAsync();
+        var screenshotResolutionSupported = await SupportsScreenshotResolutionAsync();
+        var frame = await CreateFrameAsync(
+            screenshotResolutionSupported
+                ? ScreenshotResolutionKey.SupportedDefault
+                : ScreenshotResolutionKey.Legacy);
         var hasPublishedFrame = frame.FrameRevision > 0 && frame.Png.Length > 0;
         var html = HtmlRenderer.RenderWithViewport(
             frame.Tree,
@@ -1151,6 +1187,7 @@ public sealed class InspectorServer : IDisposable
             .Append(hasPublishedFrame
                 ? BuildMeta("devflow-frame", JsonSerializer.Serialize(CreateFrameDescriptor(frame)))
                 : string.Empty)
+            .Append(BuildMeta("devflow-screenshot-resolution", screenshotResolutionSupported ? "true" : "false"))
             .ToString();
         var title = string.IsNullOrWhiteSpace(_appName)
             ? "MAUI DevFlow Inspector"
@@ -1203,7 +1240,25 @@ public sealed class InspectorServer : IDisposable
                 _diagnosticsInterestUtc = DateTime.UtcNow;
         }
         var requiresFreshFrame = IsTruthy(request.Query.GetValueOrDefault("fresh"));
-        var frame = await CreateFrameAsync(requiresFreshFrame);
+        var screenshotResolutionSupported = await SupportsScreenshotResolutionAsync();
+        if (!TryParseScreenshotResolution(
+                request.Query.GetValueOrDefault("targetScale"),
+                screenshotResolutionSupported,
+                out var resolution,
+                out var resolutionError))
+        {
+            return (
+                400,
+                "application/json",
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    ok = false,
+                    error = resolutionError,
+                    reason = "invalid-screenshot-hint"
+                }));
+        }
+
+        var frame = await CreateFrameAsync(resolution, requiresFreshFrame);
         if (frame.Tree.Count == 0)
         {
             return (
@@ -1240,6 +1295,7 @@ public sealed class InspectorServer : IDisposable
             elements = frame.ElementsHtml,
             viewportWidth = frame.LogicalWidth,
             viewportHeight = frame.LogicalHeight,
+            screenshotResolutionSupported,
             rootOffsetX = frame.RootOffsetX,
             rootOffsetY = frame.RootOffsetY,
             diagnostics = wantsDiagnostics
@@ -1270,6 +1326,9 @@ public sealed class InspectorServer : IDisposable
         rootOffsetX = frame.RootOffsetX,
         rootOffsetY = frame.RootOffsetY,
         captureScale = frame.CaptureScale,
+        nativeScale = frame.NativeScale,
+        requestedCaptureScale = frame.Resolution.TargetScale,
+        resolutionClamped = frame.ResolutionClamped,
         createdAt = frame.CreatedUtc
     };
 
@@ -1833,6 +1892,40 @@ public sealed class InspectorServer : IDisposable
             root.WindowId);
     }
 
+    private static bool TryParseScreenshotResolution(
+        string? value,
+        bool supported,
+        out ScreenshotResolutionKey resolution,
+        out string? error)
+    {
+        resolution = supported
+            ? ScreenshotResolutionKey.SupportedDefault
+            : ScreenshotResolutionKey.Legacy;
+        error = null;
+        if (!supported || string.IsNullOrWhiteSpace(value))
+            return true;
+
+        if (!double.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var parsed)
+            || double.IsNaN(parsed)
+            || double.IsInfinity(parsed)
+            || parsed <= 0)
+        {
+            error = "targetScale must be a positive finite number.";
+            return false;
+        }
+
+        var bounded = Math.Min(
+            ScreenshotScaleBuckets[^1],
+            Math.Max(ScreenshotScaleBuckets[0], parsed));
+        var normalized = ScreenshotScaleBuckets.MinBy(bucket => Math.Abs(bucket - bounded));
+        resolution = new ScreenshotResolutionKey(Enabled: true, TargetScale: normalized);
+        return true;
+    }
+
     private async Task<(int, string, byte[])> HandleScreenshotAsync(string? frameId)
     {
         byte[]? png = null;
@@ -1848,20 +1941,25 @@ public sealed class InspectorServer : IDisposable
 
         if (png is null && !string.IsNullOrWhiteSpace(frameId))
             return (404, "text/plain", Encoding.UTF8.GetBytes("Inspector frame expired"));
-        png ??= (await CreateFrameAsync()).Png;
+        png ??= (await CreateFrameAsync(ScreenshotResolutionKey.Legacy)).Png;
         if (png == null || png.Length == 0)
             return (404, "text/plain", Encoding.UTF8.GetBytes("No screenshot available"));
         return (200, "image/png", png);
     }
 
-    private async Task<InspectorFrame> CreateFrameAsync(bool force = false)
+    private async Task<InspectorFrame> CreateFrameAsync(
+        ScreenshotResolutionKey resolution,
+        bool force = false)
     {
         lock (_cacheLock)
         {
             if (!force
                 && _latestFrame is not null
+                && _latestFrame.Resolution == resolution
                 && DateTime.UtcNow - _latestFrame.CreatedUtc < _frameReuseDuration)
+            {
                 return _latestFrame;
+            }
         }
 
         await _frameCreationGate.WaitAsync(_lifetimeCts.Token);
@@ -1874,8 +1972,11 @@ public sealed class InspectorServer : IDisposable
                 {
                     if (!force
                         && _latestFrame is not null
+                        && _latestFrame.Resolution == resolution
                         && DateTime.UtcNow - _latestFrame.CreatedUtc < _frameReuseDuration)
+                    {
                         return _latestFrame;
+                    }
                     generation = _cacheGeneration;
                 }
 
@@ -1889,32 +1990,50 @@ public sealed class InspectorServer : IDisposable
                     : GetRootPageOffset(tree, rootPageId);
                 var (captureEpoch, registryGeneration, windowId) = GetCaptureMetadata(tree);
                 var frameTree = fullscreen ? tree : SelectFrameTree(tree, rootPageId);
+                var (treeLogicalWidth, treeLogicalHeight) = GetFrameLogicalSize(
+                    tree,
+                    rootPageId,
+                    fullscreen,
+                    pixelWidth: 0,
+                    pixelHeight: 0);
                 var screenshot = await GetCachedScreenshotAsync(
                     fullscreen ? null : rootPageId,
                     captureEpoch,
                     registryGeneration,
                     fullscreen,
-                    force) ?? Array.Empty<byte>();
-                var hasCompleteScreenshot = screenshot.Length > 0;
-                var (width, height) = hasCompleteScreenshot
-                    ? ScreenshotImage.GetPngDimensions(screenshot)
-                    : (0, 0);
-                if (width <= 0 || height <= 0)
+                    resolution,
+                    treeLogicalWidth,
+                    treeLogicalHeight,
+                    force);
+                var png = screenshot?.Data ?? Array.Empty<byte>();
+                var hasScreenshot = png.Length > 0;
+                var pixelWidth = screenshot?.PixelWidth ?? 0;
+                var pixelHeight = screenshot?.PixelHeight ?? 0;
+                if (pixelWidth <= 0 || pixelHeight <= 0)
+                    (pixelWidth, pixelHeight) = hasScreenshot
+                        ? ScreenshotImage.GetPngDimensions(png)
+                        : (0, 0);
+                var hasCompleteScreenshot = hasScreenshot && pixelWidth > 0 && pixelHeight > 0;
+                if (pixelWidth <= 0 || pixelHeight <= 0)
                 {
-                    width = 800;
-                    height = 600;
+                    pixelWidth = 800;
+                    pixelHeight = 600;
                 }
-                var (logicalWidth, logicalHeight) = GetFrameLogicalSize(
+                var (contractLogicalWidth, contractLogicalHeight) = GetFrameLogicalSize(
                     tree,
                     rootPageId,
                     fullscreen,
-                    width,
-                    height);
-                var captureScale = GetCaptureScale(
-                    logicalWidth,
-                    logicalHeight,
-                    width,
-                    height);
+                    pixelWidth,
+                    pixelHeight);
+                var logicalWidth = contractLogicalWidth;
+                var logicalHeight = contractLogicalHeight;
+                var captureScale = screenshot?.CaptureScale is > 0
+                    ? screenshot.CaptureScale.Value
+                    : GetCaptureScale(
+                        logicalWidth,
+                        logicalHeight,
+                        pixelWidth,
+                        pixelHeight);
 
                 var frame = new InspectorFrame(
                     Guid.NewGuid().ToString("N"),
@@ -1922,12 +2041,15 @@ public sealed class InspectorServer : IDisposable
                     0,
                     generation,
                     frameTree,
-                    screenshot,
-                    width,
-                    height,
+                    png,
+                    pixelWidth,
+                    pixelHeight,
                     logicalWidth,
                     logicalHeight,
                     captureScale,
+                    screenshot?.NativeScale,
+                    screenshot?.ResolutionClamped,
+                    resolution,
                     rootOffsetX,
                     rootOffsetY,
                     HtmlRenderer.RenderElements(
@@ -2048,12 +2170,15 @@ public sealed class InspectorServer : IDisposable
         return (200, contentType, ms.ToArray());
     }
 
-    private async Task<byte[]?> GetCachedScreenshotAsync(
-        string? elementId = null,
-        long? captureEpoch = null,
-        long? registryGeneration = null,
-        bool fullscreen = false,
-        bool force = false)
+    private async Task<InspectorScreenshot?> GetCachedScreenshotAsync(
+        string? elementId,
+        long? captureEpoch,
+        long? registryGeneration,
+        bool fullscreen,
+        ScreenshotResolutionKey resolution,
+        double logicalWidth,
+        double logicalHeight,
+        bool force)
     {
         long generation;
         lock (_cacheLock)
@@ -2067,50 +2192,97 @@ public sealed class InspectorServer : IDisposable
                 && string.Equals(_cachedScreenshotElementId, elementId, StringComparison.Ordinal)
                 && _cachedScreenshotCaptureEpoch == captureEpoch
                 && _cachedScreenshotFullscreen == fullscreen
+                && _cachedScreenshotResolution == resolution
                 && DateTime.UtcNow - _screenshotCacheTime < ScreenshotCacheDuration)
                 return _cachedScreenshot;
             generation = _cacheGeneration;
         }
 
+        var resolutionOptions = new ScreenshotResolutionOptions
+        {
+            TargetScale = resolution.Enabled ? resolution.TargetScale : null,
+            MaxPixelWidth = resolution.Enabled
+                ? GetBoundedPixelDimension(logicalWidth, resolution.TargetScale)
+                : null,
+            MaxPixelHeight = resolution.Enabled
+                ? GetBoundedPixelDimension(logicalHeight, resolution.TargetScale)
+                : null,
+            MaxPixels = resolution.Enabled ? InspectorScreenshotPixelBudget : null,
+            MaxEncodedBytes = MaxScreenshotBytes
+        };
+
         var fresh = fullscreen
-            ? await _client.FullscreenScreenshotAsync(
+            ? await _client.FullscreenScreenshotResultAsync(
                 window: null,
                 maxWidth: null,
                 scale: null,
                 captureEpoch: captureEpoch,
-                registryGeneration: registryGeneration)
-            : await _client.ScreenshotAsync(
+                registryGeneration: registryGeneration,
+                resolution: resolutionOptions)
+            : await _client.ScreenshotResultAsync(
                 window: null,
                 elementId: elementId,
                 selector: null,
                 maxWidth: null,
                 scale: null,
                 captureEpoch: captureEpoch,
-                registryGeneration: registryGeneration);
-        if (fresh is { Length: > MaxScreenshotBytes })
+                registryGeneration: registryGeneration,
+                resolution: resolutionOptions);
+        if (!fresh.Success || fresh.Data is null)
+            return null;
+        if (fresh.Data.Length > MaxScreenshotBytes)
         {
             Console.Error.WriteLine($"[inspector] screenshot exceeded {MaxScreenshotBytes} bytes");
             return null;
         }
-        if (fresh is not { Length: > 0 })
+        if (fresh.Data is not { Length: > 0 })
             return null;
-        if (!ScreenshotImage.IsCompletePng(fresh))
+        if (!ScreenshotImage.IsCompletePng(fresh.Data))
         {
             Console.Error.WriteLine("[inspector] screenshot was not a complete PNG");
             return null;
         }
+
+        var pixelWidth = fresh.PixelWidth ?? 0;
+        var pixelHeight = fresh.PixelHeight ?? 0;
+        if (pixelWidth <= 0 || pixelHeight <= 0)
+            (pixelWidth, pixelHeight) = ScreenshotImage.GetPngDimensions(fresh.Data);
+        var screenshot = new InspectorScreenshot(
+            fresh.Data,
+            pixelWidth,
+            pixelHeight,
+            fresh.LogicalWidth,
+            fresh.LogicalHeight,
+            fresh.CaptureScale,
+            fresh.NativeScale,
+            fresh.ResolutionClamped);
         lock (_cacheLock)
         {
             if (generation == _cacheGeneration)
             {
-                _cachedScreenshot = fresh;
+                _cachedScreenshot = screenshot;
                 _cachedScreenshotElementId = elementId;
                 _cachedScreenshotCaptureEpoch = captureEpoch;
                 _cachedScreenshotFullscreen = fullscreen;
+                _cachedScreenshotResolution = resolution;
                 _screenshotCacheTime = DateTime.UtcNow;
             }
         }
-        return fresh;
+        return screenshot;
+    }
+
+    private static int? GetBoundedPixelDimension(double logicalSize, double targetScale)
+    {
+        if (!double.IsFinite(logicalSize) || logicalSize <= 0
+            || !double.IsFinite(targetScale) || targetScale <= 0)
+        {
+            return null;
+        }
+
+        var requested = Math.Ceiling(logicalSize * targetScale);
+        return (int)Math.Min(
+            InspectorScreenshotMaxDimension,
+            Math.Max(1d, requested));
     }
 
     // ── Proxy handlers ──
@@ -2285,8 +2457,6 @@ public sealed class InspectorServer : IDisposable
         if (frame.WindowId != latest.WindowId ||
             !NearlyEqual(frame.LogicalWidth, latest.LogicalWidth) ||
             !NearlyEqual(frame.LogicalHeight, latest.LogicalHeight) ||
-            frame.PixelWidth != latest.PixelWidth ||
-            frame.PixelHeight != latest.PixelHeight ||
             !NearlyEqual(frame.RootOffsetX, latest.RootOffsetX) ||
             !NearlyEqual(frame.RootOffsetY, latest.RootOffsetY))
         {
@@ -2388,7 +2558,6 @@ public sealed class InspectorServer : IDisposable
 
     private static bool NearlyEqual(double left, double right)
         => Math.Abs(left - right) <= 0.0001;
-
     private static (int, string, byte[]) ActionCorrelationError(
         int statusCode,
         string error,
@@ -2840,6 +3009,9 @@ public sealed class InspectorServer : IDisposable
         double LogicalWidth,
         double LogicalHeight,
         double CaptureScale,
+        double? NativeScale,
+        bool? ResolutionClamped,
+        ScreenshotResolutionKey Resolution,
         double RootOffsetX,
         double RootOffsetY,
         string ElementsHtml,
@@ -2848,6 +3020,22 @@ public sealed class InspectorServer : IDisposable
         int? WindowId,
         string TreeRevision = "",
         string? DiagnosticInputsRevision = null);
+
+    private sealed record InspectorScreenshot(
+        byte[] Data,
+        int PixelWidth,
+        int PixelHeight,
+        double? LogicalWidth,
+        double? LogicalHeight,
+        double? CaptureScale,
+        double? NativeScale,
+        bool? ResolutionClamped);
+
+    private readonly record struct ScreenshotResolutionKey(bool Enabled, double TargetScale)
+    {
+        public static ScreenshotResolutionKey Legacy { get; } = new(false, 1);
+        public static ScreenshotResolutionKey SupportedDefault { get; } = new(true, 1);
+    }
 
     private async Task<(int, string, byte[])> HandleProxyBackAsync()
     {

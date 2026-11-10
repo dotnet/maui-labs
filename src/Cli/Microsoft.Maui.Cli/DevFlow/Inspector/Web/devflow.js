@@ -15,6 +15,12 @@ import {
 import { createPropertyGridController } from './inspector-properties.js';
 import { createElementTreeController } from './inspector-tree.js';
 import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layoutRootElementId } from './inspector-layout.js';
+import {
+  SCREENSHOT_SCALE_BUCKETS,
+  isDefaultScreenshotScale,
+  selectNativeAwareScreenshotScaleBucket,
+  selectScreenshotScaleBucket,
+} from './inspector-resolution.js';
 
 (function () {
   'use strict';
@@ -108,6 +114,15 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     platform: metaContent('devflow-platform'),
     port: Number(metaContent('devflow-agent-port')) || null,
   });
+  let screenshotResolutionSupported = metaContent('devflow-screenshot-resolution') !== 'false';
+  let requestedScreenshotScale = committedFrame.requestedCaptureScale || 1;
+  let committedScreenshotScale = requestedScreenshotScale;
+  let desiredScreenshotScale = requestedScreenshotScale;
+  let learnedMaximumScreenshotScale = committedFrame.nativeScale
+    || SCREENSHOT_SCALE_BUCKETS.at(-1);
+  let screenshotResolutionTimer = null;
+  const SCREENSHOT_RESOLUTION_UPGRADE_DELAY_MS = 350;
+  const SCREENSHOT_RESOLUTION_DOWNGRADE_DELAY_MS = 1500;
   // A per-tab writer token identifies this session for the single-writer lock. A global fetch
   // wrapper stamps it on every same-origin /api/ call and flips to read-only on a writer 409.
   const writerToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('w' + Math.random().toString(36).slice(2) + Date.now());
@@ -343,6 +358,17 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     return 'committed';
   }
 
+  function stateRequestUrl(force = false) {
+    const query = new URLSearchParams();
+    if (diagnosticsWanted()) query.set('diagnostics', '1');
+    if (force) query.set('fresh', '1');
+    if (screenshotResolutionSupported && !isDefaultScreenshotScale(requestedScreenshotScale)) {
+      query.set('targetScale', String(requestedScreenshotScale));
+    }
+    const suffix = query.toString();
+    return `${basePath}/api/state${suffix ? `?${suffix}` : ''}`;
+  }
+
   // Refresh state via AJAX (no full page reload — avoids flash)
   async function refreshState(force = false) {
     const tap = latestTap;
@@ -379,17 +405,22 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       }, STATE_FETCH_TIMEOUT_MS);
       disconnectedOverlay?.setAttribute('aria-busy', 'true');
       try {
-        const query = [];
-        if (diagnosticsWanted()) query.push('diagnostics=1');
-        if (force) query.push('fresh=1');
-        const resp = await fetch(
-          `${basePath}/api/state${query.length ? `?${query.join('&')}` : ''}`,
-          { signal: refresh.controller.signal });
+        const requestedScale = requestedScreenshotScale;
+        const resp = await fetch(stateRequestUrl(force), { signal: refresh.controller.signal });
         if (!ensureCurrent()) return followReplacement();
         if (!resp.ok) { markConnected(false); return null; }
         const state = await resp.json();
         if (!ensureCurrent()) return followReplacement();
         const frame = normalizeFrameDescriptor(state, committedFrame);
+        if (state.screenshotResolutionSupported === false) {
+          screenshotResolutionSupported = false;
+          learnedMaximumScreenshotScale = 1;
+          desiredScreenshotScale = requestedScreenshotScale = 1;
+          if (screenshotResolutionTimer) clearTimeout(screenshotResolutionTimer);
+          screenshotResolutionTimer = null;
+        } else if (state.screenshotResolutionSupported === true) {
+          screenshotResolutionSupported = true;
+        }
 
         // Keep the previous frame intact until its replacement image is ready.
         let image = null;
@@ -409,6 +440,20 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
         }
         markConnected(true);
 
+        committedScreenshotScale = Number(frame.requestedCaptureScale) || requestedScale;
+        const actualCaptureScale = Number(frame.captureScale);
+        const reportedNativeScale = Number(frame.nativeScale);
+        const previousMaximum = learnedMaximumScreenshotScale;
+        if (Number.isFinite(reportedNativeScale) && reportedNativeScale > 0) {
+          learnedMaximumScreenshotScale = reportedNativeScale;
+        } else if (Number.isFinite(actualCaptureScale)
+          && actualCaptureScale > 0
+          && actualCaptureScale + 0.01 < requestedScale) {
+          learnedMaximumScreenshotScale = Math.min(
+            learnedMaximumScreenshotScale,
+            actualCaptureScale);
+        }
+        if (learnedMaximumScreenshotScale !== previousMaximum) scheduleScale();
         const treeRevision = committedFrame.treeRevision;
         const diagnosticInputsRevision = committedFrame.diagnosticInputsRevision;
         const renderedState = [...viewport.querySelectorAll('.devflow-element')].map(element =>
@@ -611,6 +656,7 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
   let refreshTimer = null;
   let refreshTimerDelay = null;
   let refreshTimerIntent = REFRESH_INTENT_RETRY;
+  let refreshTimerRequiresFresh = false;
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
@@ -626,9 +672,13 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     })();
     return refresh.followUpPromise;
   }
-  function scheduleRefresh(delayMs = 300, intent = REFRESH_INTENT_EVIDENCE) {
+  function scheduleRefresh(
+    delayMs = 300,
+    intent = REFRESH_INTENT_EVIDENCE,
+    requiresFresh = false) {
     if (intent === REFRESH_INTENT_EVIDENCE || intent === REFRESH_INTENT_MUTATION)
       refreshRequestVersion++;
+    refreshTimerRequiresFresh = refreshTimerRequiresFresh || requiresFresh;
     if (refreshTimer) {
       const pendingIntent = refreshTimerIntent;
       refreshTimerIntent = Math.max(refreshTimerIntent, intent);
@@ -643,7 +693,9 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
       refreshTimer = null;
       refreshTimerDelay = null;
       const scheduledIntent = refreshTimerIntent;
+      const scheduledRequiresFresh = refreshTimerRequiresFresh;
       refreshTimerIntent = REFRESH_INTENT_RETRY;
+      refreshTimerRequiresFresh = false;
       const tap = latestTap;
       let state;
       if (scheduledIntent === REFRESH_INTENT_MUTATION) {
@@ -655,19 +707,21 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
           if (sharedRefresh.requestVersion !== refreshRequestVersion)
             state = await queueRefreshAfter(sharedRefresh);
         } else {
-          state = await refreshState(tap !== null);
+          state = await refreshState(tap !== null || scheduledRequiresFresh);
         }
       } else if (scheduledIntent === REFRESH_INTENT_RETRY) {
         state = activeRefresh
           ? await activeRefresh.promise
-          : await refreshState();
+          : await refreshState(scheduledRequiresFresh);
       } else if (activeRefresh) {
         state = await queueRefreshAfter(activeRefresh);
       } else {
-        state = await refreshState();
+        state = await refreshState(scheduledRequiresFresh);
       }
       if (!state && latestTap !== null && !activeRefresh)
         scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
+
+
     }, delayMs);
   }
   function onScreenshotError() {
@@ -3564,6 +3618,41 @@ import { createLayoutPanel, createLayoutEventTracker, layoutContextPayload, layo
     viewport.style.transform = s === 1 ? 'none' : ('scale(' + s + ')');
     stage.style.width = (dw * s) + 'px';
     stage.style.height = (dh * s) + 'px';
+    scheduleScreenshotResolution(dw, dh, s);
+  }
+  function scheduleScreenshotResolution(logicalWidth, logicalHeight, renderedScale) {
+    if (!screenshotResolutionSupported) return;
+    const next = selectNativeAwareScreenshotScaleBucket(
+      selectScreenshotScaleBucket({
+        logicalWidth,
+        logicalHeight,
+        renderedWidth: logicalWidth * renderedScale,
+        renderedHeight: logicalHeight * renderedScale,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      }),
+      learnedMaximumScreenshotScale);
+    const previousDesiredScale = desiredScreenshotScale;
+    desiredScreenshotScale = next;
+    if (next === requestedScreenshotScale) {
+      if (screenshotResolutionTimer) clearTimeout(screenshotResolutionTimer);
+      screenshotResolutionTimer = null;
+      return;
+    }
+    if (screenshotResolutionTimer && next === previousDesiredScale) return;
+    if (screenshotResolutionTimer) clearTimeout(screenshotResolutionTimer);
+    const delay = next > committedScreenshotScale
+      ? SCREENSHOT_RESOLUTION_UPGRADE_DELAY_MS
+      : SCREENSHOT_RESOLUTION_DOWNGRADE_DELAY_MS;
+    screenshotResolutionTimer = setTimeout(async () => {
+      screenshotResolutionTimer = null;
+      if (pendingTapRequests > 0 || latestTap !== null) {
+        scheduleScreenshotResolution(logicalWidth, logicalHeight, renderedScale);
+        return;
+      }
+      if (desiredScreenshotScale === requestedScreenshotScale) return;
+      requestedScreenshotScale = desiredScreenshotScale;
+      scheduleRefresh(0, REFRESH_INTENT_EVIDENCE, true);
+    }, delay);
   }
   function scheduleScale() {
     if (scaleRaf) cancelAnimationFrame(scaleRaf);

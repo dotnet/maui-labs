@@ -10,8 +10,10 @@ namespace Microsoft.Maui.Cli.UnitTests;
 
 public class InspectorServerCaptureMetadataTests
 {
-    [Fact]
-    public async Task State_WithFreshQuery_BypassesRecentFrameReuse()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("2")]
+    public async Task State_WithFreshQuery_BypassesRecentFrameReuse(string? targetScale)
     {
         await using var agent = new MockAgentServer();
         await agent.StartAsync();
@@ -33,11 +35,14 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
+            var stateUrl = $"http://localhost:{inspectorPort}/api/state";
+            if (targetScale is not null)
+                stateUrl += $"?targetScale={targetScale}";
 
             string? firstFrameId;
             long firstFrameRevision;
             using (var first = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state",
+                stateUrl,
                 HttpCompletionOption.ResponseHeadersRead))
             {
                 first.EnsureSuccessStatusCode();
@@ -54,7 +59,7 @@ public class InspectorServerCaptureMetadataTests
             Assert.True(screenshotsAfterFirstFrame > 0);
 
             using (var reused = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state",
+                stateUrl,
                 HttpCompletionOption.ResponseHeadersRead))
                 reused.EnsureSuccessStatusCode();
 
@@ -67,8 +72,11 @@ public class InspectorServerCaptureMetadataTests
 
             string? freshFrameId;
             long freshFrameRevision;
+            var freshStateUrl = stateUrl.Contains('?')
+                ? $"{stateUrl}&fresh=1"
+                : $"{stateUrl}?fresh=1";
             using (var fresh = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state?fresh=1",
+                freshStateUrl,
                 HttpCompletionOption.ResponseHeadersRead))
             {
                 fresh.EnsureSuccessStatusCode();
@@ -174,6 +182,55 @@ public class InspectorServerCaptureMetadataTests
                 "isVisible": true,
                 "isEnabled": true,
                 "windowBounds": { "x": 10, "y": 20, "width": 200, "height": 300 },
+                "children": []
+              }
+            ]
+          }
+        ]
+        """;
+    private const string FractionalNativeRootVisualTree = """
+        [
+          {
+            "id": "decor-root",
+            "type": "DecorView",
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "windowId": 0,
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": { "x": 0, "y": 0, "width": 400, "height": 300 },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "captureEpoch": 42,
+                "registryGeneration": 7,
+                "windowId": 0,
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": { "x": 10.25, "y": 20.25, "width": 200.25, "height": 150.25 },
+                "children": []
+              }
+            ]
+          }
+        ]
+        """;
+
+    private const string RevisionlessOffsetVisualTree = """
+        [
+          {
+            "id": "window-root",
+            "type": "Window",
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": { "x": 0, "y": 0, "width": 100, "height": 100 },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": { "x": 10, "y": 20, "width": 100, "height": 100 },
                 "children": []
               }
             ]
@@ -395,6 +452,43 @@ public class InspectorServerCaptureMetadataTests
 
             Assert.Equal(
                 2,
+                agent.RecordedRequests.Count(
+                    recorded => recorded.Path == "/api/v1/agent/capabilities"));
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task InspectorFeatures_ShareOneCapabilitiesDocument()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var stateResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            stateResponse.EnsureSuccessStatusCode();
+
+            using var request = new StringContent(
+                """{"elementId":"element-42","captureEpoch":42,"registryGeneration":7}""",
+                Encoding.UTF8,
+                "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/tap",
+                request);
+            response.EnsureSuccessStatusCode();
+
+            Assert.Equal(
+                1,
                 agent.RecordedRequests.Count(
                     recorded => recorded.Path == "/api/v1/agent/capabilities"));
         }
@@ -752,6 +846,170 @@ public class InspectorServerCaptureMetadataTests
             Assert.Contains("fullscreen=true", screenshotRequest.QueryString);
             Assert.Contains("captureEpoch=42", screenshotRequest.QueryString);
             Assert.Contains("registryGeneration=7", screenshotRequest.QueryString);
+            Assert.Contains("targetScale=1", screenshotRequest.QueryString);
+            Assert.Contains("maxPixels=8388608", screenshotRequest.QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_DifferentResolutionBucket_CreatesDistinctAtomicFrame()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var defaultResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            defaultResponse.EnsureSuccessStatusCode();
+            using var defaultState = JsonDocument.Parse(await defaultResponse.Content.ReadAsStringAsync());
+
+            using var highDpiResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2");
+            highDpiResponse.EnsureSuccessStatusCode();
+            using var highDpiState = JsonDocument.Parse(await highDpiResponse.Content.ReadAsStringAsync());
+
+            Assert.NotEqual(
+                defaultState.RootElement.GetProperty("frameId").GetString(),
+                highDpiState.RootElement.GetProperty("frameId").GetString());
+            Assert.Equal(
+                2,
+                highDpiState.RootElement
+                    .GetProperty("frame")
+                    .GetProperty("requestedCaptureScale")
+                    .GetDouble());
+            Assert.True(highDpiState.RootElement.GetProperty("screenshotResolutionSupported").GetBoolean());
+
+            var screenshotRequests = agent.RecordedRequests
+                .Where(request => request.Path == "/api/v1/ui/screenshot")
+                .ToArray();
+            Assert.Equal(2, screenshotRequests.Length);
+            Assert.Contains("targetScale=1", screenshotRequests[0].QueryString);
+            Assert.Contains("maxPixels=8388608", screenshotRequests[0].QueryString);
+            Assert.Contains("targetScale=2", screenshotRequests[1].QueryString);
+            Assert.Contains("maxPixels=8388608", screenshotRequests[1].QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_LegacyAgent_DoesNotSendResolutionHints()
+    {
+        await using var agent = new MockAgentServer(supportsCaptureEpoch: false);
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            response.EnsureSuccessStatusCode();
+
+            var screenshotRequest = Assert.Single(
+                agent.RecordedRequests,
+                request => request.Path == "/api/v1/ui/screenshot");
+            Assert.DoesNotContain("targetScale", screenshotRequest.QueryString);
+            Assert.DoesNotContain("maxPixelWidth", screenshotRequest.QueryString);
+            Assert.DoesNotContain("maxPixelHeight", screenshotRequest.QueryString);
+            Assert.DoesNotContain("maxPixels", screenshotRequest.QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Root_SupportedAgent_AppliesInitialPixelBudget()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = """
+                [
+                  {
+                    "id": "window-root",
+                    "type": "Window",
+                    "isVisible": true,
+                    "isEnabled": true,
+                    "children": [
+                      {
+                        "id": "page-root",
+                        "type": "ContentPage",
+                        "isVisible": true,
+                        "isEnabled": true,
+                        "bounds": { "x": 0, "y": 0, "width": 4096, "height": 2160 },
+                        "windowBounds": { "x": 0, "y": 0, "width": 4096, "height": 2160 },
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+                """
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/");
+            response.EnsureSuccessStatusCode();
+
+            var screenshotRequest = Assert.Single(
+                agent.RecordedRequests,
+                request => request.Path == "/api/v1/ui/screenshot");
+            Assert.Contains("targetScale=1", screenshotRequest.QueryString);
+            Assert.Contains("maxPixelWidth=4096", screenshotRequest.QueryString);
+            Assert.Contains("maxPixelHeight=2160", screenshotRequest.QueryString);
+            Assert.Contains("maxPixels=8388608", screenshotRequest.QueryString);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_InvalidResolutionHint_IsRejectedBeforeCapture()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=NaN");
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.DoesNotContain(
+                agent.RecordedRequests,
+                request => request.Path == "/api/v1/ui/tree"
+                    || request.Path == "/api/v1/ui/screenshot");
         }
         finally
         {
@@ -981,6 +1239,45 @@ public class InspectorServerCaptureMetadataTests
             Assert.Equal(300, frame.GetProperty("logicalHeight").GetDouble());
             Assert.Equal(10, frame.GetProperty("rootOffsetX").GetDouble());
             Assert.Equal(20, frame.GetProperty("rootOffsetY").GetDouble());
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_WithFractionalNativeRoot_PreservesTreeLogicalDimensions()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = FractionalNativeRootVisualTree
+        };
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Pixel-Width"] = "400";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Pixel-Height"] = "300";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Logical-Width"] = "200";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Logical-Height"] = "150";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Capture-Scale"] = "2";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Native-Scale"] = "2";
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2");
+            response.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+
+            Assert.Equal(200.25, frame.GetProperty("logicalWidth").GetDouble());
+            Assert.Equal(150.25, frame.GetProperty("logicalHeight").GetDouble());
+            Assert.Equal(200.25, state.RootElement.GetProperty("viewportWidth").GetDouble());
+            Assert.Equal(150.25, state.RootElement.GetProperty("viewportHeight").GetDouble());
         }
         finally
         {
@@ -1281,6 +1578,72 @@ public class InspectorServerCaptureMetadataTests
             Assert.NotEqual(
                 firstTap.RootElement.GetProperty("captureEpoch").GetInt64(),
                 secondTap.RootElement.GetProperty("captureEpoch").GetInt64());
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CorrelatedHitTest_RevisionlessResolutionOnlyFrameReplacement_RemainsValid()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = RevisionlessOffsetVisualTree
+        };
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var firstResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state");
+            firstResponse.EnsureSuccessStatusCode();
+            using var firstState = JsonDocument.Parse(
+                await firstResponse.Content.ReadAsStringAsync());
+            var firstFrame = firstState.RootElement.GetProperty("frame");
+
+            using var secondResponse = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2");
+            secondResponse.EnsureSuccessStatusCode();
+            using var secondState = JsonDocument.Parse(
+                await secondResponse.Content.ReadAsStringAsync());
+            var secondFrame = secondState.RootElement.GetProperty("frame");
+            Assert.NotEqual(
+                firstFrame.GetProperty("frameId").GetString(),
+                secondFrame.GetProperty("frameId").GetString());
+            Assert.Equal(1, firstFrame.GetProperty("requestedCaptureScale").GetDouble());
+            Assert.Equal(2, secondFrame.GetProperty("requestedCaptureScale").GetDouble());
+            agent.ClearRecordedRequests();
+
+            var requestJson = JsonSerializer.Serialize(new
+            {
+                x = 5,
+                y = 6,
+                correlation = new
+                {
+                    actionId = "action-resolution-only",
+                    source = "inspector",
+                    streamId = firstFrame.GetProperty("streamId").GetString(),
+                    frameId = firstFrame.GetProperty("frameId").GetString(),
+                    frameRevision = firstFrame.GetProperty("frameRevision").GetInt64(),
+                    coordinateSpace = "appLogical"
+                }
+            });
+            using var request = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(
+                $"http://localhost:{inspectorPort}/api/hitTest",
+                request);
+
+            response.EnsureSuccessStatusCode();
+            Assert.Contains(
+                agent.RecordedRequests,
+                recorded => recorded.Path == "/api/v1/ui/hit-test");
         }
         finally
         {
@@ -1673,6 +2036,8 @@ public class InspectorServerCaptureMetadataTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
     public async Task State_WhenScreenshotIsInvalidOrTruncated_ReturnsServiceUnavailable(
         int invalidPngKind)
     {
@@ -1682,8 +2047,12 @@ public class InspectorServerCaptureMetadataTests
             {
                 0 => [1, 2, 3, 4],
                 1 => MockAgentResponses.ScreenshotPng[..24],
+                2 => Convert.FromBase64String(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBwIAAAASJ8QPAAAABElEQVQAAQIDQN6+CAAAAABJRU5ErkJggg=="),
+                3 => Convert.FromBase64String(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAABklEQVR4nGNgQAfMKBUWAAAAAElFTkSuQmCC"),
                 _ => Convert.FromBase64String(
-                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBwIAAAASJ8QPAAAABElEQVQAAQIDQN6+CAAAAABJRU5ErkJggg==")
+                    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAC0lEQVR4nGJgQAcAABIAAWCK7kMAAAAASUVORK5CYII=")
             }
         };
         await agent.StartAsync();
@@ -1713,6 +2082,68 @@ public class InspectorServerCaptureMetadataTests
             var html = await root.Content.ReadAsStringAsync();
             Assert.DoesNotContain("id=\"screenshot\"", html);
             Assert.DoesNotContain("name=\"devflow-frame\"", html);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_InvalidForcedResolutionCapture_PreservesCompleteFrameAndRecovers()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            string firstFrameId;
+            string firstScreenshotUrl;
+            using (var initial = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2"))
+            {
+                initial.EnsureSuccessStatusCode();
+                using var state = JsonDocument.Parse(await initial.Content.ReadAsStringAsync());
+                firstFrameId = state.RootElement
+                    .GetProperty("frame")
+                    .GetProperty("frameId")
+                    .GetString()!;
+                firstScreenshotUrl = state.RootElement.GetProperty("screenshotUrl").GetString()!;
+            }
+
+            agent.ScreenshotResponse = MockAgentResponses.ScreenshotPng[..24];
+            using (var invalid = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2&fresh=1"))
+            {
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, invalid.StatusCode);
+            }
+
+            using (var preserved = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/{firstScreenshotUrl}"))
+            {
+                preserved.EnsureSuccessStatusCode();
+                Assert.Equal(
+                    MockAgentResponses.ScreenshotPng,
+                    await preserved.Content.ReadAsByteArrayAsync());
+            }
+
+            agent.ScreenshotResponse = MockAgentResponses.ScreenshotPng;
+            using var recovered = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2&fresh=1");
+            recovered.EnsureSuccessStatusCode();
+            using var recoveredState = JsonDocument.Parse(
+                await recovered.Content.ReadAsStringAsync());
+            Assert.NotEqual(
+                firstFrameId,
+                recoveredState.RootElement
+                    .GetProperty("frame")
+                    .GetProperty("frameId")
+                    .GetString());
         }
         finally
         {

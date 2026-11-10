@@ -41,6 +41,25 @@ await client.FillAsync("NameEntry", "Ada Lovelace");
 
 // Inspect the visual tree
 var tree = await client.GetTreeAsync(maxDepth: 3);
+
+// Request a bounded high-DPI screenshot. The result reports the actual size chosen.
+var screenshot = await client.ScreenshotResultAsync(
+    window: null,
+    elementId: null,
+    selector: null,
+    maxWidth: null,
+    scale: null,
+    captureEpoch: null,
+    registryGeneration: null,
+    resolution: new ScreenshotResolutionOptions
+    {
+        TargetScale = 2,
+        MaxPixelWidth = 1600,
+        MaxPixelHeight = 1200,
+        MaxPixels = 2_000_000,
+        MaxEncodedBytes = 64 * 1024 * 1024
+    });
+Console.WriteLine($"{screenshot.PixelWidth}x{screenshot.PixelHeight} @ {screenshot.CaptureScale}x");
 ```
 
 ## Requirements

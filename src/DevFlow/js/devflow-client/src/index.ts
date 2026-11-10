@@ -38,6 +38,16 @@ export interface ScreenshotOptions {
   selector?: string;
   maxWidth?: number;
   scale?: string;
+  targetScale?: number;
+  maxPixelWidth?: number;
+  maxPixelHeight?: number;
+  maxPixels?: number;
+}
+
+function minPositive(...values: Array<number | undefined>): number | undefined {
+  const positive = values.filter((value): value is number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0);
+  return positive.length > 0 ? Math.min(...positive) : undefined;
 }
 
 export interface OpenEventsHandlers {
@@ -348,12 +358,20 @@ export class DevFlowClient {
 
   async screenshot(opts: ScreenshotOptions = {}): Promise<DevFlowResult<Buffer>> {
     if (this.disposed) return this.disposedErr("screenshot");
+    const hasResolutionHints = opts.targetScale !== undefined
+      || opts.maxPixelWidth !== undefined
+      || opts.maxPixelHeight !== undefined
+      || opts.maxPixels !== undefined;
     const path = `/api/v1/ui/screenshot${buildQuery({
       window: opts.window,
       elementId: opts.elementId,
       selector: opts.selector,
-      maxWidth: opts.maxWidth,
-      scale: opts.scale,
+      maxWidth: minPositive(opts.maxWidth, opts.maxPixelWidth),
+      scale: opts.scale ?? (hasResolutionHints && opts.maxWidth === undefined ? "auto" : undefined),
+      targetScale: opts.targetScale,
+      maxPixelWidth: opts.maxPixelWidth,
+      maxPixelHeight: opts.maxPixelHeight,
+      maxPixels: opts.maxPixels,
     })}`;
     const resolved = await this.resolver.resolve();
     if (!resolved.ok) return { ok: false, error: resolved.error };

@@ -114,6 +114,26 @@
           "exclusiveMinimum": 0,
           "description": "Nominal PNG pixels per logical unit. Exact conversions use pixelWidth/logicalWidth and pixelHeight/logicalHeight per axis."
         },
+        "nativeScale": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "description": "Native capture pixels per logical unit before negotiated downsampling, when the backend can report it."
+        },
+        "requestedCaptureScale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Normalized screenshot scale bucket requested for this immutable frame."
+        },
+        "resolutionClamped": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Whether the backend bounded the requested screenshot resolution."
+        },
         "createdAt": {
           "$ref": "common.json#/$defs/Timestamp",
           "description": "UTC time when the complete tree and screenshot frame was created."

@@ -62,6 +62,10 @@ internal static class MockAgentResponses
               "features": ["tap", "fill", "gesture", "batch", "stale-capture-rejection"],
               "gestures": ["tap", "doubletap", "longpress", "swipe", "pan", "pinch", "rotate"]
             },
+            "ui.screenshot": {
+              "version": 3,
+              "features": ["element", "fullscreen", "resolution-hints"]
+            },
             "webview": { "version": 1, "features": ["contexts", "evaluate", "source"] },
             "network": { "version": 1, "features": ["list", "detail", "clear"] },
             "logs": { "version": 1, "features": ["list", "stream"] },

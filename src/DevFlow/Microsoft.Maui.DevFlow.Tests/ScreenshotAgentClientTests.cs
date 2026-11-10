@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Maui.DevFlow.Driver;
+using SkiaSharp;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
@@ -15,6 +16,9 @@ public class ScreenshotAgentClientTests
     {
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01, 0x02, 0x03, 0x04
     };
+
+    private static readonly byte[] ValidPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAABdElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+Bn+3AAHo8fTrAAAAAElFTkSuQmCC");
 
     [Fact]
     public async Task ScreenshotResultAsync_SuccessfulCapture_ReturnsPngBytes()
@@ -42,7 +46,15 @@ public class ScreenshotAgentClientTests
                 {
                     ["X-DevFlow-Capture-Epoch"] = "42",
                     ["X-DevFlow-Registry-Generation"] = "7",
-                    ["X-DevFlow-Window-Id"] = "2"
+                    ["X-DevFlow-Window-Id"] = "2",
+                    ["X-DevFlow-Screenshot-Pixel-Width"] = "400",
+                    ["X-DevFlow-Screenshot-Pixel-Height"] = "300",
+                    ["X-DevFlow-Screenshot-Logical-Width"] = "200",
+                    ["X-DevFlow-Screenshot-Logical-Height"] = "150",
+                    ["X-DevFlow-Screenshot-Capture-Scale"] = "2",
+                    ["X-DevFlow-Screenshot-Native-Scale"] = "3",
+                    ["X-DevFlow-Screenshot-Format"] = "png",
+                    ["X-DevFlow-Screenshot-Clamped"] = "true"
                 });
         });
 
@@ -65,7 +77,289 @@ public class ScreenshotAgentClientTests
         Assert.Equal(42, result.CaptureEpoch);
         Assert.Equal(7, result.RegistryGeneration);
         Assert.Equal(2, result.WindowId);
+        Assert.Equal(400, result.PixelWidth);
+        Assert.Equal(300, result.PixelHeight);
+        Assert.Equal(200, result.LogicalWidth);
+        Assert.Equal(150, result.LogicalHeight);
+        Assert.Equal(2, result.CaptureScale);
+        Assert.Equal(3, result.NativeScale);
+        Assert.Equal("png", result.Format);
+        Assert.True(result.ResolutionClamped == true);
 
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_ResolutionOptions_UsesAdditiveHintsAndLegacyWidthFallback()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            var request = await ReadRequestAsync(stream);
+            Assert.Contains("maxWidth=800", request, StringComparison.Ordinal);
+            Assert.Contains("targetScale=2", request, StringComparison.Ordinal);
+            Assert.Contains("maxPixelWidth=800", request, StringComparison.Ordinal);
+            Assert.Contains("maxPixelHeight=600", request, StringComparison.Ordinal);
+            Assert.Contains("maxPixels=480000", request, StringComparison.Ordinal);
+            Assert.Contains("scale=auto", request, StringComparison.Ordinal);
+            await WriteResponseAsync(stream, 200, "OK", "image/png", SamplePng);
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync(
+            window: null,
+            elementId: null,
+            selector: null,
+            maxWidth: null,
+            scale: null,
+            captureEpoch: null,
+            registryGeneration: null,
+            resolution: new ScreenshotResolutionOptions
+            {
+                TargetScale = 2,
+                MaxPixelWidth = 800,
+                MaxPixelHeight = 600,
+                MaxPixels = 480_000
+            });
+
+        Assert.True(result.Success);
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_ExplicitLegacyWidthWithResolutionCaps_DoesNotForceAutoScale()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            var request = await ReadRequestAsync(stream);
+            Assert.Contains("maxWidth=800", request, StringComparison.Ordinal);
+            Assert.Contains("maxPixels=1000000", request, StringComparison.Ordinal);
+            Assert.DoesNotContain("scale=auto", request, StringComparison.Ordinal);
+            await WriteResponseAsync(stream, 200, "OK", "image/png", SamplePng);
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync(
+            window: null,
+            elementId: null,
+            selector: null,
+            maxWidth: 800,
+            scale: null,
+            captureEpoch: null,
+            registryGeneration: null,
+            resolution: new ScreenshotResolutionOptions
+            {
+                MaxPixels = 1_000_000
+            });
+
+        Assert.True(result.Success);
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_MaxEncodedBytes_RejectsOversizedChunkedResponse()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            var request = await ReadRequestAsync(stream);
+            Assert.DoesNotContain("scale=auto", request, StringComparison.Ordinal);
+            Assert.DoesNotContain("maxPixels=", request, StringComparison.Ordinal);
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: image/png\r\n" +
+                "Transfer-Encoding: chunked\r\n" +
+                "Connection: close\r\n\r\n" +
+                "3\r\nabc\r\n" +
+                "3\r\ndef\r\n" +
+                "0\r\n\r\n"));
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync(
+            window: null,
+            elementId: null,
+            selector: null,
+            maxWidth: null,
+            scale: null,
+            captureEpoch: null,
+            registryGeneration: null,
+            resolution: new ScreenshotResolutionOptions
+            {
+                MaxEncodedBytes = 5
+            });
+
+        Assert.False(result.Success);
+        Assert.Equal("screenshot-too-large", result.Reason);
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_MaxEncodedBytes_RejectsOversizedChunkedError()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            await ReadRequestAsync(stream);
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(
+                "HTTP/1.1 500 Internal Server Error\r\n" +
+                "Content-Type: application/json\r\n" +
+                "Transfer-Encoding: chunked\r\n" +
+                "Connection: close\r\n\r\n" +
+                "3\r\nabc\r\n" +
+                "3\r\ndef\r\n" +
+                "0\r\n\r\n"));
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync(
+            window: null,
+            elementId: null,
+            selector: null,
+            maxWidth: null,
+            scale: null,
+            captureEpoch: null,
+            registryGeneration: null,
+            resolution: new ScreenshotResolutionOptions
+            {
+                MaxEncodedBytes = 5
+            });
+
+        Assert.False(result.Success);
+            Assert.Equal("screenshot-too-large", result.Reason);
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_DefaultLimit_RejectsOversizedNotSupportedError()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            await ReadRequestAsync(stream);
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(
+                "HTTP/1.1 501 Not Implemented\r\n" +
+                "Content-Type: application/json\r\n" +
+                "Content-Length: 70000\r\n" +
+                "Connection: close\r\n\r\n"));
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal("screenshot-too-large", result.Reason);
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_MetadataDisagreesWithPng_IgnoresLogicalMetadata()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            await ReadRequestAsync(stream);
+            await WriteResponseAsync(
+                stream,
+                200,
+                "OK",
+                "image/png",
+                ValidPng,
+                new Dictionary<string, string>
+                {
+                    ["X-DevFlow-Screenshot-Pixel-Width"] = "999",
+                    ["X-DevFlow-Screenshot-Pixel-Height"] = "300",
+                    ["X-DevFlow-Screenshot-Logical-Width"] = "200",
+                    ["X-DevFlow-Screenshot-Logical-Height"] = "150",
+                    ["X-DevFlow-Screenshot-Capture-Scale"] = "2",
+                    ["X-DevFlow-Screenshot-Native-Scale"] = "2"
+                });
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(400, result.PixelWidth);
+        Assert.Equal(300, result.PixelHeight);
+        Assert.Null(result.LogicalWidth);
+        Assert.Null(result.LogicalHeight);
+        Assert.Null(result.CaptureScale);
+        Assert.Null(result.NativeScale);
+        await serverTask;
+    }
+
+    [Fact]
+    public async Task ScreenshotResultAsync_FlooredTallImage_PreservesValidScaleMetadata()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var png = CreatePng(294, 639);
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var client = await AcceptAsync(listener);
+            using var stream = client.GetStream();
+            await ReadRequestAsync(stream);
+            await WriteResponseAsync(
+                stream,
+                200,
+                "OK",
+                "image/png",
+                png,
+                new Dictionary<string, string>
+                {
+                    ["X-DevFlow-Screenshot-Pixel-Width"] = "294",
+                    ["X-DevFlow-Screenshot-Pixel-Height"] = "639",
+                    ["X-DevFlow-Screenshot-Logical-Width"] = "393",
+                    ["X-DevFlow-Screenshot-Logical-Height"] = "852",
+                    ["X-DevFlow-Screenshot-Capture-Scale"] = "0.7480916030534351",
+                    ["X-DevFlow-Screenshot-Native-Scale"] = "3",
+                    ["X-DevFlow-Screenshot-Clamped"] = "true"
+                });
+        });
+
+        using var agent = new AgentClient("localhost", port);
+        var result = await agent.ScreenshotResultAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(393d, result.LogicalWidth);
+        Assert.Equal(852d, result.LogicalHeight);
+        Assert.Equal(0.7480916030534351, result.CaptureScale);
+        Assert.Equal(3, result.NativeScale);
+        Assert.True(result.ResolutionClamped == true);
         await serverTask;
     }
 
@@ -241,6 +535,15 @@ public class ScreenshotAgentClientTests
         }
 
         return Encoding.UTF8.GetString(request.ToArray());
+    }
+
+    private static byte[] CreatePng(int width, int height)
+    {
+        using var bitmap = new SKBitmap(width, height);
+        bitmap.Erase(SKColors.Transparent);
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
     }
 
     private static readonly byte[] HeaderTerminator = Encoding.ASCII.GetBytes("\r\n\r\n");

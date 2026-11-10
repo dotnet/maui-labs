@@ -10,6 +10,8 @@ namespace Microsoft.Maui.DevFlow.Agent.Gtk;
 /// </summary>
 public class GtkAgentService : MauiDevFlowAgentService
 {
+    protected override bool SupportsScreenshotResolutionHints => false;
+
     public GtkAgentService(AgentOptions? options = null) : base(options) { }
 
     internal GtkAgentService(
