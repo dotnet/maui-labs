@@ -232,6 +232,15 @@ public sealed class ScreenshotImageTests : IDisposable
     }
 
     [Fact]
+    public void IsCompletePng_TruncatedZlibTrailerWithValidChunkCrc_ReturnsFalse()
+    {
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAABklEQVR4nGNgQAfMKBUWAAAAAElFTkSuQmCC");
+
+        Assert.False(ScreenshotImage.IsCompletePng(png));
+    }
+
+    [Fact]
     public void IsCompletePng_CorruptChunkCrc_ReturnsFalse()
     {
         var png = CreatePng(2, 2);

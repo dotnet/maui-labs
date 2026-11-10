@@ -1243,6 +1243,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
 
         var request = Assert.Single(negotiatedRequests);
         Assert.Matches(@"[?&]targetScale=(?:0\.25|0\.5|0\.75|1\.5|2|3|4)(?:&|$)", request);
+        Assert.Contains("fresh=1", request, StringComparison.Ordinal);
         await Expect(Page.Locator("#df-disconnected-overlay")).ToBeHiddenAsync();
         Assert.Empty(_pageErrors);
     }

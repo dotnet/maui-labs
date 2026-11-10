@@ -240,6 +240,28 @@ internal static class ScreenshotImage
 
         try
         {
+            if (!compressedImageData.TryGetBuffer(out var compressedBuffer) ||
+                compressedImageData.Length < 6)
+            {
+                return false;
+            }
+
+            var zlibData = compressedBuffer.Array!.AsSpan(
+                compressedBuffer.Offset,
+                checked((int)compressedImageData.Length));
+            var compressionMethodAndInfo = zlibData[0];
+            var flags = zlibData[1];
+            if ((compressionMethodAndInfo & 0x0f) != 8 ||
+                (compressionMethodAndInfo >> 4) > 7 ||
+                ((compressionMethodAndInfo << 8) | flags) % 31 != 0 ||
+                (flags & 0x20) != 0)
+            {
+                return false;
+            }
+            var expectedAdler32 = BinaryPrimitives.ReadUInt32BigEndian(zlibData[^4..]);
+            uint adlerA = 1;
+            uint adlerB = 0;
+
             var bitsPerPixel = checked(channels * bitDepth);
             long decodedBytes;
             if (interlaceMethod == 0)
@@ -272,7 +294,13 @@ internal static class ScreenshotImage
                 leaveOpen: true);
             if (interlaceMethod == 0)
             {
-                if (!ValidatePngPass(zlib, width, height, bitsPerPixel))
+                if (!ValidatePngPass(
+                        zlib,
+                        width,
+                        height,
+                        bitsPerPixel,
+                        ref adlerA,
+                        ref adlerB))
                     return false;
             }
             else
@@ -286,14 +314,21 @@ internal static class ScreenshotImage
                     var passWidth = GetAdam7Dimension(width, startX[pass], stepX[pass]);
                     var passHeight = GetAdam7Dimension(height, startY[pass], stepY[pass]);
                     if (passWidth > 0 && passHeight > 0 &&
-                        !ValidatePngPass(zlib, passWidth, passHeight, bitsPerPixel))
+                        !ValidatePngPass(
+                            zlib,
+                            passWidth,
+                            passHeight,
+                            bitsPerPixel,
+                            ref adlerA,
+                            ref adlerB))
                     {
                         return false;
                     }
                 }
             }
 
-            return zlib.ReadByte() == -1;
+            var actualAdler32 = (adlerB << 16) | adlerA;
+            return zlib.ReadByte() == -1 && actualAdler32 == expectedAdler32;
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException or OverflowException)
         {
@@ -305,7 +340,9 @@ internal static class ScreenshotImage
         Stream decompressed,
         int width,
         int height,
-        int bitsPerPixel)
+        int bitsPerPixel,
+        ref uint adlerA,
+        ref uint adlerB)
     {
         var rowBytes = checked((width * (long)bitsPerPixel + 7) / 8);
         if (rowBytes > int.MaxValue - 1)
@@ -317,9 +354,23 @@ internal static class ScreenshotImage
             decompressed.ReadExactly(row);
             if (row[0] > 4)
                 return false;
+            UpdateAdler32(row, ref adlerA, ref adlerB);
         }
 
         return true;
+    }
+
+    private static void UpdateAdler32(
+        ReadOnlySpan<byte> data,
+        ref uint adlerA,
+        ref uint adlerB)
+    {
+        const uint Modulus = 65521;
+        foreach (var value in data)
+        {
+            adlerA = (adlerA + value) % Modulus;
+            adlerB = (adlerB + adlerA) % Modulus;
+        }
     }
 
     private static long GetPngPassByteCount(int width, int height, int bitsPerPixel)
