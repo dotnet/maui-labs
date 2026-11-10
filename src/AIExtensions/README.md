@@ -34,7 +34,7 @@ thread.
 | [`AIExtensions.Sample.Hello`](../../samples/AIExtensions.Sample.Hello/) | Minimal end-to-end usage |
 | [`AIExtensions.Sample.DIParameters`](../../samples/AIExtensions.Sample.DIParameters/) | DI parameter binding with `[FromServices]` |
 | [`ChatControls.Sample`](../../samples/ChatControls.Sample/) | Provider-neutral `ChatView` lab with participants, delivery states, typing, media, attachments, custom content, and theme overrides |
-| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI AI chat app: Azure OpenAI, custom product/order blocks, generated `[ToolBlock]`, approvals, UI state, attachments, image generation, raw-block preview, and template switching |
+| [`AIExtensions.Sample.Garden`](../../samples/AIExtensions.Sample.Garden/) | Full MAUI chat app with navigation, cart, approval flow |
 | [`AIExtensions.Sample.ChatPlayground`](../../samples/AIExtensions.Sample.ChatPlayground/) | Azure/Apple `IChatClient` requests, images and tools, automatic recording, and offline replay with portable tests |
 
 ## CI
