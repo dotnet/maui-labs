@@ -10,8 +10,10 @@ namespace Microsoft.Maui.Cli.UnitTests;
 
 public class InspectorServerCaptureMetadataTests
 {
-    [Fact]
-    public async Task State_WithFreshQuery_BypassesRecentFrameReuse()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("2")]
+    public async Task State_WithFreshQuery_BypassesRecentFrameReuse(string? targetScale)
     {
         await using var agent = new MockAgentServer();
         await agent.StartAsync();
@@ -33,11 +35,14 @@ public class InspectorServerCaptureMetadataTests
         try
         {
             using var client = new HttpClient();
+            var stateUrl = $"http://localhost:{inspectorPort}/api/state";
+            if (targetScale is not null)
+                stateUrl += $"?targetScale={targetScale}";
 
             string? firstFrameId;
             long firstFrameRevision;
             using (var first = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state",
+                stateUrl,
                 HttpCompletionOption.ResponseHeadersRead))
             {
                 first.EnsureSuccessStatusCode();
@@ -54,7 +59,7 @@ public class InspectorServerCaptureMetadataTests
             Assert.True(screenshotsAfterFirstFrame > 0);
 
             using (var reused = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state",
+                stateUrl,
                 HttpCompletionOption.ResponseHeadersRead))
                 reused.EnsureSuccessStatusCode();
 
@@ -67,8 +72,11 @@ public class InspectorServerCaptureMetadataTests
 
             string? freshFrameId;
             long freshFrameRevision;
+            var freshStateUrl = stateUrl.Contains('?')
+                ? $"{stateUrl}&fresh=1"
+                : $"{stateUrl}?fresh=1";
             using (var fresh = await client.GetAsync(
-                $"http://localhost:{inspectorPort}/api/state?fresh=1",
+                freshStateUrl,
                 HttpCompletionOption.ResponseHeadersRead))
             {
                 fresh.EnsureSuccessStatusCode();
@@ -2002,6 +2010,68 @@ public class InspectorServerCaptureMetadataTests
             var html = await root.Content.ReadAsStringAsync();
             Assert.DoesNotContain("id=\"screenshot\"", html);
             Assert.DoesNotContain("name=\"devflow-frame\"", html);
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task State_InvalidForcedResolutionCapture_PreservesCompleteFrameAndRecovers()
+    {
+        await using var agent = new MockAgentServer();
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            string firstFrameId;
+            string firstScreenshotUrl;
+            using (var initial = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2"))
+            {
+                initial.EnsureSuccessStatusCode();
+                using var state = JsonDocument.Parse(await initial.Content.ReadAsStringAsync());
+                firstFrameId = state.RootElement
+                    .GetProperty("frame")
+                    .GetProperty("frameId")
+                    .GetString()!;
+                firstScreenshotUrl = state.RootElement.GetProperty("screenshotUrl").GetString()!;
+            }
+
+            agent.ScreenshotResponse = MockAgentResponses.ScreenshotPng[..24];
+            using (var invalid = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2&fresh=1"))
+            {
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, invalid.StatusCode);
+            }
+
+            using (var preserved = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/{firstScreenshotUrl}"))
+            {
+                preserved.EnsureSuccessStatusCode();
+                Assert.Equal(
+                    MockAgentResponses.ScreenshotPng,
+                    await preserved.Content.ReadAsByteArrayAsync());
+            }
+
+            agent.ScreenshotResponse = MockAgentResponses.ScreenshotPng;
+            using var recovered = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2&fresh=1");
+            recovered.EnsureSuccessStatusCode();
+            using var recoveredState = JsonDocument.Parse(
+                await recovered.Content.ReadAsStringAsync());
+            Assert.NotEqual(
+                firstFrameId,
+                recoveredState.RootElement
+                    .GetProperty("frame")
+                    .GetProperty("frameId")
+                    .GetString());
         }
         finally
         {

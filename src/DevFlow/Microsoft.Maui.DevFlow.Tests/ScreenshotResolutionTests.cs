@@ -1,4 +1,5 @@
 using Microsoft.Maui.DevFlow.Agent.Core;
+using Microsoft.Maui.DevFlow.Driver;
 
 namespace Microsoft.Maui.DevFlow.Tests;
 
@@ -64,6 +65,20 @@ public class ScreenshotResolutionTests
         Assert.True(result.PixelWidth <= 350);
         Assert.True(result.PixelHeight <= 260);
         Assert.True(result.Clamped);
+    }
+
+    [Fact]
+    public void ProcessScreenshotPng_NegotiatedResize_ProducesCompletePng()
+    {
+        var result = TestAgent.ProcessImage(
+            SamplePng,
+            nativeScale: 2,
+            targetScale: 1.5,
+            maxPixelWidth: 350,
+            maxPixelHeight: 260,
+            maxPixels: 60_000);
+
+        Assert.True(ScreenshotImage.IsCompletePng(result));
     }
 
     [Theory]
@@ -242,6 +257,21 @@ public class ScreenshotResolutionTests
                 autoScale,
                 scaleModeExplicit: true,
                 CreateHints(targetScale, maxPixelWidth, maxPixelHeight, maxPixels)));
+
+        public static byte[] ProcessImage(
+            byte[] data,
+            double nativeScale,
+            double? targetScale,
+            int? maxPixelWidth,
+            int? maxPixelHeight,
+            long? maxPixels)
+            => ProcessScreenshotPng(
+                data,
+                maxWidth: null,
+                nativeScale,
+                autoScale: true,
+                scaleModeExplicit: true,
+                CreateHints(targetScale, maxPixelWidth, maxPixelHeight, maxPixels)).Data!;
 
         public static ParseResult Parse(string name, string value)
             => Parse([(name, value)]);
