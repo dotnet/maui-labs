@@ -29,6 +29,17 @@ public class RichTextNodeTests
     }
 
     [Fact]
+    public void NodeConstructors_NullRequiredValues_Throw()
+    {
+        Assert.Throws<ArgumentNullException>(() => new TextNode(null!));
+        Assert.Throws<ArgumentNullException>(() => new CodeBlockNode(null!));
+        Assert.Throws<ArgumentNullException>(() => new InlineCodeNode(null!));
+        Assert.Throws<ArgumentNullException>(() => new LinkNode(null!));
+        Assert.Throws<ArgumentNullException>(() => new ImageNode(null!));
+        Assert.Throws<ArgumentNullException>(() => new HtmlNode(null!));
+    }
+
+    [Fact]
     public void CommonNodes_PreserveConfiguredValues()
     {
         var heading = new HeadingNode(3);

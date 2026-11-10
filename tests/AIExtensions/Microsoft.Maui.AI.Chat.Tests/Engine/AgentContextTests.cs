@@ -180,6 +180,71 @@ public class AgentContextTests
         }
     }
 
+    [Fact]
+    public async Task SendMessageAsync_Failure_LogsException()
+    {
+        var exception = new InvalidOperationException("boom");
+        var loggerFactory = new CapturingLoggerFactory();
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            ResponseEmitters.EmitErrorAfterTokens(["partial"], exception, cancellationToken));
+        using var agent = new UIAgent(client, configure: null, loggerFactory);
+        using var context = new AgentContext(agent);
+
+        await context.SendMessageAsync("Hello");
+
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.Same(exception, context.Error);
+        var log = Assert.Single(
+            loggerFactory.Entries,
+            entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+        Assert.Equal(104, log.EventId.Id);
+        Assert.Same(exception, log.Exception);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_LoggingFailure_PropagatesException()
+    {
+        var processingException = new InvalidOperationException("processing failed");
+        var loggerFactory = new CapturingLoggerFactory
+        {
+            ThrowAtLevel = Microsoft.Extensions.Logging.LogLevel.Error,
+        };
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) =>
+            ResponseEmitters.EmitErrorAfterTokens(
+                ["partial"],
+                processingException,
+                cancellationToken));
+        using var agent = new UIAgent(client, configure: null, loggerFactory);
+        using var context = new AgentContext(agent);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.SendMessageAsync("Hello"));
+
+        Assert.Same(loggerFactory.LoggingException, exception);
+        Assert.Equal(ConversationStatus.Error, context.Status);
+        Assert.Same(processingException, context.Error);
+    }
+
+    [Fact]
+    public void Constructor_NullAgentThrows()
+    {
+        Assert.Throws<ArgumentNullException>(() => new AgentContext(null!));
+    }
+
+    [Fact]
+    public void RegisterCallbacks_NullCallbackThrows()
+    {
+        var (agent, _) = CreateAgent();
+        using var context = new AgentContext(agent);
+
+        Assert.Throws<ArgumentNullException>(() => context.RegisterOnTurnAdded(null!));
+        Assert.Throws<ArgumentNullException>(() => context.RegisterOnStatusChanged(null!));
+        Assert.Throws<ArgumentNullException>(() => context.RegisterOnBlockAdded(null!));
+        Assert.Throws<ArgumentNullException>(() => context.RegisterOnResponseBlocksCleared(null!));
+    }
+
     // ---- Notifications ----
 
     [Fact]
