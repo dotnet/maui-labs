@@ -1263,10 +1263,8 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
               wrap.style.flexBasis = '84px';
               wrap.style.width = '84px';
               document.querySelector('#df-toggle-fit').click();
-              document.querySelector('#df-toggle-fit').click();
               wrap.style.flexBasis = '82px';
               wrap.style.width = '82px';
-              document.querySelector('#df-toggle-fit').click();
               document.querySelector('#df-toggle-fit').click();
             }
             """);
@@ -1571,7 +1569,6 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
           wrap.style.width = '80px';
           wrap.style.height = '60px';
           document.querySelector('#df-toggle-fit').click();
-          document.querySelector('#df-toggle-fit').click();
         }
         """);
 
@@ -1580,6 +1577,19 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
     {
         await Page.Locator("#df-props-close").ClickAsync();
         await Page.Locator("#df-zoom-preset").SelectOptionAsync("1");
+        var wrapStyle = await Page.Locator("#df-viewport-wrap").GetAttributeAsync("style");
+        await Page.Locator("#df-viewport-wrap").EvaluateAsync("""
+            element => {
+              element.style.flex = '0 0 301px';
+              element.style.width = '301px';
+            }
+            """);
+        await Page.WaitForFunctionAsync("""
+            () => Math.round(document.getElementById('df-viewport-wrap').getBoundingClientRect().width) === 301
+            """);
+        await Page.EvaluateAsync("""
+            () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+            """);
         var pixelAlignedEdges = await Page.Locator("#app-viewport").EvaluateAsync<double[]>("""
             element => {
               const rect = element.getBoundingClientRect();
@@ -1589,6 +1599,12 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             """);
         Assert.All(pixelAlignedEdges, value =>
             Assert.InRange(Math.Abs(value - Math.Round(value)), 0, 0.001));
+        await Page.Locator("#df-viewport-wrap").EvaluateAsync(
+            "(element, style) => style === null ? element.removeAttribute('style') : element.setAttribute('style', style)",
+            wrapStyle);
+        await Page.EvaluateAsync("""
+            () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+            """);
         await Page.RouteAsync("**/api/tap", route => route.FulfillAsync(new()
         {
             Status = 200,
@@ -1653,6 +1669,7 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
               document.getElementById('app-viewport').setPointerCapture = () => {};
               window.fixtureGestureRequestCount = 0;
               window.fixtureScrollDuringGesture = 0;
+              window.fixtureTapDuringGesture = 0;
               window.fixtureGesturePointer = (type, pointerId, x) =>
                 document.getElementById('app-viewport').dispatchEvent(new PointerEvent(type, {
                   bubbles: true,
@@ -1672,6 +1689,12 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
               window.fetch = (url, options) => {
                 if (typeof url === 'string' && url.endsWith('/api/scroll')) {
                   window.fixtureScrollDuringGesture++;
+                  return Promise.resolve(new Response(
+                    '{"ok":true}',
+                    { status: 200, headers: { 'Content-Type': 'application/json' } }));
+                }
+                if (typeof url === 'string' && url.endsWith('/api/tap')) {
+                  window.fixtureTapDuringGesture++;
                   return Promise.resolve(new Response(
                     '{"ok":true}',
                     { status: 200, headers: { 'Content-Type': 'application/json' } }));
@@ -1726,6 +1749,23 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Page.EvaluateAsync("() => window.fixtureReleaseGesture?.()");
             await Page.EvaluateAsync("() => window.fixtureDispatchGesture(43, 40)");
             await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-gesture-requests", "3");
+
+            await Page.EvaluateAsync("""
+                async () => {
+                  const wrap = document.getElementById('df-viewport-wrap');
+                  const previousFlex = wrap.style.flex;
+                  window.fixtureGesturePointer('pointerdown', 44, 120);
+                  window.fixtureGesturePointer('pointermove', 44, 150);
+                  wrap.style.flex = '0 0 360px';
+                  await new Promise(resolve =>
+                    requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                  window.fixtureGesturePointer('pointermove', 44, 180);
+                  window.fixtureGesturePointer('pointerup', 44, 180);
+                  wrap.style.flex = previousFlex;
+                }
+                """);
+            await Expect(Page.Locator("body")).ToHaveAttributeAsync("data-fixture-gesture-requests", "3");
+            Assert.Equal(0, await Page.EvaluateAsync<int>("window.fixtureTapDuringGesture"));
             Assert.Empty(_pageErrors);
         }
         finally
@@ -1802,8 +1842,40 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
             await Page.Mouse.DownAsync();
             await Page.Mouse.MoveAsync(startX + 30, startY + 20, new() { Steps = 3 });
             await Page.Keyboard.PressAsync("Escape");
-            await Page.WaitForTimeoutAsync(1700);
+            var cancelledTransform = await viewport.EvaluateAsync<string>(
+                "element => element.style.transform");
+            await Page.Mouse.MoveAsync(startX + 80, startY + 60, new() { Steps = 3 });
+            await viewport.EvaluateAsync("""
+                element => {
+                  element.dispatchEvent(new PointerEvent('pointerdown', {
+                    bubbles: true,
+                    cancelable: true,
+                    pointerId: 99,
+                    pointerType: 'touch',
+                    isPrimary: false,
+                    button: 0,
+                    clientX: 100,
+                    clientY: 100,
+                  }));
+                  element.dispatchEvent(new PointerEvent('pointerup', {
+                    bubbles: true,
+                    cancelable: true,
+                    pointerId: 99,
+                    pointerType: 'touch',
+                    isPrimary: false,
+                    button: 0,
+                    clientX: 100,
+                    clientY: 100,
+                  }));
+                }
+                """);
+            Assert.Equal(
+                cancelledTransform,
+                await viewport.EvaluateAsync<string>("element => element.style.transform"));
             await Page.Mouse.UpAsync();
+            await Page.EvaluateAsync("""
+                () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+                """);
         }
         finally
         {
@@ -1914,15 +1986,16 @@ public sealed class InspectorBrowserFixtureTests(ITestOutputHelper output) : IAs
         await Page.Mouse.UpAsync(new() { Button = MouseButton.Middle });
         Assert.NotEqual(gutterTransform, await viewport.EvaluateAsync<string>("element => element.style.transform"));
         Assert.Empty(appRequests);
-        await Page.Keyboard.DownAsync("Control");
-        try
-        {
-            await Page.Mouse.WheelAsync(0, -120);
-        }
-        finally
-        {
-            await Page.Keyboard.UpAsync("Control");
-        }
+        await viewport.EvaluateAsync("""
+            element => element.dispatchEvent(new WheelEvent('wheel', {
+              bubbles: true,
+              cancelable: false,
+              ctrlKey: true,
+              deltaY: -120,
+              clientX: element.getBoundingClientRect().left + 20,
+              clientY: element.getBoundingClientRect().top + 20,
+            }))
+            """);
         await Expect(Page.Locator("#df-zoom-indicator")).Not.ToHaveTextAsync("50%");
         Assert.Empty(appRequests);
         await Page.Locator("#df-toggle-fit").ClickAsync();

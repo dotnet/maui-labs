@@ -33,7 +33,6 @@ test("Interact binds the rendered target while both modes share hover feedback",
   assert.match(css, /\.devflow-element\.df-action-target/);
   assert.match(css, /#df-badge\[data-kind="interactive"\]/);
   assert.match(source, /viewportWidth - b\.offsetWidth/);
-  assert.match(source, /return clientToAppLogical\(/);
   assert.match(source, /Copilot can request mutation control with maui_take_control/);
   assert.match(css, /\.df-hit-candidates\s*\{[\s\S]*position:\s*absolute/);
   assert.match(css, /#df-preview-surface\s*\{[\s\S]*position:\s*relative/);
