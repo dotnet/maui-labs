@@ -253,7 +253,7 @@ function accessState(command, inputs) {
   const allowed = requirement === 'control' ? access.controlAllowed : access.driveAllowed;
   if (allowed) return null;
 
-  if (requirement !== 'control' && access.connected === false) {
+  if (access.connected === false) {
     return disabledState(
       'disconnected',
       'app-disconnected',
@@ -283,13 +283,6 @@ function accessState(command, inputs) {
       'readOnly',
       'mutation-lease-held',
       `Read-only - ${owner} is driving. Take control to ${verb}.`);
-  }
-
-  if (access.connected === false) {
-    return disabledState(
-      'disconnected',
-      'app-disconnected',
-      access.driveMessage || 'App disconnected - waiting for DevFlow to reconnect.');
   }
 
   return disabledState(

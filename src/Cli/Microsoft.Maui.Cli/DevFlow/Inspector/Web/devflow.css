@@ -127,6 +127,14 @@ body {
 .df-mode-btn:disabled:hover, .df-tool-btn:disabled:hover { background: var(--df-surface-2); }
 .df-mode-btn[aria-disabled="true"], .df-tool-btn[aria-disabled="true"] { opacity: 0.4; cursor: help; }
 .df-mode-btn[aria-disabled="true"]:hover, .df-tool-btn[aria-disabled="true"]:hover { background: var(--df-surface-2); }
+.df-mode-btn.df-active[aria-disabled="true"]:hover {
+  background: var(--df-accent);
+  color: var(--df-accent-fg);
+}
+.df-tool-btn.df-recording[aria-disabled="true"]:hover {
+  background: var(--df-danger);
+  color: #fff;
+}
 .df-toolbar-secondary { display: inline-flex; flex: 0 0 auto; align-items: center; gap: var(--df-gap); }
 .df-toolbar-overflow {
   position: fixed;
