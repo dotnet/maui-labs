@@ -2025,12 +2025,8 @@ public sealed class InspectorServer : IDisposable
                     fullscreen,
                     pixelWidth,
                     pixelHeight);
-                var logicalWidth = screenshot?.LogicalWidth is > 0
-                    ? screenshot.LogicalWidth.Value
-                    : contractLogicalWidth;
-                var logicalHeight = screenshot?.LogicalHeight is > 0
-                    ? screenshot.LogicalHeight.Value
-                    : contractLogicalHeight;
+                var logicalWidth = contractLogicalWidth;
+                var logicalHeight = contractLogicalHeight;
                 var captureScale = screenshot?.CaptureScale is > 0
                     ? screenshot.CaptureScale.Value
                     : GetCaptureScale(
@@ -2202,17 +2198,18 @@ public sealed class InspectorServer : IDisposable
             generation = _cacheGeneration;
         }
 
-        ScreenshotResolutionOptions? resolutionOptions = null;
-        if (resolution.Enabled)
+        var resolutionOptions = new ScreenshotResolutionOptions
         {
-            resolutionOptions = new ScreenshotResolutionOptions
-            {
-                TargetScale = resolution.TargetScale,
-                MaxPixelWidth = GetBoundedPixelDimension(logicalWidth, resolution.TargetScale),
-                MaxPixelHeight = GetBoundedPixelDimension(logicalHeight, resolution.TargetScale),
-                MaxPixels = InspectorScreenshotPixelBudget
-            };
-        }
+            TargetScale = resolution.Enabled ? resolution.TargetScale : null,
+            MaxPixelWidth = resolution.Enabled
+                ? GetBoundedPixelDimension(logicalWidth, resolution.TargetScale)
+                : null,
+            MaxPixelHeight = resolution.Enabled
+                ? GetBoundedPixelDimension(logicalHeight, resolution.TargetScale)
+                : null,
+            MaxPixels = resolution.Enabled ? InspectorScreenshotPixelBudget : null,
+            MaxEncodedBytes = MaxScreenshotBytes
+        };
 
         var fresh = fullscreen
             ? await _client.FullscreenScreenshotResultAsync(

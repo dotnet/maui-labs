@@ -647,6 +647,7 @@ import {
   let refreshTimer = null;
   let refreshTimerDelay = null;
   let refreshTimerIntent = REFRESH_INTENT_RETRY;
+  let refreshTimerRequiresFresh = false;
   let latestTap = null; // newest accepted tap the Preview does not reflect yet
   let pendingTapRequests = 0;
   function renderPreviewPending() {
@@ -662,9 +663,13 @@ import {
     })();
     return refresh.followUpPromise;
   }
-  function scheduleRefresh(delayMs = 300, intent = REFRESH_INTENT_EVIDENCE) {
+  function scheduleRefresh(
+    delayMs = 300,
+    intent = REFRESH_INTENT_EVIDENCE,
+    requiresFresh = false) {
     if (intent === REFRESH_INTENT_EVIDENCE || intent === REFRESH_INTENT_MUTATION)
       refreshRequestVersion++;
+    refreshTimerRequiresFresh = refreshTimerRequiresFresh || requiresFresh;
     if (refreshTimer) {
       const pendingIntent = refreshTimerIntent;
       refreshTimerIntent = Math.max(refreshTimerIntent, intent);
@@ -679,7 +684,9 @@ import {
       refreshTimer = null;
       refreshTimerDelay = null;
       const scheduledIntent = refreshTimerIntent;
+      const scheduledRequiresFresh = refreshTimerRequiresFresh;
       refreshTimerIntent = REFRESH_INTENT_RETRY;
+      refreshTimerRequiresFresh = false;
       const tap = latestTap;
       let state;
       if (scheduledIntent === REFRESH_INTENT_MUTATION) {
@@ -691,16 +698,16 @@ import {
           if (sharedRefresh.requestVersion !== refreshRequestVersion)
             state = await queueRefreshAfter(sharedRefresh);
         } else {
-          state = await refreshState(tap !== null);
+          state = await refreshState(tap !== null || scheduledRequiresFresh);
         }
       } else if (scheduledIntent === REFRESH_INTENT_RETRY) {
         state = activeRefresh
           ? await activeRefresh.promise
-          : await refreshState();
+          : await refreshState(scheduledRequiresFresh);
       } else if (activeRefresh) {
         state = await queueRefreshAfter(activeRefresh);
       } else {
-        state = await refreshState();
+        state = await refreshState(scheduledRequiresFresh);
       }
       if (!state && latestTap !== null && !activeRefresh)
         scheduleRefresh(STATE_REFRESH_RETRY_MS, REFRESH_INTENT_RETRY);
@@ -3635,7 +3642,7 @@ import {
       }
       if (desiredScreenshotScale === requestedScreenshotScale) return;
       requestedScreenshotScale = desiredScreenshotScale;
-      scheduleRefresh(0, REFRESH_INTENT_EVIDENCE);
+      scheduleRefresh(0, REFRESH_INTENT_EVIDENCE, true);
     }, delay);
   }
   function scheduleScale() {

@@ -17,4 +17,10 @@ public sealed class ScreenshotResolutionOptions
 
     /// <summary>Maximum returned pixel count.</summary>
     public long? MaxPixels { get; init; }
+
+    /// <summary>
+    /// Maximum encoded response bytes the client will buffer. This is a local transport limit and
+    /// is not sent to the agent.
+    /// </summary>
+    public int? MaxEncodedBytes { get; init; }
 }

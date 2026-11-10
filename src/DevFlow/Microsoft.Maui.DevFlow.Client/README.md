@@ -56,7 +56,8 @@ var screenshot = await client.ScreenshotResultAsync(
         TargetScale = 2,
         MaxPixelWidth = 1600,
         MaxPixelHeight = 1200,
-        MaxPixels = 2_000_000
+        MaxPixels = 2_000_000,
+        MaxEncodedBytes = 64 * 1024 * 1024
     });
 Console.WriteLine($"{screenshot.PixelWidth}x{screenshot.PixelHeight} @ {screenshot.CaptureScale}x");
 ```

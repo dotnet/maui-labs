@@ -188,6 +188,33 @@ public class InspectorServerCaptureMetadataTests
           }
         ]
         """;
+    private const string FractionalNativeRootVisualTree = """
+        [
+          {
+            "id": "decor-root",
+            "type": "DecorView",
+            "captureEpoch": 42,
+            "registryGeneration": 7,
+            "windowId": 0,
+            "isVisible": true,
+            "isEnabled": true,
+            "windowBounds": { "x": 0, "y": 0, "width": 400, "height": 300 },
+            "children": [
+              {
+                "id": "page-root",
+                "type": "ContentPage",
+                "captureEpoch": 42,
+                "registryGeneration": 7,
+                "windowId": 0,
+                "isVisible": true,
+                "isEnabled": true,
+                "windowBounds": { "x": 10.25, "y": 20.25, "width": 200.25, "height": 150.25 },
+                "children": []
+              }
+            ]
+          }
+        ]
+        """;
 
     private const string RevisionlessOffsetVisualTree = """
         [
@@ -1193,6 +1220,45 @@ public class InspectorServerCaptureMetadataTests
     }
 
     [Fact]
+    public async Task State_WithFractionalNativeRoot_PreservesTreeLogicalDimensions()
+    {
+        await using var agent = new MockAgentServer
+        {
+            VisualTreeResponse = FractionalNativeRootVisualTree
+        };
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Pixel-Width"] = "400";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Pixel-Height"] = "300";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Logical-Width"] = "200";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Logical-Height"] = "150";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Capture-Scale"] = "2";
+        agent.ScreenshotHeaders["X-DevFlow-Screenshot-Native-Scale"] = "2";
+        await agent.StartAsync();
+
+        var inspectorPort = GetFreePort();
+        using var inspector = new InspectorServer(inspectorPort, "localhost", agent.Port);
+        inspector.Start();
+
+        try
+        {
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(
+                $"http://localhost:{inspectorPort}/api/state?targetScale=2");
+            response.EnsureSuccessStatusCode();
+            using var state = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var frame = state.RootElement.GetProperty("frame");
+
+            Assert.Equal(200.25, frame.GetProperty("logicalWidth").GetDouble());
+            Assert.Equal(150.25, frame.GetProperty("logicalHeight").GetDouble());
+            Assert.Equal(200.25, state.RootElement.GetProperty("viewportWidth").GetDouble());
+            Assert.Equal(150.25, state.RootElement.GetProperty("viewportHeight").GetDouble());
+        }
+        finally
+        {
+            await inspector.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task CorrelatedHitTest_WithExpiredFrame_IsRejectedWithoutRetargeting()
     {
         await using var agent = new MockAgentServer();
@@ -1746,12 +1812,22 @@ public class InspectorServerCaptureMetadataTests
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
     public async Task State_WhenScreenshotIsInvalidOrTruncated_ReturnsServiceUnavailable(
         int invalidPngKind)
     {
         await using var agent = new MockAgentServer
         {
-            ScreenshotResponse = invalidPngKind == 0 ? [1, 2, 3, 4] : MockAgentResponses.ScreenshotPng[..24]
+            ScreenshotResponse = invalidPngKind switch
+            {
+                0 => [1, 2, 3, 4],
+                1 => MockAgentResponses.ScreenshotPng[..24],
+                2 => Convert.FromBase64String(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBwIAAAASJ8QPAAAABElEQVQAAQIDQN6+CAAAAABJRU5ErkJggg=="),
+                _ => Convert.FromBase64String(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAABklEQVR4nGNgQAfMKBUWAAAAAElFTkSuQmCC")
+            }
         };
         await agent.StartAsync();
 

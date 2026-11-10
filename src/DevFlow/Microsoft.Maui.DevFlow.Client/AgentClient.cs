@@ -1596,6 +1596,10 @@ public class AgentClient : IDisposable
         try
         {
             var queryParams = new List<string>();
+            var hasResolutionHints = resolution?.TargetScale != null
+                || resolution?.MaxPixelWidth != null
+                || resolution?.MaxPixelHeight != null
+                || resolution?.MaxPixels != null;
             if (fullscreen) queryParams.Add("fullscreen=true");
             if (window != null) queryParams.Add($"window={window}");
             if (elementId != null) queryParams.Add($"elementId={Uri.EscapeDataString(elementId)}");
@@ -1604,7 +1608,7 @@ public class AgentClient : IDisposable
             if (fallbackMaxWidth != null) queryParams.Add($"maxWidth={fallbackMaxWidth}");
             if (scale != null)
                 queryParams.Add($"scale={Uri.EscapeDataString(scale)}");
-            else if (resolution != null && maxWidth == null)
+            else if (hasResolutionHints && maxWidth == null)
                 queryParams.Add("scale=auto");
             if (captureEpoch != null) queryParams.Add($"captureEpoch={captureEpoch}");
             if (registryGeneration != null) queryParams.Add($"registryGeneration={registryGeneration}");
@@ -1624,10 +1628,21 @@ public class AgentClient : IDisposable
             const int captureRetryCount = 2;
             for (var attempt = 0; ; attempt++)
             {
-                using var response = await SendWithTransientRetriesAsync(() => _http.GetAsync(url));
+                using var response = await SendWithTransientRetriesAsync(
+                    () => _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead));
                 if (response.IsSuccessStatusCode)
                 {
-                    var data = await response.Content.ReadAsByteArrayAsync();
+                    var (data, exceededLimit) = await ReadScreenshotDataAsync(
+                        response.Content,
+                        resolution?.MaxEncodedBytes);
+                    if (exceededLimit)
+                    {
+                        return ScreenshotResult.Failure(
+                            $"Screenshot exceeded the configured {resolution!.MaxEncodedBytes} byte limit.",
+                            "screenshot-too-large");
+                    }
+                    if (data is null)
+                        return ScreenshotResult.Failure(null);
                     var (fallbackPixelWidth, fallbackPixelHeight) = GetPngDimensions(data);
                     var headerPixelWidth = GetHeaderInt32(response, "X-DevFlow-Screenshot-Pixel-Width");
                     var headerPixelHeight = GetHeaderInt32(response, "X-DevFlow-Screenshot-Pixel-Height");
@@ -1695,6 +1710,43 @@ public class AgentClient : IDisposable
             return ScreenshotResult.Failure(ex.Message, "not_supported");
         }
         catch (Exception ex) when (IsExpectedClientException(ex)) { return ScreenshotResult.Failure(null); }
+    }
+
+    private async Task<(byte[]? Data, bool ExceededLimit)> ReadScreenshotDataAsync(
+        HttpContent content,
+        int? maximumBytes)
+    {
+        if (maximumBytes is <= 0)
+            return (null, true);
+        if (maximumBytes.HasValue &&
+            content.Headers.ContentLength is long contentLength &&
+            contentLength > maximumBytes.Value)
+        {
+            return (null, true);
+        }
+
+        using var stream = await content.ReadAsStreamAsync().ConfigureAwait(false);
+        var initialCapacity = content.Headers.ContentLength is > 0 and <= int.MaxValue
+            ? (int)content.Headers.ContentLength.Value
+            : 0;
+        if (maximumBytes.HasValue)
+            initialCapacity = Math.Min(initialCapacity, maximumBytes.Value);
+        using var buffer = new MemoryStream(initialCapacity);
+        using var timeout = new CancellationTokenSource(_http.Timeout);
+        var chunk = new byte[81920];
+        while (true)
+        {
+            var read = await stream.ReadAsync(
+                chunk,
+                0,
+                chunk.Length,
+                timeout.Token).ConfigureAwait(false);
+            if (read == 0)
+                return (buffer.ToArray(), false);
+            if (maximumBytes.HasValue && buffer.Length > maximumBytes.Value - read)
+                return (null, true);
+            buffer.Write(chunk, 0, read);
+        }
     }
 
     private static ScreenshotResult ParseScreenshotError(string body)

@@ -130,6 +130,182 @@ internal static class ScreenshotImage
         return false;
     }
 
+    private static bool IsValidPngBitDepth(byte colorType, byte bitDepth)
+        => colorType switch
+        {
+            0 => bitDepth is 1 or 2 or 4 or 8 or 16,
+            2 => bitDepth is 8 or 16,
+            3 => bitDepth is 1 or 2 or 4 or 8,
+            4 => bitDepth is 8 or 16,
+            6 => bitDepth is 8 or 16,
+            _ => false
+        };
+
+    private static bool HasValidPngImageData(
+        MemoryStream compressedImageData,
+        int width,
+        int height,
+        byte bitDepth,
+        byte colorType,
+        byte interlaceMethod)
+    {
+        var channels = colorType switch
+        {
+            0 or 3 => 1,
+            2 => 3,
+            4 => 2,
+            6 => 4,
+            _ => 0
+        };
+        if (channels == 0)
+            return false;
+
+        try
+        {
+            if (!compressedImageData.TryGetBuffer(out var compressedBuffer) ||
+                compressedImageData.Length < 6)
+            {
+                return false;
+            }
+
+            var zlibData = compressedBuffer.Array!.AsSpan(
+                compressedBuffer.Offset,
+                checked((int)compressedImageData.Length));
+            var compressionMethodAndInfo = zlibData[0];
+            var flags = zlibData[1];
+            if ((compressionMethodAndInfo & 0x0f) != 8 ||
+                (compressionMethodAndInfo >> 4) > 7 ||
+                ((compressionMethodAndInfo << 8) | flags) % 31 != 0 ||
+                (flags & 0x20) != 0)
+            {
+                return false;
+            }
+            var expectedAdler32 = BinaryPrimitives.ReadUInt32BigEndian(zlibData[^4..]);
+            uint adlerA = 1;
+            uint adlerB = 0;
+
+            var bitsPerPixel = checked(channels * bitDepth);
+            long decodedBytes;
+            if (interlaceMethod == 0)
+            {
+                decodedBytes = GetPngPassByteCount(width, height, bitsPerPixel);
+            }
+            else
+            {
+                ReadOnlySpan<int> startX = [0, 4, 0, 2, 0, 1, 0];
+                ReadOnlySpan<int> startY = [0, 0, 4, 0, 2, 0, 1];
+                ReadOnlySpan<int> stepX = [8, 8, 4, 4, 2, 2, 1];
+                ReadOnlySpan<int> stepY = [8, 8, 8, 4, 4, 2, 2];
+                decodedBytes = 0;
+                for (var pass = 0; pass < 7; pass++)
+                {
+                    var passWidth = GetAdam7Dimension(width, startX[pass], stepX[pass]);
+                    var passHeight = GetAdam7Dimension(height, startY[pass], stepY[pass]);
+                    decodedBytes = checked(
+                        decodedBytes + GetPngPassByteCount(passWidth, passHeight, bitsPerPixel));
+                }
+            }
+            const long MaxDecodedPngBytes = 512L * 1024 * 1024;
+            if (decodedBytes <= 0 || decodedBytes > MaxDecodedPngBytes)
+                return false;
+
+            compressedImageData.Position = 0;
+            using var zlib = new ZLibStream(
+                compressedImageData,
+                CompressionMode.Decompress,
+                leaveOpen: true);
+            if (interlaceMethod == 0)
+            {
+                if (!ValidatePngPass(
+                        zlib,
+                        width,
+                        height,
+                        bitsPerPixel,
+                        ref adlerA,
+                        ref adlerB))
+                    return false;
+            }
+            else
+            {
+                ReadOnlySpan<int> startX = [0, 4, 0, 2, 0, 1, 0];
+                ReadOnlySpan<int> startY = [0, 0, 4, 0, 2, 0, 1];
+                ReadOnlySpan<int> stepX = [8, 8, 4, 4, 2, 2, 1];
+                ReadOnlySpan<int> stepY = [8, 8, 8, 4, 4, 2, 2];
+                for (var pass = 0; pass < 7; pass++)
+                {
+                    var passWidth = GetAdam7Dimension(width, startX[pass], stepX[pass]);
+                    var passHeight = GetAdam7Dimension(height, startY[pass], stepY[pass]);
+                    if (passWidth > 0 && passHeight > 0 &&
+                        !ValidatePngPass(
+                            zlib,
+                            passWidth,
+                            passHeight,
+                            bitsPerPixel,
+                            ref adlerA,
+                            ref adlerB))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            var actualAdler32 = (adlerB << 16) | adlerA;
+            return zlib.ReadByte() == -1 && actualAdler32 == expectedAdler32;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ValidatePngPass(
+        Stream decompressed,
+        int width,
+        int height,
+        int bitsPerPixel,
+        ref uint adlerA,
+        ref uint adlerB)
+    {
+        var rowBytes = checked((width * (long)bitsPerPixel + 7) / 8);
+        if (rowBytes > int.MaxValue - 1)
+            return false;
+
+        var row = new byte[checked((int)rowBytes + 1)];
+        for (var y = 0; y < height; y++)
+        {
+            decompressed.ReadExactly(row);
+            if (row[0] > 4)
+                return false;
+            UpdateAdler32(row, ref adlerA, ref adlerB);
+        }
+
+        return true;
+    }
+
+    private static void UpdateAdler32(
+        ReadOnlySpan<byte> data,
+        ref uint adlerA,
+        ref uint adlerB)
+    {
+        const uint Modulus = 65521;
+        foreach (var value in data)
+        {
+            adlerA = (adlerA + value) % Modulus;
+            adlerB = (adlerB + adlerA) % Modulus;
+        }
+    }
+
+    private static long GetPngPassByteCount(int width, int height, int bitsPerPixel)
+    {
+        if (width <= 0 || height <= 0)
+            return 0;
+        var rowBytes = checked((width * (long)bitsPerPixel + 7) / 8);
+        return checked(height * (rowBytes + 1));
+    }
+
+    private static int GetAdam7Dimension(int size, int start, int step)
+        => size <= start ? 0 : (size - start + step - 1) / step;
+
     private static uint ComputePngCrc(ReadOnlySpan<byte> data)
     {
         var crc = uint.MaxValue;
