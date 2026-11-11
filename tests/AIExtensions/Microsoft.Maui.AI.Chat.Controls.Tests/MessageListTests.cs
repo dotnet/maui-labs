@@ -837,15 +837,15 @@ public class MessageListTests
         var answer = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is TextContentBlock);
         var image = Assert.Single(view.Realize(answer).Descendants<LinkedImageView>());
 
-        // The image loaded (or fell back to a chip) after its row was laid out, so the row grew: keep following.
+        // The image loaded (or fell back to a chip) after its row was laid out, so it took a new size: keep following.
         requests.Clear();
-        ChatMessageList.FollowResizedContent(image);
+        ((IView)image).Arrange(new Rect(0, 0, 320, 200));
         Assert.Equal(view.Rows().Count - 1, Assert.Single(requests));
 
         // Unless the reader has scrolled back.
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
         requests.Clear();
-        ChatMessageList.FollowResizedContent(image);
+        ((IView)image).Arrange(new Rect(0, 0, 320, 120));
         Assert.Empty(requests);
     });
 
