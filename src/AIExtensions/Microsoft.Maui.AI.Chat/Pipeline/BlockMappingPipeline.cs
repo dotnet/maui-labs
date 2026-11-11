@@ -86,7 +86,9 @@ internal class BlockMappingPipeline
             }
 
             var active = _activeStack[i];
+            context.TakeClaimedCalls();
             var result = active.Invoke(context);
+            RegisterClaimedCalls(context, active);
 
             BlockMappingPipelineLog.ActiveHandlerResult(_logger, active.Block.GetType().Name, result.Kind.ToString(), active.Block.Id);
 
@@ -131,6 +133,7 @@ internal class BlockMappingPipeline
                 {
                     var progressBefore = context.HandledProgress;
                     context.BeginClaim();
+                    context.TakeClaimedCalls();
                     var activeEntry = handler.TryHandle(context);
                     if (activeEntry is not null)
                     {
@@ -147,7 +150,9 @@ internal class BlockMappingPipeline
                             _activeStack.Add(activeEntry);
                         (emitted ??= new()).Add((context.FirstClaimed, emitBlock));
                         var madeProgress = context.HandledProgress != progressBefore;
-                        if (RegisterCall(emitBlock, activeEntry) is { } callId)
+                        var callId = RegisterCall(emitBlock, activeEntry);
+                        RegisterClaimedCalls(context, activeEntry);
+                        if (callId is not null)
                             AbsorbRepeats(context, callId);
 
                         // If the handler emitted without consuming any content, stop
@@ -247,7 +252,9 @@ internal class BlockMappingPipeline
             if (_activeStack.Contains(entry))
                 return;
 
+            context.TakeClaimedCalls();
             var handled = entry.Invoke(context);
+            RegisterClaimedCalls(context, entry);
             BlockMappingPipelineLog.ActiveHandlerResult(
                 _logger,
                 entry.Block.GetType().Name,
@@ -310,6 +317,26 @@ internal class BlockMappingPipeline
                 return call.CallId;
             default:
                 return null;
+        }
+    }
+
+    /// <summary>
+    /// Records the calls that <paramref name="entry"/> claimed for a block of the app's own type, such as a
+    /// worksheet with a row per call, so a later round routes their replays and results to that handler as it
+    /// does for a call block. The engine's call blocks are registered by <see cref="RegisterCall"/>.
+    /// </summary>
+    private void RegisterClaimedCalls(BlockMappingContext context, IActiveEntry entry)
+    {
+        if (context.TakeClaimedCalls() is not { } claimed
+            || entry.Block is FunctionInvocationContentBlock or InteractiveFunctionBlock)
+        {
+            return;
+        }
+
+        foreach (var call in claimed)
+        {
+            if (!_calls.TryGet(call.CallId, out var known) || !ReferenceEquals(known.Block, entry.Block))
+                _calls.Register(call, entry.Block, entry);
         }
     }
 

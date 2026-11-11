@@ -62,8 +62,10 @@ turn ends, whether it completed, stopped or failed, each of its calls has a resu
 [Binding from XAML](#binding-from-xaml)). `IsAwaitingInput` on both blocks says whether they can still be answered: true for
 a pending approval and for a manual action that has not run, false once answered, while the action runs,
 and after a stop, failure or restore. The block raises `PropertyChanged` for it, so templates can bind
-their buttons to it. A UI action requested together with a tool that needs approval still runs as a UI
-action. A UI action wrapped in `ApprovalRequiredAIFunction` needs `FunctionInvokingChatClient` too
+their buttons to it. A server call that `FunctionInvokingChatClient` hands back uninvoked, because a UI
+action shared its batch, gets an error result in the continuation, so the provider accepts it; the block
+that shows the call receives that result like any other. A UI action requested together with a tool that
+needs approval still runs as a UI action. A UI action wrapped in `ApprovalRequiredAIFunction` needs `FunctionInvokingChatClient` too
 (sending throws without it, because nothing would ask for the approval). It shows a
 `ToolApprovalBlock` and runs once approved, whatever its mode; edit the approval's `Call.Arguments`
 before approving to supply input.
@@ -259,7 +261,11 @@ result objects are left unread. Other property types are deserialized with refle
 that cannot be converted leaves its property unchanged.
 
 Use handwritten `ContentBlockHandler<TState>` implementations for aggregation, custom events,
-or projections spanning multiple calls.
+or projections spanning multiple calls. A handler that claims function calls with `MarkHandled` shows
+them, whatever its block: a later replay of such a call is routed to the same handler instead of being
+shown again, and a result that arrives in a later request round, such as the error result for a server
+call that `FunctionInvokingChatClient` handed back uninvoked, is handed to the handler with the block's
+state, so a block with a row per call can fill in every row.
 
 ## Conversation persistence
 

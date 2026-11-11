@@ -7,8 +7,8 @@ using Microsoft.Extensions.AI;
 namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
-/// Removes function calls that never received a result from a turn before it is committed, so the
-/// next request cannot fail on a dangling call.
+/// Finds the function calls of a round that no result answers, and removes calls that never received a
+/// result from a turn before it is committed, so the next request cannot fail on a dangling call.
 /// </summary>
 /// <remarks>
 /// Approval requests and responses are removed too when <c>includeApprovals</c> is set (a stopped
@@ -16,6 +16,35 @@ namespace Microsoft.Maui.AI.Chat;
 /// </remarks>
 internal static class UnansweredCalls
 {
+    /// <summary>
+    /// Finds the calls in <paramref name="messages"/> that no later result answers, in the order they were
+    /// made. A call id reused after its result starts a new call. Informational calls ran elsewhere and are
+    /// skipped.
+    /// </summary>
+    internal static List<FunctionCallContent> FindOpen(IEnumerable<ChatMessage> messages)
+    {
+        var open = new List<FunctionCallContent>();
+        foreach (var message in messages)
+        {
+            foreach (var content in message.Contents)
+            {
+                switch (content)
+                {
+                    case FunctionCallContent { InformationalOnly: false } call:
+                        // A repeat of a call that is still open is the same call.
+                        open.RemoveAll(other => string.Equals(other.CallId, call.CallId, StringComparison.Ordinal));
+                        open.Add(call);
+                        break;
+                    case FunctionResultContent result:
+                        open.RemoveAll(other => string.Equals(other.CallId, result.CallId, StringComparison.Ordinal));
+                        break;
+                }
+            }
+        }
+
+        return open;
+    }
+
     internal static HashSet<string> CollectAnsweredCallIds(PendingTurn turn)
     {
         var callIds = new HashSet<string>(StringComparer.Ordinal);

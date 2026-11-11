@@ -40,6 +40,12 @@ internal sealed class PendingTurn
     /// <summary>Gets the blocks that show the turn's function calls, shared by all of its rounds.</summary>
     internal FunctionCallRegistry Calls { get; } = new();
 
+    /// <summary>
+    /// Gets the calls of the last completed round that the round did not answer, such as a batch that
+    /// <see cref="FunctionInvokingChatClient"/> handed back uninvoked because it included a UI action.
+    /// </summary>
+    internal IReadOnlyList<FunctionCallContent> OpenCalls { get; private set; } = [];
+
     internal void AddRequest(ChatMessage message)
     {
         if (InitialMessage is null)
@@ -59,13 +65,21 @@ internal sealed class PendingTurn
         DisplayTurn?.ObserveResponse(rawUpdate);
     }
 
-    /// <summary>Moves the current round's response updates into <see cref="Messages"/>.</summary>
+    /// <summary>
+    /// Moves the current round's response updates into <see cref="Messages"/> and records the round's
+    /// <see cref="OpenCalls"/>.
+    /// </summary>
     internal void CompleteRound()
     {
         if (_roundUpdates.Count == 0)
+        {
+            OpenCalls = [];
             return;
+        }
 
-        Messages.AddRange(_roundUpdates.ToChatResponse().Messages);
+        var messages = _roundUpdates.ToChatResponse().Messages;
+        OpenCalls = UnansweredCalls.FindOpen(messages);
+        Messages.AddRange(messages);
         _roundUpdates.Clear();
     }
 }

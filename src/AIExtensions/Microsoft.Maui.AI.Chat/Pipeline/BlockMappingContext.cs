@@ -19,6 +19,7 @@ public class BlockMappingContext
     private bool _updateHandled;
     private readonly IReadOnlyList<IHandlerEntry>? _inactiveHandlers;
     private readonly FunctionCallRegistry? _calls;
+    private List<FunctionCallContent>? _claimedCalls;
 
     internal BlockMappingContext(ChatResponseUpdate update)
         : this(update, inactiveHandlers: null)
@@ -59,6 +60,26 @@ public class BlockMappingContext
         _handled[index] = true;
         _handledCount++;
         RecordClaim(index);
+        switch (content)
+        {
+            case FunctionCallContent call:
+                (_claimedCalls ??= new()).Add(call);
+                break;
+            case FunctionResultContent result:
+                _calls?.ReportAnswered(result.CallId);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Returns the function calls marked handled since the last call, so the pipeline can record which block
+    /// shows them, and starts collecting again.
+    /// </summary>
+    internal List<FunctionCallContent>? TakeClaimedCalls()
+    {
+        var claimed = _claimedCalls;
+        _claimedCalls = null;
+        return claimed;
     }
 
     public void MarkUpdateHandled()
