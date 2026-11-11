@@ -826,6 +826,30 @@ public class MessageListTests
     });
 
     [Fact]
+    public void ContentThatGrowsOnItsOwn_IsFollowedWhilePinned() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("Look: ![logo](https://example.com/logo.png)");
+        var view = ChatHost.Create(ChatHost.Session(client));
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+        await SendAsync(view, "Show me the logo");
+
+        var answer = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is TextContentBlock);
+        var image = Assert.Single(view.Realize(answer).Descendants<LinkedImageView>());
+
+        // The image loaded (or fell back to a chip) after its row was laid out, so the row grew: keep following.
+        requests.Clear();
+        ChatMessageList.FollowResizedContent(image);
+        Assert.Equal(view.Rows().Count - 1, Assert.Single(requests));
+
+        // Unless the reader has scrolled back.
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
+        requests.Clear();
+        ChatMessageList.FollowResizedContent(image);
+        Assert.Empty(requests);
+    });
+
+    [Fact]
     public void SwappingSessions_ProjectsTheNewSession() => UIThread.Run(async () =>
     {
         var first = ChatHost.Session(new ScriptedChatClient().Reply("From first"));
