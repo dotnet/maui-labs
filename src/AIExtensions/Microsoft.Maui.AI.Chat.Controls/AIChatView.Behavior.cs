@@ -207,6 +207,9 @@ public partial class AIChatView
     {
         base.OnHandlerChanging(args);
 
+        // Before the new handler maps the template's parts, which look the icon font up.
+        ChatIconFont.Register(args.NewHandler?.MauiContext?.Services);
+
         // The view is going away (MAUI disconnects the handlers of a popped page), unlike a plain Unloaded such as
         // a tab switch: stop the session this view created, so a response doesn't keep streaming and running tools.
         if (args.OldHandler is not null && args.NewHandler is null)
@@ -473,8 +476,7 @@ public partial class AIChatView
         {
             var remove = new ChatButton
             {
-                Text = "\u2715",
-                FontSize = 12,
+                FontSize = 14,
                 WidthRequest = 28,
                 HeightRequest = 28,
                 VerticalOptions = LayoutOptions.Center,
@@ -482,6 +484,7 @@ public partial class AIChatView
                 CommandParameter = attachment,
                 AutomationId = "AIChatRemoveAttachment",
             }.Styled(AIChatThemeKeys.IconButtonStyle);
+            remove.SetDynamicResource(Button.TextProperty, AIChatThemeKeys.RemoveIcon);
             SemanticProperties.SetDescription(remove, $"Remove {attachment.Name ?? "attachment"}");
             _attachmentsPart.Children.Add(ChatVisuals.CreateFileChip(attachment, trailing: remove));
         }

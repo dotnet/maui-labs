@@ -117,24 +117,24 @@ public class AudioTests
         var button = view.ByAutomationId<Button>("AIChatAudioButton");
 
         Assert.True(button.IsVisible);
-        Assert.Equal("\U0001F3A4", button.Text);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.MicrophoneIcon), button.Text);
         Assert.Equal("Record audio", SemanticProperties.GetDescription(button));
 
         button.Command.Execute(null);
         await UIThread.Until(() => view.IsRecordingAudio);
-        Assert.Equal("\u25A0", button.Text);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.StopIcon), button.Text);
         Assert.Equal("Stop recording", SemanticProperties.GetDescription(button));
 
         button.Command.Execute(null);
         await transcriber.Started.Task;
         Assert.True(view.IsTranscribingAudio);
-        Assert.Equal("\u2026", button.Text);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.TranscribingIcon), button.Text);
         Assert.Equal("Cancel transcription", SemanticProperties.GetDescription(button));
         Assert.True(view.ByAutomationId<Editor>("AIChatInput").IsReadOnly);
 
         transcriber.Deferred!.SetResult("hello");
         await UIThread.Until(() => !view.IsTranscribingAudio);
-        Assert.Equal("\U0001F3A4", button.Text);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.MicrophoneIcon), button.Text);
         Assert.Equal("Record audio", SemanticProperties.GetDescription(button));
         Assert.False(view.ByAutomationId<Editor>("AIChatInput").IsReadOnly);
     });

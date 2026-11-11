@@ -24,10 +24,10 @@ internal static class ChatVisuals
         new ChatBorder { Content = text }.Styled(AIChatThemeKeys.CodeBlockStyle);
 
     /// <summary>A chevron that shows or hides a card's details; see <see cref="SetExpanded"/>.</summary>
-    public static Button DisclosureButton(Action toggle, string automationId) =>
-        new ChatButton
+    public static Button DisclosureButton(Action toggle, string automationId)
+    {
+        var button = new ChatButton
         {
-            Text = Chevron,
             FontSize = 20,
             WidthRequest = 28,
             HeightRequest = 28,
@@ -35,16 +35,27 @@ internal static class ChatVisuals
             Command = new Command(toggle),
             AutomationId = automationId,
         }.Styled(AIChatThemeKeys.IconButtonStyle);
+        button.SetDynamicResource(Button.TextProperty, AIChatThemeKeys.ExpandIcon);
+        return button;
+    }
 
-    /// <summary>Points the chevron right when collapsed and down when expanded, and names the action.</summary>
+    /// <summary>Shows the chevron that expands the details, or the one that collapses them, and names the action.</summary>
     public static void SetExpanded(Button disclosure, bool expanded, string subject)
     {
-        disclosure.Rotation = expanded ? 90 : 0;
+        disclosure.SetDynamicResource(Button.TextProperty, expanded ? AIChatThemeKeys.CollapseIcon : AIChatThemeKeys.ExpandIcon);
         SemanticProperties.SetDescription(disclosure, $"{(expanded ? "Hide" : "Show")} details for {subject}");
     }
 
-    /// <summary>The disclosure glyph: a right-pointing chevron, rotated to point down when expanded.</summary>
-    public const string Chevron = "\u203A";
+    /// <summary>A glyph of the icon font, from the theme: decoration next to the text that names it.</summary>
+    public static Label Icon(string iconKey, double fontSize = 20)
+    {
+        var icon = new ChatLabel { FontSize = fontSize, VerticalOptions = LayoutOptions.Center };
+        icon.SetDynamicResource(Microsoft.Maui.Controls.Label.FontFamilyProperty, AIChatThemeKeys.IconFontFamily);
+        icon.SetDynamicResource(Microsoft.Maui.Controls.Label.TextProperty, iconKey);
+        icon.SetDynamicResource(Microsoft.Maui.Controls.Label.TextColorProperty, AIChatThemeKeys.SecondaryTextColor);
+        AutomationProperties.SetExcludedWithChildren(icon, true);
+        return icon;
+    }
 
     /// <summary>
     /// Creates the view for one media item: an inline image for image data or an image link, a file chip for
@@ -111,7 +122,7 @@ internal static class ChatVisuals
         var uri = content.Uri;
         var name = GetLinkName(uri);
         var detail = uri.IsAbsoluteUri ? $"{DescribeMediaType(content.MediaType)} · {uri.Host}" : DescribeMediaType(content.MediaType);
-        var chip = CreateChip("\U0001F517", name, detail, alignEnd, trailing: null);
+        var chip = CreateChip(Icon(AIChatThemeKeys.LinkIcon), name, detail, alignEnd, trailing: null);
         if (IsSafeUri(uri))
         {
             chip.GestureRecognizers.Add(new TapGestureRecognizer { Command = new Command(async () => await OpenLinkAsync(uri)) });
@@ -143,7 +154,7 @@ internal static class ChatVisuals
             detail = string.IsNullOrWhiteSpace(file) || file == name ? "Image" : $"Image \u00B7 {file}";
         }
 
-        var chip = CreateChip("\U0001F5BC", name, detail, alignEnd: false, trailing: null);
+        var chip = CreateChip(Icon(AIChatThemeKeys.ImageIcon), name, detail, alignEnd: false, trailing: null);
         if (uri is not null && IsWebUri(uri))
         {
             open ??= link => OpenLinkAsync(link);
@@ -195,15 +206,37 @@ internal static class ChatVisuals
         }
     }
 
+    /// <summary>A chip for a file: a thumbnail for an image with data, otherwise an icon for its kind.</summary>
     public static View CreateFileChip(DataContent content, bool alignEnd = false, View? trailing = null)
     {
         var name = string.IsNullOrWhiteSpace(content.Name) ? DescribeMediaType(content.MediaType) : content.Name!;
-        var glyph = content.HasTopLevelMediaType("audio") ? "\U0001F3B5" : "\U0001F4C4";
         var detail = $"{DescribeMediaType(content.MediaType)} · {FormatSize(content.Data.Length)}";
-        return CreateChip(glyph, name, detail, alignEnd, trailing);
+        View leading = CreateImageSource(content) is { } source
+            ? CreateThumbnail(source)
+            : Icon(
+                content.HasTopLevelMediaType("image") ? AIChatThemeKeys.ImageIcon :
+                content.HasTopLevelMediaType("audio") ? AIChatThemeKeys.AudioIcon :
+                AIChatThemeKeys.DocumentIcon);
+        return CreateChip(leading, name, detail, alignEnd, trailing);
     }
 
-    private static Border CreateChip(string glyph, string name, string detail, bool alignEnd, View? trailing)
+    private static ChatImage CreateThumbnail(ImageSource source)
+    {
+        const double Size = 32;
+        var thumbnail = new ChatImage
+        {
+            Source = source,
+            Aspect = Aspect.AspectFill,
+            WidthRequest = Size,
+            HeightRequest = Size,
+            VerticalOptions = LayoutOptions.Center,
+            Clip = new Microsoft.Maui.Controls.Shapes.RoundRectangleGeometry(new CornerRadius(6), new Rect(0, 0, Size, Size)),
+        };
+        AutomationProperties.SetExcludedWithChildren(thumbnail, true);
+        return thumbnail;
+    }
+
+    private static Border CreateChip(View leading, string name, string detail, bool alignEnd, View? trailing)
     {
         var text = new ChatVerticalStackLayout
         {
@@ -216,12 +249,10 @@ internal static class ChatVisuals
             },
         };
 
-        var icon = new ChatLabel { Text = glyph, FontSize = 18, VerticalOptions = LayoutOptions.Center };
-        icon.SetDynamicResource(Microsoft.Maui.Controls.Label.FontFamilyProperty, AIChatThemeKeys.FontFamily);
         var row = new ChatHorizontalStackLayout
         {
             Spacing = 8,
-            Children = { icon, text },
+            Children = { leading, text },
         };
         if (trailing is not null)
             row.Children.Add(trailing);

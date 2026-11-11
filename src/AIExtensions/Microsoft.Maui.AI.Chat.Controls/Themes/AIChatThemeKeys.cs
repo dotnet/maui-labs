@@ -80,6 +80,64 @@ public static class AIChatThemeKeys
     /// <summary>The monospace font family used for code (a <see cref="string"/>).</summary>
     public const string CodeFontFamily = "AIChat.FontFamily.Code";
 
+    /// <summary>
+    /// The font family of the built-in icons (a <see cref="string"/>): <c>AIChatIcons</c> by default, a subset of the
+    /// Fluent UI System Icons embedded in this library, which <see cref="AIChatView"/> registers with the app's fonts
+    /// itself. To use your own icon font, register it in your app and set this key and the <c>AIChat.Icon.*</c> keys.
+    /// </summary>
+    public const string IconFontFamily = "AIChat.FontFamily.Icons";
+
+    /// <summary>The icon of the button that adds attachments (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string AttachIcon = "AIChat.Icon.Attach";
+
+    /// <summary>The icon of the button that records an audio note (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string MicrophoneIcon = "AIChat.Icon.Microphone";
+
+    /// <summary>The icon of the button that starts live voice (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string LiveVoiceIcon = "AIChat.Icon.LiveVoice";
+
+    /// <summary>The icon of the send button (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string SendIcon = "AIChat.Icon.Send";
+
+    /// <summary>
+    /// The icon of the buttons that stop the response, a recording, or live voice (a <see cref="string"/>: a glyph of
+    /// <see cref="IconFontFamily"/>).
+    /// </summary>
+    public const string StopIcon = "AIChat.Icon.Stop";
+
+    /// <summary>
+    /// The icon of the audio button while a recording is transcribed; tapping it cancels the transcription (a
+    /// <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).
+    /// </summary>
+    public const string TranscribingIcon = "AIChat.Icon.Transcribing";
+
+    /// <summary>The icon of the button that removes a staged attachment (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string RemoveIcon = "AIChat.Icon.Remove";
+
+    /// <summary>The icon of link chips (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string LinkIcon = "AIChat.Icon.Link";
+
+    /// <summary>The icon of audio file chips (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string AudioIcon = "AIChat.Icon.Audio";
+
+    /// <summary>The icon of file chips other than audio and images (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string DocumentIcon = "AIChat.Icon.Document";
+
+    /// <summary>
+    /// The icon of chips for images that are not shown, such as an image without data or one that failed to load (a
+    /// <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>). Staged images show a thumbnail instead.
+    /// </summary>
+    public const string ImageIcon = "AIChat.Icon.Image";
+
+    /// <summary>
+    /// The chevron of collapsed details, such as a tool call's arguments or the model's reasoning; tapping it expands
+    /// them (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).
+    /// </summary>
+    public const string ExpandIcon = "AIChat.Icon.Expand";
+
+    /// <summary>The chevron of expanded details; tapping it collapses them (a <see cref="string"/>: a glyph of <see cref="IconFontFamily"/>).</summary>
+    public const string CollapseIcon = "AIChat.Icon.Collapse";
+
     /// <summary>The <see cref="ControlTemplate"/> applied to <see cref="AIChatView"/>.</summary>
     public const string ChatViewTemplate = "AIChat.Template.ChatView";
 
