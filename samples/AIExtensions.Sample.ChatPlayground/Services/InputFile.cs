@@ -27,8 +27,8 @@ public sealed record InputFile(
                 ".tif" or ".tiff" => "image/tiff",
                 _ => throw new NotSupportedException("The selected file type is not supported."),
             };
-        var bytes = await InputStreamReader.ReadBytesAsync(
-            input, 20 * 1024 * 1024, "Files must be 20 MB or smaller.", cancellationToken).ConfigureAwait(false);
-        return new(fileName, mediaType, bytes);
+        using var output = new MemoryStream();
+        await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+        return new(fileName, mediaType, output.ToArray());
     }
 }
