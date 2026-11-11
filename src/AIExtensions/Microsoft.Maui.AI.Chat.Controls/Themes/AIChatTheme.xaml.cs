@@ -23,8 +23,10 @@ public partial class AIChatTheme : ResourceDictionary
     public AIChatTheme()
     {
         InitializeComponent();
+        var platform = GetPlatform();
         this[AIChatThemeKeys.FontFamily] = null!;
-        this[AIChatThemeKeys.CodeFontFamily] = GetCodeFontFamily(GetPlatform());
+        this[AIChatThemeKeys.CodeFontFamily] = GetCodeFontFamily(platform);
+        ((Style)this[AIChatThemeKeys.InputStyle]).Setters.Add(new Setter { Property = View.MarginProperty, Value = GetInputMargin(platform) });
 
         // Keeps the app's implicit styles away from the view's own parts.
         ChatElements.AddImplicitStyles(this);
@@ -143,6 +145,25 @@ public partial class AIChatTheme : ResourceDictionary
 
         // Android, and fontconfig on Linux, resolve the generic family.
         return "monospace";
+    }
+
+    /// <summary>
+    /// Gets the margin of the message box on <paramref name="platform"/>: it puts a line of the body text on the centre of
+    /// the composer's 36-point buttons, whose bottom it shares, and keeps one line no taller than they are. The platforms
+    /// inset the text differently (measured with the default body size, 15).
+    /// </summary>
+    internal static Thickness GetInputMargin(DevicePlatform platform)
+    {
+        // UITextView: 8-point insets.
+        if (platform == DevicePlatform.iOS || platform == DevicePlatform.MacCatalyst)
+            return new Thickness(0, 0, 0, 1);
+
+        // EditText: Material's insets are deeper, more so at the top.
+        if (platform == DevicePlatform.Android)
+            return new Thickness(0, -3.5, 0, -1.8);
+
+        // Not measured.
+        return default;
     }
 
     internal static DevicePlatform GetPlatform()
