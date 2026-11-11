@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using Microsoft.Extensions.AI;
 
@@ -33,15 +35,35 @@ namespace Microsoft.Maui.AI.Chat;
 /// receives the status that ended the turn.
 /// </para>
 /// <para>
+/// The context, its turns and their blocks are bindable: the context raises <see cref="PropertyChanged"/>
+/// for <see cref="Status"/> and <see cref="Error"/>, <see cref="Turns"/> and each turn's
+/// <see cref="ConversationTurn.RequestBlocks"/> and <see cref="ConversationTurn.ResponseBlocks"/> raise
+/// <see cref="System.Collections.Specialized.INotifyCollectionChanged.CollectionChanged"/>, and turns and
+/// blocks raise <see cref="INotifyPropertyChanged.PropertyChanged"/>. Every event is raised synchronously,
+/// on the thread that makes the change, once the state it reports is in place; the engine has no
+/// dispatcher. A UI therefore drives the context from its UI thread: it sends, retries, cancels and clears
+/// there, and the response then streams on that thread through its synchronization context.
+/// </para>
+/// <para>
+/// Handlers of these events, like the callbacks, may call back into the context. A handler of a turn's
+/// addition or of a retry's removal of response blocks cannot start another send or retry, because the
+/// turn's attempt already started; a handler of a reset of <see cref="Turns"/> cannot send either, so every
+/// handler of a collection change sees the change before the next one. Send the next message from a status
+/// change instead.
+/// </para>
+/// <para>
 /// This type is single-thread-affine and is not thread-safe. Callers must serialize access and
 /// enter the owning application thread before calling it. Status checks are misuse guards, not
 /// synchronization.
 /// </para>
 /// </remarks>
-public sealed class AgentContext : IDisposable
+public sealed class AgentContext : IDisposable, INotifyPropertyChanged
 {
+    private static readonly PropertyChangedEventArgs s_statusChanged = new(nameof(Status));
+    private static readonly PropertyChangedEventArgs s_errorChanged = new(nameof(Error));
+
     private readonly UIAgent _agent;
-    private readonly List<ConversationTurn> _turns = new();
+    private readonly ObservableList<ConversationTurn> _turns = new();
     private readonly List<Action<ConversationTurn>> _turnAddedCallbacks = new();
     private readonly List<Action<ConversationStatus>> _statusChangedCallbacks = new();
     private readonly List<Action<ConversationTurn, ContentBlock>> _blockAddedCallbacks = new();
@@ -49,18 +71,42 @@ public sealed class AgentContext : IDisposable
     private Attempt? _attempt;
     private ChatMessage? _retryMessage;
     private bool _restoreCompleted;
+    private bool _resettingTurns;
+    private ConversationStatus _raisedStatus;
+    private Exception? _raisedError;
     private bool _disposed;
 
     public AgentContext(UIAgent agent)
     {
         ArgumentNullException.ThrowIfNull(agent);
         _agent = agent;
+        Turns = new ReadOnlyObservableCollection<ConversationTurn>(_turns);
     }
 
-    public IReadOnlyList<ConversationTurn> Turns => _turns;
+    /// <summary>Occurs after <see cref="Status"/> or <see cref="Error"/> changed.</summary>
+    /// <remarks>
+    /// Raised before the <see cref="RegisterOnStatusChanged"/> callbacks of the same change. A handler that
+    /// runs earlier may already have started the next send, so a later handler can read the status that
+    /// send reports; the callbacks still receive the status the change reported. A value that changed and
+    /// changed back before it was raised is not raised.
+    /// </remarks>
+    public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <summary>Gets the conversation's turns, in order.</summary>
+    /// <remarks>
+    /// Raises <see cref="System.Collections.Specialized.INotifyCollectionChanged.CollectionChanged"/> when a
+    /// send adds a turn, before its response streams, and a
+    /// <see cref="System.Collections.Specialized.NotifyCollectionChangedAction.Reset"/> once a restore loaded
+    /// every turn and when <see cref="ClearAsync"/> removed them. Cast it to
+    /// <see cref="System.Collections.Specialized.INotifyCollectionChanged"/> to subscribe from code; XAML
+    /// bindings find the event themselves.
+    /// </remarks>
+    public ReadOnlyObservableCollection<ConversationTurn> Turns { get; }
+
+    /// <summary>Gets the conversation's status.</summary>
     public ConversationStatus Status { get; private set; }
 
+    /// <summary>Gets the exception that failed the last turn, while <see cref="Status"/> is <see cref="ConversationStatus.Error"/>.</summary>
     public Exception? Error { get; private set; }
 
     /// <summary>
@@ -87,13 +133,13 @@ public sealed class AgentContext : IDisposable
 
         _agent.RejectPendingPredictiveState();
         _agent.ResetState();
-        _turns.Clear();
         _agent.ClearHistory();
         _retryMessage = null;
         _restoreCompleted = false;
         Error = null;
         Status = ConversationStatus.Idle;
-        NotifyStatusChanged();
+        ResetTurns(Array.Empty<ConversationTurn>());
+        NotifyStatusChanged(ConversationStatus.Idle);
     }
 
     public Task SendMessageAsync(string text, CancellationToken cancellationToken = default)
@@ -119,17 +165,35 @@ public sealed class AgentContext : IDisposable
             throw new InvalidOperationException("A message is already being processed.");
         }
 
+        if (_resettingTurns)
+        {
+            throw new InvalidOperationException(
+                "A message cannot be sent while the reset of Turns is reported. Send it from a status change.");
+        }
+
         _agent.ThrowIfToolsCannotBeInvoked();
         var requestMessage = EnsureMessageId(message);
         var turn = new ConversationTurn { Id = requestMessage.MessageId! };
-        _turns.Add(turn);
-        NotifyTurnAdded(turn);
+
+        // The attempt starts before the turn is reported, so a handler of the report cannot start another.
+        var attempt = BeginAttempt(cancellationToken);
+        try
+        {
+            _turns.Add(turn);
+            NotifyTurnAdded(turn);
+        }
+        catch
+        {
+            EndAttempt(attempt);
+            attempt.Complete();
+            throw;
+        }
 
         await RunAttemptAsync(
+            attempt,
             requestMessage,
             turn,
-            includeInitialRequestBlocks: true,
-            cancellationToken);
+            includeInitialRequestBlocks: true);
     }
 
     /// <summary>
@@ -138,9 +202,10 @@ public sealed class AgentContext : IDisposable
     /// <remarks>
     /// Restore requires an idle, empty context and may be called only once before
     /// <see cref="ClearAsync"/>. It reconstructs display/history blocks only: restored approvals,
-    /// tools, and other interactive blocks are not resumed or invoked. Once all turns are loaded, each
-    /// is announced through <see cref="RegisterOnTurnAdded"/> with its blocks already in place; no
-    /// block-added or status-changed notifications are raised.
+    /// tools, and other interactive blocks are not resumed or invoked. Once all turns are loaded,
+    /// <see cref="Turns"/> raises one reset and then each turn is announced through
+    /// <see cref="RegisterOnTurnAdded"/>, with its blocks already in place; no block-added or
+    /// status-changed notifications are raised.
     /// </remarks>
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
     {
@@ -171,9 +236,9 @@ public sealed class AgentContext : IDisposable
     /// which is the source of truth for its conversation; restore from the thread instead.
     /// </para>
     /// <para>
-    /// Once all turns are loaded, each is announced through <see cref="RegisterOnTurnAdded"/> with its
-    /// blocks already in place, so a view that already shows this context renders them. No block-added or
-    /// status-changed notifications are raised.
+    /// Once all turns are loaded, <see cref="Turns"/> raises one reset and then each turn is announced
+    /// through <see cref="RegisterOnTurnAdded"/>, with its blocks already in place, so a view that already
+    /// shows this context renders them. No block-added or status-changed notifications are raised.
     /// </para>
     /// </remarks>
     public async Task RestoreAsync(
@@ -202,7 +267,7 @@ public sealed class AgentContext : IDisposable
 
     private void AddRestoredTurns(IReadOnlyList<RestoredTurn> restoredTurns)
     {
-        var firstRestored = _turns.Count;
+        var turns = new List<ConversationTurn>(restoredTurns.Count);
         foreach (var restoredTurn in restoredTurns)
         {
             var turn = new ConversationTurn
@@ -216,15 +281,33 @@ public sealed class AgentContext : IDisposable
                 turn.AddRequestBlock(block);
             foreach (var block in restoredTurn.ResponseBlocks)
                 turn.AddResponseBlock(block);
-            _turns.Add(turn);
+            turns.Add(turn);
         }
 
         _restoreCompleted = true;
+        if (turns.Count == 0)
+            return;
 
         // Announce turns only once all of them are loaded, so a view that rebuilds from Turns on the first
         // notification shows the whole conversation. Restored blocks are not announced individually.
-        for (var i = firstRestored; i < _turns.Count; i++)
-            NotifyTurnAdded(_turns[i]);
+        ResetTurns(turns);
+        foreach (var turn in turns)
+            NotifyTurnAdded(turn);
+    }
+
+    /// <summary>Replaces the turns and raises the reset of <see cref="Turns"/>.</summary>
+    private void ResetTurns(IEnumerable<ConversationTurn> turns)
+    {
+        var wasResetting = _resettingTurns;
+        _resettingTurns = true;
+        try
+        {
+            _turns.Reset(turns);
+        }
+        finally
+        {
+            _resettingTurns = wasResetting;
+        }
     }
 
     /// <summary>
@@ -235,7 +318,10 @@ public sealed class AgentContext : IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (Status != ConversationStatus.Error || _retryMessage is null)
+        if (_attempt is not null)
+            throw new InvalidOperationException("A message is already being processed.");
+
+        if (Status != ConversationStatus.Error || _retryMessage is not { } message)
         {
             throw new InvalidOperationException(
                 $"RetryAsync requires Status == Error, but Status is {Status}.");
@@ -243,14 +329,27 @@ public sealed class AgentContext : IDisposable
 
         _agent.ThrowIfToolsCannotBeInvoked();
         var turn = _turns[^1];
-        turn.ClearResponseBlocks();
-        NotifyResponseBlocksCleared(turn);
+
+        // The attempt starts before the response blocks are removed, so a handler of the removal cannot
+        // start another.
+        var attempt = BeginAttempt(cancellationToken);
+        try
+        {
+            turn.ClearResponseBlocks();
+            NotifyResponseBlocksCleared(turn);
+        }
+        catch
+        {
+            EndAttempt(attempt);
+            attempt.Complete();
+            throw;
+        }
 
         await RunAttemptAsync(
-            _retryMessage,
+            attempt,
+            message,
             turn,
-            includeInitialRequestBlocks: false,
-            cancellationToken);
+            includeInitialRequestBlocks: false);
     }
 
     public Task CancelAsync() => CancelAsync(CancellationToken.None);
@@ -291,16 +390,22 @@ public sealed class AgentContext : IDisposable
         _statusChangedCallbacks.Clear();
         _blockAddedCallbacks.Clear();
         _responseBlocksClearedCallbacks.Clear();
+        PropertyChanged = null;
     }
 
-    private async Task RunAttemptAsync(
-        ChatMessage message,
-        ConversationTurn turn,
-        bool includeInitialRequestBlocks,
-        CancellationToken callerToken)
+    private Attempt BeginAttempt(CancellationToken callerToken)
     {
         var attempt = new Attempt(callerToken);
         _attempt = attempt;
+        return attempt;
+    }
+
+    private async Task RunAttemptAsync(
+        Attempt attempt,
+        ChatMessage message,
+        ConversationTurn turn,
+        bool includeInitialRequestBlocks)
+    {
         AttemptOutcome outcome;
         try
         {
@@ -319,7 +424,7 @@ public sealed class AgentContext : IDisposable
         }
 
         if (outcome != AttemptOutcome.Succeeded)
-            callerToken.ThrowIfCancellationRequested();
+            attempt.CallerToken.ThrowIfCancellationRequested();
     }
 
     private async Task<AttemptOutcome> StreamIntoTurnAsync(
@@ -333,10 +438,12 @@ public sealed class AgentContext : IDisposable
         var interactiveBlocks = new List<IInteractiveBlock>();
         try
         {
-            turn.IsFailed = false;
+            var wasFailed = turn.SetIsFailedSilently(false);
             Status = ConversationStatus.Streaming;
             Error = null;
-            NotifyStatusChanged();
+            if (wasFailed)
+                turn.RaiseIsFailedChanged();
+            NotifyStatusChanged(ConversationStatus.Streaming);
 
             IReadOnlyList<ChatMessage> currentMessages = [message];
             var isInitialRequest = true;
@@ -411,7 +518,7 @@ public sealed class AgentContext : IDisposable
                 if (humanInputBlocks.Count > 0)
                 {
                     Status = ConversationStatus.AwaitingInput;
-                    NotifyStatusChanged();
+                    NotifyStatusChanged(ConversationStatus.AwaitingInput);
                 }
 
                 var results = (await Task.WhenAll(resultTasks))
@@ -470,7 +577,7 @@ public sealed class AgentContext : IDisposable
                 }
 
                 Status = ConversationStatus.Streaming;
-                NotifyStatusChanged();
+                NotifyStatusChanged(ConversationStatus.Streaming);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -548,6 +655,7 @@ public sealed class AgentContext : IDisposable
         PendingTurn pendingTurn,
         ConversationTurn turn)
     {
+        var stopped = false;
         if (!attempt.Discard)
         {
             try
@@ -560,19 +668,19 @@ public sealed class AgentContext : IDisposable
                 return AttemptOutcome.Failed;
             }
 
-            turn.IsStopped = true;
+            stopped = turn.SetIsStoppedSilently(true);
         }
 
         _retryMessage = null;
         Error = null;
         Status = ConversationStatus.Idle;
-        ReportAttemptEnded(attempt);
+        ReportAttemptEnded(attempt, stopped ? turn : null);
         return AttemptOutcome.Stopped;
     }
 
     private void Fail(Attempt attempt, ConversationTurn turn, ChatMessage? message, Exception exception)
     {
-        turn.IsFailed = true;
+        var failed = turn.SetIsFailedSilently(true);
         _retryMessage = message;
         Error = exception;
         Status = ConversationStatus.Error;
@@ -584,17 +692,26 @@ public sealed class AgentContext : IDisposable
         finally
         {
             _agent.LogProcessingError(exception);
-            NotifyStatusChanged();
+            try
+            {
+                if (failed)
+                    turn.RaiseIsFailedChanged();
+            }
+            finally
+            {
+                NotifyStatusChanged(ConversationStatus.Error);
+            }
         }
     }
 
     /// <summary>
-    /// Reports that an attempt ended once its outcome is final: rejects a prediction nobody accepted and
-    /// raises the status change. Both run app callbacks, which may already send, retry or clear; one
-    /// that throws cannot change the outcome.
+    /// Reports that an attempt ended once its outcome is final: rejects a prediction nobody accepted, raises
+    /// the change of a stopped turn and then the status change. They run app code, which may already send,
+    /// retry or clear; code that throws cannot change the outcome.
     /// </summary>
-    private void ReportAttemptEnded(Attempt attempt)
+    private void ReportAttemptEnded(Attempt attempt, ConversationTurn? stoppedTurn = null)
     {
+        var status = Status;
         EndAttempt(attempt);
         try
         {
@@ -602,7 +719,14 @@ public sealed class AgentContext : IDisposable
         }
         finally
         {
-            NotifyStatusChanged();
+            try
+            {
+                stoppedTurn?.RaiseIsStoppedChanged();
+            }
+            finally
+            {
+                NotifyStatusChanged(status);
+            }
         }
     }
 
@@ -666,10 +790,15 @@ public sealed class AgentContext : IDisposable
 
     /// <summary>Registers a callback invoked when <see cref="Status"/> changes.</summary>
     /// <param name="callback">
-    /// The callback, which receives the status the change reports. A callback that runs earlier for the
-    /// same change may already have sent the next message, so a later one can receive the status that
-    /// ended a turn while <see cref="Status"/> already reports the next one.
+    /// The callback, which receives the status the change reports. A callback, or a
+    /// <see cref="PropertyChanged"/> handler, that runs earlier for the same change may already have sent
+    /// the next message, so a later one can receive the status that ended a turn while <see cref="Status"/>
+    /// already reports the next one.
     /// </param>
+    /// <remarks>
+    /// Runs after the <see cref="PropertyChanged"/> handlers of the change, also when a change reports the
+    /// status the context already had, for example each <see cref="ConversationStatus.Streaming"/> round.
+    /// </remarks>
     /// <returns>A registration that removes the callback when disposed.</returns>
     public IDisposable RegisterOnStatusChanged(Action<ConversationStatus> callback)
     {
@@ -697,11 +826,30 @@ public sealed class AgentContext : IDisposable
             callback);
     }
 
-    private void NotifyStatusChanged()
+    /// <summary>
+    /// Raises the changes of <see cref="Error"/> and <see cref="Status"/>, then the status callbacks with
+    /// <paramref name="status"/>.
+    /// </summary>
+    /// <param name="status">The status this change reports, read before any app code of the change ran.</param>
+    private void NotifyStatusChanged(ConversationStatus status)
     {
+        // PropertyChanged reports the current values, once each changes. A handler may already have started
+        // the next send, which raised its own change; the value is recorded before the handlers run, so a
+        // nested change is compared with what this one raised.
+        if (!ReferenceEquals(Error, _raisedError))
+        {
+            _raisedError = Error;
+            PropertyChanged?.Invoke(this, s_errorChanged);
+        }
+
+        if (Status != _raisedStatus)
+        {
+            _raisedStatus = Status;
+            PropertyChanged?.Invoke(this, s_statusChanged);
+        }
+
         // Every callback hears the status this notification reports, even when an earlier one already
         // started the next send.
-        var status = Status;
         var snapshot = _statusChangedCallbacks.ToArray();
         foreach (var cb in snapshot)
             cb(status);
@@ -744,11 +892,15 @@ public sealed class AgentContext : IDisposable
 
         internal Attempt(CancellationToken callerToken)
         {
+            CallerToken = callerToken;
             _cancellation = callerToken.CanBeCanceled
                 ? CancellationTokenSource.CreateLinkedTokenSource(callerToken)
                 : new CancellationTokenSource();
             Token = _cancellation.Token;
         }
+
+        /// <summary>Gets the token of the send or retry that started the attempt.</summary>
+        internal CancellationToken CallerToken { get; }
 
         internal CancellationToken Token { get; }
 

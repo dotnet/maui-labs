@@ -7,6 +7,7 @@ Microsoft.Maui.AI.Chat.AgentContext.CancelAsync(System.Threading.CancellationTok
 Microsoft.Maui.AI.Chat.AgentContext.ClearAsync() -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.Dispose() -> void
 Microsoft.Maui.AI.Chat.AgentContext.Error.get -> System.Exception?
+Microsoft.Maui.AI.Chat.AgentContext.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnBlockAdded(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!, Microsoft.Maui.AI.Chat.ContentBlock!>! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnResponseBlocksCleared(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!>! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentContext.RegisterOnStatusChanged(System.Action<Microsoft.Maui.AI.Chat.ConversationStatus>! callback) -> System.IDisposable!
@@ -17,7 +18,7 @@ Microsoft.Maui.AI.Chat.AgentContext.RetryAsync(System.Threading.CancellationToke
 Microsoft.Maui.AI.Chat.AgentContext.SendMessageAsync(Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.SendMessageAsync(string! text, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.Status.get -> Microsoft.Maui.AI.Chat.ConversationStatus
-Microsoft.Maui.AI.Chat.AgentContext.Turns.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ConversationTurn!>!
+Microsoft.Maui.AI.Chat.AgentContext.Turns.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.AI.Chat.ConversationTurn!>!
 Microsoft.Maui.AI.Chat.AgentState<T>
 Microsoft.Maui.AI.Chat.AgentState<T>.AcceptPredictiveState() -> void
 Microsoft.Maui.AI.Chat.AgentState<T>.HasPendingPredictiveState.get -> bool
@@ -87,8 +88,9 @@ Microsoft.Maui.AI.Chat.ConversationTurn.Id.get -> string!
 Microsoft.Maui.AI.Chat.ConversationTurn.IsFailed.get -> bool
 Microsoft.Maui.AI.Chat.ConversationTurn.IsStopped.get -> bool
 Microsoft.Maui.AI.Chat.ConversationTurn.ModelId.get -> string?
-Microsoft.Maui.AI.Chat.ConversationTurn.RequestBlocks.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!
-Microsoft.Maui.AI.Chat.ConversationTurn.ResponseBlocks.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!
+Microsoft.Maui.AI.Chat.ConversationTurn.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
+Microsoft.Maui.AI.Chat.ConversationTurn.RequestBlocks.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.AI.Chat.ContentBlock!>!
+Microsoft.Maui.AI.Chat.ConversationTurn.ResponseBlocks.get -> System.Collections.ObjectModel.ReadOnlyObservableCollection<Microsoft.Maui.AI.Chat.ContentBlock!>!
 Microsoft.Maui.AI.Chat.ConversationTurn.Usage.get -> Microsoft.Extensions.AI.UsageDetails?
 Microsoft.Maui.AI.Chat.DefinitionNode
 Microsoft.Maui.AI.Chat.DefinitionNode.DefinitionNode() -> void
