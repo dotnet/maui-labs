@@ -171,7 +171,7 @@ internal sealed class ToolApprovalView : BlockView
     internal VerticalStackLayout Details => _details;
 
     /// <summary>Gets whether the user can still decide: the request is pending and its turn is still waiting.</summary>
-    private bool CanDecide => Block is ToolApprovalBlock { Status: ApprovalStatus.Pending } && IsTurnActive;
+    private bool CanDecide => Block is ToolApprovalBlock { IsAwaitingInput: true };
 
     internal void Toggle()
     {
@@ -319,8 +319,7 @@ internal sealed class UIActionView : BlockView
 
     internal Button RunButton => _run;
 
-    private bool CanRun =>
-        Block is UIActionBlock { Mode: UIActionInvocationMode.Manual, IsComplete: false } && !ViewState.IsRunning && IsTurnActive;
+    private bool CanRun => Block is UIActionBlock { IsAwaitingInput: true } && !ViewState.IsRunning;
 
     protected override void OnBlockChanged()
     {
@@ -332,7 +331,7 @@ internal sealed class UIActionView : BlockView
             { IsComplete: true } => "Done",
             _ when ViewState.IsRunning => "Running\u2026",
             _ when !IsTurnActive => Turn?.IsStopped == true ? "Stopped" : "Not run",
-            { Mode: UIActionInvocationMode.Manual } => "Waiting for you to run it",
+            { IsAwaitingInput: true } => "Waiting for you to run it",
             _ => "Running\u2026",
         };
         _run.IsVisible = CanRun;
