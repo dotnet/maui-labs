@@ -12,6 +12,9 @@ public class BuiltInViewTests
         Assert.Equal("Hello", view.Label.Text);
         Assert.Same(view.Label, view.Content);
         Assert.Equal("AIChatAssistantText", view.AutomationId);
+
+        // Blank lines around a message would only pad the row.
+        Assert.Equal("One\n\nTwo", Render<TextBlockView>(Blocks.Text("\nOne\n\nTwo\n\n")).Label.Text);
     }
 
     [Fact]
@@ -138,6 +141,8 @@ public class BuiltInViewTests
         var view = Render<ToolCallView>(Blocks.ToolCall("search", exception: new InvalidOperationException("quota exceeded")));
 
         Assert.Equal("Failed", view.StatusLabel.Text);
+        Assert.True(view.Resources.MergedDictionaries.Single().TryGetValue(AIChatThemeKeys.ErrorColor, out var error));
+        Assert.Equal(error, view.StatusLabel.TextColor);
         view.Toggle();
         Assert.Contains(view.Details.Descendants<Label>(), label => label.Text == "quota exceeded");
     }
@@ -173,12 +178,21 @@ public class BuiltInViewTests
         Assert.False(approveView.ApproveCommand.CanExecute(null));
         Assert.False(approveView.RejectCommand.CanExecute(null));
 
+        // Once decided, the arguments fold away like a tool call's details.
+        Assert.True(approveView.DetailsToggle.IsVisible);
+        Assert.False(approveView.Details.IsVisible);
+
         // The call's result lands in the approval's inner block: the same card shows it.
         approve.InnerBlock.Result = new FunctionResultContent("call-1", "deleted /tmp/a");
         Refresh(approveView);
         Assert.Equal("Approved", approveView.StatusLabel.Text);
         Assert.Equal("deleted /tmp/a", approveView.ResultLabel.Text);
+        Assert.False(approveView.Details.IsVisible);
+
+        approveView.DetailsToggle.Command.Execute(null);
+        Assert.True(approveView.Details.IsVisible);
         Assert.True(approveView.ResultLabel.Parent is Border { IsVisible: true });
+        Assert.Equal("Hide details for delete_file", SemanticProperties.GetDescription(approveView.DetailsToggle));
 
         var reject = Blocks.Approval("delete_file");
         var rejectView = Render<ToolApprovalView>(reject);
@@ -325,13 +339,15 @@ public class BuiltInViewTests
         var block = Blocks.Reasoning("Because the sky scatters blue light.");
         var view = Render<ReasoningView>(block);
 
-        Assert.Equal("Reasoning \u25B8", view.Header.Text);
+        Assert.Equal("Reasoning", view.Header.Text);
+        Assert.Equal(0, view.Chevron.Rotation);
         Assert.False(view.TextLabel.IsVisible);
         Assert.Equal("Show reasoning", SemanticProperties.GetDescription(view.Header));
 
         view.Header.Command.Execute(null);
 
-        Assert.Equal("Reasoning \u25BE", view.Header.Text);
+        Assert.Equal(90, view.Chevron.Rotation);
+        Assert.Equal("Hide reasoning", SemanticProperties.GetDescription(view.Header));
         Assert.True(view.TextLabel.IsVisible);
         Assert.Equal("Because the sky scatters blue light.", view.TextLabel.Text);
 
@@ -347,6 +363,7 @@ public class BuiltInViewTests
 
         Assert.Equal("Reasoning is hidden", view.Header.Text);
         Assert.False(view.Header.IsEnabled);
+        Assert.False(view.Chevron.IsVisible);
 
         view.Toggle();
 
@@ -371,9 +388,14 @@ public class BuiltInViewTests
     [Fact]
     public void Media_ShowsImageLinksInlineAndOtherLinksAsChips()
     {
-        var image = Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("https://example.com/cat.png"), "image/png"))).MediaView;
-        var source = Assert.IsType<UriImageSource>(Assert.IsType<Image>(image).Source);
+        var image = Assert.IsType<LinkedImageView>(Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("https://example.com/cat.png"), "image/png"))).MediaView);
+        var source = Assert.IsType<UriImageSource>(image.Image.Source);
         Assert.Equal(new Uri("https://example.com/cat.png"), source.Uri);
+        Assert.Same(image.Image, image.Content);
+
+        // An image that cannot be loaded leaves its link.
+        image.ShowLink();
+        Assert.StartsWith("cat.png, ", SemanticProperties.GetDescription(Assert.IsType<Border>(image.Content)));
 
         var link = Render<MediaBlockView>(Blocks.Media(new UriContent(new Uri("https://example.com/docs/q3%20report.pdf"), "application/pdf"))).MediaView;
         var chip = Assert.IsType<Border>(link);

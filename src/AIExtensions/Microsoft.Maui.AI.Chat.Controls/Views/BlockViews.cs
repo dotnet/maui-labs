@@ -19,16 +19,7 @@ internal sealed class ToolCallView : BlockView
     {
         AutomationId = "AIChatToolCall";
 
-        _toggle = new Button
-        {
-            Text = "\u25B8",
-            FontSize = 14,
-            WidthRequest = 28,
-            HeightRequest = 28,
-            VerticalOptions = LayoutOptions.Center,
-            Command = new Command(Toggle),
-            AutomationId = "AIChatToolCallDetails",
-        }.Styled(AIChatThemeKeys.IconButtonStyle);
+        _toggle = ChatVisuals.DisclosureButton(Toggle, "AIChatToolCallDetails");
 
         _status.VerticalOptions = LayoutOptions.Center;
         _title.VerticalOptions = LayoutOptions.Center;
@@ -54,7 +45,7 @@ internal sealed class ToolCallView : BlockView
         _details.Children.Add(_resultHeader);
         _details.Children.Add(_resultBlock);
 
-        Content = ChatVisuals.Card(new VerticalStackLayout { Spacing = 6, Children = { header, _details } });
+        Content = ChatVisuals.Card(new VerticalStackLayout { Spacing = 8, Children = { header, _details } });
     }
 
     internal Label TitleLabel => _title;
@@ -78,6 +69,9 @@ internal sealed class ToolCallView : BlockView
         _title.Text = name;
         _status.Text = ChatVisuals.DescribeCall(block, IsTurnActive, Turn?.IsStopped == true);
         _status.IsVisible = _status.Text.Length > 0;
+        _status.SetDynamicResource(
+            Label.TextColorProperty,
+            block?.Result?.Exception is not null ? AIChatThemeKeys.ErrorColor : AIChatThemeKeys.SecondaryTextColor);
 
         var arguments = ChatVisuals.FormatArguments(block?.Arguments);
         _arguments.Text = arguments;
@@ -88,22 +82,23 @@ internal sealed class ToolCallView : BlockView
         _resultHeader.IsVisible = _resultBlock.IsVisible = result is not null;
 
         _details.IsVisible = _expanded;
-        _toggle.Text = _expanded ? "\u25BE" : "\u25B8";
-        var action = _expanded ? "Hide" : "Show";
-        SemanticProperties.SetDescription(_toggle, $"{action} details for {name}");
+        ChatVisuals.SetExpanded(_toggle, _expanded, name);
         SemanticProperties.SetDescription(_title, _status.Text.Length > 0 ? $"Tool {name}, {_status.Text}" : $"Tool {name}");
     }
 }
 
 /// <summary>
 /// Asks the user to approve or reject a tool call, then shows the decision and, once the call ran, its result —
-/// one card per call.
+/// one card per call. Once decided, the arguments and result fold away like a tool call's details.
 /// </summary>
 internal sealed class ToolApprovalView : BlockView
 {
     private readonly Label _title = ChatVisuals.Label(AIChatThemeKeys.CardTitleStyle);
     private readonly Label _status = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
-    private readonly ContentView _details = new();
+    private readonly Button _toggle;
+    private readonly VerticalStackLayout _details = new() { Spacing = 6 };
+    private readonly ContentView _call = new();
+    private readonly Label _argumentsHeader = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, "Arguments");
     private readonly Label _arguments = ChatVisuals.Label(AIChatThemeKeys.CodeTextStyle);
     private readonly Border _argumentsBlock;
     private readonly Label _resultHeader = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, "Result");
@@ -112,6 +107,7 @@ internal sealed class ToolApprovalView : BlockView
     private readonly HorizontalStackLayout _buttons;
     private BlockTemplate? _innerTemplate;
     private View? _innerView;
+    private bool _expanded;
 
     public ToolApprovalView()
     {
@@ -121,6 +117,7 @@ internal sealed class ToolApprovalView : BlockView
         _status.VerticalOptions = LayoutOptions.Center;
         _argumentsBlock = ChatVisuals.CodeBlock(_arguments);
         _resultBlock = ChatVisuals.CodeBlock(_result);
+        _toggle = ChatVisuals.DisclosureButton(Toggle, "AIChatToolApprovalDetails");
 
         ApproveCommand = new Command(Approve, () => CanDecide);
         RejectCommand = new Command(Reject, () => CanDecide);
@@ -133,17 +130,25 @@ internal sealed class ToolApprovalView : BlockView
 
         var header = new Grid
         {
-            ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) },
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(GridLength.Auto),
+            },
             ColumnSpacing = 8,
+            MinimumHeightRequest = 28,
         };
         header.Add(_title, 0);
         header.Add(_status, 1);
+        header.Add(_toggle, 2);
 
-        Content = ChatVisuals.Card(new VerticalStackLayout
-        {
-            Spacing = 8,
-            Children = { header, _details, _resultHeader, _resultBlock, _buttons },
-        });
+        _details.Children.Add(_argumentsHeader);
+        _details.Children.Add(_call);
+        _details.Children.Add(_resultHeader);
+        _details.Children.Add(_resultBlock);
+
+        Content = ChatVisuals.Card(new VerticalStackLayout { Spacing = 8, Children = { header, _details, _buttons } });
     }
 
     internal Command ApproveCommand { get; }
@@ -160,8 +165,18 @@ internal sealed class ToolApprovalView : BlockView
 
     internal View? InnerView => _innerView;
 
+    internal Button DetailsToggle => _toggle;
+
+    internal VerticalStackLayout Details => _details;
+
     /// <summary>Gets whether the user can still decide: the request is pending and its turn is still waiting.</summary>
     private bool CanDecide => Block is ToolApprovalBlock { Status: ApprovalStatus.Pending } && IsTurnActive;
+
+    internal void Toggle()
+    {
+        _expanded = !_expanded;
+        OnBlockChanged();
+    }
 
     protected override void OnBlockChanged()
     {
@@ -177,11 +192,20 @@ internal sealed class ToolApprovalView : BlockView
         _status.IsVisible = status.Length > 0;
         _status.SetDynamicResource(Label.TextColorProperty, colorKey);
 
-        // An app template for the call shows its result itself.
+        // An app template for the call shows its result itself and stays open.
         var result = block?.Result;
-        var showResult = result is not null && _innerView is null;
-        _result.Text = showResult ? ChatVisuals.FormatResult(result!) : null;
-        _resultHeader.IsVisible = _resultBlock.IsVisible = showResult;
+        var hasResult = result is not null && _innerView is null;
+        _result.Text = hasResult ? ChatVisuals.FormatResult(result!) : null;
+        _resultHeader.IsVisible = _resultBlock.IsVisible = hasResult;
+        _call.IsVisible = _call.Content is not null;
+
+        // Pending, the arguments are the question; once decided they are details, labeled like a tool call's.
+        var foldable = !canDecide && _innerView is null && (_call.Content is not null || hasResult);
+        _argumentsHeader.IsVisible = foldable && _call.Content is not null;
+        var open = !foldable || _expanded;
+        _details.IsVisible = open && (_call.Content is not null || hasResult);
+        _toggle.IsVisible = foldable;
+        ChatVisuals.SetExpanded(_toggle, open, name);
 
         _buttons.IsVisible = canDecide;
         SemanticProperties.SetDescription(_title, status.Length > 0 ? $"{name}, {status}" : _title.Text);
@@ -223,8 +247,7 @@ internal sealed class ToolApprovalView : BlockView
 
             Bind(_innerView, inner, Owner, Session, Turn);
             _innerView.IsEnabled = canDecide;
-            _details.Content = _innerView;
-            _details.IsVisible = true;
+            _call.Content = _innerView;
             return;
         }
 
@@ -232,8 +255,7 @@ internal sealed class ToolApprovalView : BlockView
         _innerView = null;
         var arguments = ChatVisuals.FormatArguments(block?.Arguments);
         _arguments.Text = arguments;
-        _details.Content = arguments.Length > 0 ? _argumentsBlock : null;
-        _details.IsVisible = arguments.Length > 0;
+        _call.Content = arguments.Length > 0 ? _argumentsBlock : null;
     }
 
     private void Approve()
@@ -275,7 +297,18 @@ internal sealed class UIActionView : BlockView
             Command = RunCommand,
         }.Styled(AIChatThemeKeys.PrimaryButtonStyle);
 
-        Content = ChatVisuals.Card(new VerticalStackLayout { Spacing = 6, Children = { _title, _status, _run } });
+        _title.VerticalOptions = LayoutOptions.Center;
+        _status.VerticalOptions = LayoutOptions.Center;
+        var header = new Grid
+        {
+            ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) },
+            ColumnSpacing = 8,
+            MinimumHeightRequest = 28,
+        };
+        header.Add(_title, 0);
+        header.Add(_status, 1);
+
+        Content = ChatVisuals.Card(new VerticalStackLayout { Spacing = 8, Children = { header, _run } });
     }
 
     internal Command RunCommand { get; }
@@ -332,6 +365,7 @@ internal sealed class UIActionView : BlockView
 internal sealed class ReasoningView : BlockView
 {
     private readonly Button _header;
+    private readonly Label _chevron = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, ChatVisuals.Chevron);
     private readonly Label _text = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
     private bool _expanded;
 
@@ -351,10 +385,22 @@ internal sealed class ReasoningView : BlockView
         _header.SetDynamicResource(Button.TextColorProperty, AIChatThemeKeys.SecondaryTextColor);
         _text.IsVisible = false;
 
-        Content = new VerticalStackLayout { Spacing = 4, Children = { _header, _text } };
+        // The chevron is decoration next to the header button, which carries the accessible name.
+        _chevron.FontSize = 18;
+        _chevron.VerticalOptions = LayoutOptions.Center;
+        _chevron.GestureRecognizers.Add(new TapGestureRecognizer { Command = _header.Command });
+        AutomationProperties.SetExcludedWithChildren(_chevron, true);
+
+        Content = new VerticalStackLayout
+        {
+            Spacing = 4,
+            Children = { new HorizontalStackLayout { Spacing = 6, Children = { _header, _chevron } }, _text },
+        };
     }
 
     internal Button Header => _header;
+
+    internal Label Chevron => _chevron;
 
     internal Label TextLabel => _text;
 
@@ -374,13 +420,16 @@ internal sealed class ReasoningView : BlockView
         {
             _header.Text = "Reasoning is hidden";
             _header.IsEnabled = false;
+            _chevron.IsVisible = false;
             _text.IsVisible = false;
             _text.Text = null;
             return;
         }
 
         _header.IsEnabled = true;
-        _header.Text = _expanded ? "Reasoning \u25BE" : "Reasoning \u25B8";
+        _header.Text = "Reasoning";
+        _chevron.IsVisible = true;
+        _chevron.Rotation = _expanded ? 90 : 0;
         SemanticProperties.SetDescription(_header, _expanded ? "Hide reasoning" : "Show reasoning");
         _text.Text = reasoning.Text;
         _text.IsVisible = _expanded && reasoning.Text.Length > 0;

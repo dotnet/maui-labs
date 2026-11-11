@@ -14,8 +14,9 @@ templates, restyle it with resource keys, or replace the whole layout.
   are no avatars, names, or timestamps. A thinking row shows until content arrives, and the list
   auto-scrolls while you are at the bottom.
 - **Agent content:** tool calls are compact cards with expandable arguments and results. An approval is one
-  card with Approve and Reject buttons that then shows the decision and the call's result. There are also
-  client UI actions, collapsible reasoning, inline images (data or links), and file and link chips.
+  card: Approve and Reject, then the decision, with the arguments and result folded away like a tool call's.
+  There are also client UI actions, collapsible reasoning, inline images (data or links, with a link chip when
+  an image cannot load), and file and link chips.
 - **Turn states:** a stopped response keeps its partial output under a "Stopped" marker. A failed response
   keeps its partial output and shows the error with Retry. A restored conversation renders without sending.
 - **Composer:** Send and Stop, suggestion chips, attachments (picker, file types, size and count limits),

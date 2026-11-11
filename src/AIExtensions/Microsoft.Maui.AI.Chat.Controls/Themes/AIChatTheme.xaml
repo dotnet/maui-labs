@@ -38,7 +38,7 @@
     <Color x:Key="AIChat.Dark.UserText">#ECEDEF</Color>
     <Color x:Key="AIChat.Dark.Surface">#23262B</Color>
     <Color x:Key="AIChat.Dark.Stroke">#3A3E45</Color>
-    <Color x:Key="AIChat.Dark.CodeBackground">#1B1D21</Color>
+    <Color x:Key="AIChat.Dark.CodeBackground">#2A2D33</Color>
     <Color x:Key="AIChat.Dark.Error">#F2B8B5</Color>
     <Color x:Key="AIChat.Dark.ErrorBackground">#3B1F1E</Color>
     <Color x:Key="AIChat.Dark.Success">#7BD88F</Color>
@@ -58,7 +58,7 @@
         <Setter Property="StrokeThickness" Value="0" />
         <Setter Property="StrokeShape" Value="RoundRectangle 18" />
         <Setter Property="Padding" Value="14,10" />
-        <Setter Property="Margin" Value="48,0,0,0" />
+        <Setter Property="Margin" Value="48,8,0,0" />
         <Setter Property="HorizontalOptions" Value="End" />
     </Style>
 
@@ -270,7 +270,7 @@
             </Grid>
 
             <VerticalStackLayout Grid.Row="2"
-                                 Padding="12,4,12,12"
+                                 Padding="16,4,16,12"
                                  Spacing="8"
                                  IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=IsInputVisible}">
 
@@ -294,7 +294,8 @@
                 <Border Style="{DynamicResource AIChat.Style.Composer}">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="2">
 
-                        <HorizontalStackLayout VerticalOptions="End" Spacing="2">
+                        <!-- Raised 2 so the buttons line up with a single line of text; they stay at the bottom as it grows. -->
+                        <HorizontalStackLayout VerticalOptions="End" Spacing="2" Margin="0,0,0,2">
                             <ContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputLeadingContent}" />
                             <Button Text="+"
                                     Style="{DynamicResource AIChat.Style.IconButton}"
@@ -327,7 +328,7 @@
                             </Editor.Triggers>
                         </Editor>
 
-                        <HorizontalStackLayout Grid.Column="2" VerticalOptions="End" Spacing="2">
+                        <HorizontalStackLayout Grid.Column="2" VerticalOptions="End" Spacing="2" Margin="0,0,0,2">
                             <ContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputTrailingContent}" />
 
                             <Button Text="&#x1F3A4;"
