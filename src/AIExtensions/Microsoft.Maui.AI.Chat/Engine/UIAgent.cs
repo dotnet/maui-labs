@@ -479,7 +479,13 @@ public class UIAgent : IDisposable
             foreach (var turn in turns)
             {
                 foreach (var block in turn.RequestBlocks.Concat(turn.ResponseBlocks))
-                    (block as InteractiveFunctionBlock)?.Abandon();
+                {
+                    if (block is InteractiveFunctionBlock interactive)
+                    {
+                        interactive.Abandon();
+                        interactive.CaptureAwaitingInput();
+                    }
+                }
             }
 
             return turns;

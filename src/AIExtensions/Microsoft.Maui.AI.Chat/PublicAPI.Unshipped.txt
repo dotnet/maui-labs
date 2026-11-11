@@ -67,7 +67,10 @@ Microsoft.Maui.AI.Chat.ContentBlock.Id.set -> void
 Microsoft.Maui.AI.Chat.ContentBlock.LifecycleState.get -> Microsoft.Maui.AI.Chat.BlockLifecycleState
 Microsoft.Maui.AI.Chat.ContentBlock.NotifyChanged() -> void
 Microsoft.Maui.AI.Chat.ContentBlock.OnChanged(System.Action! callback) -> Microsoft.Maui.AI.Chat.ContentBlockChangedSubscription
+Microsoft.Maui.AI.Chat.ContentBlock.OnPropertyChanged(string? propertyName = null) -> void
+Microsoft.Maui.AI.Chat.ContentBlock.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
 Microsoft.Maui.AI.Chat.ContentBlock.Role.get -> Microsoft.Extensions.AI.ChatRole?
+Microsoft.Maui.AI.Chat.ContentBlock.SetProperty<T>(ref T field, T value, string? propertyName = null) -> bool
 Microsoft.Maui.AI.Chat.ContentBlockChangedSubscription
 Microsoft.Maui.AI.Chat.ContentBlockChangedSubscription.ContentBlockChangedSubscription() -> void
 Microsoft.Maui.AI.Chat.ContentBlockChangedSubscription.Dispose() -> void

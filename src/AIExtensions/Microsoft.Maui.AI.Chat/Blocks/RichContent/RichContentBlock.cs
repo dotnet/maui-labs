@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.ComponentModel;
+
 namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
@@ -9,10 +11,15 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// The built-in text handler currently projects paragraphs and plain text only. The remaining
 /// rich-text node types are an extensibility contract for custom parsers and renderers, not a claim
-/// that the engine performs complete Markdown parsing.
+/// that the engine performs complete Markdown parsing. The block raises
+/// <see cref="ContentBlock.PropertyChanged"/> for <see cref="RawText"/> and <see cref="Content"/> as text
+/// streams in.
 /// </remarks>
 public class RichContentBlock : ContentBlock
 {
+    private static readonly PropertyChangedEventArgs s_rawTextChanged = new(nameof(RawText));
+    private static readonly PropertyChangedEventArgs s_contentChanged = new(nameof(Content));
+
     private readonly List<string> _segments = new();
     private readonly List<RichTextNode> _completedParagraphs = new();
     private string? _cachedText;
@@ -32,16 +39,33 @@ public class RichContentBlock : ContentBlock
     public IReadOnlyList<RichTextNode> Content
     {
         get => _content ?? (_paragraphs ??= ProjectParagraphs());
-        internal set => _content = value;
+        internal set
+        {
+            if (ReferenceEquals(_content, value))
+                return;
+
+            _content = value;
+            RaisePropertyChanged(s_contentChanged);
+        }
     }
 
     /// <summary>Appends one streaming text segment.</summary>
+    /// <remarks>
+    /// Raises <see cref="ContentBlock.PropertyChanged"/> for <see cref="RawText"/>, and for
+    /// <see cref="Content"/> while it is projected from the text.
+    /// </remarks>
     public void AppendText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
+        if (text.Length == 0)
+            return;
+
         _segments.Add(text);
         _cachedText = null;
         _paragraphs = null;
+        RaisePropertyChanged(s_rawTextChanged);
+        if (_content is null)
+            RaisePropertyChanged(s_contentChanged);
     }
 
     /// <summary>Replaces the complete text and structured projection with one provider snapshot.</summary>
@@ -50,6 +74,7 @@ public class RichContentBlock : ContentBlock
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(content);
 
+        var textChanged = !string.Equals(RawText, text, StringComparison.Ordinal);
         _segments.Clear();
         _segments.Add(text);
         _cachedText = text;
@@ -57,6 +82,9 @@ public class RichContentBlock : ContentBlock
         _paragraphs = null;
         _completedParagraphs.Clear();
         _completedParagraphsEnd = 0;
+        if (textChanged)
+            RaisePropertyChanged(s_rawTextChanged);
+        RaisePropertyChanged(s_contentChanged);
     }
 
     private IReadOnlyList<RichTextNode> ProjectParagraphs()
