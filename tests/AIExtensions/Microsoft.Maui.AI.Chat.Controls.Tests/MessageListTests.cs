@@ -630,23 +630,30 @@ public class MessageListTests
 
         await SendAsync(view, "first");
         Assert.NotEmpty(requests);
-        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+        Assert.Equal(view.EndIndex(), requests[^1]);
+
+        // Following scrolls to the end row: a point-tall item under the newest row, outside Rows.
+        var items = (IList<ChatRow>)view.MessageList.ItemsSource;
+        Assert.Equal(view.Rows().Count, view.EndIndex());
+        Assert.IsType<EndRow>(items[view.EndIndex()]);
+        Assert.Equal(1, Assert.IsType<ContentView>(view.Realize(items[view.EndIndex()])).HeightRequest);
 
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
         Assert.False(view.MessageList.IsPinned);
-        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = 40, LastVisibleItemIndex = view.Rows().Count - 1 });
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = 40, LastVisibleItemIndex = view.EndIndex() });
         Assert.True(view.MessageList.IsPinned);
 
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
         await SendAsync(view, "second");
         Assert.True(view.MessageList.IsPinned);
-        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+        Assert.Equal(view.EndIndex(), requests[^1]);
 
-        // A small correction while the newest row is visible keeps following; leaving that row unpins.
-        var last = view.Rows().Count - 1;
-        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -2, LastVisibleItemIndex = last });
+        // A scroll that leaves the list at its end keeps following. One that takes the end row off screen unpins,
+        // even with the newest row still on screen.
+        var end = view.EndIndex();
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -2, LastVisibleItemIndex = end });
         Assert.True(view.MessageList.IsPinned);
-        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -8, LastVisibleItemIndex = last - 1 });
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -2, LastVisibleItemIndex = end - 1 });
         Assert.False(view.MessageList.IsPinned);
     });
 
@@ -661,8 +668,6 @@ public class MessageListTests
             v.ChatClient = client;
             v.Tools = [new ApprovalRequiredAIFunction(AIFunctionFactory.Create((string path) => $"removed {path}", "delete_file"))];
         });
-        var now = 1_000L;
-        view.MessageList.Clock = () => now;
         var requests = new List<int>();
         view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
 
@@ -672,23 +677,21 @@ public class MessageListTests
         var row = Assert.Single(view.Rows().OfType<BlockRow>(), row => row.Block is ToolApprovalBlock);
         var approval = Assert.IsType<ToolApprovalView>(((BlockHost)view.Realize(row)).HostedView);
 
-        // Approving collapses the card. A list at the end clamps its offset in the next layout pass and reports that
-        // as a scroll back, with the newest row still on screen.
+        // Approving collapses the card at once. A list at the end clamps its offset in the next layout pass and
+        // reports that as scrolls back, in quick succession (as iOS does), with the list still at its end.
         approval.ApproveCommand.Execute(null);
         await UIThread.Until(() => !approval.Buttons.IsVisible);
-        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -71, LastVisibleItemIndex = view.Rows().Count - 1 });
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -49.3, LastVisibleItemIndex = view.EndIndex() });
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -0.3, LastVisibleItemIndex = view.EndIndex() });
         Assert.True(view.MessageList.IsPinned);
 
         // So the answer that follows still scrolls into view.
         answer.Text("Deleted.");
         await UIThread.Until(() => view.Rows()[^1] is BlockRow { Block: TextContentBlock });
-        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+        Assert.Equal(view.EndIndex(), requests[^1]);
 
-        // Once the rows have settled, a drag back is the user reading back.
-        now += 1_000;
-        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -10, LastVisibleItemIndex = view.Rows().Count - 1 });
-        now += 16;
-        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -10, LastVisibleItemIndex = view.Rows().Count - 1 });
+        // A scroll back that takes the end off screen is the user reading back.
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -10, LastVisibleItemIndex = view.EndIndex() - 1 });
         Assert.False(view.MessageList.IsPinned);
 
         answer.Complete();
@@ -702,8 +705,6 @@ public class MessageListTests
         var stream = client.ReplyLive();
         var view = ChatHost.Create(ChatHost.Session(client));
         using var dispatcher = TestDispatcher.Install();
-        var now = 1_000L;
-        view.MessageList.Clock = () => now;
         var requests = new List<int>();
         view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
 
@@ -713,7 +714,8 @@ public class MessageListTests
         await UIThread.Until(() => view.Session!.Turns.Count == 1 && view.Session.Turns[0].ResponseBlocks.Count == 1);
         dispatcher.RunPending();
         var block = (TextContentBlock)Assert.IsType<BlockRow>(view.Rows()[^1]).Block;
-        var last = view.Rows().Count - 1;
+        var answer = view.Rows().Count - 1;
+        var end = view.EndIndex();
 
         async Task StreamAsync(string text)
         {
@@ -724,45 +726,38 @@ public class MessageListTests
             dispatcher.RunPending();
         }
 
-        void Scroll(double delta)
-        {
-            now += 16;
-            view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = delta, LastVisibleItemIndex = last });
-        }
+        // The answer is taller than the screen, so its row stays on screen throughout; only the end row under it
+        // tells whether the list is still at its end.
+        void Scroll(double delta, bool atEnd) =>
+            view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = delta, LastVisibleItemIndex = atEnd ? end : answer });
 
-        // The answer is taller than the screen, so its row stays the newest one on screen throughout. A single step
-        // back is the platform correcting its layout: the list keeps following.
-        now += 1_000;
-        Scroll(-12);
+        // The platform correcting its layout (Markdown settling as it streams, rows re-measured, rounding) leaves the
+        // list at its end, in steps as quick as a drag's: it keeps following.
+        Scroll(-12, atEnd: true);
+        Scroll(-28, atEnd: true);
+        Scroll(-0.5, atEnd: true);
         await StreamAsync(" that");
         Assert.True(view.MessageList.IsPinned);
-        Assert.Equal(last, Assert.Single(requests));
+        Assert.Equal(end, Assert.Single(requests));
 
-        // Nor is rounding while rows re-measure.
-        now += 1_000;
-        Scroll(-0.5);
-        Scroll(-0.5);
-        Assert.True(view.MessageList.IsPinned);
-
-        // A slow drag back is the user: small steps, with the answer on screen the whole time.
-        now += 1_000;
-        Scroll(-3);
-        Scroll(-3);
+        // A slow drag back is the user: within a few points the end row leaves the screen, with the answer on it.
+        Scroll(-3, atEnd: true);
+        Scroll(-3, atEnd: false);
         Assert.False(view.MessageList.IsPinned);
 
         // The answer keeps streaming without pulling the reader back down, even when the finger wavers.
         await StreamAsync(" keeps");
-        Scroll(-3);
-        Scroll(2);
+        Scroll(-3, atEnd: false);
+        Scroll(2, atEnd: false);
         await StreamAsync(" growing");
         Assert.False(view.MessageList.IsPinned);
         Assert.Empty(requests);
 
-        // Scrolling back down to where following stopped follows the answer again.
-        Scroll(7);
+        // Scrolling back down to the end follows the answer again.
+        Scroll(7, atEnd: true);
         Assert.True(view.MessageList.IsPinned);
         await StreamAsync(".");
-        Assert.Equal(last, Assert.Single(requests));
+        Assert.Equal(end, Assert.Single(requests));
 
         stream.Complete();
         await UIThread.Until(() => dispatcher.PendingCount > 0 || !view.IsBusy);
@@ -785,11 +780,12 @@ public class MessageListTests
         // The app clears the conversation (not the composer): nothing is left to read back through.
         await view.Session!.ClearAsync();
         Assert.Empty(view.Rows());
+        Assert.Empty((IList<ChatRow>)view.MessageList.ItemsSource);
         Assert.True(view.MessageList.IsPinned);
 
         requests.Clear();
         await view.Session.SendMessageAsync("second");
-        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+        Assert.Equal(view.EndIndex(), requests[^1]);
     });
 
     [Fact]
@@ -811,7 +807,7 @@ public class MessageListTests
         stream.Text("Two");
         await UIThread.Until(() => view.Rows()[^1] is BlockRow { Block: TextContentBlock { RawText: "Two" } });
         Assert.True(view.MessageList.IsPinned);
-        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+        Assert.Equal(view.EndIndex(), requests[^1]);
 
         // Once the reader scrolls back, the rest of that answer streams in without pulling them down again.
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
@@ -840,7 +836,7 @@ public class MessageListTests
         // The image loaded (or fell back to a chip) after its row was laid out, so it took a new size: keep following.
         requests.Clear();
         ((IView)image).Arrange(new Rect(0, 0, 320, 200));
-        Assert.Equal(view.Rows().Count - 1, Assert.Single(requests));
+        Assert.Equal(view.EndIndex(), Assert.Single(requests));
 
         // Unless the reader has scrolled back.
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
@@ -861,7 +857,7 @@ public class MessageListTests
         // The composer grew (staged attachments, a long draft), so the list got shorter.
         requests.Clear();
         ((IView)view.MessageList).Arrange(new Rect(0, 0, 400, 600));
-        Assert.Equal(view.Rows().Count - 1, Assert.Single(requests));
+        Assert.Equal(view.EndIndex(), Assert.Single(requests));
 
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
         requests.Clear();
@@ -910,7 +906,7 @@ public class MessageListTests
         await UIThread.Until(() => view.Rows()[^1] is BlockRow);
 
         Assert.True(view.MessageList.IsPinned);
-        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+        Assert.Equal(view.EndIndex(), requests[^1]);
 
         stream.Complete();
         await send;
