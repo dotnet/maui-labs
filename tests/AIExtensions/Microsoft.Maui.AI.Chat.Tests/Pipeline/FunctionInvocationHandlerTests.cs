@@ -64,26 +64,119 @@ public class FunctionInvocationHandlerTests
     }
 
     [Fact]
-    public async Task InformationalFunctionCall_DoesNotEmitAnotherBlock()
+    public async Task InformationalOnlyCall_EmitsAndCompletesInvocationBlock()
     {
         var pipeline = CreatePipeline();
-        var update = new ChatResponseUpdate
+        var call = new FunctionCallContent("call-info", "GetWeather")
         {
-            Role = ChatRole.Assistant,
-            Contents =
-            [
-                new FunctionCallContent(
-                    "call-info",
-                    "GetWeather")
-                {
-                    InformationalOnly = true,
-                },
-            ],
+            InformationalOnly = true,
         };
 
-        var blocks = await CollectBlocks(pipeline, update);
+        var block = Assert.IsType<FunctionInvocationContentBlock>(Assert.Single(
+            await CollectBlocks(pipeline, new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents = [call],
+            })));
+        var result = new FunctionResultContent("call-info", "sunny");
+        var emitted = await CollectBlocks(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Tool,
+            Contents = [result],
+        });
 
-        Assert.Empty(blocks);
+        Assert.Same(call, block.Call);
+        Assert.Same(result, block.Result);
+        Assert.Empty(emitted);
+        Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CallAndResultInSameUpdate_CompletesInvocationBlock(bool resultFirst)
+    {
+        var pipeline = CreatePipeline();
+        var call = new FunctionCallContent("call-1", "GetWeather");
+        var result = new FunctionResultContent("call-1", "sunny");
+
+        var block = Assert.IsType<FunctionInvocationContentBlock>(Assert.Single(
+            await CollectBlocks(pipeline, new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents = resultFirst ? [result, call] : [call, result],
+            })));
+
+        Assert.Same(call, block.Call);
+        Assert.Same(result, block.Result);
+        Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
+    }
+
+    [Fact]
+    public async Task ReplayedCall_InLaterRound_UpdatesExistingBlock()
+    {
+        // FunctionInvokingChatClient yields an approved call again, with its result, in the next round.
+        var calls = new FunctionCallRegistry();
+        var firstRound = new BlockMappingPipeline(new UIAgentOptions(), calls: calls);
+        var call = new FunctionCallContent("call-1", "GetWeather");
+        var block = Assert.IsType<FunctionInvocationContentBlock>(Assert.Single(
+            await CollectBlocks(firstRound, new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents = [call],
+            })));
+        firstRound.Finalize();
+        var changes = 0;
+        using var subscription = block.OnChanged(() => changes++);
+
+        var secondRound = new BlockMappingPipeline(new UIAgentOptions(), calls: calls);
+        var result = new FunctionResultContent("call-1", "sunny");
+        var emitted = new List<ContentBlock>();
+        emitted.AddRange(await CollectBlocks(secondRound, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents = [call],
+        }));
+        emitted.AddRange(await CollectBlocks(secondRound, new ChatResponseUpdate
+        {
+            Role = ChatRole.Tool,
+            Contents = [result],
+        }));
+
+        Assert.Empty(emitted);
+        Assert.Same(result, block.Result);
+        Assert.Equal(1, changes);
+    }
+
+    [Fact]
+    public async Task ReusedCallId_AfterResult_EmitsNewBlock()
+    {
+        var pipeline = CreatePipeline();
+        var first = Assert.IsType<FunctionInvocationContentBlock>(Assert.Single(
+            await CollectBlocks(pipeline, new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents =
+                [
+                    new FunctionCallContent("call-0", "GetWeather"),
+                    new FunctionResultContent("call-0", "sunny"),
+                ],
+            })));
+
+        var second = Assert.IsType<FunctionInvocationContentBlock>(Assert.Single(
+            await CollectBlocks(pipeline, new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents =
+                [
+                    new FunctionCallContent("call-0", "GetNews"),
+                    new FunctionResultContent("call-0", "headlines"),
+                ],
+            })));
+
+        Assert.NotSame(first, second);
+        Assert.Equal("sunny", first.Result?.Result);
+        Assert.Equal("headlines", second.Result?.Result);
     }
 
     [Fact]

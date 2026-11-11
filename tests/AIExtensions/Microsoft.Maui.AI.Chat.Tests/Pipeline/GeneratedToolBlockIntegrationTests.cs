@@ -110,10 +110,10 @@ public class GeneratedToolBlockIntegrationTests
     }
 
     [Fact]
-    public async Task GeneratedHandler_InformationalCall_IsIgnored()
+    public async Task GeneratedHandler_InformationalCall_MapsBlock()
     {
         var pipeline = CreatePipeline();
-        var blocks = await ProcessAsync(
+        var block = Assert.IsType<GeneratedOrderBlock>(Assert.Single(await ProcessAsync(
             pipeline,
             new ChatResponseUpdate
             {
@@ -122,14 +122,15 @@ public class GeneratedToolBlockIntegrationTests
                 [
                     new FunctionCallContent(
                         "call-info",
-                        "find_order")
+                        "find_order",
+                        new Dictionary<string, object?> { ["orderId"] = "ORD-INFO" })
                     {
                         InformationalOnly = true,
                     },
                 ],
-            });
+            })));
 
-        Assert.Empty(blocks);
+        Assert.Equal("ORD-INFO", block.OrderId);
     }
 
     [Fact]

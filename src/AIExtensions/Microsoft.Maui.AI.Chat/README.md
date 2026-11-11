@@ -38,7 +38,10 @@ foreach (var block in turn.ResponseBlocks)
 
 - Streaming text projected into `TextContentBlock : RichContentBlock`.
 - Minimal paragraph/text rich-content AST plus an extensible rich-node vocabulary.
-- Function call/result correlation, including batched out-of-order results.
+- Function call/result correlation, including batched out-of-order results. Each call id is shown
+  once per turn, even when `FunctionInvokingChatClient` replays an approved call; informational
+  calls (`InformationalOnly`, for example handled by a server or restored) are shown without being
+  invoked.
 - `ToolApprovalBlock` human-in-the-loop flow with single-use decisions.
 - Automatic or manually invoked `UIActionBlock` client actions, with no false human-input pause
   for automatic actions.

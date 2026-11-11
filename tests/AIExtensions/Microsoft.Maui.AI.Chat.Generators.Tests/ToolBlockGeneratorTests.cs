@@ -50,7 +50,7 @@ public class ToolBlockGeneratorTests
         Assert.Contains("WeatherBlockGeneratedHandler", generated);
         Assert.Contains("state.Call = call", generated);
         Assert.DoesNotContain("state.Id = call.CallId", generated);
-        Assert.Contains("!candidate.InformationalOnly", generated);
+        Assert.DoesNotContain("InformationalOnly", generated);
         Assert.Contains("arguments.TryGetValue(\"city\"", generated);
         Assert.Contains("state.Weather = ConvertValue", generated);
         Assert.Contains("result.CallId == call.CallId", generated);

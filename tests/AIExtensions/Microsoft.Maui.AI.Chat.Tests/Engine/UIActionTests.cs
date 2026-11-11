@@ -359,7 +359,7 @@ public class UIActionTests
     }
 
     [Fact]
-    public async Task UIAction_InformationalCall_DoesNotEmitOrInvoke()
+    public async Task UIAction_InformationalCall_RendersWithoutInvoking()
     {
         var invocationCount = 0;
         var action = AIFunctionFactory.Create(
@@ -389,6 +389,9 @@ public class UIActionTests
         }
 
         Assert.DoesNotContain(blocks, block => block is UIActionBlock);
+        var callBlock = Assert.Single(blocks.OfType<FunctionInvocationContentBlock>());
+        Assert.Equal("client-info", callBlock.Id);
+        Assert.False(callBlock.HasResult);
         Assert.Equal(0, invocationCount);
     }
 

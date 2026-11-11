@@ -16,6 +16,7 @@ public class BlockMappingContext
     private int _handledCount;
     private bool _updateHandled;
     private readonly IReadOnlyList<IHandlerEntry>? _inactiveHandlers;
+    private readonly FunctionCallRegistry? _calls;
 
     internal BlockMappingContext(ChatResponseUpdate update)
         : this(update, inactiveHandlers: null)
@@ -24,11 +25,13 @@ public class BlockMappingContext
 
     internal BlockMappingContext(
         ChatResponseUpdate update,
-        IReadOnlyList<IHandlerEntry>? inactiveHandlers)
+        IReadOnlyList<IHandlerEntry>? inactiveHandlers,
+        FunctionCallRegistry? calls = null)
     {
         Update = update;
         _handled = new bool[update.Contents.Count];
         _inactiveHandlers = inactiveHandlers;
+        _calls = calls;
     }
 
     public ChatResponseUpdate Update { get; }
@@ -70,13 +73,17 @@ public class BlockMappingContext
         }
 
         var tempUpdate = new ChatResponseUpdate { Contents = [content] };
-        var tempContext = new BlockMappingContext(tempUpdate, _inactiveHandlers);
+        var tempContext = new BlockMappingContext(tempUpdate, _inactiveHandlers, _calls);
 
         for (var i = 0; i < _inactiveHandlers.Count; i++)
         {
             var activeEntry = _inactiveHandlers[i].TryHandle(tempContext);
             if (activeEntry is not null)
             {
+                // The wrapping block's call may get its result in a later round.
+                if (content is FunctionCallContent call)
+                    _calls?.Register(call, activeEntry.Block, activeEntry);
+
                 return activeEntry.Block;
             }
         }

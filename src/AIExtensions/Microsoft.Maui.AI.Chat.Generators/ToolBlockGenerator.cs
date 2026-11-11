@@ -258,7 +258,6 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("            {");
         builder.AppendLine(
             "                if (content is global::Microsoft.Extensions.AI.FunctionCallContent candidate");
-        builder.AppendLine("                    && !candidate.InformationalOnly");
         builder.Append("                    && candidate.Name == \"")
             .Append(EscapeString(model.ToolName)).AppendLine("\")");
         builder.AppendLine("                {");

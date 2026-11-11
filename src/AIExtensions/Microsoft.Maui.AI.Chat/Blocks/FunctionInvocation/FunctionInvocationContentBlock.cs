@@ -10,7 +10,10 @@ namespace Microsoft.Maui.AI.Chat;
 /// Produced by <see cref="FunctionInvocationHandler"/> from M.E.AI <see cref="FunctionCallContent"/> and
 /// <see cref="FunctionResultContent"/>. Subclass it (with a custom <see cref="ContentBlockHandler{TState}"/>)
 /// to project a specific tool into a strongly-typed block. Server tools are invoked by
-/// <see cref="FunctionInvokingChatClient"/>; the engine only renders the call and its result.
+/// <see cref="FunctionInvokingChatClient"/>; the engine only renders the call and its result. Calls
+/// marked <see cref="FunctionCallContent.InformationalOnly"/> (handled elsewhere, replayed, or
+/// restored) are rendered too, and a turn shows each call id once even when the call reappears in
+/// a later round.
 /// </remarks>
 public class FunctionInvocationContentBlock : ContentBlock
 {

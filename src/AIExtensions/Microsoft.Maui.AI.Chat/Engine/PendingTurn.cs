@@ -33,6 +33,9 @@ internal sealed class PendingTurn
     /// <summary>Gets the latest provider conversation identifier seen during the turn.</summary>
     internal string? ConversationId { get; private set; }
 
+    /// <summary>Gets the blocks that show the turn's function calls, shared by all of its rounds.</summary>
+    internal FunctionCallRegistry Calls { get; } = new();
+
     internal void AddRequest(ChatMessage message)
     {
         if (InitialMessage is null)
