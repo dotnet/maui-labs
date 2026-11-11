@@ -38,6 +38,8 @@ function Invoke-DotNet {
         if ($exitCode -eq 0) {
             throw "dotnet $($Arguments -join ' ') unexpectedly succeeded"
         }
+        # A rejected collision passes the assertion, including for PowerShell CI's exit-code wrapper.
+        $global:LASTEXITCODE = 0
         return
     }
     if ($exitCode -ne 0) {
