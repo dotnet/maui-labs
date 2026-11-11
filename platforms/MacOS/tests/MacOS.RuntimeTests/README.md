@@ -40,6 +40,9 @@ handler; `bundle-resources` verifies MAUI resources in the packaged application.
 processes with `-AppleLanguages` for German, French, Dutch, English and an unsupported
 language, then verifies an English-only host under German preferences and a partial
 host strings override, followed by default menus again to check resource isolation.
+Custom English and localized Window menus must take over AppKit's native Window
+role, not merely suppress the default menu's visible title; both replacements are
+checked by native menu identity.
 Set `RUNTIME_TEST_PACKAGES` to a directory containing the
 backend and Essentials `.nupkg` files (default: `artifacts/runtime-packages`).
 
