@@ -17,5 +17,6 @@ internal sealed class TextBlockView : BlockView
 
     internal Label Label => _label;
 
-    protected override void OnBlockChanged() => _label.Text = (Block as RichContentBlock)?.RawText;
+    // Models often start or end a message with blank lines; they would only pad the row.
+    protected override void OnBlockChanged() => _label.Text = (Block as RichContentBlock)?.RawText.Trim();
 }

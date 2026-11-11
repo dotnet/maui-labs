@@ -23,6 +23,29 @@ internal static class ChatVisuals
     public static Border CodeBlock(Label text) =>
         new Border { Content = text }.Styled(AIChatThemeKeys.CodeBlockStyle);
 
+    /// <summary>A chevron that shows or hides a card's details; see <see cref="SetExpanded"/>.</summary>
+    public static Button DisclosureButton(Action toggle, string automationId) =>
+        new Button
+        {
+            Text = Chevron,
+            FontSize = 20,
+            WidthRequest = 28,
+            HeightRequest = 28,
+            VerticalOptions = LayoutOptions.Center,
+            Command = new Command(toggle),
+            AutomationId = automationId,
+        }.Styled(AIChatThemeKeys.IconButtonStyle);
+
+    /// <summary>Points the chevron right when collapsed and down when expanded, and names the action.</summary>
+    public static void SetExpanded(Button disclosure, bool expanded, string subject)
+    {
+        disclosure.Rotation = expanded ? 90 : 0;
+        SemanticProperties.SetDescription(disclosure, $"{(expanded ? "Hide" : "Show")} details for {subject}");
+    }
+
+    /// <summary>The disclosure glyph: a right-pointing chevron, rotated to point down when expanded.</summary>
+    public const string Chevron = "\u203A";
+
     /// <summary>
     /// Creates the view for one media item: an inline image for image data or an image link, a file chip for
     /// other data, and a link chip for other links.
@@ -33,7 +56,7 @@ internal static class ChatVisuals
             DataContent data when data.HasTopLevelMediaType("image") && !data.Data.IsEmpty =>
                 CreateImage(CreateImageSource(data)!, data.Name, alignEnd),
             UriContent link when link.HasTopLevelMediaType("image") && IsWebUri(link.Uri) =>
-                CreateImage(CreateImageSource(link)!, GetLinkName(link.Uri), alignEnd),
+                new LinkedImageView(link, alignEnd),
             DataContent data => CreateFileChip(data, alignEnd),
             UriContent link => CreateLinkChip(link, alignEnd),
             _ => Label(AIChatThemeKeys.SecondaryTextStyle, content.GetType().Name),
@@ -54,7 +77,7 @@ internal static class ChatVisuals
         return CreateMediaView(content, alignEnd);
     }
 
-    private static ImageSource? CreateImageSource(AIContent content) =>
+    internal static ImageSource? CreateImageSource(AIContent content) =>
         content switch
         {
             DataContent data when data.HasTopLevelMediaType("image") && !data.Data.IsEmpty =>
@@ -64,7 +87,7 @@ internal static class ChatVisuals
             _ => null,
         };
 
-    private static Image CreateImage(ImageSource source, string? name, bool alignEnd)
+    internal static Image CreateImage(ImageSource source, string? name, bool alignEnd)
     {
         var image = new Image
         {
@@ -94,7 +117,7 @@ internal static class ChatVisuals
         return chip;
     }
 
-    private static string GetLinkName(Uri uri)
+    internal static string GetLinkName(Uri uri)
     {
         if (!uri.IsAbsoluteUri)
             return uri.OriginalString;
@@ -238,5 +261,43 @@ internal static class ChatVisuals
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
             element.WriteTo(writer);
         return Encoding.UTF8.GetString(stream.ToArray());
+    }
+}
+
+/// <summary>An image loaded from a web link. When it cannot be loaded, a link chip takes its place.</summary>
+internal sealed class LinkedImageView : ContentView
+{
+    private readonly UriContent _link;
+    private readonly bool _alignEnd;
+
+    public LinkedImageView(UriContent link, bool alignEnd)
+    {
+        _link = link;
+        _alignEnd = alignEnd;
+        Image = ChatVisuals.CreateImage(ChatVisuals.CreateImageSource(link)!, ChatVisuals.GetLinkName(link.Uri), alignEnd);
+        HorizontalOptions = Image.HorizontalOptions;
+        Content = Image;
+        Image.PropertyChanged += OnImagePropertyChanged;
+    }
+
+    public Image Image { get; }
+
+    /// <summary>Replaces the image with a chip for the link.</summary>
+    internal void ShowLink()
+    {
+        Image.PropertyChanged -= OnImagePropertyChanged;
+        Content = ChatVisuals.CreateLinkChip(_link, _alignEnd);
+    }
+
+    private void OnImagePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        // Image has no failure event: a load that ends with nothing to measure failed (a 404, or a page, not a picture).
+        if (e.PropertyName == Microsoft.Maui.Controls.Image.IsLoadingProperty.PropertyName &&
+            !Image.IsLoading &&
+            Image.Handler is not null &&
+            ((IView)Image).Measure(double.PositiveInfinity, double.PositiveInfinity).Height <= 0)
+        {
+            ShowLink();
+        }
     }
 }
