@@ -83,6 +83,102 @@ public class ReasoningHandlerTests
         Assert.Empty(blocks);
     }
 
+    [Fact]
+    public async Task ReasoningFromADifferentMessage_StartsANewBlock()
+    {
+        var pipeline = CreatePipeline();
+        var first = Assert.IsType<ReasoningContentBlock>(
+            Assert.Single(await ProcessAsync(pipeline, CreateReasoningUpdate("First ", messageId: "first"))));
+        Assert.Empty(await ProcessAsync(pipeline, CreateReasoningUpdate("thought", messageId: "first")));
+
+        var second = Assert.IsType<ReasoningContentBlock>(
+            Assert.Single(await ProcessAsync(pipeline, CreateReasoningUpdate("Second thought", messageId: "second"))));
+
+        Assert.Equal("First thought", first.Text);
+        Assert.Equal("Second thought", second.Text);
+        Assert.Equal(BlockLifecycleState.Inactive, first.LifecycleState);
+        Assert.Equal(BlockLifecycleState.Active, second.LifecycleState);
+    }
+
+    [Fact]
+    public async Task ReasoningAfterProtectedData_StartsANewBlockAndTheDataStaysWithItsItem()
+    {
+        var pipeline = CreatePipeline();
+        var first = Assert.IsType<ReasoningContentBlock>(
+            Assert.Single(await ProcessAsync(pipeline, CreateReasoningUpdate("**First**\n\nFirst body", messageId: null))));
+        Assert.Empty(await ProcessAsync(pipeline, CreateProtectedUpdate("first-item")));
+
+        var second = Assert.IsType<ReasoningContentBlock>(
+            Assert.Single(await ProcessAsync(pipeline, CreateReasoningUpdate("**Second**\n\nSecond body", messageId: null))));
+        Assert.Empty(await ProcessAsync(pipeline, CreateProtectedUpdate("second-item")));
+
+        Assert.Equal("**First**\n\nFirst body", first.Text);
+        Assert.Equal("first-item", first.ProtectedData);
+        Assert.False(first.IsEncrypted);
+        Assert.Equal(BlockLifecycleState.Inactive, first.LifecycleState);
+        Assert.Equal("**Second**\n\nSecond body", second.Text);
+        Assert.Equal("second-item", second.ProtectedData);
+    }
+
+    [Fact]
+    public async Task ProtectedDataAndTheNextItemInOneUpdate_CompleteTheFirstItemAndStartTheNext()
+    {
+        var pipeline = CreatePipeline();
+        var first = Assert.IsType<ReasoningContentBlock>(
+            Assert.Single(await ProcessAsync(pipeline, CreateReasoningUpdate("First", messageId: null))));
+
+        var blocks = await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            Contents =
+            [
+                new TextReasoningContent(string.Empty) { ProtectedData = "first-item" },
+                new TextReasoningContent("Second"),
+            ],
+        });
+
+        var second = Assert.IsType<ReasoningContentBlock>(Assert.Single(blocks));
+        Assert.Equal("First", first.Text);
+        Assert.Equal("first-item", first.ProtectedData);
+        Assert.Equal("Second", second.Text);
+        Assert.Null(second.ProtectedData);
+    }
+
+    [Fact]
+    public async Task CompleteMessageWithTwoReasoningItems_ShowsTwoBlocks()
+    {
+        var pipeline = CreatePipeline();
+
+        var blocks = await ProcessAsync(pipeline, new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = "message-1",
+            Contents =
+            [
+                new TextReasoningContent("First") { ProtectedData = "first-item" },
+                new TextReasoningContent("Second") { ProtectedData = "second-item" },
+            ],
+        });
+
+        Assert.Equal(["First", "Second"], blocks.Cast<ReasoningContentBlock>().Select(block => block.Text));
+        Assert.Equal(["first-item", "second-item"], blocks.Cast<ReasoningContentBlock>().Select(block => block.ProtectedData));
+    }
+
+    private static ChatResponseUpdate CreateReasoningUpdate(string text, string? messageId) =>
+        new()
+        {
+            Role = ChatRole.Assistant,
+            MessageId = messageId,
+            Contents = [new TextReasoningContent(text)],
+        };
+
+    private static ChatResponseUpdate CreateProtectedUpdate(string protectedData) =>
+        new()
+        {
+            Role = ChatRole.Assistant,
+            Contents = [new TextReasoningContent(string.Empty) { ProtectedData = protectedData }],
+        };
+
     private static BlockMappingPipeline CreatePipeline() =>
         new(new UIAgentOptions());
 

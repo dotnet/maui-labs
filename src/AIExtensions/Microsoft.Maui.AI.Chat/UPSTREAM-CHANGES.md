@@ -198,7 +198,9 @@ These match upstream so that upstream fixes apply directly:
   messages' text to one block. Paragraphs are built only when `Content` is read, and finished
   paragraphs are kept, so a long reply is not re-split on every token as upstream does.
 - **Reasoning.** `ReasoningContentBlock` and its handler show reasoning and protected reasoning (with
-  cached text). Upstream has no reasoning blocks.
+  cached text), one block per reasoning item: a new message id, or reasoning after the item's
+  protected data (which providers send last), starts a new block, so separate reasoning summaries are
+  not concatenated and each keeps its own protected data. Upstream has no reasoning blocks.
 - **Media.** One `MediaContentBlock` per item, each with its own id, as in #68672, but the block is
   public and holds the item (`AIContent Content`: a `DataContent` or `UriContent`) instead of a Blazor
   render fragment. `UriContent` is rendered too, and each output of an image-generation tool result

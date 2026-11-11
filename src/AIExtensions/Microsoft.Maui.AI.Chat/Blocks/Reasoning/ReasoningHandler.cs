@@ -5,6 +5,12 @@ using Microsoft.Extensions.AI;
 
 namespace Microsoft.Maui.AI.Chat;
 
+/// <summary>Maps M.E.AI <see cref="TextReasoningContent"/> into one <see cref="ReasoningContentBlock"/> per reasoning item.</summary>
+/// <remarks>
+/// A reasoning item ends when its message ends, or when it receives its protected data, which providers
+/// send last. Its protected data stays with it, and the next item, such as the next reasoning summary,
+/// starts a new block, as <c>ToChatResponse</c> keeps the items apart in the history.
+/// </remarks>
 internal sealed class ReasoningHandler : ContentBlockHandler<ReasoningContentBlock>
 {
     public override BlockMappingResult<ReasoningContentBlock> Handle(
@@ -28,6 +34,16 @@ internal sealed class ReasoningHandler : ContentBlockHandler<ReasoningContentBlo
                 : BlockMappingResult<ReasoningContentBlock>.Pass();
         }
 
+        // The block's item already ended with its protected data, or the reasoning belongs to another
+        // message: the content starts a new block.
+        if (state.ProtectedData is not null
+            || (state.MessageId is { Length: > 0 } blockMessageId
+                && context.Update.MessageId is { Length: > 0 } messageId
+                && !string.Equals(blockMessageId, messageId, StringComparison.Ordinal)))
+        {
+            return BlockMappingResult<ReasoningContentBlock>.Complete();
+        }
+
         context.MarkHandled(reasoningContent);
 
         if (reasoningContent.ProtectedData is not null)
@@ -41,6 +57,7 @@ internal sealed class ReasoningHandler : ContentBlockHandler<ReasoningContentBlo
 
         if (string.IsNullOrEmpty(state.Id))
         {
+            state.MessageId = context.Update.MessageId;
             state.Id = context.Update.MessageId ?? Guid.NewGuid().ToString("N");
             return BlockMappingResult<ReasoningContentBlock>.Emit(state, state);
         }
