@@ -18,9 +18,10 @@ namespace Microsoft.Maui.AI.Chat.Controls;
 /// <para>
 /// The view is created from <see cref="ViewType"/> (through dependency injection when the app's service
 /// provider is available, otherwise its public parameterless constructor) or from the inline
-/// <see cref="Template"/>. Its <see cref="BindableObject.BindingContext"/> is the block itself and is refreshed
-/// whenever the block changes, so bindings such as <c>{Binding Result.Result}</c> stay live while a response
-/// streams. Derive the view from <see cref="BlockView"/> to also get the session and a change callback.
+/// <see cref="Template"/>. Its <see cref="BindableObject.BindingContext"/> is the block itself, which raises
+/// <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/> as it changes, so bindings such as
+/// <c>{Binding Result.Result}</c> stay live while a response streams. Derive the view from
+/// <see cref="BlockView"/> to also get the session and a change callback.
 /// </para>
 /// <para>
 /// Request blocks (what the user sent) render as the built-in user message unless a template whose
