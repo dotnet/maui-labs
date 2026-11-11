@@ -37,8 +37,9 @@ the commit in `THIRD-PARTY-NOTICES.txt`.
 
 These match upstream so that upstream fixes apply directly:
 
-- Block lifecycle and change notifications, `BlockMappingPipeline` (two-phase mapping, handler
-  entries, `BlockMappingResult<T>`), `BlockMappingPipelineLog`.
+- Block lifecycle and the `OnChanged` change notification, `BlockMappingPipeline` (two-phase mapping,
+  handler entries, `BlockMappingResult<T>`), `BlockMappingPipelineLog`. The `RegisterOn…` callbacks of
+  `AgentContext`.
 - The rich-text node vocabulary and `RichTextContent` (copies its node list), and
   `RichTextContentHandler` (last snapshot in an update wins, co-sent `TextContent` is claimed, a new
   message id starts a new block).
@@ -75,6 +76,28 @@ These match upstream so that upstream fixes apply directly:
   still complete with `TaskCreationOptions.RunContinuationsAsynchronously` (as upstream), so
   approving never runs the next request inside the `Approve()` call.
 
+### Binding
+
+- **A bindable model.** Not in upstream, whose Blazor components re-render from the `OnChanged` and
+  `RegisterOn…` callbacks, which are kept. Here a XAML list binds to the engine directly:
+  - `ContentBlock`, `ConversationTurn` and `AgentContext` implement `INotifyPropertyChanged`. The
+    engine's blocks raise the names of the properties that changed, and `InteractiveFunctionBlock`
+    forwards its inner block's call and result properties. A block of any other type raises an empty
+    name ("every property") from `NotifyChanged`, which runs when its handler updates or completes it,
+    because the engine cannot see which of its properties changed. Block authors get
+    `OnPropertyChanged` and `SetProperty`.
+  - `AgentContext.Turns`, `ConversationTurn.RequestBlocks` and `ResponseBlocks` are
+    `ReadOnlyObservableCollection<T>` instead of `IReadOnlyList<T>`: an `Add` per turn or block, and one
+    `Reset` for a restore, a clear, and a retry's removal of response blocks.
+  - Events are raised synchronously on the thread that makes the change, once the state they report is
+    in place, as the callbacks are; the engine has no dispatcher. `PropertyChanged` for `Status` reports
+    the current value once it changed, so a handler that runs after one that sent the next message
+    reads the new status; the status callbacks still receive the status each change reported.
+  - Handlers may re-enter. The attempt starts before a send reports its turn and before a retry removes
+    its response blocks, so handlers of those changes cannot start another send or retry (upstream
+    guards on the status, which changes later), and a send from a handler of the `Turns` reset is
+    rejected, so every handler of a collection change sees it before the next change.
+
 ### Turns, history and the thread
 
 - **One owner for a turn.** `UIAgent` keeps the committed history and a pending turn (request
@@ -102,8 +125,9 @@ These match upstream so that upstream fixes apply directly:
   (reasoning that ends the turn's last message) is still shown and stored in the thread, but left out
   of the history, live and restored, because providers can reject reasoning that no output follows.
 - **Errors discard the turn, retry resends all of it.** A failed turn commits nothing and keeps its
-  partial blocks on screen. `RetryAsync` clears the turn's response blocks
-  (`RegisterOnResponseBlocksCleared` tells a list to drop them) and sends the whole turn again. #68672
+  partial blocks on screen. `RetryAsync` clears the turn's response blocks (`ResponseBlocks` raises a
+  `Reset`, and `RegisterOnResponseBlocksCleared` tells a list to drop them) and sends the whole turn
+  again. #68672
   instead retries only the failed round and truncates that round's blocks; that would resend an
   approval and run its tool again without asking.
 - **`ConversationTurn.IsFailed`.** Not in upstream. A turn whose attempt failed is marked until
@@ -194,7 +218,8 @@ These match upstream so that upstream fixes apply directly:
 - **`InteractiveFunctionBlock.IsAwaitingInput`.** A public, bindable signal for whether a block can
   still be answered: true for a pending approval and for a manual UI action that has not run and is
   not running; false once answered and once its turn stopped, failed or was restored. The block raises
-  its change notification when the value changes, after the turn's outcome is final. Upstream has no
+  `PropertyChanged` for it and its change notification when the value changes, after the turn's outcome
+  is final. Upstream has no
   equivalent, so a restored pending approval looks answerable.
 - **Canceling one invocation.** Canceling the token passed to `UIActionBlock.InvokeAsync` cancels only
   that invocation: its task is canceled, the action can be invoked again, and the turn keeps waiting
