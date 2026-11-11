@@ -39,7 +39,7 @@ public class RichTextContentHandlerTests
             EmitRichSnapshots(cancellationToken));
         var agent = new UIAgent(client);
         RichContentBlock? richBlock = null;
-        var changed = 0;
+        List<string>? changes = null;
 
         await foreach (var block in agent.SendMessageAsync(
             new ChatMessage(ChatRole.User, "format this")))
@@ -48,14 +48,14 @@ public class RichTextContentHandlerTests
                 && block.Role == ChatRole.Assistant)
             {
                 richBlock = rich;
-                rich.OnChanged(() => changed++);
+                changes = rich.RecordPropertyChanges();
             }
         }
 
         Assert.NotNull(richBlock);
         Assert.Equal("second", richBlock.RawText);
         Assert.Equal("second", GetParagraphText(Assert.Single(richBlock.Content)));
-        Assert.True(changed >= 1);
+        Assert.Contains(nameof(RichContentBlock.RawText), changes!);
     }
 
     [Fact]
@@ -126,8 +126,7 @@ public class RichTextContentHandlerTests
         var pipeline = new BlockMappingPipeline(new UIAgentOptions());
         var block = Assert.IsAssignableFrom<RichContentBlock>(Assert.Single(
             await ProcessAsync(pipeline, CreateRichTextUpdate("msg-1", "Partial"))));
-        var changeCount = 0;
-        using var subscription = block.OnChanged(() => changeCount++);
+        var changes = block.RecordPropertyChanges();
 
         var emitted = await ProcessAsync(
             pipeline,
@@ -135,7 +134,7 @@ public class RichTextContentHandlerTests
 
         Assert.Empty(emitted);
         Assert.Equal("Complete", block.RawText);
-        Assert.Equal(1, changeCount);
+        Assert.Equal([nameof(RichContentBlock.RawText), nameof(RichContentBlock.Content)], changes);
     }
 
     private static async IAsyncEnumerable<ChatResponseUpdate> EmitRichSnapshots(

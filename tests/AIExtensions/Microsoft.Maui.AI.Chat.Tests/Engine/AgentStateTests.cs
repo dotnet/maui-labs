@@ -14,24 +14,6 @@ public class AgentStateTests
     }
 
     [Fact]
-    public void OnChanged_CanDisposeRegistrationDuringNotification()
-    {
-        var state = new AgentState<TestState>();
-        IDisposable? registration = null;
-        var callbackCount = 0;
-        registration = state.OnChanged(() =>
-        {
-            callbackCount++;
-            registration!.Dispose();
-        });
-
-        state.Value = new TestState();
-        state.Value = new TestState();
-
-        Assert.Equal(1, callbackCount);
-    }
-
-    [Fact]
     public void Value_NoInitialValue_CreatesDefaultState()
     {
         var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());
@@ -56,39 +38,15 @@ public class AgentStateTests
     public void Value_Replaced_NotifiesEveryObserver()
     {
         var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());
-        var firstCount = 0;
-        var secondCount = 0;
-        agent.State.OnChanged(() => firstCount++);
-        agent.State.OnChanged(() => secondCount++);
+        var first = agent.State.RecordPropertyChanges();
+        var second = agent.State.RecordPropertyChanges();
 
         var replacement = new TestState { Name = "updated" };
         agent.State.Value = replacement;
 
         Assert.Same(replacement, agent.State.Value);
-        Assert.Equal(1, firstCount);
-        Assert.Equal(1, secondCount);
-    }
-
-    [Fact]
-    public void OnChanged_DisposedRegistration_StopsNotification()
-    {
-        var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());
-        var count = 0;
-        var registration = agent.State.OnChanged(() => count++);
-
-        agent.State.Value = new TestState();
-        registration.Dispose();
-        agent.State.Value = new TestState();
-
-        Assert.Equal(1, count);
-    }
-
-    [Fact]
-    public void OnChanged_NullCallback_Throws()
-    {
-        var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());
-
-        Assert.Throws<ArgumentNullException>(() => agent.State.OnChanged(null!));
+        Assert.Equal([nameof(AgentState<TestState>.Value)], first);
+        Assert.Equal([nameof(AgentState<TestState>.Value)], second);
     }
 
     [Fact]
@@ -165,12 +123,11 @@ public class AgentStateTests
     public void AcceptAndReject_WithoutPrediction_AreNoOps()
     {
         var agent = new UIAgent<TestState>(new DelegatingStreamingChatClient());
-        var changed = 0;
-        agent.State.OnChanged(() => changed++);
+        var changes = agent.State.RecordPropertyChanges();
 
         agent.State.AcceptPredictiveState();
         agent.State.RejectPredictiveState();
 
-        Assert.Equal(0, changed);
+        Assert.Empty(changes);
     }
 }

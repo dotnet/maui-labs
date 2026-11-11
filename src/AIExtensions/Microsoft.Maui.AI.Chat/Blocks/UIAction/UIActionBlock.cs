@@ -88,15 +88,11 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
     {
         if (!_invocationStarted && !IsComplete && !_resultSource.Task.IsCompleted)
         {
-            var wasAwaitingInput = IsAwaitingInput;
             _invocationStarted = true;
             var invocation = InvokeCoreAsync(cancellationToken);
 
-            // Reported once the invocation started, so a change callback that throws cannot block it.
+            // Reported once the invocation started, so a handler that throws cannot block it.
             ReportAwaitingInputChanged();
-            if (wasAwaitingInput && !invocation.IsCompleted)
-                NotifyChanged();
-
             return invocation;
         }
 
@@ -145,7 +141,6 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
             if (resultChanged)
                 InnerBlock.ReportResultChanged(hadResult);
             ReportAwaitingInputChanged();
-            NotifyChanged();
         }
     }
 
@@ -176,12 +171,7 @@ public class UIActionBlock : InteractiveFunctionBlock, IInteractiveBlock
             // Only this invocation was canceled. The turn still waits for a result, so allow another one;
             // a turn that ended has abandoned the block, which stops a later invocation.
             _invocationStarted = false;
-            if (IsAwaitingInput)
-            {
-                ReportAwaitingInputChanged();
-                NotifyChanged();
-            }
-
+            ReportAwaitingInputChanged();
             throw;
         }
         catch (Exception exception)

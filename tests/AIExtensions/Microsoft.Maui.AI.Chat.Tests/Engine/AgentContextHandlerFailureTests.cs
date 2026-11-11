@@ -8,29 +8,29 @@ using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 namespace Microsoft.Maui.AI.Chat.Tests.Engine;
 
 /// <summary>
-/// An exception thrown by an app callback must leave the conversation in a consistent state: a turn that
-/// was committed stays committed and is never retried, and a turn that was not is failed, not stuck.
+/// An exception thrown by an app's change handler must leave the conversation in a consistent state: a turn
+/// that was committed stays committed and is never retried, and a turn that was not is failed, not stuck.
 /// </summary>
-public class AgentContextCallbackFailureTests
+public class AgentContextHandlerFailureTests
 {
     [Fact]
-    public async Task IdleStatusCallbackThrows_CommittedTurnIsNotRetryable()
+    public async Task IdleStatusHandlerThrows_CommittedTurnIsNotRetryable()
     {
         var requests = new List<IReadOnlyList<ChatMessage>>();
         using var context = CreateContext(requests);
         var thrown = false;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.Idle && !thrown)
             {
                 thrown = true;
-                throw new InvalidOperationException("callback failed");
+                throw new InvalidOperationException("status handler failed");
             }
         });
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SendMessageAsync("first"));
 
-        Assert.Equal("callback failed", error.Message);
+        Assert.Equal("status handler failed", error.Message);
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Null(context.Error);
         await Assert.ThrowsAsync<InvalidOperationException>(() => context.RetryAsync());
@@ -42,7 +42,7 @@ public class AgentContextCallbackFailureTests
     }
 
     [Fact]
-    public async Task StateCallbackThrowsWhenPredictionIsRejected_CommittedTurnIsNotRetryable()
+    public async Task StateHandlerThrowsWhenPredictionIsRejected_CommittedTurnIsNotRetryable()
     {
         var requests = new List<IReadOnlyList<ChatMessage>>();
         var client = CreateClient(requests, predict: true);
@@ -54,16 +54,16 @@ public class AgentContextCallbackFailureTests
             });
         using var context = new AgentContext(agent);
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(statuses.Add);
+        context.OnStatusChanged(statuses.Add);
         var thrown = false;
-        agent.State.OnChanged(() =>
+        agent.State.PropertyChanged += (_, _) =>
         {
             if (!agent.State.HasPendingPredictiveState && !thrown)
             {
                 thrown = true;
-                throw new InvalidOperationException("state callback failed");
+                throw new InvalidOperationException("state handler failed");
             }
-        });
+        };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => context.SendMessageAsync("first"));
 
@@ -79,24 +79,24 @@ public class AgentContextCallbackFailureTests
     }
 
     [Fact]
-    public async Task StreamingStatusCallbackThrows_TurnFailsAndCanBeRetried()
+    public async Task StreamingStatusHandlerThrows_TurnFailsAndCanBeRetried()
     {
         var requests = new List<IReadOnlyList<ChatMessage>>();
         using var context = CreateContext(requests);
         var thrown = false;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.Streaming && !thrown)
             {
                 thrown = true;
-                throw new InvalidOperationException("callback failed");
+                throw new InvalidOperationException("status handler failed");
             }
         });
 
         await context.SendMessageAsync("first");
 
         Assert.Equal(ConversationStatus.Error, context.Status);
-        Assert.Equal("callback failed", context.Error?.Message);
+        Assert.Equal("status handler failed", context.Error?.Message);
         Assert.Empty(requests);
 
         await context.RetryAsync();
@@ -107,7 +107,7 @@ public class AgentContextCallbackFailureTests
     }
 
     [Fact]
-    public async Task StateCallbackThrowsWhenStoppedPredictionIsRejected_TurnStillStops()
+    public async Task StateHandlerThrowsWhenStoppedPredictionIsRejected_TurnStillStops()
     {
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var client = new DelegatingStreamingChatClient();
@@ -119,11 +119,11 @@ public class AgentContextCallbackFailureTests
                     context.SetPredictiveState(state);
             });
         using var context = new AgentContext(agent);
-        agent.State.OnChanged(() =>
+        agent.State.PropertyChanged += (_, _) =>
         {
             if (!agent.State.HasPendingPredictiveState)
-                throw new InvalidOperationException("state callback failed");
-        });
+                throw new InvalidOperationException("state handler failed");
+        };
 
         var send = context.SendMessageAsync("first");
         await started.Task;
@@ -136,14 +136,14 @@ public class AgentContextCallbackFailureTests
     }
 
     [Fact]
-    public async Task ChangeCallbackThrowsWhenAStopEndsAPendingApproval_TurnStillStops()
+    public async Task ChangeHandlerThrowsWhenAStopEndsAPendingApproval_TurnStillStops()
     {
         var model = new ScriptedChatClient();
         model.Enqueue(ct => ResponseEmitters.EmitApprovalRequest("delete-1", "DeleteFile", ct: ct));
         model.Enqueue(ct => ResponseEmitters.EmitTextResponse("reply 2", ct));
         using var context = new AgentContext(new UIAgent(model));
         var awaitingInput = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 awaitingInput.TrySetResult();
@@ -152,11 +152,11 @@ public class AgentContextCallbackFailureTests
         var send = context.SendMessageAsync("first");
         await awaitingInput.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var approval = Assert.Single(context.Turns[0].ResponseBlocks.OfType<ToolApprovalBlock>());
-        approval.OnChanged(() => throw new InvalidOperationException("change callback failed"));
+        approval.PropertyChanged += (_, _) => throw new InvalidOperationException("change handler failed");
         await context.CancelAsync();
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => send);
-        Assert.Equal("change callback failed", error.Message);
+        Assert.Equal("change handler failed", error.Message);
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.True(Assert.Single(context.Turns).IsStopped);
         Assert.False(approval.IsAwaitingInput);
@@ -168,27 +168,27 @@ public class AgentContextCallbackFailureTests
     }
 
     [Fact]
-    public async Task ChangeCallbackThrowsWhenAFailureEndsAPendingApproval_TurnFailsAndCanBeRetried()
+    public async Task ChangeHandlerThrowsWhenAFailureEndsAPendingApproval_TurnFailsAndCanBeRetried()
     {
         var model = new ScriptedChatClient();
         model.Enqueue(ApprovalThenError);
         model.Enqueue(ct => ResponseEmitters.EmitTextResponse("reply 1", ct));
         using var context = new AgentContext(new UIAgent(model));
-        context.RegisterOnBlockAdded((_, block) =>
+        context.OnBlockAdded((_, block) =>
         {
             if (block is ToolApprovalBlock approval)
             {
-                approval.OnChanged(() =>
+                approval.PropertyChanged += (_, _) =>
                 {
                     if (!approval.IsAwaitingInput)
-                        throw new InvalidOperationException("change callback failed");
-                });
+                        throw new InvalidOperationException("change handler failed");
+                };
             }
         });
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SendMessageAsync("first"));
 
-        Assert.Equal("change callback failed", error.Message);
+        Assert.Equal("change handler failed", error.Message);
         Assert.Equal(ConversationStatus.Error, context.Status);
         Assert.Equal("The connection was lost.", context.Error?.Message);
         Assert.False(Assert.Single(context.Turns[0].ResponseBlocks.OfType<ToolApprovalBlock>()).IsAwaitingInput);

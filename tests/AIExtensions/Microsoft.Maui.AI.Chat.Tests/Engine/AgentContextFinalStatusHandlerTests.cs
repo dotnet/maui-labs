@@ -8,13 +8,13 @@ using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 namespace Microsoft.Maui.AI.Chat.Tests.Engine;
 
 /// <summary>
-/// The status callback that reports the end of a turn may start the next one, for example to send a
-/// queued message.
+/// A handler of the status change that reports the end of a turn may start the next one, for example to send
+/// a queued message.
 /// </summary>
-public class AgentContextFinalCallbackTests
+public class AgentContextFinalStatusHandlerTests
 {
     [Fact]
-    public async Task IdleCallback_CanSendTheNextQueuedMessage()
+    public async Task IdleHandler_CanSendTheNextQueuedMessage()
     {
         var requests = new List<IReadOnlyList<ChatMessage>>();
         var client = new DelegatingStreamingChatClient();
@@ -27,7 +27,7 @@ public class AgentContextFinalCallbackTests
         var queue = new Queue<string>(["second", "third"]);
         var sends = new List<Task>();
         var queueSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status != ConversationStatus.Idle)
                 return;
@@ -51,7 +51,7 @@ public class AgentContextFinalCallbackTests
     }
 
     [Fact]
-    public async Task ErrorCallback_CanSendANewMessage()
+    public async Task ErrorHandler_CanSendANewMessage()
     {
         var calls = 0;
         var client = new DelegatingStreamingChatClient();
@@ -60,7 +60,7 @@ public class AgentContextFinalCallbackTests
             : ReplyAsync("recovered", cancellationToken));
         using var context = new AgentContext(new UIAgent(client));
         Task? next = null;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.Error && next is null)
                 next = context.SendMessageAsync("second");
@@ -78,7 +78,7 @@ public class AgentContextFinalCallbackTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EveryStatusCallback_SeesTheStatusThatEndedTheTurn_WhenAnEarlierOneSendsTheNextMessage(bool fail)
+    public async Task LaterStatusHandler_ReadsTheNextSendsStatus_AndTheTurnSaysHowItEnded_WhenAnEarlierOneSendsTheNextMessage(bool fail)
     {
         var calls = 0;
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -92,47 +92,54 @@ public class AgentContextFinalCallbackTests
         using var context = new AgentContext(new UIAgent(client));
         var ended = fail ? ConversationStatus.Error : ConversationStatus.Idle;
         Task? next = null;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ended && next is null)
                 next = context.SendMessageAsync("second");
         });
-        var seen = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(seen.Add);
+        var seen = new List<string>();
+        context.OnStatusChanged(status => seen.Add($"{status}, first turn failed: {context.Turns[0].IsFailed}"));
 
         await context.SendMessageAsync("first");
 
-        // The second subscriber hears the next turn start before the end of the first one, which the
-        // first subscriber reacted to, but it still hears how the first turn ended.
-        Assert.Equal([ConversationStatus.Streaming, ConversationStatus.Streaming, ended], seen);
+        // The second handler hears the next turn start before the end of the first one, which the first handler
+        // reacted to. When the end reaches it, it reads the status of the next send, as PropertyChanged reports the
+        // current value; the first turn says how it ended.
+        var first = $"first turn failed: {fail}";
+        Assert.Equal(
+            [
+                "Streaming, first turn failed: False",
+                $"Streaming, {first}",
+                $"Streaming, {first}",
+            ],
+            seen);
         Assert.Equal(ConversationStatus.Streaming, context.Status);
 
         release.SetResult();
         Assert.NotNull(next);
         await next;
 
-        Assert.Equal(
-            [ConversationStatus.Streaming, ConversationStatus.Streaming, ended, ConversationStatus.Idle],
-            seen);
+        Assert.Equal($"Idle, {first}", seen[^1]);
+        Assert.Equal(4, seen.Count);
         Assert.Equal(2, context.Turns.Count);
     }
 
     [Fact]
-    public async Task IdleCallback_CancelAsyncCompletesImmediately()
+    public async Task IdleHandler_CancelAsyncCompletesImmediately()
     {
         var client = new DelegatingStreamingChatClient();
         client.SetHandler((messages, options, cancellationToken) => ReplyAsync("reply", cancellationToken));
         using var context = new AgentContext(new UIAgent(client));
-        bool? cancelCompletedInCallback = null;
-        context.RegisterOnStatusChanged(status =>
+        bool? cancelCompletedInHandler = null;
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.Idle)
-                cancelCompletedInCallback ??= context.CancelAsync().IsCompletedSuccessfully;
+                cancelCompletedInHandler ??= context.CancelAsync().IsCompletedSuccessfully;
         });
 
         await context.SendMessageAsync("first");
 
-        Assert.True(cancelCompletedInCallback);
+        Assert.True(cancelCompletedInHandler);
         Assert.False(Assert.Single(context.Turns).IsStopped);
     }
 

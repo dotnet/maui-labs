@@ -29,7 +29,7 @@ public class S04_ToolApprovalTest
         var context = new AgentContext(agent);
 
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(s =>
+        context.OnStatusChanged(s =>
         {
             statuses.Add(s);
             if (s == ConversationStatus.AwaitingInput)
@@ -75,7 +75,7 @@ public class S04_ToolApprovalTest
         var agent = new UIAgent(client);
         var context = new AgentContext(agent);
 
-        context.RegisterOnStatusChanged(s =>
+        context.OnStatusChanged(s =>
         {
             if (s == ConversationStatus.AwaitingInput)
             {

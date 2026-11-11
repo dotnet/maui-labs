@@ -85,7 +85,7 @@ public class CallOutcomeTests
             options => options.RegisterUIAction(showMap, UIActionInvocationMode.Automatic)));
         ToolApprovalBlock? approval = null;
         var linkedWhenAsked = false;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status != ConversationStatus.AwaitingInput)
                 return;
@@ -131,8 +131,6 @@ public class CallOutcomeTests
         var call = Assert.Single(turn.ResponseBlocks.OfType<FunctionInvocationContentBlock>());
         Assert.False(call.IsAbandoned);
         var abandonedChanges = RecordAbandoned(call);
-        var refreshes = new List<bool>();
-        using var changed = call.OnChanged(() => refreshes.Add(call.IsAbandoned));
 
         await context.CancelAsync();
         await send.WaitAsync(TimeSpan.FromSeconds(10));
@@ -141,7 +139,6 @@ public class CallOutcomeTests
         Assert.False(call.HasResult);
         Assert.True(call.IsAbandoned);
         Assert.Equal([true], abandonedChanges);
-        Assert.True(refreshes[^1]);
     }
 
     [Fact]
@@ -162,7 +159,7 @@ public class CallOutcomeTests
         using var context = new AgentContext(new UIAgent(
             new FunctionInvokingChatClient(model),
             options => options.ChatOptions = new ChatOptions { Tools = [calculate] }));
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 context.Turns[^1].ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
@@ -172,17 +169,14 @@ public class CallOutcomeTests
         await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var approval = Assert.Single(context.Turns[^1].ResponseBlocks.OfType<ToolApprovalBlock>());
         Assert.False(approval.IsAwaitingInput);
-        var names = RecordNames(approval);
-        var refreshes = new List<bool>();
-        using var changed = approval.OnChanged(() => refreshes.Add(approval.IsAbandoned));
+        var changes = RecordStates(approval);
 
         await context.CancelAsync();
         await send.WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(ApprovalStatus.Approved, approval.Status);
         Assert.True(approval.InnerBlock.IsAbandoned);
-        Assert.Contains("IsAbandoned", names);
-        Assert.Equal([true], refreshes);
+        Assert.Equal(["IsAbandoned: awaiting input False, abandoned True"], changes);
     }
 
     [Fact]
@@ -193,7 +187,7 @@ public class CallOutcomeTests
         using var context = new AgentContext(new UIAgent(model));
         var log = new List<string>();
         FunctionInvocationContentBlock? call = null;
-        context.RegisterOnBlockAdded((turn, block) =>
+        context.OnBlockAdded((turn, block) =>
         {
             if (block is not FunctionInvocationContentBlock added)
                 return;
@@ -202,7 +196,7 @@ public class CallOutcomeTests
             added.PropertyChanged += (_, e) => log.Add(
                 $"call.{e.PropertyName}:{added.IsAbandoned}:{turn.IsFailed}:{context.Status}");
         });
-        context.RegisterOnTurnAdded(turn => turn.PropertyChanged += (_, e) =>
+        context.OnTurnAdded(turn => turn.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(ConversationTurn.IsFailed))
                 log.Add($"turn.IsFailed:{call?.IsAbandoned}");
@@ -279,7 +273,7 @@ public class CallOutcomeTests
             ct));
         using var context = new AgentContext(new UIAgent(model));
         var abandonedChanges = new Dictionary<string, List<bool>>();
-        context.RegisterOnBlockAdded((_, block) =>
+        context.OnBlockAdded((_, block) =>
         {
             if (block is FunctionInvocationContentBlock call)
                 abandonedChanges[call.Id] = RecordAbandoned(call);
@@ -322,14 +316,8 @@ public class CallOutcomeTests
         var blocks = context.Turns[^1].ResponseBlocks;
         var approval = Assert.Single(blocks.OfType<ToolApprovalBlock>());
         var action = Assert.Single(blocks.OfType<UIActionBlock>());
-        var approvalNames = RecordNames(approval);
-        var actionNames = RecordNames(action);
-        var approvalRefreshes = new List<(bool AwaitingInput, bool Abandoned)>();
-        var actionRefreshes = new List<(bool AwaitingInput, bool Abandoned)>();
-        using var approvalChanged = approval.OnChanged(
-            () => approvalRefreshes.Add((approval.IsAwaitingInput, approval.IsAbandoned)));
-        using var actionChanged = action.OnChanged(
-            () => actionRefreshes.Add((action.IsAwaitingInput, action.IsAbandoned)));
+        var approvalChanges = RecordStates(approval);
+        var actionChanges = RecordStates(action);
 
         await context.CancelAsync();
         await send.WaitAsync(TimeSpan.FromSeconds(10));
@@ -339,12 +327,15 @@ public class CallOutcomeTests
         Assert.True(approval.InnerBlock.IsAbandoned);
         Assert.True(action.IsAbandoned);
         Assert.True(action.InnerBlock.IsAbandoned);
-        Assert.Equal(["IsAwaitingInput", "IsAbandoned"], approvalNames);
-        Assert.Equal(["IsAwaitingInput", "IsAbandoned"], actionNames);
 
-        // Each card refreshes once, when both changes are in place.
-        Assert.Equal([(false, true)], approvalRefreshes);
-        Assert.Equal([(false, true)], actionRefreshes);
+        // Each card raises each change once, when both changes are in place.
+        string[] expected =
+        [
+            "IsAwaitingInput: awaiting input False, abandoned True",
+            "IsAbandoned: awaiting input False, abandoned True",
+        ];
+        Assert.Equal(expected, approvalChanges);
+        Assert.Equal(expected, actionChanges);
     }
 
     [Fact]
@@ -355,7 +346,7 @@ public class CallOutcomeTests
         model.Enqueue(ct => ResponseEmitters.EmitToolCallResponse("delete-1", "DeleteFile", FileName("a.txt"), ct));
         model.Enqueue(ct => ResponseEmitters.EmitTextResponse("I left it.", ct));
         using var context = CreateDeleteFileContext(model, deleted);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 context.Turns[^1].ResponseBlocks.OfType<ToolApprovalBlock>().Single().Reject("Not now");
@@ -382,7 +373,7 @@ public class CallOutcomeTests
         model.Enqueue(ct => ResponseEmitters.EmitApprovalRequest("delete-1", "DeleteFile", FileName("a.txt"), ct));
         using var context = new AgentContext(new UIAgent(model));
         Task? stop = null;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status != ConversationStatus.AwaitingInput)
                 return;
@@ -494,7 +485,7 @@ public class CallOutcomeTests
         using var context = new AgentContext(new UIAgent(model));
         FunctionInvocationContentBlock? call = null;
         List<bool>? abandonedChanges = null;
-        context.RegisterOnBlockAdded((_, block) =>
+        context.OnBlockAdded((_, block) =>
         {
             if (block is FunctionInvocationContentBlock added)
             {
@@ -504,7 +495,7 @@ public class CallOutcomeTests
         });
         Task? next = null;
         var sent = false;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             // The next turn may end before SendMessageAsync returns, so remember the send first.
             if (status == ConversationStatus.Idle && !sent)
@@ -548,17 +539,19 @@ public class CallOutcomeTests
         return changes;
     }
 
-    private static List<string?> RecordNames(ContentBlock block)
+    /// <summary>Records each change the block raises with the waiting and abandoned state it reads.</summary>
+    private static List<string> RecordStates(InteractiveFunctionBlock block)
     {
-        var names = new List<string?>();
-        block.PropertyChanged += (_, e) => names.Add(e.PropertyName);
-        return names;
+        var changes = new List<string>();
+        block.PropertyChanged += (_, e) => changes.Add(
+            $"{e.PropertyName}: awaiting input {block.IsAwaitingInput}, abandoned {block.IsAbandoned}");
+        return changes;
     }
 
     private static Task WhenAwaitingInput(AgentContext context)
     {
         var awaitingInput = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 awaitingInput.TrySetResult();

@@ -100,6 +100,5 @@ public class ToolApprovalBlock : InteractiveFunctionBlock, IInteractiveBlock
 
         RaisePropertyChanged(s_statusChanged);
         ReportAwaitingInputChanged();
-        NotifyChanged();
     }
 }

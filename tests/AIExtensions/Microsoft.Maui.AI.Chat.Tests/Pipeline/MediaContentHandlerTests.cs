@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 
@@ -126,8 +127,7 @@ public class MediaContentHandlerTests
         var block = Assert.IsType<MediaContentBlock>(Assert.Single(await ProcessAsync(
             pipeline,
             CreateImageResultUpdate("call-1", 1))));
-        var changes = 0;
-        using var subscription = block.OnChanged(() => changes++);
+        var changes = block.RecordPropertyChanges();
 
         var partial = await ProcessAsync(pipeline, CreateImageResultUpdate("call-1", 2));
         var final = CreateImageResultUpdate("call-1", 3);
@@ -138,7 +138,7 @@ public class MediaContentHandlerTests
         Assert.Same(
             ((ImageGenerationToolResultContent)final.Contents[0]).Outputs![0],
             block.Content);
-        Assert.Equal(2, changes);
+        Assert.Equal([nameof(MediaContentBlock.Content), nameof(MediaContentBlock.Content)], changes);
         Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
 
         pipeline.Finalize();

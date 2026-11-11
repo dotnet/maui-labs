@@ -117,9 +117,8 @@ public class FunctionInvocationContentBlock : ContentBlock
     /// arrived.
     /// </para>
     /// <para>
-    /// The change raises <see cref="ContentBlock.PropertyChanged"/> and then the
-    /// <see cref="ContentBlock.OnChanged(Action)"/> callbacks once the turn's outcome is final, after the
-    /// changes of the turn and of the context. Setting a <see cref="Result"/> makes it false again.
+    /// The change raises <see cref="ContentBlock.PropertyChanged"/> once the turn's outcome is final, after
+    /// the changes of the turn and of the context. Setting a <see cref="Result"/> makes it false again.
     /// </para>
     /// </remarks>
     public bool IsAbandoned => _abandoned && !HasResult;

@@ -29,11 +29,9 @@ public class BindableConversationTests
             [
                 "Turns Add 0 (1 turns)",
                 "Status=Streaming",
-                "callback Streaming",
                 "RequestBlocks Add 0 TextContentBlock",
                 "ResponseBlocks Add 0 TextContentBlock",
                 "Status=Idle",
-                "callback Idle",
             ],
             log);
     }
@@ -82,7 +80,6 @@ public class BindableConversationTests
             [
                 "Turns Add 0 (1 turns)",
                 "Status=Streaming",
-                "callback Streaming",
                 "RequestBlocks Add 0 TextContentBlock",
                 "turn.ModelId=model-a (Streaming)",
                 "ResponseBlocks Add 0 TextContentBlock",
@@ -90,7 +87,6 @@ public class BindableConversationTests
                 "turn.Usage=40 (Streaming)",
                 "turn.Usage=42 (Streaming)",
                 "Status=Idle",
-                "callback Idle",
             ],
             log);
     }
@@ -102,7 +98,7 @@ public class BindableConversationTests
         model.Enqueue(ct => TextThenWaitAsync("Partial", ct));
         using var context = new AgentContext(new UIAgent(model));
         var streamed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        context.RegisterOnBlockAdded((_, block) =>
+        context.OnBlockAdded((_, block) =>
         {
             if (block.Role == ChatRole.Assistant)
                 streamed.TrySetResult();
@@ -115,7 +111,7 @@ public class BindableConversationTests
         await context.CancelAsync();
         await send;
 
-        Assert.Equal(["turn.IsStopped=True (Idle)", "Status=Idle", "callback Idle"], log);
+        Assert.Equal(["turn.IsStopped=True (Idle)", "Status=Idle"], log);
     }
 
     [Fact]
@@ -133,13 +129,11 @@ public class BindableConversationTests
             [
                 "Turns Add 0 (1 turns)",
                 "Status=Streaming",
-                "callback Streaming",
                 "RequestBlocks Add 0 TextContentBlock",
                 "ResponseBlocks Add 0 TextContentBlock",
                 "turn.IsFailed=True (Error)",
                 "Error=offline",
                 "Status=Error",
-                "callback Error",
             ],
             log);
 
@@ -152,10 +146,8 @@ public class BindableConversationTests
                 "turn.IsFailed=False (Streaming)",
                 "Error=none",
                 "Status=Streaming",
-                "callback Streaming",
                 "ResponseBlocks Add 0 TextContentBlock",
                 "Status=Idle",
-                "callback Idle",
             ],
             log);
     }
@@ -208,8 +200,9 @@ public class BindableConversationTests
             new ScriptedChatClient(),
             options => options.Thread = thread));
         var log = new List<string>();
-        Observe(context.Turns).CollectionChanged += (_, e) => log.Add($"{e.Action} ({context.Turns.Count} turns)");
-        context.RegisterOnTurnAdded(turn => log.Add($"added {context.Turns.IndexOf(turn)}"));
+        Observe(context.Turns).CollectionChanged += (_, e) => log.Add(
+            $"{e.Action} ({context.Turns.Count} turns, "
+            + $"{context.Turns.Sum(turn => turn.RequestBlocks.Count + turn.ResponseBlocks.Count)} blocks)");
 
         if (thread is not null)
         {
@@ -226,7 +219,7 @@ public class BindableConversationTests
             ]);
         }
 
-        Assert.Equal(["Reset (2 turns)", "added 0", "added 1"], log);
+        Assert.Equal(["Reset (2 turns, 4 blocks)"], log);
     }
 
     [Fact]
@@ -246,13 +239,12 @@ public class BindableConversationTests
                 "Turns Reset (0 turns, Idle, no error)",
                 "Error=none",
                 "Status=Idle",
-                "callback Idle",
             ],
             log);
     }
 
     [Fact]
-    public async Task StatusHandler_CanSendTheNextMessage_AndStatusCallbacksStillHearHowTheTurnEnded()
+    public async Task StatusHandler_CanSendTheNextMessage_AndALaterHandlerReadsTheNextStatus()
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var model = new ScriptedChatClient();
@@ -271,16 +263,15 @@ public class BindableConversationTests
             if (e.PropertyName == nameof(AgentContext.Status))
                 observed.Add(context.Status);
         };
-        var reported = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(reported.Add);
 
         await context.SendMessageAsync("first");
 
-        // The second handler reads Status after the first one already started the next turn; status callbacks
-        // still receive the status each change reported.
+        // The second handler reads Status after the first one already started the next turn, so it reads the
+        // next turn's status; the turn that ended says how it ended.
         Assert.NotNull(next);
         Assert.Equal([ConversationStatus.Streaming, ConversationStatus.Streaming, ConversationStatus.Streaming], observed);
-        Assert.Equal([ConversationStatus.Streaming, ConversationStatus.Streaming, ConversationStatus.Idle], reported);
+        Assert.False(context.Turns[0].IsFailed);
+        Assert.False(context.Turns[0].IsStopped);
 
         release.SetResult();
         await next;
@@ -288,7 +279,6 @@ public class BindableConversationTests
         Assert.Equal(2, context.Turns.Count);
         Assert.Equal(ConversationStatus.Idle, context.Status);
         Assert.Equal(ConversationStatus.Idle, observed[^1]);
-        Assert.Equal(ConversationStatus.Idle, reported[^1]);
     }
 
     [Fact]
@@ -300,18 +290,21 @@ public class BindableConversationTests
         model.Enqueue(ct => ReplyAfterAsync(release.Task, "Recovered", ct));
         using var context = new AgentContext(new UIAgent(model));
         Task? retry = null;
-        context.RegisterOnTurnAdded(turn => turn.PropertyChanged += (_, e) =>
+        context.OnTurnAdded(turn => turn.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(ConversationTurn.IsFailed) && turn.IsFailed && retry is null)
                 retry = context.RetryAsync();
         });
         var reported = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(reported.Add);
+        context.OnStatusChanged(reported.Add);
 
         await context.SendMessageAsync("Hi");
 
+        // The retry started before the context raised the failure, so Status was streaming again when it was
+        // raised and a change that changed back is not raised: Error never reaches a binding.
         Assert.NotNull(retry);
-        Assert.Equal([ConversationStatus.Streaming, ConversationStatus.Streaming, ConversationStatus.Error], reported);
+        Assert.Equal([ConversationStatus.Streaming], reported);
+        Assert.Null(context.Error);
 
         release.SetResult();
         await retry;
@@ -319,6 +312,7 @@ public class BindableConversationTests
         var turn = Assert.Single(context.Turns);
         Assert.False(turn.IsFailed);
         Assert.Equal(ConversationStatus.Idle, context.Status);
+        Assert.Equal([ConversationStatus.Streaming, ConversationStatus.Idle], reported);
         Assert.Equal("Recovered", Assert.IsType<TextContentBlock>(Assert.Single(turn.ResponseBlocks)).RawText);
         Assert.Equal(2, model.Requests.Count);
     }
@@ -378,7 +372,7 @@ public class BindableConversationTests
         using var context = new AgentContext(new UIAgent(model));
         var streamed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task? next = null;
-        context.RegisterOnTurnAdded(turn =>
+        context.OnTurnAdded(turn =>
         {
             Observe(turn.ResponseBlocks).CollectionChanged += (_, _) => streamed.TrySetResult();
             turn.PropertyChanged += (_, e) =>
@@ -388,7 +382,7 @@ public class BindableConversationTests
             };
         });
         var reported = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(reported.Add);
+        context.OnStatusChanged(reported.Add);
 
         var send = context.SendMessageAsync("Hi");
         await streamed.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -400,9 +394,9 @@ public class BindableConversationTests
         Assert.Equal(2, context.Turns.Count);
         Assert.True(context.Turns[0].IsStopped);
         Assert.Equal("Next", Assert.IsType<TextContentBlock>(Assert.Single(context.Turns[1].ResponseBlocks)).RawText);
-        Assert.Equal(
-            [ConversationStatus.Streaming, ConversationStatus.Streaming, ConversationStatus.Idle, ConversationStatus.Idle],
-            reported);
+        // Each status is raised once it differs from the last one raised, so the next send's start, which kept
+        // Streaming, and the stop's Idle, which the next send had already reported, are not raised again.
+        Assert.Equal([ConversationStatus.Streaming, ConversationStatus.Idle], reported);
         Assert.Equal(["user:Hi", "assistant:Partial", "user:next"], Describe(model.Requests[^1]));
     }
 
@@ -413,7 +407,7 @@ public class BindableConversationTests
         model.Enqueue(ct => TextThenWaitAsync("Partial", ct));
         using var context = new AgentContext(new UIAgent(model));
         Task? stop = null;
-        context.RegisterOnTurnAdded(turn => Observe(turn.ResponseBlocks).CollectionChanged += (_, _) =>
+        context.OnTurnAdded(turn => Observe(turn.ResponseBlocks).CollectionChanged += (_, _) =>
             stop ??= context.CancelAsync());
 
         await context.SendMessageAsync("Hi");
@@ -459,7 +453,7 @@ public class BindableConversationTests
         model.Enqueue(ct => TextThenWaitAsync("Partial", ct));
         using var context = new AgentContext(new UIAgent(model));
         Task? clear = null;
-        context.RegisterOnTurnAdded(turn => Observe(turn.ResponseBlocks).CollectionChanged += (_, _) =>
+        context.OnTurnAdded(turn => Observe(turn.ResponseBlocks).CollectionChanged += (_, _) =>
             clear ??= context.ClearAsync());
         var turns = new List<string>();
         Observe(context.Turns).CollectionChanged += (_, e) => turns.Add($"{e.Action} ({context.Turns.Count} turns, {context.Status})");
@@ -490,7 +484,6 @@ public class BindableConversationTests
             nameof(AgentContext.Error) => $"Error={context.Error?.Message ?? "none"}",
             _ => $"{e.PropertyName}",
         });
-        context.RegisterOnStatusChanged(status => log.Add($"callback {status}"));
         Observe(context.Turns).CollectionChanged += (_, e) =>
         {
             log.Add(e.Action == NotifyCollectionChangedAction.Reset

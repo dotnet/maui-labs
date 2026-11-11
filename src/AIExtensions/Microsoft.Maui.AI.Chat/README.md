@@ -129,7 +129,8 @@ third-party list.
   text streams, a reasoning block's `Text`, a tool call's `Result` and `HasResult`, an approval's
   `Status`, a UI action's `IsComplete`, and `IsAwaitingInput`. A block of your own type, including a
   `[ToolBlock]`, raises it with an empty name (every property may have changed) whenever its handler
-  updates it; raise specific names with `SetProperty` or `OnPropertyChanged`.
+  updates it, and after the engine sets its result or abandons it; raise specific names with
+  `SetProperty` or `OnPropertyChanged`.
 - A tool call's block tells its card everything, so the card never searches the session.
   `FunctionInvocationContentBlock.HasResult` turns true when the result arrives, and `IsAbandoned` when
   the turn ends without one: it completed, stopped or failed, or left the call's approval or UI action
@@ -200,14 +201,17 @@ Events are raised synchronously on the thread that makes the change, once the st
 place; the engine has no dispatcher. Drive the session from the UI thread: send, retry, cancel and clear
 there, and the response streams on the UI thread through its synchronization context, so bindings update
 there too. Handlers may call back into the session, for example to send the next message when `Status`
-becomes `Idle`. A handler that runs after such a send reads the new send's `Status`; use
-`RegisterOnStatusChanged` when you need the status each change reported. A handler of a turn's addition,
-of a retry's removal of blocks or of the `Turns` reset cannot start a send or retry (the returned task
-fails with `InvalidOperationException`), and nothing can send while a restore runs, including a handler of
-a state change the restore replays; send from a status change instead. `ClearAsync` resets the typed
-state last, so a handler of that change can send the first message of the cleared conversation.
+becomes `Idle`. A handler that runs after such a send reads the new send's `Status`, as `PropertyChanged`
+reports the current value; the turn that ended keeps `IsFailed` and `IsStopped`, which say how it ended,
+and a status that changed back before it was raised (a retry started from the failed turn's `IsFailed`) is
+not raised at all. A handler of a turn's addition, of a retry's removal of blocks or of the `Turns` reset
+cannot start a send or retry (the returned task fails with `InvalidOperationException`), and nothing can
+send while a restore runs, including a handler of a state change the restore replays; send from a status
+change instead. `ClearAsync` resets the typed state last, so a handler of that change can send the first
+message of the cleared conversation.
 
-The `OnChanged` and `RegisterOn…` callbacks remain available.
+These events are the only change notifications: upstream's `OnChanged` and `RegisterOn…` callbacks are not
+part of this package.
 
 ## Changing options between sends
 
@@ -316,11 +320,11 @@ request options. It is transport-neutral request customization, not a provider A
 
 ## Threading contract
 
-`UIAgent`, `AgentContext`, blocks, handlers, callbacks, and `IConversationThread` are deliberately
+`UIAgent`, `AgentContext`, blocks, handlers, and `IConversationThread` are deliberately
 single-thread-affine and **not thread-safe**. Serialize access and dispatch to your owning
 application thread when entering from background work. The library does not add locks or
-concurrent-caller guarantees. Change events and callbacks are raised synchronously on the thread that
-makes the change, so a UI drives the session from its UI thread.
+concurrent-caller guarantees. Change events are raised synchronously on the thread that makes the change,
+so a UI drives the session from its UI thread.
 
 ## Rich text scope
 

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 using Microsoft.Extensions.AI;
@@ -252,7 +253,7 @@ public class AgentContextThreadTests
                     ct: cancellationToken)
                 : ResponseEmitters.EmitTextResponse("deleted", cancellationToken);
         });
-        source.RegisterOnStatusChanged(status =>
+        source.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
             {
@@ -303,7 +304,7 @@ public class AgentContextThreadTests
                     ct: cancellationToken)
                 : ResponseEmitters.EmitTextResponse("deleted", cancellationToken);
         });
-        source.RegisterOnStatusChanged(status =>
+        source.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
             {
@@ -517,11 +518,11 @@ public class AgentContextThreadTests
     }
 
     [Fact]
-    public async Task RestoreAsync_RecreatesTurnsAndAnnouncesOnlyTheTurnsOnceAllAreLoaded()
+    public async Task RestoreAsync_RecreatesTurnsAndRaisesOneResetOnceAllAreLoaded()
     {
         // Ported from upstream's RestoreAsync_RecreatesTurnsWithoutFiringCallbacks. Upstream restores silently;
-        // here each restored turn is announced so a view already showing the context renders it (see
-        // UPSTREAM-CHANGES.md). Blocks and status are still not announced.
+        // here Turns raises one reset once every turn is loaded, so a view already showing the context renders
+        // them (see UPSTREAM-CHANGES.md). The turns' blocks and the status raise nothing.
         var thread = new InMemoryConversationThread("thread-1");
         var callCount = 0;
         var firstContext = CreateContext(thread, (messages, options, cancellationToken) =>
@@ -531,13 +532,13 @@ public class AgentContextThreadTests
 
         var restoredContext = CreateContext(thread, (messages, options, cancellationToken) =>
             ResponseEmitters.EmitTextResponse("unused", cancellationToken));
-        var announced = new List<(string Request, string Response, int TurnCount)>();
+        var raised = new List<(NotifyCollectionChangedAction Action, (string Request, string Response)[] Turns)>();
         var blockAddedCount = 0;
         var statusChangedCount = 0;
-        using var turnRegistration = restoredContext.RegisterOnTurnAdded(turn =>
-            announced.Add((GetRequestText(turn), GetResponseText(turn), restoredContext.Turns.Count)));
-        using var blockRegistration = restoredContext.RegisterOnBlockAdded((_, _) => blockAddedCount++);
-        using var statusRegistration = restoredContext.RegisterOnStatusChanged(_ => statusChangedCount++);
+        ChangeEvents.Observe(restoredContext.Turns).CollectionChanged += (_, e) => raised.Add(
+            (e.Action, restoredContext.Turns.Select(turn => (GetRequestText(turn), GetResponseText(turn))).ToArray()));
+        using var blockRegistration = restoredContext.OnBlockAdded((_, _) => blockAddedCount++);
+        using var statusRegistration = restoredContext.OnStatusChanged(_ => statusChangedCount++);
 
         await restoredContext.RestoreAsync();
 
@@ -546,7 +547,9 @@ public class AgentContextThreadTests
         Assert.Equal("Response 1", GetResponseText(restoredContext.Turns[0]));
         Assert.Equal("Second", GetRequestText(restoredContext.Turns[1]));
         Assert.Equal("Response 2", GetResponseText(restoredContext.Turns[1]));
-        Assert.Equal([("First", "Response 1", 2), ("Second", "Response 2", 2)], announced);
+        var reset = Assert.Single(raised);
+        Assert.Equal(NotifyCollectionChangedAction.Reset, reset.Action);
+        Assert.Equal([("First", "Response 1"), ("Second", "Response 2")], reset.Turns);
         Assert.Equal(0, blockAddedCount);
         Assert.Equal(0, statusChangedCount);
     }

@@ -29,7 +29,7 @@ public class AgentContextErrorHandlingTests
     }
 
     [Fact]
-    public async Task Error_DuringStreaming_FiresStatusChangedCallback()
+    public async Task Error_DuringStreaming_RaisesTheStatusChange()
     {
         var statusChanges = new List<ConversationStatus>();
         var client = new DelegatingStreamingChatClient();
@@ -38,7 +38,7 @@ public class AgentContextErrorHandlingTests
 
         var agent = new UIAgent(client);
         var context = new AgentContext(agent);
-        context.RegisterOnStatusChanged(s => statusChanges.Add(s));
+        context.OnStatusChanged(s => statusChanges.Add(s));
 
         await context.SendMessageAsync("Hello");
 
@@ -195,7 +195,7 @@ public class AgentContextErrorHandlingTests
         var agent = new UIAgent(client);
         var context = new AgentContext(agent);
         ConversationTurn? clearedTurn = null;
-        context.RegisterOnResponseBlocksCleared(turn => clearedTurn = turn);
+        context.OnResponseBlocksReset(turn => clearedTurn = turn);
 
         var sendTask = context.SendMessageAsync("Hello");
         await streamStarted.Task;
@@ -278,7 +278,7 @@ public class AgentContextErrorHandlingTests
             ResponseEmitters.EmitErrorAfterTokens([], expectedError, cancellationToken));
         var context = new AgentContext(new UIAgent(client));
         using var callerCts = new CancellationTokenSource();
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.Error)
                 callerCts.Cancel();
@@ -371,7 +371,7 @@ public class AgentContextErrorHandlingTests
                 : ResponseEmitters.EmitTextResponse("fresh response", cancellationToken);
         });
         var context = new AgentContext(new UIAgent(client));
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 awaitingInput.TrySetResult();

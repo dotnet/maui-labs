@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 
@@ -15,28 +16,27 @@ public class ActivityHandlerTests
         var options = new UIAgentOptions();
         options.AddBlockHandler(handler);
         var pipeline = new BlockMappingPipeline(options);
-        var changes = 0;
 
         var emitted = await ToListAsync(pipeline.Process(Update("activity-1", "started")));
         var block = Assert.IsType<TestActivityBlock>(Assert.Single(emitted));
-        block.OnChanged(() => changes++);
+        var changes = block.RecordPropertyChanges();
 
         Assert.Equal("started", block.Value);
         Assert.Equal("activity-1", block.Id);
 
         Assert.Empty(await ToListAsync(pipeline.Process(Update("other", "ignored"))));
         Assert.Equal("started", block.Value);
-        Assert.Equal(0, changes);
+        Assert.Empty(changes);
 
         Assert.Empty(await ToListAsync(pipeline.Process(Update("activity-1", "running"))));
         Assert.Equal("running", block.Value);
         Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
-        Assert.Equal(1, changes);
+        Assert.Equal([string.Empty], changes);
 
         Assert.Empty(await ToListAsync(pipeline.Process(Update("activity-1", "finished"))));
         Assert.Equal("finished", block.Value);
         Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
-        Assert.Equal(2, changes);
+        Assert.Equal([string.Empty, nameof(TestActivityBlock.LifecycleState), string.Empty], changes);
 
         Assert.Equal(["started", "running", "finished"], handler.UpdatedValues);
     }

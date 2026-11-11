@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Blocks;
 
@@ -60,27 +61,25 @@ public class ToolApprovalBlockTests
     }
 
     [Fact]
-    public void Approve_FiresNotifyChanged()
+    public void Approve_RaisesItsStatus()
     {
         var block = CreateBlock();
-        var changed = false;
-        block.OnChanged(() => changed = true);
+        var changes = block.RecordPropertyChanges();
 
         block.Approve();
 
-        Assert.True(changed);
+        Assert.Equal([nameof(ToolApprovalBlock.Status), nameof(ToolApprovalBlock.IsAwaitingInput)], changes);
     }
 
     [Fact]
-    public void Reject_FiresNotifyChanged()
+    public void Reject_RaisesItsStatus()
     {
         var block = CreateBlock();
-        var changed = false;
-        block.OnChanged(() => changed = true);
+        var changes = block.RecordPropertyChanges();
 
         block.Reject();
 
-        Assert.True(changed);
+        Assert.Equal([nameof(ToolApprovalBlock.Status), nameof(ToolApprovalBlock.IsAwaitingInput)], changes);
     }
 
     [Fact]
@@ -98,8 +97,7 @@ public class ToolApprovalBlockTests
     public async Task Approve_Twice_IsSingleUse()
     {
         var block = CreateBlock();
-        var changedCount = 0;
-        block.OnChanged(() => changedCount++);
+        var changes = block.RecordPropertyChanges();
 
         block.Approve();
         var firstResult = await block.GetResultAsync();
@@ -107,7 +105,7 @@ public class ToolApprovalBlockTests
         var secondResult = await block.GetResultAsync();
 
         Assert.Equal(ApprovalStatus.Approved, block.Status);
-        Assert.Equal(1, changedCount);
+        Assert.Equal([nameof(ToolApprovalBlock.Status), nameof(ToolApprovalBlock.IsAwaitingInput)], changes);
         Assert.Same(firstResult, secondResult);
     }
 
@@ -115,15 +113,14 @@ public class ToolApprovalBlockTests
     public async Task RejectAfterApprove_IsNoOp()
     {
         var block = CreateBlock();
-        var changedCount = 0;
-        block.OnChanged(() => changedCount++);
+        var changes = block.RecordPropertyChanges();
 
         block.Approve();
         var approvedResult = await block.GetResultAsync();
         block.Reject("changed mind");
 
         Assert.Equal(ApprovalStatus.Approved, block.Status);
-        Assert.Equal(1, changedCount);
+        Assert.Equal([nameof(ToolApprovalBlock.Status), nameof(ToolApprovalBlock.IsAwaitingInput)], changes);
         Assert.Same(approvedResult, await block.GetResultAsync());
     }
 
@@ -131,15 +128,14 @@ public class ToolApprovalBlockTests
     public async Task ApproveAfterReject_IsNoOp()
     {
         var block = CreateBlock();
-        var changedCount = 0;
-        block.OnChanged(() => changedCount++);
+        var changes = block.RecordPropertyChanges();
 
         block.Reject("not safe");
         var rejectedResult = await block.GetResultAsync();
         block.Approve();
 
         Assert.Equal(ApprovalStatus.Rejected, block.Status);
-        Assert.Equal(1, changedCount);
+        Assert.Equal([nameof(ToolApprovalBlock.Status), nameof(ToolApprovalBlock.IsAwaitingInput)], changes);
         Assert.Same(rejectedResult, await block.GetResultAsync());
     }
 

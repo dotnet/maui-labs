@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 
@@ -187,11 +188,10 @@ public class CustomBlockHandlerTests
         Assert.Equal("Quote 1", block.Quote);
 
         // Second update — Update
-        var changeCount = 0;
-        block.OnChanged(() => changeCount++);
+        var changes = block.RecordPropertyChanges();
         await ProcessAsync(pipeline, CreateCitationUpdate("Book", "Quote 2"));
         Assert.Equal("Quote 1; Quote 2", block.Quote);
-        Assert.Equal(1, changeCount);
+        Assert.Equal([string.Empty], changes);
 
         // Third update — no RawRepresentation → Complete
         await ProcessAsync(pipeline, new ChatResponseUpdate

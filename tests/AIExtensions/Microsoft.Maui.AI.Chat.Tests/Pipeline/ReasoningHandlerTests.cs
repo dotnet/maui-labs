@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 
@@ -13,8 +14,7 @@ public class ReasoningHandlerTests
         var pipeline = CreatePipeline();
         var first = await ProcessAsync(pipeline, CreateReasoningUpdate("Step 1: "));
         var block = Assert.IsType<ReasoningContentBlock>(Assert.Single(first));
-        var changes = 0;
-        block.OnChanged(() => changes++);
+        var changes = block.RecordPropertyChanges();
 
         var second = await ProcessAsync(
             pipeline,
@@ -22,7 +22,7 @@ public class ReasoningHandlerTests
 
         Assert.Empty(second);
         Assert.Equal("Step 1: analyze the problem", block.Text);
-        Assert.Equal(1, changes);
+        Assert.Equal([nameof(ReasoningContentBlock.Text)], changes);
         Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
     }
 

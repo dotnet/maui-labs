@@ -23,8 +23,8 @@ public class TurnFailureTests
         ]);
         using var context = CreateContext(replies);
         var observed = new List<string>();
-        context.RegisterOnStatusChanged(status => observed.Add($"{status}:{context.Turns[^1].IsFailed}"));
-        context.RegisterOnResponseBlocksCleared(turn => observed.Add($"cleared:{turn.IsFailed}"));
+        context.OnStatusChanged(status => observed.Add($"{status}:{context.Turns[^1].IsFailed}"));
+        context.OnResponseBlocksReset(turn => observed.Add($"cleared:{turn.IsFailed}"));
 
         await context.SendMessageAsync("first");
 

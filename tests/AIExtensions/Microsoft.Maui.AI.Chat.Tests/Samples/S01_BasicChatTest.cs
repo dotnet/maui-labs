@@ -63,7 +63,7 @@ public class S01_BasicChatTest
 
         var agent = new UIAgent(client);
         var context = new AgentContext(agent);
-        context.RegisterOnStatusChanged(s => statuses.Add(s));
+        context.OnStatusChanged(s => statuses.Add(s));
 
         Assert.Equal(ConversationStatus.Idle, context.Status);
 

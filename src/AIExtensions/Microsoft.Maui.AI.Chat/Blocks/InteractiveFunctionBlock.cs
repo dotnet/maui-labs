@@ -63,9 +63,9 @@ public abstract class InteractiveFunctionBlock : ContentBlock
     /// the block was restored, when an answer would be ignored.
     /// </summary>
     /// <remarks>
-    /// The engine's blocks raise <see cref="ContentBlock.PropertyChanged"/> for this property, and the
-    /// <see cref="ContentBlock.OnChanged(Action)"/> callbacks, when the value changes, so a view can bind its
-    /// buttons to it. A derived block that waits for input overrides it and reports the change the same way.
+    /// The engine's blocks raise <see cref="ContentBlock.PropertyChanged"/> for this property when the value
+    /// changes, so a view can bind its buttons to it. A derived block that waits for input overrides it and
+    /// raises the change the same way.
     /// </remarks>
     public virtual bool IsAwaitingInput => false;
 
@@ -74,7 +74,7 @@ public abstract class InteractiveFunctionBlock : ContentBlock
     /// the block was restored.
     /// </summary>
     /// <returns>
-    /// Whether the block stopped waiting for input, so the caller raises the change notification once
+    /// Whether the block stopped waiting for input, so the caller raises the change once
     /// the turn's outcome is final.
     /// </returns>
     internal virtual bool Abandon() => false;

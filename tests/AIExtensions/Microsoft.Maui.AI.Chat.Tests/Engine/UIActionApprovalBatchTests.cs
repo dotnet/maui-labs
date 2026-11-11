@@ -227,7 +227,7 @@ public class UIActionApprovalBatchTests
                     options.RegisterUIAction(showMap, mode);
                     options.Thread = thread;
                 }));
-            context.RegisterOnStatusChanged(status =>
+            context.OnStatusChanged(status =>
             {
                 if (status != ConversationStatus.AwaitingInput)
                     return;

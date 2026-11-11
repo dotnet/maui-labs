@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Tests.Pipeline;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Blocks;
 
@@ -135,14 +136,11 @@ public class BlockPropertyChangedTests
         var approval = CreateApproval();
         var seen = new List<string>();
         approval.PropertyChanged += (_, e) => seen.Add($"{e.PropertyName}:{approval.Status}:{approval.IsAwaitingInput}");
-        var changes = 0;
-        approval.OnChanged(() => changes++);
 
         approval.Approve();
         approval.Reject();
 
         Assert.Equal(["Status:Approved:False", "IsAwaitingInput:Approved:False"], seen);
-        Assert.Equal(1, changes);
     }
 
     [Fact]
@@ -313,16 +311,15 @@ public class BlockPropertyChangedTests
     }
 
     [Fact]
-    public void CustomBlock_NotifyChanged_RaisesAnEmptyPropertyNameBeforeItsCallbacks()
+    public void CustomBlock_NotifyChanged_RaisesAnEmptyPropertyName()
     {
         var block = new ScoreBlock();
         var seen = new List<string>();
         block.PropertyChanged += (_, e) => seen.Add($"PropertyChanged({e.PropertyName})");
-        block.OnChanged(() => seen.Add("OnChanged"));
 
         block.Changed();
 
-        Assert.Equal(["PropertyChanged()", "OnChanged"], seen);
+        Assert.Equal(["PropertyChanged()"], seen);
     }
 
     [Fact]
@@ -333,8 +330,6 @@ public class BlockPropertyChangedTests
         var pipeline = new BlockMappingPipeline(options);
         var citation = Assert.IsType<CitationBlock>(Assert.Single(await ProcessAsync(pipeline, Citation("first"))));
         var names = Record(citation);
-        var changes = 0;
-        citation.OnChanged(() => changes++);
 
         Assert.Empty(await ProcessAsync(pipeline, Citation("second")));
         Assert.Equal([""], names);
@@ -343,7 +338,6 @@ public class BlockPropertyChangedTests
         pipeline.Finalize();
 
         Assert.Equal(["", "LifecycleState", ""], names);
-        Assert.Equal(2, changes);
     }
 
     [Fact]
@@ -352,14 +346,11 @@ public class BlockPropertyChangedTests
         var pipeline = new BlockMappingPipeline(new UIAgentOptions());
         var text = Assert.IsType<TextContentBlock>(Assert.Single(await ProcessAsync(pipeline, Text("Hel"))));
         var names = Record(text);
-        var changes = 0;
-        text.OnChanged(() => changes++);
 
         Assert.Empty(await ProcessAsync(pipeline, Text("lo")));
         pipeline.Finalize();
 
         Assert.Equal(["RawText", "Content", "LifecycleState"], names);
-        Assert.Equal(2, changes);
     }
 
     [Fact]
@@ -377,6 +368,73 @@ public class BlockPropertyChangedTests
 
         Assert.Equal(["Result", "HasResult", "LifecycleState", ""], names);
         Assert.Equal("Sunny", block.Forecast);
+    }
+
+    [Fact]
+    public async Task ToolBlockOfTheAppsOwnType_RaisesAnEmptyPropertyNameWhenTheTurnAbandonsIt()
+    {
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitUpdates(
+            [
+                new ChatResponseUpdate(
+                    ChatRole.Assistant,
+                    [new FunctionCallContent("search-1", "Search") { InformationalOnly = true }])
+                {
+                    MessageId = "assistant-1",
+                },
+            ],
+            ct));
+        using var context = new AgentContext(new UIAgent(
+            model,
+            options => options.AddBlockHandler(new CustomCallHandler("Search"))));
+        List<string?>? names = null;
+        context.OnBlockAdded((_, block) =>
+        {
+            if (block is CustomCallBlock card)
+                names = Record(card);
+        });
+
+        await context.SendMessageAsync("Search");
+
+        // A property of the card computed from IsAbandoned refreshes too.
+        var card = Assert.Single(Assert.Single(context.Turns).ResponseBlocks.OfType<CustomCallBlock>());
+        Assert.True(card.IsAbandoned);
+        Assert.Equal(["IsAbandoned", ""], names![^2..]);
+    }
+
+    [Fact]
+    public async Task ToolBlockOfTheAppsOwnType_RaisesAnEmptyPropertyNameWhenTheEngineAnswersItsUnexecutedCall()
+    {
+        // FunctionInvokingChatClient hands a server call back uninvoked when it shares a batch with a UI
+        // action. The engine answers it with an error result, which reaches the card through its handler
+        // with the next round's request, like any result.
+        var backend = AIFunctionFactory.Create((string city) => $"Sunny in {city}", "GetWeather", "Gets weather");
+        var uiAction = AIFunctionFactory.Create(() => "Portland", "GetLocation", "Gets location");
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitMultipleToolCallResponse(
+            ct,
+            new FunctionCallContent("weather-1", "GetWeather", new Dictionary<string, object?> { ["city"] = "Portland" }),
+            new FunctionCallContent("location-1", "GetLocation")));
+        model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Done", ct));
+        using var context = new AgentContext(new UIAgent(new FunctionInvokingChatClient(model), options =>
+        {
+            options.ChatOptions = new ChatOptions { Tools = [backend] };
+            options.RegisterUIAction(uiAction);
+            options.AddBlockHandler(new CustomCallHandler("GetWeather"));
+        }));
+        List<string?>? names = null;
+        context.OnBlockAdded((_, block) =>
+        {
+            if (block is CustomCallBlock card)
+                names = Record(card);
+        });
+
+        await context.SendMessageAsync("Weather here?");
+
+        var card = Assert.Single(Assert.Single(context.Turns).ResponseBlocks.OfType<CustomCallBlock>());
+        Assert.StartsWith("Error: The tool call was not executed", card.Result?.Result as string);
+        var result = names!.IndexOf(nameof(CustomCallBlock.Result));
+        Assert.Equal([nameof(CustomCallBlock.Result), nameof(CustomCallBlock.HasResult), ""], names[result..(result + 3)]);
     }
 
     private static List<string?> Record(INotifyPropertyChanged source)
@@ -466,13 +524,14 @@ public class BlockPropertyChangedTests
         public void Changed() => NotifyChanged();
     }
 
-    private sealed class CustomCallHandler : ContentBlockHandler<CustomCallBlock>
+    /// <summary>Shows every call, or only the calls of <paramref name="toolName"/>, as a <see cref="CustomCallBlock"/>.</summary>
+    private sealed class CustomCallHandler(string? toolName = null) : ContentBlockHandler<CustomCallBlock>
     {
         public override BlockMappingResult<CustomCallBlock> Handle(BlockMappingContext context, CustomCallBlock state)
         {
             foreach (var content in context.UnhandledContents)
             {
-                if (state.Call is null && content is FunctionCallContent call)
+                if (state.Call is null && content is FunctionCallContent call && (toolName is null || call.Name == toolName))
                 {
                     context.MarkHandled(call);
                     state.Call = call;

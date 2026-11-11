@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Specialized;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
@@ -234,24 +235,27 @@ public class RestoreFromMessagesTests
     }
 
     [Fact]
-    public async Task RestoreAsync_Messages_AnnouncesEachTurnOnceAllAreLoaded()
+    public async Task RestoreAsync_Messages_RaisesOneResetOnceAllTurnsAreLoaded()
     {
         var invocations = new List<string>();
         using var context = CreateContext(new DelegatingStreamingChatClient(), invocations);
-        var announced = new List<(string Id, int RequestBlocks, int ResponseBlocks, int TurnCount)>();
+        var raised = new List<(NotifyCollectionChangedAction Action, (string Id, int RequestBlocks, int ResponseBlocks)[] Turns)>();
         var blockAddedCount = 0;
         var statusChangedCount = 0;
-        using var turnRegistration = context.RegisterOnTurnAdded(turn =>
-            announced.Add((turn.Id, turn.RequestBlocks.Count, turn.ResponseBlocks.Count, context.Turns.Count)));
-        using var blockRegistration = context.RegisterOnBlockAdded((_, _) => blockAddedCount++);
-        using var statusRegistration = context.RegisterOnStatusChanged(_ => statusChangedCount++);
+        ChangeEvents.Observe(context.Turns).CollectionChanged += (_, e) => raised.Add(
+            (e.Action, context.Turns.Select(turn => (turn.Id, turn.RequestBlocks.Count, turn.ResponseBlocks.Count)).ToArray()));
+        using var blockRegistration = context.OnBlockAdded((_, _) => blockAddedCount++);
+        using var statusRegistration = context.OnStatusChanged(_ => statusChangedCount++);
 
         await context.RestoreAsync(CreateRecordedConversation());
 
+        var reset = Assert.Single(raised);
+        Assert.Equal(NotifyCollectionChangedAction.Reset, reset.Action);
         Assert.Equal(
-            context.Turns.Select(turn => (turn.Id, turn.RequestBlocks.Count, turn.ResponseBlocks.Count, 2)),
-            announced);
-        Assert.Equal((2, 3), (announced[0].RequestBlocks, announced[0].ResponseBlocks));
+            context.Turns.Select(turn => (turn.Id, turn.RequestBlocks.Count, turn.ResponseBlocks.Count)),
+            reset.Turns);
+        Assert.Equal(2, reset.Turns.Length);
+        Assert.Equal((2, 3), (reset.Turns[0].RequestBlocks, reset.Turns[0].ResponseBlocks));
         Assert.Equal(0, blockAddedCount);
         Assert.Equal(0, statusChangedCount);
         Assert.Empty(invocations);

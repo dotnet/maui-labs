@@ -37,7 +37,7 @@ public class UIActionTests
         var agent = new UIAgent(client, options => options.RegisterUIAction(action));
         var context = new AgentContext(agent);
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(status => statuses.Add(status));
+        context.OnStatusChanged(status => statuses.Add(status));
 
         await context.SendMessageAsync("Where am I?");
 
@@ -123,7 +123,7 @@ public class UIActionTests
         var context = new AgentContext(new UIAgent(client, options =>
             options.RegisterUIAction(action, UIActionInvocationMode.Manual)));
         Task<AIContent>? uiInvocation = null;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
             {
@@ -167,7 +167,7 @@ public class UIActionTests
         var context = new AgentContext(new UIAgent(client, options =>
             options.RegisterUIAction(action, UIActionInvocationMode.Manual)));
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             statuses.Add(status);
             if (status == ConversationStatus.AwaitingInput)

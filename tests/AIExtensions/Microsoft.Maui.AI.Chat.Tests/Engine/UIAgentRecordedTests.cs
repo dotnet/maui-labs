@@ -152,7 +152,7 @@ public class UIAgentRecordedTests
 
         var context = new AgentContext(agent);
         ToolApprovalBlock? approvalBlock = null;
-        context.RegisterOnStatusChanged(s =>
+        context.OnStatusChanged(s =>
         {
             if (s == ConversationStatus.AwaitingInput)
             {

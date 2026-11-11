@@ -30,15 +30,14 @@ namespace Microsoft.Maui.AI.Chat;
 /// <para>
 /// A binding refreshes when the property it reads raises <see cref="PropertyChanged"/>, so a binding that
 /// hands a view a list the block changes in place keeps its first value: expose such a list as an
-/// <see cref="System.Collections.ObjectModel.ObservableCollection{T}"/>, or react to
-/// <see cref="OnChanged(Action)"/>.
+/// <see cref="System.Collections.ObjectModel.ObservableCollection{T}"/>, or read it again in a
+/// <see cref="PropertyChanged"/> handler.
 /// </para>
 /// </remarks>
 public abstract class ContentBlock : INotifyPropertyChanged
 {
     private static readonly PropertyChangedEventArgs s_allPropertiesChanged = new(string.Empty);
 
-    private readonly List<Action> _callbacks = new();
     private readonly bool _reportsAllPropertiesOnChange;
     private string _id = string.Empty;
     private BlockLifecycleState _lifecycleState;
@@ -94,34 +93,20 @@ public abstract class ContentBlock : INotifyPropertyChanged
         internal set => SetProperty(ref _createdAt, value);
     }
 
-    /// <summary>Registers a callback that runs whenever the block changes.</summary>
-    /// <remarks>
-    /// Runs once for each change the block reports, after its <see cref="PropertyChanged"/> events, so a
-    /// view can refresh once for several property changes.
-    /// </remarks>
-    public ContentBlockChangedSubscription OnChanged(Action callback)
-    {
-        ArgumentNullException.ThrowIfNull(callback);
-        _callbacks.Add(callback);
-        return new ContentBlockChangedSubscription(this, callback);
-    }
-
     /// <summary>
-    /// Reports that the block changed: runs the <see cref="OnChanged(Action)"/> callbacks, after raising
-    /// <see cref="PropertyChanged"/> with an empty property name for a block whose type is not one of the
-    /// engine's own.
+    /// Reports that every property of the block may have changed: raises <see cref="PropertyChanged"/> with
+    /// an empty property name. The engine reports it for a block of your own when the block's handler updates
+    /// or completes it, and when the engine sets the result of a call block or abandons it; call it after
+    /// changing the block yourself.
     /// </summary>
+    /// <remarks>
+    /// The engine's own block types raise the names of the properties that changed instead, so for them it
+    /// raises nothing.
+    /// </remarks>
     protected void NotifyChanged()
     {
         if (_reportsAllPropertiesOnChange)
             RaisePropertyChanged(s_allPropertiesChanged);
-
-        // Snapshot the callbacks to allow safe removal during iteration
-        var snapshot = _callbacks.ToArray();
-        for (var i = 0; i < snapshot.Length; i++)
-        {
-            snapshot[i]();
-        }
     }
 
     /// <summary>Raises <see cref="PropertyChanged"/> for a property of the block.</summary>
@@ -152,9 +137,4 @@ public abstract class ContentBlock : INotifyPropertyChanged
     internal void RaisePropertyChanged(PropertyChangedEventArgs e) => PropertyChanged?.Invoke(this, e);
 
     internal void InvokeNotifyChanged() => NotifyChanged();
-
-    internal void RemoveCallback(Action callback)
-    {
-        _callbacks.Remove(callback);
-    }
 }

@@ -8,10 +8,6 @@ Microsoft.Maui.AI.Chat.AgentContext.ClearAsync() -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.Dispose() -> void
 Microsoft.Maui.AI.Chat.AgentContext.Error.get -> System.Exception?
 Microsoft.Maui.AI.Chat.AgentContext.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
-Microsoft.Maui.AI.Chat.AgentContext.RegisterOnBlockAdded(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!, Microsoft.Maui.AI.Chat.ContentBlock!>! callback) -> System.IDisposable!
-Microsoft.Maui.AI.Chat.AgentContext.RegisterOnResponseBlocksCleared(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!>! callback) -> System.IDisposable!
-Microsoft.Maui.AI.Chat.AgentContext.RegisterOnStatusChanged(System.Action<Microsoft.Maui.AI.Chat.ConversationStatus>! callback) -> System.IDisposable!
-Microsoft.Maui.AI.Chat.AgentContext.RegisterOnTurnAdded(System.Action<Microsoft.Maui.AI.Chat.ConversationTurn!>! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentContext.RestoreAsync(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.RestoreAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Microsoft.Maui.AI.Chat.AgentContext.RetryAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
@@ -22,7 +18,6 @@ Microsoft.Maui.AI.Chat.AgentContext.Turns.get -> System.Collections.ObjectModel.
 Microsoft.Maui.AI.Chat.AgentState<T>
 Microsoft.Maui.AI.Chat.AgentState<T>.AcceptPredictiveState() -> void
 Microsoft.Maui.AI.Chat.AgentState<T>.HasPendingPredictiveState.get -> bool
-Microsoft.Maui.AI.Chat.AgentState<T>.OnChanged(System.Action! callback) -> System.IDisposable!
 Microsoft.Maui.AI.Chat.AgentState<T>.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
 Microsoft.Maui.AI.Chat.AgentState<T>.RejectPredictiveState() -> void
 Microsoft.Maui.AI.Chat.AgentState<T>.Value.get -> T!
@@ -68,14 +63,10 @@ Microsoft.Maui.AI.Chat.ContentBlock.Id.get -> string!
 Microsoft.Maui.AI.Chat.ContentBlock.Id.set -> void
 Microsoft.Maui.AI.Chat.ContentBlock.LifecycleState.get -> Microsoft.Maui.AI.Chat.BlockLifecycleState
 Microsoft.Maui.AI.Chat.ContentBlock.NotifyChanged() -> void
-Microsoft.Maui.AI.Chat.ContentBlock.OnChanged(System.Action! callback) -> Microsoft.Maui.AI.Chat.ContentBlockChangedSubscription
 Microsoft.Maui.AI.Chat.ContentBlock.OnPropertyChanged(string? propertyName = null) -> void
 Microsoft.Maui.AI.Chat.ContentBlock.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
 Microsoft.Maui.AI.Chat.ContentBlock.Role.get -> Microsoft.Extensions.AI.ChatRole?
 Microsoft.Maui.AI.Chat.ContentBlock.SetProperty<T>(ref T field, T value, string? propertyName = null) -> bool
-Microsoft.Maui.AI.Chat.ContentBlockChangedSubscription
-Microsoft.Maui.AI.Chat.ContentBlockChangedSubscription.ContentBlockChangedSubscription() -> void
-Microsoft.Maui.AI.Chat.ContentBlockChangedSubscription.Dispose() -> void
 Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>
 Microsoft.Maui.AI.Chat.ContentBlockHandler<TState>.ContentBlockHandler() -> void
 Microsoft.Maui.AI.Chat.ConversationStatus

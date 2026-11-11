@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 
@@ -236,7 +237,7 @@ public class BlockMappingPipelineTests
     }
 
     [Fact]
-    public async Task Process_TextUpdate_NotifyChangedOnUpdate()
+    public async Task Process_TextUpdate_RaisesTheTextChange()
     {
         var pipeline = CreatePipelineWithTextHandler();
         var update1 = new ChatResponseUpdate
@@ -247,8 +248,7 @@ public class BlockMappingPipelineTests
         };
         var blocks = await ProcessAsync(pipeline, update1);
         var block = blocks[0];
-        var changeCount = 0;
-        block.OnChanged(() => changeCount++);
+        var changes = block.RecordPropertyChanges();
 
         var update2 = new ChatResponseUpdate
         {
@@ -258,7 +258,7 @@ public class BlockMappingPipelineTests
         };
         await ProcessAsync(pipeline, update2);
 
-        Assert.Equal(1, changeCount);
+        Assert.Equal([nameof(RichContentBlock.RawText), nameof(RichContentBlock.Content)], changes);
     }
 
     [Fact]
@@ -288,14 +288,13 @@ public class BlockMappingPipelineTests
         };
         var blocks = await ProcessAsync(pipeline, update);
         var block = blocks[0];
-        var changed = 0;
-        using var subscription = block.OnChanged(() => changed++);
+        var changes = block.RecordPropertyChanges();
         Assert.Equal(BlockLifecycleState.Active, block.LifecycleState);
 
         pipeline.Finalize();
 
         Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
-        Assert.Equal(1, changed);
+        Assert.Equal([nameof(ContentBlock.LifecycleState)], changes);
     }
 
     [Fact]

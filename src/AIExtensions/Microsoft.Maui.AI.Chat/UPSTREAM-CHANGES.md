@@ -37,9 +37,9 @@ the commit in `THIRD-PARTY-NOTICES.txt`.
 
 These match upstream so that upstream fixes apply directly:
 
-- Block lifecycle and the `OnChanged` change notification, `BlockMappingPipeline` (two-phase mapping,
-  handler entries, `BlockMappingResult<T>`), `BlockMappingPipelineLog`. The `RegisterOn…` callbacks of
-  `AgentContext`.
+- Block lifecycle, `BlockMappingPipeline` (two-phase mapping, handler entries, `BlockMappingResult<T>`),
+  `BlockMappingPipelineLog`. The pipeline still reports a handler's update or completion of a block through
+  the block's `NotifyChanged`, which raises `PropertyChanged` here (see Binding).
 - The rich-text node vocabulary and `RichTextContent` (copies its node list), and
   `RichTextContentHandler` (last snapshot in an update wins, co-sent `TextContent` is claimed, a new
   message id starts a new block).
@@ -78,24 +78,38 @@ These match upstream so that upstream fixes apply directly:
 
 ### Binding
 
-- **A bindable model.** Not in upstream, whose Blazor components re-render from the `OnChanged` and
-  `RegisterOn…` callbacks, which are kept. Here a XAML list binds to the engine directly:
+- **Standard .NET change notifications replace upstream's callbacks.** Upstream's Blazor components
+  re-render from callbacks, which are removed here; a XAML list binds to the engine directly instead:
+
+  | Upstream callback | Replaced by |
+  |---|---|
+  | `AgentContext.RegisterOnTurnAdded` | `Turns` raises `CollectionChanged`: an `Add` per sent turn, one `Reset` after a restore |
+  | `AgentContext.RegisterOnBlockAdded` | each turn's `RequestBlocks` and `ResponseBlocks` raise an `Add` per block |
+  | `AgentContext.RegisterOnStatusChanged` | `AgentContext` raises `PropertyChanged` for `Status` and `Error` |
+  | `ContentBlock.OnChanged` (and `ContentBlockChangedSubscription`) | `ContentBlock` raises `PropertyChanged`; `NotifyChanged` raises it with an empty name |
+  | `AgentState<T>.OnChanged` | `AgentState<T>` raises `PropertyChanged` for `Value` and `HasPendingPredictiveState` |
+
+  A block's change is reported once per property that changed instead of once per handler update, and a
+  status only once it differs from the status last raised (upstream calls back at every notification,
+  for example `Streaming` again for each continuation round). In detail:
   - `ContentBlock`, `ConversationTurn` and `AgentContext` implement `INotifyPropertyChanged`. The
     engine's blocks raise the names of the properties that changed, and `InteractiveFunctionBlock`
     forwards its inner block's call and result properties. A block of any other type raises an empty
-    name ("every property") from `NotifyChanged`, which runs when its handler updates or completes it,
-    because the engine cannot see which of its properties changed. Block authors get
+    name ("every property") from `NotifyChanged`, which runs when its handler updates or completes it and
+    when the engine sets a call block's result or abandons it, because the engine cannot see which of its
+    properties changed. Block authors get
     `OnPropertyChanged` and `SetProperty`.
-  - `AgentState<T>` implements `INotifyPropertyChanged` for `Value` and `HasPendingPredictiveState`,
-    raised before its `OnChanged` callbacks; assigning `Value` raises it even for the current instance,
-    so assigning a value changed in place refreshes bindings to its properties.
+  - `AgentState<T>` implements `INotifyPropertyChanged` for `Value` and `HasPendingPredictiveState`;
+    assigning `Value` raises it even for the current instance, so assigning a value changed in place
+    refreshes bindings to its properties.
   - `AgentContext.Turns`, `ConversationTurn.RequestBlocks` and `ResponseBlocks` are
     `ReadOnlyObservableCollection<T>` instead of `IReadOnlyList<T>`: an `Add` per turn or block, and one
     `Reset` for a restore, a clear, and a retry's removal of response blocks.
   - Events are raised synchronously on the thread that makes the change, once the state they report is
-    in place, as the callbacks are; the engine has no dispatcher. `PropertyChanged` for `Status` reports
-    the current value once it changed, so a handler that runs after one that sent the next message
-    reads the new status; the status callbacks still receive the status each change reported.
+    in place; the engine has no dispatcher. `PropertyChanged` for `Status` reports the current value once
+    it changed, as upstream passes each callback the current `Status`, so a handler that runs after one
+    that sent the next message reads the new status. The turn that ended keeps `IsFailed` and
+    `IsStopped`, which say how it ended.
   - Handlers may re-enter. The attempt starts before a send reports its turn and before a retry removes
     its response blocks, so handlers of those changes cannot start another send or retry (upstream
     guards on the status, which changes later), and a send from a handler of the `Turns` reset is
@@ -131,17 +145,12 @@ These match upstream so that upstream fixes apply directly:
   of the history, live and restored, because providers can reject reasoning that no output follows.
 - **Errors discard the turn, retry resends all of it.** A failed turn commits nothing and keeps its
   partial blocks on screen. `RetryAsync` clears the turn's response blocks (`ResponseBlocks` raises a
-  `Reset`, and `RegisterOnResponseBlocksCleared` tells a list to drop them) and sends the whole turn
-  again. #68672
+  `Reset`, which tells a list to drop them) and sends the whole turn again. #68672
   instead retries only the failed round and truncates that round's blocks; that would resend an
   approval and run its tool again without asking.
 - **`ConversationTurn.IsFailed`.** Not in upstream. A turn whose attempt failed is marked until
   `RetryAsync` runs it again, so a view can tell the failed turn (and an earlier one that was never
   retried because another message was sent) without catching the status change that reported it.
-- **Status callbacks receive the status they report.** Every callback of one status change receives
-  the same status, even when an earlier callback already sent the next message from the change that
-  ended a turn. Upstream passes each callback the current `Status`, so later callbacks never hear how
-  the turn ended.
 - **`ClearAsync`.** Not in upstream. It waits for the active response to stop, and for a restore in
   progress to finish, then clears the turns, the history, the thread and the typed state, so a response
   that was still running cannot change the cleared conversation.
@@ -163,10 +172,10 @@ These match upstream so that upstream fixes apply directly:
   the history for the next send. Recorded tool calls show their recorded results and are never
   invoked; calls without a result and their approvals are shown but left out of the history. Upstream
   can only restore from a thread.
-- **Announced.** Once all restored turns are loaded, `AgentContext` raises its turn-added callback for
-  each of them, with their blocks in place, so a native view that already shows the context renders them.
-  Block-added and status-changed callbacks are still not raised. Upstream restores silently and relies on
-  the Blazor component re-rendering after the call.
+- **Announced.** Once all restored turns are loaded, `Turns` raises one `Reset`, with every turn's blocks in
+  place, so a native view that already shows the context renders them. The turns' block collections and
+  the status raise nothing. Upstream restores silently and relies on the Blazor component re-rendering
+  after the call.
 - **Exclusive.** Until the restored turns are loaded, a send fails and `ClearAsync` waits for the
   restore, so neither a send nor a clear interleaves with it, including one started by a handler of a
   typed-state change the restore replays. Upstream does not guard a restore.

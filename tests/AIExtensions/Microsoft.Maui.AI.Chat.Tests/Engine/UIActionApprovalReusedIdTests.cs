@@ -270,7 +270,7 @@ public class UIActionApprovalReusedIdTests
                     options.RegisterUIAction(showMap);
                     options.Thread = thread;
                 }));
-            context.RegisterOnStatusChanged(status =>
+            context.OnStatusChanged(status =>
             {
                 if (status != ConversationStatus.AwaitingInput)
                     return;
