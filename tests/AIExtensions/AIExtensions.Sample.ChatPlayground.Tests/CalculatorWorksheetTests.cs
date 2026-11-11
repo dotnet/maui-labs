@@ -151,6 +151,53 @@ public sealed class CalculatorWorksheetTests
         Assert.True(Assert.Single(worksheet.Rows).IsPending);
     }
 
+    [Theory]
+    [InlineData(ThemeAction.ToolName)]
+    [InlineData(SharedNotes.ProposeToolName)]
+    public async Task CalculationBatchedWithAUIAction_IsAnsweredAndItsRowSaysItDidNotRun(string uiAction)
+    {
+        // Function invocation hands a batch with a UI action back uninvoked, calculation and all. The app runs the UI
+        // action, set_theme at once and propose_notes once the user accepts; the engine answers the calculation that
+        // nobody ran in the next request, and its row shows that answer.
+        var action = uiAction == ThemeAction.ToolName
+            ? new FunctionCallContent("call-2", ThemeAction.ToolName, new Dictionary<string, object?> { ["theme"] = "dark" })
+            : new FunctionCallContent("call-2", SharedNotes.ProposeToolName, new Dictionary<string, object?> { ["text"] = "Pack boots." });
+        using var model = new ScriptedChatClient(
+            ScriptedResponse.Stream(Calls(Calculate("call-1", 12, "multiply", 7), action)),
+            ScriptedResponse.Stream(new ChatResponseUpdate(ChatRole.Assistant, "Done; I'll work out 12 \u00D7 7 again.")));
+        using var live = new FunctionInvokingChatClient(model);
+        using var harness = new PlaygroundChatHarness(live);
+        using var accept = harness.Session.OnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+                _ = harness.NotesBar.AcceptProposalAction.ExecuteAsync(null);
+        });
+
+        await harness.Session.SendMessageAsync("Switch to dark mode, add boots to my notes, and what is 12 \u00D7 7?");
+
+        Assert.Equal(ConversationStatus.Idle, harness.Session.Status);
+        Assert.False(harness.LastTurn.IsFailed);
+        var sent = model.Requests[1].Messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().ToList();
+        Assert.Equal(["call-1", "call-2"], sent.Select(result => result.CallId).Order());
+        var notRun = Assert.Single(sent, result => result.CallId == "call-1");
+        Assert.StartsWith("Error: The tool call was not executed.", notRun.Result?.ToString(), StringComparison.Ordinal);
+
+        var row = Assert.Single(Assert.Single(harness.LastTurn.ResponseBlocks.OfType<CalculatorWorksheetBlock>()).Rows);
+        Assert.False(row.IsPending);
+        Assert.False(row.HasAnswer);
+        Assert.True(row.IsError);
+        Assert.Equal(notRun.Result?.ToString(), row.Message);
+
+        if (uiAction == ThemeAction.ToolName)
+            Assert.Equal([AppTheme.Dark], harness.AppliedThemes);
+        else
+            Assert.Equal("Pack boots.", harness.Notes.Text);
+        Assert.StartsWith(
+            uiAction == ThemeAction.ToolName ? "The app now uses the dark theme." : "Accepted:",
+            Assert.Single(sent, result => result.CallId == "call-2").Result?.ToString(),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Row_DescribesItsCalculationAndItsResult()
     {

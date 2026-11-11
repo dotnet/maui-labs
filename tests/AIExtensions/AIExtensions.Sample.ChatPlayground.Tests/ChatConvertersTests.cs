@@ -50,6 +50,17 @@ public sealed class ChatConvertersTests
     }
 
     [Fact]
+    public void TurnError_SaysWhyTheTurnFailedOnOneLine()
+    {
+        var converter = new TurnErrorConverter();
+
+        Assert.Equal(
+            "The response failed: HTTP 400 (invalid_request_error) Unsupported parameter: 'temperature'.",
+            Convert(converter, new InvalidOperationException("HTTP 400 (invalid_request_error)\r\n\r\n Unsupported parameter: 'temperature'.")));
+        Assert.Null(Convert(converter, null));
+    }
+
+    [Fact]
     public void HasValue_IsFalseForNothingToShow()
     {
         var converter = new HasValueConverter();
