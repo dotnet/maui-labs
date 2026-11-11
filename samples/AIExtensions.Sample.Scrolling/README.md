@@ -55,7 +55,8 @@ Why this shape:
   the last one while text streams into it), header and footer changes, and viewport resizes (keyboard, rotation, window
   resize). Following never animates.
 - A user scroll (drag, fling, mouse wheel or trackpad) disengages it once the user has moved the viewport more than 8
-  device-independent units away from the end. Content growing during the gesture doesn't count as moving away.
+  device-independent units away from the end. Content growing during the gesture doesn't count as moving away, and
+  neither does a bounce springing back from past the end.
 - Offset changes the platform makes while laying out (re-measuring rows, clamping after items are removed) never
   disengage it. An offset change the user isn't making, with no size change at all, that moves away from the end is a
   deliberate scroll (the keyboard, accessibility, code moving the native view) and disengages it.

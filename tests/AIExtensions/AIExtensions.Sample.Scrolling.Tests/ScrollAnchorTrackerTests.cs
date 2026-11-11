@@ -210,6 +210,44 @@ public class ScrollAnchorTrackerTests
     }
 
     [Fact]
+    public void TheBounceAtTheEndDoesNotDisengageWhenTheContentGrowsDuringIt()
+    {
+        var view = FakeScrollView.AtEnd(extent: 1000, viewport: 400);
+
+        // Pulled past the end and springing back while a streamed answer grows the content: springing back from past
+        // the end isn't moving away from it.
+        foreach (var offset in new[] { 640, 680, 650 })
+        {
+            view.Offset = offset;
+            view.Look(userScrolling: true);
+        }
+
+        view.Extent += 60;
+        view.Offset = 630;
+        Assert.Null(view.Look(userScrolling: true));
+        Assert.True(view.Tracker.IsAnchored);
+
+        // The bounce ends: catch up with the end, which moved on meanwhile.
+        Assert.Equal(660, view.Look());
+    }
+
+    [Fact]
+    public void AUserScrollFromPastTheEndCountsTheMoveShortOfTheEnd()
+    {
+        var view = FakeScrollView.AtEnd(extent: 1000, viewport: 400);
+        view.Offset = 650;
+        view.Look(userScrolling: true);
+
+        view.Offset = 594;
+        view.Look(userScrolling: true);
+        Assert.True(view.Tracker.IsAnchored);
+
+        view.Offset = 590;
+        view.Look(userScrolling: true);
+        Assert.False(view.Tracker.IsAnchored);
+    }
+
+    [Fact]
     public void ALayoutCorrectionMovingTheOffsetDoesNotDisengage()
     {
         var view = FakeScrollView.AtEnd(extent: 3000, viewport: 400);

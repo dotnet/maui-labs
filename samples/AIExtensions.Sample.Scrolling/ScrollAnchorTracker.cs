@@ -21,7 +21,8 @@ namespace AIExtensions.Sample.Scrolling;
 /// </description></item>
 /// <item><description>
 /// A user scroll disengages it once the user has moved the viewport more than <see cref="Threshold"/> away from the
-/// end. Content growing while the user scrolls doesn't count as the user moving away.
+/// end. Content growing while the user scrolls doesn't count as the user moving away, and neither does the viewport
+/// springing back from past the end (a bounce).
 /// </description></item>
 /// <item><description>
 /// An offset change the user isn't making that comes with a size change is the platform laying out, and never
@@ -120,8 +121,11 @@ internal sealed class ScrollAnchorTracker
             if (IsAnchored)
             {
                 // The user's net movement away from the end in this gesture: moving back toward it cancels it out, and
-                // content growing below the viewport doesn't add to it.
-                _drift = Math.Max(0, _drift - (metrics.Offset - previous.Offset));
+                // neither content growing below the viewport nor springing back from past the end (a bounce) adds to
+                // it. Only movement short of the end counts, and with the content resizing in between, short of both
+                // ends.
+                var end = Math.Min(previous.EndOffset, metrics.EndOffset);
+                _drift = Math.Max(0, _drift - (Math.Min(metrics.Offset, end) - Math.Min(previous.Offset, end)));
                 if (!atEnd && _drift > Threshold)
                     IsAnchored = false;
             }
