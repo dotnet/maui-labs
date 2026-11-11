@@ -164,7 +164,8 @@ public sealed class PlaygroundChatClient : IChatClient
         return options;
     }
 
-    private static bool IsContinuation(ChatMessage message) =>
+    /// <summary>Gets whether a request message only answers approvals or tool calls, continuing an earlier request.</summary>
+    internal static bool IsContinuation(ChatMessage message) =>
         message.Contents.Count > 0 &&
         message.Contents.All(static content => content is ToolApprovalResponseContent or FunctionResultContent);
 

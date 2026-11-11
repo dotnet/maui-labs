@@ -61,11 +61,15 @@ recorded user message is sent again and the replay client answers with the
 recorded response, without contacting a model.
 
 - **Play all** clears the chat and replays every turn; **Next turn** replays one;
-  **Restart** rewinds. **Stop** interrupts the replay, clears the chat, and rewinds.
+  **Restart** rewinds. **Stop**, or stopping a replayed response in the chat,
+  interrupts the replay, clears the chat, and rewinds.
 - Recorded approval decisions are applied to the approval cards. A turn whose
   approval the recording never answered is shown stopped.
 - A recorded request that does not end with a user message, such as one from a
   client that sends tool results itself, is restored as history.
+- Responses stopped part-way are not recorded. When a recorded request continues
+  a conversation that differs from the one shown, for example after a stopped
+  turn, that conversation is restored before its message is sent again.
 - While a replay is part-way through, sending stays disabled until it finishes or
   you start a new chat. The auto-saved chat replays when the app starts.
 

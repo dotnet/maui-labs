@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Maui.AI.Chat;
 using Microsoft.Maui.AI.Chat.Controls;
 
@@ -6,7 +7,9 @@ namespace AIExtensions.Sample.ChatPlayground;
 /// <summary>Shows a structured JSON response as a card, or any other JSON formatted.</summary>
 public partial class StructuredResponseView : BlockView
 {
-    private bool _showJson;
+    // The JSON toggle belongs to the response, not to this view, which the message list reuses for other responses.
+    private static readonly ConditionalWeakTable<ContentBlock, object> ShowingJson = new();
+    private static readonly object Shown = new();
 
     /// <summary>Initializes the view.</summary>
     public StructuredResponseView() => InitializeComponent();
@@ -16,7 +19,11 @@ public partial class StructuredResponseView : BlockView
 
     private void OnJsonToggleClicked(object? sender, EventArgs e)
     {
-        _showJson = !_showJson;
+        if (Block is not { } block)
+            return;
+
+        if (!ShowingJson.Remove(block))
+            ShowingJson.Add(block, Shown);
         Render();
     }
 
@@ -44,12 +51,13 @@ public partial class StructuredResponseView : BlockView
             return;
         }
 
+        var showJson = block is not null && ShowingJson.TryGetValue(block, out _);
         HeadingLabel.Text = "STRUCTURED RESPONSE";
         JsonToggle.IsVisible = true;
-        JsonToggle.Text = _showJson ? "Hide JSON" : "Show JSON";
-        SemanticProperties.SetDescription(JsonToggle, _showJson ? "Show the response card" : "Show the response JSON");
-        ResponsePanel.IsVisible = !_showJson;
-        JsonPanel.IsVisible = _showJson;
+        JsonToggle.Text = showJson ? "Hide JSON" : "Show JSON";
+        SemanticProperties.SetDescription(JsonToggle, showJson ? "Show the response card" : "Show the response JSON");
+        ResponsePanel.IsVisible = !showJson;
+        JsonPanel.IsVisible = showJson;
         JsonLabel.Text = formatted;
 
         SummaryLabel.Text = response.Summary;

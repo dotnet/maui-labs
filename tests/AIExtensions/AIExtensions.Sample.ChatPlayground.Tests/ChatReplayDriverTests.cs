@@ -133,6 +133,204 @@ public sealed class ChatReplayDriverTests
             Assert.Single(harness.LastTurn.ResponseBlocks.OfType<TextContentBlock>()).RawText);
     }
 
+    [Fact]
+    public async Task ApprovedTurnStoppedBeforeItsAnswerWasRecorded_IsRestoredRatherThanAnsweredFromTheNextTurn()
+    {
+        using var model = new ScriptedChatClient(
+            new ScriptedResponse(new ChatResponse(new ChatMessage(ChatRole.Assistant, [CalculatorCall("call-1")]))),
+            ScriptedResponse.Stream(new ChatResponseUpdate(ChatRole.Assistant, "12 ") { MessageId = "partial" }) with
+            {
+                WaitForCancellation = true,
+            },
+            ScriptedResponse.Text("You're welcome."));
+        using var live = new FunctionInvokingChatClient(model);
+        using var harness = new PlaygroundChatHarness(live, record: true);
+        harness.Settings.RequireToolApproval = true;
+        using (harness.Session.RegisterOnStatusChanged(status =>
+        {
+            if (status == ConversationStatus.AwaitingInput)
+                harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
+        }))
+        using (StopWhenTheAnswerStarts(harness))
+        {
+            await harness.Session.SendMessageAsync("What is 12 \u00D7 7?");
+        }
+
+        await harness.Session.SendMessageAsync("Thanks!");
+
+        // The approval round and the next turn were recorded; the answer stopped part-way was not. The next turn's
+        // history still carries the approval, but it belongs to the turn before.
+        Assert.True(harness.Session.Turns[0].IsStopped);
+        Assert.Equal(2, harness.Recording.InteractionCount);
+        var recorded = ChatRecordingSerializer.Deserialize(File.ReadAllText(harness.Recording.AutosavePath));
+
+        var result = await harness.Driver.ReplayAsync(playAll: true);
+
+        Assert.Equal(2, result.Turns);
+        Assert.Equal(1, result.RestoredHistory);
+        Assert.Empty(result.UnansweredApprovals);
+        Assert.Equal(2, harness.Recording.ReplayPosition);
+        Assert.Collection(harness.Session.Turns,
+            first =>
+            {
+                Assert.Equal("What is 12 \u00D7 7?", UserText(first));
+                var approval = Assert.Single(first.ResponseBlocks.OfType<ToolApprovalBlock>());
+                Assert.Equal(ApprovalStatus.Approved, approval.Status);
+                Assert.Equal("84", CalculatorDisplay.FormatResult(approval.Result, CultureInfo.InvariantCulture));
+                Assert.Equal("12 ", Assert.Single(first.ResponseBlocks.OfType<TextContentBlock>()).RawText);
+            },
+            second =>
+            {
+                Assert.Equal("Thanks!", UserText(second));
+                Assert.Equal("You're welcome.", Assert.IsType<TextContentBlock>(Assert.Single(second.ResponseBlocks)).RawText);
+            });
+
+        // The replayed turn was sent with the conversation the recorded request continued.
+        Assert.Equal(
+            ChatReplayDriver.DescribeConversation(ChatRecordingSerializer.ReadRequestMessages(recorded.Interactions[1].Request)),
+            ChatReplayDriver.DescribeConversation(harness.ReplayRequests.Requests[^1]));
+    }
+
+    [Fact]
+    public async Task LiveTurnStoppedBeforeItWasRecorded_IsRestoredBeforeTheNextTurn()
+    {
+        using var model = new ScriptedChatClient(
+            ScriptedResponse.Text("Uno"),
+            ScriptedResponse.Stream(new ChatResponseUpdate(ChatRole.Assistant, "alpha") { MessageId = "partial" }) with
+            {
+                WaitForCancellation = true,
+            },
+            ScriptedResponse.Text("Tres"),
+            ScriptedResponse.Text("Cuatro"));
+        using var harness = new PlaygroundChatHarness(model, record: true);
+        await harness.Session.SendMessageAsync("One");
+        using (StopWhenTheAnswerStarts(harness))
+            await harness.Session.SendMessageAsync("Two");
+        await harness.Session.SendMessageAsync("Three");
+        Assert.Equal(2, harness.Recording.InteractionCount);
+
+        var result = await harness.Driver.ReplayAsync(playAll: true);
+
+        Assert.Equal(1, result.RestoredHistory);
+        Assert.Equal(["One", "Two", "Three"], harness.Session.Turns.Select(UserText));
+        Assert.Equal(["Uno", "alpha", "Tres"], harness.Session.Turns.Select(turn =>
+            Assert.IsType<TextContentBlock>(Assert.Single(turn.ResponseBlocks)).RawText));
+
+        // Continuing live sends the conversation the model had: the stopped turn is part of it.
+        await harness.Session.SendMessageAsync("Four");
+
+        Assert.Equal(["One", "Two", "Three", "Four"],
+            model.Requests[^1].Messages.Where(message => message.Role == ChatRole.User).Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task NextTurnAfterTheChatContinuedLive_ShowsTheRecordedConversationOnce()
+    {
+        using var model = new ScriptedChatClient(ScriptedResponse.Text("Live answer"));
+        using var harness = new PlaygroundChatHarness(model, record: true);
+        await harness.LoadAsync("no-tools.json");
+        await harness.Driver.ReplayAsync(playAll: true);
+        await harness.Session.SendMessageAsync("A live question");
+        Assert.Equal(1, harness.Recording.ReplayPosition);
+        Assert.Equal(2, harness.Recording.InteractionCount);
+
+        var result = await harness.Driver.ReplayAsync(playAll: false);
+
+        Assert.Equal(1, result.RestoredHistory);
+        Assert.Equal(["Reply with exactly the word cobalt.", "A live question"], harness.Session.Turns.Select(UserText));
+        Assert.Equal("Live answer",
+            Assert.IsType<TextContentBlock>(Assert.Single(harness.LastTurn.ResponseBlocks)).RawText);
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task StopInTheChatView_EndsTheReplayWithoutSendingTheTurnAgain()
+    {
+        using var harness = new PlaygroundChatHarness();
+        await harness.LoadAsync("multi-turn-tools.json");
+
+        using (StopWhenTheAnswerStarts(harness))
+            await Assert.ThrowsAsync<OperationCanceledException>(() => harness.Driver.ReplayAsync(playAll: true));
+
+        Assert.Equal(0, harness.Recording.ReplayPosition);
+        Assert.True(Assert.Single(harness.Session.Turns).IsStopped);
+        Assert.Single(harness.ReplayRequests.Requests);
+        Assert.False(harness.Driver.IsReplaying);
+        Assert.False(harness.Router.IsReplaying);
+    }
+
+    [Fact]
+    public void DescribeConversation_IgnoresHowMessagesAreGrouped()
+    {
+        var call = new FunctionCallContent("call-1", "calculate");
+        ChatMessage[] grouped =
+        [
+            new(ChatRole.User, "What is 2 + 2?"),
+            new(ChatRole.Assistant, [new TextReasoningContent("Adding"), call]),
+            new(ChatRole.Tool, [new FunctionResultContent("call-1", 4), new TextReasoningContent(" done")]),
+            new(ChatRole.Assistant, "Answer: 4"),
+        ];
+        ChatMessage[] fragmented =
+        [
+            new(ChatRole.User, [new TextContent("What is "), new TextContent("2 + 2?")]),
+            new(ChatRole.Assistant, [new TextReasoningContent("Add"), new TextReasoningContent("ing")]),
+            new(ChatRole.Assistant, [call]),
+            new(ChatRole.Assistant, [call]),
+            new(ChatRole.Tool, [new FunctionResultContent("call-1", 4)]),
+            new(ChatRole.Assistant, [new TextReasoningContent(" done"), new UsageContent(new UsageDetails { OutputTokenCount = 3 })]),
+            new(ChatRole.Assistant, [new TextContent("Answer: "), new TextContent(""), new TextContent("4")]),
+        ];
+
+        Assert.Equal(ChatReplayDriver.DescribeConversation(grouped), ChatReplayDriver.DescribeConversation(fragmented));
+        Assert.Equal(
+            ["user text: What is 2 + 2?", "model reasoning: Adding", "call call-1 calculate", "result call-1",
+                "model reasoning:  done", "model text: Answer: 4"],
+            ChatReplayDriver.DescribeConversation(grouped));
+    }
+
+    [Fact]
+    public void DescribeConversation_LeavesOutWhatTheEngineDoesNotKeep()
+    {
+        var approval = new ToolApprovalRequestContent("approval-1", CalculatorCall("unanswered"));
+        ChatMessage[] withExtras =
+        [
+            new(ChatRole.User, "What is 12 \u00D7 7?"),
+            new(ChatRole.Assistant,
+            [
+                new TextContent("Let me check."),
+                new FunctionCallContent("unanswered", "calculate"),
+                approval,
+                new UsageContent(new UsageDetails { OutputTokenCount = 3 }),
+            ]),
+            new(ChatRole.User, [approval.CreateResponse(approved: false)]),
+            new(ChatRole.Assistant, [new TextReasoningContent("") { ProtectedData = "opaque" }]),
+        ];
+        ChatMessage[] kept = [new(ChatRole.User, "What is 12 \u00D7 7?"), new(ChatRole.Assistant, "Let me check.")];
+
+        Assert.Equal(ChatReplayDriver.DescribeConversation(kept), ChatReplayDriver.DescribeConversation(withExtras));
+    }
+
+    [Fact]
+    public void DescribeConversation_TellsDifferentConversationsApart()
+    {
+        ChatMessage[] conversation =
+        [
+            new(ChatRole.User, "One"), new(ChatRole.Assistant, "Uno"), new(ChatRole.User, "Two"), new(ChatRole.Assistant, "alpha"),
+        ];
+
+        Assert.NotEqual(ChatReplayDriver.DescribeConversation(conversation[..2]), ChatReplayDriver.DescribeConversation(conversation));
+        Assert.NotEqual(
+            ChatReplayDriver.DescribeConversation([new ChatMessage(ChatRole.User, "Hi")]),
+            ChatReplayDriver.DescribeConversation([new ChatMessage(ChatRole.Assistant, "Hi")]));
+        Assert.NotEqual(
+            ChatReplayDriver.DescribeConversation([new ChatMessage(ChatRole.User, "Hi")]),
+            ChatReplayDriver.DescribeConversation(
+                [new ChatMessage(ChatRole.User, [new TextContent("Hi"), new DataContent(new byte[] { 1 }, "image/png")])]));
+        Assert.NotEqual(
+            ChatReplayDriver.DescribeConversation([new ChatMessage(ChatRole.System, "Be brief.")]),
+            ChatReplayDriver.DescribeConversation([]));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -144,13 +342,15 @@ public sealed class ChatReplayDriverTests
             [new ToolApprovalRequestContent("approval-1", CalculatorCall("call-1"))])));
         if (anotherTurnFollows)
         {
-            Record(harness, [new ChatMessage(ChatRole.User, "Never mind. Hello!")],
+            // Stopping a turn that waits for an approval leaves the approval out of the history the next request sends.
+            Record(harness, [question, new ChatMessage(ChatRole.User, "Never mind. Hello!")],
                 new ChatResponse(new ChatMessage(ChatRole.Assistant, "Hello!")));
         }
 
         var result = await harness.Driver.ReplayAsync(playAll: true).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(["calculate"], result.UnansweredApprovals);
+        Assert.Equal(0, result.RestoredHistory);
         Assert.Equal(anotherTurnFollows ? 2 : 1, result.Turns);
         Assert.Equal(anotherTurnFollows ? 2 : 1, harness.Recording.ReplayPosition);
         var stopped = harness.Session.Turns[0];
@@ -229,6 +429,39 @@ public sealed class ChatReplayDriverTests
         Assert.False(Assert.Single(harness.Session.Turns).IsStopped);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplayStoppedMidConversation_ReplacesTheStoppedTurnWhenReplayedAgain(bool stopInTheChatView)
+    {
+        using var harness = new PlaygroundChatHarness(new ScriptedChatClient());
+        await harness.LoadAsync("multi-turn-tools.json");
+        using var stop = new CancellationTokenSource();
+        using (harness.Session.RegisterOnBlockAdded((turn, block) =>
+        {
+            if (harness.Session.Turns.Count == 2 && turn.ResponseBlocks.Contains(block) && !stop.IsCancellationRequested)
+            {
+                stop.Cancel();
+                if (stopInTheChatView)
+                    _ = harness.Session.CancelAsync();
+            }
+        }))
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => harness.Driver.ReplayAsync(playAll: true, stopInTheChatView ? CancellationToken.None : stop.Token));
+        }
+
+        Assert.Equal(1, harness.Recording.ReplayPosition);
+        Assert.Equal([false, true], harness.Session.Turns.Select(turn => turn.IsStopped));
+
+        var again = await harness.Driver.ReplayAsync(playAll: false);
+
+        Assert.Equal(1, again.Turns);
+        Assert.Equal(1, again.RestoredHistory);
+        Assert.Equal(2, harness.Recording.ReplayPosition);
+        Assert.Equal([false, false], harness.Session.Turns.Select(turn => turn.IsStopped));
+    }
+
     [Fact]
     public async Task FailedReplayTurn_ThrowsTheEngineError()
     {
@@ -291,6 +524,20 @@ public sealed class ChatReplayDriverTests
 
     internal static FunctionCallContent CalculatorCall(string callId) =>
         new(callId, "calculate", new Dictionary<string, object?> { ["left"] = 12, ["operation"] = "multiply", ["right"] = 7 });
+
+    /// <summary>Presses Stop once, as in the chat view, when the next response block arrives.</summary>
+    private static IDisposable StopWhenTheAnswerStarts(PlaygroundChatHarness harness)
+    {
+        var stopped = false;
+        return harness.Session.RegisterOnBlockAdded((turn, block) =>
+        {
+            if (!stopped && turn.ResponseBlocks.Contains(block) && block is not ToolApprovalBlock)
+            {
+                stopped = true;
+                _ = harness.Session.CancelAsync();
+            }
+        });
+    }
 
     internal static string UserText(ConversationTurn turn) =>
         string.Concat(turn.RequestBlocks.OfType<TextContentBlock>().Select(block => block.RawText));
