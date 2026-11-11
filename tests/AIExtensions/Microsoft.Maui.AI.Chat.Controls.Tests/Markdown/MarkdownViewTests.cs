@@ -468,6 +468,66 @@ public class MarkdownViewTests
     }
 
     [Fact]
+    public void ALinkAroundAnImage_IsTheImage_AndFollowsTheLink()
+    {
+        var opened = new List<Uri>();
+        var view = new MarkdownView
+        {
+            LinkLauncher = uri =>
+            {
+                opened.Add(uri);
+                return Task.FromResult(true);
+            },
+        };
+        view.SetMarkdown(
+            "[![build](https://img.example/b.svg)](https://docs.example/ci)\n\n" +
+            "[![](https://img.example/logo.png)](https://docs.example/)");
+
+        // Remote images are off: a chip for the image that names where the link goes, and follows it when tapped.
+        var badge = Assert.IsAssignableFrom<Border>(view.BlockViews[0]);
+        Assert.Equal("build, Image \u00B7 docs.example", SemanticProperties.GetDescription(badge));
+        var logo = Assert.IsAssignableFrom<Border>(view.BlockViews[1]);
+        Assert.Equal("Image, docs.example", SemanticProperties.GetDescription(logo));
+        Tap(badge);
+        Tap(logo);
+        Assert.Equal([new Uri("https://docs.example/ci"), new Uri("https://docs.example/")], opened);
+
+        // Allowed, the image shows, and tapping it follows the link; one that cannot show is the same chip.
+        view.ImageLoader = TestImages.Loader(uri => uri.AbsolutePath.EndsWith(".png", StringComparison.Ordinal) ? TestImages.Png(120, 40) : null);
+        view.AllowRemoteImages = true;
+        var image = Assert.IsType<ChatImage>(Assert.IsType<LinkedImageView>(view.BlockViews[1]).Image);
+        Assert.Equal(new Size(120, 40), image.PixelSize);
+        Assert.Equal("Opens the link", SemanticProperties.GetHint(image));
+        Tap(image);
+        Assert.Equal(new Uri("https://docs.example/"), opened[^1]);
+        var svg = Assert.IsAssignableFrom<Border>(Assert.IsType<LinkedImageView>(view.BlockViews[0]).Content);
+        Assert.Equal("build, Image \u00B7 docs.example", SemanticProperties.GetDescription(svg));
+
+        static void Tap(View view)
+        {
+            var tap = Assert.Single(view.GestureRecognizers.OfType<TapGestureRecognizer>());
+            tap.Command!.Execute(tap.CommandParameter);
+        }
+    }
+
+    [Fact]
+    public void AnImageInsideText_ReadsAsItsAltTextTitleOrAddress()
+    {
+        var view = new MarkdownView();
+        view.SetMarkdown(
+            "# Logo ![](https://example.com/h.png \"MAUI\")\n\n" +
+            "## Plain ![](https://example.com/p.png)\n\n" +
+            "Read [the ![guide](https://example.com/g.png) here](https://example.com/docs).");
+
+        Assert.Equal("Logo MAUI", Text(view.BlockViews[0]!));
+        Assert.Equal("Plain https://example.com/p.png", Text(view.BlockViews[1]!));
+        Assert.Equal("Read the guide here.", Text(view.BlockViews[2]!));
+
+        static string Text(View view) =>
+            view is Label { FormattedText: { } formatted } ? string.Concat(formatted.Spans.Select(span => span.Text)) : ((Label)view).Text;
+    }
+
+    [Fact]
     public void TextBesideAnImage_DropsTheLineBreaksAndSpacesNextToIt()
     {
         // An image on its own line splits the paragraph; the line breaks around it would be blank lines.

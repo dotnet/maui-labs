@@ -160,6 +160,7 @@ internal sealed partial class MarkdownRenderer
         Rule,
         Image,
         ImageReference,
+        LinkedImage,
         Literal,
         Definition,
         Footnote,
@@ -183,6 +184,7 @@ internal sealed partial class MarkdownRenderer
             ThematicBreakNode => BlockKind.Rule,
             ImageNode => BlockKind.Image,
             ImageReferenceNode => BlockKind.ImageReference,
+            LinkNode or LinkReferenceNode when GetLinkedImage(node) is not null => BlockKind.LinkedImage,
             HtmlNode => BlockKind.Literal,
             DefinitionNode => BlockKind.Definition,
             FootnoteDefinitionNode => BlockKind.Footnote,
@@ -208,6 +210,7 @@ internal sealed partial class MarkdownRenderer
                 => new StaticRendering(this, node, context, kind, RenderImage(image.Url, image.Alt, image.Title)),
             BlockKind.ImageReference
                 => new StaticRendering(this, node, context, kind, RenderImageReference((ImageReferenceNode)node, context)),
+            BlockKind.LinkedImage => new StaticRendering(this, node, context, kind, RenderLinkedImage(node, context)),
             _ => new StaticRendering(this, node, context, kind, view: null),
         };
     }
@@ -316,16 +319,20 @@ internal sealed partial class MarkdownRenderer
     private static BoxView RenderThematicBreak() =>
         Styled(new LineView { Margin = new Thickness(0, 4) }, AIChatThemeKeys.MarkdownThematicBreakStyle);
 
-    private View RenderImage(string url, string? alt, string? title)
+    // A tap follows the link around the image, when there is one; otherwise the chip opens the image.
+    private View RenderImage(string url, string? alt, string? title, string? link = null)
     {
         var description = string.IsNullOrWhiteSpace(alt) ? title : alt;
+
+        // The chip of an image inside a web link names the site the link goes to, and opens the link.
+        var target = link is not null && TryCreateImageUri(link, out _) ? link : url;
 
         // A web image loads only when the app allows it: an answer is untrusted, and loading the image sends a
         // request to whatever address the answer wrote. Otherwise, and for any other source (an attachment://
         // reference, a relative path) or an image that cannot be shown, a chip with its description takes its place
         // instead of an empty gap.
         if (!AllowRemoteImages || !TryCreateImageUri(url, out var uri))
-            return CreateImageChip(url, description);
+            return CreateImageChip(target, description);
 
         var image = new ChatImage
         {
@@ -335,7 +342,14 @@ internal sealed partial class MarkdownRenderer
             MaximumWidthRequest = MaximumImageWidth,
         };
         SemanticProperties.SetDescription(image, string.IsNullOrWhiteSpace(description) ? "Image" : description);
-        var view = new LinkedImageView(image, () => CreateImageChip(url, description));
+        if (link is not null && TryCreateLinkUri(link, out _))
+        {
+            // On the image rather than around it: the chip that replaces an image that cannot load opens by itself.
+            image.GestureRecognizers.Add(new TapGestureRecognizer { Command = _linkCommand, CommandParameter = link });
+            SemanticProperties.SetHint(image, "Opens the link");
+        }
+
+        var view = new LinkedImageView(image, () => CreateImageChip(target, description));
         ShowWhenLoaded(view, image, ImageLoader.LoadAsync(uri));
         return view;
     }
@@ -373,10 +387,31 @@ internal sealed partial class MarkdownRenderer
         }
     }
 
-    private View RenderImageReference(ImageReferenceNode reference, BlockContext context) =>
+    private View RenderImageReference(ImageReferenceNode reference, BlockContext context, string? link = null) =>
         _definitions.TryGetValue(reference.Label, out var definition)
-            ? RenderImage(definition.Url, reference.Alt, definition.Title)
+            ? RenderImage(definition.Url, reference.Alt, definition.Title, link)
             : CreateTextLabel(reference.Alt ?? "[" + reference.Label + "]", context.TextStyleKey);
+
+    // A link whose only content is an image (a badge, a thumbnail) shows the image, and a tap follows the link.
+    private View RenderLinkedImage(RichTextNode link, BlockContext context)
+    {
+        var url = link switch
+        {
+            LinkNode node => node.Url,
+            LinkReferenceNode reference when _definitions.TryGetValue(reference.Label, out var definition) => definition.Url,
+            _ => null,
+        };
+
+        return GetLinkedImage(link) is ImageNode image
+            ? RenderImage(image.Url, image.Alt, image.Title, url)
+            : RenderImageReference((ImageReferenceNode)link.Children[0], context, url);
+    }
+
+    private static RichTextNode? GetLinkedImage(RichTextNode node) =>
+        node is LinkNode or LinkReferenceNode && node.Children is [ImageNode or ImageReferenceNode] ? node.Children[0] : null;
+
+    // An image, alone or as all of a link, stands apart from the text around it.
+    private static bool IsImage(RichTextNode node) => node is ImageNode or ImageReferenceNode || GetLinkedImage(node) is not null;
 
     // Raw HTML is shown as source text, in the code font.
     private static Label RenderLiteral(string text) =>
@@ -386,7 +421,7 @@ internal sealed partial class MarkdownRenderer
     {
         foreach (var inline in inlines)
         {
-            if (inline is ImageNode or ImageReferenceNode)
+            if (IsImage(inline))
                 return true;
         }
 
@@ -474,10 +509,13 @@ internal sealed partial class MarkdownRenderer
                 AddSpan(formatted, "[" + reference.Label + "]", state);
                 break;
             case ImageNode image:
-                AddSpan(formatted, image.Alt ?? image.Title ?? string.Empty, state);
+                AddSpan(formatted, GetImageText(image.Alt, image.Title, image.Url), state);
+                break;
+            case ImageReferenceNode image when _definitions.TryGetValue(image.Label, out var definition):
+                AddSpan(formatted, GetImageText(image.Alt, definition.Title, definition.Url), state);
                 break;
             case ImageReferenceNode image:
-                AddSpan(formatted, image.Alt ?? image.Label, state);
+                AddSpan(formatted, string.IsNullOrWhiteSpace(image.Alt) ? image.Label : image.Alt, state);
                 break;
             case FootnoteReferenceNode footnote:
                 AddSpan(formatted, "[" + footnote.Label + "]", state);
@@ -506,6 +544,13 @@ internal sealed partial class MarkdownRenderer
         else
             AppendChildren(formatted, link, linkState, depth);
     }
+
+    // An image inside text reads as its description: the alt text, else the title, else the address.
+    private static string GetImageText(string? alt, string? title, string? url) =>
+        !string.IsNullOrWhiteSpace(alt) ? alt
+            : !string.IsNullOrWhiteSpace(title) ? title
+            : !string.IsNullOrWhiteSpace(url) ? url
+            : "Image";
 
     private void AddSpan(FormattedString formatted, string text, InlineState state)
     {

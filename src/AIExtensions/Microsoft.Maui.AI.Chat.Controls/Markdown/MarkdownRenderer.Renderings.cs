@@ -227,7 +227,7 @@ internal sealed partial class MarkdownRenderer
             var start = 0;
             for (var i = 0; i <= inlines.Count; i++)
             {
-                if (i < inlines.Count && inlines[i] is not (ImageNode or ImageReferenceNode))
+                if (i < inlines.Count && !IsImage(inlines[i]))
                     continue;
 
                 if (CreateRun(inlines, start, i, besideImageBefore: start > 0, besideImageAfter: i < inlines.Count) is { } run)
