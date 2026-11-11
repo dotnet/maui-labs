@@ -22,7 +22,7 @@ public class AgentContextStatusBlockTests
 
         var context = new AgentContext(new UIAgent(client));
         var added = new List<ContentBlock>();
-        context.RegisterOnBlockAdded((_, block) => added.Add(block));
+        context.OnBlockAdded((_, block) => added.Add(block));
 
         await context.SendMessageAsync("Hi");
 
@@ -43,7 +43,7 @@ public class AgentContextStatusBlockTests
 
         var context = new AgentContext(new UIAgent(client));
         var added = new List<ContentBlock>();
-        context.RegisterOnBlockAdded((_, block) => added.Add(block));
+        context.OnBlockAdded((_, block) => added.Add(block));
 
         await context.SendMessageAsync("Hi");
 

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Specialized;
 using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 using Microsoft.Extensions.AI;
 
@@ -98,7 +99,7 @@ public class AgentContextTests
         var context = new AgentContext(agent);
 
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(s => statuses.Add(s));
+        context.OnStatusChanged(s => statuses.Add(s));
 
         await context.SendMessageAsync("hi");
 
@@ -129,7 +130,7 @@ public class AgentContextTests
         var context = new AgentContext(agent);
 
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(s => statuses.Add(s));
+        context.OnStatusChanged(s => statuses.Add(s));
 
         await context.SendMessageAsync("hi");
 
@@ -166,9 +167,9 @@ public class AgentContextTests
                     cancellationToken));
             var context = new AgentContext(
                 new UIAgent(client, options => options.RegisterUIAction(tool)));
-            context.RegisterOnStatusChanged(_ =>
+            context.OnStatusChanged(_ =>
                 observedContexts.Add(SynchronizationContext.Current));
-            context.RegisterOnBlockAdded((_, _) =>
+            context.OnBlockAdded((_, _) =>
                 observedContexts.Add(SynchronizationContext.Current));
 
             await context.SendMessageAsync("Get a value");
@@ -237,39 +238,29 @@ public class AgentContextTests
         Assert.Throws<ArgumentNullException>(() => new AgentContext(null!));
     }
 
-    [Fact]
-    public void RegisterCallbacks_NullCallbackThrows()
-    {
-        var (agent, _) = CreateAgent();
-        using var context = new AgentContext(agent);
-
-        Assert.Throws<ArgumentNullException>(() => context.RegisterOnTurnAdded(null!));
-        Assert.Throws<ArgumentNullException>(() => context.RegisterOnStatusChanged(null!));
-        Assert.Throws<ArgumentNullException>(() => context.RegisterOnBlockAdded(null!));
-        Assert.Throws<ArgumentNullException>(() => context.RegisterOnResponseBlocksCleared(null!));
-    }
-
     // ---- Notifications ----
 
     [Fact]
-    public async Task RegisterOnTurnAdded_FiresWhenTurnCreated()
+    public async Task Turns_RaiseAnAddWhenATurnIsCreated()
     {
         var (agent, client) = CreateAgent();
         client.SetHandler((msgs, opts, ct) =>
             ResponseEmitters.EmitTextResponse("ok"));
         var context = new AgentContext(agent);
 
-        ConversationTurn? receivedTurn = null;
-        context.RegisterOnTurnAdded(t => receivedTurn = t);
+        var changes = new List<NotifyCollectionChangedEventArgs>();
+        ChangeEvents.Observe(context.Turns).CollectionChanged += (_, e) => changes.Add(e);
 
         await context.SendMessageAsync("hi");
 
-        Assert.NotNull(receivedTurn);
-        Assert.Same(context.Turns[0], receivedTurn);
+        var added = Assert.Single(changes);
+        Assert.Equal(NotifyCollectionChangedAction.Add, added.Action);
+        Assert.Equal(0, added.NewStartingIndex);
+        Assert.Same(context.Turns[0], Assert.Single(added.NewItems!));
     }
 
     [Fact]
-    public async Task RegisterOnBlockAdded_FiresForEachBlock()
+    public async Task BlockCollections_RaiseAnAddForEachBlock()
     {
         var (agent, client) = CreateAgent();
         client.SetHandler((msgs, opts, ct) =>
@@ -277,7 +268,7 @@ public class AgentContextTests
         var context = new AgentContext(agent);
 
         var receivedBlocks = new List<(ConversationTurn turn, ContentBlock block)>();
-        context.RegisterOnBlockAdded((t, b) => receivedBlocks.Add((t, b)));
+        context.OnBlockAdded((t, b) => receivedBlocks.Add((t, b)));
 
         await context.SendMessageAsync("hi");
 
@@ -286,31 +277,7 @@ public class AgentContextTests
     }
 
     [Fact]
-    public async Task RegisterOnStatusChanged_DisposingStopsCallbacks()
-    {
-        var (agent, client) = CreateAgent();
-        var callCount = 0;
-        client.SetHandler((msgs, opts, ct) =>
-        {
-            callCount++;
-            return ResponseEmitters.EmitTextResponse($"Reply {callCount}");
-        });
-        var context = new AgentContext(agent);
-
-        var statusCount = 0;
-        var reg = context.RegisterOnStatusChanged(_ => statusCount++);
-
-        await context.SendMessageAsync("first");
-        var countAfterFirst = statusCount;
-
-        reg.Dispose();
-
-        await context.SendMessageAsync("second");
-        Assert.Equal(countAfterFirst, statusCount);
-    }
-
-    [Fact]
-    public async Task MultipleRegistrations_AllReceiveCallbacks()
+    public async Task StatusChange_ReachesEveryHandler()
     {
         var (agent, client) = CreateAgent();
         client.SetHandler((msgs, opts, ct) =>
@@ -319,8 +286,8 @@ public class AgentContextTests
 
         var count1 = 0;
         var count2 = 0;
-        context.RegisterOnStatusChanged(_ => count1++);
-        context.RegisterOnStatusChanged(_ => count2++);
+        context.OnStatusChanged(_ => count1++);
+        context.OnStatusChanged(_ => count2++);
 
         await context.SendMessageAsync("hi");
 
@@ -339,9 +306,9 @@ public class AgentContextTests
         var context = new AgentContext(agent);
 
         var events = new List<string>();
-        context.RegisterOnStatusChanged(s => events.Add($"status:{s}"));
-        context.RegisterOnTurnAdded(_ => events.Add("turn-added"));
-        context.RegisterOnBlockAdded((_, b) => events.Add($"block:{b.Role}"));
+        context.OnStatusChanged(s => events.Add($"status:{s}"));
+        context.OnTurnAdded(_ => events.Add("turn-added"));
+        context.OnBlockAdded((_, b) => events.Add($"block:{b.Role}"));
 
         await context.SendMessageAsync("hi");
 
@@ -388,7 +355,7 @@ public class AgentContextTests
         });
         var context = new AgentContext(agent);
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(status => statuses.Add(status));
+        context.OnStatusChanged(status => statuses.Add(status));
 
         await context.SendMessageAsync("first");
         Assert.Equal(ConversationStatus.Error, context.Status);

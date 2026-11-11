@@ -101,10 +101,8 @@ public class PendingInteractionTests
         var action = Assert.Single(blocks.OfType<UIActionBlock>());
         Assert.True(approval.IsAwaitingInput);
         Assert.True(action.IsAwaitingInput);
-        var approvalChanges = new List<bool>();
-        var actionChanges = new List<bool>();
-        using var approvalChanged = approval.OnChanged(() => approvalChanges.Add(approval.IsAwaitingInput));
-        using var actionChanged = action.OnChanged(() => actionChanges.Add(action.IsAwaitingInput));
+        var approvalChanges = RecordAwaitingInput(approval);
+        var actionChanges = RecordAwaitingInput(action);
 
         await context.CancelAsync();
         await send.WaitAsync(TimeSpan.FromSeconds(10));
@@ -163,8 +161,7 @@ public class PendingInteractionTests
         var send = context.SendMessageAsync("Show Paris");
         await awaitingInput.WaitAsync(TimeSpan.FromSeconds(10));
         var action = Assert.Single(context.Turns[^1].ResponseBlocks.OfType<UIActionBlock>());
-        var changes = new List<bool>();
-        using var changed = action.OnChanged(() => changes.Add(action.IsAwaitingInput));
+        var changes = RecordAwaitingInput(action);
         Assert.True(action.IsAwaitingInput);
 
         // Running, then canceled by the app: it waits for input again.
@@ -184,7 +181,7 @@ public class PendingInteractionTests
 
         Assert.False(action.IsAwaitingInput);
         Assert.True(action.IsComplete);
-        Assert.Equal([false, true, false], Collapse(changes));
+        Assert.Equal([false, true, false], changes);
     }
 
     [Fact]
@@ -196,7 +193,7 @@ public class PendingInteractionTests
         using var context = new AgentContext(new UIAgent(model, options =>
             options.RegisterUIAction(CreateShowMap([]), UIActionInvocationMode.Automatic)));
         var awaitingInput = new List<bool>();
-        context.RegisterOnBlockAdded((_, block) =>
+        context.OnBlockAdded((_, block) =>
         {
             if (block is UIActionBlock action)
                 awaitingInput.Add(action.IsAwaitingInput);
@@ -233,7 +230,7 @@ public class PendingInteractionTests
         using var context = new AgentContext(new UIAgent(model, options =>
             options.RegisterUIAction(showMap, UIActionInvocationMode.Manual)));
         var awaitingInput = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 awaitingInput.TrySetResult();
@@ -275,7 +272,7 @@ public class PendingInteractionTests
     private static Task WhenAwaitingInput(AgentContext context)
     {
         var awaitingInput = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 awaitingInput.TrySetResult();
@@ -289,17 +286,16 @@ public class PendingInteractionTests
         return new ToolApprovalBlock(new FunctionInvocationContentBlock { Call = call }, new ToolApprovalRequestContent("approval-1", call));
     }
 
-    /// <summary>Removes consecutive repeats, so a state reported twice in a row counts once.</summary>
-    private static List<bool> Collapse(List<bool> values)
+    /// <summary>Records the value of <see cref="InteractiveFunctionBlock.IsAwaitingInput"/> each time it is raised.</summary>
+    private static List<bool> RecordAwaitingInput(InteractiveFunctionBlock block)
     {
-        var collapsed = new List<bool>();
-        foreach (var value in values)
+        var values = new List<bool>();
+        block.PropertyChanged += (_, e) =>
         {
-            if (collapsed.Count == 0 || collapsed[^1] != value)
-                collapsed.Add(value);
-        }
-
-        return collapsed;
+            if (e.PropertyName == nameof(InteractiveFunctionBlock.IsAwaitingInput))
+                values.Add(block.IsAwaitingInput);
+        };
+        return values;
     }
 
     private sealed class AppInteractiveBlock(FunctionInvocationContentBlock innerBlock) : InteractiveFunctionBlock(innerBlock);

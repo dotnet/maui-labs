@@ -169,7 +169,7 @@ public class FunctionCallBlockTests
                 options.ChatOptions = new ChatOptions { Tools = [tool] };
                 options.Thread = thread;
             }));
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status != ConversationStatus.AwaitingInput)
                 return;

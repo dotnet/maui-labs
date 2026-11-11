@@ -17,7 +17,7 @@ public class StopEdgeCaseTests
         model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Second reply.", ct));
         using var context = new AgentContext(new UIAgent(model));
         using var cancellation = new CancellationTokenSource();
-        var registration = context.RegisterOnTurnAdded(_ => cancellation.Cancel());
+        var registration = context.OnTurnAdded(_ => cancellation.Cancel());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => context.SendMessageAsync("first", cancellation.Token));
@@ -45,7 +45,7 @@ public class StopEdgeCaseTests
         await context.SendMessageAsync("first");
         Assert.Equal(ConversationStatus.Error, context.Status);
         using var cancellation = new CancellationTokenSource();
-        var registration = context.RegisterOnResponseBlocksCleared(_ => cancellation.Cancel());
+        var registration = context.OnResponseBlocksReset(_ => cancellation.Cancel());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.RetryAsync(cancellation.Token));
         registration.Dispose();
@@ -70,7 +70,7 @@ public class StopEdgeCaseTests
         model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Reply.", ct));
         model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Restored reply.", ct));
         using var context = new AgentContext(new UIAgent(model, options => options.Thread = thread));
-        context.RegisterOnBlockAdded((turn, block) =>
+        context.OnBlockAdded((turn, block) =>
         {
             if (block is ReasoningContentBlock)
                 _ = context.CancelAsync();
@@ -101,7 +101,7 @@ public class StopEdgeCaseTests
         model.Enqueue(ReasoningAndTextThenWaitAsync);
         model.Enqueue(ct => ResponseEmitters.EmitTextResponse("Reply.", ct));
         using var context = new AgentContext(new UIAgent(model));
-        context.RegisterOnBlockAdded((turn, block) =>
+        context.OnBlockAdded((turn, block) =>
         {
             if (block is TextContentBlock && block.Role == ChatRole.Assistant)
                 _ = context.CancelAsync();

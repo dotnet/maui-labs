@@ -121,7 +121,7 @@ public class AgentContextTurnTransactionTests
         var context = new AgentContext(new UIAgent(
             client,
             options => options.RegisterUIAction(action, UIActionInvocationMode.Manual)));
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 awaitingInput.TrySetResult();
@@ -202,7 +202,7 @@ public class AgentContextTurnTransactionTests
             return ResponseEmitters.EmitTextResponse("deleted", cancellationToken);
         });
         var context = new AgentContext(new UIAgent(client));
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 awaitingInput.TrySetResult();

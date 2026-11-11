@@ -18,9 +18,9 @@ public class AgentContextBaselineTests
         var statuses = new List<ConversationStatus>();
         var turnCount = 0;
         var blockCount = 0;
-        context.RegisterOnStatusChanged(s => statuses.Add(s));
-        context.RegisterOnTurnAdded(_ => turnCount++);
-        context.RegisterOnBlockAdded((_, _) => blockCount++);
+        context.OnStatusChanged(s => statuses.Add(s));
+        context.OnTurnAdded(_ => turnCount++);
+        context.OnBlockAdded((_, _) => blockCount++);
 
         // Turn 1
         await context.SendMessageAsync("Hello");

@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.ComponentModel;
+
 namespace Microsoft.Maui.AI.Chat.Tests.Blocks;
 
 public class ContentBlockTests
@@ -11,24 +13,28 @@ public class ContentBlockTests
     }
 
     [Fact]
-    public void OnChanged_CallbackFiresOnNotifyChanged()
+    public void NotifyChanged_RaisesPropertyChangedForEveryProperty()
     {
         var block = new TestBlock();
-        var fired = false;
-        block.OnChanged(() => fired = true);
+        PropertyChangedEventArgs? raised = null;
+        block.PropertyChanged += (sender, e) =>
+        {
+            Assert.Same(block, sender);
+            raised = e;
+        };
 
         block.TriggerChanged();
 
-        Assert.True(fired);
+        Assert.Equal(string.Empty, raised?.PropertyName);
     }
 
     [Fact]
-    public void OnChanged_MultipleCallbacksAllFire()
+    public void NotifyChanged_ReachesEveryHandler()
     {
         var block = new TestBlock();
         var count = 0;
-        block.OnChanged(() => count++);
-        block.OnChanged(() => count++);
+        block.PropertyChanged += (_, _) => count++;
+        block.PropertyChanged += (_, _) => count++;
 
         block.TriggerChanged();
 
@@ -36,47 +42,18 @@ public class ContentBlockTests
     }
 
     [Fact]
-    public void OnChanged_DisposingStopsCallback()
+    public void NotifyChanged_DoesNotReachARemovedHandler()
     {
         var block = new TestBlock();
         var count = 0;
-        var reg = block.OnChanged(() => count++);
+        PropertyChangedEventHandler handler = (_, _) => count++;
+        block.PropertyChanged += handler;
 
         block.TriggerChanged();
         Assert.Equal(1, count);
 
-        reg.Dispose();
+        block.PropertyChanged -= handler;
         block.TriggerChanged();
         Assert.Equal(1, count);
-    }
-
-    [Fact]
-    public void OnChanged_DoubleDisposeDoesNotThrow()
-    {
-        var block = new TestBlock();
-        var reg = block.OnChanged(() => { });
-
-        reg.Dispose();
-        reg.Dispose();
-    }
-
-    [Fact]
-    public void OnChanged_DisposingInsideCallbackDoesNotThrow()
-    {
-        var block = new TestBlock();
-        ContentBlockChangedSubscription reg = default;
-        reg = block.OnChanged(() => reg.Dispose());
-
-        block.TriggerChanged();
-    }
-
-    [Fact]
-    public void OnChanged_ReturnsConcreteStructType()
-    {
-        var block = new TestBlock();
-        ContentBlockChangedSubscription reg = block.OnChanged(() => { });
-
-        Assert.IsType<ContentBlockChangedSubscription>(reg);
-        reg.Dispose();
     }
 }

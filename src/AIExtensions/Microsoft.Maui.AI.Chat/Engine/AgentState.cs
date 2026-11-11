@@ -10,8 +10,9 @@ namespace Microsoft.Maui.AI.Chat;
 /// <remarks>
 /// <para>
 /// The state raises <see cref="PropertyChanged"/> for <see cref="Value"/> and
-/// <see cref="HasPendingPredictiveState"/> once they changed, and then its <see cref="OnChanged"/>
-/// callbacks, so a view can bind to the state's value. Assigning <see cref="Value"/> raises its change
+/// <see cref="HasPendingPredictiveState"/> once they changed, so a view can bind to the state's value:
+/// when <see cref="Value"/> is assigned, predicted, rolled back, restored or reset, and when a prediction is
+/// accepted or rejected. Assigning <see cref="Value"/> raises its change
 /// even for the current instance. Mutating properties inside <see cref="Value"/> raises nothing; assign the
 /// value again, or a new value, to notify observers.
 /// </para>
@@ -34,7 +35,6 @@ public sealed class AgentState<T> : INotifyPropertyChanged where T : class, new(
     private readonly T _initialValue;
     private T _value;
     private T? _valueBeforePrediction;
-    private readonly List<Action> _callbacks = new();
 
     internal AgentState(T? initialValue = null)
     {
@@ -44,8 +44,8 @@ public sealed class AgentState<T> : INotifyPropertyChanged where T : class, new(
 
     /// <summary>Occurs after <see cref="Value"/> or <see cref="HasPendingPredictiveState"/> changed.</summary>
     /// <remarks>
-    /// Raised before the <see cref="OnChanged"/> callbacks of the same change. A handler that runs earlier may
-    /// already have accepted or rejected the prediction, so a later handler reads the current state.
+    /// A handler that runs earlier may already have accepted or rejected the prediction, so a later handler
+    /// reads the current state.
     /// </remarks>
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -140,20 +140,8 @@ public sealed class AgentState<T> : INotifyPropertyChanged where T : class, new(
     }
 
     /// <summary>
-    /// Registers a callback invoked whenever the state changes: <see cref="Value"/> is assigned, predicted,
-    /// rolled back, restored or reset, or a prediction is accepted or rejected.
-    /// </summary>
-    /// <remarks>Runs after the <see cref="PropertyChanged"/> events of the change.</remarks>
-    public IDisposable OnChanged(Action callback)
-    {
-        ArgumentNullException.ThrowIfNull(callback);
-        _callbacks.Add(callback);
-        return new CallbackRegistration(_callbacks, callback);
-    }
-
-    /// <summary>
     /// Raises <see cref="PropertyChanged"/> for what changed since <paramref name="previousValue"/> and
-    /// <paramref name="wasPending"/> were read, and then the <see cref="OnChanged"/> callbacks.
+    /// <paramref name="wasPending"/> were read.
     /// </summary>
     /// <param name="previousValue">The value before the change.</param>
     /// <param name="wasPending">Whether a prediction was pending before the change.</param>
@@ -166,40 +154,9 @@ public sealed class AgentState<T> : INotifyPropertyChanged where T : class, new(
         // Read again: a handler of the value may already have accepted or rejected the prediction.
         if (HasPendingPredictiveState != wasPending)
             PropertyChanged?.Invoke(this, s_hasPendingPredictiveStateChanged);
-
-        NotifyChanged();
-    }
-
-    private void NotifyChanged()
-    {
-        var snapshot = _callbacks.ToArray();
-        foreach (var callback in snapshot)
-            callback();
     }
 
     internal readonly record struct StateCheckpoint(
         T Value,
         T? ValueBeforePrediction);
-
-    private sealed class CallbackRegistration : IDisposable
-    {
-        private List<Action>? _list;
-        private Action? _callback;
-
-        internal CallbackRegistration(List<Action> list, Action callback)
-        {
-            _list = list;
-            _callback = callback;
-        }
-
-        public void Dispose()
-        {
-            if (_list is null || _callback is null)
-                return;
-
-            _list.Remove(_callback);
-            _list = null;
-            _callback = null;
-        }
-    }
 }

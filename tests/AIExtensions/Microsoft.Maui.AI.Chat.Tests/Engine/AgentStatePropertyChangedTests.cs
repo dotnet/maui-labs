@@ -10,8 +10,7 @@ namespace Microsoft.Maui.AI.Chat.Tests.Engine;
 
 /// <summary>
 /// <see cref="AgentState{T}"/> raises <see cref="INotifyPropertyChanged.PropertyChanged"/> for its value and its
-/// pending prediction once they changed, before its <c>OnChanged</c> callbacks, so a view can bind to the typed
-/// state.
+/// pending prediction once they changed, so a view can bind to the typed state.
 /// </summary>
 public class AgentStatePropertyChangedTests
 {
@@ -26,7 +25,7 @@ public class AgentStatePropertyChangedTests
 
         await context.SendMessageAsync("Recipe?");
 
-        Assert.Equal(["Value: Pasta, pending False", "OnChanged: Pasta, pending False"], log);
+        Assert.Equal(["Value: Pasta, pending False"], log);
     }
 
     [Fact]
@@ -42,7 +41,6 @@ public class AgentStatePropertyChangedTests
             [
                 "Value: Final, pending False",
                 "HasPendingPredictiveState: Final, pending False",
-                "OnChanged: Final, pending False",
             ],
             log);
     }
@@ -56,7 +54,7 @@ public class AgentStatePropertyChangedTests
         state.Value.Title = "Stew";
         state.Value = state.Value;
 
-        Assert.Equal(["Value: Stew, pending False", "OnChanged: Stew, pending False"], log);
+        Assert.Equal(["Value: Stew, pending False"], log);
     }
 
     [Fact]
@@ -67,7 +65,7 @@ public class AgentStatePropertyChangedTests
         using var agent = CreateAgent(model);
         using var context = new AgentContext(agent);
         var log = Watch(agent.State);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.Idle)
                 log.Add("Idle");
@@ -79,12 +77,9 @@ public class AgentStatePropertyChangedTests
             [
                 "Value: Draft 1, pending True",
                 "HasPendingPredictiveState: Draft 1, pending True",
-                "OnChanged: Draft 1, pending True",
                 "Value: Draft 2, pending True",
-                "OnChanged: Draft 2, pending True",
                 "Value: Original, pending False",
                 "HasPendingPredictiveState: Original, pending False",
-                "OnChanged: Original, pending False",
                 "Idle",
             ],
             log);
@@ -101,7 +96,7 @@ public class AgentStatePropertyChangedTests
         state.AcceptPredictiveState();
 
         Assert.Equal(
-            ["HasPendingPredictiveState: Draft, pending False", "OnChanged: Draft, pending False"],
+            ["HasPendingPredictiveState: Draft, pending False"],
             log);
     }
 
@@ -119,7 +114,6 @@ public class AgentStatePropertyChangedTests
             [
                 "Value: Original, pending False",
                 "HasPendingPredictiveState: Original, pending False",
-                "OnChanged: Original, pending False",
             ],
             log);
     }
@@ -170,7 +164,7 @@ public class AgentStatePropertyChangedTests
 
         await context.RestoreAsync();
 
-        Assert.Equal(["Value: Pasta, pending False", "OnChanged: Pasta, pending False"], log);
+        Assert.Equal(["Value: Pasta, pending False"], log);
     }
 
     [Fact]
@@ -191,11 +185,8 @@ public class AgentStatePropertyChangedTests
         Assert.Equal(
             [
                 "Value: Original, pending False",
-                "OnChanged: Original, pending False",
                 "Value: Restored, pending False",
-                "OnChanged: Restored, pending False",
                 "Value: Previous, pending False",
-                "OnChanged: Previous, pending False",
             ],
             log);
     }
@@ -212,7 +203,7 @@ public class AgentStatePropertyChangedTests
 
         await context.ClearAsync();
 
-        Assert.Equal(["Value: Original, pending False", "OnChanged: Original, pending False"], log);
+        Assert.Equal(["Value: Original, pending False"], log);
     }
 
     [Fact]
@@ -333,13 +324,12 @@ public class AgentStatePropertyChangedTests
             },
             new NoteState { Title = "Original" });
 
-    /// <summary>Records the state's property changes and callbacks, reading the state each one reports.</summary>
+    /// <summary>Records the state's property changes, reading the state each one reports.</summary>
     private static List<string> Watch(AgentState<NoteState> state)
     {
         var log = new List<string>();
         state.PropertyChanged += (_, e) =>
             log.Add($"{e.PropertyName}: {state.Value.Title}, pending {state.HasPendingPredictiveState}");
-        state.OnChanged(() => log.Add($"OnChanged: {state.Value.Title}, pending {state.HasPendingPredictiveState}"));
         return log;
     }
 

@@ -88,14 +88,14 @@ public class UIAgentTests
     }
 
     [Fact]
-    public async Task SendMessageAsync_MultiTokenStreaming_OnChangedFiresPerToken()
+    public async Task SendMessageAsync_MultiTokenStreaming_RaisesTheTextChangePerToken()
     {
         var client = new DelegatingStreamingChatClient();
         client.SetHandler((msgs, opts, ct) =>
             ResponseEmitters.EmitMultiTokenTextResponse(ct, "A", "B", "C"));
         var agent = new UIAgent(client);
 
-        var changeCount = 0;
+        List<string>? changes = null;
         ContentBlock? firstBlock = null;
 
         await foreach (var block in agent.SendMessageAsync(
@@ -104,12 +104,18 @@ public class UIAgentTests
             if (block.Role == ChatRole.Assistant && firstBlock is null)
             {
                 firstBlock = block;
-                block.OnChanged(() => changeCount++);
+                changes = block.RecordPropertyChanges();
             }
         }
 
         // Two appended tokens after the initial emission, plus finalization.
-        Assert.Equal(3, changeCount);
+        Assert.Equal(
+            [
+                nameof(RichContentBlock.RawText), nameof(RichContentBlock.Content),
+                nameof(RichContentBlock.RawText), nameof(RichContentBlock.Content),
+                nameof(ContentBlock.LifecycleState),
+            ],
+            changes);
     }
 
     [Fact]

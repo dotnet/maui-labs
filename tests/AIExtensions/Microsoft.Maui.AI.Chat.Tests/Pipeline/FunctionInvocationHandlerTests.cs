@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Microsoft.Extensions.AI;
+using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
 
 namespace Microsoft.Maui.AI.Chat.Tests.Pipeline;
 
@@ -126,8 +127,7 @@ public class FunctionInvocationHandlerTests
                 Contents = [call],
             })));
         firstRound.Finalize();
-        var changes = 0;
-        using var subscription = block.OnChanged(() => changes++);
+        var changes = block.RecordPropertyChanges();
 
         var secondRound = new BlockMappingPipeline(new UIAgentOptions(), calls: calls);
         var result = new FunctionResultContent("call-1", "sunny");
@@ -145,7 +145,9 @@ public class FunctionInvocationHandlerTests
 
         Assert.Empty(emitted);
         Assert.Same(result, block.Result);
-        Assert.Equal(1, changes);
+        Assert.Equal(
+            [nameof(FunctionInvocationContentBlock.Result), nameof(FunctionInvocationContentBlock.HasResult)],
+            changes);
     }
 
     [Fact]
@@ -221,9 +223,7 @@ public class FunctionInvocationHandlerTests
         var blocks = await CollectBlocks(pipeline, callUpdate);
         var block = Assert.IsType<FunctionInvocationContentBlock>(blocks[0]);
 
-        // Track NotifyChanged
-        var changed = false;
-        block.OnChanged(() => changed = true);
+        var changes = block.RecordPropertyChanges();
 
         // Process the result
         var resultUpdate = new ChatResponseUpdate
@@ -235,7 +235,13 @@ public class FunctionInvocationHandlerTests
         Assert.True(block.HasResult);
         Assert.Equal("sunny, 72°F", block.Result?.Result?.ToString());
         Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState);
-        Assert.True(changed);
+        Assert.Equal(
+            [
+                nameof(FunctionInvocationContentBlock.Result),
+                nameof(FunctionInvocationContentBlock.HasResult),
+                nameof(FunctionInvocationContentBlock.LifecycleState),
+            ],
+            changes);
     }
 
     [Fact]

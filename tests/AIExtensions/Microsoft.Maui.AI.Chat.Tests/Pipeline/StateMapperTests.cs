@@ -21,15 +21,14 @@ public class StateMapperTests
     {
         var client = CreateClient(EmitStateAndText());
         var agent = CreateRecipeAgent(client);
-        var changed = 0;
-        agent.State.OnChanged(() => changed++);
+        var changes = agent.State.RecordPropertyChanges();
 
         var blocks = await EnumerateAsync(agent.SendMessageAsync(
             new ChatMessage(ChatRole.User, "Recipe?")));
 
         Assert.Equal("Pasta", agent.State.Value.Title);
         Assert.Equal("Italian", agent.State.Value.Cuisine);
-        Assert.Equal(1, changed);
+        Assert.Equal([nameof(AgentState<RecipeState>.Value)], changes);
 
         var responseText = Assert.Single(
             blocks.OfType<TextContentBlock>(),
@@ -214,7 +213,11 @@ public class StateMapperTests
             CreateClient(EmitStateOnly()),
             initial);
         var observed = new List<string>();
-        agent.State.OnChanged(() => observed.Add(agent.State.Value.Title));
+        agent.State.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AgentState<RecipeState>.Value))
+                observed.Add(agent.State.Value.Title);
+        };
         var context = new AgentContext(agent);
 
         await context.SendMessageAsync("Recipe?");
@@ -231,11 +234,11 @@ public class StateMapperTests
         var agent = CreatePredictiveAgent(
             CreateClient(EmitStateOnly()),
             initial);
-        agent.State.OnChanged(() =>
+        agent.State.PropertyChanged += (_, _) =>
         {
             if (agent.State.HasPendingPredictiveState)
                 agent.State.AcceptPredictiveState();
-        });
+        };
         var context = new AgentContext(agent);
 
         await context.SendMessageAsync("Recipe?");

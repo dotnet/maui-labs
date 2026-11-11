@@ -112,7 +112,7 @@ public class UIActionCustomBlockTests
             options.AddBlockHandler(new MapCardHandler());
             options.RegisterUIAction(new ApprovalRequiredAIFunction(CreateShowMap(shown)));
         }));
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 context.Turns[^1].ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
@@ -141,7 +141,7 @@ public class UIActionCustomBlockTests
             options.RegisterUIAction(CreateShowMap(shown), UIActionInvocationMode.Manual);
         }));
         MapCard? pendingCard = null;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status != ConversationStatus.AwaitingInput)
                 return;

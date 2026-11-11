@@ -46,9 +46,8 @@ public class PredictiveStateTests
         using (var context = new AgentContext(agent))
         {
             var documents = new List<string>();
-            using var stateSubscription = agent.State.OnChanged(
-                () => documents.Add(agent.State.Value.Document));
-            using var statusSubscription = context.RegisterOnStatusChanged(status =>
+            agent.State.PropertyChanged += (_, e) => documents.Add($"{e.PropertyName}: {agent.State.Value.Document}");
+            using var statusSubscription = context.OnStatusChanged(status =>
             {
                 if (status == ConversationStatus.AwaitingInput)
                 {
@@ -63,7 +62,16 @@ public class PredictiveStateTests
 
             await context.SendMessageAsync("Edit the document");
 
-            Assert.Equal(["Draft", "Complete draft", expectedDocument], documents);
+            Assert.Equal(
+                [
+                    "Value: Draft",
+                    "HasPendingPredictiveState: Draft",
+                    "Value: Complete draft",
+                    .. accepted
+                        ? (string[])["HasPendingPredictiveState: Complete draft"]
+                        : ["Value: Original", "HasPendingPredictiveState: Original"],
+                ],
+                documents);
             Assert.Equal(expectedDocument, agent.State.Value.Document);
             Assert.False(agent.State.HasPendingPredictiveState);
             Assert.Equal(2, callCount);

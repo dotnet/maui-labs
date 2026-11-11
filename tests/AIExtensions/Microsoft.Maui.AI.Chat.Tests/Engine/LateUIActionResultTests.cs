@@ -56,7 +56,7 @@ public class LateUIActionResultTests
                 kind == ActionKind.Automatic ? UIActionInvocationMode.Automatic : UIActionInvocationMode.Manual),
             logs));
         Task<AIContent>? invocation = null;
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status != ConversationStatus.AwaitingInput)
                 return;
@@ -81,7 +81,7 @@ public class LateUIActionResultTests
         var action = card as UIActionBlock ?? ((ToolApprovalBlock)card).UIAction!;
         Assert.True(card.IsAbandoned);
         var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var changed = action.OnChanged(() => settled.TrySetResult());
+        action.PropertyChanged += (_, _) => settled.TrySetResult();
         logs.Logged += entry =>
         {
             if (entry.EventId.Id == ResultAfterTurnEndedEventId)

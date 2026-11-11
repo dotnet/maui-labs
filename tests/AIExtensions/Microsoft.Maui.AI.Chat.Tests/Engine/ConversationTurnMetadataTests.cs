@@ -41,7 +41,7 @@ public class ConversationTurnMetadataTests
             Text("Hello", modelId: "model-a")));
         using var context = new AgentContext(new UIAgent(client));
         string? modelAtBlock = null;
-        context.RegisterOnBlockAdded((turn, block) =>
+        context.OnBlockAdded((turn, block) =>
         {
             if (block is TextContentBlock { Role.Value: "assistant" })
                 modelAtBlock = turn.ModelId;

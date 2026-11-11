@@ -134,7 +134,7 @@ public class S02_BackendToolsTest
         var chatOptions = new ChatOptions { Tools = [tool] };
         var agent = new UIAgent(client.AsBuilder().UseFunctionInvocation().Build(), chatOptions);
         var context = new AgentContext(agent);
-        context.RegisterOnStatusChanged(s => statuses.Add(s));
+        context.OnStatusChanged(s => statuses.Add(s));
 
         await context.SendMessageAsync("Do it");
 
@@ -184,7 +184,7 @@ public class S02_BackendToolsTest
         });
         var context = new AgentContext(new UIAgent(client, new ChatOptions { Tools = [tool] }));
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(statuses.Add);
+        context.OnStatusChanged(statuses.Add);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => context.SendMessageAsync("Do it"));

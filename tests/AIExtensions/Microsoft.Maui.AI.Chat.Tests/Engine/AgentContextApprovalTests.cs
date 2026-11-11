@@ -24,7 +24,7 @@ public class AgentContextApprovalTests
         var context = new AgentContext(agent);
 
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(s =>
+        context.OnStatusChanged(s =>
         {
             statuses.Add(s);
             // Auto-approve when awaiting to unblock SendMessageAsync
@@ -58,7 +58,7 @@ public class AgentContextApprovalTests
         var context = new AgentContext(agent);
 
         ToolApprovalBlock? capturedBlock = null;
-        context.RegisterOnStatusChanged(s =>
+        context.OnStatusChanged(s =>
         {
             if (s == ConversationStatus.AwaitingInput)
             {
@@ -92,7 +92,7 @@ public class AgentContextApprovalTests
         var context = new AgentContext(agent);
 
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(s =>
+        context.OnStatusChanged(s =>
         {
             statuses.Add(s);
             if (s == ConversationStatus.AwaitingInput)
@@ -132,7 +132,7 @@ public class AgentContextApprovalTests
         });
         var context = new AgentContext(agent);
 
-        context.RegisterOnStatusChanged(s =>
+        context.OnStatusChanged(s =>
         {
             if (s == ConversationStatus.AwaitingInput)
             {
@@ -165,7 +165,7 @@ public class AgentContextApprovalTests
         });
         var context = new AgentContext(agent);
 
-        context.RegisterOnStatusChanged(s =>
+        context.OnStatusChanged(s =>
         {
             if (s == ConversationStatus.AwaitingInput)
             {
@@ -204,7 +204,7 @@ public class AgentContextApprovalTests
         var context = new AgentContext(agent);
         var awaiting = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 awaiting.TrySetResult();
@@ -237,7 +237,7 @@ public class AgentContextApprovalTests
         var context = new AgentContext(agent);
 
         var statuses = new List<ConversationStatus>();
-        context.RegisterOnStatusChanged(s => statuses.Add(s));
+        context.OnStatusChanged(s => statuses.Add(s));
 
         await context.SendMessageAsync("Hello");
 
@@ -270,7 +270,7 @@ public class AgentContextApprovalTests
             client,
             options => options.RegisterUIAction(uiAction));
         var context = new AgentContext(agent);
-        context.RegisterOnStatusChanged(status =>
+        context.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
             {
