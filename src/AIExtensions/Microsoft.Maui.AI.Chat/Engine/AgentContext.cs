@@ -153,6 +153,8 @@ public sealed class AgentContext : IDisposable
             {
                 Id = restoredTurn.Id,
                 IsStopped = restoredTurn.IsStopped,
+                ModelId = restoredTurn.ModelId,
+                Usage = restoredTurn.Usage,
             };
             foreach (var block in restoredTurn.RequestBlocks)
                 turn.AddRequestBlock(block);
@@ -271,7 +273,7 @@ public sealed class AgentContext : IDisposable
         Error = null;
         NotifyStatusChanged();
 
-        var pendingTurn = _agent.BeginTurn();
+        var pendingTurn = _agent.BeginTurn(turn);
         var interactiveBlocks = new List<IInteractiveBlock>();
         try
         {

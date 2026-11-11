@@ -53,6 +53,8 @@ foreach (var block in turn.ResponseBlocks)
 - `[ToolBlock]`, `[ToolParameter]`, and `[ToolResult]` source generation for simple 1:1 tool blocks.
 - `UIAgent<TState>` and `StateMapperContext` for typed inbound state.
 - `IConversationThread` restore/retry/stateful-provider support.
+- `ConversationTurn.ModelId` (the last model id the provider reported) and `ConversationTurn.Usage`
+  (token usage summed over the turn's requests), live and restored.
 - Turn transactions: `CancelAsync` stops a response and keeps its partial output
   (`ConversationTurn.IsStopped`), failed turns commit nothing and can be retried, and `ClearAsync`
   discards the active response before clearing.
