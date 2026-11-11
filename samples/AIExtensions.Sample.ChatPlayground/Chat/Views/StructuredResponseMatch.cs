@@ -9,8 +9,8 @@ namespace AIExtensions.Sample.ChatPlayground;
 /// instead of as text.
 /// </summary>
 /// <remarks>
-/// The chat view selects templates again whenever a block changes, so streamed JSON switches to this match's template
-/// as soon as its first character arrives.
+/// A list selects a block's template once, when the block joins its turn. The engine creates a text block from the first
+/// text the model streams, so JSON is recognized from its first character.
 /// </remarks>
 public sealed class StructuredResponseMatch : BlockMatch
 {

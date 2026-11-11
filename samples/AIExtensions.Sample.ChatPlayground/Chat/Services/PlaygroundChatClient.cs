@@ -5,8 +5,8 @@ namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>
 /// The one <see cref="IChatClient"/> the chat engine talks to. It forwards each request to the client selected in
-/// settings, with options built for that request, or to the replay client while a recording is replayed, and records
-/// each live exchange.
+/// settings, with options built from the settings for that request, and adds what the request alone carries, such as
+/// the shared notes.
 /// </summary>
 /// <remarks>
 /// The engine keeps a single conversation for the whole page, so switching clients, tools, or streaming in
@@ -17,99 +17,37 @@ public sealed class PlaygroundChatClient : IChatClient
 {
     /// <summary>
     /// The key of <see cref="ChatMessage.AdditionalProperties"/> that marks a message added to one request only, such
-    /// as a scenario's current state. Recordings keep the mark, so a replay leaves the message out of the conversation
-    /// it shows.
+    /// as the current notes.
     /// </summary>
     public const string RequestContextKey = "chatPlayground.requestContext";
 
     private readonly Func<IChatClient?> _selectedClient;
-    private readonly IChatClient _replayClient;
     private readonly SettingsPaneViewModel _settings;
-    private readonly PlaygroundTools? _tools;
-    private readonly Func<ChatOptions?, ChatOptions> _createOptions;
-    private readonly IChatRecordingSession? _recording;
-    private readonly Func<IList<ChatMessage>, IList<ChatMessage>>? _prepareMessages;
-    private readonly bool _reuseOptionsForContinuations;
-    private ChatOptions? _lastLiveOptions;
+    private readonly PlaygroundTools _tools;
+    private readonly Func<string?>? _requestContext;
 
-    /// <summary>Initializes the router for the chat tab, whose requests use the settings and their tools.</summary>
+    /// <summary>Initializes the router.</summary>
     /// <param name="selectedClient">Returns the client selected in settings, or <see langword="null"/> when none is.</param>
-    /// <param name="replayClient">The client that answers from the current recording.</param>
-    /// <param name="settings">The settings that shape each live request.</param>
+    /// <param name="settings">The settings that shape each request.</param>
     /// <param name="tools">The local tools the settings can enable.</param>
-    /// <param name="recording">Records each live exchange, or <see langword="null"/> to record nothing.</param>
+    /// <param name="requestContext">
+    /// Returns what each request tells the model besides the conversation, such as the current notes, or
+    /// <see langword="null"/> for nothing. It goes just before the user's latest message, in that request only.
+    /// </param>
     public PlaygroundChatClient(
         Func<IChatClient?> selectedClient,
-        IChatClient replayClient,
         SettingsPaneViewModel settings,
         PlaygroundTools tools,
-        IChatRecordingSession? recording = null)
-        : this(selectedClient, replayClient, settings, recording, tools, createOptions: null)
-    {
-    }
-
-    /// <summary>Initializes a router whose requests use options that <paramref name="createOptions"/> builds.</summary>
-    /// <param name="selectedClient">Returns the live client to send to, or <see langword="null"/> when none is selected.</param>
-    /// <param name="replayClient">The client that answers from the current recording.</param>
-    /// <param name="settings">The settings that choose the client and whether responses stream.</param>
-    /// <param name="createOptions">
-    /// Builds the options for each live request from the options the engine sent, which carry the declarations of its
-    /// UI actions and, for a continuation, the provider's conversation id. It is called again for every request round.
-    /// </param>
-    /// <param name="recording">Records each live exchange, or <see langword="null"/> to record nothing.</param>
-    /// <param name="prepareMessages">
-    /// Returns the messages to send for each live request, for example with the scenario's current state added as
-    /// <see cref="CreateRequestContext"/> messages; <see langword="null"/> sends the engine's messages as they are.
-    /// </param>
-    public PlaygroundChatClient(
-        Func<IChatClient?> selectedClient,
-        IChatClient replayClient,
-        SettingsPaneViewModel settings,
-        Func<ChatOptions?, ChatOptions> createOptions,
-        IChatRecordingSession? recording = null,
-        Func<IList<ChatMessage>, IList<ChatMessage>>? prepareMessages = null)
-        : this(selectedClient, replayClient, settings, recording, tools: null,
-            createOptions ?? throw new ArgumentNullException(nameof(createOptions)))
-    {
-        _prepareMessages = prepareMessages;
-    }
-
-    private PlaygroundChatClient(
-        Func<IChatClient?> selectedClient,
-        IChatClient replayClient,
-        SettingsPaneViewModel settings,
-        IChatRecordingSession? recording,
-        PlaygroundTools? tools,
-        Func<ChatOptions?, ChatOptions>? createOptions)
+        Func<string?>? requestContext = null)
     {
         ArgumentNullException.ThrowIfNull(selectedClient);
-        ArgumentNullException.ThrowIfNull(replayClient);
         ArgumentNullException.ThrowIfNull(settings);
-        if (createOptions is null)
-            ArgumentNullException.ThrowIfNull(tools);
+        ArgumentNullException.ThrowIfNull(tools);
         _selectedClient = selectedClient;
-        _replayClient = replayClient;
         _settings = settings;
         _tools = tools;
-        _recording = recording;
-
-        // The chat tab keeps a continuation on the options of the request that asked for it, even when the settings
-        // changed in between; a scenario builds them again, so they carry its current state.
-        _reuseOptionsForContinuations = createOptions is null;
-        _createOptions = createOptions ?? (_ => _settings.CreateChatOptions(CreateEnabledTools()));
+        _requestContext = requestContext;
     }
-
-    /// <summary>
-    /// Gets or sets whether requests are answered from the recording. Replay mode is independent of the selected
-    /// client, so a recording restored at startup replays even while a live client is selected.
-    /// </summary>
-    public bool IsReplaying { get; set; }
-
-    /// <summary>Raised with the options built for a live request, before it is sent.</summary>
-    public event EventHandler<ChatOptions>? LiveRequestStarting;
-
-    /// <summary>Gets the client that receives the next request.</summary>
-    public IChatClient? ActiveClient => IsReplaying ? _replayClient : _selectedClient();
 
     /// <inheritdoc />
     public async Task<ChatResponse> GetResponseAsync(
@@ -129,43 +67,24 @@ public sealed class PlaygroundChatClient : IChatClient
         var request = messages as IList<ChatMessage> ?? messages.ToList();
         ClearProviderMetadata(request);
 
-        if (IsReplaying)
-        {
-            // The replay client answers with the next recorded response and ignores what it is sent.
-            await foreach (var update in _replayClient.GetStreamingResponseAsync(request, options, cancellationToken)
-                .WithCancellation(cancellationToken))
-            {
-                yield return update;
-            }
-
-            yield break;
-        }
-
         var client = _selectedClient()
             ?? throw new InvalidOperationException(
                 string.IsNullOrWhiteSpace(_settings.ClientStatus) ? "Select a chat client first." : _settings.ClientStatus);
         var descriptor = client.GetService<ChatClientDescriptor>()
             ?? throw new InvalidOperationException("The selected chat client did not expose a ChatClientDescriptor.");
-        if (descriptor.IsReplay)
-            throw new InvalidOperationException("Replay is read-only. Use Play all or Next turn.");
         ThrowIfImagesUnsupported(request, descriptor);
 
-        var requestOptions = CreateRequestOptions(request, options);
-        LiveRequestStarting?.Invoke(this, requestOptions);
-        request = _prepareMessages?.Invoke(request) ?? request;
-
-        // Recorded around the selected client's whole pipeline, so the recording holds the exchange the engine saw:
-        // the calls its function invocation ran and their results.
-        var target = _recording is null ? client : new RecordingChatClient(client, _recording);
+        var requestOptions = CreateRequestOptions(options);
+        request = AddRequestContext(request);
         if (!_settings.UseStreaming)
         {
-            var response = await target.GetResponseAsync(request, requestOptions, cancellationToken);
+            var response = await client.GetResponseAsync(request, requestOptions, cancellationToken);
             foreach (var update in response.ToChatResponseUpdates())
                 yield return update;
             yield break;
         }
 
-        await foreach (var update in target.GetStreamingResponseAsync(request, requestOptions, cancellationToken)
+        await foreach (var update in client.GetStreamingResponseAsync(request, requestOptions, cancellationToken)
             .WithCancellation(cancellationToken))
         {
             yield return update;
@@ -173,13 +92,14 @@ public sealed class PlaygroundChatClient : IChatClient
     }
 
     /// <summary>
-    /// Creates the tools the settings enable for the selected client. With "Ask before running tools" on, each
-    /// function is wrapped so the chat asks for approval before it runs.
+    /// Creates the tools the settings enable for the selected client: the local tools, which run on this device, and
+    /// the provider's image generation. With "Ask before running tools" on, each local tool asks for approval before
+    /// it runs.
     /// </summary>
     public IList<AITool> CreateEnabledTools()
     {
         var tools = new List<AITool>();
-        if (_tools is null || !_settings.SupportsToolCalling)
+        if (!_settings.SupportsToolCalling)
             return tools;
         if (_settings.UseDateTimeTool)
             tools.Add(_tools.CurrentLocalDateTime);
@@ -195,9 +115,34 @@ public sealed class PlaygroundChatClient : IChatClient
                     tools[index] = new ApprovalRequiredAIFunction(function);
             }
         }
+
         if (_settings.UseImageGenerationTool && _settings.SelectedDescriptor?.SupportsImageGeneration == true)
             tools.Add(new HostedImageGenerationTool());
         return tools;
+    }
+
+    /// <summary>
+    /// Creates the declarations of the engine's UI actions for the selected client, when it hands tool calls back to
+    /// the app, which runs them; otherwise none.
+    /// </summary>
+    /// <param name="engineTools">
+    /// The declarations of the engine's UI actions. An action registered as an <see cref="ApprovalRequiredAIFunction"/>
+    /// asks only while "Ask before running tools" is on; otherwise it is declared as a plain function, so it runs at
+    /// once.
+    /// </param>
+    public IList<AITool> CreateUIActions(IEnumerable<AITool>? engineTools)
+    {
+        if (!_settings.SupportsUIActions || engineTools is null)
+            return [];
+
+        return engineTools
+            .Select(tool => !_settings.RequireToolApproval &&
+                tool is AIFunctionDeclaration declaration &&
+                tool.GetService<ApprovalRequiredAIFunction>() is not null
+                    ? AIFunctionFactory.CreateDeclaration(
+                        declaration.Name, declaration.Description, declaration.JsonSchema, declaration.ReturnJsonSchema)
+                    : tool)
+            .ToList();
     }
 
     /// <summary>Creates a message that only the request it is added to carries, marked with <see cref="RequestContextKey"/>.</summary>
@@ -213,7 +158,7 @@ public sealed class PlaygroundChatClient : IChatClient
     public object? GetService(Type serviceType, object? serviceKey = null)
     {
         ArgumentNullException.ThrowIfNull(serviceType);
-        return ActiveClient?.GetService(serviceType, serviceKey)
+        return _selectedClient()?.GetService(serviceType, serviceKey)
             ?? (serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null);
     }
 
@@ -223,18 +168,32 @@ public sealed class PlaygroundChatClient : IChatClient
         // The clients belong to the app's service container.
     }
 
-    private ChatOptions CreateRequestOptions(IList<ChatMessage> request, ChatOptions? engineOptions)
+    // The settings cannot change while a response runs, so the requests that continue it, after a tool result or an
+    // approval, get the same tools. Within a turn the engine continues the provider's conversation, when it keeps one.
+    private ChatOptions CreateRequestOptions(ChatOptions? engineOptions)
     {
-        // An approval or tool-result continuation belongs to the request that asked for it, so it keeps its tools.
-        if (_reuseOptionsForContinuations && _lastLiveOptions is { } previous && request.Count > 0 &&
-            IsContinuation(request[^1]))
+        var options = _settings.CreateChatOptions(CreateEnabledTools(), CreateUIActions(engineOptions?.Tools));
+        options.ConversationId = engineOptions?.ConversationId;
+        return options;
+    }
+
+    private IList<ChatMessage> AddRequestContext(IList<ChatMessage> request)
+    {
+        if (_requestContext?.Invoke() is not { Length: > 0 } context)
+            return request;
+
+        // Just before what the user last sent, so a continuation still answers each call right after it.
+        for (var index = request.Count - 1; index >= 0; index--)
         {
-            return previous;
+            if (request[index].Role == ChatRole.User && !IsContinuation(request[index]))
+            {
+                var prepared = new List<ChatMessage>(request);
+                prepared.Insert(index, CreateRequestContext(context));
+                return prepared;
+            }
         }
 
-        var options = _createOptions(engineOptions);
-        _lastLiveOptions = options;
-        return options;
+        return request;
     }
 
     /// <summary>Gets whether a request message only answers approvals or tool calls, continuing an earlier request.</summary>

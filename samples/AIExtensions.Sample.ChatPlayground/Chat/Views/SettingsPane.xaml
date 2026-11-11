@@ -24,17 +24,7 @@
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
             </VerticalStackLayout>
-            <Label Text="Replay is read-only and uses the saved options for each turn."
-                   Style="{StaticResource MutedLabel}" FontSize="12"
-                   IsVisible="{Binding SelectedDescriptor.IsReplay}"
-                   AutomationId="ReplayOptionsHint" />
             <VerticalStackLayout Spacing="12" IsEnabled="{Binding CanEditOptions}" AutomationId="ChatOptionsPanel">
-                <VerticalStackLayout.Triggers>
-                    <DataTrigger TargetType="VerticalStackLayout"
-                                 Binding="{Binding SelectedDescriptor.IsReplay}" Value="True">
-                        <Setter Property="IsVisible" Value="False" />
-                    </DataTrigger>
-                </VerticalStackLayout.Triggers>
                 <VerticalStackLayout Spacing="4" IsVisible="{Binding HasModels}"
                                      AutomationId="ChatModelOptions">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
@@ -93,7 +83,7 @@
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                     <Label Text="System instructions" FontSize="12" VerticalOptions="Center" />
                     <local:InfoTip Grid.Column="1"
-                                   Text="Instructions are sent with the next request and shown once in the chat." />
+                                   Text="Sent with each request; a change applies from the next message." />
                 </Grid>
                 <Editor Text="{Binding Instructions}" AutoSize="TextChanges"
                         MinimumHeightRequest="70" AutomationId="InstructionsEditor" />

@@ -36,21 +36,21 @@ public sealed class SettingsPaneViewModelTests
     [Fact]
     public void SelectedClient_ExposesActualClientAndItsDescriptor()
     {
-        using var live = CreateClient("Live", isReplay: false);
-        using var replay = CreateClient("Replay", isReplay: true);
-        var settings = new SettingsPaneViewModel([live, replay]);
+        using var live = CreateClient("Live");
+        using var other = CreateClient("Other");
+        var settings = new SettingsPaneViewModel([live, other]);
 
         Assert.Same(live, settings.SelectedClient);
         Assert.True(settings.CanEditOptions);
         Assert.Equal("Live ready", settings.ClientStatus);
         Assert.Equal("ChatClient0Radio", settings.Clients[0].AutomationId);
 
-        settings.SelectedClient = replay;
+        settings.SelectedClient = other;
 
-        Assert.Same(replay, settings.SelectedClient);
-        Assert.True(settings.SelectedDescriptor?.IsReplay);
-        Assert.False(settings.CanEditOptions);
-        Assert.Equal("Replay ready", settings.ClientStatus);
+        Assert.Same(other, settings.SelectedClient);
+        Assert.Equal("other", settings.SelectedDescriptor?.Id);
+        Assert.True(settings.CanEditOptions);
+        Assert.Equal("Other ready", settings.ClientStatus);
         Assert.Equal("ChatClient1Radio", settings.Clients[1].AutomationId);
     }
 
@@ -65,33 +65,21 @@ public sealed class SettingsPaneViewModelTests
     [Fact]
     public void Constructor_DuplicateClientIds_Throws()
     {
-        using var first = CreateClient("Live", isReplay: false);
-        using var second = CreateClient("Live", isReplay: false);
+        using var first = CreateClient("Live");
+        using var second = CreateClient("Live");
 
         Assert.Throws<ArgumentException>(() => new SettingsPaneViewModel([first, second]));
     }
 
     [Fact]
-    public void Constructor_OnlyReplayClient_SelectsReplayWithoutLiveProvider()
+    public void Constructor_WithoutClients_SelectsNothing()
     {
-        using var replay = CreateClient("Replay", isReplay: true);
+        var settings = new SettingsPaneViewModel([]);
 
-        var settings = new SettingsPaneViewModel([replay]);
-
-        Assert.Same(replay, settings.SelectedClient);
+        Assert.Null(settings.SelectedClient);
+        Assert.Null(settings.SelectedDescriptor);
         Assert.False(settings.CanEditOptions);
-        Assert.Equal("Replay ready", settings.ClientStatus);
-    }
-
-    [Fact]
-    public void Constructor_ReplayBeforeLive_SelectsFirstLiveClient()
-    {
-        using var replay = CreateClient("Replay", isReplay: true);
-        using var live = CreateClient("Live", isReplay: false);
-        var settings = new SettingsPaneViewModel([replay, live]);
-
-        Assert.Same(live, settings.SelectedClient);
-        Assert.Equal("ChatClient1Radio", settings.Clients[1].AutomationId);
+        Assert.False(settings.SupportsToolCalling);
     }
 
     [Fact]
@@ -103,7 +91,7 @@ public sealed class SettingsPaneViewModelTests
                 new("gemini-nano", "Default"),
                 new("gemini-nano-preview-fast", "Preview fast"),
             ]));
-        using var other = CreateClient("Other", isReplay: false);
+        using var other = CreateClient("Other");
         var settings = new SettingsPaneViewModel([client, other]);
 
         Assert.True(settings.HasModels);
@@ -134,7 +122,7 @@ public sealed class SettingsPaneViewModelTests
     [Fact]
     public void CreateChatOptions_UsesBuiltInToolModesAndRejectsUnsupportedModes()
     {
-        using var client = CreateClient("Live", isReplay: false);
+        using var client = CreateClient("Live");
         var settings = new SettingsPaneViewModel([client]);
 
         Assert.True(settings.UseConnectionStatusTool);
@@ -151,9 +139,26 @@ public sealed class SettingsPaneViewModelTests
     }
 
     [Fact]
+    public void RequireAny_CountsOnlyTheToolsThatAnswerByThemselves()
+    {
+        using var client = CreateClient("Live");
+        var settings = new SettingsPaneViewModel([client]) { ToolMode = ChatToolMode.RequireAny };
+        var tool = AIFunctionFactory.Create(() => "4", "calculate");
+        var action = AIFunctionFactory.Create(() => "ok", "set_theme").AsDeclarationOnly();
+
+        // Forced to call one, the model would only ever call a UI action, such as switching the theme.
+        var error = Assert.Throws<ArgumentException>(() => settings.CreateChatOptions([], [action]));
+        Assert.Equal("Require any needs at least one enabled tool.", error.Message);
+
+        var options = settings.CreateChatOptions([tool], [action]);
+        Assert.Same(ChatToolMode.RequireAny, options.ToolMode);
+        Assert.Equal<AITool>([tool, action], options.Tools!);
+    }
+
+    [Fact]
     public void MultipleToolCalls_MapsNullableBoolDirectlyToChatOptions()
     {
-        using var client = CreateClient("Live", isReplay: false);
+        using var client = CreateClient("Live");
         var settings = new SettingsPaneViewModel([client]);
 
         Assert.True(settings.IsMultipleToolCallsDefault);
@@ -172,7 +177,7 @@ public sealed class SettingsPaneViewModelTests
     [Fact]
     public void CreateChatOptions_ClientWithoutToolCalling_DoesNotForwardHiddenToolSettings()
     {
-        using var live = CreateClient("Live", isReplay: false);
+        using var live = CreateClient("Live");
         using var noTools = new DescribedChatClient(
             new StubChatClient(),
             new ChatClientDescriptor(
@@ -189,6 +194,7 @@ public sealed class SettingsPaneViewModelTests
 
         var tool = AIFunctionFactory.Create(() => "unexpected");
         Assert.Throws<NotSupportedException>(() => settings.CreateChatOptions([tool]));
+        Assert.Throws<NotSupportedException>(() => settings.CreateChatOptions([], [tool]));
 
         settings.SelectedClient = live;
         Assert.Same(ChatToolMode.RequireAny, settings.CreateChatOptions([tool]).ToolMode);
@@ -197,7 +203,7 @@ public sealed class SettingsPaneViewModelTests
     [Fact]
     public void CreateChatOptions_SwitchingFromStructuredProvider_DoesNotSendStaleJsonSettings()
     {
-        using var live = CreateClient("Live", isReplay: false);
+        using var live = CreateClient("Live");
         using var textOnly = new DescribedChatClient(new StubChatClient(),
             new ChatClientDescriptor("text-only", "Text only", "Plain text",
                 SupportsStructuredOutput: false));
@@ -241,12 +247,45 @@ public sealed class SettingsPaneViewModelTests
         Assert.Contains("first request", settings.ClientStatus);
     }
 
-    private static IChatClient CreateClient(string name, bool isReplay) =>
+    [Fact]
+    public void ClientWithoutUIActions_IsNeitherToldNorOfferedThem()
+    {
+        using var live = CreateClient("Live");
+        using var apple = new DescribedChatClient(new StubChatClient(),
+            new ChatClientDescriptor("apple", "Apple", "Runs tools itself", SupportsToolCalling: true, SupportsUIActions: false));
+        var settings = new SettingsPaneViewModel([live, apple]);
+        Assert.True(settings.SupportsUIActions);
+        Assert.Equal($"{SettingsPaneViewModel.DefaultInstructions} {SettingsPaneViewModel.UIActionInstructions}", settings.Instructions);
+        Assert.Contains("Switch to dark mode", settings.CreateSuggestions());
+
+        settings.SelectedClient = apple;
+
+        Assert.True(settings.SupportsToolCalling);
+        Assert.False(settings.SupportsUIActions);
+        Assert.Equal(SettingsPaneViewModel.DefaultInstructions, settings.Instructions);
+        Assert.DoesNotContain("set_theme", settings.Instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("propose_notes", settings.Instructions, StringComparison.Ordinal);
+        var suggestions = settings.CreateSuggestions();
+        Assert.Contains("Am I online?", suggestions);
+        Assert.DoesNotContain("Switch to dark mode", suggestions);
+        Assert.DoesNotContain(suggestions, suggestion => suggestion.Contains("notes", StringComparison.Ordinal));
+
+        // A model without tool calling gets no UI actions either; instructions the user wrote stay as they are.
+        settings.SelectedClient = live;
+        Assert.Contains("set_theme", settings.Instructions, StringComparison.Ordinal);
+        settings.ModelStatus = new(ChatModelAvailability.Available, [ChatModelCapability.Text]);
+        Assert.False(settings.SupportsUIActions);
+        Assert.Equal(SettingsPaneViewModel.DefaultInstructions, settings.Instructions);
+        settings.Instructions = "Be brief.";
+        settings.SelectedClient = apple;
+        settings.SelectedClient = live;
+        Assert.Equal("Be brief.", settings.Instructions);
+    }
+
+    private static IChatClient CreateClient(string name) =>
         new DescribedChatClient(
             new StubChatClient(),
-            new ChatClientDescriptor(
-                name.ToLowerInvariant(), name, $"{name} ready",
-                IsReplay: isReplay, SupportsToolCalling: !isReplay));
+            new ChatClientDescriptor(name.ToLowerInvariant(), name, $"{name} ready", SupportsToolCalling: true));
 
     private sealed class StubChatClient : IChatClient
     {

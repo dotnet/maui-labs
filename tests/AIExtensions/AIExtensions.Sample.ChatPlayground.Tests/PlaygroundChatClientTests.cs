@@ -12,8 +12,6 @@ public sealed class PlaygroundChatClientTests
     {
         using var model = new ScriptedChatClient(ScriptedResponse.Text("One"), ScriptedResponse.Text("Two"));
         using var harness = new PlaygroundChatHarness(model);
-        var started = new List<ChatOptions>();
-        harness.Router.LiveRequestStarting += (_, options) => started.Add(options);
 
         harness.Settings.Instructions = "  Be brief.  ";
         await harness.Session.SendMessageAsync("First");
@@ -28,15 +26,28 @@ public sealed class PlaygroundChatClientTests
             {
                 Assert.Equal("Be brief.", first.Options!.Instructions);
                 Assert.Equal(
-                    ["get_current_local_datetime", "calculate", "get_connection_status", "image_generation"],
+                    ["get_current_local_datetime", "calculate", "get_connection_status", "image_generation", "propose_notes"],
                     first.Options.Tools!.Select(ToolName));
             },
             second =>
             {
                 Assert.Equal("Be thorough.", second.Options!.Instructions);
-                Assert.Equal(["get_current_local_datetime", "get_connection_status"], second.Options.Tools!.Select(ToolName));
+                Assert.Equal(
+                    ["get_current_local_datetime", "get_connection_status", "propose_notes"],
+                    second.Options.Tools!.Select(ToolName));
             });
-        Assert.Equal(model.Requests.Select(request => request.Options), started);
+    }
+
+    [Fact]
+    public void Instructions_StartWithWhatThePlaygroundCanDo()
+    {
+        using var model = new ScriptedChatClient();
+        using var harness = new PlaygroundChatHarness(model);
+
+        Assert.Equal(harness.Settings.GetDefaultInstructions(), harness.Settings.Instructions);
+        Assert.StartsWith(SettingsPaneViewModel.DefaultInstructions, harness.Settings.Instructions, StringComparison.Ordinal);
+        Assert.Contains("set_theme", harness.Settings.Instructions, StringComparison.Ordinal);
+        Assert.Contains("propose_notes", harness.Settings.Instructions, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -139,41 +150,12 @@ public sealed class PlaygroundChatClientTests
         Assert.Same(PlaygroundChatHarness.LiveDescriptor, harness.Router.GetService<ChatClientDescriptor>());
         Assert.NotNull(harness.Router.GetService<FunctionInvokingChatClient>());
         Assert.Same(harness.Router, harness.Router.GetService<PlaygroundChatClient>());
+        Assert.Null(harness.Router.GetService<PlaygroundChatClient>("key"));
 
-        harness.Router.IsReplaying = true;
-        Assert.Same(PlaygroundChatHarness.ReplayDescriptor, harness.Router.GetService<ChatClientDescriptor>());
+        harness.Settings.SelectedClient = null;
+        Assert.Null(harness.Router.GetService<ChatClientDescriptor>());
         Assert.Null(harness.Router.GetService<FunctionInvokingChatClient>());
         Assert.Same(harness.Router, harness.Router.GetService<PlaygroundChatClient>());
-        Assert.Null(harness.Router.GetService<PlaygroundChatClient>("key"));
-    }
-
-    [Fact]
-    public async Task ReplayMode_AnswersFromTheRecordingWhileALiveClientIsSelected()
-    {
-        using var model = new ScriptedChatClient();
-        using var harness = new PlaygroundChatHarness(model);
-        await harness.LoadAsync("no-tools.json");
-        Assert.Same(harness.Live, harness.Settings.SelectedClient);
-
-        harness.Router.IsReplaying = true;
-        var response = await harness.Router.GetResponseAsync([new ChatMessage(ChatRole.User, "Anything")]);
-
-        Assert.NotEmpty(response.Text);
-        Assert.Empty(model.Requests);
-        Assert.Equal(1, harness.Recording.ReplayPosition);
-    }
-
-    [Fact]
-    public async Task LiveRequest_WithReplaySelected_IsRejectedAsReadOnly()
-    {
-        using var harness = new PlaygroundChatHarness();
-        await harness.LoadAsync("no-tools.json");
-
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => harness.Router.GetResponseAsync([new ChatMessage(ChatRole.User, "Hello")]));
-
-        Assert.Equal("Replay is read-only. Use Play all or Next turn.", error.Message);
-        Assert.Equal(0, harness.Recording.ReplayPosition);
     }
 
     [Fact]
@@ -270,7 +252,23 @@ public sealed class PlaygroundChatClientTests
             model, PlaygroundChatHarness.LiveDescriptor with { SupportsToolCalling = false });
 
         Assert.Empty(harness.Router.CreateEnabledTools());
+        Assert.Empty(harness.Router.CreateUIActions([AIFunctionFactory.Create(() => "ok", "do_something").AsDeclarationOnly()]));
         Assert.Null(harness.Settings.CreateChatOptions(harness.Router.CreateEnabledTools()).Tools);
+    }
+
+    [Fact]
+    public async Task UIActions_AreLeftOutForAClientThatRunsToolsItself()
+    {
+        using var model = new ScriptedChatClient(ScriptedResponse.Text("Hi"));
+        using var harness = new PlaygroundChatHarness(
+            model, PlaygroundChatHarness.LiveDescriptor with { SupportsImageGeneration = false, SupportsUIActions = false });
+
+        await harness.Session.SendMessageAsync("Hello");
+
+        Assert.Equal(ConversationStatus.Idle, harness.Session.Status);
+        Assert.Equal(
+            ["get_current_local_datetime", "calculate", "get_connection_status"],
+            Assert.Single(model.Requests).Options!.Tools!.Select(ToolName));
     }
 
     [Fact]
@@ -292,7 +290,7 @@ public sealed class PlaygroundChatClientTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ApprovedCall_RunsAndTheContinuationKeepsTheRequestOptions(bool streaming)
+    public async Task ApprovedCall_RunsAndTheContinuationHasTheSameOptions(bool streaming)
     {
         using var model = new ScriptedChatClient(
             new ScriptedResponse(new ChatResponse(new ChatMessage(ChatRole.Assistant, [CalculatorCall("call-1")]))),
@@ -303,15 +301,11 @@ public sealed class PlaygroundChatClientTests
         harness.Settings.RequireToolApproval = true;
         harness.Settings.Instructions = "Use the calculator.";
         var statuses = new List<ConversationStatus>();
-        harness.Session.RegisterOnStatusChanged(status =>
+        harness.Session.OnStatusChanged(status =>
         {
             statuses.Add(status);
             if (status == ConversationStatus.AwaitingInput)
-            {
-                // Settings changed while the approval waits do not apply to the request being continued.
-                harness.Settings.Instructions = "Changed while waiting.";
                 harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Approve();
-            }
         });
 
         await harness.Session.SendMessageAsync("What is 12 \u00D7 7?");
@@ -325,10 +319,13 @@ public sealed class PlaygroundChatClientTests
         Assert.Equal("84", CalculatorDisplay.FormatResult(approval.Result, CultureInfo.InvariantCulture));
         Assert.Equal("12 \u00D7 7 = 84.", harness.LastTurn.ResponseBlocks.OfType<TextContentBlock>().Single().RawText);
 
-        // The model saw the call's result, sent with the same options (and tools) as the request that made the call.
+        // The approval card shows the call; the worksheet doesn't show it again once it runs.
+        Assert.DoesNotContain(harness.LastTurn.ResponseBlocks, block => block is CalculatorWorksheetBlock);
+
+        // The model saw the call's result, sent with the same instructions and tools as the request that made the call.
         Assert.Equal(2, model.Requests.Count);
-        Assert.Same(model.Requests[0].Options, model.Requests[1].Options);
         Assert.Equal("Use the calculator.", model.Requests[1].Options!.Instructions);
+        Assert.Equal(model.Requests[0].Options!.Tools!.Select(ToolName), model.Requests[1].Options!.Tools!.Select(ToolName));
         var sent = model.Requests[1].Messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Single();
         Assert.Equal("call-1", sent.CallId);
         Assert.Equal("84", CalculatorDisplay.FormatResult(sent, CultureInfo.InvariantCulture));
@@ -343,7 +340,7 @@ public sealed class PlaygroundChatClientTests
         using var live = new FunctionInvokingChatClient(model);
         using var harness = new PlaygroundChatHarness(live);
         harness.Settings.RequireToolApproval = true;
-        harness.Session.RegisterOnStatusChanged(status =>
+        harness.Session.OnStatusChanged(status =>
         {
             if (status == ConversationStatus.AwaitingInput)
                 harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>().Single().Reject("Not now");
@@ -354,9 +351,54 @@ public sealed class PlaygroundChatClientTests
         Assert.Equal(ConversationStatus.Idle, harness.Session.Status);
         var approval = Assert.Single(harness.LastTurn.ResponseBlocks.OfType<ToolApprovalBlock>());
         Assert.Equal(ApprovalStatus.Rejected, approval.Status);
+        Assert.DoesNotContain(harness.LastTurn.ResponseBlocks, block => block is CalculatorWorksheetBlock);
+        Assert.Equal("Okay, I will not calculate it.", harness.LastTurn.ResponseBlocks.OfType<TextContentBlock>().Single().RawText);
         var rejection = model.Requests[1].Messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Single();
         Assert.Equal("call-1", rejection.CallId);
         Assert.Contains("Not now", rejection.Result?.ToString());
+    }
+
+    [Fact]
+    public async Task EngineOptions_KeepTheProviderConversationAndAddTheUIActionsToTheSettings()
+    {
+        using var model = new ScriptedChatClient(ScriptedResponse.Text("Done"));
+        using var harness = new PlaygroundChatHarness(model);
+        harness.Settings.Instructions = "Be brief.";
+        var action = AIFunctionFactory.Create(() => "ok", "do_something").AsDeclarationOnly();
+
+        await harness.Router.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "Hi")],
+            new ChatOptions { ConversationId = "response-1", Instructions = "Ignored", Tools = [action] });
+
+        // Within a turn the engine sends only the new messages and continues the provider's conversation, so the
+        // conversation must reach the provider; everything else comes from the settings.
+        var options = Assert.Single(model.Requests).Options!;
+        Assert.Equal("response-1", options.ConversationId);
+        Assert.Equal("Be brief.", options.Instructions);
+        Assert.Equal(
+            ["get_current_local_datetime", "calculate", "get_connection_status", "image_generation", "do_something"],
+            options.Tools!.Select(ToolName));
+        Assert.Same(action, options.Tools![4]);
+    }
+
+    [Fact]
+    public void ApprovalRequiredUIAction_AsksOnlyWhileAskBeforeRunningToolsIsOn()
+    {
+        using var model = new ScriptedChatClient();
+        using var harness = new PlaygroundChatHarness(model);
+        var action = ThemeAction.Create(_ => { }).AsDeclarationOnly();
+
+        var plain = Assert.IsAssignableFrom<AIFunctionDeclaration>(
+            Assert.Single(harness.Router.CreateUIActions([action])));
+        Assert.Null(plain.GetService<ApprovalRequiredAIFunction>());
+        Assert.IsNotAssignableFrom<AIFunction>(plain);
+        Assert.Equal(action.Description, plain.Description);
+        Assert.Equal(action.JsonSchema.GetRawText(), plain.JsonSchema.GetRawText());
+
+        harness.Settings.RequireToolApproval = true;
+        var asking = Assert.Single(harness.Router.CreateUIActions([action]));
+        Assert.Same(action, asking);
+        Assert.NotNull(asking.GetService<ApprovalRequiredAIFunction>());
     }
 
     private static FunctionCallContent CalculatorCall(string callId) =>

@@ -1,8 +1,8 @@
 # AI Chat Playground
 
 A .NET MAUI sample for comparing Apple Intelligence, Windows AI, Gemini Nano,
-Azure OpenAI, and offline Replay through the same chat UI. It runs on Android,
-iOS, Mac Catalyst, and Windows (not native macOS); providers vary by platform.
+and Azure OpenAI through the same chat UI. It runs on Android, iOS, Mac Catalyst,
+and Windows (not native macOS); providers vary by platform.
 
 ## What you can try
 
@@ -16,64 +16,79 @@ Chat, Embeddings, and Images have separate providers and capabilities.
 | Windows AI | Windows 11 24H2+ on supported Copilot+ hardware | Not supported | Not supported | Supported |
 | Gemini Nano | Android API 26+ on supported AICore hardware | In-memory images | Native Auto on capable Nano V4 profiles | Not supported |
 | Azure OpenAI | Configured Responses API deployment | Supported by compatible deployments | Supported by compatible deployments | Supported by compatible deployments |
-| Replay | Recorded responses | No new image input | Recorded activity, no execution | Recorded responses |
 
 Native chat does not fall back to Azure. Structured responses stream only when
-the selected provider emits incremental updates.
+the selected provider emits incremental updates. Apple Intelligence runs tools
+inside its own session instead of handing the calls back to the app, so it isn't
+offered the chat's UI actions (`set_theme` and `propose_notes`), and its
+instructions and suggestions leave them out; the notes still reach it with each
+message.
 
-Under each answer, a footer shows the model that answered and its token usage.
-The chat auto-saves a recording locally. **New** replaces the recording; **More**
-loads the example or imports/exports recordings. Replay works offline; switch to
-a live provider to continue chatting. Settings apply to the next message without
-starting a new chat. Controls reflect provider capabilities. Uncheck tools or
-choose **None** to disable calls. Switching providers preserves your Structured
-JSON preference, but providers that opt out receive plain-text requests and their
-responses display as text.
+Settings apply to the next message without starting a new chat. Controls reflect
+provider capabilities. Uncheck tools or choose **None** to disable calls.
+Switching providers preserves your Structured JSON preference, but providers that
+opt out receive plain-text requests and their responses display as text. Under
+each answer, a footer shows the model that answered, its token usage, and whether
+you stopped it; a failed answer says why and offers **Retry**.
 
-#### Built on AIChatView
+The conversation is saved as it changes and comes back when the app starts.
+**More** starts a **New chat**, which clears the saved conversation and the notes,
+and shows or hides the notes.
 
-The Chat tab is the showcase for `AIChatView` (`Microsoft.Maui.AI.Chat.Controls`)
-on the `Microsoft.Maui.AI.Chat` engine. The messages, tool and approval cards, and
-the composer are all the control; the playground only configures it:
+#### What the chat shows
+
+The suggestions on an empty chat try what the selected client supports.
+
+| Feature | Try | How it works |
+|---------|-----|--------------|
+| A tool call | "What time is it here?" | `get_current_local_datetime` has no template of its own, so it shows the generic tool card: the call, its arguments, and its result, or **No result** when the answer ended without one. |
+| Several calls in one card | "Use the calculator: (12 × 7) + (30 ÷ 4)" | `CalculatorWorksheetHandler`, an `ActivityHandler`, folds every `calculate` call of an answer into one worksheet, a row per calculation. Rows fill in as their results arrive, and a calculation that failed or never ran says why; once the answer is stopped or fails, a row without a result says **No result**. |
+| A typed tool card | "Am I online?" | `ConnectionStatusBlock` is a `[ToolBlock("get_connection_status")]` block: the source generator writes the handler that maps the call's result into it, and `options.AddGeneratedToolBlocks()` registers it. |
+| A UI action | "Switch to dark mode" | `set_theme` runs in the app rather than in the model's client: it sets the app to the light, dark, or system theme. |
+| Approvals | **Ask before running tools** in settings | Each local tool, and `set_theme`, waits behind an approval card. **Approve** runs it; **Reject** tells the model it was declined. |
+| Reasoning | "Which is larger, 9.11 or 9.9?" | With **Reasoning summary** on, a model that summarizes its reasoning shows it muted above the answer, with the summary's headings, which the model marks with `**`, in bold. Reasoning that arrives only encrypted shows nothing. |
+| Images | Attach an image, or "Generate an image of a cozy cabin" | Clients that accept images take one with the message. With an Azure image deployment, the model can generate or edit images. |
+| Structured output | **Structured JSON** in settings | An answer that is a JSON object shows as a structured-response card, chosen by `StructuredResponseMatch`, a custom `BlockMatch`. |
+| Shared notes | "Add a Paris packing list to my notes" | See [Notes](#notes). |
+
+#### Notes
+
+You and the model share notes, which are the agent's typed state
+(`UIAgent<NotesState>`):
+
+- You edit the notes in the notes bar. Each request tells the model what they
+  say, in a message added just before yours in that request only, so the
+  conversation doesn't keep old copies.
+- The model changes them only by proposing new text with `propose_notes`, a
+  manual UI action. The proposal is predictive state: the notes show it with
+  added text highlighted and removed text struck through, and **Accept** or
+  **Reject**, in the bar or on the proposal's card, decides. The model hears which.
+  Stopping the answer, or a failure, rolls the proposal back.
+- An answer that proposes more than once is reviewed one proposal at a time, in
+  order. Once you decide one, in the bar or on its card, the bar shows the next
+  with its changes to the notes as they are then.
+- The bar stays hidden until the notes get text, change, or receive a proposal;
+  **More** shows or hides it. On a phone it sits between the messages and the
+  composer, and expands to an editor. In a wider window it is a column beside the
+  messages.
+- The notes are saved next to the conversation. Restoring the conversation can't
+  replay your own edits or decisions, so the saved notes are put back after it,
+  also when the conversation can't be restored. **New chat** deletes them.
+
+#### How the chat is built
+
+The chat is a plain `CollectionView` over the engine's turns
+(`Microsoft.Maui.AI.Chat`) with block templates from
+`Microsoft.Maui.AI.Chat.Controls`:
 
 | Piece | Where | What it does |
 |-------|-------|--------------|
-| Session | `ChatViewModel` | One `AgentContext` for the page, bound to `AIChatView.Session`. **New** clears it; it is never recreated. |
-| Router client | `PlaygroundChatClient` | The one `IChatClient` the engine talks to. It sends each request to the client selected in settings, with `ChatOptions` built from the settings for that request, or to the replay client while a recording replays, and records each live exchange. With **Streaming** off it asks for the whole response. Requests the client cannot take, such as images for a text-only client or an invalid setting, fail before anything is sent, and the chat shows the error with **Retry**. |
-| Custom cards | `ChatPage.xaml` | A `BlockTemplate` for the `calculate` tool shows the call as arithmetic (`12 × 7 = 84`). `StructuredResponseTemplate` overrides `When` to pick assistant text that is a JSON object, and shows the structured response as a card with its JSON one tap away. |
-| Slots | `ChatPage.xaml` | `MessagesHeaderTemplate` shows the system instructions in effect, `ResponseFooterTemplate` the model and usage, and `InputHeaderContent` the model readiness banner above the composer. |
-| Attachments | `PlaygroundAttachmentPicker` | Registered as the `IChatAttachmentPicker`: choose an image or attach the bundled sample image. **Attach** appears only for clients that accept images. |
-| Theme | `App.xaml` | Overrides a few `AIChat.Light.*` and `AIChat.Dark.*` colors to match the playground. Remove them to see the control's defaults. |
-
-#### Tools and approvals
-
-The settings enable the local date/time, calculator, and connection-status tools,
-and Azure image generation. **Ask before running tools** puts each local tool
-behind an approval card: **Approve** runs it, **Reject** tells the model it was
-declined. The suggestions on an empty chat try the features the selected client
-supports.
-
-#### Recording and replay
-
-Each live request is recorded with its response, including the tool calls and
-results in it: the router records around the selected client's whole pipeline, so
-the recording holds the exchange the engine saw. Replay runs through the same
-engine path as a live chat: each
-recorded user message is sent again and the replay client answers with the
-recorded response, without contacting a model.
-
-- **Play all** clears the chat and replays every turn; **Next turn** replays one;
-  **Restart** rewinds. **Stop**, or stopping a replayed response in the chat,
-  interrupts the replay, clears the chat, and rewinds.
-- Recorded approval decisions are applied to the approval cards. A turn whose
-  approval the recording never answered is shown stopped.
-- A recorded request that does not end with a user message, such as one from a
-  client that sends tool results itself, is restored as history.
-- Responses stopped part-way are not recorded. When a recorded request continues
-  a conversation that differs from the one shown, for example after a stopped
-  turn, that conversation is restored before its message is sent again.
-- While a replay is part-way through, sending stays disabled until it finishes or
-  you start a new chat. The auto-saved chat replays when the app starts.
+| Session | `ChatViewModel` | One `AgentContext` for the page over a `UIAgent<NotesState>` with the worksheet handler, the generated tool blocks, the `set_theme` and `propose_notes` UI actions, and the saved thread. **New chat** clears it; it is never recreated. |
+| Router client | `PlaygroundChatClient` | The one `IChatClient` the engine talks to. It sends each request to the client selected in settings, with `ChatOptions` built from the settings and the engine's UI actions, and the notes. With **Streaming** off it asks for the whole response. Requests the client cannot take, such as images for a text-only client or an invalid setting, fail before anything is sent, and the chat shows the error with **Retry**. |
+| Conversation | `ChatArea.xaml` | Each turn lays out its request and response blocks with a `BindableLayout` and a `BlockTemplateSelector`, then says whether it was stopped or why it failed. |
+| Templates | `ChatTemplates.xaml` | A `BlockTemplate` per kind of block, and the first that matches wins: your message, the answer, reasoning, images, the structured response, the worksheet, the connection card, the notes proposal, approvals, UI actions, and the generic tool card. |
+| Composer | `ChatComposer.xaml` | An editor, **Attach** for clients that accept images, and **Send**, or **Stop** while an answer runs. |
+| Saved conversation | `FileConversationThread` | The engine's thread (`UIAgentOptions.Thread`): it writes each finished turn's updates to a JSON file, and `RestoreAsync` shows them again when the app starts. |
 
 ### Embeddings
 
@@ -171,7 +186,7 @@ may continue. Status changes and operation errors appear in **Logs**.
 
 ## Configure Azure OpenAI
 
-Azure is optional. On-device providers and Replay need no cloud credentials.
+Azure is optional. On-device providers need no cloud credentials.
 Configure an endpoint (typically ending in `/openai/v1/`), a key, and only the
 deployments you want to use. The project uses user-secrets ID
 `2727d4aa-a3a5-484b-9447-91604761972b`. From the repository root:
@@ -192,14 +207,14 @@ when at least one Azure deployment is configured.
 
 **Debug builds embed your local user secrets. Do not distribute these builds
 or commit credentials.** Azure prompts, images, and indexed text may leave the
-device and incur charges. Recordings may also contain sensitive data; review
-them before sharing.
+device and incur charges. The saved conversation and notes may also contain
+sensitive data.
 
 ## Tests
 
-The playground's tests run without MAUI workloads. They cover the router, the
-replay driver, and the custom cards, and replay every recording in `TestData`
-through the engine:
+The playground's tests run without MAUI workloads. They drive the chat's router,
+handlers, notes, and saved conversation through the real engine with scripted
+responses:
 
 ```sh
 dotnet test tests/AIExtensions/AIExtensions.Sample.ChatPlayground.Tests

@@ -9,6 +9,24 @@ namespace AIExtensions.Sample.ChatPlayground;
 /// <summary>Owns provider selection and request options shown in the settings pane.</summary>
 public sealed partial class SettingsPaneViewModel : ObservableObject
 {
+    /// <summary>The system instructions a chat starts with, which tell the model what the playground can do.</summary>
+    public const string DefaultInstructions =
+        "You are the assistant in a .NET MAUI chat playground. Answer in plain text, without Markdown. " +
+        "Use the calculator for arithmetic, one operation per call. You can read the local date and time and this " +
+        "device's connection. The notes you share with the user come with each message when they have text; when " +
+        "none come, the notes are empty.";
+
+    /// <summary>
+    /// What the instructions add for a client that gets the chat's UI actions, which the app runs: the theme, and
+    /// proposing changes to the notes.
+    /// </summary>
+    public const string UIActionInstructions =
+        "You can switch the app between light, dark, and the system theme with set_theme. To change the notes, call " +
+        "propose_notes with the complete new text. The user accepts or rejects the proposal, so never say the notes " +
+        "changed unless the result says it was accepted.";
+
+    private const string InstructionsWithUIActions = DefaultInstructions + " " + UIActionInstructions;
+
     /// <summary>Initializes the settings state.</summary>
     public SettingsPaneViewModel(IEnumerable<IChatClient> clients)
     {
@@ -17,8 +35,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         if (Clients.Select(option => option.Descriptor.Id).Distinct(StringComparer.Ordinal).Count() != Clients.Count)
             throw new ArgumentException("Chat clients need distinct IDs.", nameof(clients));
 
-        SelectedClient = Clients.FirstOrDefault(option => !option.Descriptor.IsReplay)?.Client
-            ?? Clients.Single(option => option.Descriptor.IsReplay).Client;
+        SelectedClient = Clients.FirstOrDefault()?.Client;
     }
 
     public IReadOnlyList<ChatClientOption> Clients { get; }
@@ -31,12 +48,13 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SupportsToolCalling))]
+    [NotifyPropertyChangedFor(nameof(SupportsUIActions))]
     private ChatModelStatus? modelStatus;
 
     [ObservableProperty] private bool useStreaming = true;
     [ObservableProperty] private bool useStructuredJson;
     [ObservableProperty] private bool useReasoningSummary = true;
-    [ObservableProperty] private string instructions = string.Empty;
+    [ObservableProperty] private string instructions = DefaultInstructions;
     [ObservableProperty] private bool useDateTimeTool = true;
     [ObservableProperty] private bool useCalculatorTool = true;
     [ObservableProperty] private bool useConnectionStatusTool = true;
@@ -71,12 +89,17 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
     public ChatClientDescriptor? SelectedDescriptor => SelectedClient is { } client
         ? client.GetRequiredService<ChatClientDescriptor>()
         : null;
-    public bool CanEditOptions => !IsBusy && SelectedDescriptor is { IsReplay: false };
+    public bool CanEditOptions => !IsBusy && SelectedDescriptor is not null;
     public IReadOnlyList<ChatModelOption> Models => SelectedDescriptor?.Models ?? [];
     public bool HasModels => Models.Count > 0;
     public string? RequestModelId => HasModels ? SelectedModelId : null;
     public bool SupportsToolCalling => SelectedDescriptor?.SupportsToolCalling == true &&
         (ModelStatus?.Capabilities is not { } capabilities || capabilities.Contains(ChatModelCapability.ToolCalling));
+
+    /// <summary>
+    /// Gets whether the selected client hands tool calls back to the app, so the model gets the chat's UI actions.
+    /// </summary>
+    public bool SupportsUIActions => SupportsToolCalling && SelectedDescriptor?.SupportsUIActions == true;
 
     public bool IsMultipleToolCallsDefault
     {
@@ -96,16 +119,21 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         set { if (value) AllowMultipleToolCalls = false; }
     }
 
-    /// <summary>Creates request options using the current settings and supplied real tools.</summary>
-    public ChatOptions CreateChatOptions(IList<AITool> tools)
+    /// <summary>Creates request options using the current settings, the enabled tools, and the chat's UI actions.</summary>
+    /// <param name="tools">The tools the settings enable, which run on this device or at the provider.</param>
+    /// <param name="uiActions">The chat's UI actions, which the app runs, such as switching the theme.</param>
+    public ChatOptions CreateChatOptions(IList<AITool> tools, IList<AITool>? uiActions = null)
     {
+        uiActions ??= [];
         var supportsToolCalling = SupportsToolCalling;
-        if (!supportsToolCalling && tools.Count > 0)
+        if (!supportsToolCalling && (tools.Count > 0 || uiActions.Count > 0))
             throw new NotSupportedException("The selected chat client does not support tool calling.");
         if (supportsToolCalling && ToolMode != ChatToolMode.Auto &&
             ToolMode != ChatToolMode.None &&
             ToolMode != ChatToolMode.RequireAny)
             throw new ArgumentOutOfRangeException(nameof(ToolMode), "Select a supported tool mode.");
+
+        // A UI action does not count: forced to call one, the model would switch the theme or propose notes each time.
         if (supportsToolCalling && ToolMode == ChatToolMode.RequireAny && tools.Count == 0)
             throw new ArgumentException("Require any needs at least one enabled tool.");
         if (supportsToolCalling && ToolMode is RequiredChatToolMode && SelectedDescriptor?.SupportsRequiredToolMode == false)
@@ -123,7 +151,7 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
             PresencePenalty = OptionalFloat(EnablePresencePenalty, PresencePenalty, "Presence penalty"),
             Seed = OptionalLong(EnableSeed, Seed, "Seed"),
             StopSequences = OptionalStopSequences(),
-            Tools = supportsToolCalling ? tools : null,
+            Tools = supportsToolCalling ? [.. tools, .. uiActions] : null,
             AllowMultipleToolCalls = supportsToolCalling ? AllowMultipleToolCalls : null,
             ToolMode = supportsToolCalling ? ToolMode : ChatToolMode.None,
         };
@@ -136,6 +164,37 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         if (UseStructuredJson && SelectedDescriptor?.SupportsStructuredOutput == true)
             options.ResponseFormat = ChatResponseFormat.ForJsonSchema<PlaygroundResponse>(PlaygroundJsonContext.Default.Options);
         return options;
+    }
+
+    /// <summary>Gets the instructions a chat starts with for the selected client, which mention only what it can do.</summary>
+    public string GetDefaultInstructions() => SupportsUIActions ? InstructionsWithUIActions : DefaultInstructions;
+
+    /// <summary>Creates the prompts the empty chat suggests, for what the selected client and the settings allow.</summary>
+    public IList<string> CreateSuggestions()
+    {
+        if (SelectedDescriptor is not { } descriptor)
+            return [];
+
+        var suggestions = new List<string>();
+        var tools = SupportsToolCalling;
+        if (tools && UseCalculatorTool)
+            suggestions.Add("Use the calculator: (12 \u00D7 7) + (30 \u00F7 4)");
+        if (tools && UseDateTimeTool)
+            suggestions.Add("What time is it here?");
+        if (tools && UseConnectionStatusTool)
+            suggestions.Add("Am I online?");
+        if (SupportsUIActions)
+        {
+            suggestions.Add("Switch to dark mode");
+            suggestions.Add("Add a Paris packing list to my notes");
+        }
+        if (UseReasoningSummary && descriptor.SupportsReasoningSummary)
+            suggestions.Add("Which is larger, 9.11 or 9.9?");
+        if (tools && UseImageGenerationTool && descriptor.SupportsImageGeneration)
+            suggestions.Add("Generate an image of a cozy cabin");
+        if (suggestions.Count == 0)
+            suggestions.Add("Tell me a fun fact about .NET MAUI");
+        return suggestions;
     }
 
     private IList<string>? OptionalStopSequences()
@@ -192,6 +251,17 @@ public sealed partial class SettingsPaneViewModel : ObservableObject
         OnPropertyChanged(nameof(HasModels));
         OnPropertyChanged(nameof(RequestModelId));
         OnPropertyChanged(nameof(SupportsToolCalling));
+        OnPropertyChanged(nameof(SupportsUIActions));
+        UpdateDefaultInstructions();
+    }
+
+    partial void OnModelStatusChanged(ChatModelStatus? value) => UpdateDefaultInstructions();
+
+    // Instructions the user edited stay as they are.
+    private void UpdateDefaultInstructions()
+    {
+        if (Instructions is DefaultInstructions or InstructionsWithUIActions)
+            Instructions = GetDefaultInstructions();
     }
 
     partial void OnIsBusyChanged(bool value)

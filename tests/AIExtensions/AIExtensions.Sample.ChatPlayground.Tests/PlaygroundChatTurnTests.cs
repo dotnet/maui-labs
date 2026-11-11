@@ -14,7 +14,7 @@ public sealed class PlaygroundChatTurnTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ToolCallAndReasoning_ShowReasoningThenTheCallWithItsResultThenTheAnswer(bool streaming)
+    public async Task CalculationAndReasoning_ShowReasoningThenTheWorksheetWithItsResultThenTheAnswer(bool streaming)
     {
         var call = new FunctionCallContent("call-1", "calculate",
             new Dictionary<string, object?> { ["left"] = 2, ["operation"] = "add", ["right"] = 2 });
@@ -50,12 +50,13 @@ public sealed class PlaygroundChatTurnTests
         Assert.Equal(3, turn.ResponseBlocks.Count);
         Assert.Equal("Calculating", Assert.Single(turn.ResponseBlocks.OfType<ReasoningContentBlock>()).Text);
 
-        // The repeated call is shown once, with its result, and the answer comes last. The order of the reasoning
-        // and the call, which arrive together, is covered by BlocksFromOneMessage_FollowTheContentOrder.
-        var tool = Assert.Single(turn.ResponseBlocks.OfType<FunctionInvocationContentBlock>());
-        Assert.Equal("calculate", tool.ToolName);
-        Assert.Equal("2 + 2", CalculatorDisplay.FormatExpression(tool.Arguments, CultureInfo.InvariantCulture));
-        Assert.Equal("4", CalculatorDisplay.FormatResult(tool.Result, CultureInfo.InvariantCulture));
+        // The repeated call is one row of the worksheet, with its result, and the answer comes last. The order of the
+        // reasoning and the call, which arrive together, is covered by BlocksFromOneMessage_FollowTheContentOrder.
+        var worksheet = Assert.Single(turn.ResponseBlocks.OfType<CalculatorWorksheetBlock>());
+        var row = Assert.Single(worksheet.Rows);
+        Assert.Equal("2 + 2", CalculatorDisplay.FormatExpression(row.Call.Arguments, CultureInfo.InvariantCulture));
+        Assert.Equal("4", CalculatorDisplay.FormatResult(row.Result, CultureInfo.InvariantCulture));
+        Assert.DoesNotContain(turn.ResponseBlocks, block => block is FunctionInvocationContentBlock);
         Assert.Equal("Answer: 4", Assert.IsType<TextContentBlock>(turn.ResponseBlocks[^1]).RawText);
         Assert.All(turn.ResponseBlocks, block => Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState));
     }
@@ -77,7 +78,7 @@ public sealed class PlaygroundChatTurnTests
         harness.Settings.UseStructuredJson = true;
         var structured = new StructuredResponseMatch();
         var selectedWhenAdded = new List<bool>();
-        harness.Session.RegisterOnBlockAdded((_, block) => selectedWhenAdded.Add(structured.Matches(block)));
+        harness.Session.OnBlockAdded((_, block) => selectedWhenAdded.Add(structured.Matches(block)));
 
         await harness.Session.SendMessageAsync("Respond with JSON");
 
@@ -228,9 +229,9 @@ public sealed class PlaygroundChatTurnTests
         var contents = new AIContent[]
         {
             new TextContent(structuredJson ? """{"answer":4}""" : "Answer: 4"),
-            new TextReasoningContent("Calculated"),
-            new FunctionCallContent("call", "calculate"),
-            new FunctionResultContent("call", 4),
+            new TextReasoningContent("Checked the time"),
+            new FunctionCallContent("call", "get_current_local_datetime"),
+            new FunctionResultContent("call", "10:00"),
             image,
             new ImageGenerationToolResultContent("image") { Outputs = [image] },
         };
@@ -263,7 +264,7 @@ public sealed class PlaygroundChatTurnTests
         // images.
         var text = Assert.Single(turn.ResponseBlocks.OfType<TextContentBlock>());
         Assert.Equal(structuredJson, new StructuredResponseMatch().Matches(text));
-        Assert.Equal("Calculated", Assert.Single(turn.ResponseBlocks.OfType<ReasoningContentBlock>()).Text);
+        Assert.Equal("Checked the time", Assert.Single(turn.ResponseBlocks.OfType<ReasoningContentBlock>()).Text);
         Assert.True(Assert.Single(turn.ResponseBlocks.OfType<FunctionInvocationContentBlock>()).HasResult);
         Assert.Equal(2, turn.ResponseBlocks.OfType<MediaContentBlock>().Count());
     }
@@ -428,15 +429,15 @@ public sealed class PlaygroundChatTurnTests
     {
         using var model = new ScriptedChatClient(ScriptedResponse.Stream(
             new ChatResponseUpdate(ChatRole.Assistant,
-                [new TextContent("Calculating"), new FunctionCallContent("call", "calculate")]) { ModelId = "actual-model" },
-            new ChatResponseUpdate(ChatRole.Tool, [new FunctionResultContent("call", 4)]) { ModelId = "actual-model" }));
+                [new TextContent("Checking"), new FunctionCallContent("call", "get_current_local_datetime")]) { ModelId = "actual-model" },
+            new ChatResponseUpdate(ChatRole.Tool, [new FunctionResultContent("call", "10:00")]) { ModelId = "actual-model" }));
         using var harness = new PlaygroundChatHarness(model);
 
         await harness.Session.SendMessageAsync("Question");
 
         Assert.Equal(ConversationStatus.Idle, harness.Session.Status);
         Assert.Equal(2, harness.LastTurn.ResponseBlocks.Count);
-        Assert.Equal("Calculating", Assert.Single(harness.LastTurn.ResponseBlocks.OfType<TextContentBlock>()).RawText);
+        Assert.Equal("Checking", Assert.Single(harness.LastTurn.ResponseBlocks.OfType<TextContentBlock>()).RawText);
         Assert.True(Assert.Single(harness.LastTurn.ResponseBlocks.OfType<FunctionInvocationContentBlock>()).HasResult);
         Assert.All(harness.LastTurn.ResponseBlocks, block => Assert.Equal(BlockLifecycleState.Inactive, block.LifecycleState));
         Assert.Equal("actual-model", harness.LastTurn.ModelId);
@@ -459,8 +460,8 @@ public sealed class PlaygroundChatTurnTests
     [Fact]
     public async Task CompleteResponseWithRepeatedToolContent_ShowsOneCallWithItsResult()
     {
-        var call = new FunctionCallContent("call", "calculate");
-        var result = new FunctionResultContent("call", 4);
+        var call = new FunctionCallContent("call", "get_current_local_datetime");
+        var result = new FunctionResultContent("call", "10:00");
         using var model = new ScriptedChatClient(new ScriptedResponse(new ChatResponse(
         [
             new ChatMessage(ChatRole.Assistant, [new TextContent("Before"), call, call]),
@@ -557,7 +558,7 @@ public sealed class PlaygroundChatTurnTests
         Assert.Collection(harness.LastTurn.ResponseBlocks,
             block => Assert.Equal("Planning", Assert.IsType<ReasoningContentBlock>(block).Text),
             block => Assert.Equal("Let me calculate that.", Assert.IsType<TextContentBlock>(block).RawText),
-            block => Assert.True(Assert.IsType<FunctionInvocationContentBlock>(block).HasResult),
+            block => Assert.True(Assert.Single(Assert.IsType<CalculatorWorksheetBlock>(block).Rows).HasResult),
             block => Assert.Equal("It is 84.", Assert.IsType<TextContentBlock>(block).RawText));
     }
 

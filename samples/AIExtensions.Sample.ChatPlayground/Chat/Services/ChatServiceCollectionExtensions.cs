@@ -3,7 +3,6 @@ using System.Runtime.Versioning;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.AI.Chat.Controls;
 using OpenAI;
 
 #if IOS || MACCATALYST || ANDROID || WINDOWS
@@ -19,15 +18,15 @@ internal static class ChatServiceCollectionExtensions
         services.AddSingleton<ConnectionStatusService>();
         services.AddSingleton(serviceProvider => new PlaygroundTools(
             serviceProvider.GetRequiredService<ConnectionStatusService>().GetStatus));
-        services.AddSingleton(serviceProvider => new ChatSessionService(
-            serviceProvider.GetRequiredService<ILogger<ChatSessionService>>(),
-            FileSystem.AppDataDirectory,
-            FileSystem.CacheDirectory));
-        services.AddSingleton<IChatRecordingSession>(provider => provider.GetRequiredService<ChatSessionService>());
+
+        // The engine's conversation thread saves each committed turn, so the chat comes back when the app starts. The
+        // shared notes are saved next to it.
+        var folder = Path.Combine(FileSystem.AppDataDirectory, "chat-playground");
+        services.AddSingleton(_ => new FileConversationThread(Path.Combine(folder, "conversation.json")));
+        services.AddSingleton(_ => new NotesFile(Path.Combine(folder, "notes.txt")));
         services.AddSingleton<SettingsPaneViewModel>();
         services.AddSingleton<ModelReadinessViewModel>();
         services.AddSingleton<ChatViewModel>();
-        services.AddSingleton<IChatAttachmentPicker, PlaygroundAttachmentPicker>();
         services.AddTransient<Page, ChatPage>();
 
 #if WINDOWS
@@ -46,8 +45,6 @@ internal static class ChatServiceCollectionExtensions
         if (!string.IsNullOrWhiteSpace(settings.DeploymentName))
             services.AddSingleton<IChatClient>(serviceProvider => CreateAzureChatClient(serviceProvider, settings));
 
-        services.AddSingleton<IChatClient>(CreateReplayChatClient);
-
         return services;
     }
 
@@ -64,6 +61,9 @@ internal static class ChatServiceCollectionExtensions
                 PrepareModelAsync: (_, _, cancellationToken) => WindowsAIChatClient.EnsureReadyAsync(cancellationToken)))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
+
+            // The model cannot call tools, but the chat's set_theme action can ask for approval, which needs this.
+            .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
             .Build();
 #endif
 
@@ -76,10 +76,12 @@ internal static class ChatServiceCollectionExtensions
             .UseDescriptor(new ChatClientDescriptor(
                 "apple-intelligence-chat",
                 "Apple Intelligence",
-                "Model readiness is checked above the composer. Apple manages model preparation in system settings.",
+                "Model readiness is checked above the composer. Apple manages model preparation in system settings. " +
+                    "Apple runs the tools itself, so the theme switch and notes proposals are unavailable.",
                 SupportsImageInput: OperatingSystem.IsIOSVersionAtLeast(27) || OperatingSystem.IsMacCatalystVersionAtLeast(27),
                 SupportsToolCalling: true,
-                GetModelStatusAsync: (_, cancellationToken) => AppleIntelligenceChatClient.GetModelStatusAsync(cancellationToken)))
+                GetModelStatusAsync: (_, cancellationToken) => AppleIntelligenceChatClient.GetModelStatusAsync(cancellationToken),
+                SupportsUIActions: false))
             .UsePlaygroundTelemetry()
             .UseLogging(serviceProvider.GetRequiredService<ILoggerFactory>())
             .UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>())
@@ -148,7 +150,6 @@ internal static class ChatServiceCollectionExtensions
             ? null
             : serviceProvider.GetRequiredService<IImageGenerator>();
 
-        // The chat's router records around this whole pipeline, so the saved response is the one shown in chat.
         var builder = openAIClient.GetResponsesClient()
             .AsIChatClient(deploymentName)
             .AsBuilder()
@@ -167,16 +168,6 @@ internal static class ChatServiceCollectionExtensions
             builder.UseImageGenerationPreservingInputs(imageGenerator);
         return builder.UseFunctionInvocation(serviceProvider.GetRequiredService<ILoggerFactory>()).Build();
     }
-
-    private static IChatClient CreateReplayChatClient(IServiceProvider serviceProvider) =>
-        new ReplayChatClient(serviceProvider.GetRequiredService<IChatRecordingSession>())
-            .AsBuilder()
-            .UseDescriptor(new ChatClientDescriptor(
-                "replay",
-                "Replay",
-                "Play the saved chat without contacting a model. Switch to a live client after playback to continue.",
-                IsReplay: true))
-            .Build();
 
     private static ChatClientBuilder UseDescriptor(this ChatClientBuilder builder, ChatClientDescriptor descriptor) =>
         builder.Use(inner => new DescribedChatClient(inner, descriptor));

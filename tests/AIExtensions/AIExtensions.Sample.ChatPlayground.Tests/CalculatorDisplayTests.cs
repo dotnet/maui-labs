@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 
 namespace AIExtensions.Sample.ChatPlayground.Tests;
 
@@ -102,29 +101,19 @@ public sealed class TurnFooterConverterTests
     }
 
     [Fact]
-    public async Task Convert_DescribesACompletedTurnAndWhetherToShowIt()
+    public void Convert_DescribesTheTurnFromItsModelItsUsageAndWhetherItStopped()
     {
-        using var model = new ScriptedChatClient(
-            new ScriptedResponse(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Hi"))
-            {
-                ModelId = "actual-model",
-                Usage = new UsageDetails { InputTokenCount = 3, OutputTokenCount = 2 },
-            }),
-            ScriptedResponse.Text("Again"));
-        using var harness = new PlaygroundChatHarness(model);
         var converter = new TurnFooterConverter();
-        await harness.Session.SendMessageAsync("Hello");
-        var described = harness.LastTurn;
-        await harness.Session.SendMessageAsync("Hello again");
-        var silent = harness.LastTurn;
+        var usage = new UsageDetails { InputTokenCount = 3, OutputTokenCount = 2 };
 
         Assert.Equal("actual-model \u00B7 3 in \u00B7 2 out",
-            converter.Convert(described, typeof(string), null, CultureInfo.InvariantCulture));
-        Assert.Equal(true, converter.Convert(described, typeof(bool), "visible", CultureInfo.InvariantCulture));
-        Assert.Equal(string.Empty, converter.Convert(silent, typeof(string), null, CultureInfo.InvariantCulture));
-        Assert.Equal(false, converter.Convert(silent, typeof(bool), "Visible", CultureInfo.InvariantCulture));
-        Assert.Equal(string.Empty, converter.Convert(null, typeof(string), null, CultureInfo.InvariantCulture));
+            converter.Convert(["actual-model", usage, false], typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal("Stopped \u00B7 actual-model \u00B7 3 in \u00B7 2 out",
+            converter.Convert(["actual-model", usage, true], typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal("Stopped", converter.Convert([null, null, true], typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal(string.Empty, converter.Convert([null, null, false], typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal(string.Empty, converter.Convert([], typeof(string), null, CultureInfo.InvariantCulture));
         Assert.Throws<NotSupportedException>(() =>
-            converter.ConvertBack("text", typeof(ConversationTurn), null, CultureInfo.InvariantCulture));
+            converter.ConvertBack("text", [typeof(string)], null, CultureInfo.InvariantCulture));
     }
 }

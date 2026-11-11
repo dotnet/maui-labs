@@ -56,6 +56,6 @@ public partial class ChatPage : ContentPage
             return;
 
         _restored = true;
-        await ((ChatViewModel)BindingContext).RestoreCachedChatAsync();
+        await ((ChatViewModel)BindingContext).RestoreChatAsync();
     }
 }
