@@ -54,18 +54,20 @@ public sealed class ChatPersistenceTests
     }
 
     [Fact]
-    public async Task Relaunch_RestoresAStoppedTurnAsStoppedWithTheCalculationsThatFinished()
+    public async Task Relaunch_RestoresAStoppedTurnAsStoppedWithEveryCalculationOfItsWorksheet()
     {
-        using var model = new ScriptedChatClient(ScriptedResponse.Stream(
-            new ChatResponseUpdate(ChatRole.Assistant, "Let me work it out.") { MessageId = "text" },
-            new ChatResponseUpdate(ChatRole.Assistant, [Calculate("call-1", 12, "multiply", 7), Calculate("call-2", 84, "add", 16)])
+        using var model = new ScriptedChatClient(
+            ScriptedResponse.Stream(
+                new ChatResponseUpdate(ChatRole.Assistant, "Let me work it out.") { MessageId = "text" },
+                new ChatResponseUpdate(ChatRole.Assistant, [Calculate("call-1", 12, "multiply", 7), Calculate("call-2", 84, "add", 16)])
+                {
+                    MessageId = "calls",
+                },
+                new ChatResponseUpdate(ChatRole.Tool, [new FunctionResultContent("call-1", 84)])) with
             {
-                MessageId = "calls",
+                WaitForCancellation = true,
             },
-            new ChatResponseUpdate(ChatRole.Tool, [new FunctionResultContent("call-1", 84)])) with
-        {
-            WaitForCancellation = true,
-        });
+            ScriptedResponse.Text("100."));
         using var harness = new PlaygroundChatHarness(model, persist: true);
 
         var send = harness.Session.SendMessageAsync("What is 12 \u00D7 7, and that plus 16?");
@@ -76,13 +78,21 @@ public sealed class ChatPersistenceTests
 
         await harness.ReopenAsync();
 
-        // The engine never saves a call without a result, so only the finished calculation comes back.
+        // The thread keeps the calculation the stop left without a result, so the worksheet comes back whole: the
+        // finished row, and the row that will never get its result, which the stopped turn shows as "No result".
         var turn = Assert.Single(harness.Session.Turns);
         Assert.True(turn.IsStopped);
         Assert.Equal("Let me work it out.", Assert.IsType<TextContentBlock>(turn.ResponseBlocks[0]).RawText);
-        var row = Assert.Single(Assert.Single(turn.ResponseBlocks.OfType<CalculatorWorksheetBlock>()).Rows);
-        Assert.Equal("call-1", row.CallId);
-        Assert.True(row.HasResult);
+        var rows = Assert.Single(turn.ResponseBlocks.OfType<CalculatorWorksheetBlock>()).Rows;
+        Assert.Equal(["call-1", "call-2"], rows.Select(row => row.CallId));
+        Assert.Equal("84", CalculatorDisplay.FormatResult(rows[0].Result, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.True(rows[1].IsPending);
+
+        // The model never hears of the call without a result, which a provider would reject.
+        await harness.Session.SendMessageAsync("And the second one?");
+        var sent = model.Requests[^1].Messages.SelectMany(message => message.Contents).ToList();
+        Assert.Contains(sent, content => content is FunctionResultContent { CallId: "call-1" });
+        Assert.DoesNotContain(sent, content => content is FunctionCallContent { CallId: "call-2" });
     }
 
     [Fact]

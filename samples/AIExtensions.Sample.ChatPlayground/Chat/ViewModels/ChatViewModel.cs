@@ -103,11 +103,6 @@ public partial class ChatViewModel : ObservableObject
     /// <summary>Gets whether no response is running, so the composer shows Send.</summary>
     public bool IsIdle => !IsResponding;
 
-    /// <summary>Gets why the last turn failed, while it can be retried.</summary>
-    public string? ErrorText => Session.Status == ConversationStatus.Error
-        ? $"The response failed: {OneLine(Session.Error?.Message ?? "unknown error.")}"
-        : null;
-
     // The XAML source generator does not see the commands that [RelayCommand] generates, so the views bind to these.
     public IAsyncRelayCommand SendAction => SendCommand;
     public IAsyncRelayCommand<string> SendSuggestionAction => SendSuggestionCommand;
@@ -136,7 +131,7 @@ public partial class ChatViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            StatusMessage = $"Could not restore the saved conversation: {OneLine(exception.Message)}";
+            StatusMessage = $"Could not restore the saved conversation: {DisplayText.OneLine(exception.Message)}";
         }
         finally
         {
@@ -181,7 +176,7 @@ public partial class ChatViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            StatusMessage = $"Request failed: {OneLine(exception.Message)}";
+            StatusMessage = $"Request failed: {DisplayText.OneLine(exception.Message)}";
         }
     }
 
@@ -201,7 +196,7 @@ public partial class ChatViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            StatusMessage = $"Retry failed: {OneLine(exception.Message)}";
+            StatusMessage = $"Retry failed: {DisplayText.OneLine(exception.Message)}";
         }
     }
 
@@ -252,7 +247,7 @@ public partial class ChatViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            StatusMessage = $"New chat failed: {OneLine(exception.Message)}";
+            StatusMessage = $"New chat failed: {DisplayText.OneLine(exception.Message)}";
         }
         finally
         {
@@ -273,7 +268,7 @@ public partial class ChatViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            StatusMessage = $"Could not select image: {OneLine(exception.Message)}";
+            StatusMessage = $"Could not select image: {DisplayText.OneLine(exception.Message)}";
         }
     }
 
@@ -286,7 +281,7 @@ public partial class ChatViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            StatusMessage = $"Could not load the sample image: {OneLine(exception.Message)}";
+            StatusMessage = $"Could not load the sample image: {DisplayText.OneLine(exception.Message)}";
         }
     }
 
@@ -333,18 +328,12 @@ public partial class ChatViewModel : ObservableObject
                 application.UserAppTheme = theme;
         });
 
-    // The status line shows at most two lines, so a provider error that spans several lines is joined into one.
-    private static string OneLine(string text) =>
-        string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-
     private string ImageAvailabilityHint => SelectedDescriptor is { SupportsImageInput: false }
         ? " Image input unavailable."
         : string.Empty;
 
     private void SessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(AgentContext.Status) or nameof(AgentContext.Error))
-            OnPropertyChanged(nameof(ErrorText));
         if (e.PropertyName != nameof(AgentContext.Status))
             return;
 
@@ -365,7 +354,7 @@ public partial class ChatViewModel : ObservableObject
                     StatusMessage = "Waiting for you. Approve, reject, or decide what the chat asks for to continue.";
                     break;
                 case ConversationStatus.Error:
-                    StatusMessage = $"Request failed: {OneLine(Session.Error?.Message ?? "unknown error.")}";
+                    StatusMessage = $"Request failed: {DisplayText.OneLine(Session.Error?.Message ?? "unknown error.")}";
                     break;
                 case ConversationStatus.Idle when previous is ConversationStatus.Streaming or ConversationStatus.AwaitingInput:
                     StatusMessage = Session.Turns.Count > 0 && Session.Turns[^1].IsStopped

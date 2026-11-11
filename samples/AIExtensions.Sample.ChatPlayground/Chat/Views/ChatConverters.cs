@@ -60,6 +60,18 @@ public sealed class ApprovalStatusConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+/// <summary>Says why a turn failed, from its <see cref="ConversationTurn.Error"/>.</summary>
+public sealed class TurnErrorConverter : IValueConverter
+{
+    /// <inheritdoc />
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is Exception error ? $"The response failed: {DisplayText.OneLine(error.Message)}" : null;
+
+    /// <inheritdoc />
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>Converts the content of a <see cref="MediaContentBlock"/> to an image, when it is one.</summary>
 public sealed class MediaImageConverter : IValueConverter
 {
@@ -149,6 +161,14 @@ public sealed class BoldTextConverter : IValueConverter
             return;
         formatted.Spans.Add(bold ? new Span { Text = text, FontAttributes = FontAttributes.Bold } : new Span { Text = text });
     }
+}
+
+/// <summary>Formats text for the chat's status lines and footers.</summary>
+internal static class DisplayText
+{
+    /// <summary>Joins text that spans several lines, such as a provider error with its details, into one.</summary>
+    public static string OneLine(string text) =>
+        string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 }
 
 /// <summary>Formats the values that tool calls carry, which arrive as JSON from a provider or as .NET values.</summary>

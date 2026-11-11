@@ -29,7 +29,7 @@ provider capabilities. Uncheck tools or choose **None** to disable calls.
 Switching providers preserves your Structured JSON preference, but providers that
 opt out receive plain-text requests and their responses display as text. Under
 each answer, a footer shows the model that answered, its token usage, and whether
-you stopped it; a failed answer says why and offers **Retry**.
+you stopped it; each failed answer says why it failed, and the last offers **Retry**.
 
 The conversation is saved as it changes and comes back when the app starts.
 **More** starts a **New chat**, which clears the saved conversation and the notes,
@@ -42,7 +42,7 @@ The suggestions on an empty chat try what the selected client supports.
 | Feature | Try | How it works |
 |---------|-----|--------------|
 | A tool call | "What time is it here?" | `get_current_local_datetime` has no template of its own, so it shows the generic tool card: the call, its arguments, and its result, or **No result** when the answer ended without one. |
-| Several calls in one card | "Use the calculator: (12 × 7) + (30 ÷ 4)" | `CalculatorWorksheetHandler`, an `ActivityHandler`, folds every `calculate` call of an answer into one worksheet, a row per calculation. Rows fill in as their results arrive, and a calculation that failed or never ran says why; once the answer is stopped or fails, a row without a result says **No result**. |
+| Several calls in one card | "Use the calculator: (12 × 7) + (30 ÷ 4)" | `CalculatorWorksheetHandler`, an `ActivityHandler`, folds every `calculate` call of an answer into one worksheet, a row per calculation. Rows fill in as their results arrive, and a calculation that failed or never ran says why; once the answer is stopped or fails, a row without a result says **No result**, also after the app restarts. |
 | A typed tool card | "Am I online?" | `ConnectionStatusBlock` is a `[ToolBlock("get_connection_status")]` block: the source generator writes the handler that maps the call's result into it, and `options.AddGeneratedToolBlocks()` registers it. |
 | A UI action | "Switch to dark mode" | `set_theme` runs in the app rather than in the model's client: it sets the app to the light, dark, or system theme. |
 | Approvals | **Ask before running tools** in settings | Each local tool, and `set_theme`, waits behind an approval card. **Approve** runs it; **Reject** tells the model it was declined. |
