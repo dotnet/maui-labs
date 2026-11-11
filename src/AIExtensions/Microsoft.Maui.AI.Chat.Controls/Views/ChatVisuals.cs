@@ -302,6 +302,10 @@ internal sealed class LinkedImageView : ContentView
         HorizontalOptions = image.HorizontalOptions;
         Content = image;
         Image.PropertyChanged += OnImagePropertyChanged;
+
+        // The image (or the chip that replaces it) takes its size once it loads, after the row was laid out: a list
+        // following the answer keeps up. The new size is known here, so the list scrolls to the right end.
+        SizeChanged += (_, _) => ChatMessageList.FollowResizedContent(this);
     }
 
     public Image Image { get; }
@@ -321,8 +325,5 @@ internal sealed class LinkedImageView : ContentView
         // Image has no failure event: a load that ends with nothing to measure failed (a 404, or a page, not a picture).
         if (((IView)Image).Measure(double.PositiveInfinity, double.PositiveInfinity).Height <= 0)
             ShowFallback();
-
-        // Either way the row is now taller than when it was laid out: a list following the answer keeps up.
-        ChatMessageList.FollowResizedContent(this);
     }
 }
