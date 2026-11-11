@@ -7,8 +7,8 @@
 
     net10.0 holds the platform-agnostic core, which tests/AIExtensions/AIExtensions.Sample.Scrolling.Tests compiles and
     tests; on other platforms (such as Windows) setting the mode has no effect. The platform TFMs add the thin adapters
-    that feed the core. UseMaui is deliberately not set, like Microsoft.Maui.AI.Chat.Controls: on net10.0 it would
-    import the maui workload SDK, and nothing here needs the MAUI SDK's resources or XAML compilation.
+    that feed the core. UseMaui is deliberately not set: on net10.0 it would import the maui workload SDK, and nothing
+    here needs the MAUI SDK's resources or XAML compilation.
   -->
   <PropertyGroup>
     <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
