@@ -70,7 +70,8 @@ Why this shape:
 viewport, in device-independent units, plus whether the user is scrolling and whether the platform reported a size
 change. Its outputs are whether it's anchored and the offset to scroll to. `ScrollAnchorController` connects a tracker to
 a view: it creates the platform adapter when the view gets a handler (`HandlerChanged`), disposes it when the handler
-goes (`HandlerChanging`), and notes the app's `ScrollTo` requests (`ScrollToRequested`). The adapters only read the
+goes (`HandlerChanging`), creates or disposes it when a new `ItemsLayout` or `Orientation` starts or stops the view
+scrolling vertically, and notes the app's `ScrollTo` requests (`ScrollToRequested`). The adapters only read the
 native view's own metrics and input state, and scroll it.
 
 | | iOS and Mac Catalyst | Android `CollectionView` | Android `ScrollView` |

@@ -229,6 +229,49 @@ public sealed class ScrollAnchorTests : IDisposable
     }
 
     [Fact]
+    public void AListFollowsItsEndOnlyWhileItsLayoutIsVertical()
+    {
+        var list = new CollectionView { Handler = new FakeHandler() };
+        ScrollAnchor.SetMode(list, ScrollAnchorMode.End);
+        var first = Assert.Single(_adapters);
+        first.Report(600, 1000, 400);
+        first.Report(100, 1000, 400, userScrolling: true);
+
+        // Another vertical layout keeps the adapter, and with it that the user scrolled away.
+        list.ItemsLayout = new GridItemsLayout(2, ItemsLayoutOrientation.Vertical);
+        Assert.Single(_adapters);
+        Assert.False(first.IsDisposed);
+        Assert.False(ScrollAnchor.GetIsAnchored(list));
+
+        list.ItemsLayout = LinearItemsLayout.Horizontal;
+        Assert.True(first.IsDisposed);
+        Assert.False(ScrollAnchor.GetIsAnchored(list));
+
+        list.ItemsLayout = LinearItemsLayout.Vertical;
+        Assert.Equal(2, _adapters.Count);
+        Assert.True(ScrollAnchor.GetIsAnchored(list));
+    }
+
+    [Fact]
+    public void AScrollViewFollowsItsEndOnlyWhileItScrollsVertically()
+    {
+        var scrollView = new ScrollView { Orientation = ScrollOrientation.Horizontal, Handler = new FakeHandler() };
+        ScrollAnchor.SetMode(scrollView, ScrollAnchorMode.End);
+        Assert.Empty(_adapters);
+
+        scrollView.Orientation = ScrollOrientation.Both;
+        var adapter = Assert.Single(_adapters);
+        Assert.True(ScrollAnchor.GetIsAnchored(scrollView));
+
+        scrollView.Orientation = ScrollOrientation.Vertical;
+        Assert.Single(_adapters);
+
+        scrollView.Orientation = ScrollOrientation.Neither;
+        Assert.True(adapter.IsDisposed);
+        Assert.False(ScrollAnchor.GetIsAnchored(scrollView));
+    }
+
+    [Fact]
     public void OtherViewsIgnoreTheMode()
     {
         var label = new Label { Handler = new FakeHandler() };

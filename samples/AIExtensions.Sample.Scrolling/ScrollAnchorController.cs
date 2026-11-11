@@ -2,7 +2,8 @@ namespace AIExtensions.Sample.Scrolling;
 
 /// <summary>
 /// Connects one view's <see cref="ScrollAnchorTracker"/> to the platform: creates the platform adapter whenever the
-/// view gets a handler, disposes it when the handler goes, and publishes <see cref="ScrollAnchor.IsAnchoredProperty"/>.
+/// view gets a handler or starts scrolling vertically, disposes it when the handler goes or the view stops scrolling
+/// vertically, and publishes <see cref="ScrollAnchor.IsAnchoredProperty"/>.
 /// </summary>
 internal sealed class ScrollAnchorController : IDisposable
 {
@@ -17,6 +18,7 @@ internal sealed class ScrollAnchorController : IDisposable
         _view = view;
         view.HandlerChanging += OnHandlerChanging;
         view.HandlerChanged += OnHandlerChanged;
+        view.PropertyChanged += OnViewPropertyChanged;
         if (view is ItemsView itemsView)
             itemsView.ScrollToRequested += OnScrollToRequested;
         else if (view is ScrollView scrollView)
@@ -118,6 +120,7 @@ internal sealed class ScrollAnchorController : IDisposable
         _disposed = true;
         _view.HandlerChanging -= OnHandlerChanging;
         _view.HandlerChanged -= OnHandlerChanged;
+        _view.PropertyChanged -= OnViewPropertyChanged;
         if (_view is ItemsView itemsView)
             itemsView.ScrollToRequested -= OnScrollToRequested;
         else if (_view is ScrollView scrollView)
@@ -150,6 +153,21 @@ internal sealed class ScrollAnchorController : IDisposable
     {
         Attach();
         Publish();
+    }
+
+    // Only a vertical view anchors: attach when a new layout or orientation makes the view scroll vertically, and detach
+    // when one stops it. Another vertical layout keeps the adapter, and with it whether the user scrolled away.
+    private void OnViewPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != StructuredItemsView.ItemsLayoutProperty.PropertyName
+            && e.PropertyName != ScrollView.OrientationProperty.PropertyName)
+            return;
+
+        if (ScrollsVertically(_view) != (_adapter is not null))
+        {
+            Attach();
+            Publish();
+        }
     }
 
     // The handler scrolls the platform view for the request (synchronously, or on its next layout pass); the next look
