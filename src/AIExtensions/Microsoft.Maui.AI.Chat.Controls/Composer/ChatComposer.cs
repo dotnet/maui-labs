@@ -37,6 +37,7 @@ internal sealed class ChatComposer
     private string? _errorMessage;
 
     // Audio note / dictation recording.
+    private DataContent? _recordedAudio;
     private int _audioOperation;
     private CancellationTokenSource? _audioCts;
     private IChatAudioRecorder? _activeRecorder;
@@ -196,7 +197,10 @@ internal sealed class ChatComposer
         }
     }
 
-    public bool AddAttachments(IReadOnlyList<DataContent> additions)
+    public bool AddAttachments(IReadOnlyList<DataContent> additions) => AddAttachments(additions, replacing: null);
+
+    /// <summary>Stages <paramref name="additions"/> in place of <paramref name="replacing"/>, if both fit the limits.</summary>
+    private bool AddAttachments(IReadOnlyList<DataContent> additions, DataContent? replacing)
     {
         if (additions.Count == 0)
             return true;
@@ -208,14 +212,17 @@ internal sealed class ChatComposer
             return false;
         }
 
+        var kept = _attachments.Where(a => !ReferenceEquals(a, replacing)).ToList();
         var maxCount = _view.MaximumAttachmentCount;
-        var total = _attachments.Sum(static a => (long)a.Data.Length) + additions.Sum(static a => (long)a.Data.Length);
-        if (_attachments.Count + additions.Count > maxCount || total > MaximumTotalAttachmentBytes)
+        var total = kept.Sum(static a => (long)a.Data.Length) + additions.Sum(static a => (long)a.Data.Length);
+        if (kept.Count + additions.Count > maxCount || total > MaximumTotalAttachmentBytes)
         {
             SetError($"You can attach up to {maxCount} files and {FormatMegabytes(MaximumTotalAttachmentBytes)} MB in total.");
             return false;
         }
 
+        if (replacing is not null)
+            _attachments.Remove(replacing);
         _attachments.AddRange(additions);
         _errorMessage = null;
         Notify();
@@ -226,6 +233,9 @@ internal sealed class ChatComposer
     {
         if (!_attachments.Remove(attachment))
             return false;
+
+        if (ReferenceEquals(attachment, _recordedAudio))
+            _recordedAudio = null;
 
         Notify();
         return true;
@@ -278,6 +288,7 @@ internal sealed class ChatComposer
         if (clearDraft)
         {
             _attachments.Clear();
+            _recordedAudio = null;
             _view.Text = string.Empty;
         }
 
@@ -454,10 +465,14 @@ internal sealed class ChatComposer
                 }
                 else
                 {
-                    // Audio note: the recording is attached, replacing an earlier one.
-                    _attachments.RemoveAll(static a => a.HasTopLevelMediaType("audio"));
-                    if (AddAttachments([recording]))
+                    // Audio note: the recording is attached in place of the previous recording (not audio the user
+                    // attached), which stays if the new one doesn't fit.
+                    var previous = _recordedAudio is { } staged && _attachments.Contains(staged) ? staged : null;
+                    if (AddAttachments([recording], previous))
+                    {
+                        _recordedAudio = recording;
                         Announce("Audio recording attached.");
+                    }
                 }
             }
             catch (OperationCanceledException) when (source.IsCancellationRequested)
