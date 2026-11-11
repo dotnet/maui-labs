@@ -411,6 +411,9 @@ platform-only source and resources in that folder without affecting other heads.
 The `net10.0` asset retains the established raw-copy resource path because MAUI 10
 does not publish these external-backend processed-item contracts.
 
+GTK uses portable SDK projects and MAUI NuGet build assets, not `UseMaui=true`
+or a platform workload. The `maui` workload is not supported on Linux.
+
 The package-only consumer fixture exercises .NET 10 and .NET 11 referenced-library raw assets,
 logical names (including Unicode and empty files), incremental changes and
 removal, no-build publish, and collision failures:

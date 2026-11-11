@@ -157,8 +157,6 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
-      - name: Install pinned MAUI workload
-        run: ./eng/common/dotnet.sh workload install maui --from-rollback-file eng/workloads/dotnet11-rc2.json
       - name: Verify referenced-library assets, mutation, publish, and collisions
         shell: pwsh
         run: ./eng/smoke-tests/community-resource-acceptance.ps1 -Backend gtk

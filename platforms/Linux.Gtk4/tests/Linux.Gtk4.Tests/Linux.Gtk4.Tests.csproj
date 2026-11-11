@@ -4,7 +4,6 @@
     <AssemblyName>Microsoft.Maui.Platforms.Linux.Gtk4.Tests</AssemblyName>
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
-    <UseMaui>true</UseMaui>
     <EnableDefaultMauiResourceItems>false</EnableDefaultMauiResourceItems>
     <!-- Managed tests are portable; native GTK tests explicitly opt in on Linux. -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
