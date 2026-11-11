@@ -115,6 +115,45 @@ public class UnexecutedCallTests
         Assert.Equal("Theme set to dark", continuation["1"].Result?.ToString());
     }
 
+    [Fact]
+    public async Task StoppedBeforeTheBatchIsAnswered_RestoreShowsTheRowOfTheClaimedCallAgain()
+    {
+        var thread = new InMemoryConversationThread("thread-1");
+        var calculated = new List<string>();
+        var model = new ScriptedChatClient();
+        model.Enqueue(ct => ResponseEmitters.EmitMultipleToolCallResponse(ct, Calculate("calc-1", "2+2"), SetTheme("theme-1")));
+        Action<UIAgentOptions> configure = options =>
+        {
+            options.AddBlockHandler(new WorksheetHandler());
+            options.Thread = thread;
+        };
+        using var live = CreateContext(model, calculated, UIActionInvocationMode.Manual, configure);
+        var awaitingInput = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        live.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AgentContext.Status) && live.Status == ConversationStatus.AwaitingInput)
+                awaitingInput.TrySetResult();
+        };
+
+        var send = live.SendMessageAsync("Calculate and go dark");
+        await awaitingInput.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await live.CancelAsync();
+        await send.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Null(Assert.Single(Assert.Single(live.Turns[^1].ResponseBlocks.OfType<WorksheetBlock>()).Rows).Result);
+
+        // The handler shows the restored call again, so the app can show its row the way the stopped turn ended it.
+        using var restored = CreateContext(new ScriptedChatClient(), calculated, UIActionInvocationMode.Manual, configure);
+        await restored.RestoreAsync();
+
+        var turn = Assert.Single(restored.Turns);
+        Assert.True(turn.IsStopped);
+        var row = Assert.Single(Assert.Single(turn.ResponseBlocks.OfType<WorksheetBlock>()).Rows);
+        Assert.Equal("calc-1", row.CallId);
+        Assert.Null(row.Result);
+        Assert.True(Assert.Single(turn.ResponseBlocks.OfType<UIActionBlock>()).IsAbandoned);
+        Assert.Empty(calculated);
+    }
+
     private static AgentContext CreateContext(
         ScriptedChatClient model,
         List<string> calculated,

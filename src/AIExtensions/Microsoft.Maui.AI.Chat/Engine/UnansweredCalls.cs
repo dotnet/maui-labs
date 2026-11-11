@@ -8,7 +8,8 @@ namespace Microsoft.Maui.AI.Chat;
 
 /// <summary>
 /// Finds the function calls of a round that no result answers, and removes calls that never received a
-/// result from a turn before it is committed, so the next request cannot fail on a dangling call.
+/// result from a turn's history when it is committed or restored, so the next request cannot fail on a
+/// dangling call. The thread keeps them, so a restore shows them as the turn ended them.
 /// </summary>
 /// <remarks>
 /// Approval requests and responses are removed too when <c>includeApprovals</c> is set (a stopped
@@ -49,18 +50,19 @@ internal static class UnansweredCalls
     {
         var callIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var message in turn.Messages)
-            Collect(message.Contents);
+            AddAnsweredCallIds(callIds, message.Contents);
         foreach (var update in turn.ThreadUpdates)
-            Collect(update.Contents);
+            AddAnsweredCallIds(callIds, update.Contents);
         return callIds;
+    }
 
-        void Collect(IList<AIContent> contents)
+    /// <summary>Adds the call ids of the results in <paramref name="contents"/> to <paramref name="callIds"/>.</summary>
+    internal static void AddAnsweredCallIds(HashSet<string> callIds, IList<AIContent> contents)
+    {
+        foreach (var content in contents)
         {
-            foreach (var content in contents)
-            {
-                if (content is FunctionResultContent result)
-                    callIds.Add(result.CallId);
-            }
+            if (content is FunctionResultContent result)
+                callIds.Add(result.CallId);
         }
     }
 
@@ -88,23 +90,6 @@ internal static class UnansweredCalls
         }
 
         return kept;
-    }
-
-    internal static ChatResponseUpdate? Remove(
-        ChatResponseUpdate update,
-        HashSet<string> answeredCallIds,
-        bool includeApprovals)
-    {
-        if (AllKept(update.Contents, answeredCallIds, includeApprovals))
-            return update;
-
-        var contents = Filter(update.Contents, answeredCallIds, includeApprovals);
-        if (contents.Count == 0)
-            return null;
-
-        var clone = update.Clone();
-        clone.Contents = contents;
-        return clone;
     }
 
     private static bool AllKept(

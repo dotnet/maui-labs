@@ -216,10 +216,12 @@ public class UIAgent : IDisposable
     /// is marked as stopped in the thread, and does not advance a stateful provider conversation.
     /// </param>
     /// <remarks>
-    /// Function calls without a result are never committed. For a stopped turn the same applies to
-    /// approval requests and responses whose call has no result, and the history also leaves out
-    /// reasoning that the stop cut off (<see cref="CutOffReasoning"/>). A turn that became stale because
-    /// the history was cleared or restored after it started is discarded.
+    /// The thread receives every update of the turn, so a restore shows the turn as it ended. The history
+    /// leaves out function calls without a result, which a provider rejects. For a stopped turn it also
+    /// leaves out approval requests and responses whose call has no result, which the function invoking
+    /// client would reject or run, and reasoning that the stop cut off (<see cref="CutOffReasoning"/>).
+    /// A restore leaves the same out of the history it rebuilds. A turn that became stale because the
+    /// history was cleared or restored after it started is discarded.
     /// </remarks>
     internal void CommitTurn(PendingTurn turn, bool stopped)
     {
@@ -228,7 +230,6 @@ public class UIAgent : IDisposable
             return;
 
         turn.CompleteRound();
-        var answeredCallIds = UnansweredCalls.CollectAnsweredCallIds(turn);
 
         var thread = _options.Thread;
         if (thread is not null)
@@ -238,13 +239,7 @@ public class UIAgent : IDisposable
                 : initialMessage);
             foreach (var update in turn.ThreadUpdates)
             {
-                var committed = UnansweredCalls.Remove(
-                    update,
-                    answeredCallIds,
-                    includeApprovals: stopped);
-                if (committed is null)
-                    continue;
-
+                var committed = update;
                 if (stopped && committed.ConversationId is not null)
                 {
                     committed = committed.Clone();
@@ -259,7 +254,7 @@ public class UIAgent : IDisposable
 
         var messages = UnansweredCalls.Remove(
             turn.Messages,
-            answeredCallIds,
+            UnansweredCalls.CollectAnsweredCallIds(turn),
             includeApprovals: stopped);
         if (stopped)
             CutOffReasoning.Remove(messages);
@@ -272,7 +267,9 @@ public class UIAgent : IDisposable
     /// </summary>
     /// <remarks>
     /// Restore only reconstructs renderable history; it does not invoke tools or resume
-    /// interactive blocks. It also rebuilds the message history sent with the next request.
+    /// interactive blocks. It also rebuilds the message history sent with the next request, which leaves
+    /// out calls without a result, as the live commit of their turn did; their blocks are
+    /// <see cref="FunctionInvocationContentBlock.IsAbandoned"/>.
     /// Custom projections require the same handlers to be registered, and their
     /// discriminator data must survive the thread implementation's serialization. In particular,
     /// <see cref="AIContent.RawRepresentation"/> and <see cref="ChatResponseUpdate.RawRepresentation"/>
@@ -384,6 +381,8 @@ public class UIAgent : IDisposable
         var turns = new List<RestoredTurn>();
         var replayedHistory = new List<ChatMessage>();
         var responseUpdates = new List<ChatResponseUpdate>();
+        var turnHistoryStart = 0;
+        var turnAnsweredCallIds = new HashSet<string>(StringComparer.Ordinal);
         RestoredTurn? currentTurn = null;
         BlockMappingPipeline? responsePipeline = null;
         FunctionCallRegistry? calls = null;
@@ -412,6 +411,7 @@ public class UIAgent : IDisposable
                             ?? Guid.NewGuid().ToString("N"),
                         IsStopped(update));
                     turns.Add(currentTurn);
+                    BeginTurnHistory(update);
                     replayedHistory.Add(CreateHistoryMessage(update));
                     calls = new FunctionCallRegistry();
 
@@ -441,12 +441,15 @@ public class UIAgent : IDisposable
                             ?? Guid.NewGuid().ToString("N"),
                         isStopped: false);
                     turns.Add(currentTurn);
+                    BeginTurnHistory(update: null);
                     calls = new FunctionCallRegistry();
                     responsePipeline = new BlockMappingPipeline(
                         _options,
                         _logger,
                         calls);
                 }
+
+                UnansweredCalls.AddAnsweredCallIds(turnAnsweredCallIds, update.Contents);
 
                 // Continuation inputs were requests, so like live requests they bypass the state mapper.
                 var processUpdate = isContinuation
@@ -505,23 +508,38 @@ public class UIAgent : IDisposable
             throw;
         }
 
+        void BeginTurnHistory(ChatResponseUpdate? update)
+        {
+            turnHistoryStart = replayedHistory.Count;
+            turnAnsweredCallIds.Clear();
+            if (update is not null)
+                UnansweredCalls.AddAnsweredCallIds(turnAnsweredCallIds, update.Contents);
+        }
+
         void CompleteRestoredTurn()
         {
             responsePipeline?.Finalize();
             responsePipeline = null;
-            FlushResponseHistory(stopped: currentTurn?.IsStopped == true);
+            FlushResponseHistory();
+            if (currentTurn is null)
+                return;
+
+            // The same history as the live commit of the turn: the thread keeps what the history leaves out.
+            var stopped = currentTurn.IsStopped;
+            var turnHistory = replayedHistory.GetRange(turnHistoryStart, replayedHistory.Count - turnHistoryStart);
+            var committed = UnansweredCalls.Remove(turnHistory, turnAnsweredCallIds, includeApprovals: stopped);
+            if (stopped)
+                CutOffReasoning.Remove(committed);
+            replayedHistory.RemoveRange(turnHistoryStart, turnHistory.Count);
+            replayedHistory.AddRange(committed);
         }
 
-        void FlushResponseHistory(bool stopped = false)
+        void FlushResponseHistory()
         {
             if (responseUpdates.Count == 0)
                 return;
 
-            // The same history as the live commit of the turn.
-            var messages = responseUpdates.ToChatResponse().Messages.ToList();
-            if (stopped)
-                CutOffReasoning.Remove(messages);
-            replayedHistory.AddRange(messages);
+            replayedHistory.AddRange(responseUpdates.ToChatResponse().Messages);
             responseUpdates.Clear();
         }
     }

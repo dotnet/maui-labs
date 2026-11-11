@@ -232,7 +232,9 @@ public sealed class AgentContext : IDisposable, INotifyPropertyChanged
     /// <remarks>
     /// Restore requires an idle, empty context and may be called only once before
     /// <see cref="ClearAsync"/>. It reconstructs display/history blocks only: restored approvals,
-    /// tools, and other interactive blocks are not resumed or invoked. Once all turns are loaded,
+    /// tools, and other interactive blocks are not resumed or invoked. A call that its turn left without a
+    /// result is <see cref="FunctionInvocationContentBlock.IsAbandoned"/>, and the rebuilt history leaves it
+    /// out, as the live turn's history did. Once all turns are loaded,
     /// <see cref="Turns"/> raises one reset, with every turn's blocks already in place; the turns' block
     /// collections and the status raise nothing. The typed state raises the changes the restore replays.
     /// Until the turns are loaded, a send fails and <see cref="ClearAsync"/> waits for the restore.

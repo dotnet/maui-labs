@@ -133,8 +133,7 @@ These match upstream so that upstream fixes apply directly:
   pending is ever written and history is rebuilt from `GetUpdates()`, as upstream does.
 - **Stopping keeps the partial answer.** `CancelAsync` (and the caller's token) stops the response and
   completes once it has unwound, as in #68672. The turn then commits with its request and partial
-  output, minus tool calls and approvals that never got a result, and is marked
-  `ConversationTurn.IsStopped`; the thread stores it with
+  output and is marked `ConversationTurn.IsStopped`; the thread stores it with
   `Microsoft.Maui.AI.Chat.Persistence.IsStopped.v1`. A stopped turn does not advance a stateful
   provider's conversation id. Upstream main only requests cancellation, and the stopped round is never
   written.
@@ -143,6 +142,15 @@ These match upstream so that upstream fixes apply directly:
   request, and every update a round recorded is shown in full. Reasoning that the stop cut off
   (reasoning that ends the turn's last message) is still shown and stored in the thread, but left out
   of the history, live and restored, because providers can reject reasoning that no output follows.
+- **Calls without a result are kept in the thread, not in the history.** Like upstream, the thread
+  stores every update of a turn, so a restore shows a call that its turn left without a result (a
+  stop, a failed or unanswered UI action, or a provider's call that nothing ran) as
+  `FunctionInvocationContentBlock.IsAbandoned`, as it was when the turn ended, and a handler of the
+  app's own shows its row of the call again. The history leaves such calls out, live and restored,
+  and for a stopped turn also approval requests and responses whose call has no result, because
+  providers reject a call without a result and `FunctionInvokingChatClient` rejects an unanswered
+  approval request or runs an approved call before it sends the request. Upstream adds every message
+  to the history, so the next request can fail on such a call.
 - **Errors discard the turn, retry resends all of it.** A failed turn commits nothing and keeps its
   partial blocks on screen. `RetryAsync` clears the turn's response blocks (`ResponseBlocks` raises a
   `Reset`, which tells a list to drop them) and sends the whole turn again. #68672
