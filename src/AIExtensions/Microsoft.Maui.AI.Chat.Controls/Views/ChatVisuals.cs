@@ -315,13 +315,14 @@ internal sealed class LinkedImageView : ContentView
 
     private void OnImagePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName != Microsoft.Maui.Controls.Image.IsLoadingProperty.PropertyName || Image.IsLoading || Image.Handler is null)
+            return;
+
         // Image has no failure event: a load that ends with nothing to measure failed (a 404, or a page, not a picture).
-        if (e.PropertyName == Microsoft.Maui.Controls.Image.IsLoadingProperty.PropertyName &&
-            !Image.IsLoading &&
-            Image.Handler is not null &&
-            ((IView)Image).Measure(double.PositiveInfinity, double.PositiveInfinity).Height <= 0)
-        {
+        if (((IView)Image).Measure(double.PositiveInfinity, double.PositiveInfinity).Height <= 0)
             ShowFallback();
-        }
+
+        // Either way the row is now taller than when it was laid out: a list following the answer keeps up.
+        ChatMessageList.FollowResizedContent(this);
     }
 }

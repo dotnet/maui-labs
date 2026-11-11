@@ -57,6 +57,7 @@ internal sealed class ChatMessageList : CollectionView
     private double _backwardDistance;
     private double _awayDistance;
     private ConversationTurn? _lastTurn;
+    private bool _followRequested;
 
     public ChatMessageList(AIChatView owner)
     {
@@ -198,8 +199,30 @@ internal sealed class ChatMessageList : CollectionView
             Pin();
         _lastTurn = lastTurn;
 
-        if ((structureChanged || refreshed) && _isPinned)
+        if ((structureChanged || refreshed || _followRequested) && _isPinned)
             ScrollToEnd();
+        _followRequested = false;
+    }
+
+    /// <summary>
+    /// Keeps a list that follows the conversation at the end when content in <paramref name="element"/>'s row changed
+    /// size on its own, after the row was laid out (an image that finished loading, or fell back to a chip).
+    /// </summary>
+    internal static void FollowResizedContent(Element element)
+    {
+        for (var parent = element.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is ChatMessageList list)
+            {
+                if (list._isPinned)
+                {
+                    list._followRequested = true;
+                    list.Invalidate();
+                }
+
+                return;
+            }
+        }
     }
 
     private void Invalidate()
