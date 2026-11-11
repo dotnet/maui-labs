@@ -73,6 +73,7 @@
                      and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.'))
                      and '$(EnableMacOSMauiResourceMapping)' != 'false'">
     <ItemGroup>
+      <FileWrites Include="@(MauiProcessedImage);@(MauiProcessedFont)" />
       <_MacOSProcessedMauiBundleResource Include="@(MauiProcessedImage)"
                                          Condition="'%(MauiProcessedImage.IsAppIcon)' != 'true'
                                                     and '%(MauiProcessedImage.MSBuildSourceProjectFile)' == ''">

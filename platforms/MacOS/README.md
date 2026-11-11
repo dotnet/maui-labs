@@ -308,6 +308,12 @@ MAUI 10 compatibility target retains the prior raw-item mapping and is isolated
 from the .NET 11 path. Image names and font names must be unique within their respective bundle directories.
 Use `LogicalName` to preserve nested raw-asset paths.
 
+The standalone package-resource acceptance gate currently exposes an upstream
+limitation in Apple SDK `27.0.12212-net11-rc.2`: `dotnet publish --no-build` still
+invokes `Build` through `GetApplicationArtifactsDependsOn`, failing with
+`NETSDK1085`. The gate remains enabled; successful build, mutation, and stale-file
+checks do not certify its later no-build publish or collision stages.
+
 The `bundle-resources` scenario runs inside the shared `MacOS.RuntimeTests` host,
 using external image/font/raw fixtures and a local raw item also matched by the
 SDK glob. On macOS with Xcode and the MAUI/macOS workloads, point the runner at
