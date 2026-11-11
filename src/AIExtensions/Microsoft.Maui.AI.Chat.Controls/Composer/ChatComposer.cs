@@ -214,10 +214,17 @@ internal sealed class ChatComposer
 
         var kept = _attachments.Where(a => !ReferenceEquals(a, replacing)).ToList();
         var maxCount = _view.MaximumAttachmentCount;
-        var total = kept.Sum(static a => (long)a.Data.Length) + additions.Sum(static a => (long)a.Data.Length);
-        if (kept.Count + additions.Count > maxCount || total > MaximumTotalAttachmentBytes)
+        if (kept.Count + additions.Count > maxCount)
         {
-            SetError($"You can attach up to {maxCount} files and {FormatMegabytes(MaximumTotalAttachmentBytes)} MB in total.");
+            SetError(maxCount == 1 ? "You can attach 1 file." : $"You can attach up to {maxCount} files.");
+            return false;
+        }
+
+        var maxTotal = GetMaximumTotalAttachmentBytes(maxBytes);
+        var total = kept.Sum(static a => (long)a.Data.Length) + additions.Sum(static a => (long)a.Data.Length);
+        if (total > maxTotal)
+        {
+            SetError($"Attachments must be {FormatMegabytes(maxTotal)} MB or smaller in total.");
             return false;
         }
 
@@ -1296,6 +1303,10 @@ internal sealed class ChatComposer
 
     private static string Join(params string?[] parts) =>
         string.Join(" ", parts.Where(static part => !string.IsNullOrWhiteSpace(part)).Select(static part => part!.Trim()));
+
+    /// <summary>Gets the limit for all attachments of a message: 50 MB, or the per-file limit if that is larger.</summary>
+    internal static long GetMaximumTotalAttachmentBytes(long maximumAttachmentBytes) =>
+        Math.Max(MaximumTotalAttachmentBytes, maximumAttachmentBytes);
 
     internal static string TooLargeMessage(long maxBytes) =>
         $"Attachments must be {FormatMegabytes(maxBytes)} MB or smaller.";

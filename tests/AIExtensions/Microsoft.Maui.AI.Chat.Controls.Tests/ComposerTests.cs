@@ -340,12 +340,27 @@ public class ComposerTests
         Assert.True(view.AddAttachment(Blocks.Pdf("b.pdf")));
         Assert.False(view.AddAttachment(Blocks.Pdf("c.pdf")));
         Assert.Equal(2, view.Attachments.Count);
-        Assert.Equal("You can attach up to 2 files and 50 MB in total.", view.ErrorMessage);
+        Assert.Equal("You can attach up to 2 files.", view.ErrorMessage);
 
         view.RemoveAttachment(view.Attachments[0]);
         view.RemoveAttachment(view.Attachments[0]);
         Assert.True(view.AddAttachment(Blocks.Pdf("big1.pdf", bytes: 26 * 1024 * 1024)));
         Assert.False(view.AddAttachment(Blocks.Pdf("big2.pdf", bytes: 26 * 1024 * 1024)));
+        Assert.Single(view.Attachments);
+        Assert.Equal("Attachments must be 50 MB or smaller in total.", view.ErrorMessage);
+    }
+
+    [Fact]
+    public void Attachments_UpToTheLargerPerFileLimitFit()
+    {
+        const long Megabyte = 1024 * 1024;
+        var view = ChatHost.Create(ChatHost.Session(new ScriptedChatClient()), v => v.MaximumAttachmentBytes = 60 * Megabyte);
+
+        Assert.True(view.AddAttachment(Blocks.Pdf("video.pdf", bytes: (int)(55 * Megabyte))));
+        Assert.False(view.HasError);
+
+        Assert.False(view.AddAttachment(Blocks.Pdf("more.pdf", bytes: (int)(10 * Megabyte))));
+        Assert.Equal("Attachments must be 60 MB or smaller in total.", view.ErrorMessage);
         Assert.Single(view.Attachments);
     }
 
