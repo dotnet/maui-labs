@@ -230,6 +230,27 @@ public class MarkdownViewTests
         Assert.Equal(Blocks(fresh).Count, Blocks(view).Count);
     }
 
+    [Fact]
+    public void TappingAnImageChip_OpensItThroughTheViewsOpener()
+    {
+        // On a device without a browser (a kiosk, a managed device) Android throws ActivityNotFoundException.
+        var opened = new List<Uri>();
+        var view = new MarkdownView
+        {
+            LinkLauncher = uri =>
+            {
+                opened.Add(uri);
+                throw new NoBrowserException();
+            },
+        };
+        view.SetMarkdown("![chart](https://example.com/c.png)");
+        var tap = Assert.Single(Assert.IsAssignableFrom<Border>(view.BlockViews[0]).GestureRecognizers.OfType<TapGestureRecognizer>());
+
+        tap.Command!.Execute(tap.CommandParameter);
+
+        Assert.Equal([new Uri("https://example.com/c.png")], opened);
+    }
+
     [Theory]
     [InlineData("[docs](https://example.com/a)", "https://example.com/a")]
     [InlineData("[mail](mailto:team@example.com)", "mailto:team@example.com")]
@@ -676,4 +697,6 @@ public class MarkdownViewTests
 
     private static IEnumerable<Span> Spans(Element root) =>
         Labels(root).SelectMany(label => label.FormattedText?.Spans ?? []);
+
+    private sealed class NoBrowserException : Exception;
 }

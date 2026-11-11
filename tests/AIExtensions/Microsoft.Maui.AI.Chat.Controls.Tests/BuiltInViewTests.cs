@@ -67,6 +67,18 @@ public class BuiltInViewTests
     }
 
     [Fact]
+    public async Task OpeningALink_NeverThrows_AndOpensOnlySafeLinks()
+    {
+        var link = new Uri("https://example.com/docs");
+
+        // Whatever the platform throws (Android: ActivityNotFoundException without a browser), the tap is ignored.
+        Assert.False(await ChatVisuals.OpenLinkAsync(link, _ => throw new NoBrowserException()));
+        Assert.False(await ChatVisuals.OpenLinkAsync(link, _ => Task.FromException<bool>(new NoBrowserException())));
+        Assert.True(await ChatVisuals.OpenLinkAsync(link, _ => Task.FromResult(true)));
+        Assert.False(await ChatVisuals.OpenLinkAsync(new Uri("javascript:alert(1)"), _ => Task.FromResult(true)));
+    }
+
+    [Fact]
     public void Markdown_ImagesThatCannotLoadShowAChip()
     {
         var view = Render<TextBlockView>(Blocks.Text(
@@ -755,4 +767,6 @@ public class BuiltInViewTests
     private static void Rebind(BlockView view, ContentBlock block) => BlockView.Bind(view, block, owner: null, session: null);
 
     private static AIChatTheme Theme(VisualElement view) => view.Resources.MergedDictionaries.OfType<AIChatTheme>().Single();
+
+    private sealed class NoBrowserException : Exception;
 }
