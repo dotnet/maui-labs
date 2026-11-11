@@ -152,7 +152,10 @@ The headless chat engine in src/AIExtensions/Microsoft.Maui.AI.Chat (content blo
 block-mapping pipeline, UIAgent, AgentContext, conversation turns and state) and the
 [ToolBlock] source generator in src/AIExtensions/Microsoft.Maui.AI.Chat.Generators are
 adapted from src/Components/AI/src and src/Components/AI/gen. The MAUI differences are
-documented in src/AIExtensions/Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md.
+documented in src/AIExtensions/Microsoft.Maui.AI.Chat/UPSTREAM-CHANGES.md. The AIChatView
+message list in src/AIExtensions/Microsoft.Maui.AI.Chat.Controls follows the structure of
+the upstream components in src/Components/AI/src/Components (MessageList,
+ConversationTurnRenderer, BlockRenderer).
 
 Copyright (c) .NET Foundation and Contributors.
 

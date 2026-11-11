@@ -19,8 +19,6 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Generators.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/` | `net10.0` |
-| AIExtensions | `tests/AIExtensions/Microsoft.Maui.Chat.Tests/` | `net10.0` |
-| AIExtensions | `tests/AIExtensions/Microsoft.Maui.Chat.Controls.Tests/` | `net10.0` |
 | AppProjectReference | `src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/` | multi-TFM |
@@ -94,6 +92,20 @@ public void VisualTreeWalker_FindsElementById()
     // Test with real MAUI types where possible
 }
 ```
+
+### AI Chat Controls Tests
+
+`tests/AIExtensions/Microsoft.Maui.AI.Chat.Controls.Tests/` drives `AIChatView` against real engine sessions
+with no platform or device:
+
+- Run async tests with `UIThread.Run(async () => ...)`. This keeps every continuation on the test thread,
+  like the UI thread in an app.
+- Script the model with `ScriptedChatClient`: `Reply`, `ReplyLive` (stream as the test writes),
+  `WaitThenReply`, `Fail`, and `RequestApproval`.
+- Create views with `ChatHost.Create`, which attaches them to a `Window` so `Loaded` and `Unloaded` fire.
+  `ChatHost.Realize(row)` builds the item view the list would show for a row.
+- A module initializer installs an inline dispatcher, so the message list flushes synchronously. Install
+  `TestDispatcher` when a test needs to observe coalesced updates.
 
 ### Naming Convention
 
