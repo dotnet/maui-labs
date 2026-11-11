@@ -276,7 +276,9 @@ chip opens the image in the browser. When it is on, images load inline, up to 48
 stops at 10 MB or after 30 seconds, and an image larger than 16 megapixels, or one whose size can't be read from
 its header (PNG, JPEG, GIF, BMP, and WebP can), shows as the chip instead of being decoded. Changing the setting
 updates the answers already shown. An image from any other source (such as an `attachment://` reference), or one
-that fails to load, also shows as a chip. `AllowRemoteImages` covers images in Markdown and in a provider's rich
+that fails to load, also shows as a chip. A link around an image, such as a badge, shows the image (or its chip,
+naming the link's site) and follows the link when tapped. An image inside other text, such as in a heading or a
+table cell, reads as its alt text, title, or address. `AllowRemoteImages` covers images in Markdown and in a provider's rich
 text; images that tools and providers return as media (`MediaContentBlock`) are not affected.
 
 ## Attachments, audio, and voice
