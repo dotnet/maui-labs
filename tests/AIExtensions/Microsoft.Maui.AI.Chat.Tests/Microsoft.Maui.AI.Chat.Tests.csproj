@@ -102,8 +102,6 @@
              Link="Services\AtomicFile.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputFile.cs"
              Link="Services\InputFile.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Services\InputStreamReader.cs"
-             Link="Services\InputStreamReader.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -168,8 +168,8 @@ var sample = await files.LoadSampleAsync("playground_sample.png", cancellationTo
 ```
 
 For already-opened input, `InputFile.ReadAsync(stream, fileName, contentType, cancellationToken)`
-copies from the current stream position, enforces the shared 20 MB limit, and leaves
-the caller's stream open. Feature-specific format support is still respected:
+copies the remaining input from the current stream position using standard stream copying
+and leaves the caller's stream open. Feature-specific format support is still respected:
 image chat/edit callers continue to accept only JPEG, PNG, GIF, and WebP.
 
 Both composers use the shared `AttachmentPreview` view for the thumbnail, file name,
