@@ -2,6 +2,7 @@
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
+             xmlns:scroll="clr-namespace:AIExtensions.Sample.Scrolling;assembly=AIExtensions.Sample.Scrolling"
              x:Class="AIExtensions.Sample.ChatPlayground.ChatLogsView"
              x:Name="LogsView"
              x:DataType="local:DiagnosticsViewModel">
@@ -17,7 +18,7 @@
         <Label Grid.Row="1" Text="Local logs and completed spans, grouped by trace. No prompt capture."
                Style="{StaticResource MutedLabel}" FontSize="12" />
         <CollectionView Grid.Row="2" ItemsSource="{Binding Groups}"
-                        IsGrouped="True" SelectionMode="None"
+                        IsGrouped="True" SelectionMode="None" scroll:ScrollAnchor.Mode="End"
                         AutomationId="{Binding AutomationPrefix, Source={x:Reference LogsView}, x:DataType=local:ChatLogsView, StringFormat='{0}LogEntries'}">
             <CollectionView.GroupHeaderTemplate>
                 <DataTemplate x:DataType="local:ChatDiagnosticGroup">

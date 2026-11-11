@@ -16,6 +16,7 @@ applyTo: "**/*Tests*/**,**/*.Tests.*"
 |---------|-------------|--------|
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/` | `net10.0` |
 | AIExtensions | `tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/` | `net10.0` |
+| AIExtensions (sample) | `tests/AIExtensions/AIExtensions.Sample.Scrolling.Tests/` | `net10.0` |
 | AppProjectReference | `src/AppProjectReference/Microsoft.Maui.Build.AppProjectReference.Tests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.UnitTests/` | `net10.0` |
 | Essentials.AI | `tests/AI/Microsoft.Maui.Essentials.AI.DeviceTests/` | multi-TFM |

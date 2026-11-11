@@ -52,6 +52,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\Microsoft.Maui.Essentials.AI\Microsoft.Maui.Essentials.AI.csproj" />
     <ProjectReference Include="..\..\src\DevFlow\Microsoft.Maui.DevFlow.Agent\Microsoft.Maui.DevFlow.Agent.csproj" />
+    <ProjectReference Include="..\AIExtensions.Sample.Scrolling\AIExtensions.Sample.Scrolling.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">

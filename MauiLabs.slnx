@@ -21,6 +21,7 @@
     <Project Path="samples/DevFlow.Sample/DevFlow.Sample.csproj" />
     <Project Path="samples/EssentialsAISample/EssentialsAISample.csproj" />
     <Project Path="samples/AIExtensions.Sample.ChatPlayground/AIExtensions.Sample.ChatPlayground.csproj" />
+    <Project Path="samples/AIExtensions.Sample.Scrolling/AIExtensions.Sample.Scrolling.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AI/">
@@ -29,6 +30,7 @@
   <Folder Name="/src/AIExtensions/">
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes/Microsoft.Maui.AI.Attributes.csproj" />
     <Project Path="src/AIExtensions/Microsoft.Maui.AI.Attributes.Generators/Microsoft.Maui.AI.Attributes.Generators.csproj" />
+    <Project Path="tests/AIExtensions/AIExtensions.Sample.Scrolling.Tests/AIExtensions.Sample.Scrolling.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Tests/Microsoft.Maui.AI.Attributes.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Attributes.Generators.Tests/Microsoft.Maui.AI.Attributes.Generators.Tests.csproj" />
     <Project Path="tests/AIExtensions/Microsoft.Maui.AI.Chat.Tests/Microsoft.Maui.AI.Chat.Tests.csproj" />

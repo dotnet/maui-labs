@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests for ScrollAnchor (samples/AIExtensions.Sample.Scrolling): the platform-agnostic tracker, and the attached
+    properties and handler lifecycle against a fake platform adapter. The platform adapters are verified on devices.
+
+    Like AIExtensions.Sample.ChatPlayground.Tests, this links the sample's platform-agnostic sources instead of
+    referencing the project: the sample also targets Android, iOS, and Mac Catalyst, and restoring it needs those
+    workloads, which the AIExtensions CI test job doesn't install.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>AIExtensions.Sample.Scrolling.Tests</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <_ScrollingSampleDirectory>..\..\..\samples\AIExtensions.Sample.Scrolling\</_ScrollingSampleDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="xunit" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="$(_ScrollingSampleDirectory)**\*.cs"
+             Exclude="$(_ScrollingSampleDirectory)**\*.Android.cs;$(_ScrollingSampleDirectory)**\*.iOS.cs"
+             LinkBase="Scrolling" />
+  </ItemGroup>
+</Project>
