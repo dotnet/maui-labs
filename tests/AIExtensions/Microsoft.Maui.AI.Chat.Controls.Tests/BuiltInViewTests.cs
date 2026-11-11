@@ -79,14 +79,17 @@ public class BuiltInViewTests
         Assert.Empty(edited.GestureRecognizers);
         Assert.Equal("chart.png, Image", SemanticProperties.GetDescription(Assert.IsAssignableFrom<Border>(blocks[1])));
 
-        // A web image loads inline; if it fails, the same chip replaces it and opens the link.
-        var image = Assert.IsType<LinkedImageView>(blocks[2]);
-        Assert.Equal(new Uri("https://example.com/cat.png"), Assert.IsType<UriImageSource>(image.Image.Source).Uri);
-        Assert.Equal("cat", SemanticProperties.GetDescription(image.Image));
-        image.ShowFallback();
-        var chip = Assert.IsAssignableFrom<Border>(image.Content);
-        Assert.Equal("cat, Image \u00B7 cat.png", SemanticProperties.GetDescription(chip));
+        // A web image is a chip until the app allows remote images: it names the site, and tapping it opens the link.
+        var chip = Assert.IsAssignableFrom<Border>(blocks[2]);
+        Assert.Equal("cat, Image \u00B7 example.com", SemanticProperties.GetDescription(chip));
         Assert.Single(chip.GestureRecognizers.OfType<TapGestureRecognizer>());
+
+        // Allowed, it loads inline; when it cannot load, the same chip takes its place.
+        view.Markdown.ImageLoader = TestImages.Loader(bytes: null);
+        view.Markdown.AllowRemoteImages = true;
+        var image = Assert.IsType<LinkedImageView>(view.Markdown.BlockViews[2]);
+        Assert.Equal("cat", SemanticProperties.GetDescription(image.Image));
+        Assert.Equal("cat, Image \u00B7 example.com", SemanticProperties.GetDescription(Assert.IsAssignableFrom<Border>(image.Content)));
     }
 
     [Fact]

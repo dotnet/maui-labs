@@ -15,7 +15,8 @@ templates, restyle it with resource keys, or replace the whole layout.
   names, or timestamps. A thinking row shows until content arrives. The list follows new content while you are
   at the bottom, and again whenever a new turn starts.
 - **Markdown answers:** headings, emphasis, lists and task lists, tables, block quotes, code, links, and images
-  render as native views while the answer streams. Your own messages stay plain text.
+  render as native views while the answer streams. Images from the web show as chips until you allow them
+  (`AllowRemoteImages`). Your own messages stay plain text.
 - **Agent content:** tool calls are compact cards with expandable arguments and results. An approval is one
   card: Approve and Reject, then the decision, with the arguments and result folded away like a tool call's.
   There are also client UI actions, collapsible reasoning (encrypted reasoning without text is not shown),
@@ -265,9 +266,18 @@ chat recolors Markdown in both themes. Text sizes come from `AIChat.FontSize.Bod
 | `AIChat.Markdown.TableCellStyle` | `Label` style | Body cells |
 | `AIChat.Markdown.ThematicBreakStyle` | `BoxView` style | Horizontal rules |
 
-Only `http`, `https`, and `mailto` links open; other links read as plain text. Images load inline only from
-`http` and `https`, up to 480 × 320. An image from any other source (such as an `attachment://` reference), or
-one that fails to load, shows as a chip with its description instead.
+Only `http`, `https`, and `mailto` links open; other links read as plain text.
+
+Images from the web don't load unless you set `AllowRemoteImages="True"`. An answer is untrusted text: a web
+page, document, or tool result that the model read can make it write an image link whose address carries parts of
+the conversation, and loading that image would send them to the site. While `AllowRemoteImages` is off (the
+default), an `http` or `https` image shows as a chip with its description and the site's host, and tapping the
+chip opens the image in the browser. When it is on, images load inline, up to 480 × 320, within limits: a download
+stops at 10 MB or after 30 seconds, and an image larger than 16 megapixels, or one whose size can't be read from
+its header (PNG, JPEG, GIF, BMP, and WebP can), shows as the chip instead of being decoded. Changing the setting
+updates the answers already shown. An image from any other source (such as an `attachment://` reference), or one
+that fails to load, also shows as a chip. `AllowRemoteImages` covers images in Markdown and in a provider's rich
+text; images that tools and providers return as media (`MediaContentBlock`) are not affected.
 
 ## Attachments, audio, and voice
 

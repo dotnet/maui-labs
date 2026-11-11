@@ -17,5 +17,9 @@ internal sealed class TextBlockView : BlockView
 
     internal MarkdownView Markdown => _markdown;
 
-    protected override void OnBlockChanged() => _markdown.SetMarkdown((Block as RichContentBlock)?.RawText);
+    protected override void OnBlockChanged()
+    {
+        _markdown.ApplyImageSettings(Owner);
+        _markdown.SetMarkdown((Block as RichContentBlock)?.RawText);
+    }
 }

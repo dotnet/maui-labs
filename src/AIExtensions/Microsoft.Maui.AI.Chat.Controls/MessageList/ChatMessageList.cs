@@ -139,6 +139,13 @@ internal sealed class ChatMessageList : CollectionView
     /// </summary>
     public void InvalidateTemplates() => Invalidate();
 
+    /// <summary>Shows every row again on the next flush, after a setting their views read changed.</summary>
+    public void RefreshRows()
+    {
+        _dirtyRows.UnionWith(_rows);
+        Invalidate();
+    }
+
     /// <summary>Scrolls to the newest row and keeps following new content.</summary>
     public void PinToEnd()
     {

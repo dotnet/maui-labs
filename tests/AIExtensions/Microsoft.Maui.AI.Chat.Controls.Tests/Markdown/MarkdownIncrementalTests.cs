@@ -90,7 +90,8 @@ public class MarkdownIncrementalTests
     [Fact]
     public void AGrowingParagraph_KeepsItsLabelAndItsImages()
     {
-        var view = new MarkdownView();
+        var requests = new List<Uri>();
+        var view = new MarkdownView { AllowRemoteImages = true, ImageLoader = TestImages.Pending(requests) };
         view.SetMarkdown("Here is the chart");
         var label = Assert.IsAssignableFrom<Label>(view.BlockViews[0]);
 
@@ -112,6 +113,9 @@ public class MarkdownIncrementalTests
         Assert.Same(image, parts[0]);
         Assert.Same(after, parts[1]);
         Assert.Equal("it works", after.FormattedText.Spans[^1].Text);
+
+        // Asked for once: the image is not downloaded again as the text around it grows.
+        Assert.Single(requests);
     }
 
     [Fact]
@@ -306,7 +310,8 @@ public class MarkdownIncrementalTests
                     builder.Append(" spacing=").Append(stack.Spacing);
                     break;
                 case Image image:
-                    builder.Append(" source=").Append((image.Source as UriImageSource)?.Uri).Append(" max=").Append(image.MaximumWidthRequest).Append('x').Append(image.MaximumHeightRequest);
+                    builder.Append(" source=").Append(image.Source?.GetType().Name).Append(" pixels=").Append((image as ChatImage)?.PixelSize)
+                        .Append(" max=").Append(image.MaximumWidthRequest).Append('x').Append(image.MaximumHeightRequest);
                     break;
                 case ScrollView scroll:
                     builder.Append(' ').Append(scroll.Orientation).Append(' ').Append(scroll.HorizontalScrollBarVisibility);

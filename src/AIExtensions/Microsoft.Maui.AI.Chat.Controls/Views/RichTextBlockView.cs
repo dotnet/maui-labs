@@ -18,6 +18,7 @@ internal sealed class RichTextBlockView : BlockView
 
     protected override void OnBlockChanged()
     {
+        _markdown.ApplyImageSettings(Owner);
         if (Block is not RichContentBlock rich)
         {
             _markdown.SetDocument([]);

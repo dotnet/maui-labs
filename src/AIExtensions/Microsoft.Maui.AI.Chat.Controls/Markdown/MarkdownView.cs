@@ -74,6 +74,38 @@ internal sealed class MarkdownView : ContentView
     /// <summary>The view built for each top-level node (<see langword="null"/> when a node renders nothing).</summary>
     internal IReadOnlyList<View?> BlockViews => _blockViews;
 
+    /// <summary>
+    /// Gets or sets whether web images load inline (see <see cref="AIChatView.AllowRemoteImages"/>); otherwise they
+    /// show as chips. Changing it renders the document again.
+    /// </summary>
+    internal bool AllowRemoteImages
+    {
+        get => _renderer.AllowRemoteImages;
+        set
+        {
+            if (_renderer.AllowRemoteImages == value)
+                return;
+
+            _renderer.AllowRemoteImages = value;
+            Rebuild();
+        }
+    }
+
+    /// <summary>Gets or sets the loader of web images. Defaults to <see cref="RemoteImageLoader.Shared"/>.</summary>
+    internal RemoteImageLoader ImageLoader
+    {
+        get => _renderer.ImageLoader;
+        set
+        {
+            if (ReferenceEquals(_renderer.ImageLoader, value))
+                return;
+
+            _renderer.ImageLoader = value;
+            if (AllowRemoteImages)
+                Rebuild();
+        }
+    }
+
     /// <summary>Opens safe link targets. Defaults to <see cref="Launcher.Default"/>; replaceable for tests or hosts.</summary>
     internal Func<Uri, Task<bool>>? LinkLauncher { get; set; }
 
@@ -96,6 +128,16 @@ internal sealed class MarkdownView : ContentView
         // Snapshot the caller's list so a later call with the same, appended-to instance still
         // compares against what is on screen.
         Render(nodes is null ? Array.Empty<RichTextNode>() : nodes.ToArray());
+    }
+
+    /// <summary>Takes the web image settings of the chat view that shows this view, when there is one.</summary>
+    internal void ApplyImageSettings(AIChatView? owner)
+    {
+        if (owner is null)
+            return;
+
+        ImageLoader = owner.ImageLoader ?? RemoteImageLoader.Shared;
+        AllowRemoteImages = owner.AllowRemoteImages;
     }
 
     /// <summary>Opens <paramref name="url"/> when it is an http, https or mailto link. Never throws.</summary>
@@ -167,6 +209,12 @@ internal sealed class MarkdownView : ContentView
         TrimOuterMargins();
     }
 
+    private void Rebuild()
+    {
+        Clear();
+        Render(_document);
+    }
+
     private void Clear()
     {
         _renderings.Clear();
@@ -200,7 +248,6 @@ internal sealed class MarkdownView : ContentView
     {
         _renderer.FontSize = FontSize;
         _renderer.CodeFontSize = CodeFontSize;
-        Clear();
-        Render(_document);
+        Rebuild();
     }
 }

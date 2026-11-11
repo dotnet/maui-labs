@@ -11,6 +11,8 @@ Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAudioCapture.get -> bool
 Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAudioCapture.set -> void
 Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowLiveSpeech.get -> bool
 Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowLiveSpeech.set -> void
+Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowRemoteImages.get -> bool
+Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowRemoteImages.set -> void
 Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentFileTypes.get -> Microsoft.Maui.Storage.FilePickerFileType?
 Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentFileTypes.set -> void
 Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentPicker.get -> Microsoft.Maui.AI.Chat.Controls.IChatAttachmentPicker?
@@ -210,6 +212,7 @@ static Microsoft.Maui.AI.Chat.Controls.AppBuilderExtensions.UseAIChat(this Micro
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowAudioCaptureProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowLiveSpeechProperty -> Microsoft.Maui.Controls.BindableProperty!
+static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AllowRemoteImagesProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentFileTypesProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentPickerProperty -> Microsoft.Maui.Controls.BindableProperty!
 static readonly Microsoft.Maui.AI.Chat.Controls.AIChatView.AttachmentsProperty -> Microsoft.Maui.Controls.BindableProperty!
