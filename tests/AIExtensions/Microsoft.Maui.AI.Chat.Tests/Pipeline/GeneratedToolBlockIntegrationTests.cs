@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Maui.AI.Chat.Tests.TestHelpers;
@@ -283,6 +284,105 @@ public class GeneratedToolBlockIntegrationTests
         Assert.DoesNotContain(blocks, block => block is GeneratedOrderBlock);
     }
 
+    [Fact]
+    public async Task GeneratedHandler_ConvertsPrimitiveArgumentsFromJson()
+    {
+        var pipeline = CreatePipeline();
+        var arguments = JsonSerializer.Deserialize<Dictionary<string, object?>>("""
+            {
+              "count": 3,
+              "total": 9000000000,
+              "ratio": 0.25,
+              "scale": 1.5,
+              "price": 19.99,
+              "enabled": true,
+              "label": "Plan",
+              "limit": 7
+            }
+            """)!;
+
+        var block = Assert.IsType<GeneratedSettingsBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents = [new FunctionCallContent("call-settings", "configure", arguments)],
+            })));
+
+        Assert.Equal(3, block.Count);
+        Assert.Equal(9_000_000_000L, block.Total);
+        Assert.Equal(0.25, block.Ratio);
+        Assert.Equal(1.5f, block.Scale);
+        Assert.Equal(19.99m, block.Price);
+        Assert.True(block.Enabled);
+        Assert.Equal("Plan", block.Label);
+        Assert.Equal(7, block.Limit);
+    }
+
+    [Fact]
+    public async Task GeneratedHandler_ConvertsPrimitivesSentAsStringsOrClrValues()
+    {
+        var pipeline = CreatePipeline();
+        var previousCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+        try
+        {
+            var block = Assert.IsType<GeneratedSettingsBlock>(Assert.Single(await ProcessAsync(
+                pipeline,
+                new ChatResponseUpdate
+                {
+                    Role = ChatRole.Assistant,
+                    Contents =
+                    [
+                        new FunctionCallContent(
+                            "call-settings",
+                            "configure",
+                            new Dictionary<string, object?>
+                            {
+                                ["count"] = JsonSerializer.SerializeToElement("4"),
+                                ["total"] = 12,
+                                ["ratio"] = "0.5",
+                                ["price"] = JsonSerializer.SerializeToElement("2.50"),
+                                ["enabled"] = JsonSerializer.SerializeToElement("true"),
+                                ["label"] = JsonSerializer.SerializeToElement(42),
+                                ["limit"] = "not a number",
+                            }),
+                    ],
+                })));
+
+            Assert.Equal(4, block.Count);
+            Assert.Equal(12L, block.Total);
+            Assert.Equal(0.5, block.Ratio);
+            Assert.Equal(2.50m, block.Price);
+            Assert.True(block.Enabled);
+            Assert.Equal("42", block.Label);
+            Assert.Null(block.Limit);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public async Task GeneratedHandler_PrimitiveResult_MapsJsonValue()
+    {
+        var pipeline = CreatePipeline();
+        var block = Assert.IsType<GeneratedCountBlock>(Assert.Single(await ProcessAsync(
+            pipeline,
+            new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents =
+                [
+                    new FunctionCallContent("call-count", "count_items"),
+                    new FunctionResultContent("call-count", JsonSerializer.SerializeToElement(12)),
+                ],
+            })));
+
+        Assert.Equal(12, block.Count);
+    }
+
     private static BlockMappingPipeline CreatePipeline()
     {
         var options = new UIAgentOptions();
@@ -331,4 +431,39 @@ public sealed partial class GeneratedTitleBlock : FunctionInvocationContentBlock
 {
     [ToolResult(Name = "title")]
     public string Title { get; set; } = string.Empty;
+}
+
+[ToolBlock("configure")]
+public sealed partial class GeneratedSettingsBlock : FunctionInvocationContentBlock
+{
+    [ToolParameter(Name = "count")]
+    public int Count { get; set; }
+
+    [ToolParameter(Name = "total")]
+    public long Total { get; set; }
+
+    [ToolParameter(Name = "ratio")]
+    public double Ratio { get; set; }
+
+    [ToolParameter(Name = "scale")]
+    public float Scale { get; set; }
+
+    [ToolParameter(Name = "price")]
+    public decimal Price { get; set; }
+
+    [ToolParameter(Name = "enabled")]
+    public bool Enabled { get; set; }
+
+    [ToolParameter(Name = "label")]
+    public string? Label { get; set; }
+
+    [ToolParameter(Name = "limit")]
+    public int? Limit { get; set; }
+}
+
+[ToolBlock("count_items")]
+public sealed partial class GeneratedCountBlock : FunctionInvocationContentBlock
+{
+    [ToolResult]
+    public int Count { get; set; }
 }

@@ -102,6 +102,12 @@ Register all generated handlers in the consuming assembly:
 var agent = new UIAgent(client, options => options.AddGeneratedToolBlocks());
 ```
 
+Mapped properties need a public or internal setter that is not `init`-only (MAUIAI107). Values of
+type `string`, `int`, `long`, `double`, `float`, `decimal` and `bool` (and their nullable forms) are
+read from JSON without reflection, so they work with trimming and NativeAOT; values the model sends
+as strings, such as `"5"`, are parsed with the invariant culture. Other types are deserialized with
+reflection-based `System.Text.Json`. A value that cannot be converted leaves its property unchanged.
+
 Use handwritten `ContentBlockHandler<TState>` implementations for aggregation, custom events,
 or projections spanning multiple calls.
 

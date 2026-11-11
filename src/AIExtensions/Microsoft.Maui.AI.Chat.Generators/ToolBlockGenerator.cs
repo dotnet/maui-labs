@@ -162,6 +162,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
             var propertyLocation = SourceLocation.From(
                 property.Locations.FirstOrDefault() ?? Location.None);
             if (property.SetMethod is null
+                || property.SetMethod.IsInitOnly
                 || property.SetMethod.DeclaredAccessibility is not (
                     Accessibility.Public
                     or Accessibility.Internal
@@ -201,10 +202,32 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
                 property.Name,
                 key,
                 property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                hasExplicitName));
+                hasExplicitName,
+                GetConversionKind(property.Type)));
         }
 
         return properties.ToImmutable();
+    }
+
+    private static ConversionKind GetConversionKind(ITypeSymbol type)
+    {
+        if (type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+            && type is INamedTypeSymbol { TypeArguments.Length: 1 } nullable)
+        {
+            type = nullable.TypeArguments[0];
+        }
+
+        return type.SpecialType switch
+        {
+            SpecialType.System_String => ConversionKind.String,
+            SpecialType.System_Int32 => ConversionKind.Int32,
+            SpecialType.System_Int64 => ConversionKind.Int64,
+            SpecialType.System_Double => ConversionKind.Double,
+            SpecialType.System_Single => ConversionKind.Single,
+            SpecialType.System_Decimal => ConversionKind.Decimal,
+            SpecialType.System_Boolean => ConversionKind.Boolean,
+            _ => ConversionKind.Complex,
+        };
     }
 
     private static bool ExtendsFunctionBlock(INamedTypeSymbol type)
@@ -315,7 +338,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("        state.Result = result;");
         EmitResultProperties(builder, model.Results);
         builder.AppendLine("    }");
-        EmitConversionHelper(builder);
+        EmitConversionHelpers(builder, model);
         builder.AppendLine("}");
 
         context.AddSource(GetHintName(model), builder.ToString());
@@ -341,8 +364,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
             builder.AppendLine("                        {");
             builder.Append("                            state.")
                 .Append(EscapeIdentifier(property.PropertyName))
-                .Append(" = ConvertValue<").Append(property.TypeName).Append(">(")
-                .Append(local).AppendLine(");");
+                .Append(" = ").Append(Convert(property, local)).AppendLine(";");
             builder.AppendLine("                        }");
             builder.AppendLine("                        catch (global::System.Exception) { }");
             builder.AppendLine("                    }");
@@ -367,11 +389,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
             {
                 var local = "__" + SanitizeIdentifier(property.PropertyName);
                 builder.AppendLine(
-                    "                        var resultObject = result.Result is global::System.Text.Json.JsonElement element");
-                builder.AppendLine(
-                    "                            ? element");
-                builder.AppendLine(
-                    "                            : global::System.Text.Json.JsonSerializer.SerializeToElement(result.Result, JsonOptions);");
+                    "                        var resultObject = GetResultObject(result.Result);");
                 builder.AppendLine(
                     "                        if (resultObject.ValueKind == global::System.Text.Json.JsonValueKind.Object");
                 builder.Append("                            && resultObject.TryGetProperty(\"")
@@ -384,8 +402,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
                 builder.AppendLine("                            {");
                 builder.Append("                                state.")
                     .Append(EscapeIdentifier(property.PropertyName))
-                    .Append(" = ConvertValue<").Append(property.TypeName).Append(">(")
-                    .Append(local).AppendLine(");");
+                    .Append(" = ").Append(Convert(property, local)).AppendLine(";");
                 builder.AppendLine("                            }");
                 builder.AppendLine("                            catch (global::System.Exception) { }");
                 builder.AppendLine("                        }");
@@ -396,8 +413,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
                 builder.AppendLine("                        {");
                 builder.Append("                            state.")
                     .Append(EscapeIdentifier(property.PropertyName))
-                    .Append(" = ConvertValue<").Append(property.TypeName)
-                    .AppendLine(">(result.Result);");
+                    .Append(" = ").Append(Convert(property, "result.Result")).AppendLine(";");
                 builder.AppendLine("                        }");
                 builder.AppendLine("                        catch (global::System.Exception) { }");
             }
@@ -405,11 +421,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         else
         {
             builder.AppendLine(
-                "                        var resultObject = result.Result is global::System.Text.Json.JsonElement element");
-            builder.AppendLine(
-                "                            ? element");
-            builder.AppendLine(
-                "                            : global::System.Text.Json.JsonSerializer.SerializeToElement(result.Result, JsonOptions);");
+                "                        var resultObject = GetResultObject(result.Result);");
             builder.AppendLine(
                 "                        if (resultObject.ValueKind == global::System.Text.Json.JsonValueKind.Object)");
             builder.AppendLine("                        {");
@@ -426,8 +438,7 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
                 builder.AppendLine("                                {");
                 builder.Append("                                    state.")
                     .Append(EscapeIdentifier(property.PropertyName))
-                    .Append(" = ConvertValue<").Append(property.TypeName).Append(">(")
-                    .Append(local).AppendLine(");");
+                    .Append(" = ").Append(Convert(property, local)).AppendLine(";");
                 builder.AppendLine("                                }");
                 builder.AppendLine("                                catch (global::System.Exception) { }");
                 builder.AppendLine("                            }");
@@ -437,13 +448,97 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
         builder.AppendLine("                    }");
     }
 
-    private static void EmitConversionHelper(StringBuilder builder)
+    private static string Convert(ToolPropertyModel property, string value) =>
+        property.Conversion == ConversionKind.Complex
+            ? "ConvertValue<" + property.TypeName + ">(" + value + ")"
+            : "ConvertTo" + property.Conversion + "(" + value + ")";
+
+    private static void EmitConversionHelpers(StringBuilder builder, ToolBlockModel model)
     {
+        var properties = model.Parameters.AddRange(model.Results);
+        var conversions = new HashSet<ConversionKind>(properties.Select(property => property.Conversion));
+        var readsResultObject = model.Results.Length > 1
+            || (model.Results.Length == 1 && model.Results[0].HasExplicitName);
+
+        // Primitive conversions read JsonElement directly so they work with trimming and NativeAOT.
+        foreach (var conversion in conversions.OrderBy(conversion => conversion))
+        {
+            switch (conversion)
+            {
+                case ConversionKind.String:
+                    builder.AppendLine();
+                    builder.AppendLine("    private static string ConvertToString(object value) => value switch");
+                    builder.AppendLine("    {");
+                    builder.AppendLine("        string text => text,");
+                    builder.AppendLine(
+                        "        global::System.Text.Json.JsonElement { ValueKind: global::System.Text.Json.JsonValueKind.String } element => element.GetString()!,");
+                    builder.AppendLine(
+                        "        global::System.Text.Json.JsonElement element => element.GetRawText(),");
+                    builder.AppendLine(
+                        "        _ => global::System.Convert.ToString(value, global::System.Globalization.CultureInfo.InvariantCulture)!,");
+                    builder.AppendLine("    };");
+                    break;
+                case ConversionKind.Boolean:
+                    builder.AppendLine();
+                    builder.AppendLine("    private static bool ConvertToBoolean(object value) => value switch");
+                    builder.AppendLine("    {");
+                    builder.AppendLine("        bool typed => typed,");
+                    builder.AppendLine(
+                        "        global::System.Text.Json.JsonElement { ValueKind: global::System.Text.Json.JsonValueKind.String } element => bool.Parse(element.GetString()!),");
+                    builder.AppendLine(
+                        "        global::System.Text.Json.JsonElement element => element.GetBoolean(),");
+                    builder.AppendLine(
+                        "        _ => global::System.Convert.ToBoolean(value, global::System.Globalization.CultureInfo.InvariantCulture),");
+                    builder.AppendLine("    };");
+                    break;
+                case ConversionKind.Complex:
+                    break;
+                default:
+                    EmitNumberConversion(builder, conversion);
+                    break;
+            }
+        }
+
+        if (readsResultObject)
+        {
+            builder.AppendLine();
+            builder.AppendLine(
+                "    private static global::System.Text.Json.JsonElement GetResultObject(object value)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        if (value is global::System.Text.Json.JsonElement element)");
+            builder.AppendLine("            return element;");
+            builder.AppendLine("        try");
+            builder.AppendLine("        {");
+            builder.AppendLine("            if (value is string json)");
+            builder.AppendLine("            {");
+            builder.AppendLine(
+                "                using var document = global::System.Text.Json.JsonDocument.Parse(json);");
+            builder.AppendLine("                return document.RootElement.Clone();");
+            builder.AppendLine("            }");
+            builder.AppendLine();
+            builder.AppendLine("            // Other CLR results are serialized with reflection-based System.Text.Json.");
+            builder.AppendLine(
+                "            return global::System.Text.Json.JsonSerializer.SerializeToElement(value, JsonOptions);");
+            builder.AppendLine("        }");
+            builder.AppendLine("        catch (global::System.Exception)");
+            builder.AppendLine("        {");
+            builder.AppendLine("            return default;");
+            builder.AppendLine("        }");
+            builder.AppendLine("    }");
+        }
+
+        if (!conversions.Contains(ConversionKind.Complex) && !readsResultObject)
+            return;
+
         builder.AppendLine();
         builder.AppendLine(
             "    private static readonly global::System.Text.Json.JsonSerializerOptions JsonOptions =");
         builder.AppendLine(
             "        new() { PropertyNameCaseInsensitive = true };");
+        if (!conversions.Contains(ConversionKind.Complex))
+            return;
+
+        // Complex types use reflection-based System.Text.Json.
         builder.AppendLine();
         builder.AppendLine("    private static T ConvertValue<T>(object? value)");
         builder.AppendLine("    {");
@@ -469,6 +564,33 @@ public sealed class ToolBlockGenerator : IIncrementalGenerator
             "        var serialized = global::System.Text.Json.JsonSerializer.SerializeToElement(value, JsonOptions);");
         builder.AppendLine("        return serialized.Deserialize<T>(JsonOptions)!;");
         builder.AppendLine("    }");
+    }
+
+    private static void EmitNumberConversion(StringBuilder builder, ConversionKind conversion)
+    {
+        var (type, styles) = conversion switch
+        {
+            ConversionKind.Int32 => ("int", "Integer"),
+            ConversionKind.Int64 => ("long", "Integer"),
+            ConversionKind.Double => ("double", "Float | global::System.Globalization.NumberStyles.AllowThousands"),
+            ConversionKind.Single => ("float", "Float | global::System.Globalization.NumberStyles.AllowThousands"),
+            _ => ("decimal", "Number"),
+        };
+
+        builder.AppendLine();
+        builder.Append("    private static ").Append(type).Append(" ConvertTo").Append(conversion)
+            .AppendLine("(object value) => value switch");
+        builder.AppendLine("    {");
+        builder.Append("        ").Append(type).AppendLine(" typed => typed,");
+        builder.AppendLine(
+            "        global::System.Text.Json.JsonElement { ValueKind: global::System.Text.Json.JsonValueKind.String } element =>");
+        builder.Append("            ").Append(type).Append(".Parse(element.GetString()!, global::System.Globalization.NumberStyles.")
+            .Append(styles).AppendLine(", global::System.Globalization.CultureInfo.InvariantCulture),");
+        builder.Append("        global::System.Text.Json.JsonElement element => element.Get").Append(conversion)
+            .AppendLine("(),");
+        builder.Append("        _ => global::System.Convert.To").Append(conversion)
+            .AppendLine("(value, global::System.Globalization.CultureInfo.InvariantCulture),");
+        builder.AppendLine("    };");
     }
 
     private static void EmitRegistration(

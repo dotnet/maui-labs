@@ -7,38 +7,58 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Microsoft.Maui.AI.Chat.Generators;
 
+/// <summary>How generated code converts a value to a mapped property's type.</summary>
+internal enum ConversionKind
+{
+    /// <summary>Reflection-based System.Text.Json; not trimming or NativeAOT safe.</summary>
+    Complex,
+    String,
+    Int32,
+    Int64,
+    Double,
+    Single,
+    Decimal,
+    Boolean,
+}
+
 internal sealed class ToolPropertyModel : IEquatable<ToolPropertyModel>
 {
     internal ToolPropertyModel(
         string propertyName,
         string key,
         string typeName,
-        bool hasExplicitName)
+        bool hasExplicitName,
+        ConversionKind conversion)
     {
         PropertyName = propertyName;
         Key = key;
         TypeName = typeName;
         HasExplicitName = hasExplicitName;
+        Conversion = conversion;
     }
 
     internal string PropertyName { get; }
     internal string Key { get; }
     internal string TypeName { get; }
     internal bool HasExplicitName { get; }
+    internal ConversionKind Conversion { get; }
 
     public bool Equals(ToolPropertyModel? other) =>
         other is not null
         && PropertyName == other.PropertyName
         && Key == other.Key
         && TypeName == other.TypeName
-        && HasExplicitName == other.HasExplicitName;
+        && HasExplicitName == other.HasExplicitName
+        && Conversion == other.Conversion;
 
     public override bool Equals(object? obj) => Equals(obj as ToolPropertyModel);
 
     public override int GetHashCode() =>
         Hash.Combine(
-            Hash.Combine(Hash.Combine(PropertyName, Key), TypeName.GetHashCode()),
-            HasExplicitName.GetHashCode());
+            Hash.Combine(
+                Hash.Combine(Hash.Combine(PropertyName, Key), TypeName.GetHashCode()),
+                HasExplicitName.GetHashCode()),
+            (int)Conversion);
 }
 
 internal sealed class ToolBlockModel : IEquatable<ToolBlockModel>
