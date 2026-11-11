@@ -25,6 +25,11 @@ namespace Microsoft.Maui.AI.Chat;
 /// <see cref="RetryAsync"/>.
 /// </para>
 /// <para>
+/// Callbacks run inline. An exception thrown by one before the turn is committed fails the turn; one
+/// thrown while a committed or stopped turn is reported reaches the caller of the send or retry, and the
+/// turn stays committed.
+/// </para>
+/// <para>
 /// This type is single-thread-affine and is not thread-safe. Callers must serialize access and
 /// enter the owning application thread before calling it. Status checks are misuse guards, not
 /// synchronization.
@@ -322,14 +327,14 @@ public sealed class AgentContext : IDisposable
         bool includeInitialRequestBlocks)
     {
         var cancellationToken = attempt.Token;
-        Status = ConversationStatus.Streaming;
-        Error = null;
-        NotifyStatusChanged();
-
         var pendingTurn = _agent.BeginTurn(turn);
         var interactiveBlocks = new List<IInteractiveBlock>();
         try
         {
+            Status = ConversationStatus.Streaming;
+            Error = null;
+            NotifyStatusChanged();
+
             IReadOnlyList<ChatMessage> currentMessages = [message];
             var isInitialRequest = true;
 
@@ -467,22 +472,23 @@ public sealed class AgentContext : IDisposable
 
             cancellationToken.ThrowIfCancellationRequested();
             _agent.CommitTurn(pendingTurn, stopped: false);
-            _agent.RejectPendingPredictiveState();
-
-            _retryMessage = null;
-            Status = ConversationStatus.Idle;
-            NotifyStatusChanged();
-            return AttemptOutcome.Succeeded;
         }
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
             return EndCanceledAttempt(attempt, pendingTurn, turn, interactiveBlocks);
         }
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception ex)
         {
             Fail(message, ex);
             return AttemptOutcome.Failed;
         }
+
+        // The turn is committed, so an exception from an app callback while it is reported reaches the
+        // caller instead of failing a turn that can no longer be retried.
+        _retryMessage = null;
+        Status = ConversationStatus.Idle;
+        ReportAttemptEnded();
+        return AttemptOutcome.Succeeded;
     }
 
     private static async Task<AIContent[]> GetResultAsync(
@@ -523,7 +529,6 @@ public sealed class AgentContext : IDisposable
         ConversationTurn turn,
         List<IInteractiveBlock> interactiveBlocks)
     {
-        _agent.RejectPendingPredictiveState();
         AbandonPendingInteractions(interactiveBlocks);
 
         if (!attempt.Discard)
@@ -544,18 +549,40 @@ public sealed class AgentContext : IDisposable
         _retryMessage = null;
         Error = null;
         Status = ConversationStatus.Idle;
-        NotifyStatusChanged();
+        ReportAttemptEnded();
         return AttemptOutcome.Stopped;
     }
 
     private void Fail(ChatMessage? message, Exception exception)
     {
-        _agent.RejectPendingPredictiveState();
         _retryMessage = message;
         Error = exception;
         Status = ConversationStatus.Error;
-        _agent.LogProcessingError(exception);
-        NotifyStatusChanged();
+        try
+        {
+            _agent.RejectPendingPredictiveState();
+        }
+        finally
+        {
+            _agent.LogProcessingError(exception);
+            NotifyStatusChanged();
+        }
+    }
+
+    /// <summary>
+    /// Reports that an attempt ended once its outcome is final: rejects a prediction nobody accepted and
+    /// raises the status change. Both run app callbacks; one that throws cannot change the outcome.
+    /// </summary>
+    private void ReportAttemptEnded()
+    {
+        try
+        {
+            _agent.RejectPendingPredictiveState();
+        }
+        finally
+        {
+            NotifyStatusChanged();
+        }
     }
 
     private static void AbandonPendingInteractions(List<IInteractiveBlock> interactiveBlocks)
