@@ -436,12 +436,11 @@ public class BuiltInViewTests
     }
 
     [Fact]
-    public void Reasoning_ProtectedReasoningIsNeverShown()
+    public void Reasoning_ProtectedReasoningShowsNothing()
     {
         var view = Render<ReasoningView>(Blocks.Reasoning(text: null, protectedData: "opaque-bytes"));
 
-        Assert.Equal("Reasoning is hidden", view.Header.Text);
-        Assert.False(view.Header.IsEnabled);
+        Assert.False(view.Header.IsVisible);
         Assert.False(view.Chevron.IsVisible);
 
         view.Toggle();

@@ -273,7 +273,7 @@ internal sealed class ChatMessageList : CollectionView
                 {
                     Track(block, liveBlocks);
                     var template = BuiltInBlockTemplates.Select(block, templates, includeBuiltIns: true);
-                    if (template is { CanRender: true })
+                    if (template is { CanRender: true } && !IsEmptyBuiltInReasoning(block, template))
                     {
                         desired.Add(GetBlockRow(block, template, session, turn));
                         lastVisible = block;
@@ -313,6 +313,13 @@ internal sealed class ChatMessageList : CollectionView
         Prune(liveBlocks, liveTurns);
         return desired;
     }
+
+    /// <summary>
+    /// Gets whether the built-in reasoning view would have nothing to show: reasoning without text, such as the
+    /// encrypted reasoning some providers return in a block of its own. An app template still gets such blocks.
+    /// </summary>
+    private static bool IsEmptyBuiltInReasoning(ContentBlock block, BlockTemplate template) =>
+        block is ReasoningContentBlock reasoning && template.Factory is not null && string.IsNullOrWhiteSpace(reasoning.Text);
 
     private void AddRequestRows(
         List<ChatRow> desired,

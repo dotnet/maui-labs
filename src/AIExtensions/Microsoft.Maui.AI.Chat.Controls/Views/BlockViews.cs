@@ -410,7 +410,7 @@ internal sealed class ReasoningView : BlockView
 
     internal void Toggle()
     {
-        if (Block is not ReasoningContentBlock { IsEncrypted: false } reasoning || reasoning.Text.Length == 0)
+        if (string.IsNullOrWhiteSpace((Block as ReasoningContentBlock)?.Text))
             return;
 
         ViewState.IsExpanded = !ViewState.IsExpanded;
@@ -419,11 +419,11 @@ internal sealed class ReasoningView : BlockView
 
     protected override void OnBlockChanged()
     {
+        // Reasoning without text (only provider-protected data, such as encrypted reasoning) has nothing to show.
         var reasoning = Block as ReasoningContentBlock;
-        if (reasoning is null || reasoning.IsEncrypted)
+        if (reasoning is null || string.IsNullOrWhiteSpace(reasoning.Text))
         {
-            _header.Text = "Reasoning is hidden";
-            _header.IsEnabled = false;
+            _header.IsVisible = false;
             _chevron.IsVisible = false;
             _text.IsVisible = false;
             _text.Text = null;
@@ -431,7 +431,7 @@ internal sealed class ReasoningView : BlockView
         }
 
         var expanded = ViewState.IsExpanded;
-        _header.IsEnabled = true;
+        _header.IsVisible = true;
         _header.Text = "Reasoning";
         _chevron.IsVisible = true;
         _chevron.Rotation = expanded ? 90 : 0;
