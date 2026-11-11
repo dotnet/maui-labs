@@ -67,13 +67,13 @@ public partial class StructuredResponseView : BlockView
         CategoryLabel.Text = response.Category;
         CategoryChip.IsVisible = !string.IsNullOrWhiteSpace(response.Category);
         SentimentLabel.Text = response.Sentiment.ToString();
-        SentimentDot.SetDynamicResource(BoxView.ColorProperty, response.Sentiment switch
+        SentimentDot.Color = response.Sentiment switch
         {
-            PlaygroundSentiment.Positive => AIChatThemeKeys.SuccessColor,
-            PlaygroundSentiment.Negative => AIChatThemeKeys.ErrorColor,
-            PlaygroundSentiment.Mixed => AIChatThemeKeys.AccentColor,
-            _ => AIChatThemeKeys.SecondaryTextColor,
-        });
+            PlaygroundSentiment.Positive => Color.FromArgb("#16A34A"),
+            PlaygroundSentiment.Negative => Color.FromArgb("#DC2626"),
+            PlaygroundSentiment.Mixed => Color.FromArgb("#D97706"),
+            _ => Color.FromArgb("#64748B"),
+        };
         SemanticProperties.SetDescription(CategoryChip, $"Category: {response.Category}");
         SemanticProperties.SetDescription(SentimentChip, $"Sentiment: {response.Sentiment}");
         SemanticProperties.SetDescription(this, "Structured response");

@@ -1,172 +1,100 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:chat="http://schemas.microsoft.com/dotnet/2026/maui/ai/chat"
              xmlns:local="clr-namespace:AIExtensions.Sample.ChatPlayground"
-             xmlns:storage="clr-namespace:Microsoft.Maui.Storage;assembly=Microsoft.Maui.Essentials"
              x:Class="AIExtensions.Sample.ChatPlayground.ChatPage"
              x:DataType="local:ChatViewModel"
              Title="Chat"
              BackgroundColor="{AppThemeBinding Light={StaticResource PageBackground}, Dark={StaticResource PageBackgroundDark}}">
-    <ContentPage.Resources>
-        <local:TurnFooterConverter x:Key="TurnFooter" />
-    </ContentPage.Resources>
     <Grid>
         <local:PlaygroundPageLayout x:Name="ChatLayout" HeaderTitle="Chat"
-                                       HeaderInfo="Chat with the selected client in AIChatView. Replay plays the current chat offline through the same view; More imports, exports, or loads an example recording. Logs toggles local AI diagnostics."
+                                       HeaderInfo="Chat with the selected client. The conversation and the shared notes are saved as they change and come back when the app starts. More starts a new chat or shows the notes. Logs toggles local AI diagnostics."
                                        HeaderStatus="{Binding StatusMessage}"
                                        StatusAutomationId="RequestStatusLabel"
                                        SidebarTitle="Chat settings"
                                        Diagnostics="{Binding Diagnostics}">
             <local:PlaygroundPageLayout.HeaderActions>
-                <HorizontalStackLayout Spacing="4">
-                    <VerticalStackLayout Spacing="2">
-                        <ImageButton Source="add.png" Style="{StaticResource ChatActionButton}"
-                                     Command="{Binding NewChatAction}"
-                                     SemanticProperties.Description="Start a new chat, replacing the current autosave"
-                                     ToolTipProperties.Text="Export this chat before starting a new one"
-                                     AutomationId="NewChatButton" />
-                        <Label Text="New" Style="{StaticResource ChatActionLabel}" />
-                    </VerticalStackLayout>
-                    <VerticalStackLayout Spacing="2">
-                        <ImageButton x:Name="MoreButton" Source="more.png"
-                                     Style="{StaticResource ChatActionButton}"
-                                     SemanticProperties.Description="Chat recording options"
-                                     AutomationId="ChatMoreButton">
-                            <local:PopupMenu.Content>
-                                <VerticalStackLayout Spacing="8" x:DataType="local:ChatViewModel">
-                                    <Label Text="CURRENT CHAT" Style="{StaticResource SectionHeading}" />
-                                    <Button Text="Import from file" ImageSource="folder.png"
-                                            Command="{Binding ImportFileAction}"
-                                            SemanticProperties.Description="Replace the current chat with a recording from a file"
-                                            AutomationId="ImportChatFileButton" />
-                                    <Button Text="Load example" ImageSource="play.png"
-                                            Command="{Binding LoadSampleAction}"
-                                            SemanticProperties.Description="Replace the current chat with a bundled image and tool-call recording"
-                                            AutomationId="LoadSampleChatButton" />
-                                    <Button Text="Export to file" ImageSource="export.png"
-                                            Command="{Binding ExportChatAction}"
-                                            CommandParameter="{x:Reference MoreButton}"
-                                            AutomationId="ExportChatButton" />
-                                </VerticalStackLayout>
-                            </local:PopupMenu.Content>
-                        </ImageButton>
-                        <Label Text="More" Style="{StaticResource ChatActionLabel}" />
-                    </VerticalStackLayout>
-                </HorizontalStackLayout>
+                <VerticalStackLayout Spacing="2">
+                    <ImageButton x:Name="MoreButton" Source="more.png"
+                                 Style="{StaticResource ChatActionButton}"
+                                 SemanticProperties.Description="Chat options"
+                                 AutomationId="ChatMoreButton">
+                        <local:PopupMenu.Content>
+                            <VerticalStackLayout Spacing="8" x:DataType="local:ChatViewModel">
+                                <Label Text="CHAT" Style="{StaticResource SectionHeading}" />
+                                <Button Text="New chat" ImageSource="add.png"
+                                        Command="{Binding NewChatAction}"
+                                        SemanticProperties.Description="Start a new chat, replacing the saved conversation and notes"
+                                        AutomationId="NewChatButton" />
+                                <Button Text="{Binding Notes.ToggleShownText}"
+                                        Command="{Binding Notes.ToggleShownAction}"
+                                        AutomationId="ToggleNotesButton" />
+                            </VerticalStackLayout>
+                        </local:PopupMenu.Content>
+                    </ImageButton>
+                    <Label Text="More" Style="{StaticResource ChatActionLabel}" />
+                </VerticalStackLayout>
             </local:PlaygroundPageLayout.HeaderActions>
             <local:PlaygroundPageLayout.SettingsContent>
                 <local:SettingsPane BindingContext="{Binding Settings}" />
             </local:PlaygroundPageLayout.SettingsContent>
             <local:PlaygroundPageLayout.MainContent>
-                <Border Style="{StaticResource PlaygroundPanel}" Padding="0" AutomationId="ChatPanel">
-                    <Grid RowDefinitions="*,Auto">
-                        <!--
-                            The whole chat: messages, cards, and the composer. The session is the view model's one
-                            AgentContext; the router client behind it applies the settings to every request.
-                        -->
-                        <chat:AIChatView x:Name="ChatView"
-                                         Session="{Binding Session}"
-                                         Placeholder="{Binding Placeholder}"
-                                         WelcomeTitle="{Binding WelcomeTitle}"
-                                         WelcomeMessage="{Binding WelcomeMessage}"
-                                         Suggestions="{Binding Suggestions}"
-                                         AllowAttachments="{Binding AllowAttachments}"
-                                         AttachmentFileTypes="{x:Static storage:FilePickerFileType.Images}"
-                                         IsInputEnabled="{Binding IsInputEnabled}"
-                                         IsInputVisible="{Binding IsLiveClient}"
-                                         AutomationId="ChatView">
-
-                            <!-- Model readiness sits directly above the composer and collapses when it has nothing to say. -->
-                            <chat:AIChatView.InputHeaderContent>
-                                <Border BindingContext="{Binding Readiness}" x:DataType="local:ModelReadinessViewModel"
-                                        IsVisible="{Binding IsVisible}" Padding="12,8" StrokeShape="RoundRectangle 12"
-                                        BackgroundColor="{AppThemeBinding Light={StaticResource ModelWarningBackground}, Dark={StaticResource ModelWarningBackgroundDark}}"
-                                        Stroke="{AppThemeBinding Light={StaticResource ModelWarningText}, Dark={StaticResource ModelWarningTextDark}}"
-                                        AutomationId="ModelReadinessBanner">
-                                    <Grid ColumnDefinitions="*,112" RowDefinitions="Auto,2" ColumnSpacing="12" RowSpacing="4">
-                                        <Grid ColumnDefinitions="20,*" ColumnSpacing="8">
-                                            <ActivityIndicator IsRunning="{Binding IsIndeterminateProgress}"
-                                                               Opacity="{Binding IndeterminateProgressOpacity}"
-                                                               VerticalOptions="Center" WidthRequest="20" HeightRequest="20"
-                                                               AutomationId="ModelPreparationActivity" />
-                                            <Label Grid.Column="1" FontSize="13" VerticalOptions="Center"
-                                                   ToolTipProperties.Text="{Binding Message}"
-                                                   TextColor="{AppThemeBinding Light={StaticResource ModelWarningText}, Dark={StaticResource ModelWarningTextDark}}"
-                                                   AutomationId="ModelReadinessMessage">
-                                                <Label.FormattedText>
-                                                    <FormattedString>
-                                                        <Span Text="{Binding Message}" />
-                                                        <Span Text="{Binding ProgressLine}" FontSize="12" />
-                                                    </FormattedString>
-                                                </Label.FormattedText>
-                                            </Label>
-                                        </Grid>
-                                        <Button Grid.Column="1" Text="{Binding ActionLabel}" Command="{Binding ActionCommand}"
-                                                VerticalOptions="Center" HeightRequest="44" FontSize="12"
-                                                AutomationId="ModelReadinessActionButton" />
-                                        <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Progress="{Binding ProgressFraction}"
-                                                     Opacity="{Binding DeterminateProgressOpacity}" VerticalOptions="Center"
-                                                     AutomationId="ModelPreparationProgress" />
-                                    </Grid>
-                                </Border>
-                            </chat:AIChatView.InputHeaderContent>
-
-                            <!-- The system instructions sent with the conversation, above its first message. -->
-                            <chat:AIChatView.MessagesHeaderTemplate>
-                                <DataTemplate x:DataType="local:ChatViewModel">
-                                    <VerticalStackLayout Padding="16,12,16,2">
-                                        <Border Style="{DynamicResource AIChat.Style.Card}"
-                                                IsVisible="{Binding HasSystemInstructions}"
-                                                AutomationId="ChatInstructionsCard">
-                                            <VerticalStackLayout Spacing="2">
-                                                <Label Text="SYSTEM INSTRUCTIONS"
-                                                       Style="{DynamicResource AIChat.Style.SecondaryText}"
-                                                       FontSize="11" FontAttributes="Bold" CharacterSpacing="0.6" />
-                                                <Label Text="{Binding SystemInstructions}"
-                                                       Style="{DynamicResource AIChat.Style.SecondaryText}"
-                                                       AutomationId="ChatInstructionsText" />
-                                            </VerticalStackLayout>
-                                        </Border>
-                                    </VerticalStackLayout>
-                                </DataTemplate>
-                            </chat:AIChatView.MessagesHeaderTemplate>
-
-                            <!-- Under each completed response: the model that answered and the tokens it used. -->
-                            <chat:AIChatView.ResponseFooterTemplate>
-                                <DataTemplate x:DataType="chat:ConversationTurn">
-                                    <Label Text="{Binding ., Converter={StaticResource TurnFooter}}"
-                                           IsVisible="{Binding ., Converter={StaticResource TurnFooter}, ConverterParameter=visible}"
-                                           Style="{DynamicResource AIChat.Style.SecondaryText}"
-                                           FontSize="12"
-                                           AutomationId="ChatTurnFooter" />
-                                </DataTemplate>
-                            </chat:AIChatView.ResponseFooterTemplate>
-
-                            <!--
-                                Custom cards: the calculator tool's calls (its approvals keep the built-in card, which
-                                shows this card inside), and assistant text that is a JSON object.
-                            -->
-                            <chat:BlockTemplate Template="{chat:ViewTemplate local:CalculatorCardView}">
-                                <chat:BlockTemplate.When>
-                                    <chat:AllMatch>
-                                        <chat:BlockTypeMatch Type="chat:FunctionInvocationContentBlock" />
-                                        <chat:ToolMatch Name="calculate" />
-                                    </chat:AllMatch>
-                                </chat:BlockTemplate.When>
-                            </chat:BlockTemplate>
-                            <chat:BlockTemplate Template="{chat:ViewTemplate local:StructuredResponseView}">
-                                <chat:BlockTemplate.When>
-                                    <local:StructuredResponseMatch />
-                                </chat:BlockTemplate.When>
-                            </chat:BlockTemplate>
-                        </chat:AIChatView>
-
-                        <!-- Replay is read-only: its controls take the composer's place. -->
-                        <local:ReplayControls Grid.Row="1" IsVisible="{Binding IsReplayClient}" />
-                    </Grid>
-                </Border>
+                <!-- The notes sit beside the messages, or below them on a narrow screen. -->
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+                    <Border Style="{StaticResource PlaygroundPanel}" Padding="0" AutomationId="ChatPanel">
+                        <local:ChatArea />
+                    </Border>
+                    <local:NotesView Grid.Column="1" WidthRequest="300" Margin="12,0,0,0"
+                                     BindingContext="{Binding Notes}"
+                                     IsCompact="{Binding IsCompact, Source={x:Reference ChatLayout}, x:DataType=local:PlaygroundPageLayout}">
+                        <local:NotesView.Triggers>
+                            <DataTrigger TargetType="local:NotesView" Value="True"
+                                         Binding="{Binding IsCompact, Source={x:Reference ChatLayout}, x:DataType=local:PlaygroundPageLayout}">
+                                <Setter Property="Grid.Row" Value="1" />
+                                <Setter Property="Grid.Column" Value="0" />
+                                <Setter Property="WidthRequest" Value="-1" />
+                                <Setter Property="Margin" Value="0,12,0,0" />
+                            </DataTrigger>
+                        </local:NotesView.Triggers>
+                    </local:NotesView>
+                </Grid>
             </local:PlaygroundPageLayout.MainContent>
+            <local:PlaygroundPageLayout.InputContent>
+                <Grid RowDefinitions="Auto,Auto" RowSpacing="8">
+                    <Border BindingContext="{Binding Readiness}" x:DataType="local:ModelReadinessViewModel"
+                            IsVisible="{Binding IsVisible}" Padding="12,8" StrokeShape="RoundRectangle 12"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource ModelWarningBackground}, Dark={StaticResource ModelWarningBackgroundDark}}"
+                            Stroke="{AppThemeBinding Light={StaticResource ModelWarningText}, Dark={StaticResource ModelWarningTextDark}}"
+                            AutomationId="ModelReadinessBanner">
+                        <Grid ColumnDefinitions="*,112" RowDefinitions="Auto,2" ColumnSpacing="12" RowSpacing="4">
+                            <Grid ColumnDefinitions="20,*" ColumnSpacing="8">
+                                <ActivityIndicator IsRunning="{Binding IsIndeterminateProgress}"
+                                                   Opacity="{Binding IndeterminateProgressOpacity}"
+                                                   VerticalOptions="Center" WidthRequest="20" HeightRequest="20"
+                                                   AutomationId="ModelPreparationActivity" />
+                                <Label Grid.Column="1" FontSize="13" VerticalOptions="Center"
+                                       ToolTipProperties.Text="{Binding Message}"
+                                       TextColor="{AppThemeBinding Light={StaticResource ModelWarningText}, Dark={StaticResource ModelWarningTextDark}}"
+                                       AutomationId="ModelReadinessMessage">
+                                    <Label.FormattedText>
+                                        <FormattedString>
+                                            <Span Text="{Binding Message}" />
+                                            <Span Text="{Binding ProgressLine}" FontSize="12" />
+                                        </FormattedString>
+                                    </Label.FormattedText>
+                                </Label>
+                            </Grid>
+                            <Button Grid.Column="1" Text="{Binding ActionLabel}" Command="{Binding ActionCommand}"
+                                    VerticalOptions="Center" HeightRequest="44" FontSize="12"
+                                    AutomationId="ModelReadinessActionButton" />
+                            <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Progress="{Binding ProgressFraction}"
+                                         Opacity="{Binding DeterminateProgressOpacity}" VerticalOptions="Center"
+                                         AutomationId="ModelPreparationProgress" />
+                        </Grid>
+                    </Border>
+                    <local:ChatComposer Grid.Row="1" />
+                </Grid>
+            </local:PlaygroundPageLayout.InputContent>
         </local:PlaygroundPageLayout>
     </Grid>
 </ContentPage>

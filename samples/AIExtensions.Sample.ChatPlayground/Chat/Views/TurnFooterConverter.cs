@@ -1,26 +1,33 @@
 using System.Globalization;
 using Microsoft.Extensions.AI;
-using Microsoft.Maui.AI.Chat;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>
-/// Describes a completed turn for the response footer: the model that answered and the tokens it used, such as
-/// <c>gpt-4.1 · 1,024 in · 128 out</c>. With the parameter <c>visible</c> it returns whether there is anything to show.
+/// Describes a turn under its response, from its <c>ModelId</c>, <c>Usage</c> and <c>IsStopped</c>: whether it was
+/// stopped, the model that answered and the tokens it used, such as <c>gpt-4.1 · 1,024 in · 128 out</c>.
 /// </summary>
-public sealed class TurnFooterConverter : IValueConverter
+/// <remarks>
+/// It is a multi-value converter, so the footer binds to each property and updates when the turn reports it; a binding
+/// to the turn itself would keep its first value.
+/// </remarks>
+public sealed class TurnFooterConverter : IMultiValueConverter
 {
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public object? Convert(object?[] values, Type targetType, object? parameter, CultureInfo culture)
     {
-        var text = value is ConversationTurn turn ? Format(turn.ModelId, turn.Usage, culture) : string.Empty;
-        return string.Equals(parameter as string, "visible", StringComparison.OrdinalIgnoreCase)
-            ? text.Length > 0
-            : text;
+        var modelId = values.Length > 0 ? values[0] as string : null;
+        var usage = values.Length > 1 ? values[1] as UsageDetails : null;
+        var stopped = values.Length > 2 && values[2] is true;
+        var text = Format(modelId, usage, culture);
+        if (stopped)
+            text = text.Length > 0 ? $"Stopped \u00B7 {text}" : "Stopped";
+
+        return text;
     }
 
     /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+    public object?[] ConvertBack(object? value, Type[] targetTypes, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 
     /// <summary>Formats a model id and token usage, leaving out whatever the provider did not report.</summary>

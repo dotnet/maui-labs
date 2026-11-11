@@ -153,7 +153,7 @@ public sealed class ChatDiagnosticsTests
 
         logger.LogDebug("Model status: {Availability}", ChatModelAvailability.NotReady);
         logger.LogTrace("not captured");
-        factory.CreateLogger<ChatSessionService>().LogDebug("Recording saved.");
+        factory.CreateLogger<PlaygroundChatClient>().LogDebug("Request sent.");
         factory.CreateLogger("Microsoft.Maui.Essentials.AI.GeminiNanoChatClient").LogDebug("Native status read.");
         factory.CreateLogger("AIExtensions.Sample.ChatPlaygroundOther").LogError("unrelated");
         factory.CreateLogger("Microsoft.Maui.Essentials.AIOther").LogError("unrelated");
@@ -163,7 +163,7 @@ public sealed class ChatDiagnosticsTests
         var entry = entries[0];
         Assert.Contains(nameof(ModelReadinessViewModel), entry.Heading);
         Assert.Equal("Model status: NotReady", entry.Message);
-        Assert.Equal("Recording saved.", entries[1].Message);
+        Assert.Equal("Request sent.", entries[1].Message);
         Assert.Equal("Native status read.", entries[2].Message);
         Assert.True(logger.IsEnabled(LogLevel.Debug));
     }

@@ -29,6 +29,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat\Microsoft.Maui.AI.Chat.csproj" />
     <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Controls\Microsoft.Maui.AI.Chat.Controls.csproj" />
+    <!-- Writes the handler of the linked connection status card, a [ToolBlock], and AddGeneratedToolBlocks(). -->
+    <ProjectReference Include="..\..\..\src\AIExtensions\Microsoft.Maui.AI.Chat.Generators\Microsoft.Maui.AI.Chat.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -52,36 +56,42 @@
              Link="ViewModels\ChatDiagnosticGroups.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\ViewModels\DiagnosticsViewModel.cs"
              Link="ViewModels\DiagnosticsViewModel.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Notes\NotesFile.cs"
+             Link="Chat\Notes\NotesFile.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Notes\SharedNotes.cs"
+             Link="Chat\Notes\SharedNotes.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Notes\TextDiff.cs"
+             Link="Chat\Notes\TextDiff.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\ViewModels\NotesViewModel.cs"
+             Link="Chat\ViewModels\NotesViewModel.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\CalculatorDisplay.cs"
              Link="Chat\Services\CalculatorDisplay.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\CalculatorWorksheet.cs"
+             Link="Chat\Services\CalculatorWorksheet.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatClientDescriptor.cs"
              Link="Chat\Services\ChatClientDescriptor.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatRecording.cs"
-             Link="Chat\Services\ChatRecording.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatRecordingSerializer.cs"
-             Link="Chat\Services\ChatRecordingSerializer.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatReplayDriver.cs"
-             Link="Chat\Services\ChatReplayDriver.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ChatSessionService.cs"
-             Link="Chat\Services\ChatSessionService.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ConnectionStatusBlock.cs"
+             Link="Chat\Services\ConnectionStatusBlock.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ConnectionStatusResult.cs"
              Link="Chat\Services\ConnectionStatusResult.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\DescribedChatClient.cs"
              Link="Chat\Services\DescribedChatClient.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\IChatRecordingSession.cs"
-             Link="Chat\Services\IChatRecordingSession.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\FileConversationThread.cs"
+             Link="Chat\Services\FileConversationThread.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\PlaygroundChatClient.cs"
              Link="Chat\Services\PlaygroundChatClient.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\PlaygroundResponse.cs"
              Link="Chat\Services\PlaygroundResponse.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\PlaygroundTools.cs"
              Link="Chat\Services\PlaygroundTools.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\RecordingChatClient.cs"
-             Link="Chat\Services\RecordingChatClient.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ReplayChatClient.cs"
-             Link="Chat\Services\ReplayChatClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\SavedChat.cs"
+             Link="Chat\Services\SavedChat.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\StructuredResponseFormatter.cs"
              Link="Chat\Services\StructuredResponseFormatter.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Services\ThemeAction.cs"
+             Link="Chat\Services\ThemeAction.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\ChatConverters.cs"
+             Link="Chat\Views\ChatConverters.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\StructuredResponseMatch.cs"
              Link="Chat\Views\StructuredResponseMatch.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Chat\Views\TurnFooterConverter.cs"
@@ -119,9 +129,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="TestData\*.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_chat.json"
-             Link="TestData\multi-turn-image-in-out.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Resources\Raw\playground_sample.png"
              Link="TestData\playground_sample.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

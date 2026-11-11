@@ -22,11 +22,26 @@ public static class CalculatorDisplay
         return $"{FormatValue(left, culture)} {FormatOperator(ReadString(operation))} {FormatValue(right, culture)}";
     }
 
-    /// <summary>Formats a successful result, or returns <see langword="null"/> for none or a failure.</summary>
+    /// <summary>
+    /// Formats a result that is a number, or returns <see langword="null"/> for none, a failure or anything else.
+    /// </summary>
     public static string? FormatResult(FunctionResultContent? result, CultureInfo? culture = null) =>
-        result is null || result.Exception is not null || IsError(result.Result)
-            ? null
-            : FormatValue(result.Result, culture);
+        result is { Exception: null } && IsNumber(result.Result) ? FormatValue(result.Result, culture) : null;
+
+    /// <summary>
+    /// Describes a result that is not a number: why the call failed, or what came back instead, such as that the call
+    /// never ran. Returns <see langword="null"/> for none or a number.
+    /// </summary>
+    public static string? FormatMessage(FunctionResultContent? result) => result switch
+    {
+        null => null,
+        { Exception: { } exception } => exception.Message,
+        { Result: var value } when IsNumber(value) => null,
+        { Result: null or JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } } => "No result",
+        { Result: JsonElement { ValueKind: JsonValueKind.String } element } => element.GetString(),
+        { Result: JsonElement element } => element.GetRawText(),
+        { Result: var value } => Convert.ToString(value, CultureInfo.CurrentCulture),
+    };
 
     /// <summary>Gets the error message of a failed result, or <see langword="null"/> for a success.</summary>
     public static string? FormatError(FunctionResultContent? result)
@@ -72,6 +87,18 @@ public static class CalculatorDisplay
         double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
             ? FormatNumber(number, culture)
             : text ?? string.Empty;
+
+    private static bool IsNumber(object? value) => value switch
+    {
+        JsonElement { ValueKind: JsonValueKind.Number } => true,
+        JsonElement { ValueKind: JsonValueKind.String } element => IsNumericText(element.GetString()),
+        string text => IsNumericText(text),
+        double or float or decimal or int or long or short => true,
+        _ => false,
+    };
+
+    private static bool IsNumericText(string? text) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
 
     // Ten decimals hide binary rounding noise such as 0.30000000000000004.
     private static string FormatNumber(double number, CultureInfo culture) =>

@@ -133,12 +133,8 @@ public sealed class DocumentSearchServiceTests
     public async Task ClearIndex_RemovesOnlyOneModelAndPreservesDocumentsAndChat()
     {
         using var directory = new DocumentDirectory();
-        var chat = new ChatSessionService(
-            NullLogger<ChatSessionService>.Instance, directory.DataDirectory, directory.CacheDirectory);
-        chat.AddResponse(
-            ChatRecordingSerializer.Request([new ChatMessage(ChatRole.User, "Private chat")], null),
-            new ChatResponse([new ChatMessage(ChatRole.Assistant, "Private reply")]));
-        var chatBytes = File.ReadAllBytes(chat.AutosavePath);
+        var chatPath = directory.SaveChat("Private chat");
+        var chatBytes = File.ReadAllBytes(chatPath);
         using var store = directory.CreateStore();
         await ImportAsync(store, "notes.md", "A blue bird.");
         using var search = directory.CreateSearch(store);
@@ -149,7 +145,7 @@ public sealed class DocumentSearchServiceTests
         Assert.True(await search.ClearIndexAsync("apple/english"));
         Assert.False(await search.ClearIndexAsync("apple/english"));
         Assert.Single(await store.ListAsync());
-        Assert.Equal(chatBytes, File.ReadAllBytes(chat.AutosavePath));
+        Assert.Equal(chatBytes, File.ReadAllBytes(chatPath));
         Assert.Single((await search.SearchAsync("bird", generator, "azure/v2")).Hits);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             search.SearchAsync("bird", generator, "apple/english"));
@@ -159,12 +155,8 @@ public sealed class DocumentSearchServiceTests
     public async Task ClearingDocuments_RemovesDocumentsAndAllIndexesButLeavesChatUnchanged()
     {
         using var directory = new DocumentDirectory();
-        var chat = new ChatSessionService(
-            NullLogger<ChatSessionService>.Instance, directory.DataDirectory, directory.CacheDirectory);
-        chat.AddResponse(
-            ChatRecordingSerializer.Request([new ChatMessage(ChatRole.User, "Keep chat")], null),
-            new ChatResponse([new ChatMessage(ChatRole.Assistant, "Saved")]));
-        var saved = File.ReadAllBytes(chat.AutosavePath);
+        var chatPath = directory.SaveChat("Keep chat");
+        var saved = File.ReadAllBytes(chatPath);
         using var store = directory.CreateStore();
         await ImportAsync(store, "notes.txt", "Moonlight at the observatory.");
         using var search = directory.CreateSearch(store);
@@ -174,7 +166,7 @@ public sealed class DocumentSearchServiceTests
 
         Assert.Empty(await store.ListAsync());
         Assert.False(Directory.Exists(directory.IndexDirectory));
-        Assert.Equal(saved, File.ReadAllBytes(chat.AutosavePath));
+        Assert.Equal(saved, File.ReadAllBytes(chatPath));
     }
 
     [Fact]
@@ -282,11 +274,20 @@ public sealed class DocumentSearchServiceTests
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "document-search-" + Guid.NewGuid().ToString("N"));
         public string DataDirectory => Path.Combine(_root, "data");
-        public string CacheDirectory => Path.Combine(_root, "cache");
         public string IndexDirectory => Path.Combine(DataDirectory, "embedding-playground", "indexes");
         public string DocumentsDirectory => Path.Combine(DataDirectory, "embedding-playground", "documents");
 
         public DocumentStore CreateStore() => new(DataDirectory);
+
+        /// <summary>Saves a one-turn conversation where the chat tab saves it, and returns the file.</summary>
+        public string SaveChat(string text)
+        {
+            var thread = new FileConversationThread(Path.Combine(DataDirectory, "chat-playground", "conversation.json"));
+            thread.AppendUserMessage(new ChatMessage(ChatRole.User, text));
+            thread.AppendUpdate(new ChatResponseUpdate(ChatRole.Assistant, "Saved reply"));
+            thread.CompleteTurn();
+            return thread.FilePath;
+        }
         public DocumentSearchService CreateSearch(DocumentStore store) =>
             new(store, NullLogger<DocumentSearchService>.Instance, DataDirectory);
 
