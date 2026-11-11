@@ -5,7 +5,7 @@ using Microsoft.Extensions.Documents;
 namespace AIExtensions.Sample.ChatPlayground;
 
 /// <summary>Applies the playground's upload limit and deadline without changing provider mappings.</summary>
-internal class CloudDocumentExtractionPolicy(DocumentExtractionClient innerClient, TimeSpan timeout)
+internal sealed class CloudDocumentExtractionPolicy(DocumentExtractionClient innerClient, TimeSpan timeout)
     : DelegatingDocumentExtractionClient(innerClient)
 {
     private const int MaximumDocumentBytes = 20 * 1024 * 1024;

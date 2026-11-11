@@ -17,6 +17,28 @@ namespace AIExtensions.Sample.ChatPlayground;
 public sealed class CloudDocumentExtractionClientTests
 {
     [Fact]
+    public async Task ResponseHandler_UsesOnePipelineWithoutCopyingOrResendingTheRequest()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, OcrEndpoint)
+        {
+            Content = new StringContent("original request"),
+        };
+        request.Headers.Add("x-test", "unchanged");
+        var sends = 0;
+        using var http = Http((received, _) =>
+        {
+            sends++;
+            Assert.Same(request, received);
+            Assert.Equal("unchanged", Assert.Single(received.Headers.GetValues("x-test")));
+            return Ok("bounded response");
+        });
+        using var response = await http.SendAsync(request);
+        Assert.Equal("bounded response", await response.Content.ReadAsStringAsync());
+        Assert.Equal("original request", await request.Content.ReadAsStringAsync());
+        Assert.Equal(1, sends);
+    }
+
+    [Fact]
     public async Task Azure_ToolkitUsesSdkOptionsAndPreservesUnicodeNativeLayoutAndCells()
     {
         var paragraph = DocumentIntelligenceModelFactory.DocumentParagraph(content: "A😀é", role: ParagraphRole.Title,
@@ -40,7 +62,7 @@ public sealed class CloudDocumentExtractionClientTests
             Assert.True(token.CanBeCanceled);
             return Task.FromResult(native);
         });
-        using var client = new AzureDocumentIntelligenceExtractionClient(sdk);
+        using var client = AzureExtractor(sdk);
         using var input = new MemoryStream([1, 2]);
         var options = new DocumentExtractionOptions { ExtractorName = "custom-layout" };
         options.AdditionalProperties["locale"] = "en-US";
@@ -88,7 +110,7 @@ public sealed class CloudDocumentExtractionClientTests
         });
         var sdk = new DocumentIntelligenceClient(new Uri("https://example.invalid"), new AzureKeyCredential("test-key"),
             new DocumentIntelligenceClientOptions { Transport = new HttpClientTransport(http) });
-        using var client = new AzureDocumentIntelligenceExtractionClient(sdk);
+        using var client = AzureExtractor(sdk);
         using var input = new MemoryStream([1]);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.ExtractAsync(input, "source", "application/pdf", cancellationToken: cancellation.Token));
@@ -107,7 +129,7 @@ public sealed class CloudDocumentExtractionClientTests
                 confidence: 0.72f, polygon: [1, 0, 2, 0, 2, 1])],
             barcodes: [DocumentIntelligenceModelFactory.DocumentBarcode(kind: DocumentBarcodeKind.QrCode,
                 value: "code", confidence: 0.91f, polygon: [2, 0, 3, 0, 3, 1])]);
-        using var client = new AzureDocumentIntelligenceExtractionClient(AzureSdk(
+        using var client = AzureExtractor(AzureSdk(
             DocumentIntelligenceModelFactory.AnalyzeResult(pages: [page,
                 DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 3)], figures: [figure])));
         using var input = new MemoryStream([1]);
@@ -201,7 +223,7 @@ public sealed class CloudDocumentExtractionClientTests
             return Ok("""{"pages":[{"index":0,"markdown":"Body"}]}""");
         });
         using var mistral = Mistral(http);
-        using var azure = new AzureDocumentIntelligenceExtractionClient(AzureSdk(async (options, _) =>
+        using var azure = AzureExtractor(AzureSdk(async (options, _) =>
         {
             azureModels.Add(options.ModelId);
             await Task.Yield();
@@ -230,7 +252,7 @@ public sealed class CloudDocumentExtractionClientTests
         var requests = 0;
         using var http = Http((_, _) => { requests++; return Ok(MistralResponse); });
         using var mistral = Mistral(http);
-        using var azure = new AzureDocumentIntelligenceExtractionClient(AzureSdk((_, _) =>
+        using var azure = AzureExtractor(AzureSdk((_, _) =>
         {
             requests++;
             throw new InvalidOperationException("Unexpected upload");
@@ -315,7 +337,7 @@ public sealed class CloudDocumentExtractionClientTests
     {
         var native = DocumentIntelligenceModelFactory.AnalyzeResult(content: "A😀é",
             pages: [DocumentIntelligenceModelFactory.DocumentPage(pageNumber: 1, spans: [Span(0, 4)])]);
-        using var extraction = new AzureDocumentIntelligenceExtractionClient(AzureSdk(native));
+        using var extraction = AzureExtractor(AzureSdk(native));
         using var input = new MemoryStream([1]);
         var result = await extraction.ExtractAsync(input, "source", "application/pdf");
         Assert.Equal("A😀é", Assert.IsType<AnalyzeResult>(result.RawRepresentation).Content);
@@ -395,7 +417,7 @@ public sealed class CloudDocumentExtractionClientTests
         using var response = await http.GetAsync(OcrEndpoint);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var sdk = AzureSdk(DocumentIntelligenceModelFactory.AnalyzeResult());
-        new AzureDocumentIntelligenceExtractionClient(sdk).Dispose();
+        AzureExtractor(sdk).Dispose();
         await sdk.AnalyzeDocumentAsync(WaitUntil.Completed, new AnalyzeDocumentOptions("model", BinaryData.FromBytes(new byte[] { 1 })));
         await sdk.Received(1).AnalyzeDocumentAsync(WaitUntil.Completed, Arg.Any<AnalyzeDocumentOptions>(), Arg.Any<CancellationToken>());
     }

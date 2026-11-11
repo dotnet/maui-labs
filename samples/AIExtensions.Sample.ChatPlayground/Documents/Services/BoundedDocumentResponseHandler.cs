@@ -1,27 +1,14 @@
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Bounds each OCR response while borrowing the application's transport.</summary>
-internal sealed class BoundedDocumentResponseHandler(HttpClient client) : HttpMessageHandler
+/// <summary>Bounds OCR responses in the application's HTTP pipeline.</summary>
+internal sealed class BoundedDocumentResponseHandler : DelegatingHandler
 {
     private const int MaximumResponseBytes = 32 * 1024 * 1024;
-    private readonly HttpClient _client = client ?? throw new ArgumentNullException(nameof(client));
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        // A request cannot be sent by two HttpClients; forward an independent request to the borrowed client.
-        using var forwarded = new HttpRequestMessage(request.Method, request.RequestUri) { Version = request.Version };
-        foreach (var header in request.Headers)
-            forwarded.Headers.TryAddWithoutValidation(header.Key, header.Value);
-        if (request.Content is { } content)
-        {
-            forwarded.Content = new ByteArrayContent(await content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false));
-            foreach (var header in content.Headers)
-                forwarded.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
-        }
-
-        var response = await _client.SendAsync(forwarded, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
+        var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
         try
         {
             var original = response.Content;

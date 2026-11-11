@@ -3,8 +3,8 @@ using Microsoft.Extensions.DocumentExtraction;
 
 namespace AIExtensions.Sample.ChatPlayground;
 
-/// <summary>Projects the same Toolkit extraction used by the extraction playground into ingestion elements.</summary>
-internal sealed class AzureDocumentIntelligenceReader(DocumentExtractionClient client) : IngestionDocumentReader
+/// <summary>Projects the selected extraction client's result into ingestion elements without owning the client.</summary>
+internal sealed class ExtractedDocumentReader(DocumentExtractionClient client) : IngestionDocumentReader
 {
     private readonly DocumentExtractionClient _client = client ?? throw new ArgumentNullException(nameof(client));
 

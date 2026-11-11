@@ -54,6 +54,9 @@ All source bridges are removed. Azure and Foundry Mistral extraction use the pub
 both version `1.0.0-preview`.
 Apple Vision remains our on-device provider of the same official contract. No private substitute API is used.
 The cloud reader modes project those same Toolkit results rather than maintaining independent service protocols or HTML parsing.
+NuGet clients and their options are constructed directly in `AddDocumentFeature`, not provider-specific wrapper classes.
+Both cloud reader registrations use one shared adapter. Only shared application safeguards and the required ingestion projection remain;
+Mistral response limiting runs in the normal HTTP handler pipeline without a second forwarding client.
 Mistral table content remains literal Markdown/HTML without an addressed cell grid; native-only blocks/captions/confidence remain
 explicitly inspectable instead of being repackaged into metadata.
 

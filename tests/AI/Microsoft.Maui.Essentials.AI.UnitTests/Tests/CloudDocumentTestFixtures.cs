@@ -1,6 +1,9 @@
 using System.Net;
 using Azure;
 using Azure.AI.DocumentIntelligence;
+using CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence;
+using CommunityToolkit.DocumentExtraction.Mistral;
+using Microsoft.Extensions.DocumentExtraction;
 using NSubstitute;
 
 namespace AIExtensions.Sample.ChatPlayground;
@@ -10,7 +13,7 @@ internal static class CloudDocumentTestFixtures
     internal static readonly Uri OcrEndpoint = new("https://example.invalid/resource/providers/mistral/azure/ocr");
 
     internal static HttpClient Http(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) =>
-        new(new Handler(respond)) { Timeout = Timeout.InfiniteTimeSpan };
+        new(new BoundedDocumentResponseHandler { InnerHandler = new Handler(respond) }) { Timeout = Timeout.InfiniteTimeSpan };
 
     internal static HttpClient Http(Func<HttpRequestMessage, CancellationToken, HttpResponseMessage> respond) =>
         Http((request, token) => Task.FromResult(respond(request, token)));
@@ -18,8 +21,13 @@ internal static class CloudDocumentTestFixtures
     internal static HttpResponseMessage Ok(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json) };
 
-    internal static FoundryMistralDocumentExtractionClient Mistral(HttpClient http, string deployment = "deployment") =>
-        new(http, OcrEndpoint, "test-key", deployment);
+    internal static DocumentExtractionClient Mistral(HttpClient http, string deployment = "deployment") =>
+        new CloudDocumentExtractionPolicy(new MistralDocumentExtractionClient(
+            new() { OcrEndpoint = OcrEndpoint, DefaultModel = deployment, IncludeImages = true }, "test-key", http),
+            TimeSpan.FromMinutes(5));
+
+    internal static DocumentExtractionClient AzureExtractor(DocumentIntelligenceClient client) =>
+        new CloudDocumentExtractionPolicy(client.AsDocumentExtractionClient(), TimeSpan.FromSeconds(100));
 
     internal static DocumentIntelligenceClient AzureSdk(
         Func<AnalyzeDocumentOptions, CancellationToken, Task<AnalyzeResult>> analyze)

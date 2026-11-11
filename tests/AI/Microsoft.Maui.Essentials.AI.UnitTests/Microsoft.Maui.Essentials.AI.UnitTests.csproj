@@ -28,10 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\AzureDocumentIntelligenceReader.cs" Link="Documents\AzureDocumentIntelligenceReader.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\AzureDocumentIntelligenceExtractionClient.cs" Link="Documents\AzureDocumentIntelligenceExtractionClient.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralDocumentReader.cs" Link="Documents\FoundryMistralDocumentReader.cs" />
-    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\FoundryMistralDocumentExtractionClient.cs" Link="Documents\FoundryMistralDocumentExtractionClient.cs" />
+    <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\ExtractedDocumentReader.cs" Link="Documents\ExtractedDocumentReader.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\BoundedDocumentResponseHandler.cs" Link="Documents\BoundedDocumentResponseHandler.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\CloudDocumentExtractionPolicy.cs" Link="Documents\CloudDocumentExtractionPolicy.cs" />
     <Compile Include="..\..\..\samples\AIExtensions.Sample.ChatPlayground\Documents\Services\CloudDocumentIngestionProjection.cs" Link="Documents\CloudDocumentIngestionProjection.cs" />

@@ -28,9 +28,9 @@ public sealed class DocumentMappingTests
                         elements: ["/paragraphs/1"]),
                     DocumentIntelligenceModelFactory.DocumentTableCell(columnIndex: 1, content: "B", boundingRegions: [Region(1)]),
                 ])]);
-        using var extraction = new AzureDocumentIntelligenceExtractionClient(AzureSdk(result));
+        using var extraction = AzureExtractor(AzureSdk(result));
         using var input = new MemoryStream([1]);
-        var document = await new AzureDocumentIntelligenceReader(extraction)
+        var document = await new ExtractedDocumentReader(extraction)
             .ReadAsync(input, "layout.pdf", "application/pdf");
         Assert.Equal("layout.pdf", document.Identifier);
         Assert.Equal([1, 3], document.Sections.Select(section => section.PageNumber));
@@ -63,9 +63,9 @@ public sealed class DocumentMappingTests
                     DocumentIntelligenceModelFactory.DocumentTableCell(rowIndex: 2, columnIndex: 1,
                         content: "Sam", boundingRegions: [Region(1)]),
                 ])]);
-        using var extraction = new AzureDocumentIntelligenceExtractionClient(AzureSdk(native));
+        using var extraction = AzureExtractor(AzureSdk(native));
         using var input = new MemoryStream([1]);
-        var document = await new AzureDocumentIntelligenceReader(extraction)
+        var document = await new ExtractedDocumentReader(extraction)
             .ReadAsync(input, "table.pdf", "application/pdf");
         var table = Assert.IsType<IngestionDocumentTable>(Assert.Single(document.Sections[0].Elements));
         Assert.Contains("<th colspan=\"2\">Names &amp; roles</th>", table.GetMarkdown());
@@ -139,9 +139,9 @@ public sealed class DocumentMappingTests
                 boundingRegions: [Region(1)], cells:
                 [DocumentIntelligenceModelFactory.DocumentTableCell(content: "Value", kind: DocumentTableCellKind.Content),
                  DocumentIntelligenceModelFactory.DocumentTableCell(columnIndex: 1, content: "")])]);
-        using var extraction = new AzureDocumentIntelligenceExtractionClient(AzureSdk(native));
+        using var extraction = AzureExtractor(AzureSdk(native));
         using var input = new MemoryStream([1]);
-        var document = await new AzureDocumentIntelligenceReader(extraction)
+        var document = await new ExtractedDocumentReader(extraction)
             .ReadAsync(input, "source", "application/pdf");
         var table = Assert.IsType<IngestionDocumentTable>(Assert.Single(document.Sections[0].Elements));
         Assert.Contains("<td>Value</td>", table.GetMarkdown());
@@ -158,10 +158,10 @@ public sealed class DocumentMappingTests
                 boundingRegions: [Region(1)], cells:
                 [DocumentIntelligenceModelFactory.DocumentTableCell(columnSpan: 2, content: "Merged"),
                  DocumentIntelligenceModelFactory.DocumentTableCell(columnIndex: 1, content: "Overlaps")])]);
-        using var extraction = new AzureDocumentIntelligenceExtractionClient(AzureSdk(native));
+        using var extraction = AzureExtractor(AzureSdk(native));
         using var input = new MemoryStream([1]);
         var error = await Record.ExceptionAsync(() =>
-            new AzureDocumentIntelligenceReader(extraction).ReadAsync(input, "source", "application/pdf"));
+            new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "application/pdf"));
         Assert.NotNull(error);
     }
 

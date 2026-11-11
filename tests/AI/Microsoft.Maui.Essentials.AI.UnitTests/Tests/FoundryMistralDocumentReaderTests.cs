@@ -17,7 +17,7 @@ public sealed class FoundryMistralDocumentReaderTests
               {"index":2,"markdown":"Third"}]}
             """));
         using var extraction = Mistral(http);
-        var reader = new FoundryMistralDocumentReader(extraction);
+        var reader = new ExtractedDocumentReader(extraction);
         using var input = new MemoryStream([1, 2, 3]);
         var document = await reader.ReadAsync(input, "source.pdf", "application/pdf");
 
@@ -48,7 +48,7 @@ public sealed class FoundryMistralDocumentReaderTests
               {"index":1,"tables":[{"id":"t","content":"<table><tr><td>Alone</td></tr></table>"}]}]}
             """));
         using var extraction = Mistral(http);
-        var document = await new FoundryMistralDocumentReader(extraction)
+        var document = await new ExtractedDocumentReader(extraction)
             .ReadAsync(new MemoryStream([1]), "source", "image/png");
         Assert.Equal(2, document.Sections[0].Elements.Count);
         Assert.Equal("Page text", document.Sections[0].Elements[0].Text);
@@ -70,7 +70,7 @@ public sealed class FoundryMistralDocumentReaderTests
         })));
         using var extraction = Mistral(http);
         using var input = new MemoryStream([1]);
-        var document = await new FoundryMistralDocumentReader(extraction).ReadAsync(input, "source", "image/png");
+        var document = await new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "image/png");
         var table = Assert.IsType<IngestionDocumentTable>(Assert.Single(document.Sections[0].Elements));
         Assert.Equal(tableContent, table.GetMarkdown());
         Assert.Equal(0, table.Cells.GetLength(0));
@@ -86,7 +86,7 @@ public sealed class FoundryMistralDocumentReaderTests
         using var http = Http((_, _) => Ok($$"""{"pages":[{"index":0,{{blocks}}"markdown":"Still readable"}]}"""));
         using var extraction = Mistral(http);
         using var input = new MemoryStream([1]);
-        var result = await new FoundryMistralDocumentReader(extraction).ReadAsync(input, "source", "application/pdf");
+        var result = await new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "application/pdf");
         Assert.Equal("Still readable", Assert.Single(result.Sections[0].Elements).Text);
     }
 
@@ -98,7 +98,7 @@ public sealed class FoundryMistralDocumentReaderTests
               "images":[{"id":"img","image_base64":"data:image/jpeg;base64,AQID"}]}]}
             """));
         using var extraction = Mistral(http);
-        var result = await new FoundryMistralDocumentReader(extraction)
+        var result = await new ExtractedDocumentReader(extraction)
             .ReadAsync(new MemoryStream([1]), "source", "image/png");
         var image = Assert.IsType<IngestionDocumentImage>(Assert.Single(result.Sections[0].Elements));
         Assert.Equal(new byte[] { 1, 2, 3 }, image.Content!.Value.ToArray());
@@ -115,7 +115,7 @@ public sealed class FoundryMistralDocumentReaderTests
         var requests = 0;
         using var http = Http((_, _) => { requests++; return Ok("{}"); });
         using var extraction = Mistral(http);
-        var reader = new FoundryMistralDocumentReader(extraction);
+        var reader = new ExtractedDocumentReader(extraction);
         using var input = new MemoryStream([1]);
         await Assert.ThrowsAsync<NotSupportedException>(() => reader.ReadAsync(input, "source", "text/plain"));
         await Assert.ThrowsAsync<ArgumentException>(() => reader.ReadAsync(input, "source", ""));
@@ -138,7 +138,7 @@ public sealed class FoundryMistralDocumentReaderTests
         using var extraction = Mistral(http);
         using var input = new MemoryStream([1]);
         var error = await Assert.ThrowsAsync<InvalidDataException>(() =>
-            new FoundryMistralDocumentReader(extraction).ReadAsync(input, "source", "image/tiff"));
+            new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "image/tiff"));
         Assert.Contains("32 MB", error.Message);
         Assert.True(input.CanRead);
     }
@@ -157,7 +157,7 @@ public sealed class FoundryMistralDocumentReaderTests
             using var extraction = Mistral(http);
             using var input = new MemoryStream([1]);
             var error = await Assert.ThrowsAsync<HttpRequestException>(() =>
-                new FoundryMistralDocumentReader(extraction).ReadAsync(input, "source", "image/heic"));
+                new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "image/heic"));
             Assert.DoesNotContain("SECRET", error.ToString());
             if (!transportFailure)
             {
@@ -176,7 +176,7 @@ public sealed class FoundryMistralDocumentReaderTests
         using var extraction = Mistral(http);
         using var input = new MemoryStream([1]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            new FoundryMistralDocumentReader(extraction).ReadAsync(input, "source", "application/pdf"));
+            new ExtractedDocumentReader(extraction).ReadAsync(input, "source", "application/pdf"));
     }
 
     [Fact]

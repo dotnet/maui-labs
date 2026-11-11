@@ -8,6 +8,24 @@ packages (repository commit `74935f4e20490889ae051b4bb8f4bc32959ab3bd`).
 All remaining copied source, local provider projects/adapters, manifests and source-verification scripts are removed.
 No provider mapping, app limits, caller ownership or Apple implementation changes are needed.
 
+### Registration cleanup
+
+Provider construction and options now live directly in `AddDocumentFeature`: Azure uses the package's
+`AsDocumentExtractionClient()` extension and Foundry constructs the package's `MistralDocumentExtractionClient`.
+The four provider-specific extraction/reader wrapper classes are gone. One non-owning `ExtractedDocumentReader` adapts either
+selected client to DataIngestion; the shared projection is still needed because the NuGets return exchange documents, not ingestion records.
+
+The Mistral response bound is an ordinary `DelegatingHandler` in the DI-owned HTTP pipeline. It no longer creates a second
+HttpClient, clones requests or recopies request bodies just to forward them to another client. The package borrows that single
+HTTP client, whose lifetime is managed by DI.
+
+The remaining shared policy is application behavior, not a local provider: upload limit, operation-wide deadline (including
+Toolkit retry delays) and safe error reporting. Keeping it avoids quietly dropping limits during simplification. The reader
+projection preserves the still-supported reader mode; no new provider factory, compatibility layer or package subclass is introduced.
+After cleanup, all 480 portable integration tests and 158 surrounding playground tests pass. Complete Catalyst/Android builds
+remain clean. The isolated full playground successfully processed the bundled synthetic image through both Azure and Mistral,
+each in extraction and reader mode, exercising the actual registration extension and single HTTP pipeline.
+
 The published Documents package requires stable MEAI abstractions `11.0.0`; net10 middleware requires DI/logging abstractions
 `10.0.15`. These pins remain scoped to document consumers. The obsolete daily feed is removed.
 The user explicitly approved adding NuGet.org while mirroring catches up: configured dnceng feeds did not expose these versions.

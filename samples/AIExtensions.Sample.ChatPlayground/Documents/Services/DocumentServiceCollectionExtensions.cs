@@ -1,6 +1,8 @@
 using Azure;
 using Azure.AI.DocumentIntelligence;
 using Azure.Core.Pipeline;
+using CommunityToolkit.DocumentExtraction.AzureDocumentIntelligence;
+using CommunityToolkit.DocumentExtraction.Mistral;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DocumentExtraction;
@@ -38,9 +40,13 @@ internal static class DocumentServiceCollectionExtensions
                 new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan });
             services.AddSingleton(provider => CreateAzureClient(provider, settings));
             services.AddKeyedSingleton<DocumentExtractionClient>("azure-document", (provider, _) =>
-                new AzureDocumentIntelligenceExtractionClient(provider.GetRequiredService<DocumentIntelligenceClient>()));
-            services.AddSingleton<IngestionDocumentReader>(provider => CreateAzureDocumentReader(
-                provider.GetRequiredKeyedService<DocumentExtractionClient>("azure-document")));
+                new CloudDocumentExtractionPolicy(
+                    provider.GetRequiredService<DocumentIntelligenceClient>().AsDocumentExtractionClient(),
+                    TimeSpan.FromSeconds(100)));
+            services.AddSingleton<IngestionDocumentReader>(provider => new DescribedDocumentReader(
+                new ExtractedDocumentReader(provider.GetRequiredKeyedService<DocumentExtractionClient>("azure-document")),
+                new DocumentReaderDescriptor("azure-document-intelligence", "Azure Document Intelligence",
+                    "Uploads the entire document to Azure for prebuilt-layout analysis; may incur charges.", IsCloud: true)));
             services.AddSingleton<DocumentExtractionClient>(provider =>
                 Describe(provider.GetRequiredKeyedService<DocumentExtractionClient>("azure-document"),
                     new DocumentExtractionClientDescriptor(
@@ -51,21 +57,24 @@ internal static class DocumentServiceCollectionExtensions
         if (!string.IsNullOrWhiteSpace(settings.DocumentDeploymentName))
         {
             services.AddKeyedSingleton<HttpClient>("foundry-document", (_, _) =>
-            {
-                var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+                new HttpClient(new BoundedDocumentResponseHandler
                 {
-                    BaseAddress = settings.GetFoundryDocumentEndpoint(),
-                    Timeout = Timeout.InfiniteTimeSpan,
-                };
-                return client;
-            });
+                    InnerHandler = new HttpClientHandler { AllowAutoRedirect = false },
+                }) { Timeout = Timeout.InfiniteTimeSpan });
             services.AddKeyedSingleton<DocumentExtractionClient>("foundry-document", (provider, _) =>
-                new FoundryMistralDocumentExtractionClient(
-                    provider.GetRequiredKeyedService<HttpClient>("foundry-document"),
-                    new Uri(settings.GetFoundryDocumentEndpoint(), "providers/mistral/azure/ocr"),
-                    settings.ApiKey!, settings.DocumentDeploymentName!));
-            services.AddSingleton<IngestionDocumentReader>(provider => CreateFoundryDocumentReader(
-                provider.GetRequiredKeyedService<DocumentExtractionClient>("foundry-document")));
+                new CloudDocumentExtractionPolicy(
+                    new MistralDocumentExtractionClient(
+                        new MistralDocumentExtractionClientOptions
+                        {
+                            OcrEndpoint = new Uri(settings.GetFoundryDocumentEndpoint(), "providers/mistral/azure/ocr"),
+                            DefaultModel = settings.DocumentDeploymentName!,
+                            IncludeImages = true,
+                        }, settings.ApiKey!, provider.GetRequiredKeyedService<HttpClient>("foundry-document")),
+                    TimeSpan.FromMinutes(5)));
+            services.AddSingleton<IngestionDocumentReader>(provider => new DescribedDocumentReader(
+                new ExtractedDocumentReader(provider.GetRequiredKeyedService<DocumentExtractionClient>("foundry-document")),
+                new DocumentReaderDescriptor("foundry-mistral-document", "Foundry Mistral Document AI",
+                    "Uploads the entire document to the configured Foundry document model; may incur charges.", IsCloud: true)));
             services.AddSingleton<DocumentExtractionClient>(provider =>
                 Describe(provider.GetRequiredKeyedService<DocumentExtractionClient>("foundry-document"),
                     new DocumentExtractionClientDescriptor(
@@ -116,22 +125,4 @@ internal static class DocumentServiceCollectionExtensions
                 Transport = new HttpClientTransport(provider.GetRequiredKeyedService<HttpClient>("azure-document")),
             });
     }
-
-    private static IngestionDocumentReader CreateAzureDocumentReader(DocumentExtractionClient client) =>
-        new DescribedDocumentReader(
-            new AzureDocumentIntelligenceReader(client),
-            new DocumentReaderDescriptor(
-                "azure-document-intelligence",
-                "Azure Document Intelligence",
-                "Uploads the entire document to Azure for prebuilt-layout analysis; may incur charges.",
-                IsCloud: true));
-
-    private static IngestionDocumentReader CreateFoundryDocumentReader(DocumentExtractionClient client) =>
-        new DescribedDocumentReader(
-            new FoundryMistralDocumentReader(client),
-            new DocumentReaderDescriptor(
-                "foundry-mistral-document",
-                "Foundry Mistral Document AI",
-                "Uploads the entire document to the configured Foundry document model; may incur charges.",
-                IsCloud: true));
 }
