@@ -195,6 +195,10 @@ therefore reported as unsupported. Missing tools/plugins, absent devices,
 permission failures, and pipeline failures are explicit rather than an empty or
 synthetic successful result.
 
+Media selection recognizes GTK's cancellation/dismissal error domain and code before
+GirCore wraps the error, so translated messages do not affect cancellation. Other
+dialog errors propagate rather than being treated as an empty selection.
+
 Semantic announcements use the active GTK window's accessibility context, not a
 separate speech process. Nonblank announcements without an active application window
 throw `InvalidOperationException`; call after activation, on the application dispatcher.

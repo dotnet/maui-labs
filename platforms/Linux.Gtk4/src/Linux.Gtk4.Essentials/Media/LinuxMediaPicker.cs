@@ -67,7 +67,7 @@ public sealed class LinuxMediaPicker : IMediaPicker
 		dialog.SetFilters(filterList);
 
 		var window = GetActiveWindow("select media");
-		var file = await PickOrCancelAsync(() => dialog.OpenAsync(window));
+		var file = await PickOrCancelAsync(() => GtkMediaFileDialog.OpenAsync(dialog, window));
 		var path = file?.GetPath();
 		return path is not null ? new FileResult(path) : null;
 	}
@@ -84,7 +84,7 @@ public sealed class LinuxMediaPicker : IMediaPicker
 		dialog.SetFilters(filterList);
 
 		var window = GetActiveWindow("select media");
-		var files = await PickOrCancelAsync(() => dialog.OpenMultipleAsync(window));
+		var files = await PickOrCancelAsync(() => GtkMediaFileDialog.OpenMultipleAsync(dialog, window));
 		if (files is null)
 			return [];
 
@@ -107,12 +107,6 @@ public sealed class LinuxMediaPicker : IMediaPicker
 		}
 		catch (OperationCanceledException)
 		{
-			return null;
-		}
-		// GirCore 0.7 exposes only the GError message on GException, as in LinuxFilePicker.
-		catch (GLib.GException ex) when (string.Equals(ex.Message, "Dismissed by user", StringComparison.OrdinalIgnoreCase))
-		{
-			ex.Dispose();
 			return null;
 		}
 	}

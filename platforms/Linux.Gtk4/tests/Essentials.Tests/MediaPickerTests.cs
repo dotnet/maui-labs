@@ -18,19 +18,28 @@ public sealed class MediaPickerTests
 	}
 
 	[NativeGtkFact]
-	public async Task GtkPickerDismissal_ReturnsNull_ButOtherGErrorsPropagate()
+	public void GtkPickerDismissal_ReturnsNull_ButOtherGErrorsPropagate()
 	{
 		GLib.Module.Initialize();
-		using var dismissedText = GLib.Internal.NonNullableUtf8StringOwnedHandle.Create("Dismissed by user");
-		using var dismissed = new GLib.GException(GLib.Internal.Error.NewLiteral(
-			GLib.Functions.QuarkFromString("gtk-dialog-error-quark"), 2, dismissedText));
-		Assert.Null(await LinuxMediaPicker.PickOrCancelAsync<string>(() => Task.FromException<string?>(dismissed)));
+		foreach (var code in new[] { Gtk.DialogError.Dismissed, Gtk.DialogError.Cancelled })
+		{
+			using var translatedText = GLib.Internal.NonNullableUtf8StringOwnedHandle.Create("Translated user cancellation");
+			using var error = GLib.Internal.Error.NewLiteral(
+				GLib.Functions.QuarkFromString("gtk-dialog-error-quark"), (int)code, translatedText);
+			Assert.Null(GtkMediaFileDialog.GetResult<string>(0, error, _ => throw new InvalidOperationException()));
+		}
 
-		using var failureText = GLib.Internal.NonNullableUtf8StringOwnedHandle.Create("Dialog dismissed because the file portal failed");
-		using var failure = new GLib.GException(GLib.Internal.Error.NewLiteral(
-			GLib.Functions.QuarkFromString("gtk-dialog-error-quark"), 0, failureText));
-		Assert.Same(failure, await Assert.ThrowsAsync<GLib.GException>(() =>
-			LinuxMediaPicker.PickOrCancelAsync<string>(() => Task.FromException<string?>(failure))));
+		foreach (var domain in new[] { "gtk-dialog-error-quark", "other-error-domain" })
+		{
+			using var misleadingText = GLib.Internal.NonNullableUtf8StringOwnedHandle.Create("Dismissed by user");
+			using var error = GLib.Internal.Error.NewLiteral(
+				GLib.Functions.QuarkFromString(domain),
+				domain == "gtk-dialog-error-quark" ? (int)Gtk.DialogError.Failed : (int)Gtk.DialogError.Dismissed,
+				misleadingText);
+			using var failure = Assert.Throws<GLib.GException>(() =>
+				GtkMediaFileDialog.GetResult<string>(0, error, _ => throw new InvalidOperationException()));
+			Assert.Equal("Dismissed by user", failure.Message);
+		}
 	}
 
 	[Theory]
