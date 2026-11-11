@@ -19,6 +19,9 @@ public class ReasoningContentBlock : ContentBlock
 
     public bool IsEncrypted => ProtectedData is not null && _builder.Length == 0;
 
+    /// <summary>Gets or sets the id of the message the reasoning belongs to, when the provider sends one.</summary>
+    internal string? MessageId { get; set; }
+
     public void AppendText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
