@@ -103,6 +103,7 @@ public class UIAgent : IDisposable
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var turn = BeginTurn();
         await foreach (var block in SendRoundAsync(turn, [message], cancellationToken))
@@ -136,9 +137,10 @@ public class UIAgent : IDisposable
         foreach (var message in messages)
             ArgumentNullException.ThrowIfNull(message);
 
-        cancellationToken.ThrowIfCancellationRequested();
         ThrowIfToolsCannotBeInvoked();
 
+        // The request is recorded and shown even when the turn is already stopping, so a stopped turn keeps
+        // it. The round stops before the request is sent.
         var requestMessages = messages
             .Select(EnsureMessageId)
             .ToArray();
@@ -167,6 +169,7 @@ public class UIAgent : IDisposable
             }
             pipeline.Finalize();
 
+            cancellationToken.ThrowIfCancellationRequested();
             UIAgentLog.StreamingAssistantResponse(_logger);
             var chatOptions = BuildChatOptions(conversationId);
             var updateIndex = 0;
@@ -213,7 +216,8 @@ public class UIAgent : IDisposable
     /// </param>
     /// <remarks>
     /// Function calls without a result are never committed. For a stopped turn the same applies to
-    /// approval requests and responses whose call has no result. A turn that became stale because
+    /// approval requests and responses whose call has no result, and the history also leaves out
+    /// reasoning that the stop cut off (<see cref="CutOffReasoning"/>). A turn that became stale because
     /// the history was cleared or restored after it started is discarded.
     /// </remarks>
     internal void CommitTurn(PendingTurn turn, bool stopped)
@@ -256,6 +260,8 @@ public class UIAgent : IDisposable
             turn.Messages,
             answeredCallIds,
             includeApprovals: stopped);
+        if (stopped)
+            CutOffReasoning.Remove(messages);
         _history.AddRange(messages);
         UIAgentLog.AddedToHistory(_logger, messages.Count);
     }
@@ -489,15 +495,19 @@ public class UIAgent : IDisposable
         {
             responsePipeline?.Finalize();
             responsePipeline = null;
-            FlushResponseHistory();
+            FlushResponseHistory(stopped: currentTurn?.IsStopped == true);
         }
 
-        void FlushResponseHistory()
+        void FlushResponseHistory(bool stopped = false)
         {
             if (responseUpdates.Count == 0)
                 return;
 
-            replayedHistory.AddRange(responseUpdates.ToChatResponse().Messages);
+            // The same history as the live commit of the turn.
+            var messages = responseUpdates.ToChatResponse().Messages.ToList();
+            if (stopped)
+                CutOffReasoning.Remove(messages);
+            replayedHistory.AddRange(messages);
             responseUpdates.Clear();
         }
     }
