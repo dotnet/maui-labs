@@ -106,6 +106,13 @@ These match upstream so that upstream fixes apply directly:
   (`RegisterOnResponseBlocksCleared` tells a list to drop them) and sends the whole turn again. #68672
   instead retries only the failed round and truncates that round's blocks; that would resend an
   approval and run its tool again without asking.
+- **`ConversationTurn.IsFailed`.** Not in upstream. A turn whose attempt failed is marked until
+  `RetryAsync` runs it again, so a view can tell the failed turn (and an earlier one that was never
+  retried because another message was sent) without catching the status change that reported it.
+- **Status callbacks receive the status they report.** Every callback of one status change receives
+  the same status, even when an earlier callback already sent the next message from the change that
+  ended a turn. Upstream passes each callback the current `Status`, so later callbacks never hear how
+  the turn ended.
 - **`ClearAsync`.** Not in upstream. It waits for the active response to stop, then clears the turns,
   the history, the thread and the typed state, so a response that was still running cannot change the
   cleared conversation.

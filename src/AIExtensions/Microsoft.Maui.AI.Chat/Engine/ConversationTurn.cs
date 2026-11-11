@@ -32,6 +32,17 @@ public class ConversationTurn
     public bool IsStopped { get; internal set; }
 
     /// <summary>
+    /// Gets whether the turn's last attempt failed. A failed turn committed nothing to the history.
+    /// </summary>
+    /// <remarks>
+    /// Set before the <see cref="ConversationStatus.Error"/> status change that reports the failure is
+    /// raised, and cleared when <see cref="AgentContext.RetryAsync"/> runs the turn again, before the
+    /// <see cref="ConversationStatus.Streaming"/> status change is raised. A failed turn that is not the
+    /// last turn can no longer be retried: another message was sent after it.
+    /// </remarks>
+    public bool IsFailed { get; internal set; }
+
+    /// <summary>
     /// Gets the identifier of the model that answered, as reported by
     /// <see cref="ChatResponseUpdate.ModelId"/>, or <see langword="null"/> when the provider does not
     /// report it.

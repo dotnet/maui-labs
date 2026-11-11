@@ -81,6 +81,7 @@ Microsoft.Maui.AI.Chat.ConversationStatus.Streaming = 1 -> Microsoft.Maui.AI.Cha
 Microsoft.Maui.AI.Chat.ConversationTurn
 Microsoft.Maui.AI.Chat.ConversationTurn.ConversationTurn() -> void
 Microsoft.Maui.AI.Chat.ConversationTurn.Id.get -> string!
+Microsoft.Maui.AI.Chat.ConversationTurn.IsFailed.get -> bool
 Microsoft.Maui.AI.Chat.ConversationTurn.IsStopped.get -> bool
 Microsoft.Maui.AI.Chat.ConversationTurn.ModelId.get -> string?
 Microsoft.Maui.AI.Chat.ConversationTurn.RequestBlocks.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Maui.AI.Chat.ContentBlock!>!

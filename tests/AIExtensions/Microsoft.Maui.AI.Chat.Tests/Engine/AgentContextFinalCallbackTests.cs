@@ -75,6 +75,48 @@ public class AgentContextFinalCallbackTests
         Assert.Equal("recovered", Assert.Single(context.Turns[1].ResponseBlocks.OfType<TextContentBlock>()).RawText);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EveryStatusCallback_SeesTheStatusThatEndedTheTurn_WhenAnEarlierOneSendsTheNextMessage(bool fail)
+    {
+        var calls = 0;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new DelegatingStreamingChatClient();
+        client.SetHandler((messages, options, cancellationToken) => ++calls switch
+        {
+            1 when fail => FailAsync(cancellationToken),
+            1 => ReplyAsync("reply 1", cancellationToken),
+            _ => ReplyAfterAsync(release.Task, "reply 2", cancellationToken),
+        });
+        using var context = new AgentContext(new UIAgent(client));
+        var ended = fail ? ConversationStatus.Error : ConversationStatus.Idle;
+        Task? next = null;
+        context.RegisterOnStatusChanged(status =>
+        {
+            if (status == ended && next is null)
+                next = context.SendMessageAsync("second");
+        });
+        var seen = new List<ConversationStatus>();
+        context.RegisterOnStatusChanged(seen.Add);
+
+        await context.SendMessageAsync("first");
+
+        // The second subscriber hears the next turn start before the end of the first one, which the
+        // first subscriber reacted to, but it still hears how the first turn ended.
+        Assert.Equal([ConversationStatus.Streaming, ConversationStatus.Streaming, ended], seen);
+        Assert.Equal(ConversationStatus.Streaming, context.Status);
+
+        release.SetResult();
+        Assert.NotNull(next);
+        await next;
+
+        Assert.Equal(
+            [ConversationStatus.Streaming, ConversationStatus.Streaming, ended, ConversationStatus.Idle],
+            seen);
+        Assert.Equal(2, context.Turns.Count);
+    }
+
     [Fact]
     public async Task IdleCallback_CancelAsyncCompletesImmediately()
     {
@@ -100,6 +142,20 @@ public class AgentContextFinalCallbackTests
     {
         await Task.Yield();
         cancellationToken.ThrowIfCancellationRequested();
+        yield return new ChatResponseUpdate
+        {
+            Role = ChatRole.Assistant,
+            MessageId = Guid.NewGuid().ToString("N"),
+            Contents = [new TextContent(text)],
+        };
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> ReplyAfterAsync(
+        Task gate,
+        string text,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
         yield return new ChatResponseUpdate
         {
             Role = ChatRole.Assistant,

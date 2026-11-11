@@ -21,15 +21,16 @@ namespace Microsoft.Maui.AI.Chat;
 /// Each turn is a transaction. A completed turn is committed to the agent's history and thread. A
 /// stopped turn (<see cref="CancelAsync()"/> or the caller's cancellation token) keeps its request
 /// and partial output, is committed without calls that never received a result, and is marked
-/// <see cref="ConversationTurn.IsStopped"/>. A failed turn commits nothing and can be retried with
-/// <see cref="RetryAsync"/>.
+/// <see cref="ConversationTurn.IsStopped"/>. A failed turn commits nothing, is marked
+/// <see cref="ConversationTurn.IsFailed"/>, and can be retried with <see cref="RetryAsync"/>.
 /// </para>
 /// <para>
 /// Callbacks run inline. An exception thrown by one before the turn is committed fails the turn; one
 /// thrown while a committed or stopped turn is reported reaches the caller of the send or retry, and the
 /// turn stays committed. The status change that reports the end of a turn (<see cref="ConversationStatus.Idle"/>
 /// or <see cref="ConversationStatus.Error"/>) is raised once the turn is no longer active, so its
-/// callback can already send the next message, retry, or clear.
+/// callback can already send the next message, retry, or clear; every callback of that change still
+/// receives the status that ended the turn.
 /// </para>
 /// <para>
 /// This type is single-thread-affine and is not thread-safe. Callers must serialize access and
@@ -332,6 +333,7 @@ public sealed class AgentContext : IDisposable
         var interactiveBlocks = new List<IInteractiveBlock>();
         try
         {
+            turn.IsFailed = false;
             Status = ConversationStatus.Streaming;
             Error = null;
             NotifyStatusChanged();
@@ -491,7 +493,7 @@ public sealed class AgentContext : IDisposable
             var abandoned = AbandonPendingInteractions(interactiveBlocks);
             try
             {
-                Fail(attempt, message, ex);
+                Fail(attempt, turn, message, ex);
             }
             finally
             {
@@ -554,7 +556,7 @@ public sealed class AgentContext : IDisposable
             }
             catch (Exception ex)
             {
-                Fail(attempt, pendingTurn.InitialMessage, ex);
+                Fail(attempt, turn, pendingTurn.InitialMessage, ex);
                 return AttemptOutcome.Failed;
             }
 
@@ -568,8 +570,9 @@ public sealed class AgentContext : IDisposable
         return AttemptOutcome.Stopped;
     }
 
-    private void Fail(Attempt attempt, ChatMessage? message, Exception exception)
+    private void Fail(Attempt attempt, ConversationTurn turn, ChatMessage? message, Exception exception)
     {
+        turn.IsFailed = true;
         _retryMessage = message;
         Error = exception;
         Status = ConversationStatus.Error;
@@ -658,6 +661,13 @@ public sealed class AgentContext : IDisposable
         return new CallbackRegistration<Action<ConversationTurn>>(_turnAddedCallbacks, callback);
     }
 
+    /// <summary>Registers a callback invoked when <see cref="Status"/> changes.</summary>
+    /// <param name="callback">
+    /// The callback, which receives the status the change reports. A callback that runs earlier for the
+    /// same change may already have sent the next message, so a later one can receive the status that
+    /// ended a turn while <see cref="Status"/> already reports the next one.
+    /// </param>
+    /// <returns>A registration that removes the callback when disposed.</returns>
     public IDisposable RegisterOnStatusChanged(Action<ConversationStatus> callback)
     {
         ArgumentNullException.ThrowIfNull(callback);
@@ -686,9 +696,12 @@ public sealed class AgentContext : IDisposable
 
     private void NotifyStatusChanged()
     {
+        // Every callback hears the status this notification reports, even when an earlier one already
+        // started the next send.
+        var status = Status;
         var snapshot = _statusChangedCallbacks.ToArray();
         foreach (var cb in snapshot)
-            cb(Status);
+            cb(status);
     }
 
     private void NotifyTurnAdded(ConversationTurn turn)

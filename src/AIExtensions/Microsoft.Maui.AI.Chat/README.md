@@ -103,8 +103,8 @@ and receives the action's result, and the action still runs. The block must deri
 - `ConversationTurn.ModelId` (the last model id the provider reported) and `ConversationTurn.Usage`
   (token usage summed over the turn's requests), live and restored.
 - Turn transactions: `CancelAsync` stops a response and keeps its partial output
-  (`ConversationTurn.IsStopped`), failed turns commit nothing and can be retried, and `ClearAsync`
-  discards the active response before clearing.
+  (`ConversationTurn.IsStopped`), failed turns commit nothing, are marked `ConversationTurn.IsFailed`
+  and can be retried, and `ClearAsync` discards the active response before clearing.
 
 ## Changing options between sends
 
