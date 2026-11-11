@@ -56,7 +56,7 @@ invoked by the engine on the caller's thread; `Manual` actions wait until the ap
 `UIActionBlock.InvokeAsync()`. An action that throws sends an error result to the model instead of
 failing the turn. Canceling the token passed to `InvokeAsync` cancels only that invocation; the
 action can be invoked again. Once a turn stops or fails, its approvals and UI actions accept no
-decision or invocation. `IsAwaitingInput` on both blocks says whether they can still be answered: true for
+decision or invocation, and an action that was still running shows no result when it returns. `IsAwaitingInput` on both blocks says whether they can still be answered: true for
 a pending approval and for a manual action that has not run, false once answered, while the action runs,
 and after a stop, failure or restore. The block raises `OnChanged` when it changes, so templates can bind
 their buttons to it. A UI action requested together with a tool that needs approval still runs as a UI

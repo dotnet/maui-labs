@@ -27,7 +27,8 @@ public class ConversationTurn
     /// </summary>
     /// <remarks>
     /// A stopped turn keeps its request and partial response. Approvals and UI actions that were
-    /// still waiting for input when the turn stopped no longer respond.
+    /// still waiting for input when the turn stopped no longer respond, and a UI action that was still
+    /// running shows no result when it returns, because the result is never sent.
     /// </remarks>
     public bool IsStopped { get; internal set; }
 

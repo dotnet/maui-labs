@@ -188,7 +188,9 @@ These match upstream so that upstream fixes apply directly:
 - **Pending approvals and UI actions end with their turn.** Once a turn stops or fails, and for
   approvals and UI actions shown by a restore, `Approve()` and `Reject()` do nothing and
   `InvokeAsync()` and `GetResultAsync()` return canceled tasks, because nothing could send the
-  decision or the result. Upstream leaves them responsive and drops what they produce.
+  decision or the result. A UI action that was already running and returns after its turn ended
+  shows no result either (its invocation task is canceled), so the card matches what the model got.
+  Upstream leaves them responsive and drops what they produce.
 - **`InteractiveFunctionBlock.IsAwaitingInput`.** A public, bindable signal for whether a block can
   still be answered: true for a pending approval and for a manual UI action that has not run and is
   not running; false once answered and once its turn stopped, failed or was restored. The block raises

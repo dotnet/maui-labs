@@ -10,6 +10,9 @@ internal sealed class CapturingLoggerFactory : ILoggerFactory, ILogger
 {
     internal List<LogEntry> Entries { get; } = new();
 
+    /// <summary>Raised after an entry is recorded, on the thread that wrote it.</summary>
+    internal event Action<LogEntry>? Logged;
+
     internal LogLevel? ThrowAtLevel { get; init; }
 
     internal InvalidOperationException LoggingException { get; } = new("logging failed");
@@ -35,7 +38,9 @@ internal sealed class CapturingLoggerFactory : ILoggerFactory, ILogger
         Exception? exception,
         Func<TState, Exception?, string> formatter)
     {
-        Entries.Add(new LogEntry(logLevel, eventId, formatter(state, exception), exception));
+        var entry = new LogEntry(logLevel, eventId, formatter(state, exception), exception);
+        Entries.Add(entry);
+        Logged?.Invoke(entry);
         if (logLevel == ThrowAtLevel)
             throw LoggingException;
     }
