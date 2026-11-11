@@ -27,15 +27,23 @@ public class BlockMappingContext
     internal BlockMappingContext(
         ChatResponseUpdate update,
         IReadOnlyList<IHandlerEntry>? inactiveHandlers,
-        FunctionCallRegistry? calls = null)
+        FunctionCallRegistry? calls = null,
+        bool claimsUIActions = true)
     {
         Update = update;
         _handled = new bool[update.Contents.Count];
         _inactiveHandlers = inactiveHandlers;
         _calls = calls;
+        ClaimsUIActions = claimsUIActions;
     }
 
     public ChatResponseUpdate Update { get; }
+
+    /// <summary>
+    /// Gets whether registered UI actions claim their calls; not while a UI action builds the block
+    /// that shows its call.
+    /// </summary>
+    internal bool ClaimsUIActions { get; }
 
     public UnhandledContentsEnumerable UnhandledContents => new(Update.Contents, _handled);
 
@@ -73,9 +81,21 @@ public class BlockMappingContext
     internal void ReportProgress() => _progress++;
 
     public ContentBlock? CreateInnerBlock(AIContent content)
+        => CreateInnerBlock(content, claimUIActions: true, out _);
+
+    /// <summary>
+    /// Creates a block for <paramref name="content"/> with the registered handlers, as
+    /// <see cref="CreateInnerBlock(AIContent)"/> does, and returns the handler entry that maps the
+    /// content's later updates, such as a call's result, into it.
+    /// </summary>
+    internal ContentBlock? CreateInnerBlock(
+        AIContent content,
+        bool claimUIActions,
+        out IActiveEntry? entry)
     {
         ArgumentNullException.ThrowIfNull(content);
 
+        entry = null;
         if (_inactiveHandlers is null)
         {
             return null;
@@ -89,7 +109,7 @@ public class BlockMappingContext
             MessageId = Update.MessageId,
             Contents = [content],
         };
-        var tempContext = new BlockMappingContext(tempUpdate, _inactiveHandlers, _calls);
+        var tempContext = new BlockMappingContext(tempUpdate, _inactiveHandlers, _calls, claimUIActions);
 
         for (var i = 0; i < _inactiveHandlers.Count; i++)
         {
@@ -106,6 +126,7 @@ public class BlockMappingContext
                 if (content is FunctionCallContent call)
                     _calls?.Register(call, block, activeEntry);
 
+                entry = activeEntry;
                 return block;
             }
         }

@@ -158,6 +158,12 @@ These match upstream so that upstream fixes apply directly:
   rejected UI action is answered by the approval response alone, and `FunctionInvokingChatClient`
   returns the rejection. Upstream nests the UI action's block in the approval and answers only with
   the approval response, which `FunctionInvokingChatClient` cannot carry out for a declaration.
+- **Typed blocks for UI actions.** Registered UI actions claim their calls before the app's handlers.
+  Upstream runs the app's handlers first, so a typed block or `[ToolBlock]` for a UI action's name
+  takes the call and the action never runs. Here such a handler builds the action's inner block: it
+  shows inside the `UIActionBlock` (or inside the approval of an action that needs approval) and
+  receives the action's result through the handler. A handler whose block is not a
+  `FunctionInvocationContentBlock` cannot show a result, so the action shows a plain inner block.
 - **`InteractiveFunctionBlock`.** `ToolApprovalBlock` and `UIActionBlock` both wrap an inner
   `FunctionInvocationContentBlock` that carries the call and result; an approval for a UI action shares
   the action's inner block. Upstream's `FunctionApprovalBlock.InnerBlock` is a `ContentBlock` and its
@@ -191,7 +197,8 @@ These match upstream so that upstream fixes apply directly:
 
 ### Logging
 
-- Event ids 105 (a UI action failed) and 106 (a tool call was not executed) are added.
+- Event ids 105 (a UI action failed), 106 (a tool call was not executed) and 107 (a UI action's block
+  failed to show its result; the result is still sent) are added.
 
 ### Source generator
 

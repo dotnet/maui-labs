@@ -60,6 +60,11 @@ action. A UI action wrapped in `ApprovalRequiredAIFunction` needs `FunctionInvok
 `ToolApprovalBlock` and runs once approved, whatever its mode; edit the approval's `Call.Arguments`
 before approving to supply input.
 
+A block handler or `[ToolBlock]` registered for a UI action's name shows the action's call instead of
+replacing the action: its block becomes the `UIActionBlock.InnerBlock` (or the approval's inner block)
+and receives the action's result, and the action still runs. The block must derive from
+`FunctionInvocationContentBlock`; otherwise the action shows a plain call.
+
 ## Features
 
 - Streaming text projected into `TextContentBlock : RichContentBlock`, one block per message.
