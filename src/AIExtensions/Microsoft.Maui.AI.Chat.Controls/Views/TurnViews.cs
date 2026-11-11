@@ -74,6 +74,26 @@ internal sealed class TurnStoppedView : RowView<TurnStoppedRow>
     }
 }
 
+/// <summary>
+/// Marks an earlier turn that failed and was followed by another message instead of a retry. The assistant never
+/// got it, so it can no longer be retried and has no response footer.
+/// </summary>
+internal sealed class TurnNotSentView : RowView<TurnNotSentRow>
+{
+    internal const string Message = "Not sent";
+
+    public TurnNotSentView()
+    {
+        AutomationId = "AIChatNotSent";
+        Content = ChatVisuals.Label(AIChatThemeKeys.ErrorTextStyle, Message);
+        SemanticProperties.SetDescription(this, "Not sent. This message failed, so the assistant didn't get it");
+    }
+
+    protected override void Render(TurnNotSentRow row, bool isNewRow)
+    {
+    }
+}
+
 /// <summary>Shown under a failed turn, with a retry action.</summary>
 internal sealed class TurnErrorView : RowView<TurnErrorRow>
 {

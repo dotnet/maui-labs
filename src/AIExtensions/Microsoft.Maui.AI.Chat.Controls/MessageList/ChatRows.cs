@@ -57,6 +57,12 @@ internal sealed class TurnErrorRow(ConversationTurn turn, AgentContext session) 
     public AgentContext Session { get; } = session;
 }
 
+/// <summary>Marks an earlier turn that failed: it was never added to the conversation, so the assistant never got it.</summary>
+internal sealed class TurnNotSentRow(ConversationTurn turn) : ChatRow
+{
+    public ConversationTurn Turn { get; } = turn;
+}
+
 /// <summary>Marks a response the user stopped; its partial output stays above it.</summary>
 internal sealed class TurnStoppedRow(ConversationTurn turn) : ChatRow
 {

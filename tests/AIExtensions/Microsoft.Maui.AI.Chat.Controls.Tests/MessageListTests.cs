@@ -149,6 +149,70 @@ public class MessageListTests
     });
 
     [Fact]
+    public void FailedTurn_FollowedByANewMessage_IsMarkedNotSent() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Then((_, _, _) => PartialThenFail()).Reply("Sunny.");
+        var view = ChatHost.Create(ChatHost.Session(client), v =>
+            v.ResponseFooterTemplate = new DataTemplate(() => new Label { AutomationId = "Footer" }));
+
+        await SendAsync(view, "Weather in Paris?");
+        Assert.IsType<TurnErrorRow>(view.Rows()[^1]);
+
+        // Sending is allowed after a failure, so the user can type a new message instead of retrying.
+        await SendAsync(view, "Weather in Rome?");
+
+        var turns = view.Session!.Turns;
+        Assert.Collection(
+            view.Rows(),
+            row => Assert.Same(turns[0], Assert.IsType<UserMessageRow>(row).Turn),
+            row => Assert.Equal("Partial", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText),
+            row => Assert.Same(turns[0], Assert.IsType<TurnNotSentRow>(row).Turn),
+            row => Assert.Same(turns[1], Assert.IsType<UserMessageRow>(row).Turn),
+            row => Assert.Equal("Sunny.", ((TextContentBlock)Assert.IsType<BlockRow>(row).Block).RawText),
+            row => Assert.Same(turns[1], Assert.IsType<TurnFooterRow>(row).Turn));
+
+        var marker = Assert.IsType<TurnNotSentView>(view.Realize(view.Rows()[2]));
+        Assert.Equal("AIChatNotSent", marker.AutomationId);
+        Assert.Empty(marker.Descendants<Button>());
+
+        static async IAsyncEnumerable<ChatResponseUpdate> PartialThenFail()
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "Partial");
+            await Task.Yield();
+            throw new HttpRequestException("connection reset");
+        }
+    });
+
+    [Fact]
+    public void TurnThatFailedBeforeTheViewShowedIt_IsMarkedNotSentOnceAnotherMessageIsSent() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Fail(new InvalidOperationException("model offline")).Reply("Hello");
+        var session = ChatHost.Session(client);
+        await session.SendMessageAsync("Hi");
+        Assert.Equal(ConversationStatus.Error, session.Status);
+
+        var view = ChatHost.Create(session);
+        await SendAsync(view, "Anyone there?");
+
+        Assert.Same(session.Turns[0], Assert.Single(view.Rows().OfType<TurnNotSentRow>()).Turn);
+    });
+
+    [Fact]
+    public void RetriedTurn_IsNotMarkedNotSent() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Fail(new InvalidOperationException("model offline")).Reply("Recovered").Reply("Again");
+        var view = ChatHost.Create(ChatHost.Session(client), v =>
+            v.ResponseFooterTemplate = new DataTemplate(() => new Label { AutomationId = "Footer" }));
+
+        await SendAsync(view, "Hi");
+        await view.Session!.RetryAsync();
+        await SendAsync(view, "And now?");
+
+        Assert.DoesNotContain(view.Rows(), row => row is TurnNotSentRow or TurnErrorRow);
+        Assert.Equal(2, view.Rows().OfType<TurnFooterRow>().Count());
+    });
+
+    [Fact]
     public void Retry_RemovesThePartialResponseBeforeTheNewOneStreams() => UIThread.Run(async () =>
     {
         var retry = Waiters.Signal();
