@@ -55,7 +55,7 @@ public sealed class ChatSpeechRecognitionEventArgs : EventArgs
         Exception = exception;
     }
 
-    /// <summary>Gets the recognized text.</summary>
+    /// <summary>Gets the recognized text: everything the pass heard so far, not just what is new.</summary>
     public string Text { get; }
 
     /// <summary>Gets whether the recognition pass has ended.</summary>
@@ -75,6 +75,17 @@ public sealed class ChatSpeechRecognitionEventArgs : EventArgs
 /// .NET MAUI Community Toolkit speech-to-text service.
 /// </para>
 /// <para>
+/// A recognition pass reports what it hears through <see cref="RecognitionChanged"/>. Each interim result carries
+/// everything the pass heard so far and replaces the previous one. Each pass ends with exactly one final result,
+/// which carries the pass's whole text: raise it when the speaker pauses, when the platform ends the pass, or with
+/// an <see cref="ChatSpeechRecognitionEventArgs.ErrorKind"/> when the pass fails. With live voice, the view sends
+/// or keeps the final text and then starts the next pass.
+/// </para>
+/// <para>
+/// A pass stopped with <see cref="StopAsync"/> needs no final result: the view keeps the last interim result and
+/// ignores anything raised after it calls <see cref="StopAsync"/>.
+/// </para>
+/// <para>
 /// The chat view calls the recognizer on its UI thread. <see cref="RecognitionChanged"/> may be raised on any
 /// thread; the view handles each result on its UI thread.
 /// </para>
@@ -82,6 +93,7 @@ public sealed class ChatSpeechRecognitionEventArgs : EventArgs
 public interface IChatSpeechRecognizer
 {
     /// <summary>Raised for each interim result and once when a pass ends, on any thread.</summary>
+    /// <remarks>Interim results are cumulative within a pass; see the remarks on <see cref="IChatSpeechRecognizer"/>.</remarks>
     event EventHandler<ChatSpeechRecognitionEventArgs>? RecognitionChanged;
 
     /// <summary>Gets whether this device supports speech recognition.</summary>
@@ -97,12 +109,12 @@ public interface IChatSpeechRecognizer
 
     /// <summary>Starts a recognition pass.</summary>
     /// <param name="culture">The language to recognize.</param>
-    /// <param name="reportPartialResults">Whether to raise interim results.</param>
+    /// <param name="reportPartialResults">Whether to raise interim results. The final result is raised either way.</param>
     /// <param name="cancellationToken">Cancels the start.</param>
     /// <returns>A task that completes when the pass has started.</returns>
     Task StartAsync(CultureInfo culture, bool reportPartialResults, CancellationToken cancellationToken = default);
 
-    /// <summary>Stops the active pass.</summary>
+    /// <summary>Stops the active pass, or a pass that is still starting.</summary>
     /// <param name="cancellationToken">Cancels the stop.</param>
     /// <returns>A task that completes when the microphone is released.</returns>
     Task StopAsync(CancellationToken cancellationToken = default);

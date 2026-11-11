@@ -64,6 +64,7 @@ internal sealed class ChatComposer
     private bool _isListening;
     private string _speechPrefix = string.Empty;
     private string _speechCommitted = string.Empty;
+    private string _speechHeard = string.Empty;
     private int _restartAttempt;
     private CancellationTokenSource? _restartCts;
 
@@ -717,6 +718,7 @@ internal sealed class ChatComposer
         _liveSpeechEnabled = true;
         _speechPrefix = _view.Text?.Trim() ?? string.Empty;
         _speechCommitted = string.Empty;
+        _speechHeard = string.Empty;
         Notify();
         Announce("Listening.");
 
@@ -811,6 +813,7 @@ internal sealed class ChatComposer
         _liveSpeechEnabled = false;
         _isSpeechStopping = true;
         source?.Cancel();
+        KeepHeardSpeech();
         Notify();
 
         if (recognizer is null)
@@ -865,6 +868,15 @@ internal sealed class ChatComposer
 
         if (e.ErrorKind != ChatSpeechRecognitionErrorKind.None)
         {
+            // Keep what the pass heard before it failed.
+            var heard = string.IsNullOrWhiteSpace(e.Text) ? _speechHeard : e.Text;
+            _speechHeard = string.Empty;
+            if (!string.IsNullOrWhiteSpace(heard))
+            {
+                _speechCommitted = Join(_speechCommitted, heard);
+                _view.Text = Join(_speechPrefix, _speechCommitted);
+            }
+
             DetachCompletedSpeechPass(source);
             switch (e.ErrorKind)
             {
@@ -898,11 +910,17 @@ internal sealed class ChatComposer
 
         if (!e.IsFinal)
         {
-            if (!string.IsNullOrWhiteSpace(e.Text) && _view.ShowInterimSpeechText)
-                _view.Text = Join(_speechPrefix, _speechCommitted, e.Text);
+            if (!string.IsNullOrWhiteSpace(e.Text))
+            {
+                _speechHeard = e.Text;
+                if (_view.ShowInterimSpeechText)
+                    _view.Text = Join(_speechPrefix, _speechCommitted, e.Text);
+            }
+
             return;
         }
 
+        _speechHeard = string.Empty;
         if (!string.IsNullOrWhiteSpace(e.Text))
             _speechCommitted = Join(_speechCommitted, e.Text);
 
@@ -916,6 +934,17 @@ internal sealed class ChatComposer
             ScheduleSpeechRestart(generation, operation, countsAgainstBudget: false);
 
         Notify();
+    }
+
+    /// <summary>
+    /// Keeps what the current pass heard when live voice is turned off: a stopped pass gets no final result (iOS
+    /// and Mac Catalyst cancel it), and nothing the recognizer reports afterwards changes the draft.
+    /// </summary>
+    private void KeepHeardSpeech()
+    {
+        if (!string.IsNullOrWhiteSpace(_speechHeard))
+            _view.Text = Join(_speechPrefix, _speechCommitted, _speechHeard);
+        _speechHeard = string.Empty;
     }
 
     private async Task SubmitAndResumeSpeechAsync(int generation, int operation)
@@ -1060,6 +1089,7 @@ internal sealed class ChatComposer
         _speechCts = null;
         DetachSpeechHandler(recognizer);
         source?.Cancel();
+        KeepHeardSpeech();
 
         try
         {

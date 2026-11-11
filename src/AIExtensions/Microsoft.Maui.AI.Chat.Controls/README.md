@@ -34,7 +34,9 @@ templates, restyle it with resource keys, or replace the whole layout.
 | Chat view, templates, themes | ✅ | ✅ | ✅ | ✅ |
 | Attachments (platform file picker) | ✅ | ✅ | ✅ | ✅ |
 | Audio notes (built-in WAV recorder) | ✅ | ✅ | ✅ | ✅ |
-| Live voice (built-in recognizer) | ✅ | ✅ | ✅ | ✅ |
+| Live voice (built-in recognizer) | ✅¹ | ✅¹ | ✅¹ | ✅¹ |
+
+¹ Implemented over the .NET MAUI Community Toolkit speech-to-text service; not yet verified on devices.
 
 The package targets `net10.0` and works with any .NET MAUI backend. On other backends, register your own
 `IChatAudioRecorder` and `IChatSpeechRecognizer`.
@@ -225,6 +227,11 @@ are optional.
 | `AllowAudioCapture` | Record an audio note and attach it as WAV. With an `IChatAudioTranscriber`, the recording is dictated into the message box instead |
 | `ShowInterimAudioTranscript` | Show words while recording, using the speech recognizer |
 | `AllowLiveSpeech` | Continuous live voice. `LiveSpeechAutoSubmit` sends each finished utterance, and `ShowInterimSpeechText` and `SpeechRecognitionCulture` tune it |
+
+Live voice ends an utterance when the speaker pauses. Android ends it itself; on iOS, Mac Catalyst, and Windows,
+whose recognizers never end on their own, the built-in recognizer ends it after about two seconds without new
+words (on Windows, only while the platform reports silence). Turning live voice off keeps what it heard so far
+in the message box.
 
 Attachments and recordings are sent as `DataContent` next to the message text. Recording and live voice never
 share the microphone. Declare microphone access in your app:
