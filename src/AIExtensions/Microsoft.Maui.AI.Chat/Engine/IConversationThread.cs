@@ -16,6 +16,12 @@ namespace Microsoft.Maui.AI.Chat;
 /// do not need to roll anything back. The engine rebuilds message history from
 /// <see cref="GetUpdates"/>.
 /// <para>
+/// A committed turn can hold function calls without a result, and a stopped turn approval requests
+/// and responses whose call has no result. Implementations store them like any other update: a
+/// restore shows them as their turn ended them, and the rebuilt history leaves them out, so the next
+/// request stays valid.
+/// </para>
+/// <para>
 /// Conversation threads are single-thread-affine and are not thread-safe. Callers must serialize
 /// access and enter the owning application thread before using the agent or thread.
 /// </para>

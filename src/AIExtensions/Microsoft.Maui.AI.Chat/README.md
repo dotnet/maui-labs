@@ -292,8 +292,10 @@ No storage provider ships. Implementations own serialization and storage. Custom
 discriminators must survive serialization; `RawRepresentation` is not durable unless explicitly
 persisted. The engine writes a thread only when a turn commits (`AppendUserMessage`, then
 `AppendUpdate` for each update, then `CompleteTurn`), so failed or discarded turns never reach it.
-A stopped turn is committed with its partial output, without tool calls that never got a result;
-its history also leaves out reasoning that the stop cut off, which stays on screen.
+A stopped turn is committed with its partial output. The thread keeps every update of a turn,
+including tool calls that never got a result and a stopped turn's unanswered approvals, so a restore
+shows them as the turn ended them; the history sent to the model leaves them out, live and restored,
+because a provider rejects them, as well as reasoning that a stop cut off, which stays on screen.
 Threads must round-trip `ChatResponseUpdate.AdditionalProperties`, which mark continuation rounds and
 stopped turns. Call `RestoreAsync` to load a thread's turns and message history; until it has loaded
 them, a send fails and `ClearAsync` waits for it. Restored approvals
