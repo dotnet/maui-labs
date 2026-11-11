@@ -56,7 +56,10 @@ invoked by the engine on the caller's thread; `Manual` actions wait until the ap
 `UIActionBlock.InvokeAsync()`. An action that throws sends an error result to the model instead of
 failing the turn. Canceling the token passed to `InvokeAsync` cancels only that invocation; the
 action can be invoked again. Once a turn stops or fails, its approvals and UI actions accept no
-decision or invocation. A UI action requested together with a tool that needs approval still runs as a UI
+decision or invocation. `IsAwaitingInput` on both blocks says whether they can still be answered: true for
+a pending approval and for a manual action that has not run, false once answered, while the action runs,
+and after a stop, failure or restore. The block raises `OnChanged` when it changes, so templates can bind
+their buttons to it. A UI action requested together with a tool that needs approval still runs as a UI
 action. A UI action wrapped in `ApprovalRequiredAIFunction` needs `FunctionInvokingChatClient` too
 (sending throws without it, because nothing would ask for the approval). It shows a
 `ToolApprovalBlock` and runs once approved, whatever its mode; edit the approval's `Call.Arguments`
@@ -166,7 +169,7 @@ its history also leaves out reasoning that the stop cut off, which stays on scre
 Threads must round-trip `ChatResponseUpdate.AdditionalProperties`, which mark continuation rounds and
 stopped turns. Call `RestoreAsync` to load a thread's turns and message history. Restored approvals
 and UI actions are display history, not resumable pending work: they accept no decision or
-invocation.
+invocation, and their `IsAwaitingInput` is false.
 
 To show and continue a conversation that no thread wrote, such as a recording or an import, pass its
 messages to `AgentContext.RestoreAsync(messages)` (or `UIAgent.RestoreAsync(messages)`) on a context

@@ -169,6 +169,11 @@ These match upstream so that upstream fixes apply directly:
   approvals and UI actions shown by a restore, `Approve()` and `Reject()` do nothing and
   `InvokeAsync()` and `GetResultAsync()` return canceled tasks, because nothing could send the
   decision or the result. Upstream leaves them responsive and drops what they produce.
+- **`InteractiveFunctionBlock.IsAwaitingInput`.** A public, bindable signal for whether a block can
+  still be answered: true for a pending approval and for a manual UI action that has not run and is
+  not running; false once answered and once its turn stopped, failed or was restored. The block raises
+  its change notification when the value changes, after the turn's outcome is final. Upstream has no
+  equivalent, so a restored pending approval looks answerable.
 - **Canceling one invocation.** Canceling the token passed to `UIActionBlock.InvokeAsync` cancels only
   that invocation: its task is canceled, the action can be invoked again, and the turn keeps waiting
   for the result. Upstream cancels the block's result, which fails the turn.

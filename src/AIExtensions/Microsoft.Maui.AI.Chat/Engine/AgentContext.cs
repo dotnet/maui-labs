@@ -476,12 +476,28 @@ public sealed class AgentContext : IDisposable
         }
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
-            return EndCanceledAttempt(attempt, pendingTurn, turn, interactiveBlocks);
+            var abandoned = AbandonPendingInteractions(interactiveBlocks);
+            try
+            {
+                return EndCanceledAttempt(attempt, pendingTurn, turn);
+            }
+            finally
+            {
+                ReportAbandoned(abandoned);
+            }
         }
         catch (Exception ex)
         {
-            AbandonPendingInteractions(interactiveBlocks);
-            Fail(attempt, message, ex);
+            var abandoned = AbandonPendingInteractions(interactiveBlocks);
+            try
+            {
+                Fail(attempt, message, ex);
+            }
+            finally
+            {
+                ReportAbandoned(abandoned);
+            }
+
             return AttemptOutcome.Failed;
         }
 
@@ -528,11 +544,8 @@ public sealed class AgentContext : IDisposable
     private AttemptOutcome EndCanceledAttempt(
         Attempt attempt,
         PendingTurn pendingTurn,
-        ConversationTurn turn,
-        List<IInteractiveBlock> interactiveBlocks)
+        ConversationTurn turn)
     {
-        AbandonPendingInteractions(interactiveBlocks);
-
         if (!attempt.Discard)
         {
             try
@@ -598,10 +611,27 @@ public sealed class AgentContext : IDisposable
     }
 
     /// <summary>Stops the turn's approvals and UI actions from accepting what can no longer be sent.</summary>
-    private static void AbandonPendingInteractions(List<IInteractiveBlock> interactiveBlocks)
+    /// <returns>The blocks that stopped waiting for input.</returns>
+    private static List<ContentBlock> AbandonPendingInteractions(List<IInteractiveBlock> interactiveBlocks)
     {
+        var abandoned = new List<ContentBlock>();
         foreach (var interactive in interactiveBlocks)
-            (interactive as InteractiveFunctionBlock)?.Abandon();
+        {
+            if (interactive is InteractiveFunctionBlock block && block.Abandon())
+                abandoned.Add(block);
+        }
+
+        return abandoned;
+    }
+
+    /// <summary>
+    /// Raises the change notification of blocks that stopped waiting for input. Runs once the turn's outcome
+    /// is final, so a change callback that throws cannot leave the turn running.
+    /// </summary>
+    private static void ReportAbandoned(List<ContentBlock> abandoned)
+    {
+        foreach (var block in abandoned)
+            block.InvokeNotifyChanged();
     }
 
     private static ChatMessage EnsureMessageId(ChatMessage message)

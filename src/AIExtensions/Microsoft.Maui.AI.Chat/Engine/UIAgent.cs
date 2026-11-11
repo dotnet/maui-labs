@@ -474,7 +474,8 @@ public class UIAgent : IDisposable
             _historyVersion++;
             CompleteStateRestore();
 
-            // Restored approvals and UI actions are history: a decision or result could not be sent.
+            // Restored approvals and UI actions are history: a decision or result could not be sent. Nothing
+            // shows these blocks yet, so the change needs no notification.
             foreach (var turn in turns)
             {
                 foreach (var block in turn.RequestBlocks.Concat(turn.ResponseBlocks))
