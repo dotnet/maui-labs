@@ -413,6 +413,9 @@ public sealed class RecordedChatReplayTests
         Assert.Equal(ConversationStatus.Idle, harness.Session.Status);
         Assert.Empty(result.UnansweredApprovals);
         Assert.Equal(0, result.RestoredInteractions);
+
+        // Every turn continued the conversation the replay showed, so none had to be restored first.
+        Assert.Equal(0, result.RestoredHistory);
         Assert.Equal(userMessages.Length, result.Turns);
         Assert.Equal(ExpectedResponses[fileName].Length, harness.Session.Turns.Count);
         for (var index = 0; index < harness.Session.Turns.Count; index++)
@@ -562,6 +565,7 @@ public sealed class RecordedChatReplayTests
         // The recording starts part-way through a conversation: the earlier messages are shown without a model, the
         // system message is not shown, and the replayed answer carries the recorded model.
         Assert.Equal(1, result.Turns);
+        Assert.Equal(1, result.RestoredHistory);
         Assert.Equal(1, harness.Recording.ReplayPosition);
         Assert.Collection(harness.Session.Turns,
             earlier =>
@@ -600,8 +604,9 @@ public sealed class RecordedChatReplayTests
         harness.Driver.InteractionStarting += (_, interaction) =>
             instructions = ChatRecordingSerializer.ReadInstructions(interaction.Request);
 
-        await harness.Driver.ReplayAsync(playAll: true);
+        var result = await harness.Driver.ReplayAsync(playAll: true);
 
+        Assert.Equal(1, result.RestoredHistory);
         Assert.Equal("Be concise", instructions);
         Assert.Collection(harness.Session.Turns,
             earlier =>

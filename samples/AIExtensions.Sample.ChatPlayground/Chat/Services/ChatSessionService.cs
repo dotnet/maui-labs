@@ -128,6 +128,13 @@ public sealed class ChatSessionService : IChatRecordingSession
         }
     }
 
+    /// <summary>Gets the interaction the replay finished last, or <see langword="null"/> before the first one.</summary>
+    public RecordedInteraction? PeekPrevious()
+    {
+        lock (_gate)
+            return _cursor > 0 ? _recording.Interactions[_cursor - 1] : null;
+    }
+
     public void CompleteReplay(RecordedInteraction interaction)
     {
         lock (_gate)
