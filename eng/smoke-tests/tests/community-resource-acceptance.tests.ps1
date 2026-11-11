@@ -16,7 +16,7 @@ foreach ($name in @('Get-ResourcePublishArguments', 'Invoke-DotNet', 'Assert-Sin
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 
-foreach ($backend in @('appkit', 'gtk', 'gtk-net10', 'wpf')) {
+foreach ($backend in @('appkit', 'gtk', 'gtk-net10', 'wpf', 'wpf-net10')) {
     $arguments = @(Get-ResourcePublishArguments $backend 'App with spaces.csproj' 'publish with spaces')
     if ($arguments[0] -ne 'publish' -or
         $arguments -notcontains 'App with spaces.csproj' -or
@@ -87,4 +87,4 @@ finally {
     Remove-Item -LiteralPath $file
     Remove-Item -LiteralPath $root
 }
-Write-Host 'PASS resource acceptance: four backend commands, four exit-status contracts, and Unicode payload/stale-file checks.'
+Write-Host 'PASS resource acceptance: five backend commands, four exit-status contracts, and Unicode payload/stale-file checks.'

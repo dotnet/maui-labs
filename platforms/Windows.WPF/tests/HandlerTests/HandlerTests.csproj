@@ -1,18 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0-windows10.0.17763.0;net11.0-windows10.0.17763.0</TargetFrameworks>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <WindowsSdkPackageVersion>$(MicrosoftWindowsSdkNetRefVersion)</WindowsSdkPackageVersion>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);NETSDK1023</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,6 +25,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Content Include="../../src/Windows.WPF/buildTransitive/*" Link="BuildContracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\..\samples\Windows.WPF.Sample\TestScenarios\AssetCases.cs" Link="AssetCases.cs" />
   </ItemGroup>
 
@@ -35,6 +37,8 @@
     <EmbeddedResource Include="..\..\..\..\src\Comet\sample\Comet.Sample\Resources\Fonts\fa_solid.ttf" LogicalName="Other.Ambiguous.ttf" />
   </ItemGroup>
   <Import Project="..\..\samples\Windows.WPF.Sample\TestScenarios\PackagedAssets.props" />
+  <Import Project="..\..\src\Windows.WPF\buildTransitive\Microsoft.Maui.Platforms.Windows.WPF.props"
+          Condition="'$(_MicrosoftMauiPlatformsWindowsWPFBuildPropsImported)' != 'true'" />
   <Import Project="..\..\src\Windows.WPF\build\Microsoft.Maui.Platforms.Windows.WPF.targets" />
 
 </Project>

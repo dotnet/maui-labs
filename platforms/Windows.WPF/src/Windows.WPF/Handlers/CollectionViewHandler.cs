@@ -9,6 +9,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platforms.Windows.WPF;
+using View = Microsoft.Maui.Controls.View;
 using WBorder = System.Windows.Controls.Border;
 using WGrid = System.Windows.Controls.Grid;
 using WListBox = System.Windows.Controls.ListBox;
@@ -165,6 +166,7 @@ namespace Microsoft.Maui.Handlers.WPF
 			{
 				if (recognizer is not Microsoft.Maui.Controls.TapGestureRecognizer tap) continue;
 
+#if NET10_0
 				if (tap.Command != null && tap.Command.CanExecute(tap.CommandParameter))
 				{
 					tap.Command.Execute(tap.CommandParameter);
@@ -179,6 +181,9 @@ namespace Microsoft.Maui.Handlers.WPF
 					if (ps.Length == 1) sendTapped.Invoke(tap, new object?[] { mauiView });
 					else if (ps.Length == 2) sendTapped.Invoke(tap, new object?[] { mauiView, null });
 				}
+#else
+				tap.SendTapped(mauiView);
+#endif
 				return;
 			}
 

@@ -1,0 +1,118 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(_MicrosoftMauiPlatformsWindowsWPFBuildTargetsImported)' != 'true'">
+    <_MicrosoftMauiPlatformsWindowsWPFBuildTargetsImported>true</_MicrosoftMauiPlatformsWindowsWPFBuildTargetsImported>
+    <_WpfUseMaui11ResourcePipeline
+        Condition="'$(_WpfUseMaui11ResourcePipeline)' == '' and $([System.String]::Copy('$(TargetFramework)').StartsWith('net11.0-'))">true</_WpfUseMaui11ResourcePipeline>
+    <_WpfUseLegacyResourcePipeline Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true'">false</_WpfUseLegacyResourcePipeline>
+    <_WpfUseLegacyResourcePipeline Condition="'$(_WpfUseLegacyResourcePipeline)' == '' and '$(_WpfUseMaui11ResourcePipeline)' != 'true'">true</_WpfUseLegacyResourcePipeline>
+    <MauiActiveBackend Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true' and '$(MauiActiveBackend)' == ''">wpf</MauiActiveBackend>
+    <WPFProjectFolder Condition="'$(WPFProjectFolder)' == ''">$(PlatformsProjectFolder)WPF\</WPFProjectFolder>
+    <ResizetizerPlatformType Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true' and '$(ResizetizerPlatformType)' == ''">wpf</ResizetizerPlatformType>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true' and '$(SingleProject)' == 'true'">
+    <MauiPlatformSpecificFolder Include="$(WPFProjectFolder)"
+                                Condition="'$(_MicrosoftMauiPlatformsWindowsWPFPlatformFolderAdded)' != 'true'"
+                                TargetPlatformIdentifiers="windows"
+                                BackendIdentity="wpf"
+                                ActivationProperty="MauiActiveBackend"
+                                ActivationValue="wpf" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true' and '$(SingleProject)' == 'true'">
+    <_MicrosoftMauiPlatformsWindowsWPFPlatformFolderAdded>true</_MicrosoftMauiPlatformsWindowsWPFPlatformFolderAdded>
+  </PropertyGroup>
+
+  <Target Name="_WpfSetDefaultMauiAssetLogicalNames"
+          BeforeTargets="ProcessMauiAssets"
+          Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true'">
+    <ItemGroup>
+      <MauiAsset Condition="'%(MauiAsset.LogicalName)' == ''">
+        <LogicalName Condition="'%(MauiAsset.Link)' != ''">%(MauiAsset.Link)</LogicalName>
+        <LogicalName Condition="'%(MauiAsset.Link)' == ''">%(MauiAsset.RecursiveDir)%(MauiAsset.Filename)%(MauiAsset.Extension)</LogicalName>
+      </MauiAsset>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_WpfCollectProcessedMauiResources"
+          Condition="'$(_WpfUseMaui11ResourcePipeline)' == 'true' and '$(_WpfProcessedResourcesCollected)' != 'true'"
+          DependsOnTargets="ProcessMauiAssets;ProcessMauiFonts;ResizetizeImages"
+          AfterTargets="ResizetizeImages"
+          BeforeTargets="GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems;ComputeFilesToPublish">
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(MauiProcessedImage)"
+                             Condition="'%(MauiProcessedImage.Extension)' != '.svg' and '%(MauiProcessedImage.MSBuildSourceProjectFile)' == ''">
+        <TargetPath>Resources\Images\%(Filename)%(Extension)</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ContentWithTargetPath>
+
+      <ContentWithTargetPath Include="@(MauiProcessedFont)"
+                             Condition="'%(MauiProcessedFont.MSBuildSourceProjectFile)' == ''">
+        <TargetPath>Resources\Fonts\%(Filename)%(Extension)</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ContentWithTargetPath>
+
+      <ContentWithTargetPath Include="@(MauiProcessedAsset)"
+                             Condition="'%(MauiProcessedAsset.MSBuildSourceProjectFile)' == ''">
+        <TargetPath Condition="'%(MauiProcessedAsset.TargetPath)' != ''">%(MauiProcessedAsset.TargetPath)</TargetPath>
+        <TargetPath Condition="'%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' != ''">%(MauiProcessedAsset.LogicalName)</TargetPath>
+        <TargetPath Condition="'%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' == '' and '%(MauiProcessedAsset.Link)' != ''">%(MauiProcessedAsset.Link)</TargetPath>
+        <TargetPath Condition="'%(MauiProcessedAsset.TargetPath)' == '' and '%(MauiProcessedAsset.LogicalName)' == '' and '%(MauiProcessedAsset.Link)' == ''">%(MauiProcessedAsset.RecursiveDir)%(MauiProcessedAsset.Filename)%(MauiProcessedAsset.Extension)</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ContentWithTargetPath>
+    </ItemGroup>
+    <PropertyGroup>
+      <_WpfProcessedResourcesCollected>true</_WpfProcessedResourcesCollected>
+    </PropertyGroup>
+  </Target>
+
+  <!-- MAUI 10 compatibility lane: these item contracts predate MauiProcessed*. -->
+  <Target Name="_WpfLegacyProcessMauiImage"
+          BeforeTargets="Build"
+          Condition="'$(_WpfUseLegacyResourcePipeline)' == 'true' and '@(MauiImage)' != ''">
+    <Copy SourceFiles="@(MauiImage)"
+          DestinationFolder="$(OutputPath)Resources\Images"
+          SkipUnchangedFiles="true"
+          Condition="Exists('%(MauiImage.Identity)')" />
+  </Target>
+
+  <Target Name="_WpfLegacyProcessMauiAsset"
+          BeforeTargets="AssignTargetPaths"
+          Condition="'$(_WpfUseLegacyResourcePipeline)' == 'true' and '@(MauiAsset)' != ''">
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(MauiAsset)">
+        <TargetPath Condition="'%(MauiAsset.LogicalName)' != ''">%(MauiAsset.LogicalName)</TargetPath>
+        <TargetPath Condition="'%(MauiAsset.LogicalName)' == '' and '%(MauiAsset.Link)' != ''">%(MauiAsset.Link)</TargetPath>
+        <TargetPath Condition="'%(MauiAsset.LogicalName)' == '' and '%(MauiAsset.Link)' == ''">%(MauiAsset.RecursiveDir)%(MauiAsset.Filename)%(MauiAsset.Extension)</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ContentWithTargetPath>
+    </ItemGroup>
+  </Target>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\build\Fonts\Microsoft.Maui.Platforms.Windows.WPF.Fonts.targets"
+          Condition="'$(_WpfUseLegacyResourcePipeline)' == 'true' and '$(_MicrosoftMauiPlatformsWindowsWPFFontsTargetsImported)' != 'true'" />
+
+  <!-- App icon and splash remain native WPF concerns; processed images do not expose
+       dedicated icon/splash provenance. Preserve the existing source copies. -->
+  <Target Name="_WpfProcessMauiIcon"
+          BeforeTargets="Build"
+          Condition="'@(MauiIcon)' != ''">
+    <Copy SourceFiles="@(MauiIcon)"
+          DestinationFolder="$(OutputPath)Resources"
+          SkipUnchangedFiles="true"
+          Condition="Exists('%(MauiIcon.Identity)')" />
+  </Target>
+
+  <Target Name="_WpfProcessMauiSplashScreen"
+          BeforeTargets="Build"
+          Condition="'@(MauiSplashScreen)' != ''">
+    <Copy SourceFiles="@(MauiSplashScreen)"
+          DestinationFolder="$(OutputPath)Resources"
+          SkipUnchangedFiles="true"
+          Condition="Exists('%(MauiSplashScreen.Identity)')" />
+  </Target>
+</Project>

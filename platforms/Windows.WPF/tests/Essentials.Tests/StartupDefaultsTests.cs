@@ -3,11 +3,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Platforms.Windows.WPF;
+using Microsoft.Maui.Platforms.Windows.WPF.Essentials;
 
 namespace Essentials.Tests;
 
 public class StartupDefaultsTests
 {
+#if NET10_0
     [Fact]
     public void Startup_DeviceInfo_UsesCustomRegistrationOrDesktopFallback()
     {
@@ -41,7 +43,23 @@ public class StartupDefaultsTests
         Assert.NotNull(method);
         method.Invoke(application, null);
     }
+#else
+    [Fact]
+    public void Build_DeviceInfo_UsesPublicDiBridgeAndWpfIdentity()
+    {
+        StaticFacadeTests.Run(() =>
+        {
+            using var app = MauiApp.CreateBuilder().UseWPFEssentials().Build();
+            var deviceInfo = app.Services.GetRequiredService<IDeviceInfo>();
 
+            Assert.Same(deviceInfo, DeviceInfo.Current);
+            Assert.Equal(DeviceIdiom.Desktop, DeviceInfo.Idiom);
+            Assert.Equal(DevicePlatform.Create("WPF"), DeviceInfo.Platform);
+        });
+    }
+#endif
+
+#if NET10_0
     sealed class TestApplication : MauiWPFApplication
     {
         public void SetServices(IServiceProvider services) => Services = services;
@@ -59,4 +77,5 @@ public class StartupDefaultsTests
         public DeviceIdiom Idiom => DeviceIdiom.Desktop;
         public DeviceType DeviceType => DeviceType.Physical;
     }
+#endif
 }

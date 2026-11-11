@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0-windows10.0.17763.0;net11.0-windows10.0.17763.0</TargetFrameworks>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <WindowsSdkPackageVersion>$(MicrosoftWindowsSdkNetRefVersion)</WindowsSdkPackageVersion>
     <UseWPF>true</UseWPF>
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Components.WebView.Maui;
 using Microsoft.Maui.Controls.Hosting.WPF;
 using Microsoft.Maui.DevFlow.Agent.WPF;
 using Microsoft.Maui.Hosting;
@@ -23,8 +24,9 @@ public static class MauiProgram
 		builder.ConfigureFonts(SampleFontRegistration.Configure);
 
 		// Blazor hybrid
-		builder.Services.AddMauiBlazorWebView();
-		builder.Services.AddWpfBlazorWebView();
+		builder.Services
+			.AddMauiBlazorWebView()
+			.UsePlatformHandler<Microsoft.AspNetCore.Components.WebView.Maui.WPF.BlazorWebViewHandler>();
 
 		return builder.Build();
 	}
