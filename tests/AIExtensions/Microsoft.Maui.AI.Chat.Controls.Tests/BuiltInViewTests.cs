@@ -238,14 +238,19 @@ public class BuiltInViewTests
     }
 
     [Fact]
-    public void ToolCall_ToggleHasAnAccessibleName()
+    public void ToolCall_ToggleHasAnAccessibleNameAndAChevron()
     {
         var view = Render<ToolCallView>(Blocks.ToolCall("search"));
         var toggle = view.ByAutomationId<Button>("AIChatToolCallDetails");
 
         Assert.Equal("Show details for search", SemanticProperties.GetDescription(toggle));
+        Assert.Equal("AIChatIcons", toggle.FontFamily);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.ExpandIcon), toggle.Text);
+        Assert.Equal(0, toggle.Rotation);
         toggle.Command.Execute(null);
         Assert.Equal("Hide details for search", SemanticProperties.GetDescription(toggle));
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.CollapseIcon), toggle.Text);
+        Assert.Equal(0, toggle.Rotation);
     }
 
     [Fact]
@@ -283,6 +288,7 @@ public class BuiltInViewTests
         Assert.True(approveView.Details.IsVisible);
         Assert.True(approveView.ResultLabel.Parent is Border { IsVisible: true });
         Assert.Equal("Hide details for delete_file", SemanticProperties.GetDescription(approveView.DetailsToggle));
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.CollapseIcon), approveView.DetailsToggle.Text);
 
         var reject = Blocks.Approval("delete_file");
         var rejectView = Render<ToolApprovalView>(reject);
@@ -474,7 +480,7 @@ public class BuiltInViewTests
         reasoning.Toggle();
         Rebind(reasoning, Blocks.Reasoning("Second thought."));
         Assert.False(reasoning.TextLabel.IsVisible);
-        Assert.Equal(0, reasoning.Chevron.Rotation);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.ExpandIcon), reasoning.Chevron.Text);
         Rebind(reasoning, thought);
         Assert.True(reasoning.TextLabel.IsVisible);
 
@@ -557,13 +563,14 @@ public class BuiltInViewTests
         var view = Render<ReasoningView>(block);
 
         Assert.Equal("Reasoning", view.Header.Text);
-        Assert.Equal(0, view.Chevron.Rotation);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.ExpandIcon), view.Chevron.Text);
+        Assert.Equal("AIChatIcons", view.Chevron.FontFamily);
         Assert.False(view.TextLabel.IsVisible);
         Assert.Equal("Show reasoning", SemanticProperties.GetDescription(view.Header));
 
         view.Header.Command.Execute(null);
 
-        Assert.Equal(90, view.Chevron.Rotation);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.CollapseIcon), view.Chevron.Text);
         Assert.Equal("Hide reasoning", SemanticProperties.GetDescription(view.Header));
         Assert.True(view.TextLabel.IsVisible);
         Assert.Equal("Because the sky scatters blue light.", view.TextLabel.Text);

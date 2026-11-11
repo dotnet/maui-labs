@@ -29,6 +29,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The built-in icons: a subset of the Fluent UI System Icons (MIT). AIChatView registers it (see ChatIconFont). -->
+    <EmbeddedResource Include="Fonts\AIChatIcons.ttf" LogicalName="Microsoft.Maui.AI.Chat.Controls.Fonts.AIChatIcons.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Microsoft.Maui.AI.Chat.Controls.Tests" />
   </ItemGroup>
 

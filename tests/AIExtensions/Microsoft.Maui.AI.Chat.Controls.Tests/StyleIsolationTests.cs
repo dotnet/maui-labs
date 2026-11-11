@@ -20,8 +20,12 @@ public sealed class StyleIsolationTests : IDisposable
         new("Welcome", WelcomeAsync),
         new("Composing", ComposingAsync),
         new("History", HistoryAsync),
+        new("HistoryExpanded", HistoryAsync, ExpandDetails),
         new("AwaitingInput", AwaitingInputAsync),
         new("Streaming", StreamingAsync),
+        new("Recording", RecordingAsync),
+        new("Transcribing", TranscribingAsync),
+        new("Listening", ListeningAsync),
         new("RichText", RichTextAsync),
         new("Markdown", MarkdownAsync),
     ];
@@ -167,6 +171,8 @@ public sealed class StyleIsolationTests : IDisposable
                 resources => resources[AIChatThemeKeys.FontFamily] = AppFont);
             var codeStyle = Application.Current!.Resources[AIChatThemeKeys.CodeTextStyle];
             var codeFont = Application.Current.Resources[AIChatThemeKeys.CodeFontFamily];
+            var iconFont = Application.Current.Resources[AIChatThemeKeys.IconFontFamily];
+            var glyphs = IconTests.IconKeys.Select(key => Application.Current.Resources[key]).ToHashSet();
 
             foreach (var element in rendering.Parts())
             {
@@ -180,6 +186,8 @@ public sealed class StyleIsolationTests : IDisposable
                     Assert.True(family is null || Equals(family, codeFont), $"{description} uses '{family}'; spans inherit their label's font.");
                 else if (element is Label { Style: { } style } && ReferenceEquals(style, codeStyle))
                     Assert.True(Equals(codeFont, family), $"{description} is code but uses '{family}'.");
+                else if (Equals(iconFont, family))
+                    Assert.True(glyphs.Contains(element.GetValue(element is Button ? Button.TextProperty : Label.TextProperty)), $"{description} shows text in the icon font.");
                 else
                     Assert.True(Equals(AppFont, family), $"{description} uses '{family}' instead of AIChat.FontFamily.");
             }
@@ -340,6 +348,7 @@ public sealed class StyleIsolationTests : IDisposable
 
         view.Window!.Parent = app;
         var rows = view.Rows().Select(row => view.Realize(row)).ToList();
+        scenario.Shown?.Invoke(rows.SelectMany(Tree).ToList());
 
         if (placement == Placement.ApplicationLater)
             styles?.Invoke(app.Resources);
@@ -490,6 +499,57 @@ public sealed class StyleIsolationTests : IDisposable
         });
     }
 
+    /// <summary>Recording an audio note: the audio button stops the recording.</summary>
+    private static async Task<(AIChatView, Func<Task>)> RecordingAsync()
+    {
+        var view = ChatHost.Create(ChatHost.Session(new ScriptedChatClient()), v =>
+        {
+            v.AllowAudioCapture = true;
+            v.AudioRecorder = new FakeAudioRecorder(FakeAudioRecorder.Wav());
+        });
+        await view.Composer.ToggleAudioCaptureAsync();
+        Assert.True(view.IsRecordingAudio);
+        return (view, () =>
+        {
+            view.Composer.CancelCapture();
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>Transcribing the note just recorded: the audio button cancels the transcription.</summary>
+    private static async Task<(AIChatView, Func<Task>)> TranscribingAsync()
+    {
+        var transcriber = new FakeTranscriber();
+        var view = ChatHost.Create(ChatHost.Session(new ScriptedChatClient()), v =>
+        {
+            v.AllowAudioCapture = true;
+            v.AudioRecorder = new FakeAudioRecorder(FakeAudioRecorder.Wav());
+            v.AudioTranscriber = transcriber;
+        });
+        await view.Composer.ToggleAudioCaptureAsync();
+        var stop = view.Composer.ToggleAudioCaptureAsync();
+        await transcriber.Started.Task;
+        Assert.True(view.IsTranscribingAudio);
+        return (view, async () =>
+        {
+            transcriber.Deferred!.SetResult("Hello");
+            await stop;
+        });
+    }
+
+    /// <summary>Live voice: the live voice button stops listening.</summary>
+    private static async Task<(AIChatView, Func<Task>)> ListeningAsync()
+    {
+        var view = ChatHost.Create(ChatHost.Session(new ScriptedChatClient()), v =>
+        {
+            v.AllowLiveSpeech = true;
+            v.SpeechRecognizer = new FakeSpeechRecognizer();
+        });
+        await view.Composer.StartLiveSpeechAsync();
+        Assert.True(view.IsListening);
+        return (view, async () => await view.Composer.StopLiveSpeechAsync());
+    }
+
     /// <summary>A response that has not streamed anything yet: thinking, and the Stop button.</summary>
     private static async Task<(AIChatView, Func<Task>)> StreamingAsync()
     {
@@ -572,6 +632,14 @@ public sealed class StyleIsolationTests : IDisposable
         });
         await SendAsync(view, "Plan my trip");
         return (view, static () => Task.CompletedTask);
+    }
+
+    // Expanded cards show the chevron that collapses them.
+    private static void ExpandDetails(IReadOnlyList<Element> parts)
+    {
+        parts.OfType<ToolCallView>().First().Toggle();
+        parts.OfType<ToolApprovalView>().First().DetailsToggle.Command.Execute(null);
+        parts.OfType<ReasoningView>().First(static view => view.Header.IsVisible).Toggle();
     }
 
     private static async Task SendAsync(AIChatView view, string text)
@@ -790,7 +858,10 @@ public sealed class StyleIsolationTests : IDisposable
             _ => null,
         };
 
-    private sealed record Scenario(string Name, Func<Task<(AIChatView View, Func<Task> CleanUp)>> Render)
+    private sealed record Scenario(
+        string Name,
+        Func<Task<(AIChatView View, Func<Task> CleanUp)>> Render,
+        Action<IReadOnlyList<Element>>? Shown = null)
     {
         public override string ToString() => Name;
     }

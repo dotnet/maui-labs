@@ -24,13 +24,13 @@ templates, restyle it with resource keys, or replace the whole layout.
 - **Turn states:** a stopped response keeps its partial output under a "Stopped" marker. A failed response
   keeps its partial output and shows the error with Retry; if another message is sent instead, the failed one
   is marked "Not sent". A restored conversation renders without sending.
-- **Composer:** Send and Stop, suggestion chips, attachments (picker, file types, size and count limits),
-  audio notes, dictation, and continuous live voice. Errors appear in one place.
+- **Composer:** Send and Stop, suggestion chips, attachments (picker, file types, size and count limits, and
+  thumbnails for images), audio notes, dictation, and continuous live voice. Errors appear in one place.
 - **Customization:** `BlockTemplate` matches by block type (including `[ToolBlock]` types), tool name, role,
   priority, or a `When` override. There are header, empty, messages-header, and response-footer templates,
   input slots, resource keys, and a replaceable `ControlTemplate`.
-- **Light and dark themes** that your app's implicit styles don't change, accessible names on every action,
-  and services resolved from dependency injection.
+- **Light and dark themes** that your app's implicit styles don't change, monochrome icons from an embedded icon
+  font, accessible names on every action, and services resolved from dependency injection.
 
 ## Platform support
 
@@ -228,13 +228,50 @@ font unless you set `AIChat.FontFamily`.
 </Application.Resources>
 ```
 
+### Icons
+
+The built-in icons are glyphs of `AIChatIcons`, a subset of the
+[Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT) embedded in the package. The view
+registers the font with your app's fonts itself: there is nothing to add to `MauiProgram`. Each icon is a string
+resource, and `AIChat.FontFamily.Icons` names the font of all of them:
+
+| Key | Icon of |
+|---|---|
+| `AIChat.Icon.Attach` | The button that adds attachments |
+| `AIChat.Icon.Microphone` | The button that records an audio note |
+| `AIChat.Icon.LiveVoice` | The button that starts live voice |
+| `AIChat.Icon.Send` | The send button |
+| `AIChat.Icon.Stop` | The buttons that stop the response, a recording, or live voice |
+| `AIChat.Icon.Transcribing` | The audio button while a recording is transcribed (tap to cancel) |
+| `AIChat.Icon.Remove` | The button that removes a staged attachment |
+| `AIChat.Icon.Link`, `AIChat.Icon.Audio`, `AIChat.Icon.Document`, `AIChat.Icon.Image` | Link, audio, file, and image chips |
+| `AIChat.Icon.Expand`, `AIChat.Icon.Collapse` | Collapsed and expanded details (tool cards and reasoning) |
+
+Icons take the color of what they are in: `AIChat.Color.SecondaryText`, `AIChat.Color.OnAccent` on the send and stop
+button, and `AIChat.Color.Error` while recording or listening. Staged images show a thumbnail instead of an icon. To
+use your own icon font, register it in `MauiProgram` (`ConfigureFonts`) and set `AIChat.FontFamily.Icons` and every
+`AIChat.Icon.*` key:
+
+```xml
+<x:String x:Key="AIChat.FontFamily.Icons">MyIcons</x:String>
+<x:String x:Key="AIChat.Icon.Send">&#xE724;</x:String>
+<!-- ...and the other AIChat.Icon.* keys -->
+```
+
+### Your own template
+
 To change the whole layout, set `ControlTemplate` (or define the `AIChat.Template.ChatView` resource). Bind
 buttons to the view's commands (`SendCommand`, `StopCommand`, `PickAttachmentsCommand`,
 `ToggleAudioCaptureCommand`, `ToggleLiveSpeechCommand`) and its state (`CanSend`, `CanStop`, `IsBusy`,
 `ErrorMessage`, `HasError`, `Attachments`, `IsRecordingAudio`, `IsListening`, and others). The named parts
 `PART_Header`, `PART_Messages`, `PART_EmptyView`, `PART_Suggestions`, `PART_Attachments`, and `PART_Input`
-are optional. The default template is built from internal element types; when you start from a copy, use the
-standard controls instead.
+are optional.
+
+To start from a copy of the default template (`AIChat.Template.ChatView` in `Themes/AIChatTheme.xaml`), replace its
+internal element types with the standard controls (`Button` for `chat:ChatButton`, `Grid` for `chat:ChatGrid`, and
+so on). Keep the `AIChat.Style.*` styles and the `{DynamicResource AIChat.Icon.*}` texts: the icon styles set the
+icon font, which the view registers whatever its template. Your copy's elements take your app's implicit styles, so
+check them in your app.
 
 ### Markdown
 

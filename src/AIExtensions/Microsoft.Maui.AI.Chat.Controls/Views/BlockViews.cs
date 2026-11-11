@@ -369,7 +369,7 @@ internal sealed class UIActionView : BlockView
 internal sealed class ReasoningView : BlockView
 {
     private readonly Button _header;
-    private readonly Label _chevron = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle, ChatVisuals.Chevron);
+    private readonly Label _chevron = ChatVisuals.Icon(AIChatThemeKeys.ExpandIcon, fontSize: 16);
     private readonly Label _text = ChatVisuals.Label(AIChatThemeKeys.SecondaryTextStyle);
 
     public ReasoningView()
@@ -384,10 +384,7 @@ internal sealed class ReasoningView : BlockView
         _text.IsVisible = false;
 
         // The chevron is decoration next to the header button, which carries the accessible name.
-        _chevron.FontSize = 18;
-        _chevron.VerticalOptions = LayoutOptions.Center;
         _chevron.GestureRecognizers.Add(new TapGestureRecognizer { Command = _header.Command });
-        AutomationProperties.SetExcludedWithChildren(_chevron, true);
 
         Content = new ChatVerticalStackLayout
         {
@@ -428,7 +425,7 @@ internal sealed class ReasoningView : BlockView
         _header.IsVisible = true;
         _header.Text = "Reasoning";
         _chevron.IsVisible = true;
-        _chevron.Rotation = expanded ? 90 : 0;
+        _chevron.SetDynamicResource(Label.TextProperty, expanded ? AIChatThemeKeys.CollapseIcon : AIChatThemeKeys.ExpandIcon);
         SemanticProperties.SetDescription(_header, expanded ? "Hide reasoning" : "Show reasoning");
         _text.Text = reasoning.Text;
         _text.IsVisible = expanded && reasoning.Text.Length > 0;

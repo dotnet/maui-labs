@@ -203,18 +203,18 @@ public class LiveSpeechTests
         var editor = view.ByAutomationId<Editor>("AIChatInput");
 
         Assert.True(button.IsVisible);
-        Assert.Equal("\U0001F5E3", button.Text);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.LiveVoiceIcon), button.Text);
         Assert.Equal("Start live voice", SemanticProperties.GetDescription(button));
 
         button.Command.Execute(null);
         await UIThread.Until(() => view.IsListening && recognizer.IsListening);
-        Assert.Equal("\u25A0", button.Text);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.StopIcon), button.Text);
         Assert.Equal("Stop live voice", SemanticProperties.GetDescription(button));
         Assert.True(editor.IsReadOnly);
 
         button.Command.Execute(null);
         await UIThread.Until(() => !view.IsListening);
-        Assert.Equal("\U0001F5E3", button.Text);
+        Assert.Equal(IconTests.Glyph(AIChatThemeKeys.LiveVoiceIcon), button.Text);
         Assert.Equal("Start live voice", SemanticProperties.GetDescription(button));
         Assert.False(editor.IsReadOnly);
     });

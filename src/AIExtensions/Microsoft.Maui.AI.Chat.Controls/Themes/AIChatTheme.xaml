@@ -56,6 +56,26 @@
     <x:Double x:Key="AIChat.FontSize.Code">13</x:Double>
 
     <!--
+        Icons: glyphs of AIChat.FontFamily.Icons. The default font, AIChatIcons, is a subset of the Fluent UI System Icons
+        (MIT, https://github.com/microsoft/fluentui-system-icons) embedded in this library, which AIChatView registers
+        with the app's fonts itself. Each glyph is centred in its em, which is as tall as the font's line.
+    -->
+    <x:String x:Key="AIChat.FontFamily.Icons">AIChatIcons</x:String>
+    <x:String x:Key="AIChat.Icon.Attach">&#xF109;</x:String>
+    <x:String x:Key="AIChat.Icon.Microphone">&#xE7F9;</x:String>
+    <x:String x:Key="AIChat.Icon.LiveVoice">&#xF5DE;</x:String>
+    <x:String x:Key="AIChat.Icon.Send">&#xF19B;</x:String>
+    <x:String x:Key="AIChat.Icon.Stop">&#xF742;</x:String>
+    <x:String x:Key="AIChat.Icon.Transcribing">&#xE832;</x:String>
+    <x:String x:Key="AIChat.Icon.Remove">&#xF368;</x:String>
+    <x:String x:Key="AIChat.Icon.Link">&#xF4E4;</x:String>
+    <x:String x:Key="AIChat.Icon.Audio">&#xE854;</x:String>
+    <x:String x:Key="AIChat.Icon.Document">&#xF378;</x:String>
+    <x:String x:Key="AIChat.Icon.Image">&#xF488;</x:String>
+    <x:String x:Key="AIChat.Icon.Expand">&#xF2B0;</x:String>
+    <x:String x:Key="AIChat.Icon.Collapse">&#xF2A3;</x:String>
+
+    <!--
         Stroke shapes set their StrokeThickness (to its default) themselves, as it moves a border's outline:
         RoundRectangle is sealed, so unlike the other parts, an app's implicit RoundRectangle style still reaches
         them. RoundRectangle sets the other property that shapes the outline, Aspect, itself.
@@ -246,8 +266,8 @@
     <Style x:Key="AIChat.Style.IconButton" TargetType="Button">
         <Setter Property="BackgroundColor" Value="Transparent" />
         <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.SecondaryText}" />
-        <Setter Property="FontSize" Value="18" />
-        <Setter Property="FontFamily" Value="{DynamicResource AIChat.FontFamily}" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontFamily" Value="{DynamicResource AIChat.FontFamily.Icons}" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="WidthRequest" Value="36" />
         <Setter Property="HeightRequest" Value="36" />
@@ -265,8 +285,7 @@
         <Setter Property="BackgroundColor" Value="{DynamicResource AIChat.Color.Accent}" />
         <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.OnAccent}" />
         <Setter Property="FontSize" Value="16" />
-        <Setter Property="FontFamily" Value="{DynamicResource AIChat.FontFamily}" />
-        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="FontFamily" Value="{DynamicResource AIChat.FontFamily.Icons}" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="WidthRequest" Value="36" />
         <Setter Property="HeightRequest" Value="36" />
@@ -351,9 +370,8 @@
                         <!-- Raised 2 so the buttons line up with a single line of text; they stay at the bottom as it grows. -->
                         <chat:ChatHorizontalStackLayout VerticalOptions="End" Spacing="2" Margin="0,0,0,2">
                             <chat:ChatContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputLeadingContent}" />
-                            <chat:ChatButton Text="+"
+                            <chat:ChatButton Text="{DynamicResource AIChat.Icon.Attach}"
                                              Style="{DynamicResource AIChat.Style.IconButton}"
-                                             FontSize="22"
                                              Command="{Binding Source={RelativeSource TemplatedParent}, Path=PickAttachmentsCommand}"
                                              IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=AllowAttachments}"
                                              AutomationId="AIChatAttachButton"
@@ -385,7 +403,7 @@
                         <chat:ChatHorizontalStackLayout Grid.Column="2" VerticalOptions="End" Spacing="2" Margin="0,0,0,2">
                             <chat:ChatContentView Content="{Binding Source={RelativeSource TemplatedParent}, Path=InputTrailingContent}" />
 
-                            <chat:ChatButton Text="&#x1F3A4;"
+                            <chat:ChatButton Text="{DynamicResource AIChat.Icon.Microphone}"
                                              Style="{DynamicResource AIChat.Style.IconButton}"
                                              Command="{Binding Source={RelativeSource TemplatedParent}, Path=ToggleAudioCaptureCommand}"
                                              IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=CanCaptureAudio}"
@@ -396,7 +414,7 @@
                                     <DataTrigger TargetType="Button"
                                                  Binding="{Binding Source={RelativeSource TemplatedParent}, Path=IsRecordingAudio}"
                                                  Value="True">
-                                        <Setter Property="Text" Value="&#x25A0;" />
+                                        <Setter Property="Text" Value="{DynamicResource AIChat.Icon.Stop}" />
                                         <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Error}" />
                                         <Setter Property="SemanticProperties.Description" Value="Stop recording" />
                                         <Setter Property="ToolTipProperties.Text" Value="Stop recording" />
@@ -404,14 +422,14 @@
                                     <DataTrigger TargetType="Button"
                                                  Binding="{Binding Source={RelativeSource TemplatedParent}, Path=IsTranscribingAudio}"
                                                  Value="True">
-                                        <Setter Property="Text" Value="&#x2026;" />
+                                        <Setter Property="Text" Value="{DynamicResource AIChat.Icon.Transcribing}" />
                                         <Setter Property="SemanticProperties.Description" Value="Cancel transcription" />
                                         <Setter Property="ToolTipProperties.Text" Value="Cancel transcription" />
                                     </DataTrigger>
                                 </chat:ChatButton.Triggers>
                             </chat:ChatButton>
 
-                            <chat:ChatButton Text="&#x1F5E3;"
+                            <chat:ChatButton Text="{DynamicResource AIChat.Icon.LiveVoice}"
                                              Style="{DynamicResource AIChat.Style.IconButton}"
                                              Command="{Binding Source={RelativeSource TemplatedParent}, Path=ToggleLiveSpeechCommand}"
                                              IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=CanUseLiveSpeech}"
@@ -422,7 +440,7 @@
                                     <DataTrigger TargetType="Button"
                                                  Binding="{Binding Source={RelativeSource TemplatedParent}, Path=IsListening}"
                                                  Value="True">
-                                        <Setter Property="Text" Value="&#x25A0;" />
+                                        <Setter Property="Text" Value="{DynamicResource AIChat.Icon.Stop}" />
                                         <Setter Property="TextColor" Value="{DynamicResource AIChat.Color.Error}" />
                                         <Setter Property="SemanticProperties.Description" Value="Stop live voice" />
                                         <Setter Property="ToolTipProperties.Text" Value="Stop live voice" />
@@ -430,7 +448,7 @@
                                 </chat:ChatButton.Triggers>
                             </chat:ChatButton>
 
-                            <chat:ChatButton Text="&#x2191;"
+                            <chat:ChatButton Text="{DynamicResource AIChat.Icon.Send}"
                                              Style="{DynamicResource AIChat.Style.SendButton}"
                                              Command="{Binding Source={RelativeSource TemplatedParent}, Path=SendCommand}"
                                              AutomationId="AIChatSendButton"
@@ -445,7 +463,7 @@
                                 </chat:ChatButton.Triggers>
                             </chat:ChatButton>
 
-                            <chat:ChatButton Text="&#x25A0;"
+                            <chat:ChatButton Text="{DynamicResource AIChat.Icon.Stop}"
                                              Style="{DynamicResource AIChat.Style.SendButton}"
                                              Command="{Binding Source={RelativeSource TemplatedParent}, Path=StopCommand}"
                                              IsVisible="{Binding Source={RelativeSource TemplatedParent}, Path=CanStop}"
