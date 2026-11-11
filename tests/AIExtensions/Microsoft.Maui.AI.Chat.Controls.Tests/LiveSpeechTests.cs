@@ -71,6 +71,80 @@ public class LiveSpeechTests
     });
 
     [Fact]
+    public void BuiltInRecognizer_SendsTheWholeUtteranceAfterAPause() => UIThread.Run(async () =>
+    {
+        // iOS and Mac Catalyst report one new word per update and never end a pass themselves.
+        var toolkit = new FakeSpeechToText();
+        var time = new ManualTimeProvider();
+        var client = new ScriptedChatClient().Reply("Sunny.");
+        var view = CreateView(BuiltInRecognizer(toolkit, time), client);
+
+        await view.Composer.StartLiveSpeechAsync();
+        toolkit.SayOnApple("what's the weather in Paris");
+        Assert.Equal("what's the weather in Paris", view.Text);
+
+        time.Advance(MauiChatSpeechRecognizer.DefaultEndOfSpeechTimeout);
+        await UIThread.Until(() => client.Requests.Count == 1 && !view.IsBusy && toolkit.StartCount == 2);
+
+        Assert.Equal("what's the weather in Paris", client.LastUserText);
+        Assert.Equal(string.Empty, view.Text);
+        Assert.True(view.IsListening);
+        await view.Composer.StopLiveSpeechAsync();
+        Assert.False(toolkit.IsListening);
+    });
+
+    [Fact]
+    public void BuiltInRecognizer_StoppedMidUtterance_KeepsEveryWord() => UIThread.Run(async () =>
+    {
+        var toolkit = new FakeSpeechToText();
+        var client = new ScriptedChatClient();
+        var view = CreateView(BuiltInRecognizer(toolkit, new ManualTimeProvider()), client, v => v.ShowInterimSpeechText = false);
+
+        await view.Composer.StartLiveSpeechAsync();
+        toolkit.SayOnApple("what's the weather in Paris");
+        Assert.Equal(string.Empty, view.Text);
+
+        await view.Composer.StopLiveSpeechAsync();
+
+        Assert.Equal("what's the weather in Paris", view.Text);
+        Assert.False(toolkit.IsListening);
+        Assert.Empty(client.Requests);
+    });
+
+    [Fact]
+    public void Stopping_KeepsWhatWasHeardEvenWhenInterimTextIsHidden() => UIThread.Run(async () =>
+    {
+        var recognizer = new FakeSpeechRecognizer();
+        var client = new ScriptedChatClient();
+        var view = CreateView(recognizer, client, v => v.ShowInterimSpeechText = false);
+        view.Text = "Note:";
+
+        await view.Composer.StartLiveSpeechAsync();
+        recognizer.Emit("buy milk and", isFinal: false);
+        Assert.Equal("Note:", view.Text);
+
+        await view.Composer.StopLiveSpeechAsync();
+
+        Assert.Equal("Note: buy milk and", view.Text);
+        Assert.Empty(client.Requests);
+    });
+
+    [Fact]
+    public void FailedPass_KeepsWhatWasHeardEvenWhenInterimTextIsHidden() => UIThread.Run(async () =>
+    {
+        var recognizer = new FakeSpeechRecognizer();
+        var view = CreateView(recognizer, configure: v => v.ShowInterimSpeechText = false);
+
+        await view.Composer.StartLiveSpeechAsync();
+        recognizer.Emit("buy milk", isFinal: false);
+        recognizer.Emit(string.Empty, isFinal: true, ChatSpeechRecognitionErrorKind.Transient);
+
+        Assert.Equal("buy milk", view.Text);
+        await view.Composer.StopLiveSpeechAsync();
+        Assert.Equal("buy milk", view.Text);
+    });
+
+    [Fact]
     public void AutoSubmitOff_KeepsTheTranscriptInTheBox() => UIThread.Run(async () =>
     {
         var recognizer = new FakeSpeechRecognizer();
@@ -457,8 +531,11 @@ public class LiveSpeechTests
         Assert.False(view.CanUseLiveSpeech);
     });
 
+    private static PermittedSpeechRecognizer BuiltInRecognizer(FakeSpeechToText toolkit, ManualTimeProvider time) =>
+        new(new MauiChatSpeechRecognizer(toolkit, SpeechUpdateKind.Words, time));
+
     private static AIChatView CreateView(
-        FakeSpeechRecognizer recognizer,
+        IChatSpeechRecognizer recognizer,
         ScriptedChatClient? client = null,
         Action<AIChatView>? configure = null)
     {

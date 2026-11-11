@@ -412,6 +412,28 @@ public class AudioTests
     });
 
     [Fact]
+    public void StartingARecording_KeepsWhatLiveVoiceHeard() => UIThread.Run(async () =>
+    {
+        var recognizer = new FakeSpeechRecognizer();
+        var recorder = new FakeAudioRecorder(FakeAudioRecorder.Wav());
+        var view = CreateView(recorder, v =>
+        {
+            v.SpeechRecognizer = recognizer;
+            v.AllowLiveSpeech = true;
+            v.ShowInterimSpeechText = false;
+        });
+
+        await view.Composer.StartLiveSpeechAsync();
+        recognizer.Emit("buy milk", isFinal: false);
+        Assert.Equal(string.Empty, view.Text);
+
+        await view.Composer.StartAudioCaptureAsync();
+
+        Assert.Equal("buy milk", view.Text);
+        Assert.True(view.IsRecordingAudio);
+    });
+
+    [Fact]
     public void ReplacingTheRecorderDuringSpeechCleanup_StartsNeitherRecorder() => UIThread.Run(async () =>
     {
         var recognizer = new FakeSpeechRecognizer { StopGate = Waiters.Signal() };
