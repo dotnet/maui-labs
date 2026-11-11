@@ -664,34 +664,57 @@ public class UIAgent : IDisposable
     /// the calls they carry once the client has answered them, and leaves out their approval responses.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// When one call of a response needs approval, the function invoking client turns every call of the
     /// response into an approval request, UI actions included. It cannot invoke a UI action, so the client
     /// runs the action and sends its result. The function invoking client would remove such a request and
     /// skip its response because the call already has a result, so without this the result would reach
     /// the model without its call. A call that the function invoking client answered itself, such as a
     /// rejected one, is already in the messages as a call and keeps its request.
+    /// </para>
+    /// <para>
+    /// Providers that number their calls per response reuse call ids, and the function invoking client
+    /// derives the request id from the call id, so neither identifies a request across the history. Each
+    /// request is matched in message order with what follows it: the client answered it when a result for
+    /// its call id arrives before the call is sent again, and its response is the next response with its
+    /// request id.
+    /// </para>
     /// </remarks>
     private ChatMessage[] SendAnsweredUIActionsAsCalls(ChatMessage[] messages)
     {
         if (_options.UIActions.Count == 0)
             return messages;
 
-        HashSet<string>? answered = null;
-        HashSet<string>? calls = null;
+        HashSet<ToolApprovalRequestContent>? answered = null;
+        Dictionary<string, ToolApprovalRequestContent>? awaiting = null;
         foreach (var message in messages)
         {
             foreach (var content in message.Contents)
             {
-                if (content is FunctionResultContent result)
-                    (answered ??= new(StringComparer.Ordinal)).Add(result.CallId);
-                else if (content is FunctionCallContent call)
-                    (calls ??= new(StringComparer.Ordinal)).Add(call.CallId);
+                switch (content)
+                {
+                    case ToolApprovalRequestContent { ToolCall: FunctionCallContent call } request
+                        when IsUIAction(call):
+                        (awaiting ??= new(StringComparer.Ordinal))[call.CallId] = request;
+                        break;
+
+                    // The function invoking client answered the request itself and sent its call.
+                    case FunctionCallContent call:
+                        awaiting?.Remove(call.CallId);
+                        break;
+
+                    case FunctionResultContent result:
+                        if (awaiting is not null && awaiting.Remove(result.CallId, out var answeredRequest))
+                            (answered ??= new(ReferenceEqualityComparer.Instance)).Add(answeredRequest);
+                        break;
+                }
             }
         }
 
         if (answered is null)
             return messages;
 
+        HashSet<string>? skippedResponses = null;
         List<ChatMessage>? rewritten = null;
         for (var i = 0; i < messages.Length; i++)
         {
@@ -700,14 +723,28 @@ public class UIAgent : IDisposable
             for (var j = 0; j < message.Contents.Count; j++)
             {
                 var content = message.Contents[j];
-                var replacement = content switch
+                var replacement = content;
+                if (content is ToolApprovalRequestContent { ToolCall: FunctionCallContent requestCall } request
+                    && IsUIAction(requestCall))
                 {
-                    ToolApprovalRequestContent { ToolCall: FunctionCallContent call }
-                        when IsAnsweredUIAction(call) => call,
-                    ToolApprovalResponseContent { ToolCall: FunctionCallContent call }
-                        when IsAnsweredUIAction(call) => null,
-                    _ => content,
-                };
+                    skippedResponses ??= new(StringComparer.Ordinal);
+                    if (answered.Contains(request))
+                    {
+                        replacement = requestCall;
+                        skippedResponses.Add(request.RequestId);
+                    }
+                    else
+                    {
+                        skippedResponses.Remove(request.RequestId);
+                    }
+                }
+                else if (content is ToolApprovalResponseContent { ToolCall: FunctionCallContent responseCall } response
+                    && IsUIAction(responseCall)
+                    && skippedResponses?.Remove(response.RequestId) == true)
+                {
+                    replacement = null;
+                }
+
                 if (contents is null && ReferenceEquals(replacement, content))
                     continue;
 
@@ -733,10 +770,7 @@ public class UIAgent : IDisposable
 
         return rewritten is null ? messages : [.. rewritten];
 
-        bool IsAnsweredUIAction(FunctionCallContent call)
-            => answered.Contains(call.CallId)
-                && calls?.Contains(call.CallId) != true
-                && _options.UIActions.ContainsKey(call.Name);
+        bool IsUIAction(FunctionCallContent call) => _options.UIActions.ContainsKey(call.Name);
     }
 
     internal static ChatResponseUpdate CreateMessageUpdate(

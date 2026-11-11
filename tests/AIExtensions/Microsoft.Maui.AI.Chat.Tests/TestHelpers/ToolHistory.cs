@@ -41,6 +41,37 @@ internal static class ToolHistory
         Assert.Equal(calls.Order(), answered.Order());
     }
 
+    /// <summary>
+    /// Asserts that every call is answered once, after the call and before its id is used again, as a
+    /// provider that numbers its calls per response requires.
+    /// </summary>
+    internal static void AssertValidWithReusedIds(IReadOnlyList<ChatMessage> messages)
+    {
+        var open = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var content in messages.SelectMany(message => message.Contents))
+        {
+            switch (content)
+            {
+                case FunctionCallContent call:
+                    Assert.True(open.Add(call.CallId), $"Call '{call.CallId}' is sent again before its result.");
+                    break;
+                case FunctionResultContent result:
+                    Assert.True(
+                        open.Remove(result.CallId),
+                        $"Result '{result.CallId}' is sent without its call before it.");
+                    break;
+                case ToolApprovalRequestContent { ToolCall: FunctionCallContent { InformationalOnly: false } } request:
+                    Assert.Fail($"The pending approval request '{request.RequestId}' reached the model.");
+                    break;
+                case ToolApprovalResponseContent { ToolCall: FunctionCallContent { InformationalOnly: false } } response:
+                    Assert.Fail($"The pending approval response '{response.RequestId}' reached the model.");
+                    break;
+            }
+        }
+
+        Assert.Empty(open);
+    }
+
     /// <summary>Gets the result sent for a call.</summary>
     internal static string? FindResult(IReadOnlyList<ChatMessage> messages, string callId)
         => messages
