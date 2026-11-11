@@ -623,7 +623,7 @@ public class MessageListTests
     [Fact]
     public void NewRows_ScrollToTheEndWhilePinned() => UIThread.Run(async () =>
     {
-        var client = new ScriptedChatClient().Reply("One").Reply("Two").Reply("Three");
+        var client = new ScriptedChatClient().Reply("One").Reply("Two");
         var view = ChatHost.Create(ChatHost.Session(client));
         var requests = new List<int>();
         view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
@@ -634,15 +634,11 @@ public class MessageListTests
 
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
         Assert.False(view.MessageList.IsPinned);
-        requests.Clear();
-        await view.Session!.SendMessageAsync("second");
-        Assert.Empty(requests);
-
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = 40, LastVisibleItemIndex = view.Rows().Count - 1 });
         Assert.True(view.MessageList.IsPinned);
 
         view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
-        await SendAsync(view, "third");
+        await SendAsync(view, "second");
         Assert.True(view.MessageList.IsPinned);
         Assert.Equal(view.Rows().Count - 1, requests[^1]);
 
@@ -772,6 +768,61 @@ public class MessageListTests
         await UIThread.Until(() => dispatcher.PendingCount > 0 || !view.IsBusy);
         dispatcher.RunPending();
         await send;
+    });
+
+    [Fact]
+    public void ClearingTheConversation_FollowsTheEndAgain() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One").Reply("Two");
+        var view = ChatHost.Create(ChatHost.Session(client));
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+
+        await SendAsync(view, "first");
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
+        Assert.False(view.MessageList.IsPinned);
+
+        // The app clears the conversation (not the composer): nothing is left to read back through.
+        await view.Session!.ClearAsync();
+        Assert.Empty(view.Rows());
+        Assert.True(view.MessageList.IsPinned);
+
+        requests.Clear();
+        await view.Session.SendMessageAsync("second");
+        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+    });
+
+    [Fact]
+    public void ATurnSentByTheApp_FollowsTheEndAgain() => UIThread.Run(async () =>
+    {
+        var client = new ScriptedChatClient().Reply("One");
+        var stream = client.ReplyLive();
+        var view = ChatHost.Create(ChatHost.Session(client));
+        var requests = new List<int>();
+        view.MessageList.ScrollToRequested += (_, e) => requests.Add(e.Index);
+
+        await SendAsync(view, "first");
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
+        Assert.False(view.MessageList.IsPinned);
+
+        // Sent by the app (a suggestion-like button, a replay), not through the composer.
+        requests.Clear();
+        var send = view.Session!.SendMessageAsync("second");
+        stream.Text("Two");
+        await UIThread.Until(() => view.Rows()[^1] is BlockRow { Block: TextContentBlock { RawText: "Two" } });
+        Assert.True(view.MessageList.IsPinned);
+        Assert.Equal(view.Rows().Count - 1, requests[^1]);
+
+        // Once the reader scrolls back, the rest of that answer streams in without pulling them down again.
+        view.MessageList.SendScrolled(new ItemsViewScrolledEventArgs { VerticalDelta = -40, LastVisibleItemIndex = 0 });
+        requests.Clear();
+        stream.Text(" and more");
+        await UIThread.Until(() => view.Rows()[^1] is BlockRow { Block: TextContentBlock { RawText: "Two and more" } });
+        stream.Complete();
+        await send;
+
+        Assert.False(view.MessageList.IsPinned);
+        Assert.Empty(requests);
     });
 
     [Fact]
